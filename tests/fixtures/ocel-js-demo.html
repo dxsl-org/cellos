@@ -1,0 +1,34 @@
+<!doctype html>
+<!--
+  Document fixture for the Ocel integration lane (tests/integration/tests/ocel-browser.rs).
+
+  It exists to exercise the Tier 2 script path end to end: the viewer parses this
+  file, the inline script is dispatched to the hardware-isolated engine cell
+  (`ocel-quickjs`, or the `ocel-js` statement matcher on images without it), and
+  the DOM mutation it returns must show up as the page title. The script is real
+  JavaScript — a loop, a closure and `Array.prototype.map` — so the title proves
+  which kind of engine answered; both halves are observable in the serial log:
+
+    [ocel] js backend: Tier 2 domain service
+    [ocel] dom title: sum=10 doubled=2, 4, 6
+
+  The body text carries the word Cellos so the in-document search assertion has a
+  deterministic match in a document whose contents this file owns.
+-->
+<html>
+<head>
+<title>Ocel script fixture</title>
+</head>
+<body>
+<h1>Ocel Tier 2 script fixture</h1>
+<p>Cellos runs Ocel in a native cell; the script in this document runs in the
+separate ocel-js cell, which the kernel admits to Tier 2 with private page
+tables, so an engine fault terminates that cell instead of the viewer.</p>
+<script>
+var sum = 0;
+for (var i = 1; i <= 4; i++) { sum += i; }
+var doubled = [1, 2, 3].map(function (x) { return x * 2; }).join(", ");
+document.title = "sum=" + sum + " doubled=" + doubled;
+</script>
+</body>
+</html>

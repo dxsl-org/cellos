@@ -50,7 +50,11 @@ api::declare_syscalls![
     ReadCap,
     CloseCap,
     StatCap,
-    SeekCap
+    SeekCap,
+    // `ostd::args()` reads the spawner's command line out of the state stash
+    // (`sys_spawn_args` -> `StateRestore`), which is how `ocel <url>` gets its
+    // document without the address bar.
+    StateRestore
 ];
 
 ostd::cell_main!(cell_main);
@@ -70,10 +74,35 @@ struct Tab {
 
 impl Tab {
     fn new(url: &str, viewport_w: u32, js_runtime: &mut js::Tier2JsBridge) -> Self {
-        let loaded = load_document(url);
-        let mut doc = Document::new();
+        let mut tab = Self {
+            title: String::new(),
+            url: String::new(),
+            doc: Document::new(),
+            scroll_y: 0,
+            history: Vec::new(),
+            history_idx: 0,
+        };
+        let (loaded_url, _fmt) = tab.load(url, viewport_w, js_runtime);
+        tab.history = alloc::vec![loaded_url];
+        tab
+    }
 
-        let (nodes, scripts, arena, _) = if let Some(direct) = loaded.direct_nodes {
+    /// Parse `url` into this tab, run any script it carries, and lay it out.
+    ///
+    /// The first tab (`Tab::new`) and every later navigation both come through
+    /// here, so the load-time lines (`loaded`, `dom title`, `js backend`) are
+    /// emitted once per load and cannot drift between the two callers.
+    ///
+    /// Returns the canonical URL and the format name for the status line.
+    fn load(
+        &mut self,
+        url: &str,
+        viewport_w: u32,
+        js_runtime: &mut js::Tier2JsBridge,
+    ) -> (String, &'static str) {
+        let loaded = load_document(url);
+
+        let (nodes, scripts, arena, fmt_name) = if let Some(direct) = loaded.direct_nodes {
             (direct, alloc::vec::Vec::new(), None, "Image")
         } else {
             let fmt = DocFormat::detect_from_url_or_content(&loaded.url, &loaded.content);
@@ -91,6 +120,7 @@ impl Tab {
             )
         };
 
+        js_runtime.reset();
         for script in &scripts {
             use js::JsContext;
             let _ = js_runtime.eval(script);
@@ -101,22 +131,26 @@ impl Tab {
         for mutation in js_runtime.take_mutations() {
             if let dom_arena::DomMutation::SetDocumentTitle { title } = mutation {
                 if !title.is_empty() {
+                    ostd::io::println(&format!("[ocel] dom title: {}", title));
                     content_title = title;
                 }
             }
         }
-        doc.arena = arena;
-        doc.nodes = nodes;
-        doc.compute_layout(viewport_w);
 
-        Self {
-            title: content_title,
-            url: loaded.url.clone(),
-            doc,
-            scroll_y: 0,
-            history: alloc::vec![loaded.url],
-            history_idx: 0,
-        }
+        self.url = loaded.url;
+        self.doc.arena = arena;
+        self.title = content_title;
+        self.scroll_y = 0;
+        self.doc.clear();
+        self.doc.nodes = nodes;
+        self.doc.compute_layout(viewport_w);
+        ostd::io::println(&format!(
+            "[ocel] loaded {} ({}, {} items)",
+            self.url,
+            fmt_name,
+            self.doc.nodes.len()
+        ));
+        (self.url.clone(), fmt_name)
     }
 }
 
@@ -139,13 +173,13 @@ struct OcelViewer {
 }
 
 impl OcelViewer {
-    fn new(comp_tid: usize, width: u32, height: u32) -> Option<Self> {
+    fn new(comp_tid: usize, width: u32, height: u32, initial_url: &str) -> Option<Self> {
         let surface = ViSurface::create(comp_tid, width, height, PixelFormat::Bgra8888).ok()?;
         let _ = surface.set_title("Ocel Document Viewer");
 
         let mut js_runtime = js::Tier2JsBridge::new();
         let viewport_w = width.saturating_sub(24);
-        let first_tab = Tab::new("file:///welcome.md", viewport_w, &mut js_runtime);
+        let first_tab = Tab::new(initial_url, viewport_w, &mut js_runtime);
         let initial_url = first_tab.url.clone();
 
         let viewer = Self {
@@ -183,6 +217,11 @@ impl OcelViewer {
         self.active_tab = self.tabs.len().saturating_sub(1);
         self.url_input = self.current_tab().url.clone();
         self.status_text = format!("New tab: {}", self.url_input);
+        ostd::io::println(&format!(
+            "[ocel] tab {} active: {}",
+            self.active_tab + 1,
+            self.url_input
+        ));
         if self.search_open {
             self.perform_search();
         }
@@ -196,6 +235,11 @@ impl OcelViewer {
             }
             self.url_input = self.current_tab().url.clone();
             self.status_text = format!("Closed tab. Active: {}", self.url_input);
+            ostd::io::println(&format!(
+                "[ocel] tab {} active: {}",
+                self.active_tab + 1,
+                self.url_input
+            ));
             if self.search_open {
                 self.perform_search();
             }
@@ -207,6 +251,11 @@ impl OcelViewer {
             self.active_tab = (self.active_tab + 1) % self.tabs.len();
             self.url_input = self.current_tab().url.clone();
             self.status_text = format!("Switched to tab: {}", self.url_input);
+            ostd::io::println(&format!(
+                "[ocel] tab {} active: {}",
+                self.active_tab + 1,
+                self.url_input
+            ));
             if self.search_open {
                 self.perform_search();
             }
@@ -242,52 +291,24 @@ impl OcelViewer {
     }
 
     fn load_url(&mut self, url: &str) {
-        let loaded = load_document(url);
-        self.url_input = loaded.url.clone();
-
         let viewport_w = self.width.saturating_sub(24);
-        let (nodes, scripts, arena, fmt_name) = if let Some(direct) = loaded.direct_nodes {
-            (direct, alloc::vec::Vec::new(), None, "Image")
-        } else {
-            let fmt = DocFormat::detect_from_url_or_content(&self.url_input, &loaded.content);
-            let (parsed_nodes, parsed_scripts, parsed_arena) =
-                parser::parse_content(fmt, &loaded.content);
+        let (loaded_url, fmt_name, items, height) = {
+            let Self {
+                tabs,
+                active_tab,
+                js_runtime,
+                ..
+            } = self;
+            let tab = &mut tabs[*active_tab];
+            let (loaded_url, fmt_name) = tab.load(url, viewport_w, js_runtime);
             (
-                parsed_nodes,
-                parsed_scripts,
-                parsed_arena,
-                match fmt {
-                    DocFormat::Markdown => "Markdown",
-                    DocFormat::Html => "HTML",
-                    DocFormat::PlainText => "PlainText",
-                },
+                loaded_url,
+                fmt_name,
+                tab.doc.nodes.len(),
+                tab.doc.total_height,
             )
         };
-
-        self.js_runtime.reset();
-        for script in &scripts {
-            use js::JsContext;
-            let _ = self.js_runtime.eval(script);
-        }
-
-        let mut content_title = loaded.title;
-        use js::JsContext;
-        for mutation in self.js_runtime.take_mutations() {
-            if let dom_arena::DomMutation::SetDocumentTitle { title } = mutation {
-                if !title.is_empty() {
-                    content_title = title;
-                }
-            }
-        }
-
-        let tab = self.current_tab_mut();
-        tab.url = loaded.url;
-        tab.doc.arena = arena;
-        tab.title = content_title;
-        tab.scroll_y = 0;
-        tab.doc.clear();
-        tab.doc.nodes = nodes;
-        tab.doc.compute_layout(viewport_w);
+        self.url_input = loaded_url;
 
         if self.search_open && !self.search_query.is_empty() {
             self.perform_search();
@@ -295,10 +316,7 @@ impl OcelViewer {
 
         self.status_text = format!(
             "Loaded: {} ({}, {} items, {}px)",
-            self.url_input,
-            fmt_name,
-            self.current_tab().doc.nodes.len(),
-            self.current_tab().doc.total_height
+            self.url_input, fmt_name, items, height
         );
     }
 
@@ -333,8 +351,10 @@ impl OcelViewer {
         }
 
         let first_match = matches.first().copied();
+        let total = matches.len();
         self.search_matches = matches;
         self.search_idx = 0;
+        ostd::io::println(&format!("[ocel] search \"{}\": {} match(es)", query, total));
 
         if let Some(y) = first_match {
             if let Some(tab) = self.tabs.get_mut(self.active_tab) {
@@ -350,6 +370,11 @@ impl OcelViewer {
         self.search_idx = (self.search_idx + 1) % self.search_matches.len();
         let target_y = self.search_matches[self.search_idx];
         self.current_tab_mut().scroll_y = target_y.saturating_sub(60).max(0);
+        ostd::io::println(&format!(
+            "[ocel] search next: {}/{}",
+            self.search_idx + 1,
+            self.search_matches.len()
+        ));
     }
 
     fn viewport_height(&self) -> u32 {
@@ -980,7 +1005,15 @@ fn cell_main() {
     let win_w = screen_w.min(1024);
     let win_h = screen_h.min(680);
 
-    let mut viewer = match OcelViewer::new(comp_tid, win_w, win_h) {
+    // `ocel <url>` opens that document instead of the welcome page, so the
+    // viewer can be used as a handler (`ocel file:///docs/readme.md`) and a test
+    // can name the document it wants rendered without driving the address bar.
+    let initial_url = match ostd::args().into_iter().next() {
+        Some(url) if !url.is_empty() => url,
+        _ => String::from("file:///welcome.md"),
+    };
+
+    let mut viewer = match OcelViewer::new(comp_tid, win_w, win_h, &initial_url) {
         Some(v) => v,
         None => {
             ostd::io::println("[ocel] Failed to create ViSurface. Exiting.");

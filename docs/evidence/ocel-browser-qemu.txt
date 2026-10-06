@@ -1,0 +1,17 @@
+warning: unused variable: `qemu`
+   --> tests/ocel-browser.rs:119:28
+    |
+119 | fn assert_region_not_black(qemu: &QemuRunner, frame_path: &str, what: &str, region: [usize; 4]) {
+    |                            ^^^^ help: if this is intentional, prefix it with an underscore: `_qemu`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vicell-integration-tests` (test "ocel-browser") generated 1 warning (run `cargo fix --test "ocel-browser" -p vicell-integration-tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/ocel-browser.rs (target/x86_64-unknown-linux-gnu/debug/deps/ocel_browser-2141ef2d19732968)
+
+running 1 test
+test ocel_viewer_runs_scripts_in_tier2_and_answers_input ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.65s
+

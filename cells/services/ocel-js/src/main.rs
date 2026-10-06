@@ -15,27 +15,26 @@ mod engine;
 
 use dom_arena::{JsContext, JsEngine, OcelJsRequest, OcelJsResponse, OCEL_JS_IPC_BUF_SIZE};
 use engine::OcelJsServiceEngine;
-use ostd::syscall::{sys_recv, sys_register_service, sys_send, sys_yield, SyscallResult};
+use ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Log, RegisterService, Recv, Send, TryRecv, GetTime];
+// Untrusted-protection-class manifest: the kernel classifies this cell as a
+// domain cell and admits it to Tier 2 (private page tables), containing any
+// engine fault to this cell. Registration is NOT done here — an untrusted cell
+// holds no SpawnCap, and the kernel refuses ordinary `RegisterService` without
+// it. `init` spawns this cell and registers `service::OCEL_JS` on its behalf
+// (cells/tools/init/src/boot.rs, `spawn_optional_services`).
+api::declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+);
+api::declare_syscalls![Log, Recv, Send, TryRecv, GetTime];
 
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
     ostd::io::println("[ocel-js] Starting Tier 2 JavaScript Engine Service...");
-
-    // Register service in the kernel service registry (service::OCEL_JS = 16)
-    match sys_register_service(api::syscall::service::OCEL_JS, 0) {
-        SyscallResult::Ok(_) => {
-            ostd::io::println("[ocel-js] Registered as service::OCEL_JS (id=16)");
-        }
-        SyscallResult::Err(_) => {
-            ostd::io::println(
-                "[ocel-js] WARN: Failed to register service::OCEL_JS (already registered?)",
-            );
-        }
-    }
 
     let mut engine = OcelJsServiceEngine::new();
     let mut ctx = engine.create_context();

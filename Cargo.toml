@@ -113,6 +113,7 @@ members = [
     "cells/services/httpd",
     "cells/services/ai",
     "cells/services/ocel-js",
+    "cells/services/ocel-quickjs",
 
     # Cells - Tools (system + CLI)
     "cells/tools/init",

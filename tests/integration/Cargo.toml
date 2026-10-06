@@ -196,6 +196,10 @@ name = "ocel-browser"
 path = "tests/ocel-browser.rs"
 
 [[test]]
+name = "ocel-quickjs"
+path = "tests/ocel-quickjs.rs"
+
+[[test]]
 name = "actor-supervisor"
 path = "tests/actor-supervisor.rs"
 

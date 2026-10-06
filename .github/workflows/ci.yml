@@ -2050,6 +2050,59 @@ jobs:
             generated_counter_survives_managed_surface_configure \
             2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/viui-managed-surface.log"
 
+      - name: Run Ocel viewer + Tier 2 script engine evidence
+        shell: bash
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+        # Boots the same disk_v3.img as the steps around it and drives the viewer:
+        # a Tier 2 engine cell's admission marker, an HTML fixture whose inline
+        # script must be served by that domain, in-document search through QMP
+        # keystrokes, and a QMP click on the tab bar.
+        run: |
+          cd tests/integration
+          cargo test --test ocel-browser -- --test-threads=1 \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/ocel-browser.log"
+
+      - name: Run vendored QuickJS engine evidence
+        shell: bash
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+        # The engine's own lane: `/bin/ocel-quickjs` is admitted to Tier 2, its
+        # start-up self-check computes its exact expected value (loop, closure,
+        # `Array.prototype.map`, Unicode regexp, `toFixed`), and the fixture
+        # script's computed title reaches the viewer's document.
+        run: |
+          cd tests/integration
+          cargo test --test ocel-quickjs -- --test-threads=1 \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/ocel-quickjs.log"
+
+      - name: Run statement-matcher engine evidence (image without QuickJS)
+        shell: bash
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+          CC_riscv64gc_unknown_none_elf: riscv64-unknown-elf-gcc
+          AR_riscv64gc_unknown_none_elf: riscv64-unknown-elf-ar
+          CFLAGS_riscv64gc_unknown_none_elf: -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+          OBJCOPY: riscv64-unknown-elf-objcopy
+        # Assembles a second image from the same cells but without the QuickJS
+        # cell (`CELLOS_NO_OCEL_QUICKJS=1`) and runs the *same* viewer lane
+        # against it with the engine expectation pinned, so `init`'s fallback to
+        # `/bin/ocel-js` is witnessed by a lane instead of by inspection.
+        #
+        # Ordered right after the QuickJS lane on purpose: the reassembly
+        # rewrites `target/riscv64gc-unknown-none-elf/release/cellos-kernel` and
+        # VIFS1 in place, so the steps before it must have already booted the
+        # image that carries QuickJS.
+        run: |
+          set -o pipefail
+          CELLOS_NO_OCEL_QUICKJS=1 bash scripts/gen-disk-ci.sh --disk disk_stub.img \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/gen-disk-stub.log"
+          cd tests/integration
+          CELLOS_OCEL_DISK="$GITHUB_WORKSPACE/disk_stub.img" \
+          CELLOS_EXPECT_ENGINE_CELL=/bin/ocel-js \
+            cargo test --test ocel-browser -- --test-threads=1 \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/ocel-js-fallback.log"
+
       - name: Run Tier 2 hardware fault isolation evidence
         shell: bash
         env:

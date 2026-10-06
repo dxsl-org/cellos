@@ -62,6 +62,7 @@
 | File | Purpose |
 |------|---------|
 | [scripting-guide.md](scripting-guide.md) | Lua 5.4 usage; historical MicroPython status |
+| [ocel-viewer.md](guides/ocel-viewer.md) | Ocel native viewer, its Tier 2 script service, and the QEMU lane |
 | [hotswap-guide.md](hotswap-guide.md) | Live Cell upgrade protocol |
 | [vfs-api.md](vfs-api.md) | VFS IPC opcodes and protocol |
 | [network-api.md](network-api.md) | Network service IPC, DHCP, socket API |

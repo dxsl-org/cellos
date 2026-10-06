@@ -1,0 +1,8 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/ocel-quickjs.rs (target/x86_64-unknown-linux-gnu/debug/deps/ocel_quickjs-d1d8f7168a07e991)
+
+running 1 test
+test quickjs_engine_cell_runs_real_javascript_in_tier2 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.72s
+

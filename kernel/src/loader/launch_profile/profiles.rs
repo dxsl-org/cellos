@@ -21,6 +21,13 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
         | "/bin/silo" | "/bin/ai-test" | "/bin/silo-test" | "/bin/srv-test" | "/bin/supervisor"
         | "/bin/vfs" | "/bin/vfs-test" | "/bin/virtio-gpu" | "/bin/virtio-net"
         | "/bin/std-smoke" | "/bin/desktop"
+        // Ocel's Tier 2 JavaScript engine. `init` spawns and registers it at boot
+        // (boot.rs `spawn_optional_services`); the boot ceiling already gives it
+        // `CapSet::EMPTY`, so this edge grants init nothing but the ability to
+        // launch it, and the domain admission policy still decides whether it may
+        // run as a domain at all.
+        | "/bin/ocel-js"
+        | "/bin/ocel-quickjs"
         // Phase-02 Tier-2 entry fixtures. Both carry `PROTECTION_CLASS_UNTRUSTED`
         // manifests and `boot_ceiling` already gives them `CapSet::EMPTY`, so this
         // row grants init nothing beyond the ability to launch them: the

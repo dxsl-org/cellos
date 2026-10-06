@@ -126,7 +126,7 @@ Build-Cargo -What "app-bench"      -Packages @('app-bench')       # builds bench
 Build-Cargo -What "app-net-tools"  -Packages @('app-net-tools')
 Build-Cargo -What "app-sys-tools"  -Packages @('app-sys-tools')
 Build-Cargo -What "robot-demo + robot-dashboard" -Packages @('robot-demo', 'robot-dashboard')
-Build-Cargo -What "fb-console + desktop + ocel + ocel-js" -Packages @('fb-console', 'desktop', 'ocel', 'ocel-js')
+Build-Cargo -What "fb-console + desktop + ocel + both Ocel engines" -Packages @('fb-console', 'desktop', 'ocel', 'ocel-js', 'ocel-quickjs')
 Build-Cargo -What "hypha cells"    -Packages @('hypha-llm-gateway', 'hypha-core', 'hypha-tool-fs', 'hypha-tool-sys', 'hypha-tool-spawn')
 Build-Cargo -What "input-test"     -Packages @('input-test')
 Build-Cargo -What "window-policy-probe" -Packages @('window-policy-probe')
@@ -278,6 +278,7 @@ Add-CellToSign "$rel_dir/fb-console"
 Add-CellToSign "$rel_dir/desktop"
 Add-CellToSign "$rel_dir/ocel"
 Add-CellToSign "$rel_dir/ocel-js"
+Add-CellToSign "$rel_dir/ocel-quickjs"
 Add-CellToSign "$rel_dir/hypha-llm-gateway"
 Add-CellToSign "$rel_dir/hypha-core"
 Add-CellToSign "$rel_dir/hypha-tool-fs"
@@ -371,6 +372,7 @@ $fb_console_bin = "$rel_dir/fb-console"       # HMI: mirror kernel log to HDMI s
 $desktop_bin   = "$rel_dir/desktop"
 $ocel_bin      = "$rel_dir/ocel"
 $ocel_js_bin   = "$rel_dir/ocel-js"
+$ocel_quickjs_bin = "$rel_dir/ocel-quickjs"
 $robot_demo_bin = "$rel_dir/robot-demo"       # G1 sensor→actuator reference demo
 $dashboard_bin = "$rel_dir/robot-dashboard"  # G1 ViUI v2 dashboard demo
 $hypha_llm_bin = "$rel_dir/hypha-llm-gateway" # Hypha P0 — LLM network gateway
@@ -506,6 +508,15 @@ $kfs_args = @(
 if (Test-Path $platform_bin)   { $kfs_args += @($platform_bin,   "/bin/platform") }
 if (Test-Path $virtio_blk_bin) { $kfs_args += @($virtio_blk_bin, "/bin/block") }
 if ($doom_wad)  { $kfs_args += @($doom_wad, "/doom1.wad") }
+# Document fixture for the Ocel browser lane (tests/integration/tests/ocel-browser.rs):
+# a VIFS1 data file, not a cell. Keep in sync with scripts/gen-disk-ci.sh's kfs_args.
+$ocel_fixture = Join-Path (Get-Location) "tests/fixtures/ocel-js-demo.html"
+if (Test-Path $ocel_fixture) { $kfs_args += @($ocel_fixture, "/data/ocel-js-demo.html") }
+# QuickJS engine cell: VIFS1-resident so `init`'s kernel-loader route can reach
+# it without the VFS cell holding the whole ELF in its own heap.
+if ((Test-Path "$rel_dir/ocel-quickjs") -and ($env:CELLOS_NO_OCEL_QUICKJS -ne "1")) {
+    $kfs_args += @("$rel_dir/ocel-quickjs", "/bin/ocel-quickjs")
+}
 if (Test-Path $hotswap_demo_v1_bin) { $kfs_args += @($hotswap_demo_v1_bin, "/bin/hotswap-demo-v1") }
 if (Test-Path $hotswap_demo_v2_bin) { $kfs_args += @($hotswap_demo_v2_bin, "/bin/hotswap-demo-v2") }
 # B0 actor/supervisor witness: the supervisor carries SpawnCap, and the shell's
@@ -636,6 +647,13 @@ if (Test-Path $fb_console_bin)  { $table_args += "/bin/fb-console=$fb_console_bi
 if (Test-Path $desktop_bin)     { $table_args += "/bin/desktop=$desktop_bin" }
 if (Test-Path $ocel_bin)        { $table_args += "/bin/ocel=$ocel_bin" }
 if (Test-Path $ocel_js_bin)     { $table_args += "/bin/ocel-js=$ocel_js_bin" }
+# Opt-in engine cell: shipped means init prefers real JavaScript; absent means
+# the viewer keeps the statement matcher.
+# CELLOS_NO_OCEL_QUICKJS=1 assembles the statement-matcher-only image on purpose
+# (see scripts/gen-disk-ci.sh); `init` then registers /bin/ocel-js.
+if ((Test-Path $ocel_quickjs_bin) -and ($env:CELLOS_NO_OCEL_QUICKJS -ne "1")) {
+    $table_args += "/bin/ocel-quickjs=$ocel_quickjs_bin"
+}
 if (Test-Path $robot_demo_bin)  { $table_args += "/bin/robot-demo=$robot_demo_bin" }
 if (Test-Path $dashboard_bin)   { $table_args += "/bin/robot-dashboard=$dashboard_bin" }
 if (Test-Path $hypha_llm_bin)      { $table_args += "/bin/llm-gateway=$hypha_llm_bin" }

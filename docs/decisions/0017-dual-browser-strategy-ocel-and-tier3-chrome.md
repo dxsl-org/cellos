@@ -227,6 +227,47 @@ Phase 4 — Tier 3 Chrome (parallel, ~4-6 weeks)
 Phase 4 may start in parallel with Phase 1-2 since it uses existing hypervisor
 infrastructure.
 
+## 5a. Status update — 2026-10-06
+
+The decision above stands; the phase plan is behind it, and this records where
+the tree actually is so the ADR cannot be read as a claim about shipped
+behaviour.
+
+- **Phase 1 shipped and is regression-gated.** The viewer parses Markdown, an
+  HTML subset, plain text, and BMP, and renders with its own block layout. Two
+  Phase-1 items differ from the text above: the markdown parser is in-tree (not
+  `pulldown-cmark`), and PNG is not implemented (BMP only).
+- **Phase 2 is partially shipped.** HTTP/1.1 and TLS 1.3 fetching work through
+  the net service, and Ctrl+F search works; PDF (MuPDF) and syntax highlighting
+  do not exist.
+- **The script engine is the documented stub, not QuickJS.** `ocel-js` runs in a
+  kernel-admitted Tier 2 domain (`PROTECTION_CLASS_UNTRUSTED` manifest, spawned
+  and registered by `init`) and executes the statement forms listed in
+  `docs/guides/ocel-viewer.md` — no control
+  flow, functions, or expression evaluation. Ocel therefore makes **no**
+  web-platform claim.
+- **QuickJS direction (decided and implemented 2026-10-06).** QuickJS is the
+  engine slot, and it landed as an **opt-in engine behind the existing
+  `JsEngine`/`JsContext` trait boundary**: the sibling cell
+  `cells/services/ocel-quickjs/` vendors upstream QuickJS `2026-06-04` (the
+  release this ADR names; MIT, SHA-256 `b376e839…70ad2a`) and serves the same
+  wire protocol, so `init` prefers it when an image packages it and
+  `/bin/ocel-js` remains the engine for images that do not. The port doubles as
+  the porting-kit class-A reference port named in
+  `.agents/260922-1549-cell-native-portability-program/phase-07-reference-ports-and-cost.md`.
+  Two of the three shim gaps that document predicted turned out not to exist in
+  this release: the engine carries its own float64 parse/print (`dtoa.c`) and
+  never uses `setjmp`/`longjmp`; the Tier-A C ABI in `libs/api` already provides
+  the allocation, string, stdio and C99 math symbols, and the cell adds only
+  `abs`, `lrint`, `gettimeofday`, `clock_gettime` and a UTC-only `localtime_r`.
+  Atomics/`SharedArrayBuffer` are compiled out (the one local source deviation)
+  because a cell is single-threaded. The statement matcher stays for images that
+  do not package QuickJS; the engine's real capability and the remaining gaps
+  (no CSS, no web APIs) are recorded in `docs/guides/ocel-viewer.md`.
+- **Phase 4 is not started.** `virtio-input` exists in the hypervisor
+  (`cells/services/hypervisor/src/virtio_input.rs`); the launcher cell, clipboard
+  bridge, file sharing, and the Chromium smoke test do not.
+
 ## 6. Cross-references
 
 | Topic | Document |

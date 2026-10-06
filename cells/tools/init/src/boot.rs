@@ -242,6 +242,48 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
     #[cfg(feature = "tier2-grant-pair")]
     run_grant_pair();
 
+    // Ocel's script engine (ADR-0017). Two engine cells exist and an image
+    // packages at most one of them: `/bin/ocel-quickjs` is the vendored QuickJS
+    // engine, `/bin/ocel-js` is the in-tree statement matcher. `init` prefers
+    // QuickJS when the image shipped it, and falls back to the stub, so the
+    // engine choice is an image decision rather than a viewer rebuild.
+    //
+    // Registration is `init`'s job, not the cell's — an untrusted cell holds no
+    // SpawnCap and the kernel refuses ordinary `RegisterService` without one.
+    // Fail-soft by design, and fail-closed where it matters: an image with
+    // neither cell gets no service, and an image whose admission posture
+    // refuses domain cells (production AArch64/x86_64) refuses both spawns. In
+    // every such case Ocel falls back to its in-process engine and logs which
+    // engine served the document.
+    //
+    // The kernel's own loader route is tried first: it reads the ELF from the
+    // kernel's ramdisk (VIFS1) or the P2 table without asking the VFS cell to
+    // materialise the whole file in its own heap, which is what a multi-hundred
+    // KB engine binary otherwise requires. The VFS route stays as the fallback
+    // for images that ship the engine only in the FAT cell-store.
+    let engine_cells = ["/bin/ocel-quickjs", "/bin/ocel-js"];
+    for path in engine_cells {
+        ostd::io::print("Init: trying engine cell ");
+        ostd::io::println(path);
+        let mut attempt = ostd::syscall::sys_spawn_from_path_raw(path);
+        if matches!(attempt, SyscallResult::Err(_)) {
+            attempt = sys_spawn_from_path(path);
+        }
+        if let SyscallResult::Ok(tid) = attempt {
+            match sys_register_service(service::OCEL_JS, tid) {
+                SyscallResult::Ok(_) => {
+                    ostd::io::print("Init: registered OCEL_JS on ");
+                    ostd::io::println(path);
+                }
+                SyscallResult::Err(_) => {
+                    ostd::io::print("Init: OCEL_JS registration failed for ");
+                    ostd::io::println(path);
+                }
+            }
+            break;
+        }
+    }
+
     // fb-console mirrors the kernel user log to the display, so it stays on for
     // RPi3: a board whose only console is the serial header shows nothing on
     // HDMI otherwise. Bitmap text on a compositor surface, not a TTY.

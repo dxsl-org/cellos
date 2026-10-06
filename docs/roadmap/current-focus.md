@@ -255,6 +255,32 @@ additional prerequisite for data cells. Runnable instrument: `cells/tests/bench/
 `tests/integration/tests/capacity-observability.rs`; no committed N-sweep scenario exists.
 This remains `qemu`-ceiling work.
 
+## Native viewer (Ocel) and its Tier 2 script service
+
+- Status: executable and regression-gated. The `ocel-browser` lane runs inside
+  the `Network Data-Path Integration (riscv64)` CI job; raw evidence for the
+  first passing run is `docs/evidence/ocel-browser-qemu.log` (serial) and
+  `.txt` (runner).
+- What is true today: `init` spawns `/bin/ocel-js` at boot and registers
+  `service::OCEL_JS` (16) on its behalf; the kernel admits that cell to Tier 2
+  with private page tables (`[domain] admitted cell 'ocel-js' to Tier 2 Paged
+  Domain (SATP isolation)`); the viewer loads a document by argument or through
+  its address bar, renders Markdown / an HTML subset / plain text / BMP, and
+  sends the `<script>` blocks it extracts to that domain over 4 KiB IPC. The
+  lane witnesses the round trip, in-document search, and tab-bar input.
+- The engine is an **opt-in choice**: `cells/services/ocel-quickjs/` vendors
+  QuickJS `2026-06-04` (MIT) and runs as a Tier 2 domain cell behind the
+  `JsEngine` trait, and `/bin/ocel-js` remains the statement matcher for images
+  that do not package it. `init` prefers QuickJS and says which cell it
+  registered; the `ocel-quickjs` lane asserts the engine's own start-up
+  self-check and a document script that only a real engine can compute.
+- Still not a browser: no CSS cascade, no `fetch`/modules/workers, no
+  PDF/EPUB/SVG, and BMP is the only image decoder — the gap table lives in
+  [the Ocel guide](../guides/ocel-viewer.md).
+- Reopening / next events: add a lane that kills the engine cell mid-session to
+  witness the viewer's fallback to the in-process engine; decide whether the
+  Tier 3 Chromium launcher cell belongs to G2.
+
 ## Current executable work
 
 - Continue useful QEMU software and integration work to the `qemu` ceiling.
@@ -298,6 +324,14 @@ This remains `qemu`-ceiling work.
 - The caller-scoped shell `cd`/`pwd`, bounded truthful `fstat`, Phase 05 atomic `rename`
   backend gate, and Phase 06 pinned-QEMU x86 compatibility lanes are complete;
   POSIX documentation repair is complete and ARM64 hostile execution remains isolated.
+- Ocel's Tier 2 script service became executable on 2026-10-06. It had never
+  run: the cell linked at the default VA instead of PIE, declared no protection
+  class, and was never spawned (self-registration needs SpawnCap, which an
+  untrusted cell cannot hold). With the link script, an UNTRUSTED manifest, and
+  `init` owning the spawn and registration, the viewer's scripts execute in a
+  kernel-admitted Tier 2 domain on RV64; the `ocel-browser` lane now runs in CI
+  and the viewer's remaining capability gaps (QuickJS, CSS, PDF/EPUB/SVG) are
+  recorded in `docs/guides/ocel-viewer.md` rather than implied by the ADR.
 - Single-guest local Cell-to-Cell evidence is now required through the
   [CI workflow](../../.github/workflows/ci.yml) job
   `c2c-broker-oracle-single-guest-local-runtime`, displayed as

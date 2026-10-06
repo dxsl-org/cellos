@@ -13,7 +13,7 @@ use dom_arena::{
     DomEvent, DomMutation, JsContext, JsEngine, JsError, OcelJsRequest, OcelJsResponse,
     OCEL_JS_IPC_BUF_SIZE,
 };
-use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, SyscallResult};
+use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult};
 
 use crate::js::runtime::SimpleJsRuntime;
 
@@ -21,6 +21,8 @@ pub struct Tier2JsBridge {
     fallback: SimpleJsRuntime,
     cached_js_tid: Option<usize>,
     mutations: Vec<DomMutation>,
+    /// One line per session naming which engine actually serves the document.
+    backend_named: bool,
 }
 
 impl Default for Tier2JsBridge {
@@ -35,19 +37,40 @@ impl Tier2JsBridge {
             fallback: SimpleJsRuntime::new(),
             cached_js_tid: None,
             mutations: Vec::new(),
+            backend_named: false,
         }
     }
 
     /// Resolves the Tier 2 `ocel-js` service TID.
+    ///
+    /// `init` spawns and registers the service during boot, but Ocel may start
+    /// while that spawn is still settling, so a miss retries briefly instead of
+    /// latching the in-process fallback for the rest of the session.
     fn get_js_service_tid(&mut self) -> Option<usize> {
         if let Some(tid) = self.cached_js_tid {
             return Some(tid);
         }
-        if let Some(tid) = sys_lookup_service(api::syscall::service::OCEL_JS) {
-            self.cached_js_tid = Some(tid);
-            return Some(tid);
+        for _ in 0..200 {
+            if let Some(tid) = sys_lookup_service(api::syscall::service::OCEL_JS) {
+                self.cached_js_tid = Some(tid);
+                return Some(tid);
+            }
+            sys_yield();
         }
         None
+    }
+
+    /// Name the engine that served the script, once per session.
+    fn note_backend(&mut self, served_by_tier2: bool) {
+        if self.backend_named {
+            return;
+        }
+        self.backend_named = true;
+        if served_by_tier2 {
+            ostd::io::println("[ocel] js backend: Tier 2 domain service");
+        } else {
+            ostd::io::println("[ocel] js backend: in-process fallback (no OCEL_JS service)");
+        }
     }
 
     /// Sends an IPC request to Tier 2 `ocel-js` conforming to Spec 17 §2 (masked recv).
@@ -66,7 +89,12 @@ impl Tier2JsBridge {
             return None;
         }
 
-        // Spec 17 §2: Recv must be masked to the service TID
+        // Spec 17 §2: the receive must be masked to the service TID, and a
+        // masked receive can still surface another task's death notice — so the
+        // reply is accepted only when the kernel names `js_tid` as the sender.
+        // (The shared `ostd::ipc::recv_from` helper enforces the same rule; this
+        // cell keeps the check local so the engine cell does not depend on an
+        // API outside this change.)
         match sys_recv(js_tid, &mut recv_buf) {
             SyscallResult::Ok(sender) if sender == js_tid => {
                 postcard::from_bytes::<OcelJsResponse>(&recv_buf).ok()
@@ -95,6 +123,7 @@ impl JsContext for Tier2JsBridge {
         };
 
         if let Some(resp) = self.send_ipc_request(&req) {
+            self.note_backend(true);
             match resp {
                 OcelJsResponse::Success {
                     mutations,
@@ -110,6 +139,7 @@ impl JsContext for Tier2JsBridge {
         }
 
         // 2. Fallback to in-process SimpleJsRuntime
+        self.note_backend(false);
         use crate::js::engine::JsEngine as OldJsEngine;
         match self.fallback.eval(script) {
             Ok(val) => {

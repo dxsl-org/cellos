@@ -161,7 +161,13 @@ if [[ $BUILD_CELLS -eq 1 ]]; then
     build_cells "app-net-tools" -p app-net-tools
     build_cells "app-sys-tools" -p app-sys-tools
     build_cells "robot-demo + robot-dashboard" -p robot-demo -p robot-dashboard
-    build_cells "fb-console + desktop + ocel + ocel-js" -p fb-console -p desktop -p ocel -p ocel-js
+    if [[ "${CELLOS_NO_OCEL_QUICKJS:-0}" == "1" ]]; then
+        build_cells "fb-console + desktop + ocel + statement matcher" -p fb-console -p desktop \
+            -p ocel -p ocel-js
+    else
+        build_cells "fb-console + desktop + ocel + both Ocel engines" -p fb-console -p desktop \
+            -p ocel -p ocel-js -p ocel-quickjs
+    fi
     build_cells "hypha cells" -p hypha-llm-gateway -p hypha-core -p hypha-tool-fs -p hypha-tool-sys -p hypha-tool-spawn
     build_cells "input-test" -p input-test
     build_cells "window-policy-probe" -p window-policy-probe
@@ -262,7 +268,7 @@ for cell in app-init app-shell platform service-vfs service-config service-net s
             service-net-broker service-compositor supervisor driver-nvme driver-e1000 \
             driver-virtio-net driver-virtio-blk driver-virtio-gpu service-ai service-httpd \
             ai-test service-input bench bench-probe capacity-probe heavy-probe app-net-tools app-sys-tools \
-            robot-demo robot-dashboard fb-console desktop ocel ocel-js hypha-llm-gateway \
+            robot-demo robot-dashboard fb-console desktop ocel ocel-js ocel-quickjs hypha-llm-gateway \
             hypha-core hypha-tool-fs hypha-tool-sys hypha-tool-spawn input-test \
             window-policy-probe viui-demo audio-demo app-https-demo http-smoke cfi-test wx-test \
             vfs-test backend-supervisor backend-worker hotswap-demo-v1 hotswap-demo-v2 ls cat \
@@ -309,6 +315,16 @@ add_kfs() { [[ -f $1 ]] && kfs_args+=("$1" "$2"); return 0; }
 add_kfs "$REL/platform"             "/bin/platform"
 add_kfs "$REL/driver-virtio-blk"    "/bin/block"
 add_kfs "$(pwd)/doom1.wad"          "/doom1.wad"
+# Document fixture for the Ocel browser lane: a VIFS1 data file, not a cell, so
+# the viewer can load a document with an inline script without any image-side
+# tooling. Keep in sync with gen_disk.ps1's $kfs_args.
+add_kfs "$(pwd)/tests/fixtures/ocel-js-demo.html" "/data/ocel-js-demo.html"
+# The QuickJS engine cell resolves from VIFS1: `init` spawns it through the
+# kernel loader route, which does not make the VFS cell hold the whole ELF in
+# its own heap (see the cell's README).
+if [[ "${CELLOS_NO_OCEL_QUICKJS:-0}" != "1" ]]; then
+    add_kfs "$REL/ocel-quickjs"     "/bin/ocel-quickjs"
+fi
 add_kfs "$REL/hotswap-demo-v1"      "/bin/hotswap-demo-v1"
 add_kfs "$REL/hotswap-demo-v2"      "/bin/hotswap-demo-v2"
 add_kfs "$REL/backend-supervisor"   "/bin/backend-supervisor"
@@ -424,6 +440,15 @@ add_row "$REL/fb-console"             "/bin/fb-console"
 add_row "$REL/desktop"                "/bin/desktop"
 add_row "$REL/ocel"                   "/bin/ocel"
 add_row "$REL/ocel-js"                "/bin/ocel-js"
+# Opt-in engine cell: an image that ships it gets real JavaScript (init prefers
+# it over /bin/ocel-js); an image without it falls back to the statement matcher.
+# CELLOS_NO_OCEL_QUICKJS=1 assembles that fallback image on purpose — the
+# statement-matcher lane in boot-suite builds one to keep the picker honest.
+if [[ "${CELLOS_NO_OCEL_QUICKJS:-0}" == "1" ]]; then
+    echo "==> CELLOS_NO_OCEL_QUICKJS=1: assembling without the QuickJS engine cell"
+else
+    add_row "$REL/ocel-quickjs"       "/bin/ocel-quickjs"
+fi
 add_row "$REL/robot-demo"             "/bin/robot-demo"
 add_row "$REL/robot-dashboard"        "/bin/robot-dashboard"
 add_row "$REL/hypha-llm-gateway"      "/bin/llm-gateway"

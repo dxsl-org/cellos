@@ -11,3 +11,6 @@ ostd = { path = "../../../libs/ostd", version = "0.2.0" }
 dom-arena = { path = "../../../libs/dom-arena", version = "0.1.0" }
 postcard = { version = "1.0", default-features = false, features = ["alloc"] }
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }
