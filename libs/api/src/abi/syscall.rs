@@ -682,6 +682,41 @@ pub enum ViSyscall {
     /// ABI: a0 = physical base, a1 = byte size, a2 = `(width << 16) | height`,
     /// a3 = pitch. The kernel validates the reserved range before mapping it.
     RegisterDisplayFramebuffer = 251,
+    /// 256: Copy a bounded request into a live peer's mailbox without parking.
+    /// a0=target tid, a1=request ptr, a2=request len, a3=0 -> positive operation
+    /// token; -2 busy, -3 peer gone, -4 invalid request, -1 denied.
+    IpcSubmit = 256,
+    /// 257: Take one terminal result by exact operation token.
+    /// a0=token, a1=reply ptr, a2=reply capacity, a3=16-byte status ptr.
+    /// Returns 0 while pending, 1 after copying reply/status and releasing the
+    /// token, -5 for insufficient reply capacity (result retained).
+    IpcTake = 257,
+    /// 258: Park until any owned IPC operation terminates, or timeout expires.
+    /// a0=timeout ticks low, a1=high, a2=a3=0; 0 means indefinite.
+    /// Returns 1 on retained terminal result, 0 on timeout.
+    IpcWait = 258,
+    /// 259: Terminalize one owned operation; queued work is removed, dispatched
+    /// work is indeterminate and cannot be mistaken for a cancelled side effect.
+    /// a0=token; returns 0 on success (terminal remains retrievable by IpcTake).
+    IpcCancel = 259,
+    /// 260: Return the exact async operation token of the service's current
+    /// received request (0 for a legacy request). a0..a3=0.
+    IpcCurrent = 260,
+    /// 261: Complete a deferred request received by this exact service
+    /// generation. a0=token, a1=reply ptr, a2=reply len, a3=0 -> 0.
+    IpcReply = 261,
+}
+
+/// Fixed-width little-endian status written only by a successful `IpcTake`.
+/// Words: version=1, kind, reply byte length, reserved=0.
+pub const IPC_STATUS_LEN: usize = 16;
+pub const IPC_STATUS_VERSION: u32 = 1;
+pub mod ipc_status {
+    pub const REPLY: u32 = 0;
+    pub const PEER_GONE: u32 = 1;
+    pub const PRE_DISPATCH_TIMEOUT: u32 = 2;
+    pub const INDETERMINATE: u32 = 3;
+    pub const CANCELLED: u32 = 4;
 }
 
 /// Byte length of the frozen [`ViFstatV1`] wire record.
@@ -902,6 +937,8 @@ impl ViSyscall {
     /// bypass `ViSyscall::from()` and must be checked separately at dispatch.
     pub const fn allowlist_bit(self) -> Option<u8> {
         match self {
+            Self::IpcSubmit | Self::IpcReply => Some(0),
+            Self::IpcTake | Self::IpcWait | Self::IpcCancel | Self::IpcCurrent => Some(1),
             Self::Send => Some(0),
             Self::TrySend => Some(0), // same allowlist bit as Send (subset of Send)
             Self::Recv => Some(1),
@@ -1212,6 +1249,12 @@ impl From<usize> for ViSyscall {
             253 => ViSyscall::Getcwd,
             254 => ViSyscall::Fstat,
             255 => ViSyscall::Rename,
+            256 => ViSyscall::IpcSubmit,
+            257 => ViSyscall::IpcTake,
+            258 => ViSyscall::IpcWait,
+            259 => ViSyscall::IpcCancel,
+            260 => ViSyscall::IpcCurrent,
+            261 => ViSyscall::IpcReply,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,
@@ -1316,10 +1359,14 @@ pub mod service {
     /// IPC. `/bin/xhci` registers only this role; `/bin/dwc2-usb` registers both
     /// because on RPi3 the LAN9514 is also the NIC.
     ///
-    /// Next free id: 1–13 are the services above, 14 is
-    /// [`crate::hypervisor::HYPERVISOR_SERVICE_ID`], 15 `AI` and 16 `OCEL_JS`;
-    /// 17 is the first unassigned value.
+    /// Ids 1–13 are the services above, 14 is
+    /// [`crate::hypervisor::HYPERVISOR_SERVICE_ID`], 15 `AI`, 16 `OCEL_JS`,
+    /// 17 this producer role, 18 `OCEL_PDF`, and 19 `OCEL_ACTIVATOR`; next free: 20.
     pub const USB_HID_PRODUCER: u16 = 17;
+    /// Ocel's isolated native PDF rasterizer (`/bin/ocel-pdf`).
+    pub const OCEL_PDF: u16 = 18;
+    /// Init's allowlisted, demand-only Ocel engine activation endpoint.
+    pub const OCEL_ACTIVATOR: u16 = 19;
 }
 
 /// Arguments for `SpawnFromMem`.

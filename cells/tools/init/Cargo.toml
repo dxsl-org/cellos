@@ -7,6 +7,9 @@ license.workspace = true
 [dependencies]
 api = { path = "../../../libs/api", version = "0.1.0" }
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+ocel-service-proto = { path = "../../../libs/ocel-service-proto", version = "0.1.0" }
+ocel-pdf-proto = { path = "../../../libs/ocel-pdf-proto", version = "0.1.0" }
+dom-arena = { path = "../../../libs/dom-arena", version = "0.1.0" }
 
 [features]
 default = []
@@ -27,10 +30,40 @@ tier2-entry = []
 # edges whose real services are not built into that image; enabling this together
 # with development-silo-provider or c2c-broker is a compile error.
 tier2-grant-pair = []
-# When enabled, init brings up only VFS + Net before hypervisor — the Tier-3 VM
-# boot profile used by the hypervisor filesystem images and smoke lanes.
-hypervisor-min = []
-# Include the hostile-only supervisor control Cell in the hypervisor-min profile.
+# ── Options ─────────────────────────────────────────────────────────────────
+# Cellos is embedded-first: every image boots to a prompt with the base set
+# (vfs, net, shell on a serial console), and everything else is an option here.
+# Options are orthogonal -- a server that must not run guests is `tier3` off, a
+# kiosk is `ui` + `input` with `tier3` off, a full desktop is everything. An
+# option chooses what is packaged and booted; it never decides what may *run*
+# (admission tiers, launch profiles and ceilings are runtime policy and are the
+# same in every image).
+#
+# input: keyboard/mouse event routing (HID sources, VirtIO input).
+input = []
+# ui: the display path -- compositor, fb-console, and KMS where the board has a
+# real display driver rather than VirtIO.
+ui = []
+# ai: the Spec 24 inference service plus the config service it reads.
+ai = []
+# supervisor: the hotswap supervisor cell.
+supervisor = []
+# usb-host: the USB host driver cell (`/bin/dwc2-usb`, which also brings up the
+# LAN9514 Ethernet on a Pi). Off for a bring-up image whose only console is the
+# serial header: the kernel keeps its bring-up drivers, the image keeps no USB.
+usb-host = []
+# tier3: the guest-hosting cell is part of this image (Tier 3 apps). Without it
+# the image cannot run a Linux guest at all and `hv` fails closed with "cell
+# missing" -- the option to pick when a machine must be safer than it is capable.
+tier3 = []
+# tier3-autostart: preload the VM at boot so the first Tier-3 app starts fast.
+# Requires `tier3`.
+tier3-autostart = []
+# Preload the Tier-3 VM at boot. Cellos prioritises Tier 1/2 and otherwise lands
+# on a shell prompt with the guest idle (`hv` starts it); servers that want a
+# Tier-3 app to start fast enable this instead.
+hv-autostart = []
+# Include the hostile-only supervisor control Cell (implies `supervisor`).
 hostile-backend-recovery = ["api/hostile-backend-recovery"]
 # Admit the development/reference AArch64 Silo service into the supervised table.
 development-silo-provider = []

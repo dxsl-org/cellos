@@ -1278,7 +1278,7 @@ jobs:
 
   # VirtIO block/network e2e with a persistent two-boot backend
   # (scripts/qemu-x86-virtio-e2e.sh). Separate job from the boot gate because
-  # the lane builds the cells with its own feature set (hypervisor-min + the
+  # the lane builds the cells with its own feature set (tier3 + the
   # e2e fixture initramfs) and provisions a partitioned outer disk.
   # NOTE: this lane occasionally fails on a run whose device model logged no
   # error at all — the guest reports an I/O error on the marker write, or reads
@@ -2076,7 +2076,7 @@ jobs:
           cargo test --test ocel-quickjs -- --test-threads=1 \
             2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/ocel-quickjs.log"
 
-      - name: Run statement-matcher engine evidence (image without QuickJS)
+      - name: Run static viewer evidence (image without optional engines)
         shell: bash
         env:
           CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
@@ -2084,24 +2084,19 @@ jobs:
           AR_riscv64gc_unknown_none_elf: riscv64-unknown-elf-ar
           CFLAGS_riscv64gc_unknown_none_elf: -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
           OBJCOPY: riscv64-unknown-elf-objcopy
-        # Assembles a second image from the same cells but without the QuickJS
-        # cell (`CELLOS_NO_OCEL_QUICKJS=1`) and runs the *same* viewer lane
-        # against it with the engine expectation pinned, so `init`'s fallback to
-        # `/bin/ocel-js` is witnessed by a lane instead of by inspection.
-        #
-        # Ordered right after the QuickJS lane on purpose: the reassembly
-        # rewrites `target/riscv64gc-unknown-none-elf/release/cellos-kernel` and
-        # VIFS1 in place, so the steps before it must have already booted the
-        # image that carries QuickJS.
+        # Absence is an explicit capability boundary: static content still works,
+        # but no QuickJS, PDF or matcher is activated. Reassembly follows the
+        # engine lanes because it replaces the embedded image/kernel artifacts.
         run: |
           set -o pipefail
-          CELLOS_NO_OCEL_QUICKJS=1 bash scripts/gen-disk-ci.sh --disk disk_stub.img \
-            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/gen-disk-stub.log"
+          CELLOS_NO_OCEL_QUICKJS=1 CELLOS_NO_OCEL_PDF=1 \
+            bash scripts/gen-disk-ci.sh --disk disk_ocel_static.img \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/gen-disk-ocel-static.log"
           cd tests/integration
-          CELLOS_OCEL_DISK="$GITHUB_WORKSPACE/disk_stub.img" \
-          CELLOS_EXPECT_ENGINE_CELL=/bin/ocel-js \
+          CELLOS_OCEL_DISK="$GITHUB_WORKSPACE/disk_ocel_static.img" \
+          CELLOS_EXPECT_OCEL_ENGINE_ABSENT=1 \
             cargo test --test ocel-browser -- --test-threads=1 \
-            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/ocel-js-fallback.log"
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/ocel-static.log"
 
       - name: Run Tier 2 hardware fault isolation evidence
         shell: bash

@@ -1,6 +1,6 @@
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::{sys_lookup_service, sys_notify_on_exit, sys_recv, sys_send, SyscallResult};
+use ostd::syscall::{sys_lookup_service, sys_notify_on_exit, sys_send};
 
 use crate::service_table::{self, now_ticks, RestartPolicy, Service};
 
@@ -8,19 +8,28 @@ const MAX_RESTARTS_PER_WINDOW: u32 = 5;
 const RESTART_WINDOW_TICKS: u64 = 1000;
 
 pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -> ! {
-    let mut buffer = [0u8; 16];
+    let mut activator = crate::activation::Activator::new();
     let mut hypervisor_restarts = 0u32;
     let mut hypervisor_window_start = 0u64;
     loop {
-        let dead = match sys_recv(0, &mut buffer) {
-            SyscallResult::Ok(tid) => tid,
-            _ => {
-                ostd::task::yield_now();
-                continue;
-            }
+        let Some(message) = activator.next_message() else {
+            ostd::task::yield_now();
+            continue;
         };
-        #[cfg(not(feature = "hypervisor-min"))]
-        let reason = u64::from_le_bytes(buffer[..8].try_into().unwrap());
+        if activator.handle(message) {
+            continue;
+        }
+        // Ordinary attested caller messages are never exit notifications.
+        // Even a missing trailer is insufficient without independent liveness
+        // evidence for a watched service/root/provider.
+        if message.identity.is_some()
+            || crate::activation::task_alive(message.sender) != Some(false)
+        {
+            continue;
+        }
+        let dead = message.sender;
+        // Exit reason semantics and the Tier-3 restart branch remain unchanged.
+        let reason = message.reason();
 
         if hypervisor_tid == Some(dead) {
             relay_hypervisor_exit(dead);
@@ -74,7 +83,6 @@ pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -
         };
         let should_restart = match service.policy {
             RestartPolicy::Temporary => false,
-            #[cfg(not(feature = "hypervisor-min"))]
             RestartPolicy::Transient => reason != 0,
             RestartPolicy::Permanent => true,
         };

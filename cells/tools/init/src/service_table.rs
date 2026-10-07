@@ -4,7 +4,8 @@ use ostd::syscall::{sys_register_service, sys_spawn_from_path, SyscallResult};
 #[derive(Clone, Copy)]
 pub(crate) enum RestartPolicy {
     Permanent,
-    #[cfg(not(feature = "hypervisor-min"))]
+    /// Restarted only while it has not exited cleanly; both profiles' shells use
+    /// it, so it is not gated on the profile any more.
     Transient,
     #[allow(dead_code)]
     Temporary,
@@ -12,6 +13,9 @@ pub(crate) enum RestartPolicy {
 
 #[derive(Clone, Copy)]
 pub(crate) enum Registration {
+    /// The shell starts unregistered in every profile; the server and embedded
+    /// tables register every other service they launch.
+    #[allow(dead_code)]
     None,
     Init(u16),
     #[cfg(feature = "development-silo-provider")]
@@ -49,47 +53,54 @@ impl Service {
     }
 }
 
-#[cfg(feature = "hypervisor-min")]
-pub(crate) const SERVICE_COUNT: usize = 2 + cfg!(feature = "hostile-backend-recovery") as usize;
-#[cfg(not(feature = "hypervisor-min"))]
-pub(crate) const SERVICE_COUNT: usize = 7
-    + (!cfg!(feature = "board-rpi3")) as usize
-    + (!cfg!(feature = "board-rpi3")) as usize
-    + cfg!(feature = "development-silo-provider") as usize
-    + cfg!(feature = "c2c-broker") as usize;
-pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
-    #[cfg(feature = "hypervisor-min")]
-    return [
-        Service::new(
-            "/bin/vfs",
-            Registration::Init(service::VFS),
-            RestartPolicy::Permanent,
-        ),
-        Service::new(
-            "/bin/net",
-            Registration::Init(service::NET),
-            RestartPolicy::Permanent,
-        ),
-        #[cfg(feature = "hostile-backend-recovery")]
-        Service::new(
-            "/bin/supervisor",
-            Registration::Init(service::SUPERVISOR),
-            RestartPolicy::Permanent,
-        ),
-    ];
+/// Services every image carries: storage, the network service and a shell on a
+/// serial console. This is the embedded-first floor -- Cellos boots to a prompt
+/// on a board with nothing but a UART, and everything else is an option.
+pub(crate) const BASE_SERVICES: usize = 3;
 
-    #[cfg(not(feature = "hypervisor-min"))]
+/// One term per option, so adding an option means adding one `#[cfg]` entry to
+/// the table below and one term here. A missing term is a compile error, not a
+/// silently truncated table: `configured()` must produce exactly this many.
+pub(crate) const SERVICE_COUNT: usize = BASE_SERVICES
+    + cfg!(feature = "input") as usize
+    + cfg!(feature = "ai") as usize * 2
+    + cfg!(feature = "ui") as usize
+    + (cfg!(feature = "ui") && !cfg!(feature = "board-rpi3")) as usize
+    + cfg!(any(
+        feature = "supervisor",
+        feature = "hostile-backend-recovery"
+    )) as usize
+    + cfg!(feature = "c2c-broker") as usize
+    + cfg!(feature = "development-silo-provider") as usize;
+
+pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
     [
         Service::new(
             "/bin/vfs",
             Registration::Init(service::VFS),
             RestartPolicy::Permanent,
         ),
+        // Spec 24 unified inference service. Fail-soft: when the image has no
+        // /bin/ai (or no model), init skips it with a log line and the service,
+        // if present without a model, refuses inference truthfully. The config
+        // service ships with it -- the inference front end reads its settings
+        // there, and nothing else in the base needs it.
+        #[cfg(feature = "ai")]
         Service::new(
             "/bin/config",
             Registration::Init(service::CONFIG),
             RestartPolicy::Permanent,
         ),
+        #[cfg(feature = "ai")]
+        Service::new(
+            "/bin/ai",
+            Registration::Init(service::AI),
+            RestartPolicy::Permanent,
+        ),
+        // Keyboard and mouse event routing. Needed wherever a HID source exists
+        // (the USB host cell on a Pi, VirtIO input on a desktop image) and
+        // harmless where there is none.
+        #[cfg(feature = "input")]
         Service::new(
             "/bin/input",
             Registration::Init(service::INPUT),
@@ -100,26 +111,15 @@ pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
             Registration::Init(service::NET),
             RestartPolicy::Permanent,
         ),
+        // UI bundle: a compositor surface, plus the KMS service on boards whose
+        // display is a real driver rather than VirtIO.
+        #[cfg(feature = "ui")]
         Service::new(
             "/bin/compositor",
             Registration::Init(service::COMPOSITOR),
             RestartPolicy::Permanent,
         ),
-        // Spec 24 unified inference service. Fail-soft: when the image has no
-        // /bin/ai (or no model), init skips it with a log line and the service,
-        // if present without a model, refuses inference truthfully.
-        Service::new(
-            "/bin/ai",
-            Registration::Init(service::AI),
-            RestartPolicy::Permanent,
-        ),
-        #[cfg(feature = "development-silo-provider")]
-        Service::new(
-            "/bin/silo",
-            Registration::SelfReady(service::SILO),
-            RestartPolicy::Permanent,
-        ),
-        #[cfg(not(feature = "board-rpi3"))]
+        #[cfg(all(feature = "ui", not(feature = "board-rpi3")))]
         Service::new(
             "/bin/kms",
             Registration::Init(service::KMS),
@@ -131,12 +131,22 @@ pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
             Registration::Init(service::NET_BROKER),
             RestartPolicy::Permanent,
         ),
-        #[cfg(not(feature = "board-rpi3"))]
+        // Hotswap supervision. `hostile-backend-recovery` turns this same cell
+        // into the recovery handler, so it implies it.
+        #[cfg(any(feature = "supervisor", feature = "hostile-backend-recovery"))]
         Service::new(
             "/bin/supervisor",
             Registration::Init(service::SUPERVISOR),
             RestartPolicy::Permanent,
         ),
+        #[cfg(feature = "development-silo-provider")]
+        Service::new(
+            "/bin/silo",
+            Registration::SelfReady(service::SILO),
+            RestartPolicy::Permanent,
+        ),
+        // Last: init asserts it, and by then everything the shell may launch is
+        // already up.
         Service::new("/bin/shell", Registration::None, RestartPolicy::Transient),
     ]
 }

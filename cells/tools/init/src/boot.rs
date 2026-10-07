@@ -242,52 +242,10 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
     #[cfg(feature = "tier2-grant-pair")]
     run_grant_pair();
 
-    // Ocel's script engine (ADR-0017). Two engine cells exist and an image
-    // packages at most one of them: `/bin/ocel-quickjs` is the vendored QuickJS
-    // engine, `/bin/ocel-js` is the in-tree statement matcher. `init` prefers
-    // QuickJS when the image shipped it, and falls back to the stub, so the
-    // engine choice is an image decision rather than a viewer rebuild.
-    //
-    // Registration is `init`'s job, not the cell's — an untrusted cell holds no
-    // SpawnCap and the kernel refuses ordinary `RegisterService` without one.
-    // Fail-soft by design, and fail-closed where it matters: an image with
-    // neither cell gets no service, and an image whose admission posture
-    // refuses domain cells (production AArch64/x86_64) refuses both spawns. In
-    // every such case Ocel falls back to its in-process engine and logs which
-    // engine served the document.
-    //
-    // The kernel's own loader route is tried first: it reads the ELF from the
-    // kernel's ramdisk (VIFS1) or the P2 table without asking the VFS cell to
-    // materialise the whole file in its own heap, which is what a multi-hundred
-    // KB engine binary otherwise requires. The VFS route stays as the fallback
-    // for images that ship the engine only in the FAT cell-store.
-    let engine_cells = ["/bin/ocel-quickjs", "/bin/ocel-js"];
-    for path in engine_cells {
-        ostd::io::print("Init: trying engine cell ");
-        ostd::io::println(path);
-        let mut attempt = ostd::syscall::sys_spawn_from_path_raw(path);
-        if matches!(attempt, SyscallResult::Err(_)) {
-            attempt = sys_spawn_from_path(path);
-        }
-        if let SyscallResult::Ok(tid) = attempt {
-            match sys_register_service(service::OCEL_JS, tid) {
-                SyscallResult::Ok(_) => {
-                    ostd::io::print("Init: registered OCEL_JS on ");
-                    ostd::io::println(path);
-                }
-                SyscallResult::Err(_) => {
-                    ostd::io::print("Init: OCEL_JS registration failed for ");
-                    ostd::io::println(path);
-                }
-            }
-            break;
-        }
-    }
-
     // fb-console mirrors the kernel user log to the display, so it stays on for
     // RPi3: a board whose only console is the serial header shows nothing on
     // HDMI otherwise. Bitmap text on a compositor surface, not a TTY.
-    #[cfg(not(feature = "hypervisor-min"))]
+    #[cfg(feature = "ui")]
     match sys_spawn_from_path("/bin/fb-console") {
         SyscallResult::Ok(_) => ostd::io::println("Init: fb-console spawned."),
         SyscallResult::Err(_) => ostd::io::println("Init: fb-console spawn failed."),
@@ -295,20 +253,29 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
     // The desktop shell is not auto-started on RPi3: it is packaged in the
     // image and launched on demand (`desktop &`), which keeps the board's
     // console and compositor free during device bring-up.
-    #[cfg(all(not(feature = "hypervisor-min"), not(feature = "board-rpi3")))]
+    #[cfg(all(feature = "ui", not(feature = "board-rpi3")))]
     match sys_spawn_from_path("/bin/desktop") {
         SyscallResult::Ok(_) => ostd::io::println("Init: desktop spawned."),
         SyscallResult::Err(_) => ostd::io::println("Init: desktop spawn failed."),
     }
 
-    // The normal Pi desktop image does not launch a VM. The dedicated
-    // hypervisor-min Pi guest image does, just like the QEMU virt profile.
-    #[cfg(any(not(feature = "board-rpi3"), feature = "hypervisor-min"))]
+    // Tier 3 is an option, not a profile: `tier3` puts the guest-hosting cell in
+    // this image, `tier3-autostart` preloads the VM so the first app starts
+    // fast, and without `tier3` there is nothing to start at all.
+    #[cfg(all(feature = "tier3", feature = "tier3-autostart"))]
     let hypervisor_tid = spawn_hypervisor();
-    #[cfg(all(feature = "board-rpi3", not(feature = "hypervisor-min")))]
-    let hypervisor_tid = None;
+    #[cfg(all(feature = "tier3", not(feature = "tier3-autostart")))]
+    let hypervisor_tid = {
+        ostd::io::println("Init: tier-3 VM idle — run 'hv' in the shell to start a guest");
+        None
+    };
+    #[cfg(not(feature = "tier3"))]
+    let hypervisor_tid = {
+        ostd::io::println("Init: Tier 3 is not part of this image — no guest can be started");
+        None
+    };
 
-    #[cfg(all(not(feature = "hypervisor-min"), not(feature = "board-rpi3")))]
+    #[cfg(not(feature = "board-rpi3"))]
     {
         let _ = sys_spawn_from_path("/bin/silo-test");
         // Spec 24 G2 Level A oracle: exercises the inference service over typed IPC.

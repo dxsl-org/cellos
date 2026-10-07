@@ -136,17 +136,26 @@ impl DocumentArena {
         self.nodes.get_mut(id.index())
     }
 
-    /// Appends `child` as the last child of `parent`.
+    /// Moves a node to the last-child position, rejecting cycles and leaf parents.
     pub fn append_child(&mut self, parent: NodeId, child: NodeId) -> bool {
-        if parent.index() >= self.nodes.len() || child.index() >= self.nodes.len() {
+        if self.get(child).is_none() || child == self.root
+            || !matches!(self.get(parent).map(|n| &n.data),
+                Some(NodeData::DocumentRoot | NodeData::Element { .. }))
+        {
             return false;
         }
-
+        let mut ancestor = Some(parent);
+        while let Some(id) = ancestor {
+            if id == child { return false; }
+            ancestor = self.nodes[id.index()].parent;
+        }
+        if let Some(old_parent) = self.nodes[child.index()].parent {
+            self.remove_child(old_parent, child);
+        }
         let old_last = self.nodes[parent.index()].last_child;
         self.nodes[child.index()].parent = Some(parent);
         self.nodes[child.index()].prev_sibling = old_last;
         self.nodes[child.index()].next_sibling = None;
-
         if let Some(prev) = old_last {
             self.nodes[prev.index()].next_sibling = Some(child);
         } else {
@@ -156,41 +165,142 @@ impl DocumentArena {
         true
     }
 
-    /// Recursively extracts concatenated text content under `node_id`.
+    /// Detaches only a direct child. IDs and detached subtrees remain alive.
+    pub fn remove_child(&mut self, parent: NodeId, child: NodeId) -> bool {
+        let Some(node) = self.get(child) else { return false; };
+        if node.parent != Some(parent) { return false; }
+        let (prev, next) = (node.prev_sibling, node.next_sibling);
+        if let Some(id) = prev { self.nodes[id.index()].next_sibling = next; }
+        else { self.nodes[parent.index()].first_child = next; }
+        if let Some(id) = next { self.nodes[id.index()].prev_sibling = prev; }
+        else { self.nodes[parent.index()].last_child = prev; }
+        let node = &mut self.nodes[child.index()];
+        node.parent = None;
+        node.prev_sibling = None;
+        node.next_sibling = None;
+        true
+    }
+
+    /// Element textContent excludes comments; character nodes return their data.
     pub fn get_text_content(&self, node_id: NodeId) -> String {
+        let Some(node) = self.get(node_id) else { return String::new(); };
+        match &node.data {
+            NodeData::DocumentRoot => return String::new(),
+            NodeData::Text(s) | NodeData::Comment(s) => return s.clone(),
+            _ => {}
+        }
         let mut out = String::new();
-        self.collect_text(node_id, &mut out);
+        let mut cur = node.first_child;
+        while let Some(id) = cur {
+            let node = &self.nodes[id.index()];
+            if let NodeData::Text(s) = &node.data { out.push_str(s); }
+            if let Some(child) = node.first_child { cur = Some(child); continue; }
+            let mut cursor = id;
+            loop {
+                let node = &self.nodes[cursor.index()];
+                if let Some(next) = node.next_sibling { cur = Some(next); break; }
+                match node.parent {
+                    Some(parent) if parent != node_id => cursor = parent,
+                    _ => { cur = None; break; }
+                }
+            }
+        }
         out
     }
 
-    fn collect_text(&self, node_id: NodeId, out: &mut String) {
-        let Some(node) = self.get(node_id) else {
-            return;
-        };
-        if let NodeData::Text(ref text) = node.data {
-            out.push_str(text);
+    pub fn set_text_content(&mut self, node: NodeId, text: &str) -> bool {
+        let Some(n) = self.get_mut(node) else { return false; };
+        match &mut n.data {
+            NodeData::Text(s) | NodeData::Comment(s) => { *s = String::from(text); return true; }
+            NodeData::DocumentRoot => return true,
+            NodeData::Element { .. } => {}
         }
-        let mut cur = node.first_child;
-        while let Some(child_id) = cur {
-            self.collect_text(child_id, out);
-            cur = self.get(child_id).and_then(|n| n.next_sibling);
+        while let Some(child) = self.nodes[node.index()].first_child {
+            self.remove_child(node, child);
         }
+        if !text.is_empty() {
+            let child = self.alloc_node(NodeData::Text(String::from(text)));
+            self.append_child(node, child);
+        }
+        true
+    }
+
+    /// Checks IDs, reciprocal sibling links, parent types and acyclic ancestry.
+    pub fn validate(&self) -> bool {
+        if self.root != NodeId::ROOT || self.nodes.is_empty()
+            || !matches!(self.nodes[0].data, NodeData::DocumentRoot)
+            || self.nodes[0].parent.is_some() { return false; }
+        let mut colors = alloc::vec![0u8; self.nodes.len()];
+        for (index, node) in self.nodes.iter().enumerate() {
+            if node.id.index() != index { return false; }
+            if !matches!(node.data, NodeData::DocumentRoot | NodeData::Element { .. })
+                && (node.first_child.is_some() || node.last_child.is_some()) { return false; }
+            if index != 0 && matches!(node.data, NodeData::DocumentRoot) { return false; }
+            if let Some(parent) = node.parent {
+                let Some(parent) = self.get(parent) else { return false; };
+                if !matches!(parent.data, NodeData::DocumentRoot | NodeData::Element { .. }) { return false; }
+                if node.prev_sibling.is_none() && parent.first_child != Some(node.id) { return false; }
+                if node.next_sibling.is_none() && parent.last_child != Some(node.id) { return false; }
+            } else if node.prev_sibling.is_some() || node.next_sibling.is_some() { return false; }
+            for (link, forward) in [(node.prev_sibling, false), (node.next_sibling, true)] {
+                if let Some(id) = link {
+                    let Some(other) = self.get(id) else { return false; };
+                    if other.parent != node.parent || id == node.id
+                        || (if forward { other.prev_sibling } else { other.next_sibling }) != Some(node.id)
+                    { return false; }
+                }
+            }
+            let mut cursor = node.first_child;
+            let mut prev = None;
+            let mut count = 0;
+            while let Some(id) = cursor {
+                let Some(child) = self.get(id) else { return false; };
+                if child.parent != Some(node.id) || child.prev_sibling != prev
+                    || count >= self.nodes.len() { return false; }
+                if colors[id.index()] != 0 { return false; }
+                colors[id.index()] = 1;
+                prev = Some(id);
+                cursor = child.next_sibling;
+                count += 1;
+            }
+            if prev != node.last_child { return false; }
+        }
+        // Three-color parent walk validates deep trees in linear time, without recursion.
+        if self.nodes.iter().enumerate().any(|(index, node)| node.parent.is_some() != (colors[index] == 1)) {
+            return false;
+        }
+        colors.fill(0);
+        for index in 0..self.nodes.len() {
+            let mut cursor = Some(NodeId(index as u32));
+            while let Some(id) = cursor {
+                match colors[id.index()] {
+                    1 => return false,
+                    2 => break,
+                    _ => colors[id.index()] = 1,
+                }
+                cursor = self.nodes[id.index()].parent;
+            }
+            let mut cursor = Some(NodeId(index as u32));
+            while let Some(id) = cursor {
+                if colors[id.index()] != 1 { break; }
+                colors[id.index()] = 2;
+                cursor = self.nodes[id.index()].parent;
+            }
+        }
+        true
     }
 
     /// Applies a single DOM mutation directly to the arena.
     pub fn apply_mutation(&mut self, mutation: &DomMutation) -> bool {
         match mutation {
-            DomMutation::SetText { node, text } => {
-                if let Some(n) = self.get_mut(*node) {
-                    if let NodeData::Text(ref mut s) = n.data {
-                        *s = text.clone();
-                        return true;
-                    }
-                    n.data = NodeData::Text(text.clone());
-                    return true;
+            DomMutation::CreateNode { node, data } => {
+                if node.index() != self.nodes.len() || matches!(data, NodeData::DocumentRoot) {
+                    return false;
                 }
-                false
+                self.alloc_node(data.clone());
+                true
             }
+            DomMutation::SetText { node, text } => self.set_text_content(*node, text),
             DomMutation::SetAttribute { node, key, val } => {
                 if let Some(n) = self.get_mut(*node) {
                     if let NodeData::Element {
@@ -222,10 +332,7 @@ impl DocumentArena {
                 false
             }
             DomMutation::AppendChild { parent, child } => self.append_child(*parent, *child),
-            DomMutation::RemoveChild { .. } => {
-                // Future extension for node detach
-                true
-            }
+            DomMutation::RemoveChild { parent, child } => self.remove_child(*parent, *child),
             DomMutation::SetDocumentTitle { .. } => true,
         }
     }
@@ -236,6 +343,10 @@ impl DocumentArena {
 /// Fine-grained DOM mutation operation emitted by the JS engine to Tier 1.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum DomMutation {
+    CreateNode {
+        node: NodeId,
+        data: NodeData,
+    },
     SetText {
         node: NodeId,
         text: String,
@@ -285,28 +396,45 @@ pub struct DomEvent {
 
 pub const OCEL_JS_IPC_BUF_SIZE: usize = 4096;
 
-/// Requests sent from Ocel (Tier 1) to `ocel-js` (Tier 2).
+/// Logical commands transported through bounded, ordered IPC chunks.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum OcelJsRequest {
-    /// Execute an inline or external JavaScript script.
+pub enum OcelJsCommand {
     Eval { script: String },
-    /// Dispatch a UI event to the JS environment.
     DispatchEvent { event: DomEvent },
-    /// Reset the JS context (e.g. on new page navigation).
-    ResetContext,
+    SyncDocument { arena: DocumentArena, title: String },
 }
 
-/// Responses sent from `ocel-js` (Tier 2) to Ocel (Tier 1).
+pub const OCEL_JS_CHUNK_SIZE: usize = 3072;
+pub const OCEL_JS_MAX_TRANSFER: usize = 512 * 1024;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum OcelJsRequest {
+    /// Explicitly replaces the one active context; old tokens become invalid.
+    OpenContext { context: u64 },
+    Begin { context: u64, total: usize },
+    Chunk { context: u64, offset: usize, data: Vec<u8> },
+    Commit { context: u64 },
+    ReadResponse { context: u64, offset: usize },
+    /// Readiness probe; never replaces or mutates the active document context.
+    Ping,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum OcelJsReply {
+    Ack,
+    ResponseChunk { offset: usize, total: usize, data: Vec<u8> },
+    Error { message: String },
+    Ready,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OcelJsResponse {
-    /// Script or event execution succeeded, returning batched mutations.
-    Success {
-        mutations: Vec<DomMutation>,
-        result_repr: String,
-    },
-    /// Script execution resulted in a JavaScript error.
-    Error { message: String, line: u32 },
+    Success { mutations: Vec<DomMutation>, result_repr: String },
+    /// Side effects preceding a thrown exception must still reach the document.
+    Error { message: String, line: u32, mutations: Vec<DomMutation> },
 }
+
+pub mod ipc;
 
 // ─── Gosub-Inspired JS Engine Trait Abstraction ────────────────────────────────
 
@@ -327,6 +455,10 @@ pub trait JsEngine {
 
 /// Context in which JavaScript code executes and interacts with DOM Proxies.
 pub trait JsContext {
+    /// Synchronize a validated arena without clearing same-document JS globals.
+    fn sync_document(&mut self, _arena: &DocumentArena, _title: &str) -> Result<(), JsError> {
+        Err(JsError { message: String::from("engine has no document-backed DOM"), line: 0 })
+    }
     /// Evaluate a JavaScript code string.
     fn eval(&mut self, script: &str) -> Result<String, JsError>;
     /// Dispatch an event to JavaScript event listeners.
@@ -335,4 +467,68 @@ pub trait JsContext {
     fn take_mutations(&mut self) -> Vec<DomMutation>;
     /// Reset execution state and global variables.
     fn reset(&mut self);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn element(arena: &mut DocumentArena, tag: &str) -> NodeId {
+        arena.alloc_node(NodeData::Element { tag: String::from(tag), attributes: Vec::new() })
+    }
+    #[test]
+    fn moving_and_removing_children_preserves_links_and_rejects_cycles() {
+        let mut arena = DocumentArena::new();
+        let a = element(&mut arena, "div");
+        let b = element(&mut arena, "div");
+        let c = element(&mut arena, "span");
+        arena.append_child(NodeId::ROOT, a);
+        arena.append_child(NodeId::ROOT, b);
+        arena.append_child(a, c);
+        assert!(!arena.append_child(c, a));
+        assert!(!arena.append_child(c, NodeId::ROOT));
+        assert!(arena.append_child(b, c));
+        assert_eq!(arena.get(a).unwrap().first_child, None);
+        assert!(arena.append_child(NodeId::ROOT, a));
+        assert_eq!(arena.get(b).unwrap().next_sibling, Some(a));
+        assert_eq!(arena.get(a).unwrap().prev_sibling, Some(b));
+        assert!(!arena.remove_child(a, c));
+        assert!(arena.remove_child(b, c));
+        assert_eq!(arena.get(c).unwrap().parent, None);
+        assert!(arena.validate());
+    }
+    #[test]
+    fn element_text_content_keeps_type_attributes_and_detached_subtree() {
+        let mut arena = DocumentArena::new();
+        let element = arena.alloc_node(NodeData::Element {
+            tag: String::from("p"), attributes: alloc::vec![(String::from("id"), String::from("greeting"))],
+        });
+        let text = arena.alloc_node(NodeData::Text(String::from("old")));
+        let comment = arena.alloc_node(NodeData::Comment(String::from("hidden")));
+        arena.append_child(NodeId::ROOT, element);
+        arena.append_child(element, text);
+        arena.append_child(element, comment);
+        assert_eq!(arena.get_text_content(element), "old");
+        assert_eq!(arena.get_text_content(comment), "hidden");
+        let new_id = NodeId(arena.nodes.len() as u32);
+        assert!(arena.set_text_content(element, "new\n\t\0"));
+        assert_eq!(arena.get(element).unwrap().tag(), Some("p"));
+        assert_eq!(arena.get(element).unwrap().get_attribute("id"), Some("greeting"));
+        assert_eq!(arena.get(element).unwrap().first_child, Some(new_id));
+        assert_eq!(arena.get(text).unwrap().parent, None);
+        assert_eq!(arena.get(comment).unwrap().parent, None);
+        assert_eq!(arena.get_text_content(element), "new\n\t\0");
+        assert!(arena.set_text_content(element, ""));
+        assert_eq!(arena.get(element).unwrap().first_child, None);
+        assert!(arena.validate());
+    }
+    #[test]
+    fn creation_ids_are_sequential_and_snapshots_reject_broken_links() {
+        let mut arena = DocumentArena::new();
+        let data = NodeData::Text(String::from("hello"));
+        assert!(!arena.apply_mutation(&DomMutation::CreateNode { node: NodeId(3), data: data.clone() }));
+        assert!(arena.apply_mutation(&DomMutation::CreateNode { node: NodeId(1), data }));
+        assert!(!arena.append_child(NodeId(1), NodeId(1)));
+        arena.nodes[1].next_sibling = Some(NodeId(99));
+        assert!(!arena.validate());
+    }
 }

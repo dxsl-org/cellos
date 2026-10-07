@@ -126,7 +126,13 @@ Build-Cargo -What "app-bench"      -Packages @('app-bench')       # builds bench
 Build-Cargo -What "app-net-tools"  -Packages @('app-net-tools')
 Build-Cargo -What "app-sys-tools"  -Packages @('app-sys-tools')
 Build-Cargo -What "robot-demo + robot-dashboard" -Packages @('robot-demo', 'robot-dashboard')
-Build-Cargo -What "fb-console + desktop + ocel + both Ocel engines" -Packages @('fb-console', 'desktop', 'ocel', 'ocel-js', 'ocel-quickjs')
+Build-Cargo -What "fb-console + desktop + Ocel viewer" -Packages @('fb-console', 'desktop', 'ocel')
+if ($env:CELLOS_NO_OCEL_QUICKJS -ne "1") {
+    Build-Cargo -What "Ocel optional QuickJS engine" -Packages @('ocel-quickjs')
+}
+if ($env:CELLOS_NO_OCEL_PDF -ne "1") {
+    Build-Cargo -What "Ocel optional PDF renderer" -Packages @('ocel-pdf')
+}
 Build-Cargo -What "hypha cells"    -Packages @('hypha-llm-gateway', 'hypha-core', 'hypha-tool-fs', 'hypha-tool-sys', 'hypha-tool-spawn')
 Build-Cargo -What "input-test"     -Packages @('input-test')
 Build-Cargo -What "window-policy-probe" -Packages @('window-policy-probe')
@@ -277,8 +283,8 @@ Add-CellToSign "$rel_dir/robot-dashboard"
 Add-CellToSign "$rel_dir/fb-console"
 Add-CellToSign "$rel_dir/desktop"
 Add-CellToSign "$rel_dir/ocel"
-Add-CellToSign "$rel_dir/ocel-js"
-Add-CellToSign "$rel_dir/ocel-quickjs"
+if ($env:CELLOS_NO_OCEL_QUICKJS -ne "1") { Add-CellToSign "$rel_dir/ocel-quickjs" }
+if ($env:CELLOS_NO_OCEL_PDF -ne "1") { Add-CellToSign "$rel_dir/ocel-pdf" }
 Add-CellToSign "$rel_dir/hypha-llm-gateway"
 Add-CellToSign "$rel_dir/hypha-core"
 Add-CellToSign "$rel_dir/hypha-tool-fs"
@@ -371,7 +377,6 @@ $ai_model      = "models/tiny-llama-64.gguf"  # Spec 24: deterministic tiny mode
 $fb_console_bin = "$rel_dir/fb-console"       # HMI: mirror kernel log to HDMI screen
 $desktop_bin   = "$rel_dir/desktop"
 $ocel_bin      = "$rel_dir/ocel"
-$ocel_js_bin   = "$rel_dir/ocel-js"
 $ocel_quickjs_bin = "$rel_dir/ocel-quickjs"
 $robot_demo_bin = "$rel_dir/robot-demo"       # G1 sensor→actuator reference demo
 $dashboard_bin = "$rel_dir/robot-dashboard"  # G1 ViUI v2 dashboard demo
@@ -512,6 +517,18 @@ if ($doom_wad)  { $kfs_args += @($doom_wad, "/doom1.wad") }
 # a VIFS1 data file, not a cell. Keep in sync with scripts/gen-disk-ci.sh's kfs_args.
 $ocel_fixture = Join-Path (Get-Location) "tests/fixtures/ocel-js-demo.html"
 if (Test-Path $ocel_fixture) { $kfs_args += @($ocel_fixture, "/data/ocel-js-demo.html") }
+$pdf_fixture = Join-Path (Get-Location) "tests/fixtures/ocel-pdf-demo.pdf"
+if (Test-Path $pdf_fixture) { $kfs_args += @($pdf_fixture, "/data/ocel-pdf-demo.pdf") }
+foreach ($extension in @("html", "css", "js")) {
+    $web_fixture = Join-Path (Get-Location) "tests/fixtures/ocel-native-web.$extension"
+    if (Test-Path $web_fixture) { $kfs_args += @($web_fixture, "/data/ocel-native-web.$extension") }
+}
+$static_fixture = Join-Path (Get-Location) "tests/fixtures/ocel-static-demo.html"
+if (Test-Path $static_fixture) { $kfs_args += @($static_fixture, "/data/ocel-static-demo.html") }
+if (Test-Path $ocel_bin) { $kfs_args += @($ocel_bin, "/bin/ocel") }
+if ((Test-Path "$rel_dir/ocel-pdf") -and ($env:CELLOS_NO_OCEL_PDF -ne "1")) {
+    $kfs_args += @("$rel_dir/ocel-pdf", "/bin/ocel-pdf")
+}
 # QuickJS engine cell: VIFS1-resident so `init`'s kernel-loader route can reach
 # it without the VFS cell holding the whole ELF in its own heap.
 if ((Test-Path "$rel_dir/ocel-quickjs") -and ($env:CELLOS_NO_OCEL_QUICKJS -ne "1")) {
@@ -646,11 +663,11 @@ if (Test-Path $comp_bin)        { $table_args += "/bin/compositor=$comp_bin" }
 if (Test-Path $fb_console_bin)  { $table_args += "/bin/fb-console=$fb_console_bin" }
 if (Test-Path $desktop_bin)     { $table_args += "/bin/desktop=$desktop_bin" }
 if (Test-Path $ocel_bin)        { $table_args += "/bin/ocel=$ocel_bin" }
-if (Test-Path $ocel_js_bin)     { $table_args += "/bin/ocel-js=$ocel_js_bin" }
-# Opt-in engine cell: shipped means init prefers real JavaScript; absent means
-# the viewer keeps the statement matcher.
-# CELLOS_NO_OCEL_QUICKJS=1 assembles the statement-matcher-only image on purpose
-# (see scripts/gen-disk-ci.sh); `init` then registers /bin/ocel-js.
+if ((Test-Path "$rel_dir/ocel-pdf") -and ($env:CELLOS_NO_OCEL_PDF -ne "1")) {
+    $table_args += "/bin/ocel-pdf=$rel_dir/ocel-pdf"
+}
+# Optional engines are activated by init only on demand. An image without
+# QuickJS is a static viewer, not a statement-matcher fallback.
 if ((Test-Path $ocel_quickjs_bin) -and ($env:CELLOS_NO_OCEL_QUICKJS -ne "1")) {
     $table_args += "/bin/ocel-quickjs=$ocel_quickjs_bin"
 }

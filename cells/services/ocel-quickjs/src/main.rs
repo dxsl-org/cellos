@@ -21,7 +21,7 @@ extern crate api;
 extern crate ostd;
 
 #[cfg(not(qjs_c_unavailable))]
-use dom_arena::{JsContext, JsEngine, OcelJsRequest, OcelJsResponse, OCEL_JS_IPC_BUF_SIZE};
+use dom_arena::{ipc::JsServiceSession, JsContext, JsEngine, OcelJsRequest, OCEL_JS_IPC_BUF_SIZE};
 #[cfg(not(qjs_c_unavailable))]
 use ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
 
@@ -33,11 +33,10 @@ api::declare_manifest!(
 );
 api::declare_syscalls![Log, Recv, Send, TryRecv, GetTime];
 
-// The engine's translation units, the prelude and the engine state together
-// need more than the 1 MiB default cell heap: QuickJS compiles every function
-// it evaluates into bytecode, and the prelude itself is ~4 KiB of source.
+// Cell heap includes QuickJS's 3 MiB accounted heap, Rust transfer buffers,
+// snapshot source and allocator overhead; the engine's own ceiling stays lower.
 #[cfg(not(qjs_c_unavailable))]
-ostd::declare_custom_heap!(1024 * 1024);
+ostd::declare_custom_heap!(8 * 1024 * 1024);
 
 #[cfg(not(qjs_c_unavailable))]
 mod engine;
@@ -97,48 +96,23 @@ fn cell_main() {
 
     let mut recv_buf = [0u8; OCEL_JS_IPC_BUF_SIZE];
     let mut send_buf = [0u8; OCEL_JS_IPC_BUF_SIZE];
+    let mut session = JsServiceSession::default();
 
     loop {
         match sys_recv(0, &mut recv_buf) {
             SyscallResult::Ok(caller_tid) if caller_tid > 0 => {
+                let operation = ostd::ipc::current();
                 let response = match postcard::from_bytes::<OcelJsRequest>(&recv_buf) {
-                    Ok(OcelJsRequest::Eval { script }) => match ctx.eval(&script) {
-                        Ok(result_repr) => OcelJsResponse::Success {
-                            mutations: ctx.take_mutations(),
-                            result_repr,
-                        },
-                        Err(e) => OcelJsResponse::Error {
-                            message: e.message,
-                            line: e.line,
-                        },
-                    },
-                    Ok(OcelJsRequest::DispatchEvent { event }) => {
-                        match ctx.dispatch_event(&event) {
-                            Ok(_) => OcelJsResponse::Success {
-                                mutations: ctx.take_mutations(),
-                                result_repr: alloc::string::String::from("event_dispatched"),
-                            },
-                            Err(e) => OcelJsResponse::Error {
-                                message: e.message,
-                                line: e.line,
-                            },
-                        }
-                    }
-                    Ok(OcelJsRequest::ResetContext) => {
-                        ctx.reset();
-                        OcelJsResponse::Success {
-                            mutations: alloc::vec::Vec::new(),
-                            result_repr: alloc::string::String::from("context_reset"),
-                        }
-                    }
-                    Err(_) => OcelJsResponse::Error {
-                        message: alloc::string::String::from("Malformed OcelJsRequest IPC payload"),
-                        line: 0,
-                    },
+                    Ok(request) => session.handle(caller_tid, request, &mut ctx),
+                    Err(_) => JsServiceSession::error("Malformed OcelJsRequest IPC payload"),
                 };
 
                 if let Ok(encoded) = postcard::to_slice(&response, &mut send_buf) {
-                    let _ = sys_send(caller_tid, encoded);
+                    if let Some(operation) = operation {
+                        let _ = ostd::ipc::reply(operation, encoded);
+                    } else {
+                        let _ = sys_send(caller_tid, encoded);
+                    }
                 }
                 // Script output (`console.log`) and engine diagnostics go to the
                 // cell log, not into the reply: the viewer's IPC payload is the

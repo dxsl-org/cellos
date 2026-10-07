@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 //! Ocel — Universal Document & Web Viewer for CellOS.
 //!
-//! Native lightweight viewer for HTML/CSS, Markdown, PDF, and plain text.
+//! Native viewer for an HTML subset, Markdown, source code, text, PNG/JPEG/BMP and service-rendered PDF.
 
 #![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
@@ -17,9 +17,12 @@ mod draw;
 mod font;
 mod image;
 mod js;
+mod lease;
 mod loader;
 mod net;
 mod parser;
+mod pdf;
+mod resources;
 
 use doc::Document;
 use draw::{clear, draw_str, fill_rect, stroke_rect, theme, Color};
@@ -44,6 +47,10 @@ api::declare_syscalls![
     Recv,
     TryRecv,
     LookupService,
+    IpcSubmit,
+    IpcTake,
+    IpcWait,
+    IpcCancel,
     GpuGetResolution,
     GetTime,
     OpenCap,
@@ -57,7 +64,12 @@ api::declare_syscalls![
     StateRestore
 ];
 
+#[cfg(not(test))]
 ostd::cell_main!(cell_main);
+
+// Decoding must not use ostd's 1 MiB default arena.
+#[cfg(target_os = "none")]
+ostd::declare_custom_heap!(16 * 1024 * 1024);
 
 const TOOLBAR_HEIGHT: u32 = 44;
 const TABBAR_HEIGHT: u32 = 28;
@@ -70,10 +82,11 @@ struct Tab {
     pub scroll_y: i32,
     pub history: Vec<String>,
     pub history_idx: usize,
+    pub js_context_id: u64,
 }
 
 impl Tab {
-    fn new(url: &str, viewport_w: u32, js_runtime: &mut js::Tier2JsBridge) -> Self {
+    fn new(url: &str, viewport_w: u32, viewport_h: u32, js_runtime: &mut js::Tier2JsBridge) -> Self {
         let mut tab = Self {
             title: String::new(),
             url: String::new(),
@@ -81,8 +94,9 @@ impl Tab {
             scroll_y: 0,
             history: Vec::new(),
             history_idx: 0,
+            js_context_id: 0,
         };
-        let (loaded_url, _fmt) = tab.load(url, viewport_w, js_runtime);
+        let (loaded_url, _fmt) = tab.load(url, viewport_w, viewport_h, js_runtime);
         tab.history = alloc::vec![loaded_url];
         tab
     }
@@ -98,12 +112,16 @@ impl Tab {
         &mut self,
         url: &str,
         viewport_w: u32,
+        viewport_h: u32,
         js_runtime: &mut js::Tier2JsBridge,
     ) -> (String, &'static str) {
+        // Navigation relinquishes the old context before loading another engine.
+        js_runtime.reset();
         let loaded = load_document(url);
 
-        let (nodes, scripts, arena, fmt_name) = if let Some(direct) = loaded.direct_nodes {
-            (direct, alloc::vec::Vec::new(), None, "Image")
+        let (nodes, scripts, mut arena, fmt_name) = if let Some(direct) = loaded.direct_nodes {
+            let format_name = if pdf::is_pdf_path(&loaded.url) { "PDF" } else { "Image" };
+            (direct, alloc::vec::Vec::new(), None, format_name)
         } else {
             let fmt = DocFormat::detect_from_url_or_content(&loaded.url, &loaded.content);
             let (parsed_nodes, parsed_scripts, parsed_arena) =
@@ -121,30 +139,72 @@ impl Tab {
             )
         };
 
-        js_runtime.reset();
-        for script in &scripts {
-            use js::JsContext;
-            let _ = js_runtime.eval(script);
-        }
-
-        let mut content_title = loaded.title;
-        use js::JsContext;
-        for mutation in js_runtime.take_mutations() {
-            if let dom_arena::DomMutation::SetDocumentTitle { title } = mutation {
-                if !title.is_empty() {
-                    ostd::io::println(&format!("[ocel] dom title: {}", title));
-                    content_title = title;
+        self.doc.clear();
+        self.doc.external_stylesheets.clear();
+        if let Some(document) = &arena {
+            for node in &document.nodes {
+                if node.tag() == Some("link") && node.get_attribute("rel").is_some_and(|rel| rel.split_ascii_whitespace().any(|value| value.eq_ignore_ascii_case("stylesheet"))) {
+                    if let Some(href) = node.get_attribute("href") {
+                        match resources::load_text(&loaded.url, href) {
+                            Ok(css) => self.doc.external_stylesheets.push((node.id, css)),
+                            Err(error) => ostd::io::println(&format!("[ocel] stylesheet error: {}", error)),
+                        }
+                    }
                 }
             }
         }
-
+        let mut content_title = loaded.title;
+        let scripts_ready = match js_runtime.sync_script_document(arena.as_ref(), !scripts.is_empty(), &content_title) {
+            Ok(ready) => ready,
+            Err(error) => {
+                ostd::io::println(&format!("[ocel] DOM sync failed: {:?}", error));
+                if let Some(document) = &mut arena {
+                    let warning = document.alloc_node(dom_arena::NodeData::Element {
+                        tag: String::from("p"), attributes: Vec::new(),
+                    });
+                    let text = document.alloc_node(dom_arena::NodeData::Text(format!("JavaScript unavailable: {}", error.message)));
+                    document.append_child(warning, text);
+                    document.append_child(document.root, warning);
+                }
+                false
+            }
+        };
+        self.js_context_id = if scripts_ready { js_runtime.context_id() } else { 0 };
+        use js::JsContext;
+        for script in &scripts {
+            if !scripts_ready { break; }
+            let source = match script {
+                parser::html::ScriptSource::Inline(source) => Ok(source.clone()),
+                parser::html::ScriptSource::External(url) => resources::load_text(&loaded.url, url),
+            };
+            match source {
+                Ok(source) => if let Err(error) = js_runtime.eval(&source) {
+                    ostd::io::println(&format!("[ocel] script error: {:?}", error));
+                },
+                Err(error) => ostd::io::println(&format!("[ocel] script load error: {}", error)),
+            }
+            for mutation in js_runtime.take_mutations() {
+                match mutation {
+                    dom_arena::DomMutation::SetDocumentTitle { title } => {
+                        if !title.is_empty() {
+                            ostd::io::println(&format!("[ocel] dom title: {}", title));
+                            content_title = title;
+                        }
+                    }
+                    other => if let Some(document) = &mut arena { document.apply_mutation(&other); },
+                }
+            }
+        }
         self.url = loaded.url;
         self.doc.arena = arena;
         self.title = content_title;
         self.scroll_y = 0;
-        self.doc.clear();
         self.doc.nodes = nodes;
-        self.doc.compute_layout(viewport_w);
+        if self.doc.arena.is_some() {
+            self.doc.relayout_from_arena(viewport_w, viewport_h);
+        } else {
+            self.doc.compute_layout(viewport_w);
+        }
         ostd::io::println(&format!(
             "[ocel] loaded {} ({}, {} items)",
             self.url,
@@ -180,7 +240,7 @@ impl OcelViewer {
 
         let mut js_runtime = js::Tier2JsBridge::new();
         let viewport_w = width.saturating_sub(24);
-        let first_tab = Tab::new(initial_url, viewport_w, &mut js_runtime);
+        let first_tab = Tab::new(initial_url, viewport_w, height.saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT), &mut js_runtime);
         let initial_url = first_tab.url.clone();
 
         let viewer = Self {
@@ -213,7 +273,7 @@ impl OcelViewer {
 
     fn new_tab(&mut self, url: &str) {
         let viewport_w = self.width.saturating_sub(24);
-        let tab = Tab::new(url, viewport_w, &mut self.js_runtime);
+        let tab = Tab::new(url, viewport_w, self.height.saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT), &mut self.js_runtime);
         self.tabs.push(tab);
         self.active_tab = self.tabs.len().saturating_sub(1);
         self.url_input = self.current_tab().url.clone();
@@ -229,9 +289,15 @@ impl OcelViewer {
     }
 
     fn close_tab(&mut self, idx: usize) {
+        use js::JsContext;
         if self.tabs.len() > 1 && idx < self.tabs.len() {
+            if self.tabs[idx].js_context_id == self.js_runtime.context_id() {
+                self.js_runtime.reset();
+            }
             self.tabs.remove(idx);
-            if self.active_tab >= self.tabs.len() {
+            if idx < self.active_tab {
+                self.active_tab -= 1;
+            } else if self.active_tab >= self.tabs.len() {
                 self.active_tab = self.tabs.len().saturating_sub(1);
             }
             self.url_input = self.current_tab().url.clone();
@@ -247,10 +313,18 @@ impl OcelViewer {
         }
     }
 
+    fn switch_tab(&mut self, index: usize) {
+        if index != self.active_tab {
+            use js::JsContext;
+            self.js_runtime.reset();
+            self.active_tab = index;
+        }
+        self.url_input = self.current_tab().url.clone();
+    }
+
     fn next_tab(&mut self) {
         if !self.tabs.is_empty() {
-            self.active_tab = (self.active_tab + 1) % self.tabs.len();
-            self.url_input = self.current_tab().url.clone();
+            self.switch_tab((self.active_tab + 1) % self.tabs.len());
             self.status_text = format!("Switched to tab: {}", self.url_input);
             ostd::io::println(&format!(
                 "[ocel] tab {} active: {}",
@@ -293,6 +367,7 @@ impl OcelViewer {
 
     fn load_url(&mut self, url: &str) {
         let viewport_w = self.width.saturating_sub(24);
+        let viewport_h = self.height.saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT);
         let (loaded_url, fmt_name, items, height) = {
             let Self {
                 tabs,
@@ -301,7 +376,7 @@ impl OcelViewer {
                 ..
             } = self;
             let tab = &mut tabs[*active_tab];
-            let (loaded_url, fmt_name) = tab.load(url, viewport_w, js_runtime);
+            let (loaded_url, fmt_name) = tab.load(url, viewport_w, viewport_h, js_runtime);
             (
                 loaded_url,
                 fmt_name,
@@ -761,8 +836,7 @@ impl OcelViewer {
                         self.close_tab(i);
                     } else {
                         // Clicked tab body -> switch tab
-                        self.active_tab = i;
-                        self.url_input = self.current_tab().url.clone();
+                        self.switch_tab(i);
                     }
                     self.render();
                     return;
@@ -812,6 +886,10 @@ impl OcelViewer {
                 .doc
                 .hit_test_node(cx, cy, 0, view_y, active_scroll)
             {
+                if active_tab.js_context_id == 0 || active_tab.js_context_id != self.js_runtime.context_id() {
+                    ostd::io::println("[ocel] This tab's JavaScript context is inactive; reload to enable scripts.");
+                    return;
+                }
                 ostd::io::print("[ocel] Clicked DOM Node #");
                 ostd::io::print_usize(node_id.index());
                 ostd::io::println(" -> dispatching Click event to Tier 2 JS");
@@ -825,7 +903,11 @@ impl OcelViewer {
                 };
 
                 use js::JsContext;
-                let _ = self.js_runtime.dispatch_event(&event);
+                if let Err(error) = self.js_runtime.dispatch_event(&event) {
+                    self.status_text = format!("JavaScript: {}", error.message);
+                    ostd::io::println(&format!("[ocel] {}", self.status_text));
+                    self.render();
+                }
 
                 let mutations = self.js_runtime.take_mutations();
                 if !mutations.is_empty() {
@@ -841,7 +923,7 @@ impl OcelViewer {
                                 }
                             }
                             other => {
-                                if let Some(ref mut arena) = tab.doc.arena {
+                                if let Some(arena) = &mut tab.doc.arena {
                                     if arena.apply_mutation(&other) {
                                         layout_dirty = true;
                                     }
@@ -851,10 +933,7 @@ impl OcelViewer {
                     }
 
                     if layout_dirty {
-                        if let Some(ref arena) = tab.doc.arena {
-                            tab.doc.nodes = parser::html::arena_to_doc_nodes(arena);
-                            tab.doc.compute_layout(viewport_w);
-                        }
+                        tab.doc.relayout_from_arena(viewport_w, view_h as u32);
                     }
                     self.render();
                 }
@@ -977,6 +1056,8 @@ impl OcelViewer {
 }
 
 fn cell_main() {
+    #[cfg(target_os = "none")]
+    init_custom_heap();
     ostd::io::println("[ocel] Starting Ocel Document Viewer...");
 
     let comp_tid = ostd::display::wait_for_compositor();

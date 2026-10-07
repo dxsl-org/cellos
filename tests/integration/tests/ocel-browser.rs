@@ -1,32 +1,8 @@
 // SPDX-License-Identifier: MIT
-//! Integration test: the Ocel viewer, its Tier 2 `ocel-js` script service, and
-//! the viewer's own input paths, driven end to end in QEMU (riscv64).
-//!
-//! What each assertion is evidence for:
-//!
-//! 1. `[domain] admitted cell 'ocel-quickjs' … (SATP isolation)` and
-//!    `Init: registered OCEL_JS on …` — `init` spawns the engine cell at boot
-//!    and the kernel admits it with private page tables, so an engine fault
-//!    cannot reach the viewer's address space. The lane accepts either engine
-//!    cell: which one an image ships is an image decision, and the engine's own
-//!    identity is the `ocel-quickjs` lane's subject.
-//! 2. `[ocel] loaded file:///data/ocel-js-demo.html (HTML, …)` — the viewer
-//!    opened the document named on its command line (`ocel <url>`), parsed it,
-//!    and built layout nodes for it.
-//! 3. `[ocel] js backend: Tier 2 domain service` — the inline script in that
-//!    fixture was executed by the Tier 2 service, not by the in-process
-//!    fallback engine (the test also asserts the fallback line is absent).
-//! 4. `[ocel] dom title: …` — the mutation the service returned
-//!    crossed the IPC boundary and was applied to the document.
-//! 5. `[ocel] search "<q>": N match(es)` after QMP keystrokes — the keyboard
-//!    path (input service → focused cell) reaches the viewer, and in-document
-//!    search finds the fixture's own text.
-//! 6. `[ocel] tab 2 active: …` after a QMP click on the tab bar's `[+]` — the
-//!    compositor routes pointer input to the viewer and its hit-testing runs.
-//!
-//! Everything is read from the serial log or the framebuffer; nothing here
-//! re-states a value the test itself supplied, except the document path and the
-//! search term, both of which are the inputs under test.
+//! Ocel viewer input/rendering and demand-only Tier 2 JavaScript, in QEMU.
+//! The document's loop/closure/map result must cross IPC into its title.
+//! An optional-engine-absent image must still render and answer input, without
+//! spawning a matcher or claiming the script executed.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -57,10 +33,7 @@ fn kernel_path() -> String {
         .into_owned()
 }
 
-/// The image this lane boots. `CELLOS_OCEL_DISK` lets the statement-matcher
-/// step in `boot-suite` point at the image assembled without the QuickJS cell
-/// (`CELLOS_NO_OCEL_QUICKJS=1`), so both engine picker outcomes are witnessed
-/// against the same lane instead of the missing one rotting.
+/// Optional-engine-absent CI selects a separate disk via `CELLOS_OCEL_DISK`.
 fn disk_path() -> String {
     std::env::var("CELLOS_OCEL_DISK").unwrap_or_else(|_| {
         repo_root()
@@ -95,18 +68,6 @@ fn require_marker(qemu: &QemuRunner, marker: &str, what: &str) {
     }
 }
 
-/// Whichever of `markers` appears in the log (the engine cell an image ships is
-/// an image decision, so a lane that is not about the engine itself must accept
-/// either engine cell).
-fn require_any_marker(qemu: &QemuRunner, markers: &[&str], what: &str) {
-    if markers.iter().any(|m| qemu.output_contains(m)) {
-        return;
-    }
-    panic!(
-        "{what}: serial log lacks all of {markers:?}\n--- serial output ---\n{}",
-        qemu.dump()
-    );
-}
 
 /// The integer that follows `prefix` in the last occurrence of `prefix`.
 fn count_after(output: &str, prefix: &str) -> Option<usize> {
@@ -116,7 +77,7 @@ fn count_after(output: &str, prefix: &str) -> Option<usize> {
     digits.parse().ok()
 }
 
-fn assert_region_not_black(qemu: &QemuRunner, frame_path: &str, what: &str, region: [usize; 4]) {
+fn assert_region_not_black(_qemu: &QemuRunner, frame_path: &str, what: &str, region: [usize; 4]) {
     let [l, t, r, b] = region;
     let pixels = pixel_region(&read_ppm_frame(frame_path), l, t, r, b);
     assert!(
@@ -143,46 +104,18 @@ fn ocel_viewer_runs_scripts_in_tier2_and_answers_input() {
     // Let background boot tests finish
     let _ = qemu.wait_for("[vfs-test] ALL TESTS PASSED", EVENT_TIMEOUT);
     settle();
+    assert!(!qemu.output_contains("[domain] admitted cell 'ocel-quickjs'"),
+        "QuickJS must not run before demand:\n{}", qemu.dump());
+    assert!(!qemu.output_contains("[domain] admitted cell 'ocel-pdf'"),
+        "PDF must not run before demand:\n{}", qemu.dump());
 
-    // ── 1. A Tier 2 engine cell is up before the viewer starts ──────────────
-    require_any_marker(
-        &qemu,
-        &[
-            "[domain] admitted cell 'ocel-quickjs' to Tier 2 Paged Domain (SATP isolation)",
-            "[domain] admitted cell 'ocel-js' to Tier 2 Paged Domain (SATP isolation)",
-        ],
-        "an Ocel engine cell must be admitted to Tier 2 with private page tables",
-    );
-    require_marker(
-        &qemu,
-        "Init: registered OCEL_JS on ",
-        "init must spawn an engine cell and register service::OCEL_JS",
-    );
-    // An image assembled for one engine must have picked that engine: without
-    // this, a builder that silently dropped the cell would still pass every
-    // other assertion in every lane.
-    if let Ok(expected) = std::env::var("CELLOS_EXPECT_ENGINE_CELL") {
-        let marker = format!("Init: registered OCEL_JS on {expected}");
-        if !qemu.output_contains(&marker) {
-            panic!(
-                "expected the image to register {expected} as the Ocel engine:\n{}",
-                qemu.dump()
-            );
-        }
-        let other = if expected == "/bin/ocel-quickjs" {
-            "/bin/ocel-js"
-        } else {
-            "/bin/ocel-quickjs"
-        };
-        assert!(
-            !qemu.output_contains(&format!("Init: registered OCEL_JS on {other}")),
-            "the image registered {other} instead of {expected}:\n{}",
-            qemu.dump()
-        );
-    }
-
-    // ── 2-4. Load the script fixture by argument and run its script ──────────
-    qemu.send_line(&format!("ocel {FIXTURE_URL} &"));
+    // ── 2-4. Load the fixture by argument and exercise execution if present ──
+    let fixture_url = if std::env::var("CELLOS_EXPECT_OCEL_ENGINE_ABSENT").as_deref() == Ok("1") {
+        "file:///data/ocel-static-demo.html"
+    } else {
+        FIXTURE_URL
+    };
+    qemu.send_line(&format!("ocel {fixture_url} &"));
     qemu.wait_for("[ocel] Window initialized and painted.", EVENT_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!("Ocel failed to start: {e}\n--- serial output ---\n{}", qemu.dump())
@@ -191,27 +124,30 @@ fn ocel_viewer_runs_scripts_in_tier2_and_answers_input() {
 
     require_marker(
         &qemu,
-        &format!("[ocel] loaded {FIXTURE_URL} (HTML,"),
+        &format!("[ocel] loaded {fixture_url} (HTML,"),
         "the viewer must open the document named on its command line",
     );
-    require_marker(
-        &qemu,
-        "[ocel] js backend: Tier 2 domain service",
-        "the fixture's script must be served by the Tier 2 engine cell",
-    );
-    // Which *engine* answered is the other lane's subject (`ocel-quickjs`): this
-    // one only requires that the mutation crossed the boundary and landed.
-    require_marker(
-        &qemu,
-        "[ocel] dom title: ",
-        "the mutation returned by the Tier 2 engine must reach the document",
-    );
-    assert!(
-        !qemu.output_contains("[ocel] js backend: in-process fallback"),
-        "the viewer fell back to the in-process engine:\n{}",
-        qemu.dump()
-    );
-
+    if std::env::var("CELLOS_EXPECT_OCEL_ENGINE_ABSENT").as_deref() == Ok("1") {
+        assert!(!qemu.output_contains("[ocel] dom title: sum="),
+            "An absent engine must not claim script execution:\n{}", qemu.dump());
+        assert!(!qemu.output_contains("[domain] admitted cell 'ocel-quickjs'"),
+            "The static image unexpectedly contains QuickJS:\n{}", qemu.dump());
+        assert!(!qemu.output_contains("[domain] admitted cell 'ocel-js'"),
+            "Missing QuickJS must never activate a statement matcher:\n{}", qemu.dump());
+    } else {
+        require_marker(
+            &qemu,
+            "[domain] admitted cell 'ocel-quickjs' to Tier 2 Paged Domain (SATP isolation)",
+            "script parsing must execute in an isolated Tier 2 engine",
+        );
+        require_marker(
+            &qemu,
+            "[ocel] dom title: sum=10 doubled=2, 4, 6",
+            "real JavaScript computation must update the document title across IPC",
+        );
+    }
+    assert!(!qemu.output_contains("[domain] admitted cell 'ocel-pdf'"),
+        "PDF must not run when viewing an HTML document:\n{}", qemu.dump());
     // ── 5. Framebuffer: toolbar and document viewport both painted ──────────
     let frame_path = "/tmp/cellos-ocel-render.ppm";
     assert!(qemu.capture_qemu_screen(frame_path), "failed to capture Ocel screen");

@@ -1,11 +1,15 @@
-# Ocel — native viewer and Tier 2 script service
+# Ocel viewer — lightweight native document viewing
 
-Ocel is the native document viewer for Cellos: a Tier 2 cell that parses and
-renders Markdown, an HTML subset, plain text, and BMP images, with an optional
-script engine that runs in a **separate, hardware-isolated Tier 2 domain**.
-It is not a web browser — [ADR-0017](../decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md)
-decides that the web platform runs in the Tier 3 Linux guest (Chromium), and
-Ocel covers the "open this local file / internal dashboard instantly" case.
+Ocel viewer is the native document viewer for Cellos. Its scope is Markdown,
+source code, text, PNG/JPEG/BMP and a bounded HTML/CSS subset, with optional
+JavaScript in a separate Tier 2 engine. The existing PDF service is under
+footprint review; its presence is not a lightweight-profile requirement.
+
+The product priorities are small footprint, low memory use and fast viewing,
+not general browser compatibility. Controlled HTML content must stay within
+the supported subset; an internal URL does not guarantee compatibility.
+A full native browser is a separate future app, with no name selected.
+See [ADR-0017 §5c](../decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md#5c-ocel-viewer-scope-decision).
 
 ## Pieces
 
@@ -13,7 +17,7 @@ Ocel covers the "open this local file / internal dashboard instantly" case.
 |---|---|---|
 | Viewer cell | `cells/apps/ocel/` | Window, parsers, layout, paint, address bar, tabs, search, network fetch |
 | **QuickJS engine cell** | `cells/services/ocel-quickjs/` | Vendored QuickJS `2026-06-04` behind the `JsEngine` trait; parks on IPC as `service::OCEL_JS` (16) |
-| Statement-matcher cell | `cells/services/ocel-js/` | Fallback engine for images that do not package QuickJS |
+| Statement-matcher cell | `cells/services/ocel-js/` | Legacy standalone matcher; explicitly rejects document-backed DOM synchronization |
 | DOM model + wire types | `libs/dom-arena/` | `NodeId`/`DocumentArena`, `DomMutation`, `DomEvent`, `OcelJsRequest`/`OcelJsResponse` |
 | Lanes | `tests/integration/tests/ocel-browser.rs` (viewer), `…/ocel-quickjs.rs` (engine) | QEMU evidence; both wired into the `boot-suite` CI job |
 | Document fixture | `tests/fixtures/ocel-js-demo.html` | Placed in VIFS1 at `/data/ocel-js-demo.html` by both image builders |
@@ -25,30 +29,22 @@ Ocel covers the "open this local file / internal dashboard instantly" case.
    cell, so the kernel admits it to Tier 2 and binds a private page table to it
    (`kernel/src/task/launch.rs`, log line `[domain] admitted cell
    'ocel-quickjs' to Tier 2 Paged Domain (SATP isolation)`).
-2. `init` spawns **one** engine cell during boot and registers the service on
-   its behalf (`cells/tools/init/src/boot.rs`, `spawn_optional_services`):
-   `/bin/ocel-quickjs` when the image packaged it, `/bin/ocel-js` otherwise.
-   Which engine an image gets is therefore an image decision, and the boot log
-   names it (`Init: registered OCEL_JS on /bin/ocel-quickjs`). The cell itself
-   cannot register: ordinary `RegisterService` requires SpawnCap, which an
-   untrusted cell must not hold. Both reviewed init edges are in
-   `kernel/src/loader/launch_profile/profiles.rs`; each child ceiling is
-   `CapSet::EMPTY` (`kernel/src/loader/boot_ceiling.rs`).
-3. The viewer looks up `service::OCEL_JS` with a bounded retry
-   (`cells/apps/ocel/src/js/bridge.rs`) and sends `OcelJsRequest` frames over
-   4 KiB IPC, receiving replies with `ostd::ipc::recv_from` (masked to the
-   service tid). A reply is applied as a `DomMutation` batch.
-4. If the service is absent — not packaged, refused by the admission policy
-   (production AArch64/x86_64 images refuse domains: `switch_ordering_qualified`
-   is false there), or dead — the viewer falls back to its in-process engine.
-
-Both paths are fail-soft, and the viewer says which one served the document:
-
-```text
-[ocel] js backend: Tier 2 domain service
-[ocel] js backend: in-process fallback (no OCEL_JS service)
-```
-
+2. Neither engine cell is spawned during boot. `init` registers `service::OCEL_ACTIVATOR`
+   (19) and listens for demand leases. An image without optional engines boots as a
+   lightweight static viewer.
+3. When Ocel opens a script-bearing HTML document or a PDF, it acquires an
+   allowlisted lease from `service::OCEL_ACTIVATOR` over exact-operation async IPC.
+   `init` derives caller identity from the kernel receive trailer, monitors client
+   lifetime via `sys_notify_on_exit`, and starts the requested Tier 2 engine
+   on demand (`/bin/ocel-quickjs` as `service::OCEL_JS` 16, or `/bin/ocel-pdf` as
+   `service::OCEL_PDF` 18).
+4. Multiple documents or tabs share the live engine instance under distinct leases.
+   When a document is reset, navigated away from, or closed, the lease is released;
+   when the last active lease is surrendered or an owner exits, `init` shuts down the
+   unused engine (`sys_force_exit`) and unregisters it.
+5. Missing or unconfigured engines produce clear, user-visible errors. Ocel never
+   substitutes a matcher or guesses an engine path. Static HTML, Markdown, source code,
+   plain text, and images never activate an engine.
 The engine cell names itself and proves it executes at start-up, so the log says
 *which* engine answered and that it is not a compiled-but-broken build:
 
@@ -94,35 +90,31 @@ cells through the kernel loader route and the builders keep
 
 ### Engine capability, honestly
 
-With QuickJS packaged, documents get real JavaScript: control flow, functions,
-closures, objects, the standard library, `RegExp` with the Unicode tables.
-Without it (or when the service is refused or dead), the viewer falls back to
-`ocel-js`, a **line-oriented statement matcher** — `console.log(...)`,
-`document.title = "…"`, `node_<id>.textContent = "…"`,
-`node_<id>.setAttribute(...)`, `node_<id>.addEventListener(...)`, variable
-assignment — with no control flow, functions or expression evaluation. Both
-engines implement the same DOM dialect (`document`, `node_<id>`, `console.log`,
-event dispatch), defined for QuickJS by `cells/services/ocel-quickjs/src/prelude.js`.
+QuickJS executes real JavaScript against a synchronized native document,
+not synthetic fixed-number nodes. `getElementById` uses connected elements'
+actual `id` attributes. Node creation, append/remove, `textContent`,
+attributes, title and bubbled event listeners emit ordered mutations into
+the Rust arena. Existing wrappers/listeners survive same-document refreshes.
+Child collections are snapshot arrays, not live browser collections.
 
-Both engines run the *same* fixture document
-(`tests/fixtures/ocel-js-demo.html`, a loop, a closure and
-`Array.prototype.map`), and the serial log shows the difference plainly:
+Snapshots, scripts and replies use ordered chunks over 4 KiB copied IPC;
+serialized transfers are bounded to 512 KiB. Caller/context tokens prevent
+one viewer from silently executing against another viewer's DOM. There is
+one active script context: loading another tab invalidates the earlier tab's
+execution context; that tab must be reloaded to execute scripts again.
+QuickJS uses a 3 MiB accounted heap and bounded interrupt/job processing.
 
-| Image | `[ocel] dom title: …` |
-|---|---|
-| QuickJS packaged | `sum=10 doubled=2, 4, 6` — the computed value |
-| statement matcher only | `sum=" + sum + " doubled=" + doubled` — the literal expression, because the matcher has no expression evaluation |
+Native CSS now applies selector matching, importance/specificity/source-order
+cascade, inheritance, inline styles, width media queries, and Taffy block,
+flex and grid layout. External classic scripts and stylesheets load in
+document order from the same origin (UTF-8, at most 256 KiB per resource).
+`tests/fixtures/ocel-native-web.{html,css,js}` exercises these paths.
 
-`boot-suite` runs the viewer lane twice for exactly this reason: once on the
-image that packages QuickJS (`CELLOS_EXPECT_ENGINE_CELL=/bin/ocel-quickjs`) and
-once on an image assembled with `CELLOS_NO_OCEL_QUICKJS=1`
-(`CELLOS_EXPECT_ENGINE_CELL=/bin/ocel-js`), with evidence in
-`docs/evidence/ocel-quickjs-qemu.log`, `…/ocel-browser-qemu.log` and
-`…/ocel-js-fallback-qemu.log`.
-
-Ocel is still **not a web browser**: no CSS cascade, no layout engine from the
-web platform, no `fetch`/`XMLHttpRequest`, no modules, no workers. Documents
-that need the web platform belong to the Tier 3 Chromium lane.
+This is **not full browser compatibility**. The HTML tree builder and CSS
+parser remain subsets; modules, `fetch`/XHR, timers, workers, complete Web
+APIs, browser font shaping, positioned/float/table layout, and replaced
+HTML image elements are not implemented. General public-web compatibility
+belongs to the separate future browser, not Ocel viewer.
 
 ## Using it
 
@@ -221,15 +213,74 @@ app-init/tier3,app-init/tier3-autostart,app-init/usb-host
 This is the same trap for every GUI lane, and the reason a "no compositor"
 boot looks like a viewer bug.
 
+## Native image viewing
+
+Local `.png`, `.jpg`, `.jpeg` and `.bmp` files bypass the UTF-8 reader and are
+decoded to straight BGRA8888. PNG and JPEG use the MIT/Apache-2.0 `zune-*`
+decoders with default features disabled; BMP retains the native decoder.
+PNG palette/grayscale/RGB/alpha samples are expanded to BGRA; 16-bit PNG
+samples are reduced to 8-bit. Baseline and progressive JPEG are supported.
+Only the first frame of an animated PNG is shown; no animation playback,
+EXIF orientation transform or ICC color management is applied.
+
+Decoding is bounded to 4096 pixels per dimension and 1,048,576 pixels total.
+Encoded local images are limited to 2 MiB. Ocel initializes a 16 MiB custom
+heap before any allocation; the previous default 1 MiB arena is insufficient
+for ordinary decoded images. These per-image limits are not a guarantee that
+an unlimited number of image tabs fits in that heap.
+Corrupt, truncated and oversized images produce a decode error rather than
+being interpreted as text. Layout shares the pixel allocation with the
+document, fits wide images to the viewport without upscaling, and preserves
+their aspect ratio using nearest-neighbour sampling. Alpha is composited onto
+the viewer background. Consecutive image nodes advance the document height.
+
+Host smoke verification exercises the actual loader, codecs, layout and paint
+with filesystem/surface adapters: RGB/RGBA/grayscale/grayscale-alpha/palette
+PNG, baseline/progressive JPEG, BMP, truncation, the pixel budget and alpha
+composition. The RV64 release build succeeds. This is not guest/compositor
+or physical-device evidence. GIF, WebP and SVG decoding are not implemented;
+network and embedded HTML/Markdown images are not loaded by this local-file
+path.
+
+## Native PDF viewing
+
+Local `.pdf` files use the isolated Tier 2 `ocel-pdf` service (service ID 18),
+not a parser inside Ocel or a Tier 3 guest. MuPDF 1.26.1 rasterizes one page
+at a time, including text, vector graphics and document-embedded images.
+Open `file:///data/example.pdf#page=2` for the second page; previous/next
+links stay within the document's page range.
+
+Documents are limited to 2 MiB. Each page fits within 1024 × 1024 pixels;
+opaque BGRA pixels are transferred in bounded copied-IPC chunks. The viewer
+closes its document handle after each load, including failure paths.
+Encrypted documents requiring a password are rejected; password UI, text
+selection, search and annotations are not implemented. Base14 fallback fonts
+are embedded; CJK requires document-embedded fonts, not a bundled system
+fallback. This build is RV64-only.
+
+The service statically links AGPL-3.0-or-later MuPDF and retains upstream
+source, notices and provenance. Distributing that service requires satisfying
+the corresponding license obligations or obtaining a commercial MuPDF
+license; the surrounding workspace's license does not replace them.
+
+Verification: RV64 release compilation, real MuPDF host rendering of two pages
+(text, vectors and an inline image), malformed-document exception recovery,
+and QEMU service startup/registration. The guest viewer surface remains
+unverified: the isolated smoke boot reached Ocel but its surface creation was
+refused with `GrantShare … not a live private root`. No core workaround was
+introduced.
+
 ## Known gaps
 
 | Gap | Status |
 |---|---|
-| QuickJS integration | **Landed** (2026-10-06) as the opt-in sibling cell `cells/services/ocel-quickjs/`; images that package it get real JavaScript, images that do not keep the statement matcher |
-| CSS | No cascade/taffy: layout is the viewer's own block layout, HTML inline styles only |
-| PDF (MuPDF), EPUB, SVG, PNG/JPEG | Not implemented; BMP is the only image decoder |
+| QuickJS integration | Real document-backed DOM; missing/incompatible engines fail explicitly |
+| CSS | Native subset cascade and Taffy block/flex/grid; not standards-complete |
+| PNG/JPEG/BMP | Local image viewing implemented; network/embedded images, GIF/WebP and animation remain unsupported |
+| PDF (MuPDF) | Native local-page path implemented; guest surface verification blocked as described above |
+| EPUB, SVG | Not implemented |
 | Syntax highlighting for text/code files | Native Rust, C/C++, JSON and TOML source files and labelled Markdown fences; other languages remain unhighlighted |
-| Viewer fallback after `ocel-js` dies mid-session | The bridge invalidates the cached tid and falls back, but no lane kills the service to witness it |
+| Engine failure | Explicit errors; no in-process script fallback |
 | Tier 3 Chromium browser launcher | Guest input bridge exists (`cells/services/hypervisor/src/virtio_input.rs`); launcher cell, clipboard, and file sharing do not |
 | QuickJS on x86_64 | The Tier-A C ABI the engine links against exists only on riscv64/aarch64 (`libs/api/src/services/posix.rs`), so x86_64 builds the cell as a stub that says so |
-| Engine death mid-session | The bridge invalidates the cached tid and falls back to the in-process engine, but no lane kills the engine cell to witness it |
+| Multiple live JS tabs | One active context; inactive tabs require reload before event execution |

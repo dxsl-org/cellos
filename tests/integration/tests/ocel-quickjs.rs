@@ -1,29 +1,9 @@
 // SPDX-License-Identifier: MIT
 //! Integration test: the vendored QuickJS engine cell (`/bin/ocel-quickjs`).
 //!
-//! `ocel-browser` covers the viewer's plumbing and accepts either engine cell.
-//! This lane is about the engine itself: that the vendored QuickJS build
-//! executes on the target, that the kernel admits it to Tier 2, and that a
-//! document script using real JavaScript semantics (control flow, a closure,
-//! `Array.prototype.map`, string concatenation) produces the value only a real
-//! engine can compute — the statement matcher `ocel-js` evaluates line by line
-//! and would set the title to the literal expression instead.
-//!
-//! Assertions, in order:
-//!
-//! 1. `[domain] admitted cell 'ocel-quickjs' to Tier 2 Paged Domain (SATP isolation)`
-//!    — the cell runs in its own address space, not in the SAS.
-//! 2. `Init: registered OCEL_JS on /bin/ocel-quickjs` — `init` preferred the
-//!    QuickJS cell over the statement matcher.
-//! 3. `[ocel-quickjs] quickjs <version> engine ready (Tier 2)` — the engine
-//!    created a runtime and a context and evaluated its DOM prelude.
-//! 4. `[ocel-quickjs] self-check 55:2,4,6:accent:0.30` — the engine's own
-//!    start-up check: a loop sums 1..10, a closure maps `[1,2,3]`, a Unicode
-//!    regexp matches precomposed accents, and `(0.1+0.2).toFixed(2)` formats.
-//! 5. `[ocel] dom title: sum=10 doubled=2, 4, 6` — the fixture document's script
-//!    ran in that engine, across the IPC boundary, and its mutation reached the
-//!    viewer's document.
-//! 6. No `[fault] Cell` and no kernel panic anywhere in the run.
+//! The viewer activates QuickJS only when the document needs scripts.
+//! Real control flow, closures, arrays and DOM mutation must execute in a
+//! separate Tier 2 address space and reach the rendered document.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -110,17 +90,17 @@ fn quickjs_engine_cell_runs_real_javascript_in_tier2() {
     let _ = qemu.wait_for("[vfs-test] ALL TESTS PASSED", EVENT_TIMEOUT);
     settle();
 
-    // ── 1-4. The engine cell itself ─────────────────────────────────────────
-    require_marker(
-        &qemu,
+    assert!(!qemu.output_contains("[domain] admitted cell 'ocel-quickjs'"),
+        "QuickJS must remain unloaded before demand:\n{}", qemu.dump());
+    qemu.send_line(&format!("ocel {FIXTURE_URL} &"));
+    qemu.wait_for("[ocel] Window initialized and painted.", EVENT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!("Ocel failed to start: {e}\n--- serial output ---\n{}", qemu.dump())
+        });
+    settle();
+    require_marker(&qemu,
         "[domain] admitted cell 'ocel-quickjs' to Tier 2 Paged Domain (SATP isolation)",
-        "the QuickJS cell must be admitted to Tier 2 with private page tables",
-    );
-    require_marker(
-        &qemu,
-        "Init: registered OCEL_JS on /bin/ocel-quickjs",
-        "init must prefer the QuickJS cell and register it as service::OCEL_JS",
-    );
+        "demand-loaded QuickJS must execute in a private address space");
     require_marker(
         &qemu,
         "[ocel-quickjs] quickjs ",
@@ -132,13 +112,6 @@ fn quickjs_engine_cell_runs_real_javascript_in_tier2() {
         "the engine's start-up self-check must produce its exact expected value",
     );
 
-    // ── 5. A document script through the viewer, in that engine ─────────────
-    qemu.send_line(&format!("ocel {FIXTURE_URL} &"));
-    qemu.wait_for("[ocel] Window initialized and painted.", EVENT_TIMEOUT)
-        .unwrap_or_else(|e| {
-            panic!("Ocel failed to start: {e}\n--- serial output ---\n{}", qemu.dump())
-        });
-    settle();
     require_marker(
         &qemu,
         &format!("[ocel] loaded {FIXTURE_URL} (HTML,"),
@@ -146,18 +119,8 @@ fn quickjs_engine_cell_runs_real_javascript_in_tier2() {
     );
     require_marker(
         &qemu,
-        "[ocel] js backend: Tier 2 domain service",
-        "the fixture's script must be served by the Tier 2 engine cell",
-    );
-    require_marker(
-        &qemu,
         COMPUTED_TITLE,
         "the loop/closure/map script must compute its value inside the engine",
-    );
-    assert!(
-        !qemu.output_contains("[ocel] js backend: in-process fallback"),
-        "the viewer fell back to the in-process engine:\n{}",
-        qemu.dump()
     );
 
     // The painted window is evidence the mutation-carrying document is what is

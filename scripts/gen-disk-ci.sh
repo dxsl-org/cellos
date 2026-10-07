@@ -161,12 +161,12 @@ if [[ $BUILD_CELLS -eq 1 ]]; then
     build_cells "app-net-tools" -p app-net-tools
     build_cells "app-sys-tools" -p app-sys-tools
     build_cells "robot-demo + robot-dashboard" -p robot-demo -p robot-dashboard
-    if [[ "${CELLOS_NO_OCEL_QUICKJS:-0}" == "1" ]]; then
-        build_cells "fb-console + desktop + ocel + statement matcher" -p fb-console -p desktop \
-            -p ocel -p ocel-js
-    else
-        build_cells "fb-console + desktop + ocel + both Ocel engines" -p fb-console -p desktop \
-            -p ocel -p ocel-js -p ocel-quickjs
+    build_cells "fb-console + desktop + Ocel viewer" -p fb-console -p desktop -p ocel
+    if [[ "${CELLOS_NO_OCEL_QUICKJS:-0}" != "1" ]]; then
+        build_cells "Ocel optional QuickJS engine" -p ocel-quickjs
+    fi
+    if [[ "${CELLOS_NO_OCEL_PDF:-0}" != "1" ]]; then
+        build_cells "Ocel optional PDF renderer" -p ocel-pdf
     fi
     build_cells "hypha cells" -p hypha-llm-gateway -p hypha-core -p hypha-tool-fs -p hypha-tool-sys -p hypha-tool-spawn
     build_cells "input-test" -p input-test
@@ -268,7 +268,7 @@ for cell in app-init app-shell platform service-vfs service-config service-net s
             service-net-broker service-compositor supervisor driver-nvme driver-e1000 \
             driver-virtio-net driver-virtio-blk driver-virtio-gpu service-ai service-httpd \
             ai-test service-input bench bench-probe capacity-probe heavy-probe app-net-tools app-sys-tools \
-            robot-demo robot-dashboard fb-console desktop ocel ocel-js ocel-quickjs hypha-llm-gateway \
+            robot-demo robot-dashboard fb-console desktop ocel hypha-llm-gateway \
             hypha-core hypha-tool-fs hypha-tool-sys hypha-tool-spawn input-test \
             window-policy-probe viui-demo audio-demo app-https-demo http-smoke cfi-test wx-test \
             vfs-test backend-supervisor backend-worker hotswap-demo-v1 hotswap-demo-v2 ls cat \
@@ -276,6 +276,8 @@ for cell in app-init app-shell platform service-vfs service-config service-net s
             tetris-c tetris-lua doom lua micropython; do
     add_signable "$REL/$cell"
 done
+[[ "${CELLOS_NO_OCEL_QUICKJS:-0}" == "1" ]] || add_signable "$REL/ocel-quickjs"
+[[ "${CELLOS_NO_OCEL_PDF:-0}" == "1" ]] || add_signable "$REL/ocel-pdf"
 
 sign_cells "${SIGNABLE[@]}"
 
@@ -319,9 +321,17 @@ add_kfs "$(pwd)/doom1.wad"          "/doom1.wad"
 # the viewer can load a document with an inline script without any image-side
 # tooling. Keep in sync with gen_disk.ps1's $kfs_args.
 add_kfs "$(pwd)/tests/fixtures/ocel-js-demo.html" "/data/ocel-js-demo.html"
-# The QuickJS engine cell resolves from VIFS1: `init` spawns it through the
-# kernel loader route, which does not make the VFS cell hold the whole ELF in
-# its own heap (see the cell's README).
+add_kfs "$(pwd)/tests/fixtures/ocel-static-demo.html" "/data/ocel-static-demo.html"
+add_kfs "$(pwd)/tests/fixtures/ocel-pdf-demo.pdf" "/data/ocel-pdf-demo.pdf"
+for extension in html css js; do
+    add_kfs "$(pwd)/tests/fixtures/ocel-native-web.$extension" "/data/ocel-native-web.$extension"
+done
+add_kfs "$REL/ocel" "/bin/ocel"
+if [[ "${CELLOS_NO_OCEL_PDF:-0}" != "1" ]]; then
+    add_kfs "$REL/ocel-pdf" "/bin/ocel-pdf"
+fi
+# Optional Tier 2 engines are disk-resident, never boot-resident. Init activates
+# only the requested engine, using its kernel-loader route before the VFS route.
 if [[ "${CELLOS_NO_OCEL_QUICKJS:-0}" != "1" ]]; then
     add_kfs "$REL/ocel-quickjs"     "/bin/ocel-quickjs"
 fi
@@ -439,11 +449,11 @@ add_row "$REL/service-compositor"     "/bin/compositor"
 add_row "$REL/fb-console"             "/bin/fb-console"
 add_row "$REL/desktop"                "/bin/desktop"
 add_row "$REL/ocel"                   "/bin/ocel"
-add_row "$REL/ocel-js"                "/bin/ocel-js"
-# Opt-in engine cell: an image that ships it gets real JavaScript (init prefers
-# it over /bin/ocel-js); an image without it falls back to the statement matcher.
-# CELLOS_NO_OCEL_QUICKJS=1 assembles that fallback image on purpose — the
-# statement-matcher lane in boot-suite builds one to keep the picker honest.
+if [[ "${CELLOS_NO_OCEL_PDF:-0}" != "1" ]]; then
+    add_row "$REL/ocel-pdf" "/bin/ocel-pdf"
+fi
+# Images without QuickJS remain static viewers; there is no statement-matcher
+# fallback. An attempted script load reports that the optional engine is absent.
 if [[ "${CELLOS_NO_OCEL_QUICKJS:-0}" == "1" ]]; then
     echo "==> CELLOS_NO_OCEL_QUICKJS=1: assembling without the QuickJS engine cell"
 else

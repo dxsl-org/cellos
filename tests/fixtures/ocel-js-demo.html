@@ -3,11 +3,10 @@
   Document fixture for the Ocel integration lane (tests/integration/tests/ocel-browser.rs).
 
   It exists to exercise the Tier 2 script path end to end: the viewer parses this
-  file, the inline script is dispatched to the hardware-isolated engine cell
-  (`ocel-quickjs`, or the `ocel-js` statement matcher on images without it), and
-  the DOM mutation it returns must show up as the page title. The script is real
-  JavaScript — a loop, a closure and `Array.prototype.map` — so the title proves
-  which kind of engine answered; both halves are observable in the serial log:
+  file, init activates the hardware-isolated QuickJS Cell on demand, and
+  the DOM mutation it returns must show up as the page title. The script uses
+  a loop, a closure and `Array.prototype.map`; both execution and mutation
+  delivery are observable in the serial log:
 
     [ocel] js backend: Tier 2 domain service
     [ocel] dom title: sum=10 doubled=2, 4, 6
@@ -22,7 +21,7 @@
 <body>
 <h1>Ocel Tier 2 script fixture</h1>
 <p>Cellos runs Ocel in a native cell; the script in this document runs in the
-separate ocel-js cell, which the kernel admits to Tier 2 with private page
+separate ocel-quickjs cell, which the kernel admits to Tier 2 with private page
 tables, so an engine fault terminates that cell instead of the viewer.</p>
 <script>
 var sum = 0;

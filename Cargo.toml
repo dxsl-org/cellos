@@ -42,6 +42,8 @@ members = [
     "libs/cellos-fs",
     "libs/port-platform",
     "libs/dom-arena",
+    "libs/ocel-pdf-proto",
+    "libs/ocel-service-proto",
     
     # HAL
     "hal/core",
@@ -114,6 +116,7 @@ members = [
     "cells/services/ai",
     "cells/services/ocel-js",
     "cells/services/ocel-quickjs",
+    "cells/services/ocel-pdf",
 
     # Cells - Tools (system + CLI)
     "cells/tools/init",

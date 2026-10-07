@@ -2,8 +2,19 @@
 #![no_main]
 #![forbid(unsafe_code)]
 
-#[cfg(all(feature = "hostile-backend-recovery", not(feature = "hypervisor-min")))]
-compile_error!("hostile-backend-recovery requires hypervisor-min");
+// ── Option rules ─────────────────────────────────────────────────────────────
+// The options are orthogonal, but two combinations contradict each other and a
+// third has a prerequisite. These are compile errors rather than warnings
+// because a silent mismatch produces an image that boots and then fails at the
+// thing it was built for.
+#[cfg(all(feature = "tier3-autostart", not(feature = "tier3")))]
+compile_error!(
+    "tier3-autostart requires tier3: an image without the guest cell has nothing to preload"
+);
+#[cfg(all(feature = "hostile-backend-recovery", not(feature = "tier3")))]
+compile_error!(
+    "hostile-backend-recovery requires tier3: the recovery handler drives the hypervisor cell"
+);
 
 extern crate alloc;
 extern crate ostd;
@@ -13,6 +24,12 @@ api::declare_syscalls![
     Send,
     Recv,
     TryRecv,
+    IpcSubmit,
+    IpcTake,
+    IpcWait,
+    IpcCancel,
+    IpcCurrent,
+    IpcReply,
     RecvTimeout,
     Reply,
     Log,
@@ -23,6 +40,14 @@ api::declare_syscalls![
     GetTime,
     SetTimer,
     GrantAlloc,
+    // Demand activation uses the existing grant-backed VFS spawn route and
+    // kernel-attested root lifetime endpoints, never caller-provided identity.
+    GrantShare,
+    GrantFree,
+    SpawnFromElf,
+    ForceExit,
+    NotifyOnExit,
+    RegisterService,
     // The boot-order grant-pair launcher publishes each generation's command line
     // (`StateStash`) and waits for that generation's terminal fault by sampling
     // the process table (`GetProcs`).
@@ -31,6 +56,8 @@ api::declare_syscalls![
 ];
 
 mod boot;
+mod activation;
+mod activation_state;
 mod service_table;
 mod supervisor;
 
@@ -96,18 +123,41 @@ fn cell_main() {
         println("Init: WARN service registry mismatch.");
     }
 
+    let init_tid = {
+        let mut procs = [api::syscall::ProcessInfo::default(); 16];
+        let mut tid = 2;
+        if let Ok(count) = ostd::syscall::sys_get_procs(&mut procs) {
+            for proc in &procs[..count] {
+                if &proc.name[..4] == b"init" && (proc.name[4] == 0 || proc.name[4] == b' ') {
+                    tid = proc.id;
+                    break;
+                }
+            }
+        }
+        tid
+    };
+
+    if !matches!(
+        ostd::syscall::sys_register_service(api::syscall::service::OCEL_ACTIVATOR, init_tid),
+        ostd::syscall::SyscallResult::Ok(0)
+    ) {
+        println("Init: Ocel activator registration failed — shell not started.");
+        return;
+    }
+
     let hypervisor_tid = boot::spawn_optional_services();
 
-    #[cfg(not(feature = "hypervisor-min"))]
-    {
-        let shell = services.last_mut().expect("service table is nonempty");
-        if shell.path != "/bin/shell" {
-            println("Init: invalid service table — shell must remain last.");
-            return;
-        }
-        if service_table::spawn(shell).is_none() {
-            println("Init: shell spawn failed.");
-        }
+    // The shell is the last table entry in both profiles, and both boot to it:
+    // the full profile's desktop prompt, and the Tier-3 profile's prompt where
+    // the guest is started on demand (`hv`). Spawning it here rather than from
+    // the table loop is what keeps it last, so the cells it may launch are up.
+    let shell = services.last_mut().expect("service table is nonempty");
+    if shell.path != "/bin/shell" {
+        println("Init: invalid service table — shell must remain last.");
+        return;
+    }
+    if service_table::spawn(shell).is_none() {
+        println("Init: shell spawn failed.");
     }
 
     for tid in services.iter().filter_map(|service| service.tid) {
