@@ -2,192 +2,121 @@
 
 [![CI](https://github.com/dxsl-org/cellos/actions/workflows/ci.yml/badge.svg)](https://github.com/dxsl-org/cellos/actions/workflows/ci.yml)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Donate-%23FF5E5B?logo=ko-fi)](https://ko-fi.com/dxsl_org)
+[🌐 Tiếng Việt](./README_VN.md)
 
-A next-generation OS for the Edge-to-Cloud era. Software is organized as **Cells** (not processes) sharing one address space, isolated by the Rust type system rather than hardware MMU.
+**The next-generation Rust-native OS designed for embedded systems, RTOS, robotics, and dedicated servers/PCs.** 
 
-**Architecture**: Cellular Single Address Space (SAS) + Language-Based Isolation (LBI).  
-**Status**: v0.2.1-dev (Mycelium) · Active Stage: **G1 — Robot & Embedded**
-
----
-
-## Quick Start
-
-**Prerequisites**: Rust nightly · `qemu-system-riscv64` · PowerShell or WSL2
-
-```powershell
-git clone https://github.com/dxsl-org/cellos.git
-cd cellos
-
-# Build kernel (RV64, -pie, RUSTFLAGS handled by build.rs)
-cargo build --release
-
-# Generate FAT32 disk image and boot
-./gen_disk.ps1
-./run.ps1        # Ctrl+A X to exit QEMU
-```
-
-```
-Cellos> echo hello
-hello
-Cellos> ls /bin
-shell  vfs  net  input  compositor  hello  utils ...
-Cellos> date
-2026-06-08 00:00:00 UTC
-Cellos> cat /proc/version
-Cellos v1.x Mycelium riscv64
-```
-
-ARM64 target:
-
-```powershell
-./run-arm-virt.ps1
-```
+Instead of organizing software into bulky traditional processes, Cellos architects the system into **Cells**. Cells share a Single Address Space (SAS) and are fully isolated by Rust's powerful type system, delivering maximum performance without compromising safety.
 
 ---
 
-## What Works Today
+## ✨ What Makes Cellos Unique? (Compared to traditional OSes)
 
-| Subsystem | Status | Notes |
-|-----------|--------|-------|
-| **Kernel** | ✅ | Priority scheduler · fixed priorities · RT hart routing |
-| **SMP** | ✅ | Phase 32 — hart boot (SBI HSM) · per-hart `ViHartLocal` via `tp` · cross-hart IPI · `WaitForEvent(217)` |
-| **Memory** | ✅ | SAS · HHDM · frame allocator · cell quota · Storage 2.0 grant pages (64KB→16MB) |
-| **ELF Loader** | ✅ | PIE + `R_RISCV_RELATIVE` · loaded from FAT32 `/bin/` |
-| **VFS** | ✅ | RamFS + FAT32 · mkdir/rmdir/unlink/stat/readdir · 8-scenario e2e suite |
-| **Shell** | ✅ | Pipes · redirects · tab completion · echo/cat/ls/pwd/cd/kill/ps |
-| **Network** | ⚠️ active | TCP/UDP/DNS/DHCP are integrated; socket ownership and the legacy TLS raw framing remain open risks |
-| **Peripheral I/O** | ✅ | GPIO (PL061 · SiFive) · UART (PL011) · I2C bit-bang · SHT3x sensor demo |
-| **IPC** | ✅ | Zero-copy owned buffers · typed IPC · syscall filter · large-buffer grant pages |
-| **Reliability** | ✅ | Supervisor restart · guard pages · RT watchdog · `NotifyOnExit(204)` · zombie reaper |
-| **RT Latency** | ⚠️ measured | QEMU regression benchmarks exist; real-hardware thresholds require separate evidence |
-| **RTC** | ✅ | Goldfish RTC (RV64/ARM64) · CMOS (x86_64) · `date` command |
-| **ViUI v2** | ✅ | Reactive Signal Tree · Dual-Layer DSL · GPU command buffer · embedded/robot readiness (P01–P10) |
-| **Heap Snapshot** | ✅ | Instant-On: snapshot → restore |
-| **RV32 Nano** | ✅ | QEMU S-mode boot verified · OpenSBI · SATP=0 |
-| **AArch64** | ✅ boot | Boots to scheduler on QEMU virt |
-| **x86_64** | ✅ boot | QEMU q35 · per-vector IDT + real-CPL3 GS/PKRU oracle passed |
-| Compositor | 📋 | Full GPU desktop — G2 |
-| ARM64 full bring-up | 📋 | Beyond ring-3 smoke |
-| Hot migration | 📋 | Zero-downtime Cell live update — G2 |
+Instead of following traditional monolithic or pure microkernel paradigms, Cellos introduces:
+
+*   **Cellular Single Address Space (SAS):** Eliminates expensive hardware MMU context switches for trusted components. Inter-cell communication (IPC) is virtually zero-copy through direct Rust ownership transfer.
+*   **Language-Based Isolation (LBI):** Safety isn't enforced by costly hardware boundaries, but by Rust's strict compiler type system (`#![forbid(unsafe_code)]`). Memory violations are caught and blocked at compile time.
+*   **Instant-On & Heap Snapshot:** Built-in capability to snapshot and restore the heap memory state, enabling lightning-fast boot times and rapid recovery for embedded devices.
+*   **3-Tier Hybrid Architecture:** Seamlessly run fully trusted native code (Tier 1), dynamically sandboxed untrusted code via hardware MMU (Tier 2), or a full legacy OS like Linux in a hardware-isolated VM (Tier 3) — all governed dynamically by the same micro-scheduler.
 
 ---
 
-## Architecture
+## 🎯 Vision & Positioning: What is Cellos (and what is it not)?
 
-```
-Cellos/
-├── kernel/             Nano-kernel: scheduler · loader · memory · IPC · syscalls
-├── hal/
-│   ├── core/           Feature-selected integration facade
-│   ├── soc/            Immutable SoC facts
-│   ├── traits/         Shared architecture and device contracts
-│   └── arch/           RISC-V, ARM, and x86 mechanisms
-├── boards/             Board identity, firmware contracts, wiring, fallbacks
-├── libs/               Public ABI/types, ostd, attestation, HTTP, text, ViUI
-├── cells/
-│   ├── tools/          init, shell, system and network CLI cells
-│   ├── apps/           User-facing and Hypha cells
-│   ├── demos/          Feature, hardware, game, and smoke workloads
-│   ├── drivers/        Shared device-driver cells
-│   ├── services/       VFS, net, supervisor, compositor, platform, ...
-│   ├── tests/          Guest-side test cells
-│   └── runtimes/       Lua (active native runtime)
-├── tests/integration/  Host-driven QEMU and image tests
-├── scripts/            Build, image, policy, metrics, and CI helpers
-├── tools/              Host-side compilers and build helpers
-└── docs/               Design specs (00–12) + developer guides
-```
+Cellos was born with a clear goal: **Performance and reliability for dedicated hardware.** We are not racing to build a general-purpose operating system.
 
-**Two product stages (overlay on technical phases):**
+*   ✅ **Born for specialized hardware:** Cellos shines on embedded systems, robotics, servers running core services, or kiosk/appliance PCs with a focused mission.
+*   ✅ **The future of RTOS & Low Latency:** Focuses on strict resource control and real-time predictability, managed by an ultra-lightweight nano-kernel.
+*   ❌ **Not a Linux/Windows desktop replacement:** We are not trying to build an OS to run everyday software or support every random keyboard/mouse on the market.
+*   ❌ **No legacy hardware bloat:** Cellos refuses to bloat the codebase to maintain backward compatibility with thousands of obsolete devices. Hardware support is a strict contract: specific boards, microcontrollers, and firmware. (Running successfully on QEMU does not imply physical hardware certification — see [Hardware Policy](./docs/hardware-compatibility-list.md)).
 
-- **G1 — Robot & Embedded**: never-die · bounded RT · fault isolation · fast boot · peripheral I/O · small footprint. Target: ARM64/RV64 SBC + RV32 MCU sub-track.
-- **G2 — Server & Specialized PC**: multi-core throughput · full desktop · untrusted code · hot migration · x86_64. Target: x86_64 + multi-core RV64/ARM64 servers.
+### The 3-Tier Execution Model
+Rust-native is the soul of the project, but Cellos is pragmatic enough to handle complex needs through a multi-tier architecture:
+1.  **Tier 1 (Core & Native Cell):** Maximum speed in the shared memory space (SAS). Absolutely trusted.
+2.  **Tier 2 (Paged Domain Cell):** Runs native code in private hardware MMU pages to sandbox software needing strict hardware boundaries (C-FFI, unverified code).
+3.  **Tier 3 (VM Guest - The Escape Hatch):** Runs a full Guest OS (like Linux) inside a virtual machine. **This is not Cellos' main goal**, but a specialized solution for running a full web browser or legacy applications requiring `fork()`/JIT. See [Browser Decision](./docs/decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md) and [Guest Guide](./docs/guides/tier3b-linux-vm.md).
 
 ---
 
-## Build Targets
+## 🚀 Project Status: `v0.2.1-dev` (Mycelium)
+
+Active development phase: **G1 — Robot & Embedded** (Focusing on ARM64/RV64 SBCs and RV32 MCUs). Phase **G2 — Server & Specialized PC** will expand to multi-core and x86_64 machines.
 
 | Target | Status | Notes |
 |--------|--------|-------|
-| `riscv64gc-unknown-none-elf` | ✅ Primary | Full boot · all services |
-| `aarch64-unknown-none` | ✅ Boots | Scheduler reached; full bring-up G1 next |
-| `x86_64-unknown-none` | ✅ Boots | Scheduler + per-vector IDT real-CPL3 transition gate passed on QEMU q35; see [board commands](./boards/qemu/q35-x86_64/README.md) |
-| `riscv32imc-unknown-none-elf` | ✅ Boot | Cellos-Nano · QEMU S-mode verified |
+| `riscv64gc-unknown-none-elf` | ✅ **Primary** | Full boot support and all core services available. |
+| `aarch64-unknown-none` | ✅ Boot | Scheduler reached; full G1 bring-up is in progress. |
+| `x86_64-unknown-none` | ✅ Boot | CPL3 transition gate passed on QEMU q35. (See [q35 Docs](./boards/qemu/q35-x86_64/README.md)). No physical x86 machine is officially verified yet. |
+| `riscv32imc-unknown-none-elf`| ✅ Boot | Cellos-Nano · Verified S-mode boot on QEMU. |
 
-Build kernel with `RUSTFLAGS=-Crelocation-model=pic` (handled automatically). Cells stay non-PIC — do **not** put this in `.cargo/config.toml` globally.
-
----
-
-## The 8 Coding Laws
-
-1. **Interface is Sacred** — `libs/api/` changes require 2× user confirmation
-2. **Owned Buffers for Async** — `async fn f(data: Box<[u8]>) -> Box<[u8]>`, never `&mut [u8]`
-3. **Multi-Architecture** — use `VAddr`/`PAddr`; never hardcode pointer sizes
-4. **Unsafe Management** — Cells: `#![forbid(unsafe_code)]`; Kernel: document every `unsafe` with `// SAFETY:`
-5. **Modern Module Style** — `foo.rs` + `foo/` directory; `mod.rs` is forbidden
-6. **Cellos Naming** — `Vi` prefix (Virtual Interface namespace) for public traits/types (`ViDriver`, `ViResult`); snake_case for files
-7. **Trait Objects for Polymorphism** — `Arc<dyn ViDriver + Send + Sync>` at system boundaries
-8. **RAII — Implement Drop** — all resources clean up explicitly; no process-based cleanup in SAS
-
-Full rules: [CONTRIBUTING.md](./CONTRIBUTING.md) · [code-standards.md](./docs/code-standards.md)
+*Note:* Successful execution on QEMU serves as architectural proof, not a 100% operational guarantee on un-tuned physical boards.
 
 ---
 
-## Documentation
+## ⚡ 5-Minute Quick Start
 
-| Document | Purpose |
-|----------|---------|
-| [system-architecture.md](./docs/system-architecture.md) | High-level design |
-| [code-standards.md](./docs/code-standards.md) | Coding rules & 8 Laws |
-| [PATTERNS.md](./docs/PATTERNS.md) | Common Rust patterns (global state, IPC, RAII) |
-| [api-reference.md](./docs/api-reference.md) | Syscall table · trait reference |
-| [project-roadmap.md](./docs/project-roadmap.md) | Phase progress & milestones |
-| [getting-started.md](./docs/getting-started.md) | Setup guide |
-| [security-model.md](./docs/security-model.md) | STRIDE model · known limitations |
-| [hardware-dev-guide.md](./docs/hardware-dev-guide.md) | Real board workflow |
-| [FAQ.md](./docs/FAQ.md) | Architecture Q&A |
+To build Cellos, you need: **Rust nightly**, `qemu-system-riscv64`, and Python 3/PowerShell.
 
-**Design Specifications** (read before coding in a subsystem):
+```powershell
+# 1. Clone the repository
+git clone https://github.com/dxsl-org/cellos.git
+cd cellos
 
-| Spec | Topic |
-|------|-------|
-| [00-context.md](./docs/specs/00-context.md) | Prime directive |
-| [01-core.md](./docs/specs/01-core.md) | Cellular philosophy · linker |
-| [02-memory.md](./docs/specs/02-memory.md) | SAS · HHDM · registry |
-| [03-runtime.md](./docs/specs/03-runtime.md) | Async safety · owned buffers |
-| [04-hardware.md](./docs/specs/04-hardware.md) | Multi-arch HAL |
-| [05-application.md](./docs/specs/05-application.md) | Native · VM tiers |
-| [06-graphics.md](./docs/specs/06-graphics.md) | ViUI · compositor · GPU |
-| [07-networking.md](./docs/specs/07-networking.md) | Network stack |
-| [09-vfs.md](./docs/specs/09-vfs.md) | VFS · filesystem |
-| [11-shell.md](./docs/specs/11-shell.md) | Shell design |
-| [12-reliability.md](./docs/specs/12-reliability.md) | Never-die · supervisor |
+# 2. Build kernel (Rust handles PIC flags automatically, don't set globally)
+cargo build --release
+
+# 3. Create FAT32 disk image and boot QEMU
+./gen_disk.ps1
+./run.ps1        # Use Ctrl+A X to exit QEMU
+```
+*The Cellos command-line interface will appear. Try typing `ls /bin`, `date`, `cat /proc/version`!*
 
 ---
 
-## Contributing
+## 🧩 Source Structure & Architecture
 
-```bash
-cargo check               # type check
-cargo fmt --all           # format
-cargo clippy -- -D warnings   # lint
-cargo build --release     # build
-cargo test --all          # run tests
+```text
+Cellos/
+├── kernel/             Nano-kernel: Scheduler, memory, VFS, Cell loader, IPC
+├── hal/                Abstraction layer & hardware mechanisms (RISC-V, ARM, x86)
+├── boards/             Board identities, firmware contracts, and wiring
+├── libs/               Shared libraries: ABI, ostd, ViUI, HTTP
+├── cells/              Distributed software: apps, demos, drivers, tools, services
+├── tests/integration/  Integration tests (Host-driven & QEMU)
+└── docs/               Design specs & development guides
 ```
 
-**Before coding**: read [CONTRIBUTING.md](./CONTRIBUTING.md) and the relevant spec in `docs/specs/`.
-**Commit format**: `type(scope): description` — e.g. `feat(vfs): add readdir support`
+Before contributing or developing, please review the system design at [system-architecture.md](./docs/system-architecture.md) and the security model at [security-model.md](./docs/security-model.md).
 
 ---
 
-## Acknowledgments
+## ⚖️ The 8 Coding Laws of Cellos
 
-Cellos draws ideas from:
-- **Theseus** (UC Santa Cruz) — live evolution, single address space
-- **Asterinas** — FrameKernel safety abstractions
-- **Tock** (Google) — embedded OS efficiency, hardware isolation traits
-- **Redox OS** — Rust microkernel IPC patterns
+To maintain our uncompromising vision of memory safety and modular design, the entire codebase strictly adheres to:
+
+1. **Interface is Sacred:** Changing `libs/api/` requires high consensus (2x review).
+2. **Owned Buffers for Async:** Always use `Box<[u8]>` instead of borrowed `&mut [u8]` for data crossing IPC/async boundaries.
+3. **Multi-Architecture:** Use `VAddr`/`PAddr` types, never hardcode pointer sizes.
+4. **Unsafe Management:** Cells strictly forbid `unsafe` (`#![forbid(unsafe_code)]`). If the kernel must use it, it requires a `// SAFETY:` note.
+5. **Modern Module Style:** Use `foo.rs` alongside a `foo/` directory. `mod.rs` is forbidden.
+6. **Cellos Naming:** Traits and Types use the `Vi` prefix (Virtual Interface, e.g., `ViDriver`). Files use `snake_case`.
+7. **Trait Objects:** At system boundaries, use static polymorphism via `Arc<dyn ViDriver + Send + Sync>`.
+8. **RAII - Clean Up Explicitly:** Cells are responsible for their own resource cleanup (Drop). There is no process-based cleanup due to the shared SAS nature.
+
+👉 Read the details in [CONTRIBUTING.md](./CONTRIBUTING.md) and [code-standards.md](./docs/code-standards.md).
 
 ---
 
-**Version**: 0.2.1-dev Mycelium · **Last Updated**: 2026-09-02
+## 📚 Documentation
+
+Cellos has a transparent specification and architecture system. Before working on a new subsystem, please read the corresponding documentation:
+
+*   **Getting Started:** [getting-started.md](./docs/getting-started.md) | [project-roadmap.md](./docs/project-roadmap.md)
+*   **Architecture:** [system-architecture.md](./docs/system-architecture.md) | [hardware-dev-guide.md](./docs/hardware-dev-guide.md)
+*   **System Specs:** From context ([00-context.md](./docs/specs/00-context.md)) to memory ([02-memory.md](./docs/specs/02-memory.md)), application tiers ([05-application.md](./docs/specs/05-application.md)), networking, VFS... (Found in `docs/specs/`).
+
+---
+
+**Have an idea or code to contribute?** Run `cargo clippy -- -D warnings` and `cargo test --all` before creating a PR!
+
+Cellos extends thanks for the great ideas from: *Theseus OS* (SAS & Live Evolution), *Asterinas* (FrameKernel Safety), *Tock* (Embedded traits), and *Redox OS* (Microkernel IPC).
