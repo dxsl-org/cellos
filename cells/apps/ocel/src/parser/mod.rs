@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 
 pub mod html;
 pub mod markdown;
+pub mod syntax;
 
 use crate::doc::DocNode;
 
@@ -15,12 +16,16 @@ pub enum DocFormat {
     Markdown,
     Html,
     PlainText,
+    Source(syntax::Language),
 }
 
 impl DocFormat {
     pub fn detect_from_url_or_content(url: &str, content: &str) -> Self {
         let lower = url.to_ascii_lowercase();
 
+        if let Some(language) = syntax::Language::from_url(url) {
+            return Self::Source(language);
+        }
         if lower.ends_with(".md") || lower.ends_with(".markdown") {
             return Self::Markdown;
         }
@@ -29,11 +34,6 @@ impl DocFormat {
         }
         if lower.ends_with(".txt")
             || lower.ends_with(".log")
-            || lower.ends_with(".rs")
-            || lower.ends_with(".c")
-            || lower.ends_with(".h")
-            || lower.ends_with(".json")
-            || lower.ends_with(".toml")
         {
             return Self::PlainText;
         }
@@ -66,6 +66,14 @@ pub fn parse_content(
             let res = html::parse_html(content);
             (res.nodes, res.scripts, Some(res.arena))
         }
+        DocFormat::Source(language) => (
+            alloc::vec![DocNode::CodeBlock {
+                lang: String::from(language.name()),
+                lines: content.lines().map(String::from).collect(),
+            }],
+            Vec::new(),
+            None,
+        ),
         DocFormat::PlainText => {
             let mut lines = Vec::new();
             for l in content.lines() {

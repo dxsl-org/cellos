@@ -147,6 +147,30 @@ impl Document {
         self.total_height = 0;
     }
 
+    /// Case-insensitive search across styling/token boundaries, once per box.
+    pub fn search(&self, query: &str) -> Vec<i32> {
+        let query = query.trim().to_ascii_lowercase();
+        let mut matches = Vec::new();
+        if query.is_empty() {
+            return matches;
+        }
+        let mut text = String::new();
+        for b in &self.layout_boxes {
+            for line in &b.lines {
+                text.clear();
+                for span in &line.spans {
+                    text.push_str(&span.text);
+                }
+                text.make_ascii_lowercase();
+                if text.contains(&query) {
+                    matches.push(b.y_offset);
+                    break;
+                }
+            }
+        }
+        matches
+    }
+
     /// Compute pixel layout coordinates for all document nodes given viewport width.
     pub fn compute_layout(&mut self, content_width: u32) {
         self.layout_boxes.clear();
@@ -254,11 +278,12 @@ impl Document {
                     self.layout_boxes.push(box_item);
                 }
 
-                DocNode::CodeBlock { lines, .. } => {
+                DocNode::CodeBlock { lang, lines } => {
                     let mut layout_lines = Vec::new();
+                    let mut highlighter = crate::parser::syntax::Highlighter::new(lang);
                     for l in lines {
                         layout_lines.push(LayoutLine {
-                            spans: alloc::vec![StyledSpan::code(l)],
+                            spans: highlighter.line(l),
                             is_code: true,
                             is_heading: false,
                             scale: 1,
@@ -701,7 +726,7 @@ impl Document {
 
                         // Draw background pill for inline code
                         if span.code {
-                            let span_w = (span.text.len() * 8) as u32 + 6;
+                            let span_w = (span.text.chars().count() * 8) as u32 + 6;
                             fill_rect(
                                 surf,
                                 cursor_x - 2,
@@ -713,7 +738,7 @@ impl Document {
                         }
 
                         draw::draw_str(surf, cursor_x, line_y, &span.text, text_color, line.scale);
-                        cursor_x += (span.text.len() as i32) * (8 * line.scale as i32);
+                        cursor_x += (span.text.chars().count() as i32) * (8 * line.scale as i32);
                     }
                 }
                 line_y += line_h;
@@ -744,7 +769,7 @@ impl Document {
                 if click_y >= line_y && click_y < line_y + line_h {
                     let mut cursor_x = view_x + 16 + b.left_margin;
                     for span in &line.spans {
-                        let span_w = (span.text.len() as i32) * (8 * line.scale as i32);
+                        let span_w = (span.text.chars().count() as i32) * (8 * line.scale as i32);
                         if click_x >= cursor_x && click_x < cursor_x + span_w {
                             if let Some(url) = &span.link {
                                 return Some(url.clone());

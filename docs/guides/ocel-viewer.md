@@ -138,6 +138,34 @@ Keys and pointer: `Ctrl+T` new tab, `Ctrl+W` close, `Ctrl+Tab` next,
 links navigate, and clicks on text nodes dispatch DOM events to the Tier 2
 service.
 
+### Native syntax highlighting
+
+Source files ending in `.rs`, `.c`, `.h`, `.cpp`, `.cc`, `.cxx`, `.hpp`,
+`.json`, or `.toml` are displayed as code with lexical colours for keywords,
+strings/characters, numbers, and comments. URL query/fragment suffixes do not
+affect source-language detection. Markdown triple-backtick fences accept
+`rust`/`rs`, `c`/`h`/`cpp`/`c++`/`cc`/`cxx`/`hpp`, `json`, and `toml`.
+
+Open a source file with `ocel file:///data/example.rs`, or include a labelled
+code fence in a Markdown document. Highlighting is computed during layout,
+not each frame. It preserves text, indentation, and line count; Rust nested
+block comments/raw strings and TOML triple-quoted strings carry state between
+lines within a block. Each code block starts with fresh state.
+Search joins adjacent coloured spans before matching, so a query such as
+`let count =` can cross keyword/plain-text token boundaries.
+
+This is a small native lexer, not a compiler or a full language grammar:
+there is no semantic/type highlighting, C preprocessor evaluation, or syntax
+validation. Unlabelled/unsupported fences keep the existing uniform code
+colour; `.txt`/`.log` remain plain text. No JS engine, VM, new service, or
+public ABI is needed.
+
+Verification: eight lexer/search regressions passed in an isolated host harness.
+The same harness exercised the actual source/Markdown parsers, layout,
+glyph table, and pixel renderer on an in-memory surface, checking token
+colours and text preservation and rendering a scrolled viewport. This is
+host renderer evidence, not a QEMU compositor or physical-display claim.
+
 ## Observable behaviour
 
 The viewer and the service print one line per notable event, which is what the
@@ -200,7 +228,7 @@ boot looks like a viewer bug.
 | QuickJS integration | **Landed** (2026-10-06) as the opt-in sibling cell `cells/services/ocel-quickjs/`; images that package it get real JavaScript, images that do not keep the statement matcher |
 | CSS | No cascade/taffy: layout is the viewer's own block layout, HTML inline styles only |
 | PDF (MuPDF), EPUB, SVG, PNG/JPEG | Not implemented; BMP is the only image decoder |
-| Syntax highlighting for text/code files | Not implemented |
+| Syntax highlighting for text/code files | Native Rust, C/C++, JSON and TOML source files and labelled Markdown fences; other languages remain unhighlighted |
 | Viewer fallback after `ocel-js` dies mid-session | The bridge invalidates the cached tid and falls back, but no lane kills the service to witness it |
 | Tier 3 Chromium browser launcher | Guest input bridge exists (`cells/services/hypervisor/src/virtio_input.rs`); launcher cell, clipboard, and file sharing do not |
 | QuickJS on x86_64 | The Tier-A C ABI the engine links against exists only on riscv64/aarch64 (`libs/api/src/services/posix.rs`), so x86_64 builds the cell as a stub that says so |

@@ -116,6 +116,7 @@ impl Tab {
                     DocFormat::Markdown => "Markdown",
                     DocFormat::Html => "HTML",
                     DocFormat::PlainText => "PlainText",
+                    DocFormat::Source(_) => "Source",
                 },
             )
         };
@@ -328,27 +329,11 @@ impl OcelViewer {
             return;
         }
 
-        let q_lower = query.to_ascii_lowercase();
-        let mut matches = Vec::new();
-
-        if let Some(tab) = self.tabs.get(self.active_tab) {
-            for b in &tab.doc.layout_boxes {
-                let mut matched = false;
-                for line in &b.lines {
-                    for span in &line.spans {
-                        let s_lower = span.text.to_ascii_lowercase();
-                        if s_lower.contains(&q_lower) {
-                            matches.push(b.y_offset);
-                            matched = true;
-                            break;
-                        }
-                    }
-                    if matched {
-                        break;
-                    }
-                }
-            }
-        }
+        let matches = self
+            .tabs
+            .get(self.active_tab)
+            .map(|tab| tab.doc.search(query))
+            .unwrap_or_default();
 
         let first_match = matches.first().copied();
         let total = matches.len();
