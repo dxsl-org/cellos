@@ -268,6 +268,73 @@ behaviour.
   (`cells/services/hypervisor/src/virtio_input.rs`); the launcher cell, clipboard
   bridge, file sharing, and the Chromium smoke test do not.
 
+## 5b. Revised native public-web direction
+
+The native Ocel target now includes public web content with HTML, CSS and real
+JavaScript through QuickJS. The earlier "not a web browser" boundary and
+Tier-3-only answer for public sites are not the target of this work. Tier 3
+remains a separate optional application route, not a substitute for Ocel.
+This changes the objective, not the current compatibility claim: CSS cascade,
+standards DOM and browser Web APIs must be implemented and exercised before
+claiming support.
+
+Reuse the existing `DocumentArena` as document storage and QuickJS as the
+language engine. Reuse Taffy for box layout rather than maintaining custom
+Flexbox/Grid algorithms. Qualify html5ever for HTML parsing and cssparser/
+selectors for CSS syntax and matching; these upstream crates are not currently
+drop-in dependencies for Ocel's alloc-only target. Taffy 0.14.0 with `std`
+disabled has passed an RV64 compile probe and responsive Flexbox geometry smoke.
+The unmodified html5ever/cssparser dependency graph fails the same RV64 target
+because it requires `std`.
+
+Do not import Servo or Blitz wholesale: their DOM/style/text/runtime dependency
+graphs do not fit the current application profile, and Servo's script engine
+would replace the selected QuickJS boundary. Do not rewrite an HTML5 parser
+from scratch merely to avoid qualification work: error recovery, table
+insertion modes and entities are compatibility behavior worth reusing.
+DOM bindings and browser host APIs still need an Ocel-owned implementation;
+QuickJS supplies ECMAScript, not those APIs.
+
+Common local images now use no-std Rust PNG/JPEG decoders alongside BMP,
+with a shared BGRA buffer, bounded decode and viewport-fit painting. Host
+loader/codec/layout/paint smoke and the RV64 release build are observed; this
+does not add guest/compositor evidence to the earlier lane.
+
+## 5c. Ocel viewer scope decision
+
+This user-approved decision supersedes the public-web target in §5b for the
+existing `ocel` application. Its product name is **Ocel viewer**. Its purpose
+is small, lightweight, fast document viewing and a bounded HTML/CSS/JavaScript
+subset for controlled content. Internal-network location alone does not make
+a web application compatible with that subset.
+
+A full native browser is a separate future application, with its name and
+engine still to be decided. It is not a larger version of Ocel viewer and is
+not committed to a Tier 3 implementation. Existing web-subset functionality
+may remain where its measured cost is justified; expanding it toward general
+public-web compatibility is no longer an Ocel viewer goal.
+
+Rejected alternatives:
+
+- Continue growing Ocel's custom DOM/CSS/Web APIs into a general browser:
+  this has an unbounded compatibility surface and conflicts with the viewer's
+  footprint and startup priorities.
+- Put lightweight and full-browser engines behind one Ocel application:
+  their document ownership, dependency and lifecycle requirements differ too
+  much; sharing Cellos integration does not require sharing an application.
+- Add JavaScriptCore merely to improve web compatibility: a second ECMAScript
+  engine does not supply the missing browser DOM, layout or host APIs.
+
+PDF remains implemented but is under footprint review, not guaranteed to be
+part of the lightweight profile. The separate MuPDF service already avoids
+linking the engine into the viewer; its default packaging/startup and memory
+cost still need justification. No removal or packaging cutover is implied by
+this decision record.
+
+Footprint and latency claims must be backed by release-image and runtime
+measurements on the qualified target. Reserved heap, ELF size and observed
+peak memory are different quantities; none should be presented as the others.
+
 ## 6. Cross-references
 
 | Topic | Document |
