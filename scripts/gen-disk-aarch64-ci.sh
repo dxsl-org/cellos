@@ -217,7 +217,13 @@ done
 # `strings` markers, not sizes: the test-hooks flavour adds `access/selftest.rs`
 # to service-vfs and the `rdir-quota` / `quota:` scenarios to vfs-test, and both
 # are absent from the production binary.
-if strings -n 4 "$REL/service-vfs" | grep -qF -- "access/selftest.rs"; then
+#
+# Capture the dump rather than piping it into `grep -q`: under `set -o pipefail`,
+# `grep -q` exits at its first match, `strings` then dies on SIGPIPE (141), and
+# the pipeline's non-zero status makes the `if` false — the guard would silently
+# pass with the marker present (measured 2026-10-02 on the RV64 sibling builder).
+vfs_strings=$(strings -n 8 "$REL/service-vfs" || true)
+if grep -qF -- "access/selftest.rs" <<<"$vfs_strings"; then
     echo "FAIL: $REL/service-vfs carries the test-hooks marker 'access/selftest.rs'." >&2
     echo "      service-vfs must be built WITHOUT --features test-hooks for a" >&2
     echo "      production image (scripts/build-aarch64-test-hooks-ci.sh owns that flavour)." >&2

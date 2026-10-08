@@ -45,9 +45,13 @@ cargo build --release --target "$TARGET" -p app-cpp-smoke
 # not a source-level claim.
 OBJDUMP_TOOL="${CPP_SMOKE_NM:-riscv64-unknown-elf-nm}"
 if command -v "$OBJDUMP_TOOL" >/dev/null 2>&1; then
-    if "$OBJDUMP_TOOL" "$CELL_ELF" 2>/dev/null | grep -qE "__cxa_throw|_Unwind_|__gxx_personality|_ZSt"; then
+    # Capture the symbol dump before matching: under `set -o pipefail`,
+    # `nm | grep -q` returns 141 (nm dies on SIGPIPE after grep's first match),
+    # so the `if` would be false exactly when the forbidden symbols ARE present.
+    nm_dump=$("$OBJDUMP_TOOL" "$CELL_ELF" 2>/dev/null || true)
+    if grep -qE "__cxa_throw|_Unwind_|__gxx_personality|_ZSt" <<<"$nm_dump"; then
         echo "FAIL: hosted C++ runtime symbols are linked into $CELL_ELF" >&2
-        "$OBJDUMP_TOOL" "$CELL_ELF" | grep -E "__cxa_throw|_Unwind_|__gxx_personality|_ZSt" | head >&2
+        grep -E "__cxa_throw|_Unwind_|__gxx_personality|_ZSt" <<<"$nm_dump" | head >&2
         exit 1
     fi
     echo "==> Link check: no hosted C++ runtime symbols"

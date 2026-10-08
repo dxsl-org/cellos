@@ -93,7 +93,11 @@ fi
 # Assert the PVH entry note exists (name "Xen"): otherwise this kernel is not
 # PVH-capable and the cell would need the bzImage fallback path.
 if command -v readelf &>/dev/null; then
-    if readelf -n "$VMLINUX" 2>/dev/null | grep -qi "Xen"; then
+    # Capture before matching: `readelf -n | grep -q` returns 141 under
+    # `set -o pipefail` when readelf is still writing, which would take the
+    # error branch on a kernel that DOES carry the note.
+    readelf_notes=$(readelf -n "$VMLINUX" 2>/dev/null || true)
+    if grep -qi "Xen" <<<"$readelf_notes"; then
         echo "[fetch-x86] PVH note present (XEN_ELFNOTE_PHYS32_ENTRY) — PVH-capable ✓"
     else
         echo "ERROR: vmlinux carries no Xen PVH note — CONFIG_PVH missing?" >&2
