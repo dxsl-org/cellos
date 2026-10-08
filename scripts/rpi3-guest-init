@@ -1,0 +1,14 @@
+#!/bin/sh
+# This guest boots directly from Alpine's initramfs rather than Alpine's /init.
+# Initialize the mounts and modules that the normal init would have provided.
+set -e
+/bin/busybox mount -t proc proc /proc
+/bin/busybox mount -t sysfs sysfs /sys
+/bin/busybox mount -t devtmpfs devtmpfs /dev
+/bin/busybox modprobe virtio_mmio
+/bin/busybox modprobe virtio_blk
+/bin/busybox modprobe ext4
+/bin/busybox mkdir -p /mnt/disk
+/bin/busybox mount -t ext4 /dev/vda /mnt/disk
+printf '[pi-guest] ext4 mounted /dev/vda at /mnt/disk\n'
+exec /bin/sh

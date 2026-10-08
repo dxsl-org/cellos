@@ -61,4 +61,9 @@ if [[ "$gate" == boot ]] && ! grep -Eq '(^|[[:space:]])(/ #|localhost:~#|~ #)' "
     echo "FAIL: Alpine guest shell not reached; log: $log" >&2
     exit 1
 fi
+if [[ "$gate" == boot && -n "$disk" ]] \
+    && ! grep -Fq '[pi-guest] ext4 mounted /dev/vda at /mnt/disk' "$log"; then
+    echo "FAIL: Alpine guest did not mount its SD-backed ext4 disk; log: $log" >&2
+    exit 1
+fi
 echo "PASS: raspi3b $gate gate; log: $log"
