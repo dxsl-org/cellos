@@ -688,6 +688,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             current_el >> 2,
             crate::hal::aarch64::monitor::is_ready()
         );
+        let (booted_el2, hvc_result, op0_seen) = crate::hal::aarch64::monitor::probe_status();
+        log::info!(
+            "[pi-monitor] probe booted_el2={} hvc_result=0x{:x} op0_seen={}",
+            booted_el2,
+            hvc_result,
+            op0_seen
+        );
     }
     #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
     crate::hypervisor::registry::pi_monitor_smoke();

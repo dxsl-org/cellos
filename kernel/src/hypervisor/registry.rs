@@ -55,6 +55,9 @@ struct Vm {
     // so the field stays reserved for VM introspection until they read it too.
     #[allow(dead_code)]
     vmid: u16,
+    /// Set once the guest RAM window has been cleaned to PoC and the I-cache
+    /// invalidated, before the first vCPU entry.
+    entry_flushed: bool,
 }
 
 // VM_REGISTRY is keyed by (owner_tid, vm_id).
@@ -94,6 +97,13 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
     {
         #[cfg(feature = "board-rpi3")]
         if !hal::aarch64::monitor::is_verified() {
+            // The cell can only print one sentence for every failure, so the
+            // reason has to be here: a refused boot monitor and a failed carve
+            // are different bugs with the same symptom on the console.
+            log::warn!(
+                "[hv] create_vm refused: EL2 monitor not verified (ready={})",
+                hal::aarch64::monitor::is_ready()
+            );
             return Err(ViError::NotSupported);
         }
         use crate::memory::paging::PAGE_SIZE;
@@ -105,7 +115,7 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
         let guest_pa = table
             .carve_guest_ram(guest_pages)
             .ok_or_else(|| {
-                let (total_mib, used_mib) = {
+                let (total_mib, used_mib, largest_mib) = {
                     let frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
                     frames
                         .as_ref()
@@ -113,16 +123,18 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
                             (
                                 allocator.total_memory() / (1024 * 1024),
                                 allocator.used_memory() / (1024 * 1024),
+                                allocator.largest_free_run() / 256,
                             )
                         })
-                        .unwrap_or((0, 0))
+                        .unwrap_or((0, 0, 0))
                 };
                 log::error!(
-                    "[hv] create_vm: no contiguous guest run ({} pages, {} MiB; allocator {} MiB total, {} MiB used)",
+                    "[hv] create_vm: no contiguous guest run ({} pages, {} MiB; allocator {} MiB total, {} MiB used, largest free run {} MiB)",
                     guest_pages,
                     guest_pages / 256,
                     total_mib,
-                    used_mib
+                    used_mib,
+                    largest_mib
                 );
                 ViError::OutOfMemory
             })?;
@@ -169,6 +181,7 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
                     vcpus: Vec::new(),
                     vcpu_irqs: Vec::new(),
                     vmid,
+                    entry_flushed: false,
                 },
             );
             let _ = PAGE_SIZE; // suppress unused warning
@@ -310,15 +323,34 @@ pub unsafe fn run_vcpu(
                 }
             }
 
+            // ── Guest image: make it visible to the guest's own view ────────────
+            //
+            // The cell streams the guest kernel/initrd/DTB into guest RAM through
+            // `write_guest_memory`, which copies through the kernel's mapping; the
+            // guest fetches those pages through Stage-2, a different VA and ASID.
+            // Cache maintenance by VA does not cover that alias, so the first
+            // entry cleans the whole window to the point of coherency and drops
+            // the instruction cache. Once per VM: the streaming happens before
+            // the first run, and the guest owns the window afterwards.
+            if !vm.entry_flushed {
+                #[cfg(target_arch = "aarch64")]
+                {
+                    let start = vm.guest_pa as usize;
+                    let len = vm.guest_pages * crate::memory::paging::PAGE_SIZE;
+                    hal::aarch64::cache::clean_data_cache_range(start, len);
+                    hal::aarch64::cache::invalidate_instruction_cache_all();
+                }
+                vm.entry_flushed = true;
+            }
+
             // ── World-switch into guest ──────────────────────────────────────────
             let exit = {
                 let vcpu = vm.vcpus.get_mut(vcpu_idx).ok_or(ViError::NotFound)?;
 
                 // Resolve guest ID_AA64* reads (trapped by HCR_EL2.TID3) here:
-                // `ViVmExit::SysReg` carries no value field and `libs/api` is
-                // frozen (Law 1), so resolve ID reads here. On budget expiry,
-                // yield without changing the faulting PC: the next RunVcpu
-                // retries the same MRS rather than fabricating a zero ID value.
+                // `ViVmExit::SysReg` cannot carry a return value. When the
+                // bounded batch ends, retry the faulting MRS on the next run
+                // instead of fabricating a CPU feature value.
                 const MAX_ID_REG_RESOLVES: u32 = 64;
                 let mut resolved = 0u32;
                 let exit = loop {
@@ -734,10 +766,16 @@ pub fn reap_vms_for_task(dead_tid: usize) {
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 pub fn pi_monitor_smoke() {
     use crate::memory::frame::phys_to_virt;
-    use hal::aarch64::{cache::sync_instruction_cache, monitor};
+    use hal::aarch64::{
+        cache::{clean_data_cache_range, invalidate_instruction_cache_all, sync_instruction_cache},
+        monitor,
+    };
 
     if !monitor::is_ready() {
-        log::warn!("[pi-monitor] firmware entered EL1 or HVC init failed; HypervisorCap closed");
+        log::warn!(
+            "[pi-monitor] entry EL={} HVC init unavailable; HypervisorCap closed",
+            monitor::entry_el()
+        );
         return;
     }
     const IPA: u64 = 0x4000_0000;
@@ -773,8 +811,20 @@ pub fn pi_monitor_smoke() {
         // +0x300: `B .` — a guest that never yields, for the preemption step.
         page.add(0x300 / 4).write(0x1400_0000);
         sync_instruction_cache(page as usize, page as usize, 4096);
+        // The guest fetches this page through Stage-2, i.e. a different VA and
+        // ASID, so the per-VA invalidate above does not cover the alias. Clean
+        // the page to the point of coherency and drop the whole instruction
+        // cache: on real hardware (not in TCG, which has no caches) a guest that
+        // fetched a stale alias faulted at its first instruction while EL2's own
+        // read of the same page showed the correct blob.
+        clean_data_cache_range(page as usize, 4096);
+        invalidate_instruction_cache_all();
     }
     let mut vcpu = AArch64Vcpu::new(IPA);
+    // These markers distinguish an unobserved EL2 write from a genuine trap
+    // whose syndrome and PC happen to be zero.
+    vcpu.exit_esr = 0x534d_4f4b_4553_52;
+    vcpu.exit_elr = 0x534d_4f4b_4550_43;
     // Boot has DAIF.I set: defer the existing, still-routed physical timers
     // for a bounded 100 ms guest smoke window. Otherwise their pre-boot
     // pending IRQs can turn a conditional WFI into a NOP. Production vCPU
@@ -794,14 +844,40 @@ pub fn pi_monitor_smoke() {
         }
     };
     let passed = {
-        run_step(&mut vcpu, false);
+        log::info!(
+            "[pi-monitor] first-run EL1 entry={:#x} insn={:#x} esr-marker={:#x} elr-marker={:#x}",
+            vcpu.g_elr_el2,
+            unsafe { core::ptr::read_volatile(page) },
+            vcpu.exit_esr,
+            vcpu.exit_elr
+        );
+        prepare();
+        let first =
+            unsafe { monitor::run_probed(&mut vcpu, VMID, table.root_pa(), false, IPA, guest_pa) };
+        log::info!(
+            "[pi-monitor] first-run root={:#x} page={:#x} EL2 entry={:#x} s2=[{:#x},{:#x},{:#x}] insn={:#x} exit=[{:#x},{:#x},irq={}] EL1 exit=[{:#x},{:#x},irq={}]",
+            table.root_pa(), guest_pa, first.entry_pc, first.stage2_l1,
+            first.stage2_l2, first.stage2_l3, first.instruction,
+            first.exit_esr, first.exit_elr, first.exit_is_irq,
+            vcpu.exit_esr, vcpu.exit_elr, vcpu.exit_is_irq
+        );
+        if matches!(vcpu.decode_exit(), HalVmExit::Preempted) {
+            run_step(&mut vcpu, false);
+        }
         let hvc = matches!(vcpu.decode_exit(), HalVmExit::Hvc { imm: 0, regs } if regs[0] == 42);
         if !hvc {
+            // EL1's own view of the same words EL2 reported: if they differ the
+            // two regimes disagree about memory; if they agree, the divergence is
+            // in what the *hardware* walk/fetch saw, not in what software reads.
+            let el1_root_leaf = unsafe { core::ptr::read_volatile(phys_to_virt(table.root_pa() as usize) as *const u64) };
+            let el1_insn = unsafe { core::ptr::read_volatile(page) };
             log::warn!(
-                "[pi-monitor] HVC exit={:?} pc={:#x} esr={:#x}",
+                "[pi-monitor] HVC exit={:?} pc={:#x} esr={:#x} EL1 leaf0={:#x} EL1 insn={:#x}",
                 vcpu.decode_exit(),
                 vcpu.exit_elr,
-                vcpu.exit_esr
+                vcpu.exit_esr,
+                el1_root_leaf,
+                el1_insn
             );
             false
         } else {

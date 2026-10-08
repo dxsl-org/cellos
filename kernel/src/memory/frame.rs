@@ -358,6 +358,53 @@ impl FrameAllocator {
         }
     }
 
+    /// Index of the first run of `n` free frames, scanning the whole index space.
+    ///
+    /// Linear: one pass counting the current run, so a request that must span a
+    /// large free tail costs one bitmap read per frame rather than a re-scan from
+    /// every candidate start. Index space is the concatenation of the managed
+    /// ranges, so a run can only sit inside one range — a hole between ranges
+    /// still ends it.
+    pub fn find_free_run(&self, n: usize) -> Option<usize> {
+        if n == 0 || n > self.total_frames {
+            return None;
+        }
+        let mut run_start = 0usize;
+        let mut run_len = 0usize;
+        for idx in 0..self.total_frames {
+            if self.is_frame_allocated(idx) {
+                run_len = 0;
+                continue;
+            }
+            if run_len == 0 {
+                run_start = idx;
+            }
+            run_len += 1;
+            if run_len == n {
+                return Some(run_start);
+            }
+        }
+        None
+    }
+
+    /// Longest run of free frames the allocator currently has.
+    ///
+    /// A failed guest-RAM carve reports this: "no contiguous run" without the
+    /// size of the largest one cannot tell a fragmented map from a small one.
+    pub fn largest_free_run(&self) -> usize {
+        let mut best = 0usize;
+        let mut run = 0usize;
+        for idx in 0..self.total_frames {
+            if self.is_frame_allocated(idx) {
+                run = 0;
+            } else {
+                run += 1;
+                best = best.max(run);
+            }
+        }
+        best
+    }
+
     /// Find `n` consecutive free frames inside **one** managed range and mark them
     /// all allocated.
     ///
@@ -775,6 +822,49 @@ mod tests {
         assert_eq!(allocator.allocate_contiguous(8), Some(0x20000));
     }
 
+    /// The guest-RAM search takes the first run that fits and never spans a hole
+    /// between two managed ranges.
+    #[test]
+    fn find_free_run_takes_the_first_fitting_run_and_never_spans_a_hole() {
+        let mut allocator = allocator(32);
+        // Used: [0, 8) and [16, 20); free: [8, 16) and [20, 32).
+        allocator.mark_range_used(0, 8);
+        allocator.mark_range_used(16, 4);
+
+        assert_eq!(allocator.find_free_run(8), Some(8), "first run that fits");
+        assert_eq!(
+            allocator.find_free_run(9),
+            Some(20),
+            "skips the 8-frame run"
+        );
+        assert_eq!(allocator.find_free_run(12), Some(20));
+        assert_eq!(
+            allocator.find_free_run(13),
+            None,
+            "12 + 8 frames, no single run"
+        );
+        assert_eq!(
+            allocator.find_free_run(0),
+            None,
+            "a zero-frame request is not a run"
+        );
+        assert_eq!(allocator.largest_free_run(), 12);
+        assert_eq!(allocator.used_frames(), 12);
+    }
+
+    /// A carve marks the run it returns, so the next search cannot hand the same
+    /// frames out twice.
+    #[test]
+    fn a_carved_run_is_marked_used_in_the_same_pass() {
+        let mut allocator = allocator(32);
+        let start = allocator.find_free_run(20).expect("20 frames fit");
+        assert_eq!(start, 0);
+        allocator.mark_range_used(start, 20);
+        assert_eq!(allocator.used_frames(), 20);
+        assert_eq!(allocator.find_free_run(20), None, "the run is gone");
+        assert_eq!(allocator.largest_free_run(), 12);
+    }
+
     fn allocator(total_frames: usize) -> FrameAllocator {
         let mut ranges: [Option<super::ManagedRange>; super::MAX_MANAGED_RANGES] =
             [None; super::MAX_MANAGED_RANGES];
@@ -900,75 +990,33 @@ mod tests {
     }
 }
 
-/// Allocate N contiguous physical frames for guest VM RAM using a chunked scan.
+/// Allocate N contiguous physical frames for guest VM RAM.
 ///
-/// Releases `FRAME_ALLOCATOR` every `PROBE_CHUNK` frames during the search phase
-/// to keep lock-hold time bounded and prevent the RT watchdog from firing during
-/// a 512 MiB (131 072-frame) contiguous search (Red-Team M2).
-///
-/// # TOCTOU
-/// After locating a candidate run, the lock is re-acquired to re-verify and mark
-/// all frames atomically.  Transparent on QEMU TCG (single CPU).  A production
-/// SMP build would use a buddy allocator with a free-run index.
+/// One lock hold, one linear pass. The scan used to release `FRAME_ALLOCATOR`
+/// every `PROBE_CHUNK` frames so a long search could not trip the RT watchdog,
+/// but that let any other allocation split the run being counted: the same image
+/// created its 128 MiB guest on one board boot and failed on the next with no
+/// layout change (`[hv] create_vm: no contiguous guest run`). Counting a run
+/// over the bitmap is a read per frame — tens of kilobytes for a 512 MiB
+/// request — so the whole search belongs inside the lock, and the frames are
+/// marked in the same hold. There is no window left in which a candidate run can
+/// be taken by someone else.
 pub fn allocate_guest_ram(n_pages: usize) -> Option<PhysAddr> {
-    const PROBE_CHUNK: usize = 256;
+    let mut guard = FRAME_ALLOCATOR.lock();
+    let allocator = guard.as_mut()?;
+    let start = allocator.find_free_run(n_pages)?;
+    allocator.mark_range_used(start, n_pages);
+    Some(allocator.frame_addr(start))
+}
 
-    let total = FRAME_ALLOCATOR.lock().as_ref()?.total_frames;
-    let limit = total.saturating_sub(n_pages);
-    let mut candidate = 0usize; // current candidate run start (frame index)
-    let mut run_len = 0usize; // confirmed free frames from candidate onward
-
-    while candidate <= limit {
-        let probe_from = candidate + run_len;
-        if probe_from >= total {
-            break;
-        }
-
-        // Probe up to PROBE_CHUNK frames under a bounded lock hold.
-        let (chunk_free, first_used) = {
-            let g = FRAME_ALLOCATOR.lock();
-            let a = g.as_ref()?;
-            let probe_end = (probe_from + PROBE_CHUNK).min(total);
-            let mut free_cnt = 0usize;
-            let mut used_at = None;
-            for idx in probe_from..probe_end {
-                if a.is_frame_allocated(idx) {
-                    used_at = Some(idx);
-                    break;
-                }
-                free_cnt += 1;
-            }
-            (free_cnt, used_at)
-        }; // lock dropped — other kernel tasks may run
-
-        run_len += chunk_free;
-
-        if run_len >= n_pages {
-            // Candidate run is long enough — re-verify and allocate under lock.
-            let result = {
-                let mut g = FRAME_ALLOCATOR.lock();
-                let a = g.as_mut()?;
-                let all_free = (0..n_pages).all(|i| !a.is_frame_allocated(candidate + i));
-                if all_free {
-                    a.mark_range_used(candidate, n_pages);
-                    Some(a.frame_addr(candidate))
-                } else {
-                    None // race: another CPU grabbed a frame; restart
-                }
-            };
-            if let Some(pa) = result {
-                return Some(pa);
-            }
-            candidate += 1;
-            run_len = 0;
-            continue;
-        }
-
-        if let Some(used_idx) = first_used {
-            candidate = used_idx + 1;
-            run_len = 0;
-        }
-        // If chunk was all free but run_len < n_pages: loop to probe next chunk.
-    }
-    None
+/// Longest free run the allocator has right now, in frames.
+///
+/// Logged when a guest carve fails, so the next report says whether the map is
+/// fragmented or simply too small.
+pub fn largest_free_run() -> usize {
+    let guard = FRAME_ALLOCATOR.lock();
+    guard
+        .as_ref()
+        .map(FrameAllocator::largest_free_run)
+        .unwrap_or(0)
 }
