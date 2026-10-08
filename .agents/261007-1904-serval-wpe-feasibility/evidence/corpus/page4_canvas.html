@@ -1,0 +1,6 @@
+<!DOCTYPE html><html><head><title>Canvas 2D</title></head><body><canvas id="c" width="800" height="600"></canvas>
+<script>
+let ctx = document.getElementById('c').getContext('2d');
+ctx.fillStyle = 'red'; ctx.fillRect(10, 10, 100, 100);
+ctx.beginPath(); ctx.arc(150, 60, 50, 0, Math.PI*2); ctx.fillStyle = 'blue'; ctx.fill();
+</script></body></html>

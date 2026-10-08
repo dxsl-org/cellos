@@ -1,0 +1,13 @@
+<!DOCTYPE html><html><head><title>JS Heavy</title></head><body><div id="out"></div><script>
+let out = document.getElementById('out');
+let data = [];
+for (let i = 0; i < 50000; i++) {
+    data.push({ id: i, val: Math.random().toString(36).substring(7) });
+}
+data.sort((a,b) => a.val.localeCompare(b.val));
+for (let i = 0; i < 1000; i++) {
+    let d = document.createElement('div');
+    d.textContent = data[i].id + ": " + data[i].val;
+    out.appendChild(d);
+}
+</script></body></html>

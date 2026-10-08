@@ -1,0 +1,16 @@
+<!DOCTYPE html><html><head><title>Mock SPA</title></head><body><div id="app"></div><script>
+// Simulate a heavy framework initialization
+const App = {
+    render(count) {
+        let app = document.getElementById('app');
+        app.innerHTML = '';
+        for(let i=0; i<count; i++) {
+            let n = document.createElement('span');
+            n.textContent = " Node " + i;
+            n.style.color = i % 2 ? 'red' : 'blue';
+            app.appendChild(n);
+        }
+    }
+};
+App.render(10000);
+</script></body></html>
