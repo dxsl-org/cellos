@@ -1,12 +1,80 @@
 # Current Focus
 
-**Last updated**: 2026-09-25 (backend actor/supervisor library B0 closed at the `qemu` ceiling)
+**Last updated**: 2026-10-08 — Intel x86-64 C2C-only direction
+
+## Sole active direction: C2C Anywhere on Intel x86-64
+
+[ADR-0022](../decisions/0022-intel-x86-64-c2c-only-direction.md) records the
+owner-approved direction: **all work serves Cell-to-Cell Anywhere on Intel
+x86-64; there are no independent feature or platform programs.** This supersedes
+lab-first ordering and the prior permission to advance unrelated lanes.
+
+The destination includes Tier 1 native Cells, Tier 2 isolated C/C++ consumers and
+Tier 3 Linux guest adapters, sharing service contracts, identity/authority and
+lifecycle semantics. Local IPC, LAN and relay remain distinct transports:
+`anywhere` does not mean shared pointers across machines, automatic distribution
+of arbitrary applications, invisible failures or unbounded retries.
+
+### Task admission and working limits
+
+- Every task names the Intel C2C milestone/consumer it serves, its dependency or
+  measured defect, and an observable acceptance scenario/evidence ceiling.
+- No direct connection means **parked**, even if an older document says `ready`.
+- One implementation slice at a time; reuse existing contracts and child plans.
+  The [portfolio](../../.agents/plan-portfolio.md) selects the next executable
+  slice after ABI, security and ownership gates pass.
+- Console/CLI, kernel, networking, storage, isolation, SDK and build/CI work are
+  supporting work only. GUI, a terminal product, AI, robotics, general Linux
+  replacement and additional hardware ports are not separate objectives.
+- Preserve existing code, tests and history. Run non-Intel regressions only as
+  needed for shared changes; do not continue ARM/RISC-V/AMD feature development.
+- No procurement, paid service, ABI approval, remote activation or production
+  admission is authorized by the direction change.
+
+### Milestone projection
+
+These are target outcomes, not a claim that the existing implementations pass.
+Local/software work may proceed without unrelated physical or production gates.
+
+| Milestone | Required outcome | Present boundary / owning work |
+|---|---|---|
+| Contract and local C2C | Typed local service calls, authority, bounded waits/cancellation, restart/stale-reference behavior and explicit errors | [Tier-aware C2C plan](../../.agents/260927-1100-c2c-anywhere-tier-aware/plan.md); Phase 01 review/ABI entry gates remain |
+| One Intel node | Exact machine boots with usable console, stable bidirectional wired network, persistence across reboot and applicable DMA isolation | [PC plan](../../.agents/261004-1957-x86-pc-lane/plan.md), [HCL](../hardware-compatibility-list.md); QEMU controller evidence exists, no physical row yet; procurement remains separate |
+| Intel tier prerequisites | Qualified x86 Tier 2 C/C++ runtime/admission and Intel VMX/EPT guest lifecycle, storage and network | Tier 2 is test-image-only; x86 C++ runtime gap remains; [VMX plan](../../.agents/260711-1917-tier3b-x86-vtx/plan.md) P09 is required; SVM/TCG does not qualify Intel |
+| Two-node LAN C2C | Same service contract across two identified Intel nodes, authority enforcement, bounded disconnect/reconnect, restart and uncertain outcomes | A second same-model machine follows first-node qualification; two QEMU nodes are software evidence only; tier-aware transport/identity gates still apply |
+| All-tier and remote closure | Explicit Tier 2/guest adapters, local/LAN/relay interoperability and negative authority/replay cases | Existing guest bridge scope is not blanket cross-node authorization; protected relay identity/time/persistence gates remain, with no insecure fallback |
+| Measured usefulness | Reproducible workload and same-hardware Linux comparison: latency distribution, throughput, CPU/RAM use and recovery | Establish baseline before optimization; no universal performance or commercial-readiness claim |
+
+Completion requires the all-tier destination, not just local Tier 1 or guest boot.
+Do not add an unneeded application ecosystem to demonstrate it. First choose a
+bounded service workload that exercises the contract; optimize observed costs.
+
+### Parked until an explicit scope decision
+
+ARM/RPi3/RISC-V/AMD bring-up and peripheral expansion; LAB/BASE/ASSEMBLY and robot
+acceptance; desktop/ViUI/Ocel/browser work; AI/NPU/GPU programs; general office or
+server replacement; standalone runtime breadth and general virtualization-platform
+expansion. Existing non-Intel authority/security work can supply a named C2C
+dependency, not an automatic second hardware program.
+
+### Evidence and security
+
+Host/QEMU results are not physical Intel qualification. The same applies to
+historical ARM guest boots and AMD SVM results. The existing solo-development
+policy remains; independent human approvals, protected relay authority, signing
+and production gates remain mandatory where applicable.
+
+## Historical capability snapshots — not the execution queue
+
+The remainder preserves earlier evidence and plans. Its `next`, `active`,
+`executable` and stage-order wording is historical and cannot reopen a program.
+Use the direction and milestone table above, then the portfolio, for scheduling.
 
 ## Development-first, solo-first execution boundary
 
 [ADR-0007](../decisions/0007-development-first-hardware-constrained-execution.md)
-keeps work lane-local and bounded by available hardware and truthful evidence
-ceilings. [ADR-0013](../decisions/0013-solo-first-development-independent-promotion.md)
+previously kept development lanes independent; its hardware and scheduling scope
+is now superseded by ADR-0022. [ADR-0013](../decisions/0013-solo-first-development-independent-promotion.md)
 allows the sole accountable maintainer to perform all development roles.
 AI agents, local subagents, and CI jobs provide automated assurance; none is an
 independent accountable identity.
@@ -17,11 +85,11 @@ independent-member decision blocks only the independently ratified or
 production promotion that requires it. When required, another repository
 member must answer explicit `YES` or `NO` through the GitHub issue or pull
 request bound to the exact proposal, commit, and evidence. It does not block
-unrelated host, QEMU, exact-device development, or documentation work.
+in-scope host, QEMU, exact-device development, or documentation work.
 
-## Lab-first product workflow
+## Lab-first product workflow (parked historical record)
 
-[ADR-0014](../decisions/0014-lab-first-robot-workflows.md) selects LAB-01:
+[ADR-0014](../decisions/0014-lab-first-robot-workflows.md) previously selected LAB-01:
 one identified closed inert dummy carrier transferred from indexed rack A to B,
 with confirmed placement and traceable outcome. The
 [SAS/LBI roadmap plan](../../.agents/260905-1139-sas-lbi-outcome-closure/plan.md)

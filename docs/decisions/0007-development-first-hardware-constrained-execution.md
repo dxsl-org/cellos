@@ -1,7 +1,10 @@
 # ADR-0007: Use development-first hardware-constrained execution
 
 **Date**: 2026-08-28
-**Status**: Accepted
+**Status**: Partially superseded by [ADR-0022](0022-intel-x86-64-c2c-only-direction.md)
+(2026-10-08) for active hardware scope and independent-lane scheduling. Evidence
+ceilings and fail-closed production boundaries remain accepted. The original
+decision below is retained as history, not authorization for non-Intel programs.
 
 ## Context
 

@@ -4,7 +4,15 @@
 >
 > **Version**: 0.2.1-dev | **Last Updated**: 2026-06-19
 
-## Quick Start
+> **Direction update (2026-10-08):** Intel x86-64 C2C Anywhere is the only
+> active program; see [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md),
+> [current focus](roadmap/current-focus.md) and the
+> [q35 x86 instructions](../boards/qemu/q35-x86_64/README.md).
+> The RV64 quickstart below is a retained runnable reference, not the primary
+> platform or permission to expand RISC-V. QEMU is software evidence, never a
+> replacement for exact physical Intel qualification.
+
+## Legacy RV64 Reference Quick Start
 
 Get Cellos running in 5 steps. Expect 30–45 minutes on your first setup.
 
@@ -13,7 +21,7 @@ Get Cellos running in 5 steps. Expect 30–45 minutes on your first setup.
 | Requirement | Version | Why |
 |-------------|---------|-----|
 | **Rust** | nightly | Compiler for no_std kernel |
-| **QEMU** | 7.0+ | RISC-V emulator (replaces physical hardware) |
+| **QEMU** | 7.0+ (legacy RV64 reference) | RISC-V software/emulation environment; not physical qualification |
 | **Python** | 3.8+ | Disk image creation script |
 | **Git** | 2.30+ | Source control |
 | **RAM** | 4GB min | Development environment needs breathing room |

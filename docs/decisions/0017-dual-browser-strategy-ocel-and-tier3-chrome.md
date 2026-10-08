@@ -1,6 +1,9 @@
 # ADR-0017 — Dual Browser Strategy: Ocel + Tier 3 Chrome
 
-> **Status**: Accepted 2026-09-20.
+> **Status**: Accepted 2026-09-20 as the retained browser design; implementation
+> expansion is parked by [ADR-0022](0022-intel-x86-64-c2c-only-direction.md)
+> (2026-10-08). Existing code/evidence stays; Intel C2C, not browser completion,
+> owns the current Tier 3 objective.
 > **Supersedes**: None. First browser/viewer decision.
 
 ## 1. Context

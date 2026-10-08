@@ -1,13 +1,16 @@
 # Runtime and Platform Tracks
 
-**Last updated**: 2026-09-29
+**Last updated**: 2026-10-08 — runtime work restricted to Intel C2C dependencies
 
-This page groups the runtime and higher-level platform overlays that sit next
-to the physical hardware tracks.
+[ADR-0022](../decisions/0022-intel-x86-64-c2c-only-direction.md) makes Intel
+x86-64 C2C Anywhere the sole program. This page inventories runtime assets, not
+independent programs. New work requires a named C2C consumer, acceptance scenario
+and evidence ceiling in the portfolio. Standalone scripting, WASM, Rust std,
+language/port breadth and general virtualization expansion are parked.
 
-## Active Native Runtime
+## Existing Native Runtime
 
-- Lua 5.4 is the active native scripting runtime.
+- Lua 5.4 is an existing native scripting runtime, not an active expansion program.
 - It is the only current native scripting runtime that should be documented as
   supported in-tree. It is a trusted Tier 1 `lua` runtime profile, not a
   separate application tier.
@@ -29,18 +32,19 @@ to the physical hardware tracks.
 
 ## Platform Overlays and Capability Gates
 
-- G4 is the planned pure-Rust `rust-std` Tier 1 runtime profile. Its next
-  remediation work is `governance-gated`; host results cannot establish a PAL,
-  target, sysroot, runtime, or production qualification.
-- G5 remains a virtualization-platform research/design overlay after G4. It
-  does not prevent Tier 3 QEMU runners, persistence work, or transport parity
-  from advancing to their own documented software evidence ceilings.
-- Untrusted Linux/POSIX application compatibility stays in Tier 3 VM lanes
-  until Tier 2 native domains exist.
-- Tier 2 native domains remain unimplemented. [Spec 22](../specs/22-native-domain-cell-implementation-gate.md)
-  is the mandatory design and negative-test gate before a private-MMU native
-  runtime may be implemented or offered; current native cells remain shared-SAS
-  code and are not treated as contained.
+- Intel Tier 2/C/C++ support and Intel VMX are direct prerequisites for the C2C
+  target, not stages that must wait for G4/G5 product releases.
+- Existing pure-Rust `rust-std`/PAL assets may be reused for an identified C2C
+  consumer; standalone G4 expansion is parked.
+- G5 general virtualization-platform research is parked. Bounded Intel guest
+  lifecycle/storage/network and explicit C2C bridge work remain in scope.
+- Tier 2 domain substrate exists in test-image profiles, but production AArch64
+  and x86 admission still refuses without `test-hooks`. The x86 C++ freestanding
+  runtime gap remains. [Spec 22](../specs/22-native-domain-cell-implementation-gate.md)
+  and existing ABI/negative-test gates still apply; no generic contained-native
+  or arbitrary Linux application support is implied.
+- Historical SVM/TCG guest evidence is not Intel VMX qualification. Existing
+  non-Intel regressions may protect shared changes without platform expansion.
 
 The canonical cross-lane execution classes and reopening events are in the
 [roadmap capability table](../project-roadmap.md#capability-lanes).

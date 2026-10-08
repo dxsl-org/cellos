@@ -1,6 +1,6 @@
 ---
-title: "x86_64 PC lane — controller-family bring-up, QEMU first"
-description: "Close roadmap X86-PC-0..7 as controller-family slices (descriptor+HCL, AHCI, xHCI, igb, ACPI DMAR, multi-port COM/RS485, physical lane). Each phase has a QEMU-first gate; Intel VMX stays in P09 and x86 AI SIMD stays in the cpu-engine plan."
+title: "Intel x86-64 C2C substrate — fixed headless target, QEMU first"
+description: "Own the fixed Intel C2C hardware substrate and gated first-machine HCL capture. Phases 01–06 completed at QEMU only; phase 07 remains procurement-gated. Intel VMX P09 is a required Tier-3 dependency, not a shipped capability."
 status: in-progress
 priority: P2
 effort: 7 phases; per-family driver estimates follow spec 04 §7 scale (NVMe ~3-5K LOC, real NIC ~5-8K LOC)
@@ -9,23 +9,29 @@ created: 2026-10-04
 tags: [x86, pc, ahci, xhci, igb, dmar, iommu, hcl, qemu-first, g2]
 ---
 
-# x86_64 PC lane — controller-family bring-up (QEMU first)
+# Intel x86-64 C2C substrate — fixed headless target (QEMU first)
 
 ## Goal
 
-Make Cellos usable and qualifiable on ordinary x86_64 PCs/servers, which is the
-G2 "organization server / office PC" cohort (ADR-0014,
-`.agents/260905-1139-sas-lbi-outcome-closure/organization-deployment-profiles.md`).
-The roadmap already records the missing prerequisites as **X86-PC-0..7** in
-`docs/roadmap/hardware-tracks.md` and as risk `CELLOS-X86-PC-001`; this plan is
-the owner for X86-PC-0..5 plus the physical lane. It does **not** own Intel VMX
-(that is `.agents/260711-1917-tier3b-x86-vtx/phase-09-vtx-backend-apic.md`) or
-x86 CPU-inference kernels (`.agents/260914-cpu-engine-optimization/`).
+As of 2026-10-08, [ADR-0022](../../docs/decisions/0022-intel-x86-64-c2c-only-direction.md)
+makes Cell-to-Cell Anywhere on Intel x86-64 the sole program. This plan supplies
+its fixed, headless hardware substrate, not general PC/industrial support.
+Select one exact Intel machine, qualify it, then consider an identical second
+node with its own capture and separate procurement authorization. No AMD row,
+new ARM/RISC-V platform work, or autonomous GUI/browser/AI/robotics/OS program
+is scheduled. Every remaining task must name its direct Intel C2C deliverable,
+dependency, or required regression.
 
-Phases are split by **controller family**, not by machine model, because that is
-the unit of reuse: one AHCI driver, one xHCI driver and one `igb` driver each
-cover a whole generation of industrial and office PCs from either vendor. Per
-machine work is reduced to a board descriptor plus an HCL row.
+This plan owns X86-PC-0..5 and the physical lane. Intel VMX remains owned by
+`.agents/260711-1917-tier3b-x86-vtx/phase-09-vtx-backend-apic.md` and is required
+before Intel Tier 3 can be claimed. SVM QEMU evidence is regression/reference
+only. AI/SIMD work is parked, not a parallel owner mandate. Existing ABI,
+authority, remote-enablement and production gates are unchanged.
+
+Controller-family reuse remains the implementation boundary; it does not
+authorize qualification across vendors or families. Current `igb` admission
+is only `8086:10c9` (QEMU 82576) and `8086:1533` (flash-backed i210), not broad
+i210/i211 support. No physical machine or NIC is qualified.
 
 ## Why QEMU first
 
@@ -44,11 +50,9 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
 | 06 multi-port COM | several `isa-serial` ports | RS485 DE/RE timing has **no** QEMU model and cannot be gated here |
 | 07 physical lane | — | hardware only; no QEMU substitute is acceptable |
 
-`scripts/qemu-x86_64-test.sh` currently accepts only
-`X86_NIC_MODEL=e1000|e1000e`; each phase extends the runner and the
-`QemuRunner` x86 constructors (`tests/integration/src/lib.rs`, today
-`boot_x86_bios`, `boot_x86_bios_with_nvme`, `boot_x86_bios_with_nic`,
-`boot_x86_bios_with_vtd`) rather than inventing a second harness.
+Reuse `scripts/qemu-x86_64-test.sh` and the existing `QemuRunner` x86
+constructors in `tests/integration/src/lib.rs`; do not invent a second harness.
+Completed phases' exact device arguments and evidence below remain QEMU-only.
 
 ## Phases
 
@@ -75,19 +79,20 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
 02b  ──► 05 ────────┘        (05 also needs 04a/04b as the DMA client it gates)
 ```
 
-## Sequencing (validated 2026-10-04)
+## Sequencing (current direction 2026-10-08; original gates retained)
 
 - **Sequential, one family at a time.** The user chose sequential execution over
   worktree parallelism: each new driver brings its own QEMU lane, and a red lane
   must be attributable to one change. Do not start 02b before 02a is green, or
   04b before 04a.
-- **Hardware is bought only after 02b / 03 / 04b / 05 are green on QEMU** — the
-  HCL checklist is ready (`docs/hardware-compatibility-list.md`), and the
-  purchase decision follows working drivers instead of spec sheets. Phase 07
-  therefore starts last and is the only phase with no QEMU gate.
-- **e1000e/I219 is a recorded follow-up decision**, not a dropped requirement:
-  revisit it at 04b exit, using the HCL and the actual chip list of the machines
-  to be bought.
+- **Phase 07 remains held.** Green QEMU gates for 02b / 03 / 04b / 05 are
+  prerequisites, not purchase authorization. An explicit procurement decision
+  is still required before acquiring the first Intel machine. A second node
+  must be the identical model/configuration and wait for first-machine
+  qualification plus separate approval.
+- **No automatic NIC expansion.** The historical e1000e/I219 follow-up is
+  parked; the selected fixed Intel configuration must match the supported
+  exact-ID HCL. Any new driver work needs a direct C2C dependency and scope decision.
 
 ## Evidence rules
 
@@ -113,17 +118,18 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
 ## Out of scope (separate owners)
 
 - **Intel VMX / Tier 3 on Intel boards** — P09 in
-  `.agents/260711-1917-tier3b-x86-vtx/`; cannot be QEMU-gated (TCG has no VMX
-  model). This plan only ensures the descriptor and driver substrate P09 needs.
-- **x86 CPU-inference kernels (AVX2/FMA) and kernel vector state** — X86-PC-7,
-  owned by `.agents/260914-cpu-engine-optimization/`; risk `CELLOS-AI-SIMD-004`.
-- **Signed/measured boot** — Security track
-  (`.agents/260605-2107-full-reliability-track/plan.md:76`); until it ships,
-  "firmware must allow disabling Secure Boot" is a hard HCL row, not a code task.
-- **WiFi/BT, audio, GPIO/Super-I/O extras, hardware watchdog, SIM/Mini-PCIe** —
-  not required by X86-PC-0..5; each would need its own scope decision.
-- **AMD SVM backend** — already implemented (QEMU-qualified only); no work here
-  beyond the physical lane's AMD row.
+  `.agents/260711-1917-tier3b-x86-vtx/` is a required Intel C2C Tier-3
+  prerequisite under its own owner. TCG cannot prove VMX; use an explicitly
+  admitted Intel/nested-KVM lane. This plan supplies its hardware substrate.
+- **x86 CPU-inference kernels and vector state** — historical X86-PC-7 is
+  parked unless an explicit direct C2C dependency is established.
+- **Signed/measured boot** — existing Security/production gates remain intact;
+  until a signed boot path ships, disabling Secure Boot is a hard HCL requirement.
+  This does not authorize an independent Security-track expansion.
+- **WiFi/BT, audio, GPIO/Super-I/O, watchdog, SIM/Mini-PCIe, GUI and robotics**
+  — no autonomous work; optional inventory is not a deliverable.
+- **AMD SVM and non-Intel expansion** — retained implementations and required
+  regressions only; no AMD physical row or new ARM/RISC-V program.
 
 ## Assumptions (unverified — verify in the phase that needs them)
 
@@ -143,16 +149,21 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
 
 | Risk | Mitigation |
 |---|---|
-| Phase scope creep into "support every PC" | Phases are family-scoped; expansion requires a new phase and an HCL row each |
+| Phase scope creep into "support every PC" | Only the fixed Intel C2C configuration is current; no vendor/family expansion without an explicit direct C2C dependency and scope decision |
 | QEMU model divergence makes the QEMU gate falsely reassuring | Every phase records its QEMU-model caveat and the registers/paths **not** validated on the model; phase 07 re-validates on hardware |
 | Driver lands before the descriptor/HCL model exists | 01 ships first and defines the HCL file the other phases write into |
-| Touching kernel PCIe/IOMMU code destabilizes QEMU VT-d lanes | 05 keeps the q35 base as a fallback path until DMAR discovery passes both QEMU and hardware gates |
+| Touching kernel PCIe/IOMMU code destabilizes QEMU VT-d lanes | Retain QEMU regression coverage; phase 05 completed with DMAR discovery and required isolation on the physical profile, not a generic-PC fallback to q35 |
 | No hardware is ever bought, so the lane stalls at `qemu` | 07 is explicitly the only hardware-gated phase; 02–06 stay useful as regression coverage and as the prerequisite inventory for a purchase decision |
-| Two NIC cells compete for one class triple | `FindPcieDevice` matches `(class, subclass, prog_if)` only, so e1000 and igb resolve to the same triple and the loser must decline and release before the winner's retry can claim it (phase 04a applied a retry-window workaround outside its own file list). Proper fix: match by vendor:device, or have the kernel hand out devices per driver family; until then the sibling-exit dependency is a real race, not a design |
+| NIC-family selection regression | Phase 04a closed the historical sibling race with owner-approved opcode 424 and exact-ID selection; retain that QEMU regression when servicing the Intel C2C NIC path. The earlier race investigation remains historical evidence below |
 | `bar_mem_*` depends on the kernel's early ECAM scan retaining every BAR | The kernel's own scan retains all BARs (that is why phase 02a passes), but the Platform-Cell registration path stores only BAR0 (`register_device`), so a device registered through that path with an I/O BAR0 and MMIO at BAR5 would report `bar_mem_base = 0` and the AHCI cell would fail closed with a named error. Extending PCI registration to retain per-BAR index/base/size belongs to the Platform-Cell cutover owner, not to this lane; the syscall site carries a note and the AHCI cell fails closed meanwhile |
 | Two storage drivers on one machine: registration is single-slot and last-wins, but the *consumer* caches its provider | Both `/bin/nvme` and `/bin/ahci` register successfully and the later TID replaces the earlier one (`driver_cell.rs:84-91`, registry `insert`); however `service-vfs` resolves the block driver through a cached TID, so if it looks up before the second registration, the replacement does not redirect I/O — and the observed registration order varied between runs. Consequence: which drive serves `/mnt/sd` on a machine with two storage devices is scheduling-dependent. This lane's lanes each attach exactly one storage device, and `ahci_and_nvme_both_register_x86` asserts only the registration contract; deterministic storage selection needs owner-side arbitration (Platform/VFS) and is recorded here rather than assumed |
 
 ## Validation log
+
+The following dated decisions and test results are historical provenance, not
+current scheduling, procurement authorization, or Intel hardware/VMX claims.
+The current direction and gates above supersede broader vendor/family goals
+and follow-up sequencing; original observations are retained unchanged.
 
 ### Validation Decisions (interview, 2026-10-04)
 

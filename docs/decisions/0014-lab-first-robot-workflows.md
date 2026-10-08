@@ -1,7 +1,10 @@
 # ADR-0014: Choose lab-first workflows with gated base and assembly extensions
 
 **Date**: 2026-09-05  
-**Status**: Accepted — product/workflow ordering and planning scope only  
+**Status**: Superseded for current workflow ordering by
+[ADR-0022](0022-intel-x86-64-c2c-only-direction.md) (2026-10-08).
+Lab/base/assembly contracts and evidence below are retained; their development
+and physical acceptance are parked, not active work.
 **Decider**: Cellos maintainer, through the recorded user approval in this planning session
 
 ## Context

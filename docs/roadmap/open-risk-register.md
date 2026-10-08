@@ -1,6 +1,6 @@
 # Open Risk Register
 
-**Last updated**: 2026-09-22 (cell scale and mixed-profile limits recorded)
+**Last updated**: 2026-10-08 (Intel C2C scheduling boundary; prior risk evidence retained)
 
 This register tracks confirmed readiness gaps found while syncing docs to code.
 It is not a global bug-fix queue, and it does not turn all future or
@@ -8,16 +8,18 @@ production-only capability into technical debt.
 
 ## Capability scheduling boundary
 
-Risks do not serialize unrelated work. Under
-[ADR-0007](../decisions/0007-development-first-hardware-constrained-execution.md),
-QEMU, the two owner-reported Raspberry Pi 3 Model B+ boards, incoming sensors,
-and local-runtime work remain executable to their lane-specific evidence
-ceilings without additional procurement. QEMU evidence is software-only.
-RPi3/sensor evidence is development and exact-device hardware-integration
-evidence only; RPi3 cannot qualify production security or the independent
-external floor.
+[ADR-0022](../decisions/0022-intel-x86-64-c2c-only-direction.md) makes Intel
+x86-64 C2C Anywhere the sole direction. A risk authorizes work only when it
+protects that path or its required shared baseline, with a named acceptance
+scenario and evidence ceiling. Earlier ARM/RPi3/sensor programs are parked;
+an available board or a prior risk classification cannot reopen them.
 
-Primary planning classification for the open entries:
+Current critical dependencies include exact Intel hardware qualification,
+stable network/storage, x86 Tier 2/C++ runtime and admission, Intel VMX/EPT,
+and the identity/time/persistence gates for the corresponding C2C transports.
+QEMU/SVM evidence does not qualify physical Intel or Intel VMX execution.
+
+Historical planning classification for the retained open entries:
 
 | Planning class | Entries |
 |---|---|
@@ -30,10 +32,9 @@ Primary planning classification for the open entries:
 An entry's primary class does not erase its nested dependencies. In particular,
 production release gates remain mandatory, disabled, and fail-closed, but block
 only the production-admission or production-release milestone that owns them.
-Mitigation and prequalification work may continue without promoting local,
-QEMU, or RPi3 results. The authoritative execution class, owner, and reopening
-event are in
-[the roadmap capability table](../project-roadmap.md#capability-lanes).
+In-scope mitigation may continue without promoting host, QEMU or prior board
+results. Current scope/milestones are in [current-focus.md](current-focus.md)
+and child scheduling is in the [portfolio](../../.agents/plan-portfolio.md).
 
 The former single-guest local Cell-to-Cell oracle CI-coverage gap is closed by
 the required [workflow job](../../.github/workflows/ci.yml)
@@ -120,44 +121,27 @@ those remain fail-closed production gates.
   or a separately approved, explicitly test-only clock/provider harness that
   cannot weaken the default image.
 
-- **`CELLOS-X86-PC-001` — High, owner: x86_64 PC/server lane
-  (`.agents/261004-1957-x86-pc-lane/`).** Every x86 evidence row carries a `qemu`
-  ceiling and no physical machine is qualified: `boards/` carries the generic
-  `pc/x86_64-pc` descriptor (phase 01, 2026-10-04) alongside `qemu/q35-x86_64`,
-  but there is no machine-specific descriptor and no HCL machine row. The
-  PC-class driver path is largely absent as well — the AHCI/SATA storage family
-  shipped in phases 02a/02b (`cells/drivers/ahci/`, QEMU-gated with a two-boot
-  persistence oracle) but there is still no real NIC (no driver in the Cellos
-  source for the other families), xHCI is only now being reopened for this lane
-  by the owner's 2026-10-05 decision, recorded in
-  `.agents/260819-1416-port-common-drivers-g1-g2-g3/phase-01-evidence-and-provenance-gate.md`
-  item 5 and `reports/driver-source-license-bom.md:32`; and `cells/drivers/e1000`
-  binds 82540EM only, with `kernel/src/task/drivers/pcie_ecam.rs:894`
-  fail-closing every other Ethernet-class binding. Consequence: the q35 software
-  lane boots Cellos to a COM1 shell from the embedded VIFS1 and runs a Tier 3
-  guest from the hypervisor cell's filesystem; a SATA-only industrial PC is
-  expected to do the same but is **unqualified** (no physical capture), and it
-  would still have no persistent `/data`, no persistent guest disk, no real NIC,
-  and no USB input. This is a
-  capability gap, not a regression: it blocks no current QEMU, RPi3, or
-  local-runtime lane. Prerequisite inventory X86-PC-0..7 is in
-  [hardware-tracks.md](hardware-tracks.md). Any HCL claim requires an
-  exact board pair (one Intel, one AMD) with a 16550-compatible COM1 and a
-  separately activated implementation lane; QEMU results must not be promoted.
-  A board whose firmware offers no way to disable Secure Boot is additionally
-  incompatible until a signed or measured x86 boot path exists — code-signing/
-  secure-boot belongs to the Security track and secure/measured boot is a
-  production-release-gate requirement, so there is no exemption path today.
+- **`CELLOS-X86-PC-001` — High, owner: Intel C2C hardware lane
+  (`.agents/261004-1957-x86-pc-lane/`).** No physical machine is qualified.
+  Generic `pc/x86_64-pc` plus AHCI, xHCI/HID, `igb`, DMAR and serial have QEMU
+  evidence, not machine-specific boot, network, persistence or isolation evidence.
+  Current `igb` admits `8086:10c9` and flash-backed i210 `8086:1533`, not every
+  i210/i211 SKU. Qualify one exact Intel machine against HCL R1–R9, then a
+  separately authorized second node of the identical configuration; the earlier
+  Intel/AMD pair is superseded. COM1, HPET, disable-able Secure Boot, exact
+  NIC/storage, VT-d/DMAR and VT-x/EPT availability are prerequisites, not evidence
+  that VMX or C2C works. See [hardware tracks](hardware-tracks.md) and the
+  [HCL](../hardware-compatibility-list.md). Procurement is separately gated.
 
 ## Medium
 
-- **`CELLOS-X86-DMAR-002` — Medium, owner: x86 IOMMU/PCIe lane.** The x86 IOMMU
-  base is hardcoded to the q35 model (`kernel/src/task/drivers/iommu_x86.rs:59-60`),
-  so ACPI DMAR discovery is unexercised and per-Cell DMA isolation cannot be
-  programmed on real hardware. The q35 VT-d TX/Rx/DHCP gate is QEMU evidence
-  only (`.agents/260903-x86-e1000-dhcp/`, status completed). A real PC/server
-  lane needs DMAR parsing plus a fail-closed gate for boards without VT-d
-  (absent on Haswell-ULT U-series; present on Whiskey-Lake-class parts).
+- **`CELLOS-X86-DMAR-002` — Medium, owner: x86 IOMMU/PCIe lane.** ACPI DMAR
+  discovery landed in PC phase 05 with QEMU evidence. Real-machine remapping,
+  exact firmware topology and isolation-before-DMA remain unqualified. The
+  physical `x86_64-pc` profile requires DMA isolation and refuses the q35
+  fallback without a valid firmware-discovered remapper; QEMU optional isolation
+  cannot substitute. Capture VT-d on the selected Intel configuration before
+  qualifying traffic or untrusted DMA-capable drivers.
 - **`CELLOS-X86-VMX-003` — Medium, owner: Tier 3 x86 VM lane.** Intel VT-x guest
   execution is unimplemented: `hal/arch/x86/src/hypervisor.rs` returns
   `NotSupported`, the kernel x86_64 dispatch routes only to

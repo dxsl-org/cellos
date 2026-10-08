@@ -2,8 +2,8 @@
 
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
-**Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-09-30 (Tier 1 `rust-std` implementation and lane status)
+**Current direction**: C2C Anywhere on Intel x86-64 — sole active program
+**Last updated**: 2026-10-08 (ADR-0022 direction cutover)
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -15,8 +15,8 @@ historical decision is not represented by the current topic pages.
 |---|---|
 | What is active now | [roadmap/current-focus.md](roadmap/current-focus.md) |
 | Hardware qualification lanes | [roadmap/hardware-tracks.md](roadmap/hardware-tracks.md) |
-| Product-stage overlay G1-G5 | [roadmap/product-stages.md](roadmap/product-stages.md) |
-| Runtime and platform overlays | [roadmap/runtime-and-platform-tracks.md](roadmap/runtime-and-platform-tracks.md) |
+| Historical product-stage definitions G1-G5 (parked) | [roadmap/product-stages.md](roadmap/product-stages.md) |
+| Runtime assets and C2C dependency boundaries | [roadmap/runtime-and-platform-tracks.md](roadmap/runtime-and-platform-tracks.md) |
 | Technical milestones and historical status | [roadmap/technical-milestones.md](roadmap/technical-milestones.md) |
 | BEAM/OTP parity and backend roadmap (analysis) | [roadmap/beam-parity-backend-roadmap.md](roadmap/beam-parity-backend-roadmap.md) |
 | Completed history ledger | [roadmap/completed-history.md](roadmap/completed-history.md) |
@@ -25,9 +25,12 @@ historical decision is not represented by the current topic pages.
 
 ## Execution Model
 
-G1–G5 are release and market overlays, not a global execution queue. A lane may
-advance only when its own dependency and evidence requirements are met; a later
-product-stage label never makes unrelated host or QEMU work wait.
+[ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md) makes **Intel x86-64
+C2C Anywhere the only development direction**. All tasks must identify the C2C
+deliverable, required dependency, measured bottleneck or regression they address,
+with an observable acceptance scenario and evidence ceiling. No direct connection
+means parked. Older G1–G5 labels and plan-local `ready` statuses cannot authorize
+independent robotics, GUI, AI, runtime or hardware programs.
 
 The canonical evidence ladder is `none → contract → host → QEMU → physical →
 service → production`. `execution_class` describes whether a lane may run now:
@@ -36,12 +39,11 @@ service → production`. `execution_class` describes whether a lane may run now:
 slice may truthfully claim. QEMU and host evidence never promote a lane to
 physical, service, or production qualification.
 
-[ADR-0014](decisions/0014-lab-first-robot-workflows.md) selects LAB-01 as the first
-product workflow, with BASE-01 and ASSEMBLY-01 as gated extensions in the
-[SAS/LBI plan](../.agents/260905-1139-sas-lbi-outcome-closure/plan.md).
-Organizational replacement is scoped separately to ORG-SRV-01 web/app/microservice
-servers and ORG-PC-01 ordinary office PCs. Scope definition does not activate
-three product programs or turn robot physical work into a G2 prerequisite.
+The [current focus](roadmap/current-focus.md) projects the outcomes; the
+[portfolio](../.agents/plan-portfolio.md) selects child work with one implementation
+slice at a time. LAB-01 / BASE-01 / ASSEMBLY-01 and general organizational
+server/office replacement are parked. Earlier results and contracts are retained,
+not prerequisites for the Intel C2C program.
 
 [ADR-0015](decisions/0015-dual-mode-hybrid-architecture.md) settles the
 Dual-Mode Hybrid Architecture (Real-time SAS Tier 1 + Paged Domain Tier 2 + VM Guest Tier 3),
@@ -50,26 +52,23 @@ and unsigned code, governed by the [evolution plan](../.agents/260906-dual-mode-
 
 ### Development-first hardware-constrained decision
 
+[ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md) supersedes
 [ADR-0007](decisions/0007-development-first-hardware-constrained-execution.md)
-sets the current execution policy. The available platform inventory is QEMU,
-two owner-reported Raspberry Pi 3 Model B+ boards, and incoming sensors. No
-additional hardware procurement is planned now. QEMU, RPi3, sensor, and
-local-runtime lanes may advance independently to their stated evidence
-ceilings. The HDMI external-display lane is complete at exact-device
-development evidence on the prior captured Model B device, whose mapping to
-the current Model B+ inventory is unresolved. The lane is regression-only;
-camera and other sensor integration remains executable but is
-deferred in the session order.
+only for hardware focus and independent-lane scheduling. Target one exact Intel
+headless machine, then a second of the same configuration after first-node
+qualification. Existing x86 controller QEMU evidence is not a qualified physical
+machine; Intel VMX and x86 Tier 2/C++ gaps remain required work.
 
-QEMU results remain software-only. RPi3 and sensor results may establish
-development and hardware-integration behavior on the exact exercised devices,
-but the RPi3 is never a production-security qualification target or an
-independent external floor. Production admission and production release remain
-disabled and fail-closed until every applicable remote-identity, protected-root,
-secure/measured-boot, qualified-floor, physical-hostile-evidence,
-authenticated-runner, human-approval, and governed-ledger gate is satisfied.
-Those gates are milestone-local: they do not block unrelated QEMU, RPi3,
-sensor, or local-runtime development.
+ARM/RPi3/RISC-V/AMD code and evidence stay in-tree, but new platform/peripheral
+work is parked. Existing non-Intel regressions may protect shared C2C changes;
+they do not reopen a platform program. Software work can proceed before hardware
+procurement, and local work need not wait for unrelated production gates.
+
+No acquisition, paid service, irreversible provisioning, ABI change, remote
+enablement or production admission is approved by the direction change.
+Protected authority, identity/time/replay, signing, secure/measured boot,
+qualified-floor, independent-human and release-ledger gates remain mandatory
+for their applicable milestones. No insecure demonstration fallback is allowed.
 
 ### Solo-first development and independent promotion
 
@@ -79,20 +78,19 @@ including planning, implementation, testing, self-review, documentation, and
 development release. AI agents and CI jobs provide automated assurance only;
 they are not independent accountable identities. A missing independent-member
 approval blocks only the independently ratified or production claim that names
-it, never unrelated work below that evidence ceiling. When such approval is
+it, never otherwise-admitted C2C work below that evidence ceiling. When such approval is
 required, a repository member distinct from the maintainer must answer an
 explicit `YES` or `NO` on the GitHub issue or pull request bound to the exact
 proposal, commit, and evidence.
 
 ### Planning classes
 
-- **Current executable work**: useful work supported by present software,
-  QEMU, the two Raspberry Pi 3 Model B+ boards, or incoming sensors, bounded
-  by its lane ceiling.
-- **Current-scope technical debt**: a defect or maintainability gap in the
-  current supported scope; it is not a label for every unfinished capability.
-- **Future capability**: intentionally later product functionality, not a
-  current defect.
+- **Current executable work**: an admitted Intel C2C slice supported by present
+  software/assets and its technical, ownership and approval gates.
+- **Current-scope technical debt**: a defect or maintainability gap in that path
+  or its shared baseline, not every unfinished OS capability.
+- **Parked / future capability**: unrelated product, platform or runtime work;
+  an old ready checkbox or newly available board does not authorize resumption.
 - **Completed / regression-only**: a delivered lane whose stated evidence
   ceiling has passed and has no active implementation slice; reopen only for a
   regression or a separately governed higher evidence class.
@@ -105,6 +103,24 @@ proposal, commit, and evidence.
 
 ## Capability Lanes
 
+| Current C2C workstream | Required result | Entry boundary |
+|---|---|---|
+| Contract and local service lifecycle | Typed calls, authority, bounded waits, restart and stale-reference behavior | Tier-aware C2C Phase 01 review/ABI gates |
+| Fixed Intel hardware | One qualified physical node, then two same-model nodes with stable wired networking and persistence | Existing PC plan/HCL; procurement and exact-device qualification remain separate |
+| Tier 2 C/C++ | Qualified x86 domain admission and runtime/adapters | Test-only admission and C++ runtime gap are not closed by this decision |
+| Tier 3 Intel | VMX/EPT guest lifecycle, storage/network and explicit C2C bridge | VMX plan P09; existing SVM/TCG evidence is not Intel qualification |
+| LAN and remote/relay | Two-node behavior, authority enforcement, restart/reconnect and explicit uncertain outcomes | Each transport's identity/security contract; no automatic remote activation |
+| Useful measured workload | All-tier participation and same-hardware Linux comparison | Reproducible workload/semantics before optimization or advantage claims |
+
+The detailed next slice is in the portfolio, not all rows running at once.
+
+### Historical capability inventory — not scheduling authority
+
+The table below retains pre-ADR-0022 planning/status evidence. Its old planning
+classes, owner/next slices and reopening events are historical. They cannot
+authorize work outside the current C2C workstreams; source and exercised evidence
+still determine implementation truth.
+
 | Capability | Planning class | Execution class | Evidence ceiling | Owner / next slice | Reopening event |
 |---|---|---|---|---|---|
 | Roadmap projection | Current executable work | `ready` | `contract` | Hardware-independent roadmap Phase 01/08 | A lane emits bounded evidence/status |
@@ -113,7 +129,7 @@ proposal, commit, and evidence.
 | LAB-01 / BASE-01 / ASSEMBLY-01 software contracts | Current executable work | `ready` | `contract`; host/QEMU only after the named milestone evidence | SAS/LBI 06A LAB-01 and 07A BASE-01 bounded private contracts pass independent host plants at the model-only ceiling; ASSEMBLY-01 is the next slice | Consume the reviewed shared identity/dispatch/observation/reconciliation contract for 08A; native QEMU roles wait for the real Phase05 backend/oracles |
 | Robot physical workflow acceptance | External-gated prerequisite | `external-gated` | `physical` development target, unexercised | SAS/LBI plan 06C/07C/08C | Exact mechanism/controller/fixture/observation/metrology/safety package and applicable activation approvals; no procurement or motion authorization from the plan alone |
 | Organizational server and office profiles | Future capability | `scope-gated` | `contract` | ORG-SRV-01 / ORG-PC-01 profile document | Actual application/hardware inventory, compatibility/disposition matrix and separately activated implementation/qualification lane; no prerequisite on physical robot completion |
-| x86_64 PC/server enablement (physical) | Future capability | `external-gated` | `contract` | `.agents/261004-1957-x86-pc-lane/` owns phases 01–07 (QEMU-first, phase 07 hardware-gated); [hardware-tracks.md](roadmap/hardware-tracks.md) is the gate inventory and [hardware-compatibility-list.md](hardware-compatibility-list.md) the machine list: phase 01 landed a **generic** `pc/x86_64-pc` compatibility descriptor (`--features board-x86-pc`) plus the HCL model, and phases 02a/02b landed the **AHCI/SATA storage family** (`cells/drivers/ahci/`, `ahci-x86` 5/5 including a two-boot FAT32 persistence oracle) — but there is still no machine-specific descriptor or HCL row, xHCI is being reopened for this lane by the owner's 2026-10-05 decision, the e1000 cell fail-closes every Ethernet binding other than 82540EM, there is no ACPI DMAR discovery, and Intel VMX still pending P09 | An exact x86 board pair (one Intel, one AMD) exposing a 16550-compatible COM1, HPET, AHCI-mode storage and disable-able Secure Boot, a published HCL row per machine, and phases 02–06 green on QEMU; neither QEMU evidence nor this row authorizes implementation |
+| Intel x86-64 C2C physical substrate | Required dependency | `external-gated` | `qemu` controller evidence; no physical row | PC phases 01–06 have QEMU evidence; first exact Intel node needs separately authorized phase 07 capture | First Intel qualification then separately authorized identical second node; VMX remains a separate prerequisite; former Intel/AMD pair superseded |
 | RPi3 HDMI software and exact-device boundary | Completed / regression-only | `scope-gated` | `physical` development evidence on the prior captured revision `a22082` / Model B / serial `000000003d042795` device; mapping to current inventory unresolved | Phases 04 and 05 completed; no active HDMI slice | Reopen only for a regression: the exact mailbox unsafe island is approved by `lungmat8`, strict F1/F5 passes, and the separately recorded TFTP deployment, later UART boot block, and user visual observation close the reviewed exact-device gate |
 | RPi3 peripheral hardware integration | Current executable work | `ready` | `host` now; `physical` development evidence after exact-device exercise | G1 board/peripheral lane using the two available Raspberry Pi 3 Model B+ boards; HDMI external-display work is completed and regression-only | Reconcile each current board's exact serial, revision, and condition before attributing evidence; stop before any production-security qualification claim |
 | Camera and other sensor integration | Current executable work | `deferred` | `contract` until resumed; then exact-device `physical` development evidence | Deferred in the current session order; the available camera must be identified before use | Resume the sensor lane in a later session and record the exact sensor/interface before exercise |
@@ -143,27 +159,26 @@ proposal, commit, and evidence.
 | Production root selection | External-gated prerequisite | `external-gated` | `production` | ADR-0006 | Vendor package satisfying ADR-0006 and a superseding GO ADR; no stock TPM or generic secure-element counter is selected as the floor |
 | Production admission and release | Production release gate | `external-gated` | `production` | Tier 1 admission and governed release owners | Remote C2C identity where applicable, protected relay identity, production KMS/root, secure/measured boot, qualified external floor, physical hostile evidence, authenticated runner, required human approvals, and release-ledger closure |
 
-Internal lane-specific child plans own execution details. This page is the
-authoritative routing index; the legacy roadmap remains historical only.
+Internal child plans own execution details subject to ADR-0022 and the portfolio.
+The preceding historical table is not an executable queue.
 
 ## Current Direction
 
-Cellos is being shaped around product stages, not only phase numbers:
+Intel x86-64 C2C Anywhere is the sole direction until an explicit owner decision
+changes it. Tier 1 native, Tier 2 C/C++ and Tier 3 VM consumers are all part of
+the target. Console/CLI and underlying OS facilities serve that target; they are
+not independent products. Local native IPC or a guest boot alone is not completion.
 
-- G1 Robot & Embedded: LAB-01 dry carrier transfer first on a bounded native
-  lab platform; BASE-01 tray transport and ASSEMBLY-01 stationary integration
-  follow their own exact-device gates. No general humanoid or safety claim.
-- G2 Organization Servers & Office PCs: web/app/microservice server and ordinary
-  office workflows on selected organizational cohorts. Application compatibility,
-  physical qualification, isolation and operational sovereignty are separate
-  requirements; specialist devices are not the initial target.
-- G3 NPU-native Compute OS: parked until real NPU hardware and vendor API
-  experience inform the contract.
-- G4 Full Rust std for Tier 1 Cells: planned as a `rust-std` runtime profile
-  using pure-Rust PAL/rustc target work, not `std` over mlibc.
-- G5 Virtualization Platform: research/design overlay after G4.
+All former G1–G5 product programs are parked except concrete slices admitted as
+Intel C2C dependencies. Keep one physical configuration, one implementation slice
+and bounded acceptance scenarios; see ADR-0022 and the current-focus milestone table.
 
-## Current Codebase Facts
+## Retained Codebase Snapshot
+
+The following snapshot and open-gate records predate this direction change.
+They preserve provenance, not current scheduling or qualification; consult source
+and the current-focus boundaries before using an old status as an implementation
+claim. In particular, x86 guest evidence below is SVM/TCG, not Intel VMX.
 
 - Cargo workspace members: 111, verified with `cargo metadata --no-deps`.
 - HAL shape: `hal/core`, four `hal/soc/*` crates, fifteen `hal/traits/*`
@@ -171,9 +186,9 @@ Cellos is being shaped around product stages, not only phase numbers:
 - HAL to kernel Rust ABI hook signatures are single-sourced in
   `hal/traits/arch/src/kernel_abi.rs`; `scripts/check-hal-boundaries.sh`
   rejects new local `extern "Rust"` declarations under `hal/arch`.
-- Board descriptors live in root `boards/`; seven descriptors are active
-  integration targets, while `q35-x86_32`, `virt-riscv32`, and `virt-aarch32`
-  remain placeholder-only documentation entries.
+- Board descriptors live in root `boards/`; the earlier inventory recorded seven
+  integration descriptors and placeholder documentation for `q35-x86_32`,
+  `virt-riscv32`, and `virt-aarch32`. Only Intel x86-64 is now a development target.
 - Active native scripting runtime: Lua. MicroPython is historical roadmap text
   and is not a current Cargo workspace member.
 - Application execution uses Tier 1/2/3 terminology. `Tier 1b` and `Tier 3b`
@@ -248,7 +263,7 @@ Cellos is being shaped around product stages, not only phase numbers:
   the separate `window-policy` QEMU regression also passes. This is QEMU
   software evidence only, not physical-board or production qualification.
 
-## Immediate Open Gates
+## Retained Open-Gate Records
 
 - Production signing is not fleet-enforced by default: `signing-required` is
   non-default and the non-dev public key path is still a `[0u8; 32]` placeholder.

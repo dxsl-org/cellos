@@ -1,13 +1,22 @@
 # Cellos Documentation Index
 
-**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-08-21
+**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-10-08
 
 ---
 
 ## Start Here
 
+The sole active program is **Cell-to-Cell Anywhere on Intel x86-64**, using one fixed headless hardware configuration. Read [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md) and [current focus](roadmap/current-focus.md) before choosing work: every task must identify a direct C2C-on-Intel deliverable, dependency, or necessary regression.
+
+The target includes Tier 1 native Cells, Tier 2 C/C++ domains, and Tier 3 VM participants through explicit adapters across local/LAN/relay paths, not transparent arbitrary-app distribution. Intel VMX is incomplete, x86 Tier 2 admission evidence is test-only with a C++ shim gap, and no physical x86 HCL entry is qualified. Existing security, ABI, purchase, remote-activation, and production gates remain unchanged.
+
+GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V platform work are paused as independent programs. The reference lists below preserve existing contracts, code documentation, and historical evidence; listing a document does not activate its old roadmap. Necessary shared-code regressions and existing ARM protected-authority evidence may support the Intel program without reopening another platform program.
+
 | File | Purpose |
 |------|---------|
+| [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md) | Canonical sole-program decision |
+| [roadmap/current-focus.md](roadmap/current-focus.md) | Current Intel C2C priorities and evidence gates |
+| [QEMU q35 x86-64](../boards/qemu/q35-x86_64/README.md) | Documented x86 build/test path; software evidence, not physical qualification |
 | [getting-started.md](getting-started.md) | Setup, build, run, first contribution |
 | [app-development-guide.md](app-development-guide.md) | Write/build/run/test a Cell application (worked examples) |
 | [codebase-summary.md](codebase-summary.md) | Quick reference: LOC, crates, features |
@@ -23,9 +32,9 @@
 | [project-roadmap.md](project-roadmap.md) | Roadmap entrypoint and links to split roadmap files |
 | [roadmap/README.md](roadmap/README.md) | Roadmap folder index |
 | [roadmap/current-focus.md](roadmap/current-focus.md) | Active stage, current gates, and next work |
-| [roadmap/hardware-tracks.md](roadmap/hardware-tracks.md) | Board, SoC, and physical qualification lanes |
-| [roadmap/product-stages.md](roadmap/product-stages.md) | G1-G5 product-stage overlay |
-| [roadmap/runtime-and-platform-tracks.md](roadmap/runtime-and-platform-tracks.md) | Runtime and platform overlays |
+| [roadmap/hardware-tracks.md](roadmap/hardware-tracks.md) | Intel qualification dependencies and retained/paused hardware lanes |
+| [roadmap/product-stages.md](roadmap/product-stages.md) | Historical G1-G5 overlay, subject to the sole-program decision |
+| [roadmap/runtime-and-platform-tracks.md](roadmap/runtime-and-platform-tracks.md) | Runtime dependencies and retained/paused platform overlays |
 | [roadmap/technical-milestones.md](roadmap/technical-milestones.md) | Current milestone snapshot |
 | [roadmap/completed-history.md](roadmap/completed-history.md) | Condensed completion history |
 | [roadmap/open-risk-register.md](roadmap/open-risk-register.md) | Confirmed open code/readiness risks |

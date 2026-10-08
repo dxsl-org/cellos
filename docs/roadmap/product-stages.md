@@ -1,40 +1,31 @@
 # Product Stages
 
-**Last updated**: 2026-09-05
+**Last updated**: 2026-10-08 — G1–G5 retained as parked historical product definitions
 
 ## Execution Relationship
 
-G1–G5 define product and release outcomes. They do not impose a global
-G1→G2→G3 implementation order. Each capability is scheduled independently by
-its documented dependency, `execution_class`, and `evidence_ceiling`; see the
-[capability lanes](../project-roadmap.md#capability-lanes). A result may advance
-only to the evidence class actually exercised. In particular, host/QEMU results
-never satisfy physical, service, or production requirements.
+[ADR-0022](../decisions/0022-intel-x86-64-c2c-only-direction.md) replaces the
+G1–G5 scheduling overlay with one program: **C2C Anywhere on Intel x86-64**.
+The stage descriptions below preserve earlier goals and evidence requirements;
+they are not active programs or an execution queue. A stage's local trigger
+cannot reopen it. Only a named Intel C2C dependency may be admitted through the
+[portfolio](../../.agents/plan-portfolio.md), with existing technical/ABI/security
+gates intact. A change of direction needs an explicit new owner decision.
 
 ## Development inventory and planning classes
 
-[ADR-0007](../decisions/0007-development-first-hardware-constrained-execution.md)
-authorizes development-first execution with QEMU, two owner-reported Raspberry
-Pi 3 Model B+ boards, and incoming sensors, with no additional procurement now.
+Use the [current focus](current-focus.md) for executable scope and milestone
+projection. Existing ARM/RPi3/RISC-V/AMD assets and evidence are retained, not
+expanded. Intel hardware procurement and physical qualification remain separate
+gates; no physical Intel machine is qualified by this direction decision.
 
-| Roadmap item | Planning class | Stage relationship |
-|---|---|---|
-| G1 QEMU, RPi3, sensor, and local-runtime integration | Current executable work | Advance now to the lane-specific software or development-hardware ceiling |
-| Confirmed defects in currently supported paths | Current-scope technical debt | Track in the [open risk register](open-risk-register.md); do not use this label for all future work |
-| G2 expansion, remote/public C2C, G3, G4, and G5 outcomes | Future capability | May be designed or implemented only through independently opened lanes; they are not defects in G1 |
-| Unavailable exact boards, protected relay assets, cloud identity, and exact production-root evidence | External-gated prerequisite | Block only the milestone requiring that external evidence |
-| Production admission and governed release closure | Production release gate | Remain disabled and fail-closed until every applicable security, hardware, evidence, approval, and ledger invariant passes |
+The three-tier target is not delayed until a hypothetical G4/G5 product release:
+x86 Tier 2/C++ and Intel VMX are direct C2C dependencies, each requiring its own
+qualification. GUI, robotics, AI and standalone runtime expansion are parked.
 
-QEMU provides software evidence only. RPi3 and sensor exercise may provide
-development/hardware-integration evidence for the exact device, but RPi3 is
-never a production-security qualification target or a qualified external
-floor. No stock TPM or generic secure-element counter is selected as that floor.
-Remote C2C,
-protected relay identity, production KMS/root, secure/measured boot, a qualified
-rollback-resistant external floor, physical hostile evidence, an authenticated
-runner, required human approvals, and release-ledger closure remain mandatory
-only for the applicable production-admission or production-release claim; they
-do not serialize QEMU, RPi3, sensor, or local-runtime work.
+Host/QEMU results never establish physical, service or production qualification.
+Protected relay identity, authenticated time, signing, production roots and
+required approvals remain mandatory where their contracts require them.
 
 ## G1 - Robot & Embedded
 
@@ -49,10 +40,10 @@ Required evidence:
 - Bounded memory and stack posture per Cell.
 - Clear separation between QEMU integration proof and physical hardware proof.
 
-[ADR-0014](../decisions/0014-lab-first-robot-workflows.md) selects LAB-01 dry,
-identified carrier transfer as the first product workflow. BASE-01 tray transport
-and ASSEMBLY-01 stationary coupling are planned extensions, not simultaneous
-active product programs. Their [execution plan](../../.agents/260905-1139-sas-lbi-outcome-closure/plan.md)
+[ADR-0014](../decisions/0014-lab-first-robot-workflows.md) previously selected LAB-01
+dry carrier transfer first, with BASE-01 and ASSEMBLY-01 as extensions. All are now
+parked under ADR-0022. Their historical
+[execution plan](../../.agents/260905-1139-sas-lbi-outcome-closure/plan.md)
 separates host/QEMU milestones from exact-device physical acceptance; robot
 hardware, precision, safety and production remain unqualified by software results.
 

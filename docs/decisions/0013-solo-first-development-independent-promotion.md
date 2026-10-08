@@ -3,6 +3,11 @@
 - **Status:** Accepted
 - **Date:** 2026-09-03
 
+**Scheduling scope (2026-10-08):** [ADR-0022](0022-intel-x86-64-c2c-only-direction.md)
+limits all new/resumed work to Intel x86-64 C2C dependencies. This decision still
+governs who may execute development and independently ratify claims; it does not
+authorize unrelated programs to proceed.
+
 ## Context
 
 Cellos currently has one active maintainer who may design, implement, execute,

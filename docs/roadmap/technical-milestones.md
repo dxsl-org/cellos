@@ -1,18 +1,21 @@
 # Technical Milestones
 
-**Last updated**: 2026-09-22
+**Last updated**: 2026-10-08 (direction routing; prior technical snapshot retained)
 
-This file is a compact status map. See
-[completed-history.md](completed-history.md) for the condensed completion
-ledger and [project-roadmap-legacy.md](../project-roadmap-legacy.md) for the
-archived traceability notes.
+The sole program is **Intel x86-64 C2C Anywhere** under
+[ADR-0022](../decisions/0022-intel-x86-64-c2c-only-direction.md). Use
+[current-focus.md](current-focus.md) for required outcomes and gaps, and the
+[portfolio](../../.agents/plan-portfolio.md) for the next executable slice.
+The following technical snapshot is retained evidence, not authorization to
+continue all architectures or runtime programs. See
+[completed-history.md](completed-history.md) for completion provenance.
 
 | Area | Current Status |
 |---|---|
 | Kernel core | Active; size and boundary residue tracked by generated metrics and roadmap notes |
 | HAL/arch | RV64, AArch64, and x86_64 have implementation and smoke/build evidence; RV32/AArch32 remain separate qualification tracks |
 | HAL to kernel Rust ABI | Centralized in `hal/traits/arch/src/kernel_abi.rs`; boundary script rejects local HAL declarations |
-| Boards | Seven active descriptors in `boards/`; placeholder-only docs for `q35-x86_32`, `virt-riscv32`, `virt-aarch32` |
+| Boards | Existing descriptors retained; Intel x86-64 is the sole development target; physical Intel HCL remains empty |
 | VFS and storage | Service path active; FAT32 (`/mnt/sd`), littlefs2 (`/data`), and CellosFS Native (`/srv`) remain split by backend maturity |
 | Networking | Net service and net-broker pieces exist; broker routing/beacon/lease/enrollment wiring remains incomplete |
 | Scripting | Lua is active; MicroPython is historical and absent from current workspace members |

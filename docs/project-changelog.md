@@ -2,7 +2,20 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
-## [Unreleased] Development-first hardware-constrained execution
+## [Unreleased] Intel x86-64 C2C-only direction
+
+- **2026-10-08 — Intel x86-64 C2C-only direction (ADR-0022).** The maintainer
+  selected Cell-to-Cell Anywhere as Cellos's sole program on one fixed headless
+  Intel configuration, then two same-model physical nodes. Every task must name
+  a direct deliverable, necessary prerequisite, measured bottleneck or baseline
+  repair with an acceptance scenario and evidence ceiling. Former independent
+  ARM/RPi3/RISC-V/AMD, robotics, GUI/browser, AI/accelerator and general OS/runtime
+  programs are parked; existing implementations, tests and evidence are retained.
+  Updated roadmap, portfolio/TODO, public entrypoints, hardware/C2C/VMX plans and
+  prior decision statuses. Intel VMX, x86 Tier 2/C++ and physical HCL gaps remain
+  open. No procurement, ABI approval, security relaxation, remote route or
+  production promotion is authorized. ADR-0007 scheduling and ADR-0014 lab-first
+  ordering are superseded only in the stated scope; existing security gates stay.
 
 - **x86 PC lane phase 06: multi-port 16550 serial, and RS485 declared but not
   claimed (`qemu` ceiling).** `X86PlatformProfile` gained `serial_ports` (console

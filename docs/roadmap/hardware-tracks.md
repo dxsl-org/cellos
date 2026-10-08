@@ -1,10 +1,26 @@
 # Hardware Tracks
 
-**Last updated**: 2026-10-04
+**Last updated**: 2026-10-08
 
 This page collects the hardware qualification lanes that matter for roadmap
 reading. For the architecture split between board descriptors, SoC facts, and
 shared drivers, see [system-architecture.md](../system-architecture.md).
+
+## Sole Current Direction — Intel x86-64 C2C
+
+[ADR-0022](../decisions/0022-intel-x86-64-c2c-only-direction.md) makes
+Cell-to-Cell Anywhere on one fixed, headless Intel x86-64 configuration the
+sole program. Every hardware task must name its direct C2C deliverable,
+dependency, or regression obligation. Select and qualify one exact Intel
+machine first; only then consider a second node of the identical model and
+configuration, with its own capture. This is not purchase authorization:
+phase 07 and an explicit procurement decision remain mandatory.
+
+AMD, new ARM/RISC-V ports and expansion, GUI/browser, AI, robotics, and
+general-purpose OS programs are paused. Existing implementations, inventory,
+historical evidence, and necessary shared-code cross-architecture regressions
+are retained, not converted into new platform work. Strategy approval grants
+no ABI/security exception, remote activation, or production readiness.
 
 ## Board and SoC Ownership
 
@@ -14,16 +30,16 @@ shared drivers, see [system-architecture.md](../system-architecture.md).
   integration path; boards do not fork UART, SDHCI, GIC/PLIC, PCIe, or similar
   mechanism code.
 
-## Current Qualification Lanes
+## Retained Qualification Evidence (Non-Intel Expansion Paused)
 
 - Prior RPi3 physical smoke is merged as real evidence for the exact captured
   device; it is not evidence for either current Model B+ board until identity
   reconciliation.
-- VF2, Pioneer, and RPi4 remain physical-only qualification lanes unless a log
-  explicitly records PASS/FAIL/BLOCKED evidence.
+- VF2, Pioneer, and RPi4 are retained inventory/evidence lanes, not active
+  qualification objectives. New captures or ports are not independently queued.
 - QEMU and compile-only checks are regression evidence, not board qualification.
 
-## x86_64 PC/Server Lane (planned — prerequisite inventory, no physical qualification)
+## Intel x86-64 C2C Lane (QEMU prerequisites landed; no physical qualification)
 
 There is no supported physical x86 target today: no machine is qualified and no
 machine-specific descriptor exists. `boards/` carries `qemu/q35-x86_64`, the
@@ -33,21 +49,20 @@ placeholder entries (`q35-x86_32` is README-only), and — since phase 01 of
 baseline and only drivers whose cells exist — not a claim that every PC exposes
 that wiring. Every x86 Capability Lane row still carries a
 `qemu` ceiling, and QEMU/compile results never qualify a board. The table below
-records the missing prerequisites; the owner is
-`.agents/261004-1957-x86-pc-lane/` (phases 01–07, QEMU-first; phase 07 is the
-hardware gate), and the machine-level list lives in
-[hardware-compatibility-list.md](../hardware-compatibility-list.md). Nothing
-outside that plan is authorized by this inventory.
+records prerequisites and their evidence ceilings; the owner is
+`.agents/261004-1957-x86-pc-lane/` (phases 01–06 completed at QEMU only; phase 07
+is the separately authorized hardware gate), and the machine-level list lives in
+[hardware-compatibility-list.md](../hardware-compatibility-list.md). Driver
+completion is not procurement authorization or physical qualification.
 
-**Boot-critical requirement (current code).** On x86 the only working log and
-input path is a 16550-compatible UART at COM1 (`0x3F8`, IRQ 4)
-(`hal/soc/x86/src/lib.rs`, `kernel/src/main.rs:157`,
-`kernel/src/task/drivers/console_drv.rs:139-145`). Without it the boot is
-silent: there is no xHCI (USB-serial), no PS/2, no framebuffer console driver
-(`cells/apps/fb-console` needs a real display driver), and no netconsole. Polled
-RX keeps debug alive when the MADT/HPET gate closes the IRQ
-(`kernel/src/main.rs:160,711-716`). Treat "COM1 or an equivalent 16550 (including
-BMC serial-over-LAN) at the configured base" as a must-have HCL row.
+**Boot-critical requirement.** The fixed headless target requires a
+16550-compatible UART at COM1 (`0x3F8`, IRQ 4), including a correctly mapped
+BMC serial-over-LAN option. xHCI/HID has QEMU evidence, but that is neither a
+USB-serial console nor a physical-board qualification; no framebuffer,
+PS/2, or netconsole alternative is implied. Polled RX preserves debugging
+when the MADT/HPET IRQ gate closes, so a shell prompt alone does not prove
+the address/IRQ contract. Require the exact-resource and exercised-RX HCL
+capture, and exposed HPET.
 
 **Firmware requirement — Secure Boot must be disable-able.** Cellos has no
 signed or measured x86 boot path: code-signing/secure-boot is a separate
@@ -63,21 +78,21 @@ qualified machine.
 
 | Gate | Missing capability | Blocking evidence | Notes |
 |---|---|---|---|
-| X86-PC-0 | Machine-specific descriptor + a published HCL row per machine + physical lane (one Intel, one AMD) separate from QEMU | **Generic descriptor + HCL model landed in phase 01** (`boards/pc/x86_64-pc`, `--features board-x86-pc`, `boards/pc/x86_64-pc/README.md`); no machine-specific descriptor and no HCL row exist yet | Descriptor + `SocId::GenericX86Pc` profile are facts and contract only; the physical half still needs hardware (phase 07) |
-| X86-PC-1 | AHCI/SATA storage | **Landed in phases 02a/02b** (`cells/drivers/ahci/`, `ahci-x86` 5/5 incl. a two-boot FAT32 persistence oracle, QEMU-gated and wired into CI). What remains is hardware: no machine has been captured against it | Highest-value gap for this class is closed at the `qemu` ceiling; `/data` and a persistent guest disk now have a real SATA backend |
-| X86-PC-2 | xHCI + HID | No x86 USB host controller driver yet; `cells/drivers/dwc2-usb` is BCM2837-only | **Reopened 2026-10-05 by the repository owner for this lane** (phase 03 in progress); the original freeze is `.agents/260819-1416-port-common-drivers-g1-g2-g3/phase-01-evidence-and-provenance-gate.md` item 5, `reports/driver-source-license-bom.md:32` |
-| X86-PC-3 | Real NIC — first family Intel `igb` (i210/i211) | `cells/drivers/e1000` implements 82540EM only and `kernel/src/task/drivers/pcie_ecam.rs:894` fail-closes every other Ethernet-class binding; `RTL8125/i225` are research-only in the driver plan | i210/i211 have public datasheets and an upstream reference (`igb`); the q35 e1000 DHCP gate (`.agents/260903-x86-e1000-dhcp/`) is QEMU-only |
-| X86-PC-4 | ACPI DMAR discovery → real IOMMU | `kernel/src/task/drivers/iommu_x86.rs:59-60` hardcodes the q35 base | DMA isolation on real hardware; requires board VT-d (present on Whiskey-Lake-class parts, absent on Haswell-ULT U-series) |
-| X86-PC-5 | Multi-port COM / RS232-485 with DE/RE control | `cells/drivers/serial` is PL011 (ARM); x86 exposes the COM1 console only | Industrial deployment requirement, not boot-critical |
-| X86-PC-6 | Intel VMX guest execution (Tier 3 on Intel) | `docs/guides/tier3b-linux-vm.md` Platform Support: "Intel VT-x guest execution is not implemented"; `hal/arch/x86/src/hypervisor.rs` returns `NotSupported`; `.agents/260711-1917-tier3b-x86-vtx/phase-09-vtx-backend-apic.md` is pending | Needs a real-Intel/KVM lane. AMD SVM remains the only implemented x86 Tier 3 backend, itself QEMU-qualified only |
-| X86-PC-7 | x86 CPU-inference kernels (AVX2/FMA) + kernel vector-state decision | AVX2/NEON/RVV kernels are an explicit open item, not a hidden defect: `.agents/260914-cpu-engine-optimization/plan.md:51-53` keeps them out of the default profile because a Cell also runs on CPUs without them and on a kernel that does not save vector state | Independent of X86-PC-0..6; track it with Spec 24, not with the storage/network gates |
+| X86-PC-0 | Exact Intel configuration, machine-specific descriptor and HCL capture | Generic `pc/x86_64-pc` descriptor and HCL model landed in phase 01; no machine-specific descriptor or physical HCL row | First exact Intel machine, then an identical second node only after first-machine qualification; phase 07 and procurement approval remain gates |
+| X86-PC-1 | AHCI/SATA storage | Phases 02a/02b completed at `qemu` only, including two-boot FAT32 persistence | Exact physical storage controller still needs capture |
+| X86-PC-2 | xHCI + HID | Phases 03/03b completed at `qemu` only, including shell key delivery | Retain as a substrate/regression dependency; no GUI program or physical USB claim |
+| X86-PC-3 | Ethernet with a shipped exact device ID | Phases 04a/04b completed at `qemu` only; `igb` supports `8086:10c9` (QEMU 82576) and `8086:1533` (flash-backed i210) | i210/i211 was the family research target, not broad SKU support; neither i211 nor flashless i210 is admitted by that claim; no actual NIC is qualified |
+| X86-PC-4 | ACPI DMAR → VT-d DMA isolation | Phase 05 completed at `qemu` only; DMAR discovery and `DmaIsolation` profile contract landed | Physical profile requires VT-d; no generic-PC q35-base fallback or untranslated-DMA waiver |
+| X86-PC-5 | Multi-port COM / RS232-485 | Phase 06 completed at `qemu` only; RS485 DE/RE timing remains unclaimed | Retained evidence; further serial work requires a named C2C dependency, not an industrial side program |
+| X86-PC-6 | Intel VMX/VT-x + EPT guest execution | Intel guest execution remains incomplete; `.agents/260711-1917-tier3b-x86-vtx/phase-09-vtx-backend-apic.md` owns the prerequisite | Required for Intel Tier 3 and the explicit C2C guest adapter; Intel hardware or a suitable nested-KVM lane is needed; AMD SVM QEMU evidence never qualifies VMX |
+| X86-PC-7 | CPU-inference kernels and vector-state work | Historical inventory only, parked | AI/SIMD is not an independent objective; reopen only for an explicit direct Intel C2C dependency |
 
-Already working on x86 and therefore not gaps: Limine BIOS+UEFI boot, ACPI
-MADT/HPET/MCFG discovery (`kernel/src/main.rs:514-516,725-739`), the COM1 console
-with polled fallback, NVMe, the virtio device stack, and the AMD SVM Tier 3
-backend under QEMU-TCG.
+Retained x86 substrate evidence includes Limine BIOS+UEFI boot, ACPI
+MADT/HPET/MCFG discovery, COM1 with polled fallback, NVMe, and virtio.
+The AMD SVM Tier 3 backend under QEMU-TCG remains regression/reference evidence
+only, not Intel guest readiness or an AMD hardware objective.
 
-## Available RPi3 Inventory
+## Retained RPi3 Inventory (No New Platform Program)
 
 - **Current inventory — `2 × Raspberry Pi 3 Model B+`, owner-reported;
   reconciliation pending.** No provisional board labels are assigned. Record
@@ -111,9 +126,9 @@ backend under QEMU-TCG.
 - **Current access state.** COM4 and the direct 100-Mbps Ethernet link were
   usable for the prior exact-device run. The COM4 recorder and verified
   repository TFTP process were stopped after the final capture.
-- **Available peripherals.** One HDMI cable is retained for regression testing.
-  A camera is available but its model/interface is still unrecorded and sensor
-  integration is deferred in the current session order.
+- **Available peripherals.** One HDMI cable is retained with the historical
+  inventory. A camera is available but its model/interface is still unrecorded;
+  camera and display expansion are paused, not next-session objectives.
 
 ## Placeholder-Only Board Entries
 
@@ -121,8 +136,8 @@ backend under QEMU-TCG.
 - `virt-riscv32`
 - `virt-aarch32`
 
-These entries exist for documentation and future expansion, not as active
-hardware claims.
+These entries are retained documentation only. New ports and expansion are
+paused; their presence is not an active hardware claim or scheduling authority.
 
 ## Shared-Lane Rule
 

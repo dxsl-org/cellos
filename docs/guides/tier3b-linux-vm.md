@@ -1,8 +1,10 @@
 # Tier 3 `linux-guest` Profile — Full Kernel Guest
 
-> Legacy name: Tier 3b. Run unmodified Linux binaries in a hypervisor-isolated
-> VM. Use this for legacy code, fork-heavy apps, or untrusted workloads while
-> Tier 2 native domains are not implemented.
+> Legacy name: Tier 3b. Run Linux workloads in a hypervisor-isolated VM.
+> **Current direction:** [Intel x86-64 C2C Anywhere](../decisions/0022-intel-x86-64-c2c-only-direction.md).
+> Intel VMX is not implemented; SVM/QEMU and ARM evidence below remains reference
+> material, not Intel qualification or permission to resume those platform programs.
+> Tier 3 C2C guest adapters are a required target; browser/GUI expansion is parked.
 
 ---
 
@@ -27,7 +29,9 @@ Tier 3 lets you run a full Linux kernel (e.g., Alpine, Busybox) inside a lightwe
 | **x86_64** | ✅ Working in QEMU (G2) | SVM (AMD, TCG-testable) | Boots Alpine to a shell under QEMU-TCG 10.2.0 (`scripts/qemu-hypervisor-smoke-x86.sh boot`); the primary application gate `scripts/qemu-x86-python-gate.sh` installs CPython in a 256 MiB Alpine guest and processes JSON into CSV in separate Linux processes. Nginx remains a secondary regression in the same CI job. Intel VT-x guest execution is not implemented |
 | **RISC-V** | ❌ Not implemented | H-ext (too new) | Deferred beyond G1 |
 
-**G2-only**: requires real hardware or advanced QEMU (not basic RISC-V). Both the ARM64 and x86_64 paths boot a Linux guest; RISC-V has no hypervisor.
+Tier 3 is an Intel C2C prerequisite, not gated behind a G2/G4 product release.
+Existing ARM/SVM guest paths do not qualify Intel; complete and exercise VMX
+under its own entry/authority gates before claiming Intel guest participation.
 
 ### Raspberry Pi 3 (Cortex-A53, QEMU-first)
 

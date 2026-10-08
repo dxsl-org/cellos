@@ -1,6 +1,18 @@
-# ViOS
+# Cellos
 
-> ViOS is a Rust no_std OS using Cellular SAS + LBI.
+> Cellos is a Rust no_std research OS. Its sole active direction is Cell-to-Cell Anywhere on Intel x86-64 with one fixed headless hardware configuration.
+
+## Active direction
+
+- [ADR-0022 — Intel x86-64 C2C-only direction](docs/decisions/0022-intel-x86-64-c2c-only-direction.md): canonical program decision.
+- [Current Focus](docs/roadmap/current-focus.md): current priorities and evidence gates; every task must name a direct C2C-on-Intel deliverable, dependency, or necessary regression.
+- [QEMU q35 x86-64](boards/qemu/q35-x86_64/README.md): documented x86 build/test instructions, not physical qualification.
+
+The target includes Tier 1 native Cells, Tier 2 C/C++ domains, and Tier 3 VM participants through explicit adapters across local, LAN, and gated relay paths. It does not promise transparent distribution of arbitrary apps. Intel VMX is incomplete; x86 Tier 2 admission evidence is test-only and the C++ shim gap remains open; no physical x86 HCL entry is qualified. AMD SVM QEMU evidence does not qualify Intel.
+
+GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V platform programs are paused. Preserve existing implementations, evidence, and necessary cross-architecture regressions. Existing ARM protected-authority evidence is a dependency reference, not authorization for a new ARM program. No purchase approval, ABI/security relaxation, automatic remote execution, or production activation follows from this direction.
+
+The index below retains technical and historical references. Older proposals, market stages, and architecture-specific guides do not independently authorize work; ADR-0022 and current focus control scheduling.
 
 ## Docs
 
@@ -26,7 +38,7 @@
 - [Cellos on Milk-V Pioneer (SG2042) — Board Bring-Up Guide](docs/pioneer-bringup.md)
 - [Cellos Project Changelog](docs/project-changelog.md)
 - [Cellos Project Overview & PDR](docs/project-overview-pdr.md)
-- [Cellos Project Roadmap](docs/project-roadmap-legacy.md)
+- [Cellos Project Roadmap — historical snapshot](docs/project-roadmap-legacy.md)
 - [Cellos Project Roadmap](docs/project-roadmap.md)
 - [Cellos Scripting Guide](docs/scripting-guide.md)
 - [Cellos Security Model](docs/security-model.md)

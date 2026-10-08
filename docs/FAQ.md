@@ -4,20 +4,20 @@
 
 ## 1. What is Cellos?
 
-Cellos is a **Cellular Single Address Space (SAS) operating system** written in Rust.
-All code — kernel, drivers, and applications — shares one virtual address space.
-Isolation is enforced by **Rust's type system and ownership model** (Language-Based
-Isolation, LBI), not by hardware page tables.  Software is organized as **Cells**
-rather than traditional processes.
+Cellos is a Rust research OS organized around Cells. Its sole active direction
+is **Cell-to-Cell Anywhere on Intel x86-64**, under
+[ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md).
+Trusted native Cells use SAS/LBI; isolated native domains and VM guests use
+hardware boundaries. The three-tier destination is not yet qualified on Intel.
 
 ---
 
 ## 2. Why "Cellular"?
 
 A Cell is the fundamental unit of Cellos software, analogous to a process in Linux but
-much lighter.  Cells share the same address space and communicate via zero-copy IPC
-(ownership transfer), making the design similar to a mycelium network — many
-independent organisms sharing the same substrate.
+lighter in its trusted native profile. Trusted Cells may share an address space
+and use ownership-aware local IPC. Remote C2C uses explicit service/transport
+contracts, not shared address-space pointers or automatic application distribution.
 
 ---
 
@@ -30,8 +30,9 @@ independent organisms sharing the same substrate.
 | Language | Rust (no_std) | Rust | C (kernel), Rust user | Rust |
 | Focus | Edge-to-Cloud, Cellular SAS | POSIX-compatible | High-assurance embedded | Live evolution / hot-swap |
 
-Cellos is most similar to Theseus in spirit but targets a broader hardware range and
-prioritizes zero-copy IPC performance over formal verification.
+Cellos shares SAS/lifecycle research interests with Theseus. Current work is
+restricted to a fixed Intel C2C target, not broader hardware coverage or a
+claim that every IPC path is zero-copy.
 
 ---
 
@@ -48,30 +49,26 @@ tested.
 
 ---
 
-## 5. Why no hardware MMU isolation?
+## 5. Does Cellos use hardware MMU isolation?
 
-Hardware MMU isolation has a cost: every context switch flushes the TLB, every
-cross-process IPC copies data.  Cellos bets that Rust's type system provides equivalent
-safety guarantees at near-zero overhead.
-
-Trade-offs accepted:
-- A bug in `unsafe` kernel code can corrupt any Cell's memory — mitigated by
-  minimising `unsafe` to hardware I/O only.
-- Spectre-class side-channel attacks are harder to mitigate — tracked in the
-  STRIDE threat model (`docs/security-model.md`).
+Yes: the architecture separates trusted SAS/LBI native Cells, private-MMU
+native domains and hardware-isolated guests. Rust types are not a security
+boundary for arbitrary C/C++ or unaudited unsafe code. Intel x86 Tier 2 admission
+and C/C++ runtime support still need qualification, and Intel VMX remains
+incomplete. See [current focus](roadmap/current-focus.md).
 
 ---
 
 ## 6. What hardware does Cellos run on?
 
-**Emulated (supported today):**
-- RISC-V 64 (`qemu-system-riscv64 -machine virt`) — primary target, CI-tested
-- AArch64 (`qemu-system-aarch64 -machine virt`) — secondary, boot tested
-- x86_64 (`qemu-system-x86_64 -machine q35`) — secondary, boot tested
+**Current target:** one exact Intel x86-64 configuration, then a second identical
+node for physical C2C. The [HCL](hardware-compatibility-list.md) has no qualified
+physical Intel row yet. x86 QEMU/controller and SVM guest evidence is software-only;
+it does not prove Intel VMX guest execution.
 
-**Real hardware (planned):**
-- HiFive Unmatched (RV64, post-v1.0)
-- Raspberry Pi 4/5 (AArch64, post-v1.0)
+Existing ARM/RPi3/RISC-V/AMD code and evidence are retained. New board, peripheral
+and non-Intel platform work is parked; existing regressions may protect shared
+changes. No Pi4/Pi5/HiFive or other purchase/port is scheduled by this direction.
 
 ---
 

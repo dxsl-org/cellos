@@ -8,7 +8,30 @@ Mục nào đã đóng thì **xoá khỏi file này** — không để lại dò
 báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền lệ: các mục đã đóng
 2026-09-19 → 2026-09-27 đã được gỡ, nội dung của chúng nằm ở bốn chỗ trên.
 
-## Đang mở — làm được ngay, không cần gì thêm
+## Current queue — Intel x86-64 C2C Anywhere only (2026-10-08)
+
+[ADR-0022](../docs/decisions/0022-intel-x86-64-c2c-only-direction.md) supersedes
+earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
+[current focus](../docs/roadmap/current-focus.md) before selecting any task.
+
+- [ ] Close the tier-aware C2C Phase 01 contract/review entry gates; identify the
+  next local Intel/x86 C2C acceptance scenario without enabling blocked routes.
+- [ ] Reconcile one exact Intel machine against the HCL; physical bring-up and
+  acquisition remain separately gated. No AMD/new ARM/RISC-V hardware program.
+- [ ] Close x86 Tier 2 admission/C/C++ gaps and Intel VMX/EPT prerequisites for
+  the corresponding C2C consumers; preserve existing ABI/security review gates.
+- [ ] Qualify two same-model Intel nodes for LAN C2C after first-node bring-up,
+  including restart, authority denial, disconnect/reconnect and uncertain outcomes.
+- [ ] Close explicit all-tier adapters and relay identity/time/persistence gates;
+  measure a bounded workload against Linux on identical hardware/semantics.
+
+Every task must name a direct dependency or measured defect of this direction,
+its acceptance scenario and evidence ceiling. Other work is **parked**.
+Old `[in-progress]`, `next` and unchecked entries below are historical diagnostics,
+not automatic permission to resume. Preserve source/tests/evidence; do not erase
+unresolved defects or rerun them just to reconfirm recorded failures.
+
+## Historical backlog and evidence — subject to the current queue
 - [resolved] **Lane `Tier 3 x86 VirtIO E2E + Persistence` flaky (~1/3 lượt CI)** — chuỗi nhân quả đọc được từ artifact
   `x86-tier3-virtio-e2e-1` của run đỏ: (1) `vtd_iova_to_slpte … slpte=0x0 (iova=0x7ffdd0c0, write=0)` cho `dev=00:02:00` (đúng BDF NVMe)
   → (2) `[nvme] admin timeout after 1000000 polls` → cell nvme thoát → init respawn (instance 2 in `DMA authorized`) → (3)

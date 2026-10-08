@@ -1,30 +1,34 @@
 # Cellos plan portfolio
 
 **Status:** Canonical scheduling index
-**Updated:** 2026-09-27 (kernel-repair/C2C concurrency boundary recorded; C2C implementation remains queued)
+**Updated:** 2026-10-08 — Intel x86-64 C2C Anywhere is the sole active program
 
 This file owns scheduling intent. Source/tests own implementation truth; individual plan
 files preserve detailed scope and provenance. Untouched checkboxes are not proof that code
-is absent. A plan directory not listed as active or queued is historical until explicitly
-promoted through this index.
+is absent. [ADR-0022](../docs/decisions/0022-intel-x86-64-c2c-only-direction.md)
+owns direction; this index owns child-plan scheduling. Every task must name a
+direct Intel C2C deliverable, required prerequisite, measured bottleneck or
+regression/security/build repair protecting that path, plus its acceptance
+scenario and evidence ceiling. An old plan's `active`/`ready` status is not
+authorization. Plans not admitted below are parked/historical.
 
-## Active
+## Active program — Intel x86-64 C2C Anywhere only
 
-- `260916-1200-tier1-rust-std-pal-implementation` — [completed 2026-09-16] Tier 1 Rust `std` PAL in-tree implementation (custom target specs, sysroot overlay, PAL primitives, workload parity PASS).
-- `260913-2002-g2-level-a-ai-inference` — Spec 24 CPU inference path (CP-1..CP-3); phases
-  01-04 complete at the host/QEMU ceilings, NPU/GPU/Tier 2 checkpoints remain gated.
-- `260727-2101-midori-lessons-cellos` — complete convergence program (D39).
-- `260925-2214-beam-parity-b0-actor-supervisor` — B0 of the BEAM/OTP backend roadmap
-  (`docs/roadmap/beam-parity-backend-roadmap.md` §5): a userspace actor + supervisor library
-  (`ostd::actor`, `ostd::actor::supervisor`) so an application declares its own supervision tree
-  instead of editing `/bin/init`. No `libs/api` change; design in
-  [ADR-0021](../docs/decisions/0021-actor-supervisor-library-in-userspace.md). Witnessed at the
-  `qemu` ceiling (`scripts/qemu-actor-supervisor.sh`, evidence under `docs/evidence/`). B1 (in-cell
-  concurrency and cancellation) and B2 (per-request cell cost/scale, which keeps D5 WIP-limited)
-  stay queued behind their own triggers; this promotion opens no ABI and touches no
-  capability-scheduling boundary.
-- `261004-1957-x86-pc-lane` — x86_64 PC lane, controller-family bring-up with
-  QEMU-first gates ([plan](261004-1957-x86-pc-lane/plan.md)).
+- `260927-1100-c2c-anywhere-tier-aware` — **primary program**, not a queued
+  alternative. [Plan](260927-1100-c2c-anywhere-tier-aware/plan.md).
+  Next executable scope is Phase 01 contract inventory/review and non-activating
+  evidence preparation. Kernel-owner review, contract ratification and Law-1
+  approvals still precede affected implementation. This direction decision does
+  not ratify Spec 20 or enable any remote route. Local/remote, asynchronous,
+  trusted fastpath and guest adapters retain separate gates.
+  Relay Phases 04–06 remain blocked on protected authority evidence; source
+  incarnation must be protected/nonrollback or separately ratified, not uptime.
+  Overlapping kernel/syscall/domain/grant/scheduler work requires an explicit
+  ownership handoff from the kernel-repair owner after its applicable gates.
+- Required child work is admitted only for this program; it is not permission
+  to run all children simultaneously. **WIP: one implementation slice.**
+- `261004-1957-x86-pc-lane` — **Intel-only supporting hardware lane**,
+  one exact headless configuration ([plan](261004-1957-x86-pc-lane/plan.md)).
   **Authorized scope: phases 01–06** — 01 `x86_64-pc` descriptor + HCL model
   (**completed 2026-10-04**), 02a/02b AHCI/SATA (**completed 2026-10-05**,
   two-boot persistence), 03 xHCI + HID (**completed 2026-10-05**, enumeration +
@@ -38,19 +42,34 @@ promoted through this index.
   from DMAR, `DmaIsolation` profile contract makes absent-DMAR fail-closed), 06
   multi-port COM/RS232-485 (**completed 2026-10-05**; ABI 425–428 + `serial_port`
   capability + policy blob v4, owner-approved; RS485 declared, not claimed).
-  **Phase 07 (physical lane + first HCL rows)
-  is not authorized**: it starts only after 02b/03/04b/05 are green on QEMU and
-  hardware is bought. Validate completed 2026-10-04 (36/36 claims verified,
-  0 failed; interview: igb first, 02/04 split into sub-phases, sequential
-  execution, hardware after QEMU). WIP limit: **one family at a time**.
-  Boundaries: Intel VMX stays in `260711-1917-tier3b-x86-vtx` (P09); x86 AVX2
-  kernels stay with `260914-cpu-engine-optimization`; Secure Boot belongs to the
-  Security track. This promotion opens no ABI, claims no physical machine, and
-  changes no evidence ceiling — QEMU results remain regression evidence only.
-Allowed side work is limited to P0 security fixes, broken-build/CI repairs, and
-verification-only closure that opens no new feature program.
+  **Phase 07 remains hardware/procurement-gated and is not activated here.**
+  Qualify one exact Intel machine after the existing QEMU gates and separately
+  approved acquisition; a second same-model node follows the first-node gates.
+  The former Intel-plus-AMD machine objective is superseded. No physical HCL row
+  exists. WIP remains one controller family at a time, only when needed by C2C.
+  Intel VMX is a required Tier 3 dependency in `260711-1917-tier3b-x86-vtx` P09;
+  SVM/TCG is not Intel evidence. x86 AVX2/other optimization is parked unless a
+  measured C2C workload needs it. Secure Boot retains its security-track gates.
+  No new ABI, hardware qualification or evidence promotion is authorized here.
+- x86 Tier 2 runtime/admission and C/C++ support — required consumer dependency,
+  not delivered by the prior RV64 portability closure. Scope through existing
+  [kernel evolution](260906-dual-mode-kernel-evolution/plan.md) and portability
+  contracts; admission is test-image-only and x86 C++ runtime support is missing.
+- `260711-1917-tier3b-x86-vtx` P09 — required Intel VMX/EPT dependency. Plan and
+  qualify Intel guest lifecycle/storage/network before claiming the Tier 3 target.
+  Existing SVM evidence is retained; AMD physical work is parked.
+- Protected relay identity/time/persistence — required, phase-local C2C
+  prerequisites. Existing authority approvals and evidence gates remain; reuse
+  earlier records without opening another general hardware/cloud program.
 
-## Queued / blocked
+Side work is limited to defects, security, build/CI and evidence repairs needed
+to protect this program's shared baseline. No unrelated feature work is admitted.
+
+## Parked candidates — not an executable queue
+
+The following earlier queues are preserved for context. Before resuming any
+slice, record its concrete Intel C2C dependency and meet the promotion rule.
+Satisfying an old trigger alone does not reopen an independent program.
 
 - `260712-0800-supervisory-cell-migration` — P-TRUST dependency satisfied; WIP-limited.
 - `260712-1000-cell-package-distribution` — blocked on a capability-scoped installer
@@ -58,9 +77,6 @@ verification-only closure that opens no new feature program.
 - **Trust & Identity program** (one portfolio group, separate child plans):
   - `260712-1900-manifest-v2` — P00-P02 complete; P03 deferred.
   - `260712-1902-dice-attestation-identity` — P00 complete; P01-P05 queued.
-- `260927-1100-c2c-anywhere-tier-aware` — [queued implementation plan](260927-1100-c2c-anywhere-tier-aware/plan.md); Phase 01 contract ratification and Law-1 approvals before ABI work, with relay Phases 04–06 blocked on independent protected authority evidence. Native local/remote, async, Tier-1 fastpath and Tier-3 guest have distinct capability gates. WIP promotion requires this portfolio rule; no remote route is enabled by queuing the plan.
-
-  Scheduling agreement (2026-09-27): C2C Phase 01 may proceed in parallel **only as contract inventory, drafting, review and non-activating evidence preparation**. Inventory and [Spec 20 Draft v3](../docs/specs/20-unified-ipc-contract.md) are prepared; Phase 01 waits for kernel-owner review of local binding and contract/ABI decisions. Its replay design also requires a protected nonrollback source incarnation or a separately ratified alternative: current beacon uptime is not such a source. This does not promote C2C implementation, ratify Spec 20, approve an ABI or enable remote operation. Kernel architecture repair retains sole ownership of overlapping kernel/syscall/domain/grant/scheduler files until its applicable gates pass and ownership is handed off. Promote C2C implementation through the rule below in the same portfolio change; serialize overlapping edits and verification.
 - `260605-1406-phase28-wasm-cells-epmp` — partial/suspect: WASM crates are present but
   retain-vs-remove and runtime qualification are unresolved; ePMP is M-mode-blocked.
 - Per-request server scale (D5) — accepted goal, WIP-limited behind Midori. Promotion requires
@@ -74,12 +90,30 @@ verification-only closure that opens no new feature program.
 
 ## Explicitly deferred
 
-- ViUI GPU acceleration — reopen as its own hardware/benchmark-gated plan.
-- Manifest v2 `cap_args` — concrete parameterized-capability consumer required.
-- DICE Veraison/COSE adapter — external verifier/consumer required.
-- Hardware-gated product programs remain deferred until their plan-specific trigger is met.
+- ARM/RPi3/RISC-V/MCU and AMD physical bring-up, NIC/peripheral expansion and new boards.
+- Robotics and LAB-01 / BASE-01 / ASSEMBLY-01 physical workflows.
+- Desktop, ViUI, Ocel/browser, graphics/typography and GPU acceleration.
+- AI/Hypha/NPU/GPU product expansion and general office/server replacement.
+- Standalone runtime breadth, BEAM parity expansion and general VM-platform work.
+- Manifest v2 `cap_args`, DICE adapters and other breadth without an identified
+  C2C consumer remain parked; a necessary security slice still needs its own gates.
+- Completed assets remain in-tree; existing cross-architecture regressions may
+  protect shared changes but do not make those architectures active targets.
 
 ## Completed / closed records
+- `260916-1200-tier1-rust-std-pal-implementation` — [completed 2026-09-16] Tier 1 Rust `std` PAL in-tree implementation (custom target specs, sysroot overlay, PAL primitives, workload parity PASS).
+- `260913-2002-g2-level-a-ai-inference` — Spec 24 CPU inference path (CP-1..CP-3); phases
+  01-04 complete at the host/QEMU ceilings, NPU/GPU/Tier 2 checkpoints remain gated.
+- `260727-2101-midori-lessons-cellos` — complete convergence program (D39).
+- `260925-2214-beam-parity-b0-actor-supervisor` — B0 of the BEAM/OTP backend roadmap
+  (`docs/roadmap/beam-parity-backend-roadmap.md` §5): a userspace actor + supervisor library
+  (`ostd::actor`, `ostd::actor::supervisor`) so an application declares its own supervision tree
+  instead of editing `/bin/init`. No `libs/api` change; design in
+  [ADR-0021](../docs/decisions/0021-actor-supervisor-library-in-userspace.md). Witnessed at the
+  `qemu` ceiling (`scripts/qemu-actor-supervisor.sh`, evidence under `docs/evidence/`). B1 (in-cell
+  concurrency and cancellation) and B2 (per-request cell cost/scale, which keeps D5 WIP-limited)
+  stay queued behind their own triggers; this promotion opens no ABI and touches no
+  capability-scheduling boundary.
 
 - `260712-1901-cap-revocation` (P00-P05) — closed 2026-09-25 at the `qemu` ceiling.
   `sys_cap_revoke` no longer label-changes: MMIO windows lose user accessibility
@@ -123,7 +157,12 @@ verification-only closure that opens no new feature program.
 
 ## Promotion rule
 
-A queued/deferred plan becomes active only when its dependency/trigger is evidenced, file
-ownership does not collide with the active program, Law-1 confirmations are satisfied,
-and this index is updated in the same change. Do not advertise aggregate COMPLETE/OPEN
-counts until a generated inventory can reconcile code evidence with plan metadata.
+A slice becomes executable only when it names a concrete Intel C2C outcome,
+dependency and acceptance scenario, its technical/approval triggers are evidenced,
+file ownership does not collide, Law-1 confirmations are satisfied where needed,
+and this index records the selected slice in the same change. An unrelated
+program requires an explicit new owner direction decision, not just a local plan
+trigger. Direction approval does not authorize procurement, paid services,
+irreversible provisioning, an ABI change, remote enablement or production.
+Do not advertise aggregate COMPLETE/OPEN counts until a generated inventory can
+reconcile source evidence with plan metadata.

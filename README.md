@@ -4,58 +4,64 @@
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Donate-%23FF5E5B?logo=ko-fi)](https://ko-fi.com/dxsl_org)
 [🌐 Tiếng Việt](./README_VN.md)
 
-**The next-generation Rust-native OS designed for embedded systems, RTOS, robotics, and dedicated servers/PCs.** 
+**Cellos is a Rust-native research OS with one active direction: Cell-to-Cell Anywhere on Intel x86-64.**
 
-Instead of organizing software into bulky traditional processes, Cellos architects the system into **Cells**. Cells share a Single Address Space (SAS) and are fully isolated by Rust's powerful type system, delivering maximum performance without compromising safety.
+The target is explicit Cell-to-Cell communication across local execution, LAN, and a gated relay on one fixed, headless Intel hardware configuration. Software participates through defined contracts and adapters, not transparent distribution of arbitrary applications. Trusted native Cells use a shared Single Address Space (SAS); Rust language-based isolation is not a blanket hardware or security boundary.
+
+The [Intel-only direction (ADR-0022)](./docs/decisions/0022-intel-x86-64-c2c-only-direction.md) and [current focus](./docs/roadmap/current-focus.md) govern all work. Every task must name a direct C2C-on-Intel deliverable, dependency, or necessary regression. GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V platform work are paused as independent programs; existing code, evidence, and necessary cross-architecture regressions are retained.
 
 ---
 
 ## ✨ What Makes Cellos Unique? (Compared to traditional OSes)
 
-Instead of following traditional monolithic or pure microkernel paradigms, Cellos introduces:
+The architecture provides mechanisms to evaluate for that program, with distinct evidence and trust boundaries:
 
-*   **Cellular Single Address Space (SAS):** Eliminates expensive hardware MMU context switches for trusted components. Inter-cell communication (IPC) is virtually zero-copy through direct Rust ownership transfer.
-*   **Language-Based Isolation (LBI):** Safety isn't enforced by costly hardware boundaries, but by Rust's strict compiler type system (`#![forbid(unsafe_code)]`). Memory violations are caught and blocked at compile time.
-*   **Instant-On & Heap Snapshot:** Built-in capability to snapshot and restore the heap memory state, enabling lightning-fast boot times and rapid recovery for embedded devices.
-*   **3-Tier Hybrid Architecture:** Seamlessly run fully trusted native code (Tier 1), dynamically sandboxed untrusted code via hardware MMU (Tier 2), or a full legacy OS like Linux in a hardware-isolated VM (Tier 3) — all governed dynamically by the same micro-scheduler.
+*   **Cellular Single Address Space (SAS):** Trusted components can share memory and transfer ownership of buffers. This does not promise zero-copy transport across tier or machine boundaries.
+*   **Language-Based Isolation (LBI):** Safe Rust checks reduce memory-safety risks within the reviewed compiler/kernel/unsafe-code trust base. They do not isolate arbitrary untrusted binaries from the SAS.
+*   **Heap Snapshot research:** Snapshot-format work exists, but capture and restore remain disabled in shipping images pending quiescence and a real board save/reset/restore/resume witness; instant-on is not a shipped guarantee.
+*   **Three-tier target:** Native Cells, C/C++ paged domains, and VM guests are intended C2C participants through explicit adapters. This is a research and qualification direction, not a claim that all three tiers work end-to-end on Intel today.
 
 ---
 
 ## 🎯 Vision & Positioning: What is Cellos (and what is it not)?
 
-Cellos was born with a clear goal: **Performance and reliability for dedicated hardware.** We are not racing to build a general-purpose operating system.
+The sole active goal is **Cell-to-Cell Anywhere on a fixed, headless Intel x86-64 configuration**, not a general-purpose desktop, robotics, or multi-market OS program.
 
-*   ✅ **Born for specialized hardware:** Cellos shines on embedded systems, robotics, servers running core services, or kiosk/appliance PCs with a focused mission.
-*   ✅ **The future of RTOS & Low Latency:** Focuses on strict resource control and real-time predictability, managed by an ultra-lightweight nano-kernel.
-*   ❌ **Not a Linux/Windows desktop replacement:** We are not trying to build an OS to run everyday software or support every random keyboard/mouse on the market.
-*   ❌ **No legacy hardware bloat:** Cellos refuses to bloat the codebase to maintain backward compatibility with thousands of obsolete devices. Hardware support is a strict contract: specific boards, microcontrollers, and firmware. (Running successfully on QEMU does not imply physical hardware certification — see [Hardware Policy](./docs/hardware-compatibility-list.md)).
+*   **One hardware model first:** Qualify one exact configuration before a second machine of the same model. Target requirements include VT-x/EPT, VT-d, COM1, HPET, and the exact firmware/device contract in the [Hardware Compatibility List](./docs/hardware-compatibility-list.md).
+*   **Local, LAN, and relay are separate gates:** Existing identity, authorization, protected-authority, and production gates remain in force. This decision authorizes neither purchases nor ABI/security relaxation, automatic remote execution, or production activation.
+*   **No arbitrary-app transparency:** Existing applications require a defined port or adapter; a VM guest does not automatically become a distributed Cell.
 
 ### The 3-Tier Execution Model
-Rust-native is the soul of the project, but Cellos is pragmatic enough to handle complex needs through a multi-tier architecture:
-1.  **Tier 1 (Core & Native Cell):** Maximum speed in the shared memory space (SAS). Absolutely trusted.
-2.  **Tier 2 (Paged Domain Cell):** Runs native code in private hardware MMU pages to sandbox software needing strict hardware boundaries (C-FFI, unverified code).
-3.  **Tier 3 (VM Guest - The Escape Hatch):** Runs a full Guest OS (like Linux) inside a virtual machine. **This is not Cellos' main goal**, but a specialized solution for running a full web browser or legacy applications requiring `fork()`/JIT. See [Browser Decision](./docs/decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md) and [Guest Guide](./docs/guides/tier3b-linux-vm.md).
+
+All three tiers belong to the C2C target, with different trust boundaries:
+1.  **Tier 1 (Core & Native Cell):** Trusted native Cells in the shared SAS, subject to signing and reviewed trust constraints.
+2.  **Tier 2 (Paged Domain Cell):** Hardware-paged domains for C/C++ and other workloads requiring isolation. x86 admission evidence is test-only; the C++ shim gap remains open.
+3.  **Tier 3 (VM Guest):** VM-backed participants connected through explicit guest adapters. Intel VMX is incomplete, and AMD SVM evidence on QEMU does not qualify Intel. The [Guest Guide](./docs/guides/tier3b-linux-vm.md) is a technical reference; the [earlier browser decision](./docs/decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md) is not an active browser program.
 
 ---
 
 ## 🚀 Project Status: `v0.2.1-dev` (Mycelium)
 
-Active development phase: **G1 — Robot & Embedded** (Focusing on ARM64/RV64 SBCs and RV32 MCUs). Phase **G2 — Server & Specialized PC** will expand to multi-core and x86_64 machines.
+Active direction: **Intel x86-64 Cell-to-Cell Anywhere**. Existing architecture evidence is retained below; it is not a list of parallel development programs.
 
-| Target | Status | Notes |
-|--------|--------|-------|
-| `riscv64gc-unknown-none-elf` | ✅ **Primary** | Full boot support and all core services available. |
-| `aarch64-unknown-none` | ✅ Boot | Scheduler reached; full G1 bring-up is in progress. |
-| `x86_64-unknown-none` | ✅ Boot | CPL3 transition gate passed on QEMU q35. (See [q35 Docs](./boards/qemu/q35-x86_64/README.md)). No physical x86 machine is officially verified yet. |
-| `riscv32imc-unknown-none-elf`| ✅ Boot | Cellos-Nano · Verified S-mode boot on QEMU. |
+| Target | Role / evidence | Limits |
+|--------|-----------------|--------|
+| `x86_64-unknown-none` (Intel) | **Sole active target**; QEMU q35 boot/CPL3 evidence | [q35 instructions](./boards/qemu/q35-x86_64/README.md); Intel VMX incomplete; no qualified physical x86 HCL entry. |
+| `riscv64gc-unknown-none-elf` | Existing reference/QEMU lane; new platform work paused | Retain evidence and necessary shared-code regressions; not the primary direction. |
+| `aarch64-unknown-none` | Existing boot and exact-device evidence; new platform work paused | Protected-authority evidence may inform Intel dependencies, not authorize a new ARM program. |
+| `riscv32imc-unknown-none-elf` | Existing Cellos-Nano QEMU boot evidence; new platform work paused | Retain implementation and necessary regressions. |
 
-*Note:* Successful execution on QEMU serves as architectural proof, not a 100% operational guarantee on un-tuned physical boards.
+QEMU is software/integration evidence, not physical hardware qualification. The supported `igb` IDs (`8086:10c9` in QEMU and flash-backed i210 `8086:1533`) do not establish that an actual machine is qualified.
 
 ---
 
-## ⚡ 5-Minute Quick Start
+## Getting Started
 
-To build Cellos, you need: **Rust nightly**, `qemu-system-riscv64`, and Python 3/PowerShell.
+**Active x86 path:** Follow the checked-in [QEMU q35 x86-64 build and test instructions](./boards/qemu/q35-x86_64/README.md). That lane is a software witness, not Intel VMX completion or physical-PC certification.
+
+### Legacy RV64 quickstart reference
+
+The commands below are retained for the existing RV64 reference lane, not the Intel program's default build. They require **Rust nightly**, `qemu-system-riscv64`, and Python 3/PowerShell.
 
 ```powershell
 # 1. Clone the repository
@@ -96,8 +102,8 @@ To maintain our uncompromising vision of memory safety and modular design, the e
 
 1. **Interface is Sacred:** Changing `libs/api/` requires high consensus (2x review).
 2. **Owned Buffers for Async:** Always use `Box<[u8]>` instead of borrowed `&mut [u8]` for data crossing IPC/async boundaries.
-3. **Multi-Architecture:** Use `VAddr`/`PAddr` types, never hardcode pointer sizes.
-4. **Unsafe Management:** Cells strictly forbid `unsafe` (`#![forbid(unsafe_code)]`). If the kernel must use it, it requires a `// SAFETY:` note.
+3. **Preserve Architecture Boundaries:** Use `VAddr`/`PAddr` types, never hardcode pointer sizes. Keeping existing cross-architecture code correct does not activate other hardware programs.
+4. **Unsafe Management:** Safe Cells use `#![forbid(unsafe_code)]`; reviewed driver/FFI exemptions remain explicit. Kernel/HAL unsafe operations require documented `// SAFETY:` invariants.
 5. **Modern Module Style:** Use `foo.rs` alongside a `foo/` directory. `mod.rs` is forbidden.
 6. **Cellos Naming:** Traits and Types use the `Vi` prefix (Virtual Interface, e.g., `ViDriver`). Files use `snake_case`.
 7. **Trait Objects:** At system boundaries, use static polymorphism via `Arc<dyn ViDriver + Send + Sync>`.
@@ -111,6 +117,7 @@ To maintain our uncompromising vision of memory safety and modular design, the e
 
 Cellos has a transparent specification and architecture system. Before working on a new subsystem, please read the corresponding documentation:
 
+*   **Active Direction:** [ADR-0022](./docs/decisions/0022-intel-x86-64-c2c-only-direction.md) | [current-focus.md](./docs/roadmap/current-focus.md)
 *   **Getting Started:** [getting-started.md](./docs/getting-started.md) | [project-roadmap.md](./docs/project-roadmap.md)
 *   **Architecture:** [system-architecture.md](./docs/system-architecture.md) | [hardware-dev-guide.md](./docs/hardware-dev-guide.md)
 *   **System Specs:** From context ([00-context.md](./docs/specs/00-context.md)) to memory ([02-memory.md](./docs/specs/02-memory.md)), application tiers ([05-application.md](./docs/specs/05-application.md)), networking, VFS... (Found in `docs/specs/`).

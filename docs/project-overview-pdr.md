@@ -1,28 +1,29 @@
 # Cellos Project Overview & PDR
 
-**Project Name**: Cellos (Jarvis Hybrid OS)  
+**Project Name**: Cellos
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Status**: Active Development (Phase 1 - Core Stability)  
-**Last Updated**: 2026-09-05 (product scope updated; technical sections retain their own evidence dates)
+**Status**: Research and development — Intel x86-64 Cell-to-Cell Anywhere only
+**Last Updated**: 2026-10-08 (sole-program direction; retained technical sections keep their own evidence dates)
 
 ---
 
 ## Executive Summary
 
-Cellos is a next-generation operating system designed for the **Edge-to-Cloud era**. It combines innovations from Theseus (Live Evolution), Asterinas (FrameKernel Safety), and Tock (Embedded Efficiency) into a unified architecture.
+Cellos is a Rust-native research OS whose **sole active direction is Cell-to-Cell Anywhere on Intel x86-64**, on one fixed headless hardware configuration. [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md) is the canonical decision and [current focus](roadmap/current-focus.md) owns the active work sequence.
 
-**Product delivery is framed by product stages** (overlay on the technical phases below — see [project-roadmap.md](project-roadmap.md) and [roadmap/product-stages.md](roadmap/product-stages.md)):
-- **Stage G1 — Robot & Embedded**: LAB-01 dry identified carrier transfer is the first product workflow. BASE-01 tray transport and ASSEMBLY-01 stationary integration are gated extensions; exact hardware, metrology and safety requirements are not established by host/QEMU evidence. See [ADR-0014](decisions/0014-lab-first-robot-workflows.md).
-- **Stage G2 — Organization Servers & Office PCs**: bounded organizational Windows/Linux replacement for web/app/microservice hosting and ordinary office applications. Actual application/device compatibility, isolation, operations and production qualification determine acceptance; specialist equipment is not an entry requirement. These profiles are scope-defined, not active implementation or application-support claims.
-- **Stages G3-G5**: NPU-native compute, full Rust `std` as a Tier 1 runtime profile, and virtualization remain later overlays with explicit entry gates.
+The target is explicit C2C participation across local execution, LAN, and a gated relay: **Tier 1 native Cells, Tier 2 C/C++ paged domains, and Tier 3 VM guests through explicit adapters**. It is not transparent distribution of arbitrary applications, and this direction does not assert that all tiers or transports are implemented and qualified on Intel today.
 
-**Key Innovation**: Cellular Single Address Space (SAS) using Language-Based Isolation (LBI) via Rust's type system. Software is organized as **Cells** (not processes) sharing one address space, isolated by Rust's compiler rather than hardware MMU.
+Every task must identify a direct C2C-on-Intel deliverable, dependency, or necessary regression. GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V platform work are paused as independent programs. Prior G1–G5 product stages and the dated phase plans below are retained for history, not independent implementation schedules. Existing code, exact-target evidence, and necessary cross-architecture regression coverage remain; ARM protected-authority evidence may inform an Intel dependency without reopening an ARM platform program.
 
-**Current Focus**: Stabilize the nano-kernel, keep the service-service hotswap path aligned with the reviewed supervisor contract, and maintain target-specific HAL evidence across RV64/ARM/x86 support. Root `boards/` owns board descriptors, `hal/soc/*` owns immutable SoC facts, and `hal/traits/arch/src/kernel_abi.rs` owns shared HAL-to-kernel Rust ABI hook signatures.
+**Architecture boundary**: Trusted native Cells can share a Cellular Single Address Space (SAS), using Rust language-based isolation within the reviewed compiler/kernel/unsafe-code trust base. LBI is not a hardware isolation boundary for arbitrary untrusted code. Tier 2 and Tier 3 have distinct isolation and admission requirements.
+
+**Evidence ceiling**: x86 QEMU boot/CPL3 evidence does not qualify a physical Intel machine. Intel VMX is incomplete, AMD SVM QEMU evidence does not qualify Intel, x86 Tier 2 admission is test-only, and the C++ shim gap remains open. No physical x86 HCL entry is qualified.
+
+The decision does not authorize hardware purchases, ABI changes, security relaxation, automatic remote execution, or production activation. Root `boards/` continues to own board descriptors, `hal/soc/*` immutable SoC facts, and `hal/traits/arch/src/kernel_abi.rs` shared HAL-to-kernel Rust ABI hook signatures.
 
 ---
 
-## Key Differentiator Opportunity
+## Retained Research: Heap Snapshotting
 
 The architecture spec (03-runtime.md §4) designs **Heap Snapshotting**: after first boot, serialize
 a versioned address inventory and frame payload into the reserved P3 region of the disk image, and on
@@ -32,15 +33,15 @@ and unit-tested, but **capture and restore are disabled in every shipping image*
 quiescence, closure, coherent staging and a real save→reset→restore→resume witness on a block-capable
 board exist. No warm-boot timing is claimed — there is no measurement and no board witness.
 
-No production OS offers this. If qualified, this becomes Cellos's primary competitive differentiator
-over Linux, Fuchsia, and unikernels. It is **not shipped**: the earlier "Phase 29 — COMPLETE
-(2026-06-07)" status and its sub-100 ms figure had no witness behind them and are withdrawn.
+This is retained architecture research, **not a separate active differentiator program**.
+The earlier "Phase 29 — COMPLETE (2026-06-07)" status and its sub-100 ms figure had
+no witness behind them and are withdrawn. Further work requires a named C2C-on-Intel dependency.
 
 ---
 
 ## Vision & Philosophy
 
-### Problem Statement
+### Historical Problem Framing
 
 Traditional operating systems (Linux, Windows, macOS) inherit Unix's process model:
 - **Process Isolation**: Hardware MMU enforces boundaries (expensive TLB flushes, context switches)
@@ -48,23 +49,23 @@ Traditional operating systems (Linux, Windows, macOS) inherit Unix's process mod
 - **Kernel Complexity**: 20+ million LOC to handle process management
 - **IPC Overhead**: Message passing across process boundaries requires syscalls + memory copies
 
-**Cellos Goal**: Redesign the OS from first principles for 2026+
+**Current goal**: Deliver the bounded Intel C2C program above; the historical OS-wide framing does not authorize general-purpose expansion.
 
 ### Architecture Principles
 
-1. **Cellular SAS**: One address space, multiple isolated execution contexts (Cells)
-   - Cells are like "super-processes" with compiler-enforced isolation
-   - Zero-copy IPC via owned buffers and capability objects
+1. **Cellular SAS**: Trusted native Cells share one address space
+   - Compiler-enforced safety is subject to the trusted computing base, not a hardware boundary
+   - Owned buffers and capability objects support local IPC; cross-tier/remote adapters have distinct contracts
    - No process cleanup on exit (Cells clean up explicitly via Drop)
 
-2. **Language-Based Isolation**: Rust's type system enforces safety
-   - Cells cannot use `unsafe` code (`#![forbid(unsafe_code)]`)
-   - Kernel/HAL use `unsafe` only for hardware I/O (documented with `// SAFETY:`)
-   - No buffer overflows, no use-after-free in application code
+2. **Language-Based Isolation**: Rust's type system supports the native trust model
+   - Safe Cells use `#![forbid(unsafe_code)]`; reviewed driver/FFI exemptions remain explicit
+   - Kernel/HAL unsafe operations require documented safety invariants
+   - Do not infer protection from a compromised trusted component or arbitrary untrusted binary
 
 3. **Nano-Kernel Philosophy**: Minimize trusted code
-   - Kernel size is tracked by generated project status; in-kernel driver and
-     orchestration residue remains scheduled for migration to Cells
+   - Kernel size is tracked by generated project status; driver and orchestration
+     residue is addressed only as a named Intel C2C dependency or regression
    - Move filesystem, networking, drivers to userspace Cells
    - Each Cell is independently testable and upgradeable
 
@@ -73,10 +74,10 @@ Traditional operating systems (Linux, Windows, macOS) inherit Unix's process mod
    - IPC messages include capability grants
    - Revocation is automatic (Drop trait)
 
-5. **Multi-Architecture from Day 1**: Single codebase, multiple targets
-   - RV64, AArch64, and x86_64 have distinct build/smoke evidence
-   - RV32/AArch32 and architecture-specific production qualification remain separate gates
-   - A successful HAL smoke is not a blanket hardware/product qualification
+5. **Preserve Multi-Architecture Boundaries; Develop for Intel**
+   - RV64, AArch64, and x86_64 retain their distinct build/smoke evidence
+   - Existing RV32/AArch32 code and necessary regression coverage remain; new non-Intel platform work is paused
+   - A successful HAL smoke is not hardware/product qualification or authorization for another platform program
 
 ---
 
@@ -119,14 +120,36 @@ Cells
 ### Total Codebase
 - **Rust Code**: moving file/LOC totals belong in generated project status, not this PDR
 - **Design Docs**: normative specifications plus generated status; exact counts are generated
-- **Build lanes**: RV64 is the primary reference/QEMU CI target; ARM64 is the first
-  bare-metal safety-qualification candidate; x86_64 support and qualification are tracked separately
+- **Build lanes**: Intel x86-64 is the sole active direction; the documented
+  [q35 lane](../boards/qemu/q35-x86_64/README.md) supplies software evidence.
+  Existing RV64/ARM reference lanes remain for evidence and necessary regressions,
+  not as primary development or new physical-qualification programs.
 
 ---
 
 ## Product Development Requirements (PDR)
 
-### Phase 1: Core Stability (Current — 2026-06)
+### Current Program Requirements
+
+| Requirement | Acceptance boundary |
+|-------------|---------------------|
+| One fixed headless Intel x86-64 configuration | Exact VT-x/EPT, VT-d, COM1, HPET, firmware/device and NIC requirements from the [HCL](hardware-compatibility-list.md); qualify the first machine before a second of the same model. No purchase is authorized by this PDR. |
+| Tier 1 native C2C | Named native participants and their contracts, with retained signing, identity, capability and lifecycle gates. |
+| Tier 2 C/C++ participation | Explicit adapters and on-path admission evidence on Intel; test-only admission and the C++ shim gap are not completion. |
+| Tier 3 VM participation | Explicit guest adapters and Intel VMX/EPT evidence; SVM QEMU results cannot satisfy the Intel gate. Tier 3 is part of this target, not a browser-led escape hatch. |
+| Local, LAN, and relay paths | Separate bounded witnesses and existing security gates; no implied automatic remote or production activation. |
+| Scope discipline | Every task names its direct C2C-on-Intel deliverable, dependency, or necessary regression; retained historical plans cannot schedule independent work. |
+
+Implementation order and evidence owners belong to [current focus](roadmap/current-focus.md). These are program targets, not claims of delivered support or approval to change an ABI.
+
+### Historical Phase Requirements
+
+The Phase 1–4 requirements below preserve prior technical planning and evidence.
+Their dates, effort estimates, owners, unchecked items, and “current” labels are
+historical snapshots, not active schedules or independent acceptance commitments.
+Any resumed item must first satisfy the Intel C2C scope rule above.
+
+### Phase 1: Core Stability (Historical — 2026-06)
 
 #### 1.1 VirtIO Block Device Fix
 
@@ -420,9 +443,10 @@ hardware-gated.
 
 ### Hardware Requirements
 
-- **Primary**: QEMU virt machine (RV64 target)
-- **Minimum**: 128 MB RAM, 1 hart
-- **Future**: Bare-metal boards (HiFive Unleashed, Raspberry Pi 5, x86 boards)
+- **Sole active target**: One fixed, headless Intel x86-64 model, with exact requirements and qualification recorded in the [HCL](hardware-compatibility-list.md).
+- **Software evidence lane**: [QEMU q35 x86-64](../boards/qemu/q35-x86_64/README.md); QEMU does not qualify physical hardware or Intel VMX.
+- **NIC boundary**: Existing `igb` support is limited to `8086:10c9` (QEMU) and flash-backed i210 `8086:1533`; support is not actual-device qualification.
+- **Retained reference**: The earlier RV64 QEMU minimum (128 MB RAM, one hart) is not an Intel sizing or hardware-purchase specification. New non-Intel board programs are paused.
 
 ### Software Stack
 
@@ -446,11 +470,11 @@ riscv = "0.16.0"          # RISC-V CSR access
 
 ### Breaking Changes
 
-None documented yet (Phase 1 still stabilizing).
+This direction approves no ABI change. Existing ABI review and compatibility gates remain mandatory.
 
 ---
 
-## Success Metrics (Phase 1)
+## Historical Success Metrics (Phase 1)
 
 | Metric | Target | Current | Status |
 |--------|--------|---------|--------|
@@ -465,7 +489,11 @@ None documented yet (Phase 1 still stabilizing).
 
 ---
 
-## Risk Assessment
+## Historical Risk Assessment
+
+The following is the prior phase risk snapshot, not the active work queue.
+Use [current focus](roadmap/current-focus.md) and the [open risk register](roadmap/open-risk-register.md)
+for current C2C-on-Intel gates; old mitigation priorities below do not authorize side programs.
 
 ### High-Risk Items
 
@@ -503,13 +531,13 @@ None documented yet (Phase 1 still stabilizing).
 
 ---
 
-## Development Timeline
+## Historical Development Timeline
 
-> **Current use-case overlay** ([product stages](./roadmap/product-stages.md), [ADR-0014](./decisions/0014-lab-first-robot-workflows.md)):
-> - **G1 Robot & Embedded:** LAB-01 first, with separately gated BASE-01 and ASSEMBLY-01 extensions. No date or physical qualification follows from software closure.
-> - **G2 Organization Servers & Office PCs:** ORG-SRV-01 web/app/microservice hosting and ORG-PC-01 ordinary local-office workflows. Actual cohort/application requirements determine capability needs; implementation scheduling remains unactivated, with no robot-physical prerequisite.
->
-> The dated technical timeline below is historical planning context, not the current G1/G2 schedule, required capability bundle, or qualification evidence.
+The G1 robot, G2 organization-server/office-PC, and G3–G5 product overlays are
+retained in [product stages](./roadmap/product-stages.md) as historical context.
+They are not independently scheduled or automatically unblocked by software closure.
+The dated timeline below is historical planning, not an Intel C2C delivery promise,
+physical qualification, or production commitment.
 
 ```
 Phase 1: Core Stability
@@ -539,16 +567,20 @@ Phase 4: Advanced Features (2026-12 — 2027-03)
 
 ---
 
-## Non-Functional Requirements
+## Retained Non-Functional Targets
+
+These earlier targets are not achieved guarantees or independent programs.
+Only requirements tied to a named Intel C2C deliverable are active; measurement,
+isolation, and hardware claims require their own evidence.
 
 | Requirement | Target | Method |
 |-------------|--------|--------|
 | **Reliability** | 99.5% uptime | Watchdog timers, graceful shutdown |
 | **Performance** | < 100 µs context switch | Benchmarking suite |
-| **Security** | No buffer overflows in Cells | Rust compiler enforcement |
+| **Security** | Reviewed trust/admission boundaries; no blanket SAS isolation claim | Rust compiler checks plus explicit unsafe-code, Tier 2/Tier 3, and security gates |
 | **Maintainability** | Responsibility-bounded kernel with generated total/core nLOC trend | Spec 15 + [generated metrics](code-metrics.generated.md) |
 | **Scalability** | Per-request profile goal: 1000 simultaneous isolated cells after staged 64/128/256/512 measurements | Shared immutable image frames, demand-paged stacks, profile quotas, dynamic tables |
-| **Portability** | RV64, ARM, x86 | Feature-gated HAL |
+| **Portability** | Preserve existing RV64/ARM/x86 contracts; Intel x86-64 alone is active | Feature-gated HAL and necessary regression coverage |
 
 ---
 
@@ -560,7 +592,10 @@ Phase 4: Advanced Features (2026-12 — 2027-03)
 
 ---
 
-## Success Criteria (Overall)
+## Retained Engineering Success Criteria
+
+This list preserves engineering evidence and gaps, not an independent multi-architecture
+roadmap. Current program acceptance is defined above and in ADR-0022/current focus.
 
 1. ✅ Passes architecture validation (10/10)
 2. 🚧 Kernel boundary target — generated size/status must show tracked driver and orchestration migrations complete
@@ -575,6 +610,8 @@ Phase 4: Advanced Features (2026-12 — 2027-03)
 
 ## See Also
 
+- [ADR-0022 — Intel x86-64 C2C-only direction](decisions/0022-intel-x86-64-c2c-only-direction.md)
+- [Current focus — active program gates](roadmap/current-focus.md)
 - **codebase-summary.md** — File structure & metrics
 - **code-standards.md** — Coding rules & conventions
 - **system-architecture.md** — High-level design

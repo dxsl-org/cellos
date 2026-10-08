@@ -1,6 +1,6 @@
 ---
-title: "Tier 3b: x86_64 hardware-virt VMM (SVM-first / VT-x) booting Alpine Linux"
-description: "Port the shipped ARM64-EL2 Tier-3b VMM to x86_64 behind a vendor-neutral HAL: AMD SVM first (TCG-testable), Intel VT-x second (real-HW/KVM). PVH direct-boot, EPT/NPT Stage-2, no-LAPIC MVP, reuse the arch-generic virtio stack + run loop → boot Alpine x86_64 to a serial shell, then virtio-blk→VFS + virtio-net→Net."
+title: "Intel x86-64 VMX — required Tier-3 dependency for Cell-to-Cell Anywhere"
+description: "Complete the Intel VT-x/EPT path required by the sole Intel C2C program. Retain the shared VMM and historical AMD SVM QEMU evidence as regressions; SVM does not qualify Intel guest execution. VMX and the C2C guest adapter remain separately gated."
 status: pending
 priority: P2
 effort: 10 phases (~5-6K new LOC; heavy reuse of shipped ARM64 cell)
@@ -9,7 +9,41 @@ tags: [hypervisor, x86_64, vt-x, vmx, svm, ept, pvh, virtio, vmm, tier3b]
 created: 2026-07-11
 ---
 
-# Tier 3b — x86_64 hardware-virtualization VMM (boots Alpine Linux)
+# Intel x86-64 VMX — required Tier-3 dependency for Cell-to-Cell Anywhere
+
+## Current direction (2026-10-08)
+
+[ADR-0022](../../docs/decisions/0022-intel-x86-64-c2c-only-direction.md) makes
+Cell-to-Cell Anywhere on a fixed headless Intel x86-64 configuration the sole
+program. This plan is its required Intel Tier-3 prerequisite, not a standalone
+VM product. Intel guest execution remains incomplete: P09 VMX/VT-x + EPT
+evidence is mandatory before any Intel guest-readiness claim. SVM QEMU results
+prove only their named AMD/software path; they cannot substitute for VMX.
+
+Preserve existing AMD SVM and ARM implementations, tests and historical
+acceptance evidence as shared-code regressions/reference. New AMD/ARM/RISC-V
+platform work is paused. Only tasks naming an Intel C2C dependency or necessary
+regression are admissible. No unrelated guest/device/APIC expansion is opened.
+The fixed configuration must expose VT-x/EPT and VT-d, COM1 and HPET per the
+HCL; acquire no hardware without the x86-PC phase-07 procurement decision.
+Qualify the first exact Intel machine before a separately authorized identical
+second node.
+
+Current delivery gate: admit a bounded Intel VMX slice through the portfolio
+and existing ABI/security review, consume shared VMM prerequisites, then
+capture Intel guest execution/isolation on real Intel hardware or a suitable
+nested-KVM lane. QEMU TCG has no usable VMX execution path. A KVM/software
+oracle is not a physical HCL qualification. The C2C plan's Phase 09 separately
+owns the explicit guest adapter and its admission; VM boot does not make a
+guest a native Cell or enable remote calls. No new ABI, authority bypass,
+remote activation, production claim or purchase is approved by this direction.
+
+## Retained architecture and original staging
+
+The architecture remains reusable. The SVM-first ordering, phase status
+snapshots and dated validation below are historical provenance, not today's
+delivery order or current Intel readiness. Where old text calls VMX
+non-blocking, that refers only to the historical SVM bring-up, not Intel C2C.
 
 Same KVM-style split as the shipped ARM64-EL2 track (`.agents/260613-2134-tier3b-vmm-arm64-el2/`,
 DONE): the **kernel** owns all privileged virt ops (VMXON/EFER.SVME, VMCS/VMCB, EPT/NPT,
@@ -19,14 +53,14 @@ run loop. **The syscall ABI, VM registry, virtio-mmio/virtqueue/blk/net/console 
 structure already exist and are arch-generic — this port ADDS an x86 platform personality, never
 rewrites them.**
 
-**CI-accelerator decision (research #9, evidence in Validation Log): AMD SVM first, behind a
-vendor-neutral trait; Intel VT-x second on a non-blocking KVM/real-HW lane.** QEMU TCG emulates SVM
+**Historical CI-accelerator decision (research #9): AMD SVM first, behind a
+vendor-neutral trait; Intel VT-x second on a KVM/real-HW lane.** QEMU TCG emulates SVM
 (`target/i386/tcg/system/svm_helper.c`) but has **zero** VMX support and WHPX exposes no nested virt —
 so SVM is the *only* path that runs on the existing Windows+QEMU+TCG CI host, preserving the ARM
 track's "TCG makes CI cheap" property. Dev/test: `qemu-system-x86_64 -cpu qemu64,+svm -accel tcg`
 (SVM, CI); `-accel kvm -cpu host` (VMX/SVM on real hardware).
 
-## Phases
+## Historical Phase Map (Retained Evidence, Not Intel Readiness)
 
 | # | Phase | Effort | Status | Law 1? | Depends on |
 |---|-------|--------|--------|--------|------------|
@@ -38,10 +72,10 @@ track's "TCG makes CI cheap" property. Dev/test: `qemu-system-x86_64 -cpu qemu64
 | 06 | [virtio-mmio on x86 guest + virtio-console (reuse arch-generic stack)](phase-06-virtio-mmio-x86.md) | M | pending | no | 05 |
 | 07 | [virtio-blk → VFS Cell → mount rootfs (M3)](phase-07-virtio-blk-vfs.md) | M | pending | no | 06 |
 | 08 | [virtio-net → Net Cell (M4, apk works)](phase-08-virtio-net.md) | M | pending | no | 06 |
-| 09 | [Intel VT-x backend bring-up (KVM/HW lane) + optional LAPIC/APICv upgrade](phase-09-vtx-backend-apic.md) | M | pending | no | 03,06 |
+| 09 | [Intel VT-x backend bring-up (KVM/HW lane)](phase-09-vtx-backend-apic.md) | M | **pending; required Intel C2C Tier-3 prerequisite**; optional APIC work only if directly required | no new approval implied | 03,06; admitted Intel execution lane |
 | 10 | [Run scripts (SVM-TCG CI smoke + KVM note) + CI job + ENOSYS→real x86 trait finalize + docs ⚠️](phase-10-run-ci-docs.md) | M | pending | **YES(light)** | 05,07,08 |
 
-## Dependency Graph
+## Historical Dependency Graph
 
 ```
 01 ─► 02 ─► 03 ─► 04 ─► 05 ─┬─► 06 ─┬─► 07 ─┐
@@ -51,11 +85,14 @@ track's "TCG makes CI cheap" property. Dev/test: `qemu-system-x86_64 -cpu qemu64
                             └───────────────┘ (10 needs only 05 for boot-to-shell smoke)
 ```
 
-- **Critical path (Alpine-to-shell, SVM/TCG):** 01 → 02 → 03 → 04 → 05. **P05 is the central deliverable.**
-- **Parallelizable after P06:** P07 (blk/VFS), P08 (net) own disjoint cell files → concurrent. P09
-  (VT-x backend + APIC) depends on P03 (world-switch scaffold) + P06 (device set to validate) and is
-  gated on a real-Intel-HW / nested-KVM lane existing — it is **non-blocking** for the SVM merge cadence.
-- **P10** gates on P05 (boot smoke) at minimum; full CI matrix needs P07+P08.
+- **Historical SVM/TCG path:** 01 → 02 → 03 → 04 → 05. Retain its results and
+  tests, not its priority as a new AMD deliverable.
+- **Current Intel gate:** P09 consumes the shared P03/P06 prerequisites and
+  requires an admitted Intel/nested-KVM lane. It is blocking for Intel Tier 3,
+  not optional work after an SVM release. P07/P08 device work is allowed only
+  when it serves the named Intel C2C guest profile; no automatic fan-out.
+- **P10:** retain SVM regression coverage, but Intel delivery needs Intel VMX
+  evidence as well as the guest boot/block/network proofs actually claimed.
 - ⚠️ **Law 1 (2× user confirmation):** **P04** adds `#[repr(C,u8)]` variants to the frozen `ViVmExit`
   (`libs/api/src/abi/hypervisor.rs:17`) + bumps `VERSION` 1→2. **P10** finalizes the multi-arch
   `ViHypervisor` trait shape (light). **No new syscalls, no manifest-flag bump** — 220-227 +
@@ -63,8 +100,9 @@ track's "TCG makes CI cheap" property. Dev/test: `qemu-system-x86_64 -cpu qemu64
 
 ## Key Cross-Cutting Invariants
 
-- **Vendor-neutral trait boundary (Law 7):** one `ViHypervisor` impl per vendor (`X86Svm`, `X86Vmx`)
-  selected at boot by CPUID; SVM ships first, VMX second. The kernel `registry.rs` and the cell run-loop
+- **Vendor-neutral trait boundary (Law 7):** preserve the per-vendor boundary
+  (`X86Svm`, `X86Vmx`) and CPUID selection; do not remove SVM to express strategy.
+  New execution work targets Intel VMX. The kernel `registry.rs` and the cell run-loop
   personality dispatch on vendor only where mechanics genuinely differ (enablement, VMCS vs VMCB,
   world-switch instr, exit-reason decode). EPT vs NPT trees, guest memory, device models, boot protocol
   are vendor-agnostic.
@@ -95,7 +133,7 @@ track's "TCG makes CI cheap" property. Dev/test: `qemu-system-x86_64 -cpu qemu64
 - **Capability gate:** only a manifest-declared `hypervisor=true` cell on a kernel that detected SVM or
   VMX gets `HypervisorCap` (`kernel/src/task/cap.rs:164`). Deny-by-default in dispatch.
 
-## Validation Log
+## Historical Validation Log (No Intel Qualification Implied)
 
 ### 2026-07-12 — Research (3 parallel haily-researcher agents)
 
@@ -146,8 +184,8 @@ track's "TCG makes CI cheap" property. Dev/test: `qemu-system-x86_64 -cpu qemu64
 
 ## Open Questions
 
-- **SVM budget mechanism fidelity under TCG:** SVM has no preemption timer; confirm a host one-shot
-  timer + physical-INTR intercept yields a clean synchronous `Preempted`-equivalent exit under TCG.
-  Spike in P03.
+- **Historical SVM budget fidelity question:** retain its evidence/regression
+  obligation; do not launch an AMD expansion program. Intel work must prove
+  its own VMX preemption and host-IRQ behavior.
 - **`InjectIrq` semantics reuse:** ABI param `intid` is reinterpreted as an x86 interrupt vector (0-255,
   8259 line) — no ABI change, but document the semantic overload in P04.
