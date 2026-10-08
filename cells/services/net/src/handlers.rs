@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-mod tcp;
+pub(crate) mod tcp;
 #[cfg(test)]
 mod tests;
 mod udp;
@@ -23,9 +23,18 @@ use crate::{
     socket_state::SocketState,
     socket_table::{SocketOwner, SocketTable},
     tls::socket::TlsSocketEntry,
-    tls_handler::handle_tls_raw,
+    tls_handler::{handle_tls_raw, TlsPending},
     tls_wire::TLS_CLOSE_OP,
 };
+
+/// L2 bridge requests handled, by direction (`loop-trace` images).
+///
+/// `l2recv` is the hypervisor's guest-RX poll: it is the count that proves the
+/// guest's receive path reached this service at all.
+pub static L2_SEND_REQUESTS: core::sync::atomic::AtomicUsize =
+    core::sync::atomic::AtomicUsize::new(0);
+pub static L2_RECV_REQUESTS: core::sync::atomic::AtomicUsize =
+    core::sync::atomic::AtomicUsize::new(0);
 
 pub(crate) fn tcp_state_byte(s: smoltcp_tcp::State) -> u8 {
     match s {
@@ -71,6 +80,9 @@ pub(crate) fn make_tcp(
     table: &mut SocketTable,
     owner: SocketOwner,
 ) -> Result<(SocketHandle, u64), ()> {
+    if !table.can_insert(owner) {
+        return Err(());
+    }
     let handle = sockets.add(smoltcp_tcp::Socket::new(
         smoltcp_tcp::SocketBuffer::new(alloc::vec![0u8; 4096]),
         smoltcp_tcp::SocketBuffer::new(alloc::vec![0u8; 4096]),
@@ -94,9 +106,36 @@ pub fn handle_request(
     sockets: &mut SocketSet<'_>,
     table: &mut SocketTable,
     tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
+    tls_pending: &mut TlsPending,
     resolver: &Resolver,
     local_ip: &[u8; 4],
 ) {
+    // Prevent typed TCP access to a TLS-owned socket while its future holds
+    // the transport. Raw TLS Close is the cancellation/teardown path.
+    if let Ok(req) = ipc::decode::<NetRequest<'_>>(buf) {
+        let cap = match req {
+            NetRequest::TcpSend { cap_id, .. }
+            | NetRequest::TcpRecv { cap_id, .. }
+            | NetRequest::TcpClose { cap_id }
+            | NetRequest::TcpRecvReady { cap_id, .. }
+            | NetRequest::TcpSendReady { cap_id, .. }
+            | NetRequest::TcpCloseGraceful { cap_id }
+            | NetRequest::SocketState { cap_id } => Some(cap_id as u64),
+            _ => None,
+        };
+        if let Some(cap) = cap {
+            if table.is_owner(cap, owner) && tls_pending.contains_cap(cap) {
+                send_typed(sender, NetResponse::Err(0xFF));
+                return;
+            }
+            if table.is_owner(cap, owner) && tls_table.contains_key(&cap)
+                && !matches!(req, NetRequest::TcpClose { .. })
+            {
+                send_typed(sender, NetResponse::Err(0xFF));
+                return;
+            }
+        }
+    }
     match ipc::decode::<NetRequest<'_>>(buf) {
         Ok(req) => {
             iface.poll(now_instant(), device, sockets);
@@ -107,7 +146,7 @@ pub fn handle_request(
         }
         Err(_) if buf.first().copied().unwrap_or(0) >= TLS_CLOSE_OP => {
             iface.poll(now_instant(), device, sockets);
-            handle_tls_raw(buf, sender, owner, iface, device, sockets, table, tls_table);
+            handle_tls_raw(buf, sender, owner, iface, device, sockets, table, tls_table, tls_pending);
             iface.poll(now_instant(), device, sockets);
         }
         _ => {}
@@ -150,27 +189,46 @@ pub(crate) fn handle_typed(
             send_typed(sender, if ok { R::Ok } else { R::Err(0xFF) });
         }
         NetRequest::Resolve { hostname } => {
-            // Literals and the SLIRP aliases answer off the wire; everything
-            // else is a bounded synchronous A-record query (see `crate::dns`).
-            let answer = crate::dns::static_lookup(hostname, resolver.server())
-                .or_else(|| resolver.resolve(hostname, iface, device, sockets));
+            // The service reactor intercepts wire lookups and retains their
+            // query slots. This fallback only handles static names.
+            let answer = crate::dns::static_lookup(hostname, resolver.server());
             match answer {
                 Some(addr) => send_typed(sender, R::Addr(addr)),
                 None => send_typed(sender, R::Err(0xFF)),
             }
         }
         NetRequest::L2Send { data } => {
-            let response = if device.send_l2(data) {
-                R::Ok
-            } else {
-                R::Err(0xFF)
-            };
-            send_typed(sender, response);
+            L2_SEND_REQUESTS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            // The frame came out of the guest's TX queue, so its source address is
+            // where the guest's replies must be routed (see
+            // `VirtioNetDevice::learn_guest_mac_from` — the hypervisor's registered
+            // belief and the guest's own address disagree on the board).
+            device.learn_guest_mac_from(data);
+            if let Some(accepted) = device.send_l2(data, sender) {
+                send_typed(sender, if accepted { R::Ok } else { R::Err(0xFF) });
+            }
         }
         NetRequest::L2Recv { guest_mac } => {
+            L2_RECV_REQUESTS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            static FIRST_GUEST_POLL: core::sync::atomic::AtomicBool =
+                core::sync::atomic::AtomicBool::new(false);
+            if !FIRST_GUEST_POLL.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                ostd::io::println("[net-bridge] first guest L2Recv — guest MAC registered");
+            }
             device.set_guest_mac(guest_mac);
             let _ = device.pump_rx_split();
             if let Some(frame) = device.pop_guest_rx() {
+                // Split the guest receive chain: this line proves the net
+                // service handed a frame to the hypervisor, and the virtio-net
+                // side prints its own when the frame reaches the guest's queue.
+                static FIRST_GUEST_RX: core::sync::atomic::AtomicBool =
+                    core::sync::atomic::AtomicBool::new(false);
+                if !FIRST_GUEST_RX.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                    ostd::io::println(&alloc::format!(
+                        "[net-bridge] first guest RX len={}",
+                        frame.len()
+                    ));
+                }
                 let mut rb = [0u8; IPC_BUF_SIZE];
                 if let Ok(s) = ipc::encode(&R::Data(&frame), &mut rb) {
                     sys_send(sender, s);
