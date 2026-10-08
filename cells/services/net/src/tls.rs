@@ -10,12 +10,12 @@
 //!   roots    — ca_cert() single trust anchor, cfg-selected by tls-ca-* feature
 //!   provider — ViTlsProvider (CryptoProvider with infallible verifier())
 //!   rng      — ViRng (VirtIO-RNG-backed ChaCha20)
-//!   transport — SmoltcpTlsTransport (embedded-io Read+Write over smoltcp TCP)
-//!   socket   — TlsSocketEntry (per-connection TLS state + handshake)
-//!   block_on — blocking executor shim
+//!   transport — nonblocking embedded-io-async smoltcp TCP transport
+//!   socket   — owned TLS state and async handshake
+//!   dispatch — deferred IPC operation scheduler
 
-pub mod block_on;
 pub mod clock;
+pub mod dispatch;
 pub mod provider;
 #[cfg(test)]
 pub mod relay_certificate;
@@ -24,8 +24,8 @@ pub mod relay_profile;
 pub mod rng;
 pub mod roots;
 pub mod socket;
+pub mod transport;
 
 #[cfg(test)]
 #[path = "tls/authenticated-time-precheck-tests.rs"]
 pub(crate) mod authenticated_time_precheck_tests;
-pub mod transport;

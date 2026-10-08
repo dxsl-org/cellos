@@ -49,7 +49,11 @@ impl AiTransport for OstdTransport {
             // reply is decoded tolerantly — the same convention every other typed client uses.
             Ok(raw) => ai_proto::decode(raw).map_err(|_| AiClientError::Protocol),
             Err(IpcError::Encode) | Err(IpcError::Decode) => Err(AiClientError::Protocol),
-            Err(IpcError::Send) | Err(IpcError::Recv) | Err(IpcError::WrongSender) => {
+            Err(IpcError::Send)
+            | Err(IpcError::Recv)
+            | Err(IpcError::WrongSender)
+            | Err(IpcError::InvalidOperation)
+            | Err(IpcError::BufferTooSmall) => {
                 // The provider may have died or restarted under a new tid.
                 self.svc.invalidate();
                 Err(AiClientError::Transport)

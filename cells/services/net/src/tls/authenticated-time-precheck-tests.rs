@@ -24,7 +24,7 @@ use crate::{
     interface::VirtioNetDevice,
     socket_table::{SocketOwner, SocketTable},
     tls::socket::prepare_handshake_buffers,
-    tls_handler::handle_tls_raw,
+    tls_handler::{handle_tls_raw, TlsPending},
     tls_wire::TLS_CONNECT_OP,
 };
 
@@ -43,6 +43,7 @@ fn handler_rejects_before_allocating_tcp_capability() {
     let mut sockets = SocketSet::new(&mut storage[..]);
     let mut table = SocketTable::new();
     let mut tls_table = BTreeMap::new();
+    let mut pending = TlsPending::default();
     let owner = SocketOwner {
         cell_id: 1,
         generation: 1,
@@ -61,6 +62,7 @@ fn handler_rejects_before_allocating_tcp_capability() {
         &mut sockets,
         &mut table,
         &mut tls_table,
+        &mut pending,
     );
 
     assert_eq!(table.next_cap_for_test(), 1);

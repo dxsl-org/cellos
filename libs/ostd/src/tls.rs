@@ -21,7 +21,8 @@
 
 extern crate alloc;
 
-use crate::syscall::{sys_recv, sys_send, SyscallResult};
+use crate::ipc::recv_from;
+use crate::syscall::sys_send;
 
 // TLS IPC opcodes (mirrors cells/services/net/src/poll_driver.rs cell_opcodes).
 const TLS_CONNECT: u8 = 0x30;
@@ -50,8 +51,8 @@ pub fn tls_connect(net_tid: usize, addr: [u8; 4], port: u16, hostname: &str) -> 
 
     sys_send(net_tid, &msg);
     let mut reply = [0u8; 8];
-    match sys_recv(0, &mut reply) {
-        SyscallResult::Ok(_) => u64::from_le_bytes(reply),
+    match recv_from(net_tid, &mut reply) {
+        Ok(_) => u64::from_le_bytes(reply),
         _ => 0,
     }
 }
@@ -71,8 +72,8 @@ pub fn tls_write(net_tid: usize, cap_id: u64, data: &[u8]) -> usize {
     msg[11..11 + payload_len].copy_from_slice(&data[..payload_len]);
     sys_send(net_tid, &msg);
     let mut reply = [0u8; 4];
-    match sys_recv(0, &mut reply) {
-        SyscallResult::Ok(_) => u32::from_le_bytes(reply) as usize,
+    match recv_from(net_tid, &mut reply) {
+        Ok(_) => u32::from_le_bytes(reply) as usize,
         _ => 0,
     }
 }
@@ -107,8 +108,8 @@ pub fn tls_read(net_tid: usize, cap_id: u64, buf: &mut [u8]) -> usize {
 
     sys_send(net_tid, &msg);
     let mut tmp = alloc::vec![0u8; 2 + want_len];
-    match sys_recv(0, &mut tmp) {
-        SyscallResult::Ok(_) => parse_tls_read_reply(&tmp, buf),
+    match recv_from(net_tid, &mut tmp) {
+        Ok(_) => parse_tls_read_reply(&tmp, buf),
         _ => 0,
     }
 }
@@ -120,7 +121,7 @@ pub fn tls_close(net_tid: usize, cap_id: u64) {
     msg[1..9].copy_from_slice(&cap_id.to_le_bytes());
     sys_send(net_tid, &msg);
     let mut r = [0u8; 1];
-    let _ = sys_recv(0, &mut r);
+    let _ = recv_from(net_tid, &mut r);
 }
 
 #[cfg(test)]
