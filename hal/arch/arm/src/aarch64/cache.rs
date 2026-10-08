@@ -53,6 +53,21 @@ pub unsafe fn sync_instruction_cache(data_start: usize, instruction_start: usize
         core::arch::asm!("dsb ish", "isb", options(nostack));
     }
 }
+/// Invalidate the whole instruction cache.
+///
+/// `sync_instruction_cache` invalidates by VA, which is the right sequence when
+/// the same VA will fetch the code again. It is *not* enough when the code will
+/// be fetched through a **different** mapping of the same physical page — a guest
+/// fetching through Stage-2 uses its own IPA/ASID, so the per-VA invalidate
+/// leaves the alias untouched. This is the blunt, correct instrument for that
+/// case: invalidate everything after the data has been cleaned to PoC.
+pub fn invalidate_instruction_cache_all() {
+    // SAFETY: pure cache maintenance; no memory is read or written.
+    unsafe {
+        core::arch::asm!("ic iallu", "dsb ish", "isb", options(nostack));
+    }
+}
+
 /// Clean data cache lines covering `[start, start + len)` to Point of Coherency (PoC).
 ///
 /// Used before initiating a device DMA read from RAM.

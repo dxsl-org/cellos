@@ -46,8 +46,8 @@ const VTCR_VALUE: u64 = 0x8002_3558;
 /// # Safety
 /// - Must be called with an active EL2 host, or the Pi EL1 monitor initialized.
 /// - `root_pa` must be 8 KB-aligned (concatenated 2 × L1 tables, VTCR.SL0=1).
-/// - The Stage-2 page table must be fully populated and all writes flushed to
-///   RAM before this function is called.
+/// - The Stage-2 page table must be fully populated; the entry `dsb ishst`
+///   publishes WB descriptor stores to the Inner-shareable walkers.
 /// - `vmid` must be ≥ 1 (VMID 0 is reserved for the EL2 host).
 /// - This function must NOT be called while a vCPU is running (VTTBR races).
 #[cfg(target_arch = "aarch64")]
@@ -60,6 +60,9 @@ pub unsafe fn monitor_enable_stage2(vmid: u16, root_pa: u64) {
     // SAFETY: caller guarantees EL2 context and well-formed root PA.
     unsafe {
         core::arch::asm!(
+            // Stage-2 descriptors were populated by EL1 (Pi) or EL2 (virt).
+            // Complete their WB stores before programming the walk and TLBI.
+            "dsb ishst",
             // 1. Program VTCR_EL2 (S2 translation parameters).
             "msr vtcr_el2,  {vtcr}",
             // 2. Program VTTBR_EL2 (VMID + S2 root PA).
@@ -72,7 +75,7 @@ pub unsafe fn monitor_enable_stage2(vmid: u16, root_pa: u64) {
             "isb",
             vtcr  = in(reg) VTCR_VALUE,
             vttbr = in(reg) vttbr,
-            options(nomem, nostack),
+            options(nostack),
         );
     }
 }
@@ -112,10 +115,11 @@ pub unsafe fn monitor_s2_tlb_flush_all() {
     // SAFETY: EL2 broadcast TLB invalidation; no memory mutation.
     unsafe {
         core::arch::asm!(
+            "dsb ishst",
             "tlbi vmalls12e1is",
             "dsb ish",
             "isb",
-            options(nomem, nostack),
+            options(nostack),
         );
     }
 }
@@ -134,13 +138,14 @@ pub unsafe fn monitor_s2_tlb_flush_ipa(ipa: u64) {
                              // SAFETY: EL2 TLB maintenance; encoded IPA operand is correct per ARM DDI.
     unsafe {
         core::arch::asm!(
+            "dsb ishst",
             "tlbi ipas2e1is, {x}",  // invalidate Stage-2 entry for this IPA
             "dsb ish",
             "tlbi vmalle1is",       // flush Stage-1 entries cached during S2 walk
             "dsb ish",
             "isb",
             x = in(reg) encoded,
-            options(nomem, nostack),
+            options(nostack),
         );
     }
 }

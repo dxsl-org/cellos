@@ -313,6 +313,7 @@ impl PageTableTrait for PageTable {
             return;
         }
 
+
         // ── EL1 path (unchanged) ─────────────────────────────────────────────
         let mair: u64 = 0x0000_0000_0000_FF00; // index0=Device-nGnRnE(0x00), index1=Normal-WB-WA(0xFF)
                                                // TG0=4KB (bits 15:14 = 0b00, already zero at reset — no term needed)
@@ -350,8 +351,12 @@ impl PageTableTrait for PageTable {
                 options(nostack),
             );
         }
+        // EL1 now uses Normal-WB/Inner-shareable RAM. Install the identical
+        // EL2 regime through HVC before either side exchanges READY or guest
+        // state; the identity root is passed explicitly because TTBR0_EL1 can
+        // later hold a private Cell root.
         #[cfg(feature = "board-rpi3")]
-        super::monitor::init();
+        super::monitor::init(ttbr0);
     }
 }
 

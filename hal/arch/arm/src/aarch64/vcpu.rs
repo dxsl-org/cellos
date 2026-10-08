@@ -612,15 +612,15 @@ vcpu_enter_guest:
     // SAFETY: TPIDR_EL2 is EL2-private; the guest cannot read or write it.
     msr  tpidr_el2, x0
 
-    // HCR_EL2 guest bits: RW|VM|SWIO|FMO|IMO|AMO|TWI|TWE|TSC|TID3.
+    // HCR_EL2 guest bits: RW|VM|SWIO|FMO|IMO|AMO|TWI|TWE|TSC.
     // RW(31)=AArch64 EL1, VM(0)=Stage-2, SWIO(1)=SW IRQ override,
     // FMO(3)/IMO(4)/AMO(5)=route physical exceptions to EL2.
     // TWI(13)/TWE(14)=trap WFI/WFE if the instruction would actually wait;
     // a pending interrupt can make WFI a NOP without trapping. TSC(19)=trap
     // SMC to EL2. In particular DC(12) must stay clear on a Stage-2 guest.
-    // TID3(18)=trap guest reads of the AArch64 ID-register group (Op0=3,Op1=0,
-    // CRn=0,CRm=1..7) to EL2 so the un-virtualized host PARange/feature bits
-    // are never handed to the guest raw — see `id_regs::read_trapped_id_reg`.
+    // Generic virt traps ID reads with TID3(18) to clamp PARange to Stage-2's
+    // 40-bit limit. Pi's Cortex-A53 already reports 40-bit PARange; passing
+    // through its native ID registers avoids a trap on every feature probe.
     // SAFETY: HCR_EL2 is EL2-private.
     mov  x9,  #(1 << 31)       // RW
     orr  x9,  x9,  #(1 << 0)   // VM
@@ -630,7 +630,6 @@ vcpu_enter_guest:
     orr  x9,  x9,  #(1 << 5)   // AMO
     orr  x9,  x9,  #(1 << 13)  // TWI: trap WFI if it would block
     orr  x9,  x9,  #(1 << 14)  // TWE: trap WFE
-    orr  x9,  x9,  #(1 << 18)  // TID3
     orr  x9,  x9,  #(1 << 19)  // TSC
     .if {pi}
     adrp x10, PI_GUEST_VI
@@ -639,6 +638,8 @@ vcpu_enter_guest:
     cbz x10, 1f
     orr x9, x9, #(1 << 7)   // HCR_EL2.VI: software virtual IRQ
 1:
+    .else
+    orr  x9, x9, #(1 << 18)  // TID3 (generic virt only)
     .endif
     msr  hcr_el2, x9
     isb

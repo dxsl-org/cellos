@@ -66,6 +66,56 @@ pub unsafe fn el2_hcr_init() {
     }
 }
 
+/// Both non-VHE EL2 hosts use the same MAIR/TCR encoding as the EL1 identity
+/// root: index 0 is Device-nGnRnE, index 1 is Normal WB-WA, Inner-shareable.
+const EL2_MAIR: u64 = 0x0000_0000_0000_FF00;
+const EL2_TCR: u64 = 25
+    | (1 << 8)       // IRGN0 = WB-WA-RA
+    | (1 << 10)      // ORGN0 = WB-WA-RA
+    | (3 << 12)      // SH0 = Inner-shareable
+    | (1 << 23)      // RES1 in non-VHE TCR_EL2
+    | (1_u64 << 31); // RES1 in non-VHE TCR_EL2
+
+/// Install Pi's EL2 identity root after the EL1 host has enabled its matching
+/// Normal-WB mappings. The shared kernel root already maps RAM as WB/Inner-
+/// shareable and peripheral apertures as Device; do not turn the monitor into
+/// an uncached alias of EL1's dirty guest/vCPU/Stage-2 pages.
+///
+/// # Safety
+/// The caller must run at EL2 with interrupts masked and the EL2 MMU off, with
+/// `ttbr0_phys` an identity root covering this code, VBAR_EL2, SP_EL2, its own
+/// table frames, and all RAM/MMIO the monitor may access. The Pi handshake
+/// checks live code, vector, stack and MMIO leaves and rejects firmware WXN=1
+/// because the current kernel-image leaves are writable.
+#[cfg(feature = "board-rpi3")]
+pub(super) unsafe fn pi_monitor_mmu_init(ttbr0_phys: u64) {
+    unsafe {
+        core::arch::asm!(
+            "msr mair_el2, {mair}",
+            "msr tcr_el2, {tcr}",
+            "isb",
+            "msr ttbr0_el2, {ttbr0}",
+            "dsb sy",
+            "isb",
+            "tlbi alle2",
+            "dsb sy",
+            "isb",
+            "mrs {sctlr}, sctlr_el2",
+            "orr {sctlr}, {sctlr}, #(1 << 0)",
+            "orr {sctlr}, {sctlr}, #(1 << 2)",
+            "orr {sctlr}, {sctlr}, #(1 << 12)",
+            "msr sctlr_el2, {sctlr}",
+            "dsb sy",
+            "isb",
+            mair = in(reg) EL2_MAIR,
+            tcr = in(reg) EL2_TCR,
+            ttbr0 = in(reg) ttbr0_phys,
+            sctlr = out(reg) _,
+            options(nostack),
+        );
+    }
+}
+
 /// Activate the EL2 MMU with the given L1 page table root.
 ///
 /// TCR_EL2 non-VHE encoding: bit31 and bit23 are RES1 (ARMv8.0 requirement).
@@ -81,24 +131,9 @@ pub unsafe fn el2_hcr_init() {
 /// - `ttbr0_phys` must identity-cover the current PC and all page-table frames.
 /// - Must be called at EL2 after `el2_hcr_init()`.
 pub unsafe fn el2_mmu_init(ttbr0_phys: u64, uart_base: usize) {
-    // Same MAIR as EL1: Device-nGnRnE at index 0, Normal-WB-WA at index 1.
-    let mair: u64 = 0x0000_0000_0000_FF00;
-    // TCR_EL2 (non-VHE):
-    //   T0SZ=25  → 39-bit VA
-    //   IRGN0=WB-WA-RA (bits 9:8 = 0b01)
-    //   ORGN0=WB-WA-RA (bits 11:10 = 0b01)
-    //   SH0=Inner-shareable (bits 13:12 = 0b11)
-    //   TG0=4 KB (bits 15:14 = 0b00)
-    //   bit23 = RES1 (ARMv8.0 non-VHE requirement)
-    //   bit31 = RES1 (ARMv8.0 non-VHE requirement)
-    // TG0 = 4 KB (bits 15:14 = 0b00, already zero at reset — no term needed)
-    let tcr: u64 = 25_u64
-        | (1 << 8)       // IRGN0 = WB-WA-RA
-        | (1 << 10)      // ORGN0 = WB-WA-RA
-        | (3 << 12)      // SH0   = Inner-shareable
-        | (1 << 23)      // RES1
-        | (1_u64 << 31); // RES1
-                         // SAFETY: EL2-private registers; identity-map covers current PC; caller verified EL2.
+    let mair = EL2_MAIR;
+    let tcr = EL2_TCR;
+    // SAFETY: EL2-private registers; identity-map covers current PC and stack.
     unsafe {
         core::arch::asm!(
             "msr mair_el2, {mair}",
