@@ -19,6 +19,10 @@ default = ["tls-roots-embedded", "tls-ca-private"]
 
 hypervisor-bridge = []
 ipc-wake-oracle = []
+# Diagnostic image: one rate-limited `[net-loop]` line per ~2 s with turns,
+# messages received, L2 request counts and driver commands/deadlines. Shows
+# whether the service is looping and where its time goes.
+loop-trace = []
 # Flavors
 tls-roots-embedded = []
 tls-roots-full     = []   # deps wired in P04
