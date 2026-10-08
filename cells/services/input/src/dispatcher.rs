@@ -18,7 +18,11 @@
 
 use api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE};
 use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_send, sys_try_send};
+use ostd::syscall::{sys_lookup_service, sys_try_send};
+
+/// Report every Nth dropped keyboard event, so a stalled consumer is visible
+/// without one log line per keystroke.
+const DROP_REPORT_EVERY: u64 = 64;
 
 /// Opcode prefix byte sent to the focused cell's IPC endpoint.
 pub const INPUT_EVENT_OPCODE: u8 = 0x10;
@@ -27,6 +31,9 @@ pub const INPUT_EVENT_OPCODE: u8 = 0x10;
 pub struct Dispatcher {
     /// Task ID of the currently focused cell (0 = no focus, events dropped).
     focused: usize,
+    /// Keyboard events dropped because the focused cell was not draining. The
+    /// first drop and every `DROP_REPORT_EVERY`-th after it are logged.
+    dropped: u64,
     /// Reserved for a future focus-fallback policy; `dispatch()` does not read it.
     // reason: keyboard send failure currently leaves `focused` unchanged until a
     // later SetFocus. Keep the field only as a placeholder for a separately
@@ -43,6 +50,7 @@ impl Dispatcher {
     pub fn new() -> Self {
         Self {
             focused: 0,
+            dropped: 0,
             fallback_tid: 0,
             compositor_tid: 0,
         }
@@ -64,8 +72,18 @@ impl Dispatcher {
 
     /// Send a translated `InputEvent` to the focused cell.
     ///
-    /// Blocking delivery preserves ordering and applies backpressure until the
-    /// focused cell receives the event or the kernel confirms the target failed.
+    /// **Non-blocking, and that is the fix for a board failure, not a
+    /// preference.** Delivery used to block until the focused cell received the
+    /// event, which applies backpressure from a slow consumer to *everything
+    /// behind it*: while a Tier-3 guest held focus and was busy, the guest's VMM
+    /// polled input only on its WFI/preemption exits, so the input service
+    /// stayed blocked in this send, the USB cell stayed blocked feeding it, and
+    /// the network cell stayed blocked sending through the USB cell — long
+    /// enough that the kernel's liveness sweep killed net as hung
+    /// (`task 7 … missed liveness deadline`, 2026-10-04). A keyboard is a
+    /// lossy source at the consumer's pace; the events that do not fit are
+    /// dropped and counted (`dropped`), never silently and never by stalling
+    /// the cells behind them.
     ///
     /// The IPC message format is:
     /// ```text
@@ -76,10 +94,17 @@ impl Dispatcher {
         if self.focused == 0 {
             return true; // no focus — drop silently
         }
-        if Self::send_keyboard_event(self.focused, event).is_ok() {
+        if Self::try_send_event(self.focused, event).is_ok() {
             return true;
         }
-        self.focused = 0;
+        // The focused cell's queue is full: it is not draining. Drop this event
+        // (and the ones that follow until it does) and say so periodically.
+        self.dropped = self.dropped.wrapping_add(1);
+        if self.dropped % DROP_REPORT_EVERY == 1 {
+            ostd::io::print("[input] dropped ");
+            ostd::io::print_usize(self.dropped as usize);
+            ostd::io::println(" keyboard event(s): focused cell is not draining");
+        }
         false
     }
 
@@ -104,14 +129,6 @@ impl Dispatcher {
         }
         if Self::try_send_event(self.compositor_tid, event).is_err() {
             self.compositor_tid = 0; // stale TID — re-resolve on next event
-        }
-    }
-
-    fn send_keyboard_event(target: usize, event: &InputEvent) -> Result<(), ()> {
-        let buf = Self::encode(event);
-        match sys_send(target, &buf) {
-            ostd::syscall::SyscallResult::Ok(0) => Ok(()),
-            _ => Err(()),
         }
     }
 
