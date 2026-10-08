@@ -1,15 +1,26 @@
 //! G14 TLS server certificate verification gate.
 //!
-//! Core invariant: the default build (`tls-ca-private`) must REJECT a public
-//! HTTPS host whose cert chains to a public CA, proving verification is active
-//! rather than silently no-op'd.
+//! Core invariant: the default build (`tls-ca-private`) must never accept a
+//! public HTTPS host whose cert chains to a public CA — verification may not be
+//! silently no-op'd.
+//!
+//! Current reachable state (measured 2026-10-02): `cells/services/net/src/tls/clock.rs`
+//! deliberately has no authenticated time source, so `handle_tls_raw` refuses every
+//! `TLS_CONNECT` before a single certificate byte is examined and logs
+//! `[net/tls] TLS connect refused: authenticated time unavailable (fail-closed)`.
+//! The gate therefore pins what is reachable — no silent success, and a named
+//! fail-closed refusal — instead of an unreachable certificate-reject string.
+//! When authenticated time lands (see
+//! `.agents/260621-1823-g14-tls-server-auth/reports/p03-e2e-gate.md`), the refusal
+//! disappears and this lane must be re-pointed at the real reject reason.
 //!
 //! Gate conditions:
-//!   PASS  — `https-demo` prints `TLS handshake failed` AND net logs
-//!            `certificate verification failed`.
+//!   PASS  — net cell logged the fail-closed refusal AND `https-demo` printed
+//!            `TLS handshake failed`.
 //!   SKIP  — host has no outbound internet (TCP connect fails before TLS →
 //!            `transport I/O`). Inconclusive, not a gate failure.
 //!   FAIL  — `TLS handshake OK` → cert verification bypassed (ship-blocker).
+//!   INCONCLUSIVE — anything else; the output is printed for triage.
 //!
 //! Prerequisites:
 //!   cargo build --release -p cellos-kernel (RUSTFLAGS="-C relocation-model=pic")
@@ -24,6 +35,9 @@ use vicell_integration_tests::{qemu_binary, QemuRunner};
 const BOOT_TIMEOUT: u64 = 45;
 /// P02 transport deadline is 30 s; add boot + TCP connect margin.
 const TLS_TIMEOUT: u64 = 90;
+/// Net cell's named fail-closed refusal (Phase-3: no authenticated time source).
+const TLS_REFUSAL: &str =
+    "[net/tls] TLS connect refused: authenticated time unavailable (fail-closed)";
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -94,14 +108,18 @@ fn tls_gate_default_rejects_public_cert() {
         )
     });
 
-    // Run https-demo: connects to example.com:443 via TLS 1.3.
+    // Run https-demo: attempts example.com:443 via TLS 1.3.
     qemu.send_line("https-demo");
 
-    // Wait until the demo completes. Both success and failure print a marker.
-    qemu.wait_for("[https-demo]", TLS_TIMEOUT)
+    // Wait for the OUTCOME, not the banner: the demo prints
+    // `[https-demo] TLS 1.3 HTTPS demo starting` before the handshake begins, so
+    // matching `[https-demo]` asserts while the handshake is still running
+    // (measured 2026-10-02: a 6 s INCONCLUSIVE with no outcome yet). Only the two
+    // outcome lines contain `TLS handshake`.
+    qemu.wait_for("TLS handshake", TLS_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
-                "https-demo produced no output within {TLS_TIMEOUT}s: {e}\n--- output ---\n{}",
+                "https-demo produced no TLS outcome within {TLS_TIMEOUT}s: {e}\n--- output ---\n{}",
                 qemu.dump()
             )
         });
@@ -118,9 +136,20 @@ fn tls_gate_default_rejects_public_cert() {
         );
     }
 
+    // PASS: the net cell refused at the authenticated-time gate, before any
+    // certificate was examined, and the demo reported the failure.
+    if output.contains(TLS_REFUSAL) {
+        assert!(
+            output.contains("[https-demo] ERROR: TLS handshake failed"),
+            "net cell refused TLS but the demo did not report failure.\n\
+             --- serial output ---\n{output}"
+        );
+        return;
+    }
+
     // SKIP: no outbound internet — TCP connect failed before TLS handshake.
     // This is inconclusive, not a verification bypass.
-    if output.contains("transport I/O") && !output.contains("certificate verification failed") {
+    if output.contains("transport I/O") {
         eprintln!(
             "SKIP tls-gate: TCP connect failed before TLS (host has no outbound internet).\n\
              Re-run with QEMU SLIRP internet access to execute the full gate.\n\
@@ -129,12 +158,9 @@ fn tls_gate_default_rejects_public_cert() {
         return;
     }
 
-    // PASS: the verifier ran and produced a reject (not a transport timeout).
-    assert!(
-        output.contains("certificate verification failed"),
-        "G14 gate INCONCLUSIVE: TLS handshake failed but reject reason unknown.\n\
-         Expected `certificate verification failed` in net cell log;\n\
-         got `transport I/O` or unknown error — fix networking and re-run.\n\
-         --- serial output ---\n{output}"
+    panic!(
+        "G14 gate INCONCLUSIVE: neither the fail-closed refusal nor a certificate reject was observed.\n\
+         Expected `{TLS_REFUSAL}` while no authenticated time source exists, or `TLS handshake OK`\n\
+         as the ship-blocker. --- serial output ---\n{output}"
     );
 }
