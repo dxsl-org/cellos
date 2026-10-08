@@ -6,7 +6,9 @@ extern crate alloc;
 
 use api::syscall::service;
 use api::{declare_manifest, declare_syscalls};
-use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF};
+#[cfg(feature = "loop-trace")]
+use driver_dwc2_usb::dispatch::OP_TX;
+use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF, STATUS_NOT_READY};
 use driver_dwc2_usb::hid::EvdevEvent;
 use driver_dwc2_usb::hub::UsbHub;
 use driver_dwc2_usb::lan9514::Lan9514Device;
@@ -17,8 +19,8 @@ use driver_dwc2_usb::Dwc2Controller;
 use ostd::io::{print, println};
 use ostd::syscall::{
     sys_force_exit, sys_lookup_service, sys_notify_on_exit, sys_recv_timeout,
-    sys_register_nic_driver, sys_register_usb_hid_producer, sys_spawn_from_path, sys_try_send,
-    sys_yield, SyscallResult,
+    sys_register_nic_driver, sys_register_usb_hid_producer, sys_send, sys_spawn_from_path,
+    sys_try_send, sys_yield, SyscallResult,
 };
 
 declare_manifest!(
@@ -61,6 +63,20 @@ declare_syscalls![
 /// driver nothing: `RecvTimeout` returns as soon as a message arrives, so the
 /// delay only applies when there is no traffic to service.
 const NIC_RECV_TICKS: u64 = 1;
+
+/// Serving-loop turns between PHY link checks.
+///
+/// One check is two or three synchronous control transfers (wait for MII idle,
+/// write `MII_ADDR`, read `MII_DATA`) on the bus the NIC and both keyboards share,
+/// so it belongs on its own cadence rather than in every turn. A turn is a 10 ms
+/// receive timeout when the loop is idle and a transfer's worth of time when it is
+/// busy, so a turn count is a floor on the interval: the poll can never cost more
+/// than one check per this many turns of real work. On the board a per-turn check
+/// was thousands of transfers a second of pure polling, and the ones the flaky bus
+/// dropped printed `[dwc2] control ... failed` and were misread as link
+/// transitions. A link only changes on the scale of auto-negotiation, so 64 turns
+/// (≥ ~0.6 s idle) still catches one that comes up after bring-up.
+const LINK_POLL_TURNS: u32 = 64;
 
 const DWC2_BASE: usize = 0x3F98_0000;
 const DWC2_LEN: usize = 0x20000;
@@ -189,6 +205,7 @@ fn cell_main() {
     // instead of a silent no-op.
     let mut hid_interfaces: alloc::vec::Vec<usb_hid::HidInterface> = alloc::vec::Vec::new();
     let mut lan: Option<Lan9514Device<'_>> = None;
+    let mut lan_addr: Option<u8> = None;
     match root_class {
         // ── Hub: scan its downstream ports ───────────────────────────────────
         usb_hid::RootClass::Hub => {
@@ -212,11 +229,30 @@ fn cell_main() {
             for port in 1..=ports as u16 {
                 let _ = hub.power_on_port(port);
 
-                let Some((addr, ifaces, split)) =
-                    usb_hid::attach_port(&engine, &hub, port, &mut next_addr)
-                else {
-                    continue;
-                };
+                let (addr, ifaces, split) =
+                    match usb_hid::attach_port(&engine, &hub, port, &mut next_addr) {
+                        usb_hid::AttachOutcome::Attached(addr, ifaces, split) => {
+                            (addr, ifaces, split)
+                        }
+                        usb_hid::AttachOutcome::Empty => continue,
+                        usb_hid::AttachOutcome::Failed => {
+                            // A hub that has stopped answering will not enumerate
+                            // anything else, and every further request is one more
+                            // STALL on a control pipe that is already stuck. Ask it a
+                            // question it must answer — the *standard* device
+                            // GET_STATUS — before trusting it with another port. The
+                            // port-status form is a hub-class request whose wIndex is
+                            // a port; asking it with wIndex = 0 stalls on this hub and
+                            // once ended enumeration before the keyboard's port.
+                            if !hub.is_responsive() {
+                                println(
+                                    "[usb-hid] hub stopped answering — ending port enumeration",
+                                );
+                                break;
+                            }
+                            continue;
+                        }
+                    };
 
                 // Address whatever is on this port the way the port is wired:
                 // a full- or low-speed device behind the hub is reached only
@@ -238,22 +274,32 @@ fn cell_main() {
                     continue;
                 }
 
-                if lan.is_none() {
-                    println("[lan9514] Initializing SMSC LAN9514 Ethernet Controller...");
-                    let mut candidate = Lan9514Device::new(&engine, addr);
-                    if candidate.init().is_ok() {
-                        let mac = candidate.mac_address();
-                        print("[lan9514] Hardware MAC: ");
-                        print_mac(&mac);
-                        println(" (Ready)");
-                        lan = Some(candidate);
-                    } else {
-                        println("[lan9514] WARN: Ethernet MAC init failed on this port");
-                    }
+                // The hub's own function device (on the LAN9514 that is the
+                // Ethernet controller) is remembered here and initialized
+                // *after* the port scan. Initializing it inline put a chip's
+                // register waits in front of the remaining ports, and the
+                // keyboard on a later port never enumerated: no LEDs, no keys.
+                // Input devices are claimed before any NIC work now.
+                if lan_addr.is_none() {
+                    lan_addr = Some(addr);
                 }
 
                 // Back to direct addressing for the next port's hub traffic.
                 engine.set_split(None);
+            }
+
+            if let Some(addr) = lan_addr {
+                println("[lan9514] Initializing SMSC LAN9514 Ethernet Controller...");
+                let mut candidate = Lan9514Device::new(&engine, addr);
+                if candidate.init().is_ok() {
+                    let mac = candidate.mac_address();
+                    print("[lan9514] Hardware MAC: ");
+                    print_mac(&mac);
+                    println(" (Ready)");
+                    lan = Some(candidate);
+                } else {
+                    println("[lan9514] WARN: Ethernet MAC init failed on this port");
+                }
             }
         }
 
@@ -307,10 +353,19 @@ fn cell_main() {
         Some(dev) => dev,
         None => Lan9514Device::new(&engine, 0),
     };
+    #[cfg(feature = "loopback-diag")]
+    if lan_present {
+        let (tx_ok, rx_bytes) = lan.loopback_self_test();
+        println(&alloc::format!(
+            "[lan9514] loopback diag: chip_tx_ok={} chip_rx_bytes={}",
+            tx_ok,
+            rx_bytes
+        ));
+    }
 
     // This host is the single kernel NIC endpoint even without an attached
-    // LAN9514. The kernel-authenticated identity also authorizes its direct HID
-    // event stream into Input.
+    // LAN9514 — on RPi3 the LAN9514 *is* the NIC, so it must keep publishing
+    // service::NIC_DRIVER.
     if sys_register_nic_driver().is_err() {
         println("[dwc2-usb] ERROR: failed to register DWC2 NIC endpoint");
     }
@@ -322,6 +377,34 @@ fn cell_main() {
     }
     let mut lan_worker_tid = if lan_present { spawn_lan_worker() } else { 0 };
     let mut lan_attach_pending = lan_worker_tid != 0;
+    let mut lan_deferred = DeferredLan::new();
+    // Last link state reported, so the transition prints exactly once (`init`
+    // reports the state it measured, this tracks it afterwards). A bring-up read
+    // that failed leaves this "down" as the conservative default: the first
+    // successful poll then reports the transition once, which is the truth.
+    let mut lan_link_up = lan_present && lan.link_bmsr().is_some_and(|bmsr| bmsr & 0x0004 != 0);
+    let mut lan_poll_countdown: u32 = LINK_POLL_TURNS;
+    // The port's change latches were set by this boot's own reset and connect;
+    // clearing them here is what makes a later change (the core disabling the port
+    // on a bus event) visible as a transition instead of lost in the boot-time
+    // latches. `PRTENA` is not touched — see `clear_port_change_bits`.
+    engine.clear_port_change_bits();
+    let mut port_enabled = engine.port_enabled();
+    // Bracket the window: this is the last moment the bring-up path knew the port
+    // was alive, and the line below says whether it still is when the loop starts.
+    // The board's run had the port already dead on the loop's first turn with no
+    // line saying whether it died during enumeration or after it, and the *when* is
+    // what decides between a bring-up bug and a bus event.
+    println(&alloc::format!(
+        "[dwc2] end of bring-up: root port {}",
+        if port_enabled { "enabled" } else { "DISABLED" }
+    ));
+    if !port_enabled {
+        println(
+            "[dwc2] the serving loop starts with the root port already disabled \
+             (no transfer can complete until it is reset)",
+        );
+    }
 
     // Input-service endpoint, re-resolved whenever it is missing: the service is
     // supervised and comes back under a new tid after a restart.
@@ -334,6 +417,8 @@ fn cell_main() {
     println("[dwc2-usb] Entering NIC + HID serving loop...");
 
     loop {
+        #[cfg(feature = "loop-trace")]
+        let turn_start = ostd::syscall::sys_get_time_ms().unwrap_or(0);
         // Re-resolve both endpoints: the input service restarts under a new tid.
         if input_tid == 0 {
             input_tid = sys_lookup_service(service::INPUT).unwrap_or(0);
@@ -352,6 +437,76 @@ fn cell_main() {
             if matches!(sys_try_send(lan_worker_tid, &attach), SyscallResult::Ok(0)) {
                 lan_attach_pending = false;
             }
+        } else if lan_worker_tid != 0 {
+            // A request the front-end was not parked for waits here rather than
+            // being lost; it goes first, before the client's next frame can
+            // replace it.
+            lan_deferred.retry(lan_worker_tid);
+        }
+
+        // The link can come up (or drop) long after `init` measured it: the chip
+        // re-negotiated when its port was reset, and nothing else looks again.
+        // Reported once per transition, and the data path is re-enabled on the way
+        // up so a slow negotiation is not a permanently dead NIC. The cadence is
+        // `LINK_POLL_TURNS`; see the constant for why a check does not belong in
+        // every turn.
+        // The port is a single local register read, so it is checked every turn
+        // rather than on the poll cadence -- it is what decides whether any USB work
+        // below is worth attempting at all. Its failure mode looks identical to
+        // every other fault: with PRTENA clear, control, bulk and split transfers
+        // all fail with no channel status, so the console showed "no status bit"
+        // (and one NAK-retry line per attempt) for a NIC that was simply off the bus.
+        // Reported once per transition, so a log says when it happened.
+        let now_enabled = engine.port_enabled();
+        if now_enabled != port_enabled {
+            port_enabled = now_enabled;
+            if now_enabled {
+                println("[dwc2] root port enabled");
+            } else {
+                println(
+                    "[dwc2] root port DISABLED (HPRT0.PRTENA=0) — every transfer fails until the \
+                     port is reset and the bus re-enumerated",
+                );
+                // The state that says *what* was lost (see `core_state`): one loop
+                // over four registers, once, at the transition.
+                for (name, value) in engine.core_state() {
+                    print("[dwc2]   ");
+                    print(name);
+                    print("=0x");
+                    usb_channel::print_hex_val(value);
+                    println("");
+                }
+            }
+        }
+
+        lan_poll_countdown = lan_poll_countdown.saturating_sub(1);
+        if lan_poll_countdown == 0 {
+            lan_poll_countdown = LINK_POLL_TURNS;
+
+            // The link can come up (or drop) long after `init` measured it: the chip
+            // re-negotiated when its port was reset, and nothing else looks again.
+            // Reported once per transition, and the data path is re-enabled on the
+            // way up so a slow negotiation is not a permanently dead NIC.
+            //
+            // An access that did not complete says nothing about the link: leave the
+            // state and the console alone until one does. Reading it as `BMSR = 0` is
+            // what printed the `PHY link down`/`PHY link up` pairs.
+            if lan_present {
+                if let Some(bmsr) = lan.link_bmsr() {
+                    let now_up = bmsr & 0x0004 != 0;
+                    if now_up != lan_link_up {
+                        lan_link_up = now_up;
+                        if now_up {
+                            lan.enable_data_path();
+                            print("[lan9514] PHY link up (BMSR=0x");
+                        } else {
+                            print("[lan9514] PHY link down (BMSR=0x");
+                        }
+                        usb_channel::print_hex_val(bmsr as u32);
+                        println(")");
+                    }
+                }
+            }
         }
 
         // Exit-watch wakeups name the dead LAN child but do not write a message.
@@ -361,15 +516,34 @@ fn cell_main() {
             SyscallResult::Ok(sender_tid) if sender_tid > 0 => {
                 if sender_tid == lan_worker_tid {
                     if let Some((client_tid, request)) = lan_ipc::decode_request(&in_buf) {
+                        // Reply straight to the client. The request still only
+                        // reaches `handle` after the front-end has decoded it,
+                        // so the envelope check is intact, and a reply routed
+                        // back through the front-end arrives from *its* tid -
+                        // which a client waiting on this cell's tid never sees
+                        // (the net bridge timed out on every TX that way).
                         match handle(&mut lan, request, &mut out_buf) {
                             NicReply::Status(code) => {
-                                send_lan_response(lan_worker_tid, client_tid, &[code]);
+                                // The chip's verdict for a transmitted frame.
+                                #[cfg(feature = "loop-trace")]
+                                if request.first() == Some(&OP_TX) {
+                                    let counter = if code == 0 { &NIC_TX_OK } else { &NIC_TX_FAIL };
+                                    counter.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                                }
+                                let _ = sys_send(client_tid, &[code]);
                             }
                             NicReply::Frame { len, buf } => {
-                                send_lan_response(lan_worker_tid, client_tid, &buf[..2 + len]);
+                                // A frame read out of the chip, or an empty read
+                                // (the chip had nothing — the ordinary idle poll).
+                                #[cfg(feature = "loop-trace")]
+                                {
+                                    let counter = if len > 0 { &NIC_RX_FRAMES } else { &NIC_RX_EMPTY };
+                                    counter.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                                }
+                                let _ = sys_send(client_tid, &buf[..2 + len]);
                             }
                             NicReply::Mac(mac) => {
-                                send_lan_response(lan_worker_tid, client_tid, &mac);
+                                let _ = sys_send(client_tid, &mac);
                             }
                         }
                     } else if in_buf.iter().all(|&byte| byte == 0) {
@@ -379,18 +553,43 @@ fn cell_main() {
                         let _ = sys_force_exit(lan_worker_tid);
                         lan_worker_tid = spawn_lan_worker();
                         lan_attach_pending = lan_worker_tid != 0;
+                        // A replacement front-end only understands the attach
+                        // frame first, so a deferred request cannot be handed to
+                        // it: the client's retry is what gets served.
+                        lan_deferred.clear();
                     }
-                    continue;
-                }
-
-                // Input owns lock state; the host translates it to each
-                // keyboard's descriptor-defined Output report.
-                if sender_tid == input_tid && in_buf[0] == api::ipc::OP_SET_LEDS {
+                    // A NIC reply must not skip HID polling on this iteration.
+                } else if sender_tid == input_tid && in_buf[0] == api::ipc::OP_SET_LEDS {
+                    // Input owns lock state; translate it to each keyboard's
+                    // descriptor-defined Output report.
                     let leds = in_buf[1];
                     for iface in hid_interfaces.iter_mut() {
                         usb_hid::request_leds(iface, leds);
                     }
-                } else if lan_worker_tid != 0 {
+                } else if lan_worker_tid == 0 || lan_attach_pending || !port_enabled {
+                    // Not ready means three things: the front-end is not spawned
+                    // yet (it is spawned after the chip is brought up, while the
+                    // net service starts asking right away), or it is spawned but
+                    // still waiting for the attach handshake. Forwarding in the
+                    // second case loses the request - the front-end's first loop
+                    // only recognises the attach frame - and the client then
+                    // waits out its whole reply timeout for a request nobody
+                    // ever answered. A status byte says "not ready" instead, and
+                    // the client's own retry is what gets served.
+                    //
+                    // `STATUS_NOT_READY`, not a bare 1: the Net Cell keeps a refused
+                    // frame and offers it again, and this code is what tells its log
+                    // that nothing reached the chip (rather than the chip refusing).
+                    //
+                    // The third case is a disabled root port: the chip is off the bus,
+                    // so a request handed to the front-end would spend the whole
+                    // transfer budget failing (the board showed one NAK-retry line per
+                    // attempt, hundreds of them, while the Net Cell waited seconds per
+                    // frame). Saying "not ready" costs one byte and keeps the frame.
+                    if nic_request_len(&in_buf).is_some() {
+                        let _ = sys_send(sender_tid, &[STATUS_NOT_READY]);
+                    }
+                } else {
                     if let Some(request_len) = nic_request_len(&in_buf) {
                         let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
                         if let Some(len) = lan_ipc::encode_request(
@@ -398,7 +597,25 @@ fn cell_main() {
                             &in_buf[..request_len],
                             &mut request,
                         ) {
-                            let _ = sys_try_send(lan_worker_tid, &request[..len]);
+                            if !matches!(
+                                sys_try_send(lan_worker_tid, &request[..len]),
+                                SyscallResult::Ok(0)
+                            ) {
+                                // The front-end is mid-transfer: keep the request
+                                // for the next turn instead of losing the frame
+                                // (a dropped one costs the client its whole
+                                // timeout and, on the board's multi-second USB
+                                // turns, every retry as well).
+                                static DEFERRED: core::sync::atomic::AtomicBool =
+                                    core::sync::atomic::AtomicBool::new(false);
+                                if lan_deferred.defer(&request[..len])
+                                    && !DEFERRED.swap(true, core::sync::atomic::Ordering::Relaxed)
+                                {
+                                    ostd::io::println(
+                                        "[dwc2-usb] NIC request deferred until the front-end is parked",
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -408,7 +625,12 @@ fn cell_main() {
 
         // Poll and decode one interface at a time so device identity remains
         // attached to every event and press/release ordering is preserved.
-        for iface in hid_interfaces.iter_mut() {
+        //
+        // Skipped entirely while the root port is disabled: the interrupts are on
+        // that port, so every poll would spend its whole budget discovering what
+        // `port_enabled` already says, and the board's console was a metre of
+        // timeout dumps for it.
+        for iface in hid_interfaces.iter_mut().filter(|_| port_enabled) {
             events.clear();
             usb_hid::poll_interface(&engine, iface, &mut events);
             if input_tid != 0 {
@@ -419,13 +641,81 @@ fn cell_main() {
         }
 
         // Output reports share endpoint zero with HID polling, so run the retry
-        // queue only after every interrupt-IN poll has completed.
-        for iface in hid_interfaces.iter_mut() {
+        // queue only after every interrupt-IN poll has completed -- and not at all
+        // while the port is disabled, for the same reason as the polls above.
+        for iface in hid_interfaces.iter_mut().filter(|_| port_enabled) {
             usb_hid::flush_leds(&engine, iface);
         }
 
+        #[cfg(feature = "loop-trace")]
+        trace_turn(ostd::syscall::sys_get_time_ms().unwrap_or(turn_start).saturating_sub(turn_start));
+
         sys_yield();
     }
+}
+
+/// Chip-level NIC outcomes (`loop-trace` images).
+///
+/// The client's `accepted=true` only says the driver served its request; what the
+/// board still cannot tell is what the *chip* did — did the frame go out, and did
+/// anything come back. These count `handle`'s own verdict (the USB transfer's
+/// result) and ride the existing `[dwc2-loop]` line, so a diagnostic run answers
+/// it without adding a line of noise to a quiet image.
+#[cfg(feature = "loop-trace")]
+static NIC_TX_OK: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+#[cfg(feature = "loop-trace")]
+static NIC_TX_FAIL: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+#[cfg(feature = "loop-trace")]
+static NIC_RX_FRAMES: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+#[cfg(feature = "loop-trace")]
+static NIC_RX_EMPTY: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Report driver turn cost (`loop-trace` images).
+///
+/// The driver shares one loop between USB transfers and its mailbox, so a long
+/// turn is exactly what keeps it out of `Recv` while a client is offering it a
+/// request — the client's bounded offer then expires and its command is retried.
+/// One line per ~2 s with the worst and latest turn, in milliseconds.
+#[cfg(feature = "loop-trace")]
+fn trace_turn(elapsed_ms: u64) {
+    use core::sync::atomic::{AtomicU64, Ordering};
+    /// Report cadence in milliseconds.
+    const REPORT_INTERVAL_MS: u64 = 2000;
+    static TURNS: AtomicU64 = AtomicU64::new(0);
+    static MAX_MS: AtomicU64 = AtomicU64::new(0);
+    static SLOW_TURNS: AtomicU64 = AtomicU64::new(0);
+    static LAST_REPORT: AtomicU64 = AtomicU64::new(0);
+
+    let turns = TURNS.fetch_add(1, Ordering::Relaxed) + 1;
+    MAX_MS.fetch_max(elapsed_ms, Ordering::Relaxed);
+    if elapsed_ms >= 100 {
+        SLOW_TURNS.fetch_add(1, Ordering::Relaxed);
+    }
+    let Some(now) = ostd::syscall::sys_get_time_ms() else {
+        return;
+    };
+    let last = LAST_REPORT.load(Ordering::Relaxed);
+    if last != 0 && now.saturating_sub(last) < REPORT_INTERVAL_MS {
+        return;
+    }
+    LAST_REPORT.store(now, Ordering::Relaxed);
+    println(&alloc::format!(
+        "[dwc2-loop] turns={} max_turn_ms={} last_turn_ms={} turns_over_100ms={} \
+         nic_tx_ok={} nic_tx_fail={} nic_rx={} nic_rx_empty={} \
+         ch_xacterr={} ch_stall={} ch_other={} ch_timeout={}",
+        turns,
+        MAX_MS.load(Ordering::Relaxed),
+        elapsed_ms,
+        SLOW_TURNS.load(Ordering::Relaxed),
+        NIC_TX_OK.load(Ordering::Relaxed),
+        NIC_TX_FAIL.load(Ordering::Relaxed),
+        NIC_RX_FRAMES.load(Ordering::Relaxed),
+        NIC_RX_EMPTY.load(Ordering::Relaxed),
+        usb_channel::fault_counts()[0],
+        usb_channel::fault_counts()[1],
+        usb_channel::fault_counts()[2],
+        usb_channel::fault_counts()[3]
+    ));
 }
 
 /// Spawn the LAN9514 front-end. It receives no USB/DMA capability and can
@@ -440,6 +730,62 @@ fn spawn_lan_worker() -> usize {
             println("[dwc2-usb] WARN: LAN9514 worker spawn failed");
             0
         }
+    }
+}
+
+/// The NIC request the front-end was not parked to receive.
+///
+/// A request reaches the front-end by rendezvous `sys_try_send`, which completes
+/// only while the front-end is parked in `Recv` — and the front-end is inside a
+/// USB transfer for the whole of a slow turn. A request that arrived in that
+/// window used to be dropped: the board printed
+/// `[dwc2-usb] NIC request not forwarded to the front-end` and, immediately
+/// after it, the net service's `NIC driver reply timeout; frame not
+/// acknowledged`, so the frame the guest's ARP needed never left this cell. The
+/// NIC protocol keeps one request outstanding per client, so one slot is enough;
+/// the driver re-offers it every turn, exactly like the attach handshake above,
+/// and a newer request replaces a deferred older one — that client has already
+/// given up, and the net service keeps its frame at the head of its TX queue for
+/// the retry anyway.
+struct DeferredLan {
+    bytes: [u8; lan_ipc::MAX_REQUEST],
+    len: usize,
+}
+
+impl DeferredLan {
+    fn new() -> Self {
+        Self {
+            bytes: [0u8; lan_ipc::MAX_REQUEST],
+            len: 0,
+        }
+    }
+
+    /// Keep `request` for the next turn. Anything the encoder produced fits;
+    /// a request that does not is refused rather than truncated.
+    fn defer(&mut self, request: &[u8]) -> bool {
+        if request.len() > self.bytes.len() {
+            return false;
+        }
+        self.bytes[..request.len()].copy_from_slice(request);
+        self.len = request.len();
+        true
+    }
+
+    /// Hand a deferred request to `front_end`; the slot clears when it lands.
+    fn retry(&mut self, front_end: usize) {
+        if self.len == 0 {
+            return;
+        }
+        if matches!(
+            sys_try_send(front_end, &self.bytes[..self.len]),
+            SyscallResult::Ok(0)
+        ) {
+            self.len = 0;
+        }
+    }
+
+    fn clear(&mut self) {
+        self.len = 0;
     }
 }
 
@@ -479,12 +825,7 @@ fn print_usize(v: usize) {
     }
 }
 
-fn send_lan_response(worker_tid: usize, client_tid: usize, payload: &[u8]) {
-    let mut response = [0u8; REPLY_BUF + 9];
-    if let Some(len) = lan_ipc::encode_response(client_tid, payload, &mut response) {
-        let _ = sys_try_send(worker_tid, &response[..len]);
-    }
-}
+
 
 fn print_hex_u32(val: u32) {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";

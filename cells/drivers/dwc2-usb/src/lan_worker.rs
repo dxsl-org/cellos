@@ -4,7 +4,7 @@
 
 use driver_dwc2_usb::lan_ipc;
 use ostd::io::println;
-use ostd::syscall::{sys_heartbeat, sys_recv_timeout, sys_send, sys_try_send, SyscallResult};
+use ostd::syscall::{sys_heartbeat, sys_recv_timeout, sys_send, SyscallResult};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 api::declare_syscalls![Send, TrySend, RecvTimeout, Heartbeat, Log];
@@ -33,12 +33,13 @@ fn cell_main() {
         sys_heartbeat(HEARTBEAT_TICKS);
         match sys_recv_timeout(0, &mut buf, POLL_TICKS) {
             SyscallResult::Ok(sender) if sender == host_tid => {
-                if let Some((client_tid, payload)) = lan_ipc::decode_response(&buf) {
-                    let _ = sys_try_send(client_tid, payload);
-                } else if lan_ipc::decode_request(&buf).is_some() {
-                    // The host is the registered NIC endpoint. It forwards each
-                    // client request through this capability-free front-end;
-                    // send the bounded envelope back for USB transport dispatch.
+                // The host is the registered NIC endpoint. It forwards each
+                // client request through this capability-free front-end; send
+                // the bounded envelope back for USB transport dispatch. Replies
+                // go from the host to the client directly: a reply relayed here
+                // would arrive from this cell's tid, and a client waiting on the
+                // host's tid never receives it.
+                if lan_ipc::decode_request(&buf).is_some() {
                     let _ = sys_send(host_tid, &buf);
                 }
             }

@@ -141,6 +141,29 @@ impl<'a> UsbHub<'a> {
         Ok(())
     }
 
+    /// Is the hub itself still answering?
+    ///
+    /// A **standard device** `GET_STATUS` (`0x80`, 2 bytes) — the request every
+    /// USB device must answer. The port-status form above cannot be reused for
+    /// this: it is a *hub-class* request whose `wIndex` is a port, so sending it
+    /// with `wIndex = 0` asks an invalid question and the LAN9514 answers STALL.
+    /// The 2026-10-04 board trace is what that cost: the stall was read as "hub
+    /// stopped answering", enumeration ended at port 2, and the keyboard on port
+    /// 4 was never probed.
+    pub fn is_responsive(&self) -> bool {
+        let mut buf = [0u8; 2];
+        self.engine
+            .control_transfer(
+                self.hub_addr,
+                0x80, // Standard, Device-to-host, Device
+                0x00, // GET_STATUS
+                0,
+                0,
+                &mut buf,
+            )
+            .is_ok()
+    }
+
     /// Read 4-byte port status and change bits.
     pub fn get_port_status(&self, port: u16) -> ViResult<(u16, u16)> {
         let mut buf = [0u8; 4];

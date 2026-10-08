@@ -53,6 +53,16 @@ const REPORT_BUF: usize = 64;
 /// first SETUP is lost, so one attempt is not enough to tell a dead device from
 /// a slow one.
 const ENUM_ATTEMPTS: usize = 3;
+
+/// Port resets allowed for one attached device.
+///
+/// The first round is the ordinary attach. A device that NAKs its descriptor
+/// read is not necessarily absent -- cheap low-speed devices come up
+/// half-initialized after a hot-plug and answer only after the port has been
+/// reset again, which is why host stacks re-reset a port whose enumeration
+/// failed. The board saw a low-speed keyboard NAK every GET_DESCRIPTOR attempt
+/// and then get written off as `no HID device attached`.
+const ENUM_ROUNDS: usize = 3;
 /// Frame interval between retried HID Output reports.
 ///
 /// A split-control request can transiently receive NYET while the hub's
@@ -60,6 +70,15 @@ const ENUM_ATTEMPTS: usize = 3;
 /// failed LED update visible to the user without competing continuously with
 /// keyboard polling.
 const LED_RETRY_FRAMES: u32 = 50;
+
+/// Deferrals a pending Output report may accumulate before the host stops
+/// retrying it.
+///
+/// Endpoint zero on this board is reached through the same hub translator the
+/// Ethernet bulk pair uses, and a keyboard that keeps NAKing a SET_REPORT keeps
+/// the shared NIC path waiting behind it. A handful of retries covers a busy
+/// hub; past that the report is left for the next lock-state transition.
+const LED_MAX_DEFERRALS: u8 = 8;
 
 /// The retry disposition for a failed HID Output report.
 ///
@@ -100,6 +119,8 @@ pub struct HidInterface {
     pub desired_leds: Option<u8>,
     /// Full USB frame of the most recent Output-report attempt.
     led_retry_frame: Option<u32>,
+    /// Consecutive deferrals of the current pending Output report.
+    led_deferrals: u8,
 
     /// How this device is reached: through the hub, or directly.
     ///
@@ -130,19 +151,50 @@ const HUB_PORT_SPEED_LOW: u8 = 1;
 ///
 /// Returns `None` when the port is empty or the device does not answer; a flaky
 /// port must not take the whole controller down.
+/// What a port turned out to hold.
+///
+/// The caller needs to tell "nothing is plugged in" from "something is there and
+/// bringing it up failed": only the second is a reason to ask whether the hub
+/// itself is still answering.
+pub enum AttachOutcome {
+    /// No connection on this port — the ordinary case for an empty one.
+    Empty,
+    /// A device was present and enumeration failed.
+    Failed,
+    /// A device is up: its address, its interfaces and the split it is reached
+    /// through.
+    Attached(u8, Vec<InterfaceDesc>, Option<crate::usb_channel::Split>),
+}
+
 pub fn attach_port(
     engine: &UsbHostEngine<'_>,
     hub: &UsbHub<'_>,
     port: u16,
     next_addr: &mut u8,
-) -> Option<(u8, Vec<InterfaceDesc>, Option<crate::usb_channel::Split>)> {
+) -> AttachOutcome {
     // Everything before the device answers is traffic to the hub itself, which
     // sits on the root port and must not be reached through a split. Whatever
     // the previous port left behind is cleared before the first of them.
     engine.set_split(None);
 
-    if !hub.is_port_connected(port) {
-        return None;
+    let (status, change) = match hub.get_port_status(port) {
+        Ok(status) => status,
+        Err(_) => {
+            print("[usb-hid] WARN: hub port ");
+            print_u8(port as u8);
+            println(" status unreadable");
+            return AttachOutcome::Failed;
+        }
+    };
+    print("[usb-hid] hub port ");
+    print_u8(port as u8);
+    print(" status=0x");
+    print_hex16(status);
+    print(" change=0x");
+    print_hex16(change);
+    println("");
+    if status & (1 << crate::hub::PORT_CONNECTION) == 0 {
+        return AttachOutcome::Empty;
     }
 
     print("[usb-hid] device on hub port ");
@@ -152,9 +204,23 @@ pub fn attach_port(
     if hub.reset_port(port).is_err() {
         println("[usb-hid] WARN: port reset failed");
         hub.clear_port_change(port, crate::hub::C_PORT_RESET);
-        return None;
+        return AttachOutcome::Failed;
     }
     hub.clear_port_change(port, crate::hub::C_PORT_CONNECTION);
+    let reset_status = hub.get_port_status(port);
+    if let Ok((status, change)) = reset_status {
+        print("[usb-hid] hub port ");
+        print_u8(port as u8);
+        print(" after reset status=0x");
+        print_hex16(status);
+        print(" change=0x");
+        print_hex16(change);
+        print(" speed=");
+        print_u8(((status >> 9) & 3) as u8);
+        println(" (0=full 1=low 2=high)");
+    } else {
+        println("[usb-hid] WARN: port status unreadable after reset");
+    }
 
     let addr = *next_addr;
 
@@ -162,7 +228,10 @@ pub fn attach_port(
     // will not run a high-speed channel programmed with 8-byte packets (nor
     // frame a full-speed device that answers in 8 bytes at 64). Take EP0's
     // starting size from this port's negotiated speed.
-    let hub_speed = hub.port_speed(port);
+    let hub_speed = match reset_status {
+        Ok((status, _)) => ((status >> 9) & 3) as u8,
+        Err(_) => hub.port_speed(port),
+    };
     let ep0_mps = match hub_speed {
         HUB_PORT_SPEED_HIGH => {
             crate::usb_channel::initial_control_mps(crate::usb_channel::PORT_SPEED_HIGH)
@@ -192,33 +261,120 @@ pub fn attach_port(
     // context on its way out: leaving it set routes the *next* transfer -- which
     // is hub traffic for the next port -- through a hub port, and the hub then
     // reports transaction errors for requests it never received.
-    let brought_up = (|| -> Option<Vec<InterfaceDesc>> {
-        // The device answers at address 0 until SET_ADDRESS latches.
-        let device = read_device_descriptor(engine, 0)?;
-        print("[usb-hid] vendor:product ");
-        print_hex16(device.vendor_id);
-        print(":");
-        print_hex16(device.product_id);
-        println("");
+    let mut brought_up = None;
+    // Whether this round got as far as the device answering address 0. A device
+    // that never answers is not fixed by another port reset, and the reset is not
+    // free: see the retry rule below.
+    let mut answered;
+    for round in 0..ENUM_ROUNDS {
+        answered = false;
+        brought_up = (|| -> Option<Vec<InterfaceDesc>> {
+            // The device answers at address 0 until SET_ADDRESS latches.
+            let device = match read_device_descriptor(engine, 0) {
+                Some(device) => device,
+                None => {
+                    print("[usb-hid] GET_DESCRIPTOR(device) exhausted ");
+                    print_u8(ENUM_ATTEMPTS as u8);
+                    println(" attempts");
+                    return None;
+                }
+            };
+            answered = true;
+            print("[usb-hid] vendor:product ");
+            print_hex16(device.vendor_id);
+            print(":");
+            print_hex16(device.product_id);
+            println("");
 
-        UsbHub::set_address(engine, addr).ok()?;
-        let (config_value, descriptors) = read_configuration(engine, addr)?;
+            if UsbHub::set_address(engine, addr).is_err() {
+                println("[usb-hid] SET_ADDRESS exhausted 5 attempts");
+                return None;
+            }
+            let (config_value, descriptors) = match read_configuration(engine, addr) {
+                Some(config) => config,
+                None => {
+                    println("[usb-hid] GET_DESCRIPTOR(configuration) failed");
+                    return None;
+                }
+            };
 
-        // Activate the configuration before any interface-level request: SET_IDLE
-        // and SET_PROTOCOL are only answered in the configured state.
-        UsbHub::set_configuration(engine, addr, config_value).ok()?;
+            // Activate the configuration before any interface-level request: SET_IDLE
+            // and SET_PROTOCOL are only answered in the configured state.
+            if UsbHub::set_configuration(engine, addr, config_value).is_err() {
+                println("[usb-hid] SET_CONFIGURATION failed");
+                return None;
+            }
 
-        Some(descriptors)
-    })();
+            print("[usb-hid] configured interfaces=");
+            print_u8(descriptors.len() as u8);
+            println("");
+            for iface in &descriptors {
+                print("[usb-hid] interface ");
+                print_u8(iface.number);
+                print(" alt=");
+                print_u8(iface.alternate);
+                print(" class=");
+                print_u8(iface.class);
+                print(" subclass=");
+                print_u8(iface.subclass);
+                print(" protocol=");
+                print_u8(iface.protocol);
+                print(" interrupt-in=");
+                print_u8(iface.interrupt_in.len() as u8);
+                println("");
+            }
+            Some(descriptors)
+        })();
+        if brought_up.is_some() || round + 1 == ENUM_ROUNDS {
+            break;
+        }
+        if !answered {
+            // The device never answered address 0. A second port reset cannot
+            // change that, and issuing one is not free: the board's 2026-10-03
+            // trace shows what the extra hub traffic costs -- the LAN9514 stalled
+            // `CLEAR_FEATURE(C_PORT_RESET)`, then stalled `SET_FEATURE(PORT_RESET)`
+            // and every request after it, and port 5's status became unreadable.
+            // Leave the port alone and report what it looks like now.
+            println("[usb-hid] device never answered at address 0; leaving the port alone");
+            break;
+        }
+        print("[usb-hid] enumeration failed after the device answered; re-resetting hub port ");
+        print_u8(port as u8);
+        println(" and retrying");
+        // `reset_port` clears the reset-change bit itself and ignores that clear's
+        // error; doing it here as well is what the hub stalled on.
+        if hub.reset_port(port).is_err() {
+            println("[usb-hid] WARN: retry port reset failed");
+            break;
+        }
+        // A port reset returns the device to address 0, which is the only
+        // address this retry may speak to -- including when the failed round had
+        // already latched a new one. The split context goes back with it: every
+        // failure path above clears it, and the retry is a fresh attach.
+        engine.set_control_mps(ep0_mps);
+        engine.set_split(split);
+    }
 
     match brought_up {
         Some(descriptors) => {
             *next_addr = next_addr.saturating_add(1);
-            Some((addr, descriptors, split))
+            AttachOutcome::Attached(addr, descriptors, split)
         }
         None => {
+            // Say what the port looks like now: a device that disappeared and one
+            // that is present but silent both end here, and the port status is
+            // what tells them apart on the next capture.
+            if let Ok((status, change)) = hub.get_port_status(port) {
+                print("[usb-hid] hub port ");
+                print_u8(port as u8);
+                print(" final status=0x");
+                print_hex16(status);
+                print(" change=0x");
+                print_hex16(change);
+                println("");
+            }
             engine.set_split(None);
-            None
+            AttachOutcome::Failed
         }
     }
 }
@@ -335,6 +491,14 @@ pub fn read_configuration(
     }
     if cn < 9 {
         return None;
+    }
+
+    if cn < total {
+        print("[usb-hid] WARN: configuration short read, received ");
+        print_usize_hid(cn);
+        print(" of ");
+        print_usize_hid(total);
+        println(" bytes; interface list may be incomplete");
     }
 
     let config_value = cfg.get(5).copied().unwrap_or(1);
@@ -509,6 +673,7 @@ fn start_interface(
         leds_set: None,
         desired_leds: None,
         led_retry_frame: None,
+        led_deferrals: 0,
     })
 }
 
@@ -552,8 +717,9 @@ pub fn enumerate(
         if out.len() >= MAX_HID_INTERFACES {
             return;
         }
-        let Some((addr, descriptors, split)) = attach_port(engine, hub, port, next_addr) else {
-            continue;
+        let (addr, descriptors, split) = match attach_port(engine, hub, port, next_addr) {
+            AttachOutcome::Attached(addr, descriptors, split) => (addr, descriptors, split),
+            AttachOutcome::Empty | AttachOutcome::Failed => continue,
         };
         // The interfaces are brought up through the same path the device was.
         engine.set_split(split);
@@ -688,6 +854,7 @@ pub fn request_leds(iface: &mut HidInterface, leds: u8) {
     // A changed lock state is eligible immediately; only failed retries are
     // rate-limited.
     iface.led_retry_frame = None;
+    iface.led_deferrals = 0;
 }
 
 /// Retry the latest pending lock-key LED state after HID polling.
@@ -735,6 +902,7 @@ pub fn flush_leds(engine: &UsbHostEngine<'_>, iface: &mut HidInterface) {
         Ok(_) => {
             iface.leds_set = Some(leds);
             iface.desired_leds = None;
+            iface.led_deferrals = 0;
             print("[usb-hid] iface ");
             print_u8(iface.interface);
             print(" LEDs 0x");
@@ -743,6 +911,19 @@ pub fn flush_leds(engine: &UsbHostEngine<'_>, iface: &mut HidInterface) {
         }
         Err(_) => match led_failure_disposition(engine.last_was_stall()) {
             LedFailureDisposition::Retry => {
+                iface.led_deferrals = iface.led_deferrals.saturating_add(1);
+                if iface.led_deferrals >= LED_MAX_DEFERRALS {
+                    // The endpoint keeps refusing the report. Endpoint zero is
+                    // shared with the NIC path through the hub translator, so
+                    // retrying it forever starves frames; leave the state for the
+                    // next lock-state transition instead.
+                    iface.desired_leds = None;
+                    iface.led_retry_frame = None;
+                    print("[usb-hid] WARN: iface ");
+                    print_u8(iface.interface);
+                    println(" deferred the LED output report too often; waiting for lock-state change");
+                    return;
+                }
                 print("[usb-hid] WARN: iface ");
                 print_u8(iface.interface);
                 println(" deferred the LED output report");
@@ -753,6 +934,7 @@ pub fn flush_leds(engine: &UsbHostEngine<'_>, iface: &mut HidInterface) {
                 // a later lock-state transition is still a fresh request.
                 iface.desired_leds = None;
                 iface.led_retry_frame = None;
+                iface.led_deferrals = 0;
                 print("[usb-hid] WARN: iface ");
                 print_u8(iface.interface);
                 println(" rejected the LED output report; waiting for lock-state change");

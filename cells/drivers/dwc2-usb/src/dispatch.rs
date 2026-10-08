@@ -7,9 +7,22 @@
 
 use crate::lan9514::Lan9514Device;
 
-const OP_TX: u8 = 0;
-const OP_RX: u8 = 1;
-const OP_GETMAC: u8 = 2;
+pub const OP_TX: u8 = 0;
+pub const OP_RX: u8 = 1;
+pub const OP_GETMAC: u8 = 2;
+
+/// NIC response status byte: only [`STATUS_OK`] means the frame went out.
+///
+/// Every other value is a refusal the caller may retry, and the value says which
+/// kind — the board's ping drowned in a single `accepted=false` byte whose cause
+/// (the chip refused versus the driver was not ready) had to be guessed from the
+/// surrounding lines. The Net Cell keeps a refused frame and offers it again,
+/// bounded, so naming the refusal is what decides the next fix.
+pub const STATUS_OK: u8 = 0;
+/// The request was malformed, or its USB transfer failed.
+pub const STATUS_FAILED: u8 = 1;
+/// The front-end that decodes requests was not parked: nothing reached the chip.
+pub const STATUS_NOT_READY: u8 = 2;
 
 pub const FRAME_BUF: usize = 1514;
 pub const REPLY_BUF: usize = 2 + FRAME_BUF;
@@ -26,25 +39,33 @@ pub fn handle<'a>(
     out_buf: &'a mut [u8; REPLY_BUF],
 ) -> NicReply<'a> {
     if data.is_empty() {
-        return NicReply::Status(1);
+        return NicReply::Status(STATUS_FAILED);
     }
 
     match data[0] {
         OP_TX => {
             if data.len() < 3 {
-                return NicReply::Status(1);
+                return NicReply::Status(STATUS_FAILED);
             }
             let len = u16::from_le_bytes([data[1], data[2]]) as usize;
             if len == 0 || len > FRAME_BUF || (3 + len) > data.len() {
-                return NicReply::Status(1);
+                return NicReply::Status(STATUS_FAILED);
             }
             let frame = &data[3..3 + len];
             let ok = dev.send_frame(frame);
             if ok {
-                ostd::io::println("[dwc2-usb] TX packet transmitted OK");
-                NicReply::Status(0)
+                // One line per *successful* frame would flood the console the
+                // guest is being driven from (the LAN carries one per ARP/echo
+                // exchange). The first success is the fact worth a witness; the
+                // count is what `[net-loop] drv_cmd` is for.
+                static FIRST_TX_OK: core::sync::atomic::AtomicBool =
+                    core::sync::atomic::AtomicBool::new(false);
+                if !FIRST_TX_OK.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                    ostd::io::println("[dwc2-usb] TX packet transmitted OK");
+                }
+                NicReply::Status(STATUS_OK)
             } else {
-                NicReply::Status(1)
+                NicReply::Status(STATUS_FAILED)
             }
         }
 
@@ -60,6 +81,6 @@ pub fn handle<'a>(
 
         OP_GETMAC => NicReply::Mac(dev.mac_address()),
 
-        _ => NicReply::Status(1),
+        _ => NicReply::Status(STATUS_FAILED),
     }
 }

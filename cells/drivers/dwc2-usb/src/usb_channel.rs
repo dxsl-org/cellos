@@ -59,7 +59,16 @@ pub fn initial_control_mps(speed: u32) -> u8 {
 }
 
 /// Maximum complete-splits issued while the accepted start-split is still live.
-const SPLIT_ATTEMPTS: usize = 8;
+const SPLIT_ATTEMPTS: usize = 4;
+/// Spin budget for one split poll attempt.
+///
+/// The split path keeps `split_pending` across calls, so a shorter spin only
+/// means the poll resumes on the next iteration. The full `SPIN_POLLS` budget
+/// here cost hundreds of milliseconds per HID poll, and the NIC driver cell
+/// shares its loop with HID: a NIC round trip (client -> cell -> front-end ->
+/// cell -> USB -> reply) then exceeded the client's reply timeout even though
+/// the frame was transmitted.
+const SPLIT_SPIN_POLLS: usize = 20_000;
 
 /// U-Boot's working DWC2 path abandons a split after four raw HFNUM ticks.
 const PERIODIC_SPLIT_MICROFRAMES: u32 = 4;
@@ -73,12 +82,42 @@ const FULL_FRAME_SHIFT: u32 = 3;
 
 /// Register reads a non-yielding channel wait will make before giving up.
 ///
-/// The frame check inside that wait is the real bound; this only stops a core
-/// that never reports anything from spinning forever.
+/// The channel is left to report for itself (a frame check here once halted a
+/// split exactly as its low-speed half was finishing), so this is the only bound:
+/// it stops a core that never reports anything from spinning forever. Callers
+/// that must also stay inside a split's pairing window check the microframe
+/// counter themselves -- `run_packet` does that per attempt.
 const SPIN_POLLS: usize = 200_000;
 
 /// Poll budget for the ordinary `wait_channel`.
-const WAIT_POLLS: usize = 50_000;
+/// Host microframes a *yielding* channel wait may spend before giving up.
+///
+/// 800 microframes is 100 ms of bus time — far more than a high-speed bulk
+/// transfer needs (1514 bytes is ~26 us on the wire) and more than a split
+/// sequence needs, but small enough that a stuck channel cannot hold the driver's
+/// loop. The count `WAIT_POLLS` it replaces could not express that: each poll
+/// yields, and a yield costs ~20 ms here.
+const WAIT_MICROFRAMES: u32 = 800;
+
+/// Yields the same wait may spend. A yield costs ~20 ms here, so eight of them is
+/// the same ~100 ms expressed in the unit the wait actually spends — and it is
+/// what bounds the wait when the microframe counter itself wraps (it is 16 bits
+/// wide, so an eight-second stall can mask back to a small elapsed value).
+const WAIT_YIELDS: u32 = 8;
+
+/// Retries a bulk OUT makes against a NAK before giving up.
+///
+/// Each attempt costs the channel wait plus a yield (~20 ms on the board), so 50 of
+/// them was a second per give-up and the console showed a line for each — while the
+/// Net Cell, which retries the frame itself, waited out its whole deadline inside
+/// the driver. Eight keeps a retry inside that deadline.
+const BULK_NAK_RETRIES: usize = 8;
+
+/// Register reads spent waiting for a Tx FIFO flush to complete.
+///
+/// The core clears `GRSTCTL.TXFFLSH` in microseconds; this only has to be long
+/// enough not to miss it.
+const TX_FLUSH_POLLS: usize = 1_000;
 
 /// Poll budget for waiting out a channel halt.
 ///
@@ -89,11 +128,21 @@ const CHANNEL_HALT_POLLS: usize = 4_000;
 
 /// Complete-split attempts for a synchronous control transfer.
 ///
-/// Control traffic is non-periodic. Its start and completion therefore use the
-/// normal yielding channel wait; forcing it through the tight periodic-poll
-/// schedule prevents the LAN9514 translator from completing endpoint-zero
-/// enumeration on this board.
-const SPLIT_COMPLETE_ATTEMPTS: usize = 2;
+/// One per microframe, which is the most a split pairing can use: the window
+/// U-Boot bounds a split by is four raw `HFNUM` ticks past its start-split, so a
+/// fifth attempt could only land after the pairing is gone. The board trace is
+/// what set this: two attempts issued inside the start-split's own microframe
+/// both came back NYET and the low-speed keyboard never enumerated.
+const SPLIT_COMPLETE_ATTEMPTS: usize = 4;
+
+/// Register reads spent waiting for the microframe counter to move.
+///
+/// A microframe is 125 us and one `HFNUM` read costs a couple hundred
+/// nanoseconds, so this covers a boundary with room to spare while still
+/// returning if the counter never moves. The wait is a spin on purpose: a
+/// `sys_yield()` hands the CPU away for about twenty milliseconds, which is
+/// sixty-four microframes -- the pairing is over long before control comes back.
+const MICROFRAME_POLLS: usize = 2_000;
 
 /// Where a device sits when it has to be reached through a hub.
 ///
@@ -113,6 +162,66 @@ pub struct Split {
     pub port: u8,
     /// The device is low-speed and needs the preamble its speed requires.
     pub low_speed: bool,
+}
+
+/// Register snapshots from one endpoint-zero split packet, printed only after
+/// the packet fails. Printing between halves costs multiple USB frames.
+#[derive(Clone, Copy)]
+struct SplitTiming {
+    /// Complete-splits actually issued, including ones the window cut short.
+    attempts: usize,
+    passes: usize,
+    /// Per pass: HFNUM before/after arm and after wait; HCINT, HCCHAR, HCSPLT.
+    samples: [[u32; 6]; 3],
+}
+
+impl SplitTiming {
+    const EMPTY: Self = Self {
+        attempts: 0,
+        passes: 0,
+        samples: [[0; 6]; 3],
+    };
+}
+
+/// Devices whose endpoint data toggles this engine tracks (USB device addresses).
+const TOGGLE_DEVICES: usize = 128;
+/// Endpoints per device (USB 2.0 allows 16 per direction).
+const TOGGLE_ENDPOINTS: usize = 16;
+
+/// Data toggle (`HCTSIZ.PID`) to use next, per device, endpoint and direction.
+///
+/// USB 2.0 §8.6: the data toggle belongs to the endpoint, not to a transfer, so it
+/// survives from one URB to the next — and the DWC2 reports the value a transfer
+/// actually ended on back in `HCTSIZ`. U-Boot's `dwc2.c` keeps exactly this table
+/// (`in_data_toggle`/`out_data_toggle`, filled from the register in
+/// `wait_for_chhltd`) because without it every packet after the first carries the
+/// wrong toggle. The driver here used a constant DATA0 for bulk and interrupt IN
+/// and restarted DATA0 for every bulk OUT call, which is what the board reported
+/// as `[lan9514] first bulk-IN failure: DTERR - data toggle mismatch` — and why
+/// the receive path delivered a handful of frames and then froze (`nic_rx=5`, then
+/// nothing, while the keyboard dropped reports).
+struct DataToggles {
+    in_toggle: [[u8; TOGGLE_ENDPOINTS]; TOGGLE_DEVICES],
+    out_toggle: [[u8; TOGGLE_ENDPOINTS]; TOGGLE_DEVICES],
+}
+
+impl DataToggles {
+    const fn new() -> Self {
+        Self {
+            in_toggle: [[0; TOGGLE_ENDPOINTS]; TOGGLE_DEVICES],
+            out_toggle: [[0; TOGGLE_ENDPOINTS]; TOGGLE_DEVICES],
+        }
+    }
+}
+
+/// Index a device address inside the toggle table.
+///
+/// `None` for an address or endpoint outside the tracked range: such a transfer
+/// runs with DATA0 rather than aliasing another device's toggle.
+fn toggle_slot(dev_addr: u8, ep_num: u8) -> Option<(usize, usize)> {
+    let dev = dev_addr as usize;
+    let ep = ep_num as usize & 0x0F;
+    (dev < TOGGLE_DEVICES && ep < TOGGLE_ENDPOINTS).then_some((dev, ep))
 }
 
 pub struct UsbHostEngine<'a> {
@@ -135,6 +244,34 @@ pub struct UsbHostEngine<'a> {
     /// split paths tell a completed complete-split from one that ended on a
     /// handshake that carries no data.
     last_hcint: Cell<u32>,
+    /// Last control split's timing, retained until its caller reports failure.
+    last_split_timing: Cell<SplitTiming>,
+    /// Endpoint data toggles; see [`DataToggles`].
+    toggles: RefCell<DataToggles>,
+}
+
+/// Transfer faults by cause, for the driver's `loop-trace` report.
+///
+/// Errors are the slow path, so counting them costs nothing on a working
+/// transfer, and the *mix* is what names the fault: a board run whose NIC
+/// transactions all fail wants to know whether they end in `XACTERR` (the bus
+/// protocol, i.e. the split schedule) or in the poll budget (a transfer the
+/// driver waited out), because the two need different fixes. Zero in a build
+/// that never prints them.
+pub static FAULT_XACTERR: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+pub static FAULT_STALL: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+pub static FAULT_OTHER: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+pub static FAULT_TIMEOUT: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Fault counts as `[xacterr, stall, other, timeout]`.
+pub fn fault_counts() -> [usize; 4] {
+    use core::sync::atomic::Ordering;
+    [
+        FAULT_XACTERR.load(Ordering::Relaxed),
+        FAULT_STALL.load(Ordering::Relaxed),
+        FAULT_OTHER.load(Ordering::Relaxed),
+        FAULT_TIMEOUT.load(Ordering::Relaxed),
+    ]
 }
 
 impl<'a> UsbHostEngine<'a> {
@@ -146,6 +283,82 @@ impl<'a> UsbHostEngine<'a> {
             dma: RefCell::new(None),
             split: Cell::new(None),
             last_hcint: Cell::new(0),
+            last_split_timing: Cell::new(SplitTiming::EMPTY),
+            toggles: RefCell::new(DataToggles::new()),
+        }
+    }
+
+    /// `HCTSIZ.PID` bits for the next transfer to `(dev_addr, ep_num)`.
+    fn next_pid(&self, dev_addr: u8, ep_num: u8, dir_in: bool) -> u32 {
+        let Some((dev, ep)) = toggle_slot(dev_addr, ep_num) else {
+            return 0; // DATA0
+        };
+        let toggles = self.toggles.borrow();
+        let pid = if dir_in {
+            toggles.in_toggle[dev][ep]
+        } else {
+            toggles.out_toggle[dev][ep]
+        };
+        (pid as u32) << 29
+    }
+
+    /// Adopt the data toggle the core ended the transfer on.
+    ///
+    /// Read back from `HCTSIZ.PID` rather than flipped locally: the core reports
+    /// the value the transfer actually completed with, which is what the endpoint
+    /// expects next. U-Boot does the same in `wait_for_chhltd`.
+    fn adopt_pid(&self, ch: usize, dev_addr: u8, ep_num: u8, dir_in: bool) {
+        let Some((dev, ep)) = toggle_slot(dev_addr, ep_num) else {
+            return;
+        };
+        let pid = ((self.read32(hctsiz(ch)) >> 29) & 0x3) as u8;
+        let mut toggles = self.toggles.borrow_mut();
+        if dir_in {
+            toggles.in_toggle[dev][ep] = pid;
+        } else {
+            toggles.out_toggle[dev][ep] = pid;
+        }
+    }
+
+    /// Whether the last failure was a data-toggle mismatch.
+    ///
+    /// A mismatch means the stored toggle was stale — the endpoint advanced and the
+    /// table did not (a port reset under a device, a device that re-enumerated) —
+    /// and the fix is to flip the stored value, not to retry it unchanged: the same
+    /// value fails the same way forever.
+    fn last_was_dterr(&self) -> bool {
+        self.last_hcint.get() & (1 << 10) != 0
+    }
+
+    /// Flip one endpoint's stored toggle; see [`Self::last_was_dterr`].
+    fn flip_pid(&self, dev_addr: u8, ep_num: u8, dir_in: bool) {
+        let Some((dev, ep)) = toggle_slot(dev_addr, ep_num) else {
+            return;
+        };
+        let mut toggles = self.toggles.borrow_mut();
+        let slot = if dir_in {
+            &mut toggles.in_toggle[dev][ep]
+        } else {
+            &mut toggles.out_toggle[dev][ep]
+        };
+        *slot = match *slot {
+            0 => 2, // DATA0 -> DATA1
+            _ => 0, // DATA1 -> DATA0
+        };
+    }
+
+    /// Put one endpoint's toggle back to DATA0, which is what clearing its halt
+    /// does (USB 2.0 §8.6). Only that endpoint: a device-wide reset would also
+    /// wrong-foot the endpoints that were not touched.
+    fn clear_endpoint_toggle(&self, dev_addr: u8, ep_num: u8, dir_in: bool) {
+        let Some((dev, ep)) = toggle_slot(dev_addr, ep_num) else {
+            return;
+        };
+        let mut toggles = self.toggles.borrow_mut();
+        if dir_in {
+            toggles.in_toggle[dev][ep] = 0;
+        } else {
+            toggles.out_toggle[dev][ep] = 0;
         }
     }
 
@@ -282,26 +495,86 @@ impl<'a> UsbHostEngine<'a> {
             return self.wait_channel(ch);
         }
 
-        // Endpoint-zero control traffic uses the normal wait rather than the
-        // tight periodic split-polling wait. The latter is required for
-        // interrupt-IN reports, but makes this board's LAN9514 translator return
-        // NYET throughout HID enumeration.
+        // The log's NYET tells us the hub answered CSPLIT but not whether it
+        // had time to complete the low-speed transfer. Capture both sides of
+        // each channel wait, without printing until the entire packet has ended:
+        // sys_yield() can move this thread across many 125-us microframes.
+        let mut timing = SplitTiming::EMPTY;
+        let before_arm = self.frame_number();
         arm(false);
-        self.wait_channel(ch)?;
+        let after_arm = self.frame_number();
+        let split_reg = self.read32(hcsplt(ch));
+        let start = self.wait_channel(ch);
+        timing.samples[0] = [
+            before_arm,
+            after_arm,
+            self.frame_number(),
+            self.last_hcint.get(),
+            self.read32(hcchar(ch)),
+            split_reg,
+        ];
+        timing.passes = 1;
+        if let Err(e) = start {
+            self.last_split_timing.set(timing);
+            return Err(e);
+        }
 
-        // A complete-split can return NYET while the translator finishes the
-        // low-speed transaction. The old board-working path retried that answer
-        // through the scheduler; keep that bounded behavior for synchronous
-        // control traffic.
-        for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
+        // A hub publishes the result of a split in the microframe *after* the one
+        // that carried the start-split, so a complete-split issued in the same
+        // microframe can only ever be answered NYET. The board trace shows exactly
+        // that for the low-speed keyboard on hub ports 3 and 5:
+        //
+        //     split ss  hfnum=0000184A->0000184A->0000184A hcint=0x00000022
+        //     split cs1 hfnum=0000184A->0000184A->0000184A hcint=0x00000042
+        //     split cs2 hfnum=0000184A->0000184A->0000184A hcint=0x00000042
+        //
+        // Both retries were spent inside the start-split's own microframe, so both
+        // came back NYET and enumeration gave up with the keyboard's descriptor
+        // still sitting in the hub. Each retry here waits for the counter to move
+        // first, then uses the tight non-yielding wait: yielding would hand the CPU
+        // away for ~20 ms and put the pair tens of frames past the window U-Boot
+        // bounds a split by -- it abandons one whose complete-split is still NYET
+        // more than four raw `HFNUM` ticks after its start-split.
+        let started = self.frame_number();
+        let mut issued_in = started;
+        for attempt in 0..SPLIT_COMPLETE_ATTEMPTS {
+            if !self.wait_microframe(issued_in, MICROFRAME_POLLS) {
+                break;
+            }
+            issued_in = self.frame_number();
+            if !split_window_open(started, issued_in) {
+                break;
+            }
             arm(true);
-            match self.wait_channel(ch) {
+            timing.attempts = attempt + 1;
+            let after_arm = self.frame_number();
+            let split_reg = self.read32(hcsplt(ch));
+            let outcome = self.wait_channel_spin(ch, SPIN_POLLS);
+            if timing.passes < timing.samples.len() {
+                timing.samples[timing.passes] = [
+                    issued_in,
+                    after_arm,
+                    self.frame_number(),
+                    self.last_hcint.get(),
+                    self.read32(hcchar(ch)),
+                    split_reg,
+                ];
+                timing.passes += 1;
+            }
+            match outcome {
                 Ok(()) if self.last_reported_complete() => return Ok(()),
                 Ok(()) | Err(ViError::WouldBlock) if self.last_was_nyet() => {}
-                Err(e) => return Err(e),
-                Ok(()) => return Err(ViError::IO),
+                Err(e) => {
+                    self.last_split_timing.set(timing);
+                    return Err(e);
+                }
+                Ok(()) => {
+                    self.last_split_timing.set(timing);
+                    return Err(ViError::IO);
+                }
             }
         }
+        self.last_split_timing.set(timing);
         Err(ViError::IO)
     }
 
@@ -705,7 +978,14 @@ impl<'a> UsbHostEngine<'a> {
         Ok(actual)
     }
 
-    /// Log one failed control-transfer phase with the request that caused it.
+    /// Log the first failure of each kind, with the request that caused it.
+    ///
+    /// One line per *failure* is what a flaky bus turns into a flood: the board's
+    /// PHY link poll alone issued thousands of control transfers a second, and
+    /// every one the bus dropped printed a line that buried the network log it was
+    /// meant to explain. A repeat of a kind the console has already shown carries
+    /// no new information — the rate is what `[dwc2-loop]` exists for — so each
+    /// `(phase, cause)` is reported once and then silenced.
     #[allow(clippy::too_many_arguments)]
     fn report_failure(
         &self,
@@ -718,6 +998,10 @@ impl<'a> UsbHostEngine<'a> {
         length: u16,
         error: ViError,
     ) {
+        let int = self.last_hcint.get();
+        if !claim_failure_report(phase, &error, int) {
+            return;
+        }
         ostd::io::print("[dwc2] control ");
         ostd::io::print(phase);
         ostd::io::print(" failed: bmRequestType=0x");
@@ -732,16 +1016,55 @@ impl<'a> UsbHostEngine<'a> {
         print_hex_val(length as u32);
         ostd::io::print(" addr=");
         print_hex_val(dev_addr as u32);
+        if let Some(split) = self.split.get() {
+            ostd::io::print(" hub=");
+            print_hex_val(split.hub_addr as u32);
+            ostd::io::print(" port=");
+            print_hex_val(split.port as u32);
+        }
         ostd::io::print(" err=");
         match error {
-            ViError::IO => {
-                // The raw outcome, not a bucket: a STALL, an AHB error and a
-                // core that never finished all used to print the same word.
-                ostd::io::print("IO - ");
-                ostd::io::println(self.describe_hcint(self.last_hcint.get()));
+            ViError::IO if self.split.get().is_some() && self.last_was_nyet() => {
+                ostd::io::print("IO - complete split NYET exhausted (");
+                print_hex_val(self.last_split_timing.get().attempts as u32);
+                ostd::io::print(" attempts)");
             }
-            ViError::WouldBlock => ostd::io::println("WouldBlock (NAK)"),
-            _ => ostd::io::println("other"),
+            ViError::IO => {
+                ostd::io::print("IO - ");
+                ostd::io::print(self.describe_hcint(int));
+            }
+            ViError::WouldBlock => {
+                ostd::io::print("WouldBlock - ");
+                ostd::io::print(self.describe_hcint(int));
+            }
+            _ => ostd::io::print("other"),
+        }
+        ostd::io::print(" hcint=0x");
+        print_hex_val(int);
+        ostd::io::println("");
+        if self.split.get().is_some() {
+            let timing = self.last_split_timing.get();
+            for (label, sample) in ["ss", "cs1", "cs2"]
+                .iter()
+                .zip(timing.samples.iter())
+                .take(timing.passes)
+            {
+                ostd::io::print("[dwc2] split ");
+                ostd::io::print(label);
+                ostd::io::print(" hfnum=");
+                print_hex_val(sample[0]);
+                ostd::io::print("->");
+                print_hex_val(sample[1]);
+                ostd::io::print("->");
+                print_hex_val(sample[2]);
+                ostd::io::print(" hcint=0x");
+                print_hex_val(sample[3]);
+                ostd::io::print(" hcchar=0x");
+                print_hex_val(sample[4]);
+                ostd::io::print(" hcsplt=0x");
+                print_hex_val(sample[5]);
+                ostd::io::println("");
+            }
         }
     }
 
@@ -812,18 +1135,20 @@ impl<'a> UsbHostEngine<'a> {
     /// Transmit a raw Ethernet packet via Bulk OUT (Channel 2, EP 2).
     pub fn bulk_transmit(&self, dev_addr: u8, ep_num: u8, packet: &[u8]) -> ViResult<()> {
         let ch = 2;
+        if self.port_refuses() {
+            return Err(ViError::IO);
+        }
         let mut sent = 0;
-        let mut toggle = 0; // Starts at DATA0
+        let mut halt_cleared = false;
+        let mut toggle_flipped = false;
 
         let use_dma = self.dma_slot(ch).is_some();
         if use_dma {
             self.stage_out(ch, 0, packet);
-            self.program_hcdma(ch, 0);
         }
         while sent < packet.len() {
             let chunk = (packet.len() - sent).min(512); // 512 bytes for High-Speed Bulk
 
-            let sctsiz = (chunk as u32) | (1 << 19) | ((toggle as u32) << 29);
             // HCCHAR: EPDIR = 0 (OUT), EPTYPE = 2 (Bulk), MC = 1 packet, MPS = 512 (HS Bulk).
             let scchar = 512
                 | ((ep_num as u32) << 11)
@@ -837,12 +1162,26 @@ impl<'a> UsbHostEngine<'a> {
                 self.prepare_channel(ch);
                 self.write32(hcsplt(ch), 0);
                 self.write32(hcintmsk(ch), 0x07FF);
+                // The packet's PID comes from the endpoint's own toggle, which
+                // survives across transfers (see `DataToggles`), and it is read here
+                // -- inside the retry loop -- so a toggle the recovery paths flip or
+                // reset is what the next attempt actually arms with. Restarting at
+                // DATA0 for every frame gave every second and later frame the wrong
+                // one, and a receiver discards a mismatched packet even when the
+                // handshake completes.
+                let sctsiz = (chunk as u32) | (1 << 19) | self.next_pid(dev_addr, ep_num, false);
                 self.write32(hctsiz(ch), sctsiz);
+                if use_dma {
+                    // Point the core at the start of *this* chunk on every attempt,
+                    // including retries: the core advances `HCDMA` as it fetches each
+                    // packet into the FIFO, so a retry that only rewrote `HCTSIZ`
+                    // would fetch the packet after this one as if it were this chunk.
+                    // U-Boot and Linux re-issue the packet from its start too.
+                    self.program_hcdma(ch, sent);
+                }
                 self.write32(hcchar(ch), self.start_hcchar(scchar));
 
-                if use_dma {
-                    // Staged and armed before the loop; the core walks it.
-                } else {
+                if !use_dma {
                     let words_count = chunk.div_ceil(4);
                     for i in 0..words_count {
                         let mut b = [0u8; 4];
@@ -858,36 +1197,210 @@ impl<'a> UsbHostEngine<'a> {
                 }
 
                 match self.wait_channel(ch) {
-                    Ok(()) => break,
+                    Ok(()) => {
+                        // Adopt the toggle this packet ended on, for the next packet
+                        // of this frame and for the next frame after it.
+                        self.adopt_pid(ch, dev_addr, ep_num, false);
+                        break;
+                    }
                     Err(ViError::WouldBlock) => {
                         retries += 1;
-                        if retries > 50 {
-                            ostd::io::println("[dwc2] bulk_transmit: exceeded 50 NAK retries");
+                        if retries > BULK_NAK_RETRIES {
+                            static FIRST_GIVE_UP: core::sync::atomic::AtomicBool =
+                                core::sync::atomic::AtomicBool::new(false);
+                            if !FIRST_GIVE_UP.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                                ostd::io::println(
+                                    "[dwc2] bulk_transmit: the endpoint kept answering NAK",
+                                );
+                            }
+                            // Giving up abandons the packet the core staged in the
+                            // Tx FIFO, so clear it out like any other abort.
+                            self.flush_tx_fifo();
                             return Err(ViError::IO);
                         }
                         sys_yield();
+                    }
+                    // The device refused the endpoint. A bulk endpoint stays halted
+                    // until the host clears it (see `clear_endpoint_halt`), so a
+                    // plain retry would fail identically: clear, re-arm and try the
+                    // same packet once more.
+                    Err(error) if self.last_was_stall() && !halt_cleared => {
+                        halt_cleared = true;
+                        if !self.clear_endpoint_halt(dev_addr, ep_num, false) {
+                            return Err(error);
+                        }
+                        // Clearing the halt also resets the endpoint's data toggle to
+                        // DATA0 (USB 2.0 §8.6), so the retry must go back to it or the
+                        // device sees a toggle mismatch (`DTERR`) instead.
+                        self.clear_endpoint_toggle(dev_addr, ep_num, false);
+                        static FIRST_CLEAR: core::sync::atomic::AtomicBool =
+                            core::sync::atomic::AtomicBool::new(false);
+                        if !FIRST_CLEAR.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                            ostd::io::println(
+                                "[dwc2] cleared a halted bulk-OUT endpoint after STALL",
+                            );
+                        }
+                    }
+                    // A stale toggle: flip it and re-arm once (see `bulk_receive`).
+                    Err(error) if self.last_was_dterr() && !toggle_flipped => {
+                        toggle_flipped = true;
+                        self.flip_pid(dev_addr, ep_num, false);
+                        static FIRST_DTERR: core::sync::atomic::AtomicBool =
+                            core::sync::atomic::AtomicBool::new(false);
+                        if !FIRST_DTERR.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                            ostd::io::println("[dwc2] flipped a stale bulk-OUT toggle after DTERR");
+                        }
+                        let _ = error;
                     }
                     Err(e) => return Err(e),
                 }
             }
 
             sent += chunk;
-            toggle = if toggle == 0 { 2 } else { 0 };
         }
 
         Ok(())
     }
 
+    /// Name the last channel failure for the console.
+    ///
+    /// `ViError::IO` on its own cannot say whether the device refused the transfer
+    /// (`STALL`), the bus protocol broke (`XACTERR`) or the channel never reported
+    /// within its budget — and those need different fixes. The board's NIC TX
+    /// failed over and over with nothing but `IO` on the console, so the cause went
+    /// unrecorded while the frames were dropped.
+    pub fn failure_name(&self, error: &ViError) -> &'static str {
+        let int = self.last_hcint.get();
+        if int == 0 {
+            return match error {
+                ViError::WouldBlock => "WouldBlock - no status bit, the poll budget ran out",
+                _ => "IO - no status bit, the poll budget ran out",
+            };
+        }
+        self.describe_hcint(int)
+    }
+
+    /// Flush the non-periodic Tx FIFO after an aborted OUT transfer.
+    ///
+    /// A packet that was being fetched into the Tx FIFO when its channel was
+    /// aborted stays there, and the core keeps feeding the endpoint from it: the
+    /// device sees a malformed packet and answers with a transaction error, so the
+    /// failure repeats on every retry until the FIFO is cleared. The board's
+    /// `first bulk-OUT failure: XACTERR` behaved exactly that way — the first frames
+    /// went out, then a HID `SET_REPORT` (a control OUT) aborted mid-packet and every
+    /// later frame failed. Linux's `dwc2_hc_cleanup` flushes the Tx FIFO of an OUT
+    /// channel for this reason (`if (!chan->ep_is_in)`); this driver shares one
+    /// non-periodic FIFO, so the coarse `TXFNUM_ALL` form is used. U-Boot only
+    /// flushes at core init, which is why a run that never aborts an OUT transfer
+    /// never needs this.
+    fn flush_tx_fifo_after_abort(&self, ch: usize) {
+        if self.read32(hcchar(ch)) & HCCHAR_EPDIR != 0 {
+            return; // an IN channel leaves the Tx FIFO alone
+        }
+        self.flush_tx_fifo();
+    }
+
+    /// Start a Tx FIFO flush and wait (bounded, non-yielding) for it to finish.
+    fn flush_tx_fifo(&self) {
+        self.write32(GRSTCTL, GRSTCTL_TXFFLSH | GRSTCTL_TXFNUM_ALL);
+        for _ in 0..TX_FLUSH_POLLS {
+            if self.read32(GRSTCTL) & GRSTCTL_TXFFLSH == 0 {
+                break;
+            }
+        }
+        static FIRST_FLUSH: core::sync::atomic::AtomicBool =
+            core::sync::atomic::AtomicBool::new(false);
+        if !FIRST_FLUSH.swap(true, core::sync::atomic::Ordering::Relaxed) {
+            ostd::io::println("[dwc2] flushed the Tx FIFO after an aborted OUT transfer");
+        }
+    }
+
+    /// Whether the root port is enabled (`HPRT0.PRTENA`).
+    ///
+    /// The core clears this itself on a bus-level event (USB 2.0 §11.8, a
+    /// disconnect), and a disabled port fails *every* transfer — control, bulk and
+    /// the hub's splits alike — with no channel status to report, which is exactly
+    /// the `no status bit, the poll budget ran out` the board printed for
+    /// `bulk_transmit` after its first frames had gone out. It is a local register
+    /// read, so the serving loop can watch it.
+    pub fn port_enabled(&self) -> bool {
+        self.read32(HPRT0) & HPRT0_PRTENA != 0
+    }
+
+    /// Core state at the moment the port changed, for the console.
+    ///
+    /// The board's dead-port runs left one question open: was the *port* lost, or
+    /// the whole core reset? A core soft reset re-programs `GINTMSK` to zero
+    /// (Linux re-writes it after `dwc2_core_reset` for exactly that reason), so
+    /// printing these four at the transition answers it from the log alone —
+    /// `GINTMSK` intact with `HPRT0` back at its power-on default means the core is
+    /// alive and the *device* went away, which is a different fix from a core that
+    /// reset itself.
+    pub fn core_state(&self) -> [(&'static str, u32); 4] {
+        [
+            ("HPRT0", self.read32(HPRT0)),
+            ("GINTSTS", self.read32(GINTSTS)),
+            ("GINTMSK", self.read32(GINTMSK)),
+            ("GRSTCTL", self.read32(GRSTCTL)),
+        ]
+    }
+
+    /// Clear the root port's change bits.
+    ///
+    /// `PRTCONNDET`, `PRTENCHNG` and `PRTOVRCURRCHNG` latch and are never cleared by
+    /// this driver, so a *later* connect or enable change looked the same as the
+    /// boot-time one — which is why the run that ended with `HPRT0.PRTENA = 0` could
+    /// not show when the port was disabled. `PRTENA` is deliberately not written:
+    /// in this register it is write-1-to-change, so including it would disable a
+    /// working port (and the boot path's own writes leave a zero there, which the
+    /// board confirms by still reporting the port enabled afterwards).
+    pub fn clear_port_change_bits(&self) {
+        self.write32(
+            HPRT0,
+            HPRT0_PRTCONNDET | HPRT0_PRTENCHNG | HPRT0_PRTOVRCURRCHNG,
+        );
+    }
+
+    /// Clear a halted endpoint: `CLEAR_FEATURE(ENDPOINT_HALT)`.
+    ///
+    /// USB 2.0 §8.5.3.4: a **bulk** endpoint that stalls stays halted until the host
+    /// clears the halt, so a single device `STALL` fails every later transfer to
+    /// that endpoint — the shape of a NIC that transmits once and then never again.
+    /// The control endpoint is the exception (its next `SETUP` clears the halt),
+    /// which is why only the bulk paths call this.
+    pub fn clear_endpoint_halt(&self, dev_addr: u8, ep_num: u8, dir_in: bool) -> bool {
+        let index = (ep_num & 0x0F) | if dir_in { 0x80 } else { 0x00 };
+        self.control_transfer(dev_addr, 0x02, 0x01, 0, index as u16, &mut [])
+            .is_ok()
+    }
+
+    /// Refuse to start a transfer while the root port is disabled.
+    ///
+    /// Nothing on a disabled port can complete: the board's log was hundreds of
+    /// `bulk_transmit: exceeded 50 NAK retries` lines while the Net Cell waited
+    /// seconds per frame, all of it spent discovering what this one register read
+    /// says up front. Reported once, because the serving loop already names the
+    /// transition.
+    fn port_refuses(&self) -> bool {
+        if self.port_enabled() {
+            return false;
+        }
+        static FIRST: core::sync::atomic::AtomicBool =
+            core::sync::atomic::AtomicBool::new(false);
+        if !FIRST.swap(true, core::sync::atomic::Ordering::Relaxed) {
+            ostd::io::println("[dwc2] a transfer was refused: the root port is disabled");
+        }
+        true
+    }
+
     /// Receive a raw packet via Bulk IN (Channel 1, EP 1). Returns received length or 0 if nothing.
     pub fn bulk_receive(&self, dev_addr: u8, ep_num: u8, buf: &mut [u8]) -> ViResult<usize> {
         let ch = 1;
-        self.prepare_channel(ch);
-        self.write32(hcsplt(ch), 0);
-        self.write32(hcintmsk(ch), 0x07FF);
+        if self.port_refuses() {
+            return Err(ViError::IO);
+        }
         let want = buf.len().min(512);
-        let sctsiz = (want as u32) | (1 << 19);
-        self.write32(hctsiz(ch), sctsiz);
-
+        // HCCHAR: EPDIR = 1 (IN), EPTYPE = 2 (Bulk), MC = 1 packet, MPS = 512 (HS Bulk).
         let scchar = 512
             | ((ep_num as u32) << 11)
             | (1 << 15) // IN
@@ -895,42 +1408,106 @@ impl<'a> UsbHostEngine<'a> {
             | (1 << 20) // MC = 1
             | ((dev_addr as u32) << 22)
             | (1 << 31);
-        self.program_hcdma(ch, 0);
-        self.write32(hcchar(ch), self.start_hcchar(scchar));
 
-        // Non-blocking wait: check if transfer completed or NAK
-        let mut count = 0;
-        while count < 1000 {
-            let int = self.read32(hcint(ch));
-            if int & (1 << 0) != 0 {
-                // The core reports the actual length in HCTSIZ either way, but
-                // only DMA deposits the payload outside the FIFO.
-                let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
-                let got = want.saturating_sub(remaining);
-                if self.dma_slot(ch).is_some() {
-                    self.collect_in(ch, 0, buf, got);
-                } else {
-                    let words = want.div_ceil(4);
-                    for (i, word) in (0..words).map(|i| (i, self.read_fifo(ch))) {
-                        for (j, byte) in word.to_le_bytes().iter().enumerate() {
-                            let idx = i * 4 + j;
-                            if idx < buf.len() && idx < want {
-                                buf[idx] = *byte;
+        let mut halt_cleared = false;
+        let mut toggle_flipped = false;
+        loop {
+            self.prepare_channel(ch);
+            self.write32(hcsplt(ch), 0);
+            self.write32(hcintmsk(ch), 0x07FF);
+            // PID from the endpoint's own toggle, not a constant DATA0: the toggle
+            // belongs to the endpoint and survives across transfers (see
+            // `DataToggles`), and a stale one answers every later packet with
+            // `DTERR`.
+            let sctsiz = (want as u32) | (1 << 19) | self.next_pid(dev_addr, ep_num, true);
+            self.write32(hctsiz(ch), sctsiz);
+            self.program_hcdma(ch, 0);
+            self.write32(hcchar(ch), self.start_hcchar(scchar));
+
+            // A poll, not a wait: the device answers NAK immediately when it has
+            // nothing, so a long budget here only ever happens when the core reports
+            // nothing at all — and the old 1000 yields is twenty seconds of the
+            // serving loop that the Net Cell's request deadline is sitting inside.
+            // Same two units as `wait_channel`: host microframes and yields.
+            let started = self.frame_number();
+            let mut yields = 0;
+            let outcome = loop {
+                let int = self.read32(hcint(ch));
+                if int & (1 << 0) != 0 {
+                    // The core reports the actual length in HCTSIZ either way, but
+                    // only DMA deposits the payload outside the FIFO. Read the
+                    // endpoint's new toggle out of the same register first.
+                    self.adopt_pid(ch, dev_addr, ep_num, true);
+                    let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
+                    let got = want.saturating_sub(remaining);
+                    if self.dma_slot(ch).is_some() {
+                        self.collect_in(ch, 0, buf, got);
+                    } else {
+                        let words = want.div_ceil(4);
+                        for (i, word) in (0..words).map(|i| (i, self.read_fifo(ch))) {
+                            for (j, byte) in word.to_le_bytes().iter().enumerate() {
+                                let idx = i * 4 + j;
+                                if idx < buf.len() && idx < want {
+                                    buf[idx] = *byte;
+                                }
                             }
                         }
                     }
+                    break Ok(got);
                 }
-                return Ok(got);
-            }
-            if int & (1 << 4) != 0 {
-                // NAK: device has no packet right now
-                return Ok(0);
-            }
-            count += 1;
-            sys_yield();
-        }
+                if int & (1 << 4) != 0 {
+                    // NAK: device has no packet right now.
+                    break Ok(0);
+                }
+                // Error conditions the old read loop ignored (only XFRC and NAK were
+                // tested): a refused or broken transfer was reported as "no frame",
+                // which hid a halted endpoint behind an ordinary idle poll and made
+                // every later poll fail the same silent way.
+                if int & ((1 << 3) | (1 << 7) | (1 << 8) | (1 << 10)) != 0 {
+                    self.last_hcint.set(int);
+                    self.halt_channel(ch);
+                    break Err(ViError::IO);
+                }
+                if yields >= WAIT_YIELDS
+                    || self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK
+                        >= WAIT_MICROFRAMES
+                {
+                    break Ok(0);
+                }
+                yields += 1;
+                sys_yield();
+            };
 
-        Ok(0)
+            match outcome {
+                Ok(n) => return Ok(n),
+                // The device refused this endpoint. Clear the halt and re-arm once:
+                // until the halt is cleared, no later transfer can succeed.
+                Err(error) if self.last_was_stall() && !halt_cleared => {
+                    halt_cleared = true;
+                    if !self.clear_endpoint_halt(dev_addr, ep_num, true) {
+                        return Err(error);
+                    }
+                    static FIRST_CLEAR: core::sync::atomic::AtomicBool =
+                        core::sync::atomic::AtomicBool::new(false);
+                    if !FIRST_CLEAR.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                        ostd::io::println("[dwc2] cleared a halted bulk-IN endpoint after STALL");
+                    }
+                }
+                // A stale toggle: flip it and re-arm once, or the same packet fails
+                // with `DTERR` for as long as the device and the table disagree.
+                Err(error) if self.last_was_dterr() && !toggle_flipped => {
+                    toggle_flipped = true;
+                    self.flip_pid(dev_addr, ep_num, true);
+                    static FIRST_DTERR: core::sync::atomic::AtomicBool =
+                        core::sync::atomic::AtomicBool::new(false);
+                    if !FIRST_DTERR.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                        ostd::io::println("[dwc2] flipped a stale bulk-IN toggle after DTERR");
+                    }
+                    let _ = error;
+                }
+                Err(error) => return Err(error),
+            }
+        }
     }
 
     /// Receive up to one packet via Interrupt IN on `ch`.
@@ -967,9 +1544,10 @@ impl<'a> UsbHostEngine<'a> {
         self.write32(hcsplt(ch), 0);
         self.write32(hcintmsk(ch), 0x07FF);
 
-        // HCTSIZ: XFERSIZE (= want), PKTCNT = 1, PID = DATA0 (0). The core
+        // HCTSIZ: XFERSIZE (= want), PKTCNT = 1, and the PID this endpoint's
+        // toggle says (DATA0 only for the first report; see `DataToggles`). The core
         // overwrites XFERSIZE with the remaining count as it transfers.
-        let sctsiz = (want as u32) | (1 << 19);
+        let sctsiz = (want as u32) | (1 << 19) | self.next_pid(dev_addr, ep_num, true);
         self.write32(hctsiz(ch), sctsiz);
 
         // HCCHAR: MPS from the endpoint descriptor, EPNUM, IN direction, DEVCTL,
@@ -1002,14 +1580,22 @@ impl<'a> UsbHostEngine<'a> {
                 self.halt_channel(ch);
                 return Ok(0);
             }
-            // Errors (STALL / babble / transaction error) end the poll cycle.
-            if int & ((1 << 2) | (1 << 3) | (1 << 7)) != 0 {
+            // Errors (STALL / babble / transaction error / toggle mismatch) end the
+            // poll cycle. `DTERR` used to be missing here, so a mismatched report
+            // simply ended the poll with "no data" and the device's toggle and ours
+            // stayed out of step.
+            if int & ((1 << 2) | (1 << 3) | (1 << 7) | (1 << 10)) != 0 {
+                if int & (1 << 10) != 0 {
+                    self.flip_pid(dev_addr, ep_num, true);
+                }
                 self.halt_channel(ch);
                 return Err(ViError::IO);
             }
 
             let complete = int & (1 << 0) != 0 || int & (1 << 1) != 0 || int & (1 << 5) != 0;
             if complete {
+                // The report that just arrived advanced this endpoint's toggle.
+                self.adopt_pid(ch, dev_addr, ep_num, true);
                 let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
                 let got = want.saturating_sub(remaining);
                 self.halt_channel(ch);
@@ -1082,12 +1668,14 @@ impl<'a> UsbHostEngine<'a> {
         self.prepare_channel(ch);
         self.write32(hcintmsk(ch), 0x07FF);
 
-        // HCTSIZ: XFERSIZE = one max packet, PKTCNT = 1, PID = DATA0. A split
-        // carries exactly one packet, whatever the caller asked for.
+        // HCTSIZ: XFERSIZE = one max packet, PKTCNT = 1, and the PID this
+        // endpoint's toggle says (see `DataToggles`). A split carries exactly one
+        // packet, whatever the caller asked for, so the same value is used for both
+        // halves of the pair and adopted only once the data has arrived.
         //
         // HCCHAR: MPS, EPNUM, IN, and EPTYPE = Interrupt, for the same reason as
         // the channel above: a low-speed endpoint has no other type.
-        let sctsiz = (want as u32) | (1 << 19);
+        let sctsiz = (want as u32) | (1 << 19) | self.next_pid(dev_addr, ep_num, true);
         let scchar = (mps as u32 & 0x7FF)
             | ((ep_num as u32) << 11)
             | self.device_flags()
@@ -1111,7 +1699,7 @@ impl<'a> UsbHostEngine<'a> {
         // scheduling and left only the frame boundary for retries.
 
         arm(false);
-        let outcome = self.wait_channel_spin(ch, SPIN_POLLS);
+        let outcome = self.wait_channel_spin(ch, SPLIT_SPIN_POLLS);
         if !matches!(outcome, Ok(())) {
             *pending = false;
             return match outcome {
@@ -1123,7 +1711,7 @@ impl<'a> UsbHostEngine<'a> {
         let started = self.frame_number();
         for _ in 0..SPLIT_ATTEMPTS {
             arm(true);
-            let outcome = self.wait_channel_spin(ch, SPIN_POLLS);
+            let outcome = self.wait_channel_spin(ch, SPLIT_SPIN_POLLS);
 
             match outcome {
                 Ok(()) if !self.last_reported_complete() => {
@@ -1133,6 +1721,9 @@ impl<'a> UsbHostEngine<'a> {
                 }
                 Ok(()) => {
                     *pending = false;
+                    // The report arrived: this endpoint's toggle has advanced to
+                    // what the next poll must ask for.
+                    self.adopt_pid(ch, dev_addr, ep_num, true);
                     let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
                     let got = want.saturating_sub(remaining);
                     if got == 0 {
@@ -1162,9 +1753,7 @@ impl<'a> UsbHostEngine<'a> {
                         *pending = false;
                         return Ok(0);
                     }
-                    if self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK
-                        > PERIODIC_SPLIT_MICROFRAMES
-                    {
+                    if !split_window_open(started, self.frame_number()) {
                         *pending = false;
                         return Ok(0);
                     }
@@ -1249,6 +1838,24 @@ impl<'a> UsbHostEngine<'a> {
         }
         self.dump_reg("HCINT", self.read32(hcint(ch)));
         self.dump_reg("HAINT", self.read32(HAINT));
+        // `HAINT` names every channel with an unserviced interrupt, and the dump
+        // above covers only the channel this transfer used. The board's timeouts
+        // all read `HAINT=0x2` with the dumped channel's own `HCINT` zero, which
+        // cannot be told apart from a stale aggregate without reading the channel
+        // that owns the bit.
+        let haint = self.read32(HAINT);
+        for pending in 0..DMA_CHANNELS {
+            if haint & (1 << pending) == 0 {
+                continue;
+            }
+            ostd::io::print("[dwc2]   HAINT ch=");
+            print_hex_val(pending as u32);
+            ostd::io::print(" HCCHAR=0x");
+            print_hex_val(self.read32(hcchar(pending)));
+            ostd::io::print(" HCINT=0x");
+            print_hex_val(self.read32(hcint(pending)));
+            ostd::io::println("");
+        }
         self.dump_reg("GINTSTS", self.read32(GINTSTS));
         self.dump_reg("GINTMSK", self.read32(GINTMSK));
         self.dump_reg("HPRT0", self.read32(HPRT0));
@@ -1258,11 +1865,21 @@ impl<'a> UsbHostEngine<'a> {
     }
 
     /// Log a channel error once per distinct cause, with the register state.
+    ///
+    /// The dump is expensive on a 115200 baud console, so only the first few get
+    /// one; the line itself is deduplicated like `report_failure`, because a bus
+    /// that fails the same transfer repeatedly would otherwise fill the log.
     fn report_channel_error(&self, ch: usize, int: u32) {
-        static REPORTED: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
-        if REPORTED.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 4 {
-            ostd::io::print("[dwc2] channel error: ");
-            ostd::io::println(self.describe_hcint(int));
+        /// Dumps printed before the line alone carries the count.
+        const DUMPS: usize = 4;
+        static DUMPED: core::sync::atomic::AtomicUsize =
+            core::sync::atomic::AtomicUsize::new(0);
+        if !claim_failure_report("channel", &ViError::IO, int) {
+            return;
+        }
+        ostd::io::print("[dwc2] channel error: ");
+        ostd::io::println(self.describe_hcint(int));
+        if DUMPED.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < DUMPS {
             self.dump_transfer_state(ch, "error");
         }
     }
@@ -1285,19 +1902,29 @@ impl<'a> UsbHostEngine<'a> {
     /// visible first, but the channel still owns its registers until the halt
     /// arrives; [`Self::channel_outcome`] keeps waiting rather than letting the
     /// caller re-arm the channel against that delayed completion.
-    fn wait_channel(&self, ch: usize) -> ViResult<()> {
-        self.wait_channel_with(ch, WAIT_POLLS)
-    }
-
-    /// Wait for channel completion or error, spending at most `budget` polls.
+    /// Wait for channel completion or error, bounded by host time rather than by
+    /// a poll count.
     ///
-    /// The budget is a real cost rather than a formality: every poll yields, and
-    /// a transfer that never reports anything spends the whole of it before it is
-    /// given up on. Callers on the driver's own serving thread want a small one.
-    fn wait_channel_with(&self, ch: usize, budget: usize) -> ViResult<()> {
-        for _ in 0..budget {
+    /// This wait yields, and a yield costs the board around twenty milliseconds —
+    /// so a *count* budget is not a time budget. `WAIT_POLLS` (50 000) was minutes
+    /// of host time, and the board measured a single driver turn at **404 s**: the
+    /// driver is out of `Recv` for that whole turn, so the net service's 200 ms
+    /// offer and the hypervisor's 2 s L2 deadline both expire long before it comes
+    /// back, and the guest's frame is lost with them. A transfer that has not
+    /// reported inside [`WAIT_MICROFRAMES`] is stuck; failing it fast is what lets
+    /// the loop turn again, and every caller above retries.
+    fn wait_channel(&self, ch: usize) -> ViResult<()> {
+        let started = self.frame_number();
+        let mut yields = 0u32;
+        loop {
             if let Some(outcome) = self.channel_outcome(ch) {
                 return outcome;
+            }
+            yields += 1;
+            if yields >= WAIT_YIELDS
+                || self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK >= WAIT_MICROFRAMES
+            {
+                break;
             }
             sys_yield();
         }
@@ -1335,6 +1962,21 @@ impl<'a> UsbHostEngine<'a> {
         self.channel_timeout(ch)
     }
 
+    /// Wait for the microframe counter to leave `from`. Returns whether it moved.
+    ///
+    /// A hub runs the low-speed half of a split in a microframe later than the
+    /// start-split's, so this is what puts each complete-split retry somewhere the
+    /// hub could actually have an answer for it. Without it every retry lands in
+    /// the start-split's own microframe and the core answers NYET every time.
+    fn wait_microframe(&self, from: u32, polls: usize) -> bool {
+        for _ in 0..polls {
+            if self.frame_number() != from {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Classify a channel's interrupt register, or `None` while it is still running.
     fn channel_outcome(&self, ch: usize) -> Option<ViResult<()>> {
         let int = self.read32(hcint(ch));
@@ -1361,6 +2003,9 @@ impl<'a> UsbHostEngine<'a> {
             // surely as the bits that were already checked.
             if int & ((1 << 2) | (1 << 3) | (1 << 7) | (1 << 8) | (1 << 10)) != 0 {
                 self.report_channel_error(ch, int);
+                // The core has halted this channel (CHHLTD), so an OUT transfer's
+                // half-fetched packet can be cleared out of the Tx FIFO here.
+                self.flush_tx_fifo_after_abort(ch);
                 self.last_hcint.set(int);
                 return Some(Err(ViError::IO));
             }
@@ -1423,6 +2068,17 @@ impl<'a> UsbHostEngine<'a> {
 
         // ── Error conditions ──────────────────────────────────────
         if int & ((1 << 2) | (1 << 3) | (1 << 7) | (1 << 8) | (1 << 10)) != 0 {
+            {
+                use core::sync::atomic::Ordering;
+                let counter = if int & (1 << 7) != 0 {
+                    &FAULT_XACTERR
+                } else if int & (1 << 3) != 0 {
+                    &FAULT_STALL
+                } else {
+                    &FAULT_OTHER
+                };
+                counter.fetch_add(1, Ordering::Relaxed);
+            }
             self.report_channel_error(ch, int);
             self.halt_channel(ch);
             self.last_hcint.set(int);
@@ -1442,7 +2098,14 @@ impl<'a> UsbHostEngine<'a> {
         // Timeout — capture hcint BEFORE halt clears it
         let int = self.read32(hcint(ch));
         let char_val = self.read32(hcchar(ch));
+        // Read the direction before the halt clears EPDIR, then clear the Tx FIFO
+        // an abandoned OUT transfer may have left a packet in.
+        let was_out = char_val & HCCHAR_EPDIR == 0;
         self.halt_channel(ch);
+        if was_out {
+            self.flush_tx_fifo();
+        }
+        FAULT_TIMEOUT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         static TIMEOUT_COUNT: core::sync::atomic::AtomicUsize =
             core::sync::atomic::AtomicUsize::new(0);
         let attempt = TIMEOUT_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
@@ -1489,6 +2152,56 @@ impl<'a> UsbHostEngine<'a> {
     }
 }
 
+/// Whether a `(phase, cause)` control-transfer failure still needs reporting.
+///
+/// Keeps one bit per kind in [`REPORTED_FAILURES`]; the first caller for a kind
+/// prints it and every later one is silent (see `UsbHostEngine::report_failure`).
+fn claim_failure_report(phase: &str, error: &ViError, hcint: u32) -> bool {
+    /// Phases a control transfer is logged with; a channel error uses the next
+    /// slot so the two do not share bits.
+    const PHASES: u64 = 4;
+    /// Causes [`failure_cause`] can return.
+    const CAUSES: u64 = 12;
+    let phase_index = match phase {
+        "setup" => 0,
+        "data" => 1,
+        "status" => 2,
+        _ => 3,
+    };
+    let index = (phase_index * CAUSES + failure_cause(error, hcint)).min(PHASES * CAUSES - 1);
+    let bit = 1u64 << index;
+    REPORTED_FAILURES.fetch_or(bit, core::sync::atomic::Ordering::Relaxed) & bit == 0
+}
+
+/// Which cause a failure ended in, as a small index.
+///
+/// The order follows [`UsbHostEngine::describe_hcint`], so two failures that
+/// print the same sentence share a report: the `NAK` of an interrupt-IN poll and
+/// the `XACTERR` of a register read with a low-speed split in flight are different
+/// kinds and both deserve their first line, but the second of each does not.
+fn failure_cause(error: &ViError, hcint: u32) -> u64 {
+    if matches!(error, ViError::WouldBlock) {
+        // NYET is the hub still working; NAK is the device having nothing to send.
+        return if hcint & (1 << 6) != 0 { 1 } else { 0 };
+    }
+    if !matches!(error, ViError::IO) {
+        return 2;
+    }
+    for (index, bit) in [2u32, 8, 3, 7, 10, 9, 6, 4].into_iter().enumerate() {
+        if hcint & (1 << bit) != 0 {
+            return index as u64 + 3;
+        }
+    }
+    // An `IO` with no status bit at all (an abandoned channel, a poll budget).
+    11
+}
+
+/// Kinds of transfer failure the console has already named, one bit each.
+///
+/// See `claim_failure_report`: the bit index is `phase * 12 + cause`, and the last
+/// phase is the channel-error path, so the whole set fits in one word.
+static REPORTED_FAILURES: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
 /// Build a DWC2 halt request only for a channel that is actually active.
 ///
 /// `CHDIS|CHENA` requests the active-channel halt; a stopped channel must not
@@ -1496,6 +2209,19 @@ impl<'a> UsbHostEngine<'a> {
 #[inline]
 fn active_halt_request(hcchar: u32) -> Option<u32> {
     (hcchar & HCCHAR_CHENA != 0).then_some((hcchar | HCCHAR_CHDIS | HCCHAR_CHENA) & !HCCHAR_EPDIR)
+}
+
+/// Whether a split's pairing window is still open `now` raw `HFNUM` ticks after
+/// the start-split it belongs to.
+///
+/// U-Boot abandons a split whose complete-split is still NYET more than four
+/// ticks past that point, on the grounds that the hub has dropped the pairing by
+/// then. The counter is 16 bits and wraps about every eight seconds, so the
+/// difference has to wrap with it -- a stale start must read as closed, never as
+/// a fresh window.
+#[inline]
+fn split_window_open(started: u32, now: u32) -> bool {
+    now.wrapping_sub(started) & HFNUM_FRNUM_MASK <= PERIODIC_SPLIT_MICROFRAMES
 }
 
 /// `HCSPLT` for a transfer addressed through `split`, or 0 when there is none.
@@ -1529,10 +2255,61 @@ fn hcsplt_for(split: Option<Split>, complete: bool) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        active_halt_request, hcsplt_for, Split, HCCHAR_CHDIS, HCCHAR_CHENA, HCCHAR_EPDIR,
-        HCSPLT_COMPSPLT, HCSPLT_HUBADDR_MASK, HCSPLT_HUBADDR_SHIFT, HCSPLT_PRTADDR_MASK,
-        HCSPLT_SPLTENA, HCSPLT_XACTPOS_ALL,
+        active_halt_request, failure_cause, hcsplt_for, split_window_open, toggle_slot, Split,
+        HCCHAR_CHDIS, HCCHAR_CHENA, HCCHAR_EPDIR, HCSPLT_COMPSPLT, HCSPLT_HUBADDR_MASK,
+        HCSPLT_HUBADDR_SHIFT, HCSPLT_PRTADDR_MASK, HCSPLT_SPLTENA, HCSPLT_XACTPOS_ALL,
+        TOGGLE_DEVICES,
     };
+    use types::ViError;
+
+    /// Failing transfers are reported once per kind, so the kinds must not collide:
+    /// two causes sharing a slot would silence whichever reaches the console
+    /// second, which is exactly the visibility the dedup exists to preserve.
+    #[test]
+    fn failure_kinds_do_not_collide() {
+        /// Causes one phase can name; must cover `claim_failure_report`'s range.
+        const CAUSES: u64 = 12;
+        let distinct = [
+            failure_cause(&ViError::WouldBlock, 1 << 4), // NAK: the device had nothing
+            failure_cause(&ViError::WouldBlock, 1 << 6), // NYET: the hub is still working
+            failure_cause(&ViError::NotSupported, 0),    // deadline, unsupported request
+            failure_cause(&ViError::IO, 1 << 2),         // AHBERR
+            failure_cause(&ViError::IO, 1 << 8),         // BBLERR
+            failure_cause(&ViError::IO, 1 << 3),         // STALL
+            failure_cause(&ViError::IO, 1 << 7),         // XACTERR
+            failure_cause(&ViError::IO, 1 << 10),        // DTERR
+            failure_cause(&ViError::IO, 1 << 9),         // FRMOVRN
+            failure_cause(&ViError::IO, 1 << 6),         // NYET
+            failure_cause(&ViError::IO, 1 << 4),         // NAK
+            failure_cause(&ViError::IO, 0),              // no status bit: "unknown"
+        ];
+
+        let mut seen = 0u32;
+        for cause in distinct {
+            assert!(cause < CAUSES, "cause {cause} is outside one phase's range");
+            let bit = 1u32 << cause;
+            assert_eq!(seen & bit, 0, "two causes share report slot {cause}");
+            seen |= bit;
+        }
+
+        // An `ACK` that never halted prints `unknown` through `describe_hcint`,
+        // like a missing status bit, so one report covers both.
+        assert_eq!(failure_cause(&ViError::IO, 1 << 5), failure_cause(&ViError::IO, 0));
+    }
+
+    /// Endpoint toggles are indexed per device and endpoint, so a mis-indexed slot
+    /// would let one device's transfer change another's toggle — random `DTERR`
+    /// with no failing transfer to point at. Out-of-range addresses must fall
+    /// outside the table rather than wrap into a slot that exists.
+    #[test]
+    fn toggle_slots_do_not_alias_out_of_range_addresses() {
+        assert_eq!(toggle_slot(1, 2), Some((1, 2)));
+        assert_eq!(toggle_slot(TOGGLE_DEVICES as u8, 2), None);
+        assert_eq!(toggle_slot(255, 2), None);
+        // The endpoint field is masked to the tracked range: an endpoint number that
+        // cannot exist on the wire cannot reach outside its device's row either.
+        assert_eq!(toggle_slot(1, 0xF0), Some((1, 0)));
+    }
 
     #[test]
     fn active_halt_request_requests_halt_without_changing_channel_configuration() {
@@ -1588,9 +2365,28 @@ mod tests {
         assert_eq!(hcsplt_for(None, false), 0);
         assert_eq!(hcsplt_for(None, true), 0);
     }
+
+    /// The pairing window is four raw `HFNUM` ticks wide and follows the counter
+    /// across its wrap, so a start from before the wrap is still recognised as the
+    /// same split -- and a stale one is closed rather than read as fresh.
+    #[test]
+    fn split_window_is_four_ticks_and_wraps_with_the_counter() {
+        assert!(
+            split_window_open(0x1234, 0x1234),
+            "the start-split's own tick"
+        );
+        assert!(split_window_open(0x1234, 0x1238), "four ticks later");
+        assert!(!split_window_open(0x1234, 0x1239), "past the window");
+        assert!(split_window_open(0xFFFF, 0x0002), "across the wrap");
+        assert!(!split_window_open(0xFFFF, 0x0005), "past the wrap window");
+        assert!(
+            !split_window_open(0x1234, 0x0234),
+            "a stale start, not a new one"
+        );
+    }
 }
 
-pub(crate) fn print_hex_val(val: u32) {
+pub fn print_hex_val(val: u32) {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     let mut buf = [0u8; 8];
     for i in 0..8 {
