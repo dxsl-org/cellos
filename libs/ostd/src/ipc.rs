@@ -34,6 +34,128 @@ pub enum IpcError {
     WrongSender,
     /// The reply bytes did not decode into the expected type.
     Decode,
+    /// Operation token is stale, foreign, cancelled, or otherwise invalid.
+    InvalidOperation,
+    /// Reply output buffer is too short; the terminal result was not consumed.
+    BufferTooSmall,
+}
+
+/// Exact operation identity scoped to the caller's live task generation.
+pub type IpcOpId = usize;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IpcSubmitError {
+    Busy,
+    PeerGone,
+    InvalidRequest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IpcTerminal {
+    Reply,
+    PeerGone,
+    PreDispatchTimeout,
+    Indeterminate,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IpcTakeResult {
+    Pending,
+    Terminal { status: IpcTerminal, len: usize },
+}
+
+/// Copies `request` into kernel storage, without waiting for the peer to
+/// receive or reply. Busy means no work was accepted; do not wait on this id.
+pub fn submit(peer_tid: usize, request: &[u8]) -> Result<IpcOpId, IpcSubmitError> {
+    match crate::syscall::sys_ipc_submit(peer_tid, request) {
+        token if token > 0 => Ok(token as usize),
+        -2 => Err(IpcSubmitError::Busy),
+        -3 => Err(IpcSubmitError::PeerGone),
+        _ => Err(IpcSubmitError::InvalidRequest),
+    }
+}
+
+/// Atomically take the exact operation's retained terminal result. The reply
+/// bytes are owned by the kernel until this succeeds; an undersized `reply`
+/// never consumes the result. A terminal result releases the operation slot.
+pub fn take(op: IpcOpId, reply: &mut [u8]) -> Result<IpcTakeResult, IpcError> {
+    let mut status = [0u8; api::syscall::IPC_STATUS_LEN];
+    match crate::syscall::sys_ipc_take(op, reply, &mut status) {
+        0 => Ok(IpcTakeResult::Pending),
+        1 => {
+            let version = u32::from_le_bytes(status[..4].try_into().unwrap());
+            let kind = u32::from_le_bytes(status[4..8].try_into().unwrap());
+            let len = u32::from_le_bytes(status[8..12].try_into().unwrap()) as usize;
+            let reserved = u32::from_le_bytes(status[12..16].try_into().unwrap());
+            if version != api::syscall::IPC_STATUS_VERSION || reserved != 0 || len > reply.len() {
+                return Err(IpcError::Decode);
+            }
+            let status = match kind {
+                api::syscall::ipc_status::REPLY => IpcTerminal::Reply,
+                api::syscall::ipc_status::PEER_GONE => IpcTerminal::PeerGone,
+                api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT => IpcTerminal::PreDispatchTimeout,
+                api::syscall::ipc_status::INDETERMINATE => IpcTerminal::Indeterminate,
+                api::syscall::ipc_status::CANCELLED => IpcTerminal::Cancelled,
+                _ => return Err(IpcError::Decode),
+            };
+            Ok(IpcTakeResult::Terminal { status, len })
+        }
+        -5 => Err(IpcError::BufferTooSmall),
+        _ => Err(IpcError::InvalidOperation),
+    }
+}
+
+/// Sleep until any result is terminal, or a finite timeout expires. Zero
+/// waits indefinitely; the kernel rechecks results atomically with parking.
+pub fn wait(timeout_ticks: u64) -> bool {
+    crate::syscall::sys_ipc_wait(timeout_ticks) == 1
+}
+
+/// Abandon one exact operation. A pre-dispatch request becomes Cancelled;
+/// an already-dispatched request becomes Indeterminate (not rolled back).
+/// Call `take` afterwards to release the retained terminal slot.
+pub fn cancel(op: IpcOpId) -> Result<(), IpcError> {
+    match crate::syscall::sys_ipc_cancel(op) {
+        0 => Ok(()),
+        _ => Err(IpcError::InvalidOperation),
+    }
+}
+
+/// Token of the current async service request, if the last receive delivered
+/// one. Save it before receiving another request for a deferred reply.
+pub fn current() -> Option<IpcOpId> {
+    match crate::syscall::sys_ipc_current() {
+        token if token > 0 => Some(token as usize),
+        _ => None,
+    }
+}
+
+/// Reply to a deferred request bound to this exact provider incarnation.
+/// Cancelled, duplicate, dead-client and foreign tokens are rejected.
+pub fn reply(op: IpcOpId, bytes: &[u8]) -> Result<(), IpcError> {
+    match crate::syscall::sys_ipc_reply(op, bytes) {
+        0 => Ok(()),
+        _ => Err(IpcError::InvalidOperation),
+    }
+}
+
+/// A masked receive may still return an unrelated NotifyOnExit record.
+#[inline]
+fn reply_sender(peer_tid: usize, result: SyscallResult) -> Result<(), IpcError> {
+    match result {
+        SyscallResult::Ok(sender) if sender == peer_tid => Ok(()),
+        SyscallResult::Ok(_) => Err(IpcError::WrongSender),
+        SyscallResult::Err(_) => Err(IpcError::Recv),
+    }
+}
+
+/// Receive a reply from one peer. A masked `Recv` can still deliver a queued
+/// NotifyOnExit record for another task, returning that task's id and writing
+/// its exit reason into the reply buffer. Never decode it as the peer's reply.
+pub fn recv_from<'r>(peer_tid: usize, recv_buf: &'r mut [u8]) -> Result<&'r [u8], IpcError> {
+    reply_sender(peer_tid, sys_recv(peer_tid, recv_buf))?;
+    Ok(recv_buf)
 }
 
 /// One request/reply exchange with `service_tid`, recv **masked** to it.
@@ -53,14 +175,24 @@ pub fn service_call<'r, Req: Serialize>(
     if let SyscallResult::Err(_) = sys_send(service_tid, encoded) {
         return Err(IpcError::Send);
     }
-    // MASKED recv — Spec 17 §2. Only the service's reply, never a keystroke.
-    match sys_recv(service_tid, recv_buf) {
-        SyscallResult::Ok(sender) if sender == service_tid => {
-            let len = recv_buf.len();
-            Ok(&recv_buf[..len])
-        }
-        SyscallResult::Ok(_) => Err(IpcError::WrongSender),
-        SyscallResult::Err(_) => Err(IpcError::Recv),
+    // MASKED recv — Spec 17 §2. A queued death for another task can still
+    // bypass the mask; recv_from checks the returned sender before decoding.
+    recv_from(service_tid, recv_buf)
+}
+
+#[cfg(test)]
+mod recv_tests {
+    use super::{reply_sender, IpcError};
+    use crate::syscall::{SyscallError, SyscallResult};
+
+    #[test]
+    fn masked_receive_rejects_unrelated_death_instead_of_decoding_reason() {
+        assert_eq!(reply_sender(17, SyscallResult::Ok(31)), Err(IpcError::WrongSender));
+        assert_eq!(
+            reply_sender(17, SyscallResult::Err(SyscallError::TryAgain)),
+            Err(IpcError::Recv)
+        );
+        assert_eq!(reply_sender(17, SyscallResult::Ok(17)), Ok(()));
     }
 }
 

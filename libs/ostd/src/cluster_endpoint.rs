@@ -90,7 +90,9 @@ impl<M: CellMethod> LocalEndpoint<M> {
             Err(ipc::IpcError::Send)
             | Err(ipc::IpcError::Recv)
             | Err(ipc::IpcError::WrongSender)
-            | Err(ipc::IpcError::Decode) => Err(ViError::IO),
+            | Err(ipc::IpcError::Decode)
+            | Err(ipc::IpcError::InvalidOperation)
+            | Err(ipc::IpcError::BufferTooSmall) => Err(ViError::IO),
         }
     }
 }

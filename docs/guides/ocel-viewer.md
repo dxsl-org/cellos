@@ -22,6 +22,27 @@ See [ADR-0017 §5c](../decisions/0017-dual-browser-strategy-ocel-and-tier3-chrom
 | Lanes | `tests/integration/tests/ocel-browser.rs` (viewer), `…/ocel-quickjs.rs` (engine) | QEMU evidence; both wired into the `boot-suite` CI job |
 | Document fixture | `tests/fixtures/ocel-js-demo.html` | Placed in VIFS1 at `/data/ocel-js-demo.html` by both image builders |
 
+### Standalone typography build
+
+The viewer requires the `ostd::ipc` exact-operation wrappers and the exhaustive
+error mappings in `ServiceRef` and `LocalEndpoint`; the syscall numbers and
+status wire format are defined in `api::syscall`. These dependencies must be
+committed with the viewer rather than supplied by a dirty working tree.
+
+From a clean checkout, use the RV64 PIC flags already used by CI:
+
+```sh
+cargo test --target x86_64-unknown-linux-gnu -p ostd -p viui -p fb-console -p ocel -p desktop
+CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS="-C relocation-model=pic" \
+  cargo build --release --target riscv64gc-unknown-none-elf \
+  -p desktop -p fb-console -p ocel -p robot-dashboard -p viui-demo
+```
+
+This verifies application compilation and hosted contracts, not execution of
+async IPC in a guest. The kernel must also implement syscalls 256–261 for
+demand-engine leases to run; committing user-space wrappers alone does not
+provide that kernel backend.
+
 ## How the script engine is wired (and why it is Tier 2)
 
 1. Both engine cells declare `tier = api::manifest::PROTECTION_CLASS_UNTRUSTED`.

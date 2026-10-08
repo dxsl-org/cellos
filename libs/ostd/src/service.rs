@@ -123,7 +123,9 @@ impl<const ID: u16> ServiceRef<ID> {
         match crate::ipc::service_call_typed::<Req, Resp>(tid, req, &mut send_buf, resp_buf) {
             Ok(resp) => Ok(resp),
             Err(crate::ipc::IpcError::Encode) => Err(ViError::InvalidArgument),
-            Err(crate::ipc::IpcError::Decode) => Err(ViError::IO),
+            Err(crate::ipc::IpcError::Decode)
+            | Err(crate::ipc::IpcError::InvalidOperation)
+            | Err(crate::ipc::IpcError::BufferTooSmall) => Err(ViError::IO),
             Err(crate::ipc::IpcError::Send)
             | Err(crate::ipc::IpcError::Recv)
             | Err(crate::ipc::IpcError::WrongSender) => {

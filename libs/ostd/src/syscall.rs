@@ -1193,6 +1193,43 @@ pub fn sys_write(fd: usize, buffer: &[u8]) -> Result<usize, SyscallError> {
     }
 }
 
+/// Submit an owned IPC request. The kernel copies bytes before this returns.
+/// Positive return is an opaque operation token; negative values are the
+/// additive IPC error mapping documented on `ViSyscall::IpcSubmit`.
+pub fn sys_ipc_submit(target: usize, bytes: &[u8]) -> isize {
+    // SAFETY: the kernel snapshots the input before returning.
+    unsafe { syscall(ViSyscall::IpcSubmit, target, bytes.as_ptr() as usize, bytes.len(), 0) }
+}
+
+/// Poll and atomically retrieve a retained terminal IPC result.
+pub fn sys_ipc_take(token: usize, reply: &mut [u8],
+                    status: &mut [u8; api::syscall::IPC_STATUS_LEN]) -> isize {
+    // SAFETY: both output buffers remain exclusively borrowed for this syscall.
+    unsafe { syscall(ViSyscall::IpcTake, token, reply.as_mut_ptr() as usize,
+        reply.len(), status.as_mut_ptr() as usize) }
+}
+
+pub fn sys_ipc_wait(timeout_ticks: u64) -> isize {
+    // SAFETY: register-only wait, no user pointer retained.
+    unsafe { syscall(ViSyscall::IpcWait, timeout_ticks as usize,
+        (timeout_ticks >> 32) as usize, 0, 0) }
+}
+
+pub fn sys_ipc_cancel(token: usize) -> isize {
+    // SAFETY: token-only syscall; completion storage remains kernel-owned.
+    unsafe { syscall(ViSyscall::IpcCancel, token, 0, 0, 0) }
+}
+
+pub fn sys_ipc_current() -> isize {
+    // SAFETY: register-only query of this task's current delivered request.
+    unsafe { syscall(ViSyscall::IpcCurrent, 0, 0, 0, 0) }
+}
+
+pub fn sys_ipc_reply(token: usize, bytes: &[u8]) -> isize {
+    // SAFETY: kernel copies reply into previously reserved owned storage.
+    unsafe { syscall(ViSyscall::IpcReply, token, bytes.as_ptr() as usize, bytes.len(), 0) }
+}
+
 // IPC Wrappers
 pub fn sys_send(target: usize, msg: &[u8]) -> SyscallResult {
     unsafe {
