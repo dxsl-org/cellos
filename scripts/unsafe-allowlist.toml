@@ -136,6 +136,13 @@ approver = "dmin"
 date = "2026-10-06"
 
 [[file]]
+path = "cells/services/ocel-pdf/src/engine.rs"
+class = "c-ffi"
+reason = "Isolated Tier 2 MuPDF FFI: this wrapper owns the native document and keeps borrowed input alive; all C exceptions are caught in C before returning to Rust."
+approver = "dmin"
+date = "2026-10-06"
+
+[[file]]
 path = "cells/tests/tls-test/src/regs.rs"
 class = "test-harness"
 reason = "Per-task TLS base test: reading the user thread pointer register (tp / TPIDR_EL0) and touching the thread's own TLS block through it are exactly what the test proves; both are confined to this file behind safe wrappers."
@@ -533,6 +540,13 @@ date = "2026-07-14"
 name = "ocel-quickjs"
 class = "c-ffi"
 reason = "Owns allowlisted unsafe under cells/services/ocel-quickjs/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+approver = "dmin"
+date = "2026-10-06"
+
+[[crate]]
+name = "ocel-pdf"
+class = "c-ffi"
+reason = "Native PDF renderer behind the explicitly approved capability-free Tier 2 launch edge; unsafe is confined to engine.rs."
 approver = "dmin"
 date = "2026-10-06"
 

@@ -1,0 +1,125 @@
+ocel-pdf native renderer provenance and build contract
+===================================================
+
+Source package: MuPDF 1.26.1 (Artifex Software, Inc.)
+URL: https://mupdf.com/downloads/archive/mupdf-1.26.1-source.tar.gz
+Archive SHA-256:
+  bdce017c776744c288b02102977ee0378cb436c78df8127a23f281f1360406fd
+Individual retained upstream file hashes: vendor/SOURCES.json.
+All retained upstream bytes are unmodified. No third-party source patches.
+The selected package directories retain PDF/Fitz source, public headers,
+upstream slim FreeType/JPEG configuration, dependent C libraries and font
+resources. Applications, platform ports, other document engines, JavaScript,
+OCR, and unrelated libraries are not dependencies of the renderer.
+The unlinked Droid font binary payloads are omitted from the retained source
+selection; their Apache notice is preserved. The inventory records retained
+files only.
+
+Combined static service license: AGPL-3.0-or-later, unless distributed under
+separately obtained applicable Artifex commercial licensing terms. This is
+not an MPL-only executable. Artifex's alternative-commercial-license notices
+remain in every upstream source header. Full AGPL text: vendor/mupdf/COPYING.
+Owned Rust/C glue and owned C declarations: AGPL-3.0-or-later. Referenced API,
+ostd and IPC protocol retain their original file licenses; no unrelated
+repository files are relicensed by this package.
+
+Third-party licenses and notices retained with source:
+* FreeType: FreeType License (chosen here; credit: portions of this software
+  are copyright The FreeType Project, https://freetype.org/; all rights
+  reserved), vendor/mupdf/thirdparty/freetype/LICENSE.TXT and docs/FTL.TXT;
+  alternate GPLv2-or-later text is retained as docs/GPLv2.TXT.
+* Independent JPEG Group: thirdparty/libjpeg/README (license and attribution;
+  this software is based in part on the work of the Independent JPEG Group).
+* zlib: thirdparty/zlib/LICENSE.
+* jbig2dec: AGPL-3.0-or-later, thirdparty/jbig2dec/LICENSE and COPYING.
+* OpenJPEG: BSD-2-Clause, thirdparty/openjpeg/LICENSE.
+* LCMS2 multithreaded fork: MIT, thirdparty/lcms2/LICENSE; per-file notices
+  remain intact. Threaded plugin source may carry GPLv3 notices; the plugin
+  is NOT compiled. The renderer uses upstream CMS_NO_PTHREADS.
+* URW base14 font resources: OFL-1.1, resources/fonts/urw/OFL.txt.
+* Android Droid font license retained for source-package provenance only:
+  Apache-2.0, resources/fonts/droid/NOTICE. No Droid font is linked.
+
+Renderer configuration
+----------------------
+Real MuPDF PDF parsing and drawing, including text, vectors, multiple pages,
+embedded images, compressed streams, embedded font formats, transparency,
+ICC color and JPEG2000/JBIG2/JPEG decoding. Only the PDF document agent is
+selected. PDF JavaScript is disabled; it is not part of passive rasterizing.
+TOFU/TOFU_CJK retain standard PDF base14 fallback only. Droid CJK fallback
+is not linked because its multi-megabyte payload exceeds the existing VIFS1
+loader's staging heap. Non-embedded CJK font substitution is unavailable;
+CJK and other scripts still render through document-embedded fonts. The large
+Noto/SIL fallback collection is also not embedded. Password-protected documents
+needing a password return an explicit error because the protocol has no
+password field.
+Brotli, HTML-rich annotation layout, OCR and export-to-office agents are off.
+The upstream slim FreeType module/options configuration is used unchanged.
+
+Service bounds: one live owner-TID-scoped handle, 2 MiB copied input, 1M page
+pixels, 3072-byte pixel chunks, 10 MiB MuPDF allocator budget, 16 MiB cell heap.
+The sole full raster allocation is a four-component RGB+alpha MuPDF pixmap
+rendered onto opaque white. C closes/drops its draw device, checks packed
+opaque RGBA, swaps R/B in-place, and retains the pixmap only as a BGRA byte
+cache until the next render/Close. No full-page RGB/BGRA duplicate exists.
+A new Open while occupied returns busy, even to another TID. Handles are never
+recycled; exhaustion is explicit. Failed raster production clears the cache;
+invalid argument rejection does not modify an existing cache. Close
+drops cached BGRA, document/streams, context and allocator, then Rust input.
+No mmap, domain/shared-memory grant, SpawnCap or self-registration is used.
+Clock-dependent C time() returns the standard unavailable sentinel (-1);
+parsing and formatting timestamps already present in PDFs uses real UTC
+calendar conversion. No wall-clock epoch is invented.
+
+Freestanding ABI
+----------------
+Sole production target: riscv64gc-unknown-none-elf, RV64GC/lp64d, PIC/medany.
+CC_riscv64gc_unknown_none_elf selects the compiler, otherwise
+riscv-none-elf-gcc is selected. An unsupported target fails build.rs clearly.
+No hosted libc or C++ runtime is linked. Compiler intrinsic headers provide
+stddef/stdint/stdarg/float; owned vendor/include supplies the rest.
+Source-derived external ABI requirements (not an observed nm inventory):
+* api POSIX: malloc, calloc, realloc, free; memcpy/memmove/memset/memcmp/
+  memchr; strlen/strcmp/strncmp/strcpy/strncpy/strcat/strchr/strrchr;
+  fprintf/sprintf/snprintf/vsnprintf/vsprintf/vfprintf/fputs/fputc/fwrite,
+  stdout/stderr; abort; double/float C99 math functions (libm-backed).
+* Service-local C: prefixed qsort/bsearch, integer parsing, extra string
+  operations, lrintf, errno, UTC calendar operations, absent environment;
+  __popcountdi2 is implemented with exact 64-bit parallel bit summation in
+  the same lp64d archive (avoids incompatible compiler_builtins objects).
+  ocel_pdf_remove fails with EACCES/-1: this passive service never mutates
+  files, including LCMS profile-writing cleanup reachable at static link.
+* Service-local Rust: ocel_pdf_exit invokes the real cell exit syscall.
+* Service-local assembly: ocel_pdf_setjmp/ocel_pdf_longjmp save ra/sp,
+  s0..s11 and fs0..fs11 in 26 words. They do NOT use the shared api POSIX
+  setjmp (which currently saves only fs0/fs1). All MuPDF exception frames
+  and codec error boundaries stay in C; there are no throwing Rust callbacks.
+IJG's documented NO_GETENV configuration disables JPEGMEM environment parsing
+and its sscanf dependency; cells have no process environment to consult.
+File, exporter and process-environment declarations needed to compile unused
+upstream API sections are present, but these sections are removed by function/
+data section GC. The service opens only ostd::fs::File bounded read buffers
+and passes fz_open_memory; no MuPDF file-opening entry point is invoked.
+The final RV64 link and nm undefined-symbol closure must be checked by parent;
+no link or smoke execution was performed during this worker assignment.
+
+Parent verification entry points
+-------------------------------
+1. From repository root:
+   python3 cells/services/ocel-pdf/smoke/host.py tests/fixtures/ocel-pdf-demo.pdf
+   This compiles the same pinned renderer/dependency selection against host
+   libc and asserts C exception recovery, two real raster pages, opaque BGRA,
+   text and colored vector pixels, cache/range rejection. It is a native C
+   harness, NOT an unsupported-target service fallback.
+2. Parent adds workspace member, then:
+   cargo build -p ocel-pdf --release --target riscv64gc-unknown-none-elf
+   Use the project's normal cross-compiler/linker environment. Inspect the
+   service ELF with readelf/nm for unresolved symbols and section sizes; ELF
+   plus font data plus 16MiB heap and stack must fit the existing 32MiB slot.
+3. Parent image/QEMU smoke: init registers OCEL_PDF=18, Open the fixture,
+   require pages=2, RenderPage(0/1,320,240), collect ReadPixels chunks, require
+   each raster is 307200 bytes with alpha=255 and distinct colored/text/image
+   content; Close. Also exercise invalid bytes through Open (C catch path),
+   page/size/range/closed-handle errors, and a different sender TID's inability
+   to render/read/close an owner's document. Test local RV64 exception recovery
+   with live fs2..fs11 values across the prefixed setjmp/longjmp if possible.
