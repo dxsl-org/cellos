@@ -17,21 +17,12 @@ use alloc::vec;
 use alloc::vec::Vec;
 use vm_fdt::{FdtWriter, FdtWriterResult};
 
-/// Boot arguments passed to the Linux kernel command line.
-/// Each printed character traps through Stage-2 MMIO on Pi, so keep the
-/// release board profile quiet; warnings and errors remain on the console.
-#[cfg(feature = "board-rpi3")]
-pub const BOOTARGS: &str =
-    "console=ttyAMA0 earlycon=pl011,0x9000000 rdinit=/bin/sh panic=1 loglevel=3 quiet";
-#[cfg(not(feature = "board-rpi3"))]
-pub const BOOTARGS: &str =
-    "console=hvc0 console=ttyAMA0 earlycon=pl011,0x9000000 rdinit=/bin/sh panic=1 loglevel=8";
-
 /// Build a minimal DTB for a single-CPU Alpine guest.
 ///
 /// Parameters:
 /// - `ram_base` / `ram_size`: guest physical RAM region (usually 0x40000000, configurable MB)
 /// - `initrd_start` / `initrd_end`: guest physical addresses of the initramfs blob
+/// - `bootargs`: the guest kernel command line, from the guest profile
 ///
 /// Returns the raw DTB bytes.
 pub fn build_dtb(
@@ -39,6 +30,7 @@ pub fn build_dtb(
     ram_size: u64,
     initrd_start: u64,
     initrd_end: u64,
+    bootargs: &str,
 ) -> FdtWriterResult<Vec<u8>> {
     let mut fdt = FdtWriter::new()?;
 
@@ -148,7 +140,7 @@ pub fn build_dtb(
 
     // ── 6. /chosen ───────────────────────────────────────────────────────────
     let chosen = fdt.begin_node("chosen")?;
-    fdt.property_string("bootargs", BOOTARGS)?;
+    fdt.property_string("bootargs", bootargs)?;
     fdt.property_string("stdout-path", "pl011@9000000")?;
     fdt.property_u64("linux,initrd-start", initrd_start)?;
     fdt.property_u64("linux,initrd-end", initrd_end)?;

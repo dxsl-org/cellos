@@ -8,12 +8,10 @@ use crate::{dtb, loader_image, run_loop, vmm};
 /// Guest IPA base (1 GiB, must match registry.rs GUEST_IPA_BASE).
 #[cfg(target_arch = "aarch64")]
 const GUEST_IPA_BASE: u64 = 0x4000_0000;
-/// 128 MiB guest RAM.
+/// Guest RAM and the page count for `create_vm` follow the guest profile
+/// (`boot_arm_profile`), the same way the x86 lane sizes its guest.
 #[cfg(target_arch = "aarch64")]
-const GUEST_RAM_SIZE: u64 = 128 * 1024 * 1024;
-/// Page count for create_vm.
-#[cfg(target_arch = "aarch64")]
-const GUEST_RAM_PAGES: usize = (GUEST_RAM_SIZE / 4096) as usize;
+use crate::boot_arm_profile::{GUEST_RAM_PAGES, GUEST_RAM_SIZE, PROFILE};
 
 #[cfg(target_arch = "aarch64")]
 const VMLINUZ_PATH: &str = "/vmlinuz";
@@ -33,6 +31,11 @@ pub fn boot_arm() {
     use ostd::io::println;
     use types::ViError;
     println("[hv] hypervisor service cell starting");
+    println(&alloc::format!(
+        "[hv] guest profile: {} ({} MiB)",
+        PROFILE,
+        GUEST_RAM_SIZE / (1024 * 1024)
+    ));
 
     // The embedded VIFS1 files are required. Check both paths before carving
     // 128 MiB from the host: a malformed/incomplete image must not look like
@@ -148,6 +151,7 @@ pub fn boot_arm() {
         GUEST_RAM_SIZE,
         guest.initrd_gpa,
         guest.initrd_gpa + guest.initrd_size,
+        &crate::boot_arm_profile::bootargs(),
     ) {
         Ok(b) => b,
         Err(_) => {

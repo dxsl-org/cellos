@@ -46,9 +46,12 @@ pub fn run(
     let mut timer_regs = [0u64; 32];
     let mut console = Console::new();
     let mut vmio = VirtioMmio::default();
-    let mut blk = BlkDisk::new(disk_file, Some(17));
+    let mut blk = BlkDisk::new(disk_file, Some(vmm::device_irq(17)));
     let mut blk_vmio = VirtioMmio::default();
-    let mut net = NetDev::new(sys_lookup_service(service::NET).unwrap_or(0), Some(18));
+    let mut net = NetDev::new(
+        sys_lookup_service(service::NET).unwrap_or(0),
+        Some(vmm::device_irq(18)),
+    );
     let mut net_vmio = VirtioMmio::default();
     let mut gpu = GpuDev::new(
         compositor_tid,
@@ -56,12 +59,12 @@ pub fn run(
         if height == 0 { 768 } else { height },
     );
     let mut gpu_vmio = VirtioMmio::default();
-    let mut input = InputDev::new(Some(INPUT_SPI));
+    let mut input = InputDev::new(Some(vmm::device_irq(INPUT_SPI)));
     let mut input_vmio = VirtioMmio::default();
+    #[cfg(feature = "board-rpi3")]
+    let mut focused_input_tid = 0;
     gpu.bring_up();
     let mut exit = ViVmExit::Unknown { ec: 0, iss: 0 };
-    #[cfg(feature = "board-rpi3")]
-    let mut diag = [0u64; 3]; // total exits, timer preemptions, WFI
 
     loop {
         gpu.poll_damage();
@@ -93,24 +96,6 @@ pub fn run(
             return RunOutcome::Shutdown;
         }
 
-        #[cfg(feature = "board-rpi3")]
-        {
-            diag[0] += 1;
-            if matches!(exit, ViVmExit::Preempted) {
-                diag[1] += 1;
-            }
-            if matches!(exit, ViVmExit::Wfi) {
-                diag[2] += 1;
-            }
-            if diag[0] <= 8 || diag[0] % 128 == 0 {
-                let mut rb = [0u64; 32];
-                vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
-                println(&alloc::format!(
-                    "[hv-diag] exits={} preempt={} wfi={} pc={:#x} lr={:#x} x0={:#x} x19={:#x} x20={:#x} ctl={:#x} cval={:#x} last={:?}",
-                    diag[0], diag[1], diag[2], rb[31], rb[30], rb[0], rb[19], rb[20], timer_regs[0], timer_regs[1], exit
-                ));
-            }
-        }
         match exit {
             // ── HVC (PSCI + unknown) ──────────────────────────────────────────
             ViVmExit::Hvc { imm: 0, mut regs } => match psci::dispatch(&mut regs) {
@@ -207,14 +192,46 @@ pub fn run(
                 #[cfg(not(feature = "board-rpi3"))]
                 timer::inject_timer_irq(vm_id, vcpu_id);
                 gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
-                if let Some(frame) = net_backend::try_receive(&mut net.backend) {
-                    if net.push_rx_frame(&frame, vm_id, vcpu_id, &net_vmio) {
-                        net_vmio.signal_used();
-                    }
-                }
-                forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);
+                // Input first: it is the interactive path, and the RX poll below
+                // is an IPC round trip the guest's echo should not wait behind.
+                forward_input_events(
+                    &mut input,
+                    &mut input_vmio,
+                    vm_id,
+                    vcpu_id,
+                    #[cfg(feature = "board-rpi3")]
+                    &mut pl011,
+                    #[cfg(feature = "board-rpi3")]
+                    &mut focused_input_tid,
+                );
                 #[cfg(feature = "board-rpi3")]
                 drain_host_serial(&mut pl011);
+                {
+                    static FIRST_RX_READY: core::sync::atomic::AtomicBool =
+                        core::sync::atomic::AtomicBool::new(false);
+                    if net.rx_available(vm_id, &net_vmio)
+                        && !FIRST_RX_READY.swap(true, core::sync::atomic::Ordering::Relaxed)
+                    {
+                        ostd::io::println(
+                            "[hv-virtio-net] guest RX buffers posted — polling the net service",
+                        );
+                    }
+                }
+                if net.rx_available(vm_id, &net_vmio) {
+                    if let Some(frame) = net_backend::try_receive(&mut net.backend) {
+                        if net.push_rx_frame(&frame, vm_id, vcpu_id, &net_vmio) {
+                            net_vmio.signal_used();
+                            static FIRST_GUEST_RX: core::sync::atomic::AtomicBool =
+                                core::sync::atomic::AtomicBool::new(false);
+                            if !FIRST_GUEST_RX.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                                ostd::io::println(&alloc::format!(
+                                    "[hv-virtio-net] first RX frame len={} into the guest",
+                                    frame.len()
+                                ));
+                            }
+                        }
+                    }
+                }
                 #[cfg(feature = "board-rpi3")]
                 ostd::task::yield_now();
             }
@@ -222,14 +239,44 @@ pub fn run(
             // ── Preemption budget expired (C2 yield) — poll RX before re-enter
             ViVmExit::Preempted => {
                 gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
-                if let Some(frame) = net_backend::try_receive(&mut net.backend) {
-                    if net.push_rx_frame(&frame, vm_id, vcpu_id, &net_vmio) {
-                        net_vmio.signal_used();
-                    }
-                }
-                forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);
+                forward_input_events(
+                    &mut input,
+                    &mut input_vmio,
+                    vm_id,
+                    vcpu_id,
+                    #[cfg(feature = "board-rpi3")]
+                    &mut pl011,
+                    #[cfg(feature = "board-rpi3")]
+                    &mut focused_input_tid,
+                );
                 #[cfg(feature = "board-rpi3")]
                 drain_host_serial(&mut pl011);
+                {
+                    static FIRST_RX_READY: core::sync::atomic::AtomicBool =
+                        core::sync::atomic::AtomicBool::new(false);
+                    if net.rx_available(vm_id, &net_vmio)
+                        && !FIRST_RX_READY.swap(true, core::sync::atomic::Ordering::Relaxed)
+                    {
+                        ostd::io::println(
+                            "[hv-virtio-net] guest RX buffers posted — polling the net service",
+                        );
+                    }
+                }
+                if net.rx_available(vm_id, &net_vmio) {
+                    if let Some(frame) = net_backend::try_receive(&mut net.backend) {
+                        if net.push_rx_frame(&frame, vm_id, vcpu_id, &net_vmio) {
+                            net_vmio.signal_used();
+                            static FIRST_GUEST_RX: core::sync::atomic::AtomicBool =
+                                core::sync::atomic::AtomicBool::new(false);
+                            if !FIRST_GUEST_RX.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                                ostd::io::println(&alloc::format!(
+                                    "[hv-virtio-net] first RX frame len={} into the guest",
+                                    frame.len()
+                                ));
+                            }
+                        }
+                    }
+                }
                 ostd::task::yield_now();
             }
 
@@ -291,7 +338,10 @@ fn drain_host_serial(pl011: &mut Pl011) {
             break;
         }
         for &byte in &buf[..n] {
-            pl011.push_rx(byte);
+            // `push_host_rx`, not `push_rx`: the host terminal's reply to the
+            // guest's cursor-position query arrives too late for the guest to
+            // use it, and would otherwise be read as a command.
+            pl011.push_host_rx(byte);
         }
         if n < buf.len() {
             break;
@@ -304,12 +354,44 @@ fn forward_input_events(
     input_vmio: &mut VirtioMmio,
     vm_id: usize,
     vcpu_id: usize,
+    #[cfg(feature = "board-rpi3")] pl011: &mut Pl011,
+    #[cfg(feature = "board-rpi3")] focused_input_tid: &mut usize,
 ) {
+    #[cfg(feature = "board-rpi3")]
+    {
+        let input_tid = sys_lookup_service(service::INPUT).unwrap_or(0);
+        if input_tid != *focused_input_tid {
+            *focused_input_tid = 0;
+            if input_tid != 0 && ostd::input::request_focus() {
+                *focused_input_tid = input_tid;
+            }
+        }
+    }
     for ev in ostd::input::poll_events(16) {
         match ev {
             api::input::InputEvent::Key(ke) => {
                 let pressed = ke.state == api::input::KeyState::Pressed
                     || ke.state == api::input::KeyState::Repeated;
+                #[cfg(feature = "board-rpi3")]
+                if pressed {
+                    use api::input::KeySym;
+                    match ke.keysym {
+                        KeySym::Return => pl011.push_rx(b'\r'),
+                        KeySym::Backspace => pl011.push_rx(0x7f),
+                        KeySym::Tab => pl011.push_rx(b'\t'),
+                        KeySym::Printable if ke.is_ctrl('c') => pl011.push_rx(3),
+                        KeySym::Printable if ke.is_ctrl('d') => pl011.push_rx(4),
+                        KeySym::Printable => {
+                            if let Some(ch) = ke.char() {
+                                let mut bytes = [0u8; 4];
+                                for &byte in ch.encode_utf8(&mut bytes).as_bytes() {
+                                    pl011.push_rx(byte);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
                 let code = if ke.scancode > 0 {
                     ke.scancode as u16
                 } else {

@@ -13,8 +13,12 @@ compile_error!("ubuntu-wide-guest requires the persistent /mnt/sd/guest_disk.img
 compile_error!("ubuntu-wide-guest is qualified only on the x86_64 PVH path");
 #[cfg(all(feature = "alpine-wide-guest", feature = "ubuntu-wide-guest"))]
 compile_error!("choose one wide guest profile: Alpine or Ubuntu");
-#[cfg(all(feature = "alpine-wide-guest", not(target_arch = "x86_64")))]
-compile_error!("alpine-wide-guest is supported only on the x86_64 PVH path");
+#[cfg(all(feature = "alpine-gui-guest", feature = "alpine-wide-guest"))]
+compile_error!("one guest profile per image: alpine-gui-guest and alpine-wide-guest are exclusive");
+#[cfg(all(feature = "alpine-gui-guest", feature = "ubuntu-wide-guest"))]
+compile_error!("one guest profile per image: alpine-gui-guest and ubuntu-wide-guest are exclusive");
+#[cfg(all(feature = "alpine-gui-guest", not(target_arch = "aarch64")))]
+compile_error!("alpine-gui-guest is defined for the aarch64 guest path");
 
 extern crate alloc;
 
@@ -33,6 +37,7 @@ api::declare_syscalls![
     // IPC / service discovery
     Send,
     TrySend,
+    TryRecv,
     Recv,
     RecvTimeout,
     Log,
@@ -79,6 +84,8 @@ mod vmm;
 // ── aarch64 (EL2) personality ─────────────────────────────────────────────────
 #[cfg(target_arch = "aarch64")]
 mod boot_arm;
+#[cfg(target_arch = "aarch64")]
+mod boot_arm_profile;
 #[cfg(target_arch = "aarch64")]
 mod dtb;
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]

@@ -14,8 +14,19 @@ default = []
 hostile-backend-recovery = ["api/hostile-backend-recovery"]
 volatile-disk = []
 ubuntu-wide-guest = []
+# 256 MiB guest: a musl userspace with real packages (Python, Node, a headless
+# browser). Shared name with the x86 lane, which measured why 128 MiB is not
+# enough (`apk add python3` is OOM-killed there).
 alpine-wide-guest = []
+# 512 MiB guest that draws a window. The display path (virtio-gpu surface ->
+# compositor -> panel) is not built yet, so this is a build for the day it
+# lands, not a claim that a window appears today.
+alpine-gui-guest = []
 board-rpi3 = []
+# Diagnostic image: report every L2 exchange outcome (direction, counter,
+# status) instead of the first one only, so the guest's network path can be
+# placed from one board log.
+l2-trace = []
 [dependencies]
 types  = { path = "../../../libs/types", version = "0.1.0" }
 api    = { path = "../../../libs/api", version = "0.1.0" }
