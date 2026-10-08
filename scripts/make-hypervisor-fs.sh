@@ -66,7 +66,14 @@ if [[ -z "${LIBCLANG_PATH:-}" ]]; then
     [[ -f "$VS_LLVM/libclang.dll" ]] && export LIBCLANG_PATH="$VS_LLVM"
 fi
 echo "[make-hv-fs] Building aarch64 cells (service-hypervisor + core cells)..."
-INIT_FEATURES="${HV_INIT_MIN:+--features app-init/hypervisor-min}"
+# These images exist to exercise the hypervisor, so the VM is preloaded
+# (`hv-autostart`). Cellos itself defaults to the other shape: prompt first, guest
+# on demand (`hv`), which is what `make-hypervisor-fs-rpi3.sh` builds unless it is
+# asked for `--autostart`.
+INIT_FEATURES="--features app-init/input,app-init/ui,app-init/ai,app-init/supervisor,app-init/tier3,app-init/tier3-autostart"
+if [[ -n "${HV_INIT_MIN:-}" ]]; then
+    INIT_FEATURES="--features app-init/input,app-init/tier3,app-init/tier3-autostart"
+fi
 
 cargo build --release \
     --target "$TARGET" \

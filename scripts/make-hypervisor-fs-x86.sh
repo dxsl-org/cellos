@@ -34,7 +34,7 @@ prepare_guest_artifacts
 
 # ── Step 2: Build x86 runtime cells as PIE ───────────────────────────────────
 
-INIT_FEATURES="service-net/tls-roots-embedded,service-net/tls-ca-private"
+INIT_FEATURES="app-init/input,app-init/ui,app-init/ai,app-init/supervisor,app-init/tier3,app-init/tier3-autostart,service-net/tls-roots-embedded,service-net/tls-ca-private"
 HOSTILE_PACKAGE_ARGS=()
 if [[ "$HV_VOLATILE_DISK_VALUE" == "1" ]]; then
     INIT_FEATURES+=",service-hypervisor/volatile-disk"
@@ -46,12 +46,12 @@ if [[ "$GUEST_PROFILE" == "alpine-wide" ]]; then
     INIT_FEATURES+=",service-hypervisor/alpine-wide-guest"
 fi
 if [[ "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" == "1" ]]; then
-    INIT_FEATURES+=",app-init/hypervisor-min,app-init/hostile-backend-recovery"
+    INIT_FEATURES+=",app-init/hostile-backend-recovery"
     INIT_FEATURES+=",service-net/hypervisor-bridge,supervisor/hostile-backend-recovery"
     INIT_FEATURES+=",service-hypervisor/hostile-backend-recovery"
     HOSTILE_PACKAGE_ARGS=(-p supervisor)
 elif [[ "$GUEST_PROFILE" == "ubuntu" || "$HV_INIT_MIN_VALUE" == "1" ]]; then
-    INIT_FEATURES+=",app-init/hypervisor-min,service-net/hypervisor-bridge"
+    INIT_FEATURES+=",service-net/hypervisor-bridge"
 fi
 INIT_FEATURE_ARGS=(--features "$INIT_FEATURES")
 
@@ -83,7 +83,7 @@ sign_cells "${SIGN_TARGETS[@]}"
 
 # ── Step 3: Assemble kernel_fs.img ──────────────────────────────────────────
 mkdir -p "$EMBEDDED_HV"
-# /bin/shell remains available to the ordinary profile. The hypervisor-min
+# /bin/shell remains available to the PC profile. The server profile
 # profile does not start it; it supervises VFS then Net before starting the
 # hypervisor. Hostile backend recovery additionally supervises /bin/supervisor
 # after Net, leaving the nested guest as the only interactive console.

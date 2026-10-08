@@ -102,7 +102,7 @@ if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
         --target aarch64-unknown-none-softfloat \
         -Z build-std=core,alloc \
         --no-default-features \
-        --features development-silo-provider \
+        --features development-silo-provider,input,ui,ai,supervisor \
         -p app-init -p service-silo -p service-kms
 
     echo "==> Building development-Silo containment probe (app-silo-test)..."
