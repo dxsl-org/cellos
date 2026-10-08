@@ -4,7 +4,7 @@
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>alloc::string::String;
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>alloc::vec::Vec;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>api::ipc::{VfsRequest, VfsResponse};
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>ostd::syscall::{<span class="self">self</span>, SyscallResult};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>ostd::syscall;
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>DirEntry {
 <a href=#10 id=10 data-nosnippet>10</a>    <span class="kw">pub </span>is_dir: bool,
@@ -75,8 +75,8 @@
 <a href=#75 id=75 data-nosnippet>75</a>        ostd::task::yield_now();
 <a href=#76 id=76 data-nosnippet>76</a>    };
 <a href=#77 id=77 data-nosnippet>77</a>    syscall::sys_send(vfs, <span class="kw-2">&amp;</span>send[..len]);
-<a href=#78 id=78 data-nosnippet>78</a>    <span class="kw">match </span>syscall::sys_recv(vfs, recv) {
-<a href=#79 id=79 data-nosnippet>79</a>        SyscallResult::Ok(<span class="kw">_</span>) =&gt; <span class="prelude-val">Ok</span>(recv),
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="kw">match </span>ostd::ipc::recv_from(vfs, recv) {
+<a href=#79 id=79 data-nosnippet>79</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="prelude-val">Ok</span>(recv),
 <a href=#80 id=80 data-nosnippet>80</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(String::from(<span class="string">"VFS request failed"</span>)),
 <a href=#81 id=81 data-nosnippet>81</a>    }
 <a href=#82 id=82 data-nosnippet>82</a>}

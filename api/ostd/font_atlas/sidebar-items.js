@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["GlyphAtlas","GlyphMetrics"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_FONT_PX"],"fn":["supported_size"],"struct":["GlyphAtlas","GlyphMetrics"]};

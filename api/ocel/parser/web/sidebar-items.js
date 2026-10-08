@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["append_run","append_text","ceil_pixel","collect_styles","empty_line","finish_line","flush_word","intrinsic_widths","layout","measure","next_advance","paint_lines","pixel","push_char","same_run","wrap","wrap_runs"],"struct":["Builder","Entry","TextContext","TextLine","TextRun","WebBox","WebLayout"]};

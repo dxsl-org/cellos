@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["REPLY_TIMEOUT","TCP_TIMEOUT","TLS_TIMEOUT"],"enum":["ReplyTo","Request","State","Step"],"fn":["failed","poll_future","start"],"struct":["LegacyReply","Pending","Queued","TlsPending"],"type":["Handshake","Receiving","Sending"]};

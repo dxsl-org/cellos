@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_request","handle_typed","make_tcp","send_typed","tcp_state_byte","try_promote"],"mod":["tcp","udp"]};
+window.SIDEBAR_ITEMS = {"fn":["handle_request","handle_typed","make_tcp","send_typed","tcp_state_byte","try_promote"],"mod":["tcp","udp"],"static":["L2_RECV_REQUESTS","L2_SEND_REQUESTS"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["HTTPD_PORT"],"fn":["cell_main","main","parse_u16","wait_for_service"],"mod":["handlers","net_ipc","router","static_files"],"static":["VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"constant":["HTTPD_PORT"],"fn":["cell_main","init_custom_heap","main","parse_u16","wait_for_service"],"mod":["handlers","net_ipc","reactor","router"],"static":["VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

@@ -20,18 +20,26 @@
 <a href=#20 id=20 data-nosnippet>20</a>    }
 <a href=#21 id=21 data-nosnippet>21</a>}
 <a href=#22 id=22 data-nosnippet>22</a>
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>bytes(data: <span class="kw-2">&amp;</span>[u8]) -&gt; AlignedElf&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>bytes(data: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;AlignedElf&lt;<span class="lifetime">'_</span>&gt;, types::ViError&gt; {
 <a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">if </span>(data.as_ptr() <span class="kw">as </span>usize).is_multiple_of(<span class="number">8</span>) {
-<a href=#25 id=25 data-nosnippet>25</a>        <span class="kw">return </span>AlignedElf::Borrowed(data);
+<a href=#25 id=25 data-nosnippet>25</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(AlignedElf::Borrowed(data));
 <a href=#26 id=26 data-nosnippet>26</a>    }
-<a href=#27 id=27 data-nosnippet>27</a>    <span class="kw">let </span><span class="kw-2">mut </span>words = <span class="macro">alloc::vec!</span>[<span class="number">0u64</span>; data.len().div_ceil(<span class="number">8</span>)];
-<a href=#28 id=28 data-nosnippet>28</a>    <span class="comment">// SAFETY: the u64 backing has at least `data.len()` writable bytes.
-<a href=#29 id=29 data-nosnippet>29</a>    </span><span class="kw">unsafe </span>{
-<a href=#30 id=30 data-nosnippet>30</a>        core::ptr::copy_nonoverlapping(data.as_ptr(), words.as_mut_ptr().cast::&lt;u8&gt;(), data.len());
-<a href=#31 id=31 data-nosnippet>31</a>    }
-<a href=#32 id=32 data-nosnippet>32</a>    AlignedElf::Owned {
-<a href=#33 id=33 data-nosnippet>33</a>        words,
-<a href=#34 id=34 data-nosnippet>34</a>        len: data.len(),
-<a href=#35 id=35 data-nosnippet>35</a>    }
-<a href=#36 id=36 data-nosnippet>36</a>}
+<a href=#27 id=27 data-nosnippet>27</a>    <span class="comment">// The copy is the ELF's own size, so it must be fallible: `vec![0u64; ..]`
+<a href=#28 id=28 data-nosnippet>28</a>    // goes through the infallible allocator and a full heap would halt the kernel
+<a href=#29 id=29 data-nosnippet>29</a>    // instead of refusing the spawn.
+<a href=#30 id=30 data-nosnippet>30</a>    </span><span class="kw">let </span>words_len = data.len().div_ceil(<span class="number">8</span>);
+<a href=#31 id=31 data-nosnippet>31</a>    <span class="kw">let </span><span class="kw-2">mut </span>words: alloc::vec::Vec&lt;u64&gt; = alloc::vec::Vec::new();
+<a href=#32 id=32 data-nosnippet>32</a>    words
+<a href=#33 id=33 data-nosnippet>33</a>        .try_reserve_exact(words_len)
+<a href=#34 id=34 data-nosnippet>34</a>        .map_err(|<span class="kw">_</span>| types::ViError::OutOfMemory)<span class="question-mark">?</span>;
+<a href=#35 id=35 data-nosnippet>35</a>    words.resize(words_len, <span class="number">0</span>);
+<a href=#36 id=36 data-nosnippet>36</a>    <span class="comment">// SAFETY: the u64 backing has at least `data.len()` writable bytes.
+<a href=#37 id=37 data-nosnippet>37</a>    </span><span class="kw">unsafe </span>{
+<a href=#38 id=38 data-nosnippet>38</a>        core::ptr::copy_nonoverlapping(data.as_ptr(), words.as_mut_ptr().cast::&lt;u8&gt;(), data.len());
+<a href=#39 id=39 data-nosnippet>39</a>    }
+<a href=#40 id=40 data-nosnippet>40</a>    <span class="prelude-val">Ok</span>(AlignedElf::Owned {
+<a href=#41 id=41 data-nosnippet>41</a>        words,
+<a href=#42 id=42 data-nosnippet>42</a>        len: data.len(),
+<a href=#43 id=43 data-nosnippet>43</a>    })
+<a href=#44 id=44 data-nosnippet>44</a>}
 </code></pre></div></section></main></body></html>

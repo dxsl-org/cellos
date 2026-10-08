@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_OPERATIONS","OPERATION_TIMEOUT_TICKS"],"enum":["Failure","Phase"],"fn":["cancel","current","cutover_peer","dispatch","expire","live","new_token","owner_died","peer_died","reply","reply_current","submit","take","terminal","wait","wake"],"static":["NEXT_OPERATION"],"struct":["Operation","Operations"]};

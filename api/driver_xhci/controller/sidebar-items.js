@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["alloc","parse_boot_keyboard","ring_enqueue","ring_init_link","ring_read_trb","ring_write_trb","setup_packet"],"struct":["Enumerated","XhciController"]};

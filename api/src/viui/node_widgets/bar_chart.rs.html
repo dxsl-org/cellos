@@ -7,7 +7,7 @@
 <a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">extern crate </span>alloc;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>alloc::{rc::Rc, string::String, vec::Vec};
 <a href=#9 id=9 data-nosnippet>9</a>
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span><span class="kw">crate</span>::canvas::{Color, TextStyle};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span><span class="kw">crate</span>::canvas::Color;
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span><span class="kw">crate</span>::dirty::DirtyRegion;
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span><span class="kw">crate</span>::event::Event;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span><span class="kw">crate</span>::layout::{Constraints, Point, Rect, Size};
@@ -59,9 +59,9 @@
 <a href=#59 id=59 data-nosnippet>59</a>}
 <a href=#60 id=60 data-nosnippet>60</a>
 <a href=#61 id=61 data-nosnippet>61</a><span class="kw">impl </span>ViNode <span class="kw">for </span>BarChart {
-<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, constraints: Constraints) -&gt; Size {
-<a href=#63 id=63 data-nosnippet>63</a>        <span class="self">self</span>.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
-<a href=#64 id=64 data-nosnippet>64</a>        constraints.max
+<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, constraints: Constraints, _font: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::font_context::FontContext) -&gt; Size {
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="self">self</span>.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
+<a href=#64 id=64 data-nosnippet>64</a>    constraints.max
 <a href=#65 id=65 data-nosnippet>65</a>    }
 <a href=#66 id=66 data-nosnippet>66</a>
 <a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">fn </span>bounds(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Rect {
@@ -105,48 +105,37 @@
 <a href=#105 id=105 data-nosnippet>105</a>            );
 <a href=#106 id=106 data-nosnippet>106</a>
 <a href=#107 id=107 data-nosnippet>107</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(label) = <span class="self">self</span>.labels.get(i) {
-<a href=#108 id=108 data-nosnippet>108</a>                cx.canvas.draw_text(
-<a href=#109 id=109 data-nosnippet>109</a>                    Point::new(bx, b.y + b.h - mb + <span class="number">4.0</span>),
-<a href=#110 id=110 data-nosnippet>110</a>                    label,
-<a href=#111 id=111 data-nosnippet>111</a>                    TextStyle {
-<a href=#112 id=112 data-nosnippet>112</a>                        color: Color::rgb(<span class="number">120</span>, <span class="number">130</span>, <span class="number">150</span>),
-<a href=#113 id=113 data-nosnippet>113</a>                        size_px: <span class="number">0</span>,
-<a href=#114 id=114 data-nosnippet>114</a>                    },
-<a href=#115 id=115 data-nosnippet>115</a>                );
-<a href=#116 id=116 data-nosnippet>116</a>            }
-<a href=#117 id=117 data-nosnippet>117</a>
-<a href=#118 id=118 data-nosnippet>118</a>            <span class="kw">if </span><span class="self">self</span>.show_values &amp;&amp; bar_h &gt; <span class="number">14.0 </span>{
-<a href=#119 id=119 data-nosnippet>119</a>                <span class="kw">let </span>label = format_f32_short(v);
-<a href=#120 id=120 data-nosnippet>120</a>                cx.canvas.draw_text(
-<a href=#121 id=121 data-nosnippet>121</a>                    Point::new(bx, by - <span class="number">14.0</span>),
-<a href=#122 id=122 data-nosnippet>122</a>                    <span class="kw-2">&amp;</span>label,
-<a href=#123 id=123 data-nosnippet>123</a>                    TextStyle {
-<a href=#124 id=124 data-nosnippet>124</a>                        color: Color::WHITE,
-<a href=#125 id=125 data-nosnippet>125</a>                        size_px: <span class="number">0</span>,
-<a href=#126 id=126 data-nosnippet>126</a>                    },
-<a href=#127 id=127 data-nosnippet>127</a>                );
-<a href=#128 id=128 data-nosnippet>128</a>            }
-<a href=#129 id=129 data-nosnippet>129</a>        }
-<a href=#130 id=130 data-nosnippet>130</a>    }
-<a href=#131 id=131 data-nosnippet>131</a>
-<a href=#132 id=132 data-nosnippet>132</a>    <span class="kw">fn </span>event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _event: <span class="kw-2">&amp;</span>Event) -&gt; bool {
-<a href=#133 id=133 data-nosnippet>133</a>        <span class="bool-val">false
-<a href=#134 id=134 data-nosnippet>134</a>    </span>}
+<a href=#108 id=108 data-nosnippet>108</a>                <span class="kw">let </span>x = bx + (bar_w - cx.measure(label)) * <span class="number">0.5</span>;
+<a href=#109 id=109 data-nosnippet>109</a>                cx.draw_text(Point::new(x, b.y + b.h - mb + <span class="number">4.0</span>), label, Color::rgb(<span class="number">120</span>, <span class="number">130</span>, <span class="number">150</span>));
+<a href=#110 id=110 data-nosnippet>110</a>            }
+<a href=#111 id=111 data-nosnippet>111</a>
+<a href=#112 id=112 data-nosnippet>112</a>            <span class="kw">if </span><span class="self">self</span>.show_values &amp;&amp; bar_h &gt; cx.line_height() {
+<a href=#113 id=113 data-nosnippet>113</a>                <span class="kw">let </span>label = format_f32_short(v);
+<a href=#114 id=114 data-nosnippet>114</a>                <span class="kw">let </span>x = bx + (bar_w - cx.measure(<span class="kw-2">&amp;</span>label)) * <span class="number">0.5</span>;
+<a href=#115 id=115 data-nosnippet>115</a>                <span class="kw">let </span>y = by - cx.line_height();
+<a href=#116 id=116 data-nosnippet>116</a>                cx.draw_text(Point::new(x, y), <span class="kw-2">&amp;</span>label, Color::WHITE);
+<a href=#117 id=117 data-nosnippet>117</a>            }
+<a href=#118 id=118 data-nosnippet>118</a>        }
+<a href=#119 id=119 data-nosnippet>119</a>    }
+<a href=#120 id=120 data-nosnippet>120</a>
+<a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">fn </span>event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _event: <span class="kw-2">&amp;</span>Event) -&gt; bool {
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="bool-val">false
+<a href=#123 id=123 data-nosnippet>123</a>    </span>}
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">fn </span>collect_dirty_handles(<span class="kw-2">&amp;mut </span><span class="self">self</span>, region: DirtyRegion) -&gt; Vec&lt;SubscriptionHandle&gt; {
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">let </span>b = <span class="self">self</span>.bounds;
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">let </span>r = Rc::clone(<span class="kw-2">&amp;</span>region);
+<a href=#128 id=128 data-nosnippet>128</a>        <span class="kw">let </span>sub = <span class="self">self</span>.data.subscribe(<span class="kw">move </span>|| {
+<a href=#129 id=129 data-nosnippet>129</a>            r.borrow_mut().mark(b);
+<a href=#130 id=130 data-nosnippet>130</a>        });
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="self">self</span>.sub = <span class="prelude-val">None</span>; <span class="comment">// old handle dropped, subscription pruned
+<a href=#132 id=132 data-nosnippet>132</a>        </span><span class="macro">alloc::vec!</span>[sub]
+<a href=#133 id=133 data-nosnippet>133</a>    }
+<a href=#134 id=134 data-nosnippet>134</a>}
 <a href=#135 id=135 data-nosnippet>135</a>
-<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">fn </span>collect_dirty_handles(<span class="kw-2">&amp;mut </span><span class="self">self</span>, region: DirtyRegion) -&gt; Vec&lt;SubscriptionHandle&gt; {
-<a href=#137 id=137 data-nosnippet>137</a>        <span class="kw">let </span>b = <span class="self">self</span>.bounds;
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="kw">let </span>r = Rc::clone(<span class="kw-2">&amp;</span>region);
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">let </span>sub = <span class="self">self</span>.data.subscribe(<span class="kw">move </span>|| {
-<a href=#140 id=140 data-nosnippet>140</a>            r.borrow_mut().mark(b);
-<a href=#141 id=141 data-nosnippet>141</a>        });
-<a href=#142 id=142 data-nosnippet>142</a>        <span class="self">self</span>.sub = <span class="prelude-val">None</span>; <span class="comment">// old handle dropped, subscription pruned
-<a href=#143 id=143 data-nosnippet>143</a>        </span><span class="macro">alloc::vec!</span>[sub]
-<a href=#144 id=144 data-nosnippet>144</a>    }
-<a href=#145 id=145 data-nosnippet>145</a>}
-<a href=#146 id=146 data-nosnippet>146</a>
-<a href=#147 id=147 data-nosnippet>147</a><span class="doccomment">/// Format a f32 as a short one-decimal-place string without std.
-<a href=#148 id=148 data-nosnippet>148</a></span><span class="kw">fn </span>format_f32_short(v: f32) -&gt; String {
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">let </span>scaled = (v * <span class="number">10.0</span>) <span class="kw">as </span>i32;
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="macro">alloc::format!</span>(<span class="string">"{}.{}"</span>, scaled / <span class="number">10</span>, (scaled % <span class="number">10</span>).abs())
-<a href=#151 id=151 data-nosnippet>151</a>}
+<a href=#136 id=136 data-nosnippet>136</a><span class="doccomment">/// Format a f32 as a short one-decimal-place string without std.
+<a href=#137 id=137 data-nosnippet>137</a></span><span class="kw">fn </span>format_f32_short(v: f32) -&gt; String {
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">let </span>scaled = (v * <span class="number">10.0</span>) <span class="kw">as </span>i32;
+<a href=#139 id=139 data-nosnippet>139</a>    <span class="macro">alloc::format!</span>(<span class="string">"{}.{}"</span>, scaled / <span class="number">10</span>, (scaled % <span class="number">10</span>).abs())
+<a href=#140 id=140 data-nosnippet>140</a>}
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Diacritic"],"fn":["decompose_vietnamese","get_glyph"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DocNode"],"struct":["Document","LayoutBox","LayoutLine","StyledSpan","TableCellLayout","TableRowLayout"]};
+window.SIDEBAR_ITEMS = {"enum":["DocNode"],"fn":["lines_for","lines_height"],"struct":["Document","LayoutBox","StyledSpan","TableCellLayout","TableRowLayout"]};

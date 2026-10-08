@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["clear","draw_char","draw_image","draw_str","fill_rect","stroke_rect"],"mod":["theme"],"struct":["Color"]};
+window.SIDEBAR_ITEMS = {"fn":["blend_pixel","clear","clipped_rect","draw_image_clipped","fill_rect","stroke_rect","text"],"mod":["theme"],"struct":["Color"]};

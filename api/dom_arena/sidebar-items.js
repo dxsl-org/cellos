@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["OCEL_JS_IPC_BUF_SIZE"],"enum":["DomMutation","EventKind","NodeData","OcelJsRequest","OcelJsResponse"],"struct":["DocumentArena","DomEvent","DomNode","JsError","NodeId"],"trait":["JsContext","JsEngine"]};
+window.SIDEBAR_ITEMS = {"constant":["OCEL_JS_CHUNK_SIZE","OCEL_JS_IPC_BUF_SIZE","OCEL_JS_MAX_TRANSFER"],"enum":["DomMutation","EventKind","NodeData","OcelJsCommand","OcelJsReply","OcelJsRequest","OcelJsResponse"],"mod":["ipc"],"struct":["DocumentArena","DomEvent","DomNode","JsError","NodeId"],"trait":["JsContext","JsEngine"]};

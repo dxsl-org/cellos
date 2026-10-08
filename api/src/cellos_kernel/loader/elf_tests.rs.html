@@ -816,7 +816,7 @@
 <a href=#816 id=816 data-nosnippet>816</a>    <span class="kw">let </span>elf = build_minimal_signed_elf(MINIMAL_ELF_DEV_SIG);
 <a href=#817 id=817 data-nosnippet>817</a>    <span class="kw">let </span>sig = <span class="kw">crate</span>::signing::extract_sig(<span class="kw-2">&amp;</span>elf).expect(<span class="string">"sig present"</span>);
 <a href=#818 id=818 data-nosnippet>818</a>    <span class="macro">assert!</span>(
-<a href=#819 id=819 data-nosnippet>819</a>        <span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf, <span class="kw-2">&amp;</span>sig),
+<a href=#819 id=819 data-nosnippet>819</a>        <span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf, <span class="kw-2">&amp;</span>sig).expect(<span class="string">"verification must not run out of memory"</span>),
 <a href=#820 id=820 data-nosnippet>820</a>        <span class="string">"unmodified minimal signed ELF must pass verification"
 <a href=#821 id=821 data-nosnippet>821</a>    </span>);
 <a href=#822 id=822 data-nosnippet>822</a>
@@ -824,7 +824,7 @@
 <a href=#824 id=824 data-nosnippet>824</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>elf_bad = elf.clone();
 <a href=#825 id=825 data-nosnippet>825</a>    elf_bad[<span class="number">48</span>] ^= <span class="number">1</span>;
 <a href=#826 id=826 data-nosnippet>826</a>    <span class="macro">assert!</span>(
-<a href=#827 id=827 data-nosnippet>827</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig),
+<a href=#827 id=827 data-nosnippet>827</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig).expect(<span class="string">"verification must not run out of memory"</span>),
 <a href=#828 id=828 data-nosnippet>828</a>        <span class="string">"CELLOS-LOADER-SIG-001: mutated e_flags must be rejected"
 <a href=#829 id=829 data-nosnippet>829</a>    </span>);
 <a href=#830 id=830 data-nosnippet>830</a>
@@ -832,7 +832,7 @@
 <a href=#832 id=832 data-nosnippet>832</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>elf_bad = elf.clone();
 <a href=#833 id=833 data-nosnippet>833</a>    elf_bad[<span class="number">24</span>] ^= <span class="number">0x40</span>;
 <a href=#834 id=834 data-nosnippet>834</a>    <span class="macro">assert!</span>(
-<a href=#835 id=835 data-nosnippet>835</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig),
+<a href=#835 id=835 data-nosnippet>835</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig).expect(<span class="string">"verification must not run out of memory"</span>),
 <a href=#836 id=836 data-nosnippet>836</a>        <span class="string">"CELLOS-LOADER-SIG-001: mutated e_entry must be rejected"
 <a href=#837 id=837 data-nosnippet>837</a>    </span>);
 <a href=#838 id=838 data-nosnippet>838</a>
@@ -840,7 +840,7 @@
 <a href=#840 id=840 data-nosnippet>840</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>elf_bad = elf.clone();
 <a href=#841 id=841 data-nosnippet>841</a>    elf_bad[<span class="number">68</span>] ^= <span class="number">2</span>;
 <a href=#842 id=842 data-nosnippet>842</a>    <span class="macro">assert!</span>(
-<a href=#843 id=843 data-nosnippet>843</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig),
+<a href=#843 id=843 data-nosnippet>843</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig).expect(<span class="string">"verification must not run out of memory"</span>),
 <a href=#844 id=844 data-nosnippet>844</a>        <span class="string">"CELLOS-LOADER-SIG-001: mutated Phdr p_flags must be rejected"
 <a href=#845 id=845 data-nosnippet>845</a>    </span>);
 <a href=#846 id=846 data-nosnippet>846</a>
@@ -848,7 +848,7 @@
 <a href=#848 id=848 data-nosnippet>848</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>elf_bad = elf.clone();
 <a href=#849 id=849 data-nosnippet>849</a>    elf_bad[<span class="number">216</span>] ^= <span class="number">1</span>;
 <a href=#850 id=850 data-nosnippet>850</a>    <span class="macro">assert!</span>(
-<a href=#851 id=851 data-nosnippet>851</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig),
+<a href=#851 id=851 data-nosnippet>851</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig).expect(<span class="string">"verification must not run out of memory"</span>),
 <a href=#852 id=852 data-nosnippet>852</a>        <span class="string">"CELLOS-LOADER-SIG-001: mutated sig sh_offset must be rejected"
 <a href=#853 id=853 data-nosnippet>853</a>    </span>);
 <a href=#854 id=854 data-nosnippet>854</a>
@@ -856,7 +856,7 @@
 <a href=#856 id=856 data-nosnippet>856</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>elf_bad = elf.clone();
 <a href=#857 id=857 data-nosnippet>857</a>    elf_bad[<span class="number">280</span>] ^= <span class="number">1</span>;
 <a href=#858 id=858 data-nosnippet>858</a>    <span class="macro">assert!</span>(
-<a href=#859 id=859 data-nosnippet>859</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig),
+<a href=#859 id=859 data-nosnippet>859</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig).expect(<span class="string">"verification must not run out of memory"</span>),
 <a href=#860 id=860 data-nosnippet>860</a>        <span class="string">"CELLOS-LOADER-SIG-001: mutated shstrtab sh_offset must be rejected"
 <a href=#861 id=861 data-nosnippet>861</a>    </span>);
 <a href=#862 id=862 data-nosnippet>862</a>
@@ -864,7 +864,7 @@
 <a href=#864 id=864 data-nosnippet>864</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>elf_bad = elf.clone();
 <a href=#865 id=865 data-nosnippet>865</a>    elf_bad[<span class="number">385</span>] ^= <span class="string">b'x'</span>;
 <a href=#866 id=866 data-nosnippet>866</a>    <span class="macro">assert!</span>(
-<a href=#867 id=867 data-nosnippet>867</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig),
+<a href=#867 id=867 data-nosnippet>867</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig).expect(<span class="string">"verification must not run out of memory"</span>),
 <a href=#868 id=868 data-nosnippet>868</a>        <span class="string">"CELLOS-LOADER-SIG-001: mutated section name must be rejected"
 <a href=#869 id=869 data-nosnippet>869</a>    </span>);
 <a href=#870 id=870 data-nosnippet>870</a>
@@ -872,7 +872,7 @@
 <a href=#872 id=872 data-nosnippet>872</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>elf_bad = elf.clone();
 <a href=#873 id=873 data-nosnippet>873</a>    elf_bad[<span class="number">120</span>] ^= <span class="number">0xFF</span>;
 <a href=#874 id=874 data-nosnippet>874</a>    <span class="macro">assert!</span>(
-<a href=#875 id=875 data-nosnippet>875</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig),
+<a href=#875 id=875 data-nosnippet>875</a>        !<span class="kw">crate</span>::signing::verify_cell(<span class="kw-2">&amp;</span>elf_bad, <span class="kw-2">&amp;</span>sig).expect(<span class="string">"verification must not run out of memory"</span>),
 <a href=#876 id=876 data-nosnippet>876</a>        <span class="string">"CELLOS-LOADER-SIG-001: mutated PT_LOAD code byte must be rejected"
 <a href=#877 id=877 data-nosnippet>877</a>    </span>);
 <a href=#878 id=878 data-nosnippet>878</a>

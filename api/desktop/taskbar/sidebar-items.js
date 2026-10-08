@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_VISIBLE_APPS","TASKBAR_HEIGHT"],"enum":["TaskbarAction"],"fn":["handle_click","is_inside","render"],"struct":["TaskbarState"]};
+window.SIDEBAR_ITEMS = {"constant":["APPS_X","APP_STEP","APP_WIDTH","BUTTON_HEIGHT","BUTTON_Y","MAX_VISIBLE_APPS","MORE_WIDTH","PAGE_STEP","PAGE_WIDTH","TASKBAR_HEIGHT"],"enum":["TaskbarAction"],"fn":["handle_click","is_inside","render","render_page_button"],"struct":["Layout","TaskbarState"]};

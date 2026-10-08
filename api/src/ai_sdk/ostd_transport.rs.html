@@ -49,12 +49,16 @@
 <a href=#49 id=49 data-nosnippet>49</a>            // reply is decoded tolerantly — the same convention every other typed client uses.
 <a href=#50 id=50 data-nosnippet>50</a>            </span><span class="prelude-val">Ok</span>(raw) =&gt; ai_proto::decode(raw).map_err(|<span class="kw">_</span>| AiClientError::Protocol),
 <a href=#51 id=51 data-nosnippet>51</a>            <span class="prelude-val">Err</span>(IpcError::Encode) | <span class="prelude-val">Err</span>(IpcError::Decode) =&gt; <span class="prelude-val">Err</span>(AiClientError::Protocol),
-<a href=#52 id=52 data-nosnippet>52</a>            <span class="prelude-val">Err</span>(IpcError::Send) | <span class="prelude-val">Err</span>(IpcError::Recv) | <span class="prelude-val">Err</span>(IpcError::WrongSender) =&gt; {
-<a href=#53 id=53 data-nosnippet>53</a>                <span class="comment">// The provider may have died or restarted under a new tid.
-<a href=#54 id=54 data-nosnippet>54</a>                </span><span class="self">self</span>.svc.invalidate();
-<a href=#55 id=55 data-nosnippet>55</a>                <span class="prelude-val">Err</span>(AiClientError::Transport)
-<a href=#56 id=56 data-nosnippet>56</a>            }
-<a href=#57 id=57 data-nosnippet>57</a>        }
-<a href=#58 id=58 data-nosnippet>58</a>    }
-<a href=#59 id=59 data-nosnippet>59</a>}
+<a href=#52 id=52 data-nosnippet>52</a>            <span class="prelude-val">Err</span>(IpcError::Send)
+<a href=#53 id=53 data-nosnippet>53</a>            | <span class="prelude-val">Err</span>(IpcError::Recv)
+<a href=#54 id=54 data-nosnippet>54</a>            | <span class="prelude-val">Err</span>(IpcError::WrongSender)
+<a href=#55 id=55 data-nosnippet>55</a>            | <span class="prelude-val">Err</span>(IpcError::InvalidOperation)
+<a href=#56 id=56 data-nosnippet>56</a>            | <span class="prelude-val">Err</span>(IpcError::BufferTooSmall) =&gt; {
+<a href=#57 id=57 data-nosnippet>57</a>                <span class="comment">// The provider may have died or restarted under a new tid.
+<a href=#58 id=58 data-nosnippet>58</a>                </span><span class="self">self</span>.svc.invalidate();
+<a href=#59 id=59 data-nosnippet>59</a>                <span class="prelude-val">Err</span>(AiClientError::Transport)
+<a href=#60 id=60 data-nosnippet>60</a>            }
+<a href=#61 id=61 data-nosnippet>61</a>        }
+<a href=#62 id=62 data-nosnippet>62</a>    }
+<a href=#63 id=63 data-nosnippet>63</a>}
 </code></pre></div></section></main></body></html>

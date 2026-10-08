@@ -158,73 +158,96 @@
 <a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">if </span>size == <span class="number">0 </span>{
 <a href=#159 id=159 data-nosnippet>159</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidInput);
 <a href=#160 id=160 data-nosnippet>160</a>        }
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>sector_count = size.div_ceil(SECTOR_SIZE);
-<a href=#162 id=162 data-nosnippet>162</a>        <span class="kw">let </span><span class="kw-2">mut </span>buf = <span class="macro">alloc::vec!</span>[<span class="number">0u8</span>; sector_count * SECTOR_SIZE];
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..sector_count {
-<a href=#164 id=164 data-nosnippet>164</a>            <span class="kw">let </span>lba = data_lba + i <span class="kw">as </span>u64;
-<a href=#165 id=165 data-nosnippet>165</a>            <span class="kw">let </span>offset = i * SECTOR_SIZE;
-<a href=#166 id=166 data-nosnippet>166</a>            <span class="kw">crate</span>::task::drivers::block::read_sector(lba, <span class="kw-2">&amp;mut </span>buf[offset..offset + SECTOR_SIZE])<span class="question-mark">?</span>;
-<a href=#167 id=167 data-nosnippet>167</a>        }
-<a href=#168 id=168 data-nosnippet>168</a>        buf.truncate(size);
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="prelude-val">Ok</span>(buf.into_boxed_slice())
-<a href=#170 id=170 data-nosnippet>170</a>    }
-<a href=#171 id=171 data-nosnippet>171</a>
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="doccomment">/// Read a cell ELF into a heap-allocated buffer.
-<a href=#173 id=173 data-nosnippet>173</a>    ///
-<a href=#174 id=174 data-nosnippet>174</a>    /// Resolution order depends on whether the path is a bootstrap cell:
-<a href=#175 id=175 data-nosnippet>175</a>    /// - **VIFS1-first**: bootstrap cells and embedded development cells resolve
-<a href=#176 id=176 data-nosnippet>176</a>    ///   from RAM before the block table. This keeps boot independent of block
-<a href=#177 id=177 data-nosnippet>177</a>    ///   I/O and keeps hardware-gate binaries paired with their TFTP kernel.
-<a href=#178 id=178 data-nosnippet>178</a>    /// - **Non-bootstrap**: block table first, VIFS1 fallback (historical order,
-<a href=#179 id=179 data-nosnippet>179</a>    ///   unchanged until those cells migrate to a VFS-served store — plan phase 03).
-<a href=#180 id=180 data-nosnippet>180</a>    ///
-<a href=#181 id=181 data-nosnippet>181</a>    /// `path` must match what `gen_disk.ps1` wrote (e.g. `/bin/vfs`).
-<a href=#182 id=182 data-nosnippet>182</a>    ///
-<a href=#183 id=183 data-nosnippet>183</a>    /// # Errors
-<a href=#184 id=184 data-nosnippet>184</a>    /// Returns `ViError::NotFound` if neither source has the path.
-<a href=#185 id=185 data-nosnippet>185</a>    </span><span class="kw">pub fn </span>read_file(path: <span class="kw-2">&amp;</span>str) -&gt; ViResult&lt;Box&lt;[u8]&gt;&gt; {
-<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">if </span>EMBEDDED_DEVELOPMENT_CELLS.contains(<span class="kw-2">&amp;</span>path) {
-<a href=#187 id=187 data-nosnippet>187</a>            <span class="kw">return </span><span class="kw">crate</span>::fs::read_file_from_vifs1(path).inspect_err(|error| {
-<a href=#188 id=188 data-nosnippet>188</a>                <span class="macro">log::error!</span>(
-<a href=#189 id=189 data-nosnippet>189</a>                    <span class="string">"[early] embedded development cell {:?} missing from VIFS1"</span>,
-<a href=#190 id=190 data-nosnippet>190</a>                    path
-<a href=#191 id=191 data-nosnippet>191</a>                );
-<a href=#192 id=192 data-nosnippet>192</a>                <span class="kw">let _ </span>= error;
-<a href=#193 id=193 data-nosnippet>193</a>            });
-<a href=#194 id=194 data-nosnippet>194</a>        }
-<a href=#195 id=195 data-nosnippet>195</a>
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">if </span>is_bootstrap_path(path) {
-<a href=#197 id=197 data-nosnippet>197</a>            <span class="kw">match </span><span class="kw">crate</span>::fs::read_file_from_vifs1(path) {
-<a href=#198 id=198 data-nosnippet>198</a>                <span class="prelude-val">Ok</span>(buf) =&gt; {
-<a href=#199 id=199 data-nosnippet>199</a>                    <span class="comment">// Runtime evidence (G2 loader redesign phase 01): bootstrap cell
-<a href=#200 id=200 data-nosnippet>200</a>                    // loaded from RAM, not the block device. info! now that the
-<a href=#201 id=201 data-nosnippet>201</a>                    // migration is verified across arches — one-time boot output,
-<a href=#202 id=202 data-nosnippet>202</a>                    // suppressed for vfs/config/shell (spawned by init after the log
-<a href=#203 id=203 data-nosnippet>203</a>                    // level drops to Warn, main.rs) during normal operation.
-<a href=#204 id=204 data-nosnippet>204</a>                    </span><span class="macro">log::info!</span>(
-<a href=#205 id=205 data-nosnippet>205</a>                        <span class="string">"[early] VIFS1-first {} &lt;- ramdisk ({} bytes)"</span>,
-<a href=#206 id=206 data-nosnippet>206</a>                        path,
-<a href=#207 id=207 data-nosnippet>207</a>                        buf.len()
-<a href=#208 id=208 data-nosnippet>208</a>                    );
-<a href=#209 id=209 data-nosnippet>209</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(buf);
-<a href=#210 id=210 data-nosnippet>210</a>                }
-<a href=#211 id=211 data-nosnippet>211</a>                <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
-<a href=#212 id=212 data-nosnippet>212</a>                    <span class="macro">log::warn!</span>(
-<a href=#213 id=213 data-nosnippet>213</a>                        <span class="string">"[early] VIFS1-first {:?} missing — falling back to block table"</span>,
-<a href=#214 id=214 data-nosnippet>214</a>                        path
-<a href=#215 id=215 data-nosnippet>215</a>                    );
-<a href=#216 id=216 data-nosnippet>216</a>                    <span class="kw">return </span><span class="self">Self</span>::read_from_block_table(path);
-<a href=#217 id=217 data-nosnippet>217</a>                }
-<a href=#218 id=218 data-nosnippet>218</a>            }
-<a href=#219 id=219 data-nosnippet>219</a>        }
-<a href=#220 id=220 data-nosnippet>220</a>
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">match </span><span class="self">Self</span>::read_from_block_table(path) {
-<a href=#222 id=222 data-nosnippet>222</a>            <span class="prelude-val">Ok</span>(buf) =&gt; <span class="prelude-val">Ok</span>(buf),
-<a href=#223 id=223 data-nosnippet>223</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
-<a href=#224 id=224 data-nosnippet>224</a>                <span class="macro">log::debug!</span>(<span class="string">"[early] block table miss for {:?} — trying VIFS1"</span>, path);
-<a href=#225 id=225 data-nosnippet>225</a>                <span class="kw">crate</span>::fs::read_file_from_vifs1(path)
-<a href=#226 id=226 data-nosnippet>226</a>            }
-<a href=#227 id=227 data-nosnippet>227</a>        }
-<a href=#228 id=228 data-nosnippet>228</a>    }
-<a href=#229 id=229 data-nosnippet>229</a>}
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="comment">// Fallible, exactly-sized allocation. The previous shape (`alloc::vec!` of the
+<a href=#162 id=162 data-nosnippet>162</a>        // sector-rounded length, then `truncate` + `into_boxed_slice`) allocated
+<a href=#163 id=163 data-nosnippet>163</a>        // infallibly and left `capacity != len`, so the box conversion reallocated —
+<a href=#164 id=164 data-nosnippet>164</a>        // and an infallible allocation on a full kernel heap reaches the alloc error
+<a href=#165 id=165 data-nosnippet>165</a>        // handler, which halts the kernel instead of failing the spawn.
+<a href=#166 id=166 data-nosnippet>166</a>        </span><span class="kw">let </span>whole = size / SECTOR_SIZE;
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">let </span>tail = size % SECTOR_SIZE;
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">let </span><span class="kw-2">mut </span>buf = Vec::new();
+<a href=#169 id=169 data-nosnippet>169</a>        buf.try_reserve_exact(size).map_err(|<span class="kw">_</span>| {
+<a href=#170 id=170 data-nosnippet>170</a>            <span class="macro">log::error!</span>(
+<a href=#171 id=171 data-nosnippet>171</a>                <span class="string">"[loader] OOM: block-table read of {} bytes for {:?}"</span>,
+<a href=#172 id=172 data-nosnippet>172</a>                size,
+<a href=#173 id=173 data-nosnippet>173</a>                path
+<a href=#174 id=174 data-nosnippet>174</a>            );
+<a href=#175 id=175 data-nosnippet>175</a>            ViError::OutOfMemory
+<a href=#176 id=176 data-nosnippet>176</a>        })<span class="question-mark">?</span>;
+<a href=#177 id=177 data-nosnippet>177</a>        buf.resize(size, <span class="number">0</span>);
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..whole {
+<a href=#179 id=179 data-nosnippet>179</a>            <span class="kw">let </span>offset = i * SECTOR_SIZE;
+<a href=#180 id=180 data-nosnippet>180</a>            <span class="kw">crate</span>::task::drivers::block::read_sector(
+<a href=#181 id=181 data-nosnippet>181</a>                data_lba + i <span class="kw">as </span>u64,
+<a href=#182 id=182 data-nosnippet>182</a>                <span class="kw-2">&amp;mut </span>buf[offset..offset + SECTOR_SIZE],
+<a href=#183 id=183 data-nosnippet>183</a>            )<span class="question-mark">?</span>;
+<a href=#184 id=184 data-nosnippet>184</a>        }
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">if </span>tail != <span class="number">0 </span>{
+<a href=#186 id=186 data-nosnippet>186</a>            <span class="comment">// Partial final sector: read it into a scratch buffer so the returned box
+<a href=#187 id=187 data-nosnippet>187</a>            // stays exactly `size` bytes without a shrink realloc.
+<a href=#188 id=188 data-nosnippet>188</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>sector = [<span class="number">0u8</span>; SECTOR_SIZE];
+<a href=#189 id=189 data-nosnippet>189</a>            <span class="kw">crate</span>::task::drivers::block::read_sector(data_lba + whole <span class="kw">as </span>u64, <span class="kw-2">&amp;mut </span>sector)<span class="question-mark">?</span>;
+<a href=#190 id=190 data-nosnippet>190</a>            buf[whole * SECTOR_SIZE..].copy_from_slice(<span class="kw-2">&amp;</span>sector[..tail]);
+<a href=#191 id=191 data-nosnippet>191</a>        }
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="prelude-val">Ok</span>(buf.into_boxed_slice())
+<a href=#193 id=193 data-nosnippet>193</a>    }
+<a href=#194 id=194 data-nosnippet>194</a>
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="doccomment">/// Read a cell ELF into a heap-allocated buffer.
+<a href=#196 id=196 data-nosnippet>196</a>    ///
+<a href=#197 id=197 data-nosnippet>197</a>    /// Resolution order depends on whether the path is a bootstrap cell:
+<a href=#198 id=198 data-nosnippet>198</a>    /// - **VIFS1-first**: bootstrap cells and embedded development cells resolve
+<a href=#199 id=199 data-nosnippet>199</a>    ///   from RAM before the block table. This keeps boot independent of block
+<a href=#200 id=200 data-nosnippet>200</a>    ///   I/O and keeps hardware-gate binaries paired with their TFTP kernel.
+<a href=#201 id=201 data-nosnippet>201</a>    /// - **Non-bootstrap**: block table first, VIFS1 fallback (historical order,
+<a href=#202 id=202 data-nosnippet>202</a>    ///   unchanged until those cells migrate to a VFS-served store — plan phase 03).
+<a href=#203 id=203 data-nosnippet>203</a>    ///
+<a href=#204 id=204 data-nosnippet>204</a>    /// `path` must match what `gen_disk.ps1` wrote (e.g. `/bin/vfs`).
+<a href=#205 id=205 data-nosnippet>205</a>    ///
+<a href=#206 id=206 data-nosnippet>206</a>    /// # Errors
+<a href=#207 id=207 data-nosnippet>207</a>    /// Returns `ViError::NotFound` if neither source has the path.
+<a href=#208 id=208 data-nosnippet>208</a>    </span><span class="kw">pub fn </span>read_file(path: <span class="kw-2">&amp;</span>str) -&gt; ViResult&lt;Box&lt;[u8]&gt;&gt; {
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">if </span>EMBEDDED_DEVELOPMENT_CELLS.contains(<span class="kw-2">&amp;</span>path) {
+<a href=#210 id=210 data-nosnippet>210</a>            <span class="kw">return </span><span class="kw">crate</span>::fs::read_file_from_vifs1(path).inspect_err(|error| {
+<a href=#211 id=211 data-nosnippet>211</a>                <span class="macro">log::error!</span>(
+<a href=#212 id=212 data-nosnippet>212</a>                    <span class="string">"[early] embedded development cell {:?} missing from VIFS1"</span>,
+<a href=#213 id=213 data-nosnippet>213</a>                    path
+<a href=#214 id=214 data-nosnippet>214</a>                );
+<a href=#215 id=215 data-nosnippet>215</a>                <span class="kw">let _ </span>= error;
+<a href=#216 id=216 data-nosnippet>216</a>            });
+<a href=#217 id=217 data-nosnippet>217</a>        }
+<a href=#218 id=218 data-nosnippet>218</a>
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">if </span>is_bootstrap_path(path) {
+<a href=#220 id=220 data-nosnippet>220</a>            <span class="kw">match </span><span class="kw">crate</span>::fs::read_file_from_vifs1(path) {
+<a href=#221 id=221 data-nosnippet>221</a>                <span class="prelude-val">Ok</span>(buf) =&gt; {
+<a href=#222 id=222 data-nosnippet>222</a>                    <span class="comment">// Runtime evidence (G2 loader redesign phase 01): bootstrap cell
+<a href=#223 id=223 data-nosnippet>223</a>                    // loaded from RAM, not the block device. info! now that the
+<a href=#224 id=224 data-nosnippet>224</a>                    // migration is verified across arches — one-time boot output,
+<a href=#225 id=225 data-nosnippet>225</a>                    // suppressed for vfs/config/shell (spawned by init after the log
+<a href=#226 id=226 data-nosnippet>226</a>                    // level drops to Warn, main.rs) during normal operation.
+<a href=#227 id=227 data-nosnippet>227</a>                    </span><span class="macro">log::info!</span>(
+<a href=#228 id=228 data-nosnippet>228</a>                        <span class="string">"[early] VIFS1-first {} &lt;- ramdisk ({} bytes)"</span>,
+<a href=#229 id=229 data-nosnippet>229</a>                        path,
+<a href=#230 id=230 data-nosnippet>230</a>                        buf.len()
+<a href=#231 id=231 data-nosnippet>231</a>                    );
+<a href=#232 id=232 data-nosnippet>232</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(buf);
+<a href=#233 id=233 data-nosnippet>233</a>                }
+<a href=#234 id=234 data-nosnippet>234</a>                <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#235 id=235 data-nosnippet>235</a>                    <span class="macro">log::warn!</span>(
+<a href=#236 id=236 data-nosnippet>236</a>                        <span class="string">"[early] VIFS1-first {:?} missing — falling back to block table"</span>,
+<a href=#237 id=237 data-nosnippet>237</a>                        path
+<a href=#238 id=238 data-nosnippet>238</a>                    );
+<a href=#239 id=239 data-nosnippet>239</a>                    <span class="kw">return </span><span class="self">Self</span>::read_from_block_table(path);
+<a href=#240 id=240 data-nosnippet>240</a>                }
+<a href=#241 id=241 data-nosnippet>241</a>            }
+<a href=#242 id=242 data-nosnippet>242</a>        }
+<a href=#243 id=243 data-nosnippet>243</a>
+<a href=#244 id=244 data-nosnippet>244</a>        <span class="kw">match </span><span class="self">Self</span>::read_from_block_table(path) {
+<a href=#245 id=245 data-nosnippet>245</a>            <span class="prelude-val">Ok</span>(buf) =&gt; <span class="prelude-val">Ok</span>(buf),
+<a href=#246 id=246 data-nosnippet>246</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#247 id=247 data-nosnippet>247</a>                <span class="macro">log::debug!</span>(<span class="string">"[early] block table miss for {:?} — trying VIFS1"</span>, path);
+<a href=#248 id=248 data-nosnippet>248</a>                <span class="kw">crate</span>::fs::read_file_from_vifs1(path)
+<a href=#249 id=249 data-nosnippet>249</a>            }
+<a href=#250 id=250 data-nosnippet>250</a>        }
+<a href=#251 id=251 data-nosnippet>251</a>    }
+<a href=#252 id=252 data-nosnippet>252</a>}
 </code></pre></div></section></main></body></html>

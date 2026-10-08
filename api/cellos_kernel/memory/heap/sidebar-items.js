@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["alloc_error_handler","init_heap"],"static":["ALLOCATOR"],"struct":["QuotaAlloc"]};
+window.SIDEBAR_ITEMS = {"fn":["alloc_error_handler","capture_fail_site","fail_site","init_heap","oom_sources","try_box","usage"],"static":["ALLOCATOR","FAIL_SITE","NULL_FROM_HEAP","NULL_FROM_QUOTA"],"struct":["QuotaAlloc"]};

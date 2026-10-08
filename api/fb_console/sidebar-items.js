@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BG","FG"],"fn":["cell_main","draw_char","main","scroll_up"],"mod":["font"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"constant":["BG","FACE","FG","FONT_PX"],"fn":["append_combining_mark","cell_extent","cell_main","init_custom_heap","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["Console","Utf8Decoder","__CustomHeapArena"]};

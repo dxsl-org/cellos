@@ -57,27 +57,27 @@
 <a href=#57 id=57 data-nosnippet>57</a>}
 <a href=#58 id=58 data-nosnippet>58</a>
 <a href=#59 id=59 data-nosnippet>59</a><span class="kw">impl </span>ViNode <span class="kw">for </span>Card {
-<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, constraints: Constraints) -&gt; Size {
-<a href=#61 id=61 data-nosnippet>61</a>        <span class="kw">let </span>pad = <span class="self">self</span>.padding;
-<a href=#62 id=62 data-nosnippet>62</a>
-<a href=#63 id=63 data-nosnippet>63</a>        <span class="comment">// Give child the interior area — origin shifted in by padding.
-<a href=#64 id=64 data-nosnippet>64</a>        </span><span class="kw">let </span>inner = Constraints {
-<a href=#65 id=65 data-nosnippet>65</a>            origin: Point::new(constraints.origin.x + pad, constraints.origin.y + pad),
-<a href=#66 id=66 data-nosnippet>66</a>            min: Size { w: <span class="number">0.0</span>, h: <span class="number">0.0 </span>},
-<a href=#67 id=67 data-nosnippet>67</a>            max: Size {
-<a href=#68 id=68 data-nosnippet>68</a>                w: (constraints.max.w - pad * <span class="number">2.0</span>).max(<span class="number">0.0</span>),
-<a href=#69 id=69 data-nosnippet>69</a>                h: (constraints.max.h - pad * <span class="number">2.0</span>).max(<span class="number">0.0</span>),
-<a href=#70 id=70 data-nosnippet>70</a>            },
-<a href=#71 id=71 data-nosnippet>71</a>        };
-<a href=#72 id=72 data-nosnippet>72</a>        <span class="kw">let </span>inner_size = <span class="self">self</span>.child.layout(inner);
-<a href=#73 id=73 data-nosnippet>73</a>
-<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">let </span>size = constraints.constrain(Size {
-<a href=#75 id=75 data-nosnippet>75</a>            w: inner_size.w + pad * <span class="number">2.0</span>,
-<a href=#76 id=76 data-nosnippet>76</a>            h: inner_size.h + pad * <span class="number">2.0</span>,
-<a href=#77 id=77 data-nosnippet>77</a>        });
-<a href=#78 id=78 data-nosnippet>78</a>        <span class="self">self</span>.bounds_cache
-<a href=#79 id=79 data-nosnippet>79</a>            .set(Rect::from_origin_size(constraints.origin, size));
-<a href=#80 id=80 data-nosnippet>80</a>        size
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, constraints: Constraints, font: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::font_context::FontContext) -&gt; Size {
+<a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">let </span>pad = <span class="self">self</span>.padding;
+<a href=#62 id=62 data-nosnippet>62</a>    
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="comment">// Give child the interior area — origin shifted in by padding.
+<a href=#64 id=64 data-nosnippet>64</a>    </span><span class="kw">let </span>inner = Constraints {
+<a href=#65 id=65 data-nosnippet>65</a>        origin: Point::new(constraints.origin.x + pad, constraints.origin.y + pad),
+<a href=#66 id=66 data-nosnippet>66</a>        min: Size { w: <span class="number">0.0</span>, h: <span class="number">0.0 </span>},
+<a href=#67 id=67 data-nosnippet>67</a>        max: Size {
+<a href=#68 id=68 data-nosnippet>68</a>            w: (constraints.max.w - pad * <span class="number">2.0</span>).max(<span class="number">0.0</span>),
+<a href=#69 id=69 data-nosnippet>69</a>            h: (constraints.max.h - pad * <span class="number">2.0</span>).max(<span class="number">0.0</span>),
+<a href=#70 id=70 data-nosnippet>70</a>        },
+<a href=#71 id=71 data-nosnippet>71</a>    };
+<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">let </span>inner_size = <span class="self">self</span>.child.layout(inner, font);
+<a href=#73 id=73 data-nosnippet>73</a>    
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">let </span>size = constraints.constrain(Size {
+<a href=#75 id=75 data-nosnippet>75</a>        w: inner_size.w + pad * <span class="number">2.0</span>,
+<a href=#76 id=76 data-nosnippet>76</a>        h: inner_size.h + pad * <span class="number">2.0</span>,
+<a href=#77 id=77 data-nosnippet>77</a>    });
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="self">self</span>.bounds_cache
+<a href=#79 id=79 data-nosnippet>79</a>        .set(Rect::from_origin_size(constraints.origin, size));
+<a href=#80 id=80 data-nosnippet>80</a>    size
 <a href=#81 id=81 data-nosnippet>81</a>    }
 <a href=#82 id=82 data-nosnippet>82</a>
 <a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">fn </span>bounds(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Rect {

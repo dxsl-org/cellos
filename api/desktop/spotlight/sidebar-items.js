@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_RESULTS","SPOTLIGHT_HEIGHT","SPOTLIGHT_WIDTH"],"enum":["SpotlightAction"],"fn":["handle_click","handle_key","is_inside","render"],"struct":["SpotlightState"]};
+window.SIDEBAR_ITEMS = {"constant":["ACTION_HEIGHT","ACTION_WIDTH","ACTION_Y","LIST_START_Y","MAX_RESULTS","ROW_HEIGHT","ROW_STEP","SPOTLIGHT_HEIGHT","SPOTLIGHT_WIDTH"],"enum":["SpotlightAction"],"fn":["handle_click","handle_key","is_inside","pin_x","render","run_x"],"struct":["SpotlightState"]};

@@ -11,7 +11,7 @@ architecture is refused with <a href="enum.EngineError.html#variant.UnsupportedA
 <li><strong>Both tokenizer families</strong>: byte-level BPE (<code>gpt2</code>) and SentencePiece (<code>llama</code>), including
 control-token matching for chat templates. See <code>ai-tokenizer</code>.</li>
 <li><strong>Two weight layouts</strong>: <code>Q8_0</code> tensors stay quantized and run through
-<a href="../tensor_math/fn.matvec_q8_0_int8.html" title="fn tensor_math::matvec_q8_0_int8"><code>tensor_math::matvec_q8_0_int8</code></a> with the activation quantized to Q8_0 as well, so the inner
+[<code>tensor_math::matvec_q8_0_int8</code>] with the activation quantized to Q8_0 as well, so the inner
 loop is an integer dot product and two f32 multiplies per 32 weights; <code>F32</code>/<code>F16</code> tensors are
 materialized as <code>f32</code> at load time and run through the dense kernel.</li>
 <li><strong>Zero-copy weights</strong>: <a href="struct.Engine.html#method.load" title="associated function ai_engine::Engine::load"><code>Engine::load</code></a> takes ownership of the model file and addresses every

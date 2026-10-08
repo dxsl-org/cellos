@@ -58,31 +58,31 @@
 <a href=#58 id=58 data-nosnippet>58</a>}
 <a href=#59 id=59 data-nosnippet>59</a>
 <a href=#60 id=60 data-nosnippet>60</a><span class="kw">impl </span>ViNode <span class="kw">for </span>ScrollArea {
-<a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, constraints: Constraints) -&gt; Size {
-<a href=#62 id=62 data-nosnippet>62</a>        <span class="kw">let </span>size = constraints.constrain(Size {
-<a href=#63 id=63 data-nosnippet>63</a>            w: constraints.max.w,
-<a href=#64 id=64 data-nosnippet>64</a>            h: constraints.max.h,
-<a href=#65 id=65 data-nosnippet>65</a>        });
-<a href=#66 id=66 data-nosnippet>66</a>        <span class="self">self</span>.bounds_cache
-<a href=#67 id=67 data-nosnippet>67</a>            .set(Rect::from_origin_size(constraints.origin, size));
-<a href=#68 id=68 data-nosnippet>68</a>
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">let </span>scroll = <span class="self">self</span>.scroll_y.get();
-<a href=#70 id=70 data-nosnippet>70</a>
-<a href=#71 id=71 data-nosnippet>71</a>        <span class="comment">// Child gets full width minus scrollbar, unbounded height.
-<a href=#72 id=72 data-nosnippet>72</a>        // Origin is shifted up by scroll_y so child bounds are already scrolled.
-<a href=#73 id=73 data-nosnippet>73</a>        </span><span class="kw">let </span>child_constraints = Constraints {
-<a href=#74 id=74 data-nosnippet>74</a>            origin: Point::new(constraints.origin.x, constraints.origin.y - scroll),
-<a href=#75 id=75 data-nosnippet>75</a>            min: Size { w: <span class="number">0.0</span>, h: <span class="number">0.0 </span>},
-<a href=#76 id=76 data-nosnippet>76</a>            max: Size {
-<a href=#77 id=77 data-nosnippet>77</a>                w: (size.w - SCROLLBAR_W).max(<span class="number">0.0</span>),
-<a href=#78 id=78 data-nosnippet>78</a>                <span class="comment">// Unlimited height — measure the full content.
-<a href=#79 id=79 data-nosnippet>79</a>                </span>h: f32::MAX,
-<a href=#80 id=80 data-nosnippet>80</a>            },
-<a href=#81 id=81 data-nosnippet>81</a>        };
-<a href=#82 id=82 data-nosnippet>82</a>        <span class="kw">let </span>child_size = <span class="self">self</span>.child.layout(child_constraints);
-<a href=#83 id=83 data-nosnippet>83</a>        <span class="self">self</span>.content_height.set(child_size.h);
-<a href=#84 id=84 data-nosnippet>84</a>
-<a href=#85 id=85 data-nosnippet>85</a>        size
+<a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, constraints: Constraints, font: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::font_context::FontContext) -&gt; Size {
+<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">let </span>size = constraints.constrain(Size {
+<a href=#63 id=63 data-nosnippet>63</a>        w: constraints.max.w,
+<a href=#64 id=64 data-nosnippet>64</a>        h: constraints.max.h,
+<a href=#65 id=65 data-nosnippet>65</a>    });
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="self">self</span>.bounds_cache
+<a href=#67 id=67 data-nosnippet>67</a>        .set(Rect::from_origin_size(constraints.origin, size));
+<a href=#68 id=68 data-nosnippet>68</a>    
+<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">let </span>scroll = <span class="self">self</span>.scroll_y.get();
+<a href=#70 id=70 data-nosnippet>70</a>    
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="comment">// Child gets full width minus scrollbar, unbounded height.
+<a href=#72 id=72 data-nosnippet>72</a>    // Origin is shifted up by scroll_y so child bounds are already scrolled.
+<a href=#73 id=73 data-nosnippet>73</a>    </span><span class="kw">let </span>child_constraints = Constraints {
+<a href=#74 id=74 data-nosnippet>74</a>        origin: Point::new(constraints.origin.x, constraints.origin.y - scroll),
+<a href=#75 id=75 data-nosnippet>75</a>        min: Size { w: <span class="number">0.0</span>, h: <span class="number">0.0 </span>},
+<a href=#76 id=76 data-nosnippet>76</a>        max: Size {
+<a href=#77 id=77 data-nosnippet>77</a>            w: (size.w - SCROLLBAR_W).max(<span class="number">0.0</span>),
+<a href=#78 id=78 data-nosnippet>78</a>            <span class="comment">// Unlimited height — measure the full content.
+<a href=#79 id=79 data-nosnippet>79</a>            </span>h: f32::MAX,
+<a href=#80 id=80 data-nosnippet>80</a>        },
+<a href=#81 id=81 data-nosnippet>81</a>    };
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">let </span>child_size = <span class="self">self</span>.child.layout(child_constraints, font);
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="self">self</span>.content_height.set(child_size.h);
+<a href=#84 id=84 data-nosnippet>84</a>    
+<a href=#85 id=85 data-nosnippet>85</a>    size
 <a href=#86 id=86 data-nosnippet>86</a>    }
 <a href=#87 id=87 data-nosnippet>87</a>
 <a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">fn </span>bounds(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Rect {

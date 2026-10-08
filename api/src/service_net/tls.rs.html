@@ -10,12 +10,12 @@
 <a href=#10 id=10 data-nosnippet>10</a>//!   roots    — ca_cert() single trust anchor, cfg-selected by tls-ca-* feature
 <a href=#11 id=11 data-nosnippet>11</a>//!   provider — ViTlsProvider (CryptoProvider with infallible verifier())
 <a href=#12 id=12 data-nosnippet>12</a>//!   rng      — ViRng (VirtIO-RNG-backed ChaCha20)
-<a href=#13 id=13 data-nosnippet>13</a>//!   transport — SmoltcpTlsTransport (embedded-io Read+Write over smoltcp TCP)
-<a href=#14 id=14 data-nosnippet>14</a>//!   socket   — TlsSocketEntry (per-connection TLS state + handshake)
-<a href=#15 id=15 data-nosnippet>15</a>//!   block_on — blocking executor shim
+<a href=#13 id=13 data-nosnippet>13</a>//!   transport — nonblocking embedded-io-async smoltcp TCP transport
+<a href=#14 id=14 data-nosnippet>14</a>//!   socket   — owned TLS state and async handshake
+<a href=#15 id=15 data-nosnippet>15</a>//!   dispatch — deferred IPC operation scheduler
 <a href=#16 id=16 data-nosnippet>16</a>
-<a href=#17 id=17 data-nosnippet>17</a></span><span class="kw">pub mod </span>block_on;
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">pub mod </span>clock;
+<a href=#17 id=17 data-nosnippet>17</a></span><span class="kw">pub mod </span>clock;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">pub mod </span>dispatch;
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">pub mod </span>provider;
 <a href=#20 id=20 data-nosnippet>20</a><span class="attr">#[cfg(test)]
 <a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">pub mod </span>relay_certificate;
@@ -24,9 +24,9 @@
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">pub mod </span>rng;
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">pub mod </span>roots;
 <a href=#26 id=26 data-nosnippet>26</a><span class="kw">pub mod </span>socket;
-<a href=#27 id=27 data-nosnippet>27</a>
-<a href=#28 id=28 data-nosnippet>28</a><span class="attr">#[cfg(test)]
-<a href=#29 id=29 data-nosnippet>29</a>#[path = <span class="string">"tls/authenticated-time-precheck-tests.rs"</span>]
-<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>authenticated_time_precheck_tests;
-<a href=#31 id=31 data-nosnippet>31</a><span class="kw">pub mod </span>transport;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">pub mod </span>transport;
+<a href=#28 id=28 data-nosnippet>28</a>
+<a href=#29 id=29 data-nosnippet>29</a><span class="attr">#[cfg(test)]
+<a href=#30 id=30 data-nosnippet>30</a>#[path = <span class="string">"tls/authenticated-time-precheck-tests.rs"</span>]
+<a href=#31 id=31 data-nosnippet>31</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>authenticated_time_precheck_tests;
 </code></pre></div></section></main></body></html>

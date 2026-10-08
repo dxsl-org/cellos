@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DocFormat"],"fn":["parse_content"],"mod":["html","markdown"]};
+window.SIDEBAR_ITEMS = {"enum":["DocFormat"],"fn":["parse_content"],"mod":["css","html","markdown","syntax","web"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Language","State"],"fn":["append","char_len","char_literal_end","consume_raw","consume_string","identifier_continue","identifier_start","keyword","raw_open"],"struct":["Highlighter"]};

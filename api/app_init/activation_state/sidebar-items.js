@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Phase"],"fn":["index"],"struct":["Effects","Lease","Owner","Principal","Provider","State"]};

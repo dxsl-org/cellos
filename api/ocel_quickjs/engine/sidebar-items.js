@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_HEAP_BYTES","MAX_INTERRUPT_POLLS","MAX_PENDING_JOBS","MAX_STACK_BYTES","PRELUDE"],"fn":["decode_field","engine_identity","format_float","interrupt_budget","push_js_string"],"struct":["InterruptGuard","QuickJsContext","QuickJsEngine"]};

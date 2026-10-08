@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["I210_IDS","I211_IDS","QEMU_MODEL_ID","QUERY_DEVICE_IDS","SUPPORTED_DEVICE_IDS","VENDOR_INTEL"],"enum":["IgbSku"],"fn":["classify","sku_name"]};

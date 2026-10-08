@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["INTER_ITALIC","INTER_REGULAR","INTER_SEMIBOLD","INTER_SEMIBOLD_ITALIC","JETBRAINS_MONO_BOLD","JETBRAINS_MONO_REGULAR"],"enum":["FontFace"],"fn":["is_combining_mark","normalized_chars"],"struct":["TextFonts"]};

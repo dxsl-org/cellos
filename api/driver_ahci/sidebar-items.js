@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["AHCI_BAR_LEN","AHCI_BAR_MIN","AHCI_PROGIF","NON_AHCI_PROGIFS","SATA_CLASS","SATA_SUB"],"fn":["handler","main","refuse_non_ahci_progif"],"mod":["controller","dispatch","dma"],"static":["STATE","VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["AhciState"]};

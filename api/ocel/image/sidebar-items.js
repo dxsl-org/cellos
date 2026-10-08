@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["bmp"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_PIXELS"],"fn":["checked_pixels","convert","decode","is_image_path"],"mod":["bmp"]};

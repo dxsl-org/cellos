@@ -320,179 +320,209 @@
 <a href=#320 id=320 data-nosnippet>320</a>        {
 <a href=#321 id=321 data-nosnippet>321</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::PermissionDenied);
 <a href=#322 id=322 data-nosnippet>322</a>        }
-<a href=#323 id=323 data-nosnippet>323</a>        <span class="kw">if </span>target.pending_msgs.len() + source.pending_msgs.len() &gt; HOTSWAP_MSG_QUEUE_DEPTH {
-<a href=#324 id=324 data-nosnippet>324</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::WouldBlock);
-<a href=#325 id=325 data-nosnippet>325</a>        }
-<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw">let </span>wake_sender = <span class="kw">match </span>target.state {
-<a href=#327 id=327 data-nosnippet>327</a>            TaskState::Recv { mask, .. } =&gt; source
-<a href=#328 id=328 data-nosnippet>328</a>                .pending_msgs
-<a href=#329 id=329 data-nosnippet>329</a>                .iter()
-<a href=#330 id=330 data-nosnippet>330</a>                .find(|msg| mask == <span class="number">0 </span>|| mask == msg.sender_tid)
-<a href=#331 id=331 data-nosnippet>331</a>                .map(|msg| msg.sender_tid),
-<a href=#332 id=332 data-nosnippet>332</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#333 id=333 data-nosnippet>333</a>        };
-<a href=#334 id=334 data-nosnippet>334</a>        (
-<a href=#335 id=335 data-nosnippet>335</a>            source.pending_msgs.len(),
-<a href=#336 id=336 data-nosnippet>336</a>            target.pending_msgs.len(),
-<a href=#337 id=337 data-nosnippet>337</a>            target.cell_id.<span class="number">0 </span><span class="kw">as </span>usize,
-<a href=#338 id=338 data-nosnippet>338</a>            wake_sender,
-<a href=#339 id=339 data-nosnippet>339</a>        )
-<a href=#340 id=340 data-nosnippet>340</a>    };
-<a href=#341 id=341 data-nosnippet>341</a>    <span class="kw">if </span>!<span class="kw">crate</span>::cell::service_registry::paused_matches(service_id, source_tid) {
-<a href=#342 id=342 data-nosnippet>342</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::WouldBlock);
-<a href=#343 id=343 data-nosnippet>343</a>    }
-<a href=#344 id=344 data-nosnippet>344</a>
-<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">for </span>index <span class="kw">in </span><span class="number">0</span>..source_len {
-<a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">let </span>copied = {
-<a href=#347 id=347 data-nosnippet>347</a>            <span class="kw">let </span>source = sched.tasks.get(<span class="kw-2">&amp;</span>source_tid).ok_or(ViError::NotFound)<span class="question-mark">?</span>;
-<a href=#348 id=348 data-nosnippet>348</a>            <span class="kw">let </span>message = <span class="kw-2">&amp;</span>source.pending_msgs.as_slice()[index];
-<a href=#349 id=349 data-nosnippet>349</a>            <span class="kw">let </span>wire = <span class="kw">match </span><span class="kw-2">&amp;</span>message.wire {
-<a href=#350 id=350 data-nosnippet>350</a>                <span class="prelude-val">Some</span>(w) =&gt; w.try_clone().ok(),
-<a href=#351 id=351 data-nosnippet>351</a>                <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#352 id=352 data-nosnippet>352</a>            };
-<a href=#353 id=353 data-nosnippet>353</a>            PendingMsgData::try_copy(message.payload(), target_cell).map(|data| PendingMsg {
-<a href=#354 id=354 data-nosnippet>354</a>                sender_tid: message.sender_tid,
-<a href=#355 id=355 data-nosnippet>355</a>                data,
-<a href=#356 id=356 data-nosnippet>356</a>                wire,
-<a href=#357 id=357 data-nosnippet>357</a>                enqueued_tick: message.enqueued_tick,
-<a href=#358 id=358 data-nosnippet>358</a>            })
-<a href=#359 id=359 data-nosnippet>359</a>        };
-<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span>pushed = copied.and_then(|message| {
-<a href=#361 id=361 data-nosnippet>361</a>            sched
-<a href=#362 id=362 data-nosnippet>362</a>                .tasks
-<a href=#363 id=363 data-nosnippet>363</a>                .get_mut(<span class="kw-2">&amp;</span>target_tid)
-<a href=#364 id=364 data-nosnippet>364</a>                .ok_or(())<span class="question-mark">?
-<a href=#365 id=365 data-nosnippet>365</a>                </span>.pending_msgs
-<a href=#366 id=366 data-nosnippet>366</a>                .try_push(message)
-<a href=#367 id=367 data-nosnippet>367</a>        });
-<a href=#368 id=368 data-nosnippet>368</a>        <span class="kw">if </span>pushed.is_err() {
-<a href=#369 id=369 data-nosnippet>369</a>            rollback_mailbox_appends(sched, target_tid, target_start);
-<a href=#370 id=370 data-nosnippet>370</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::WouldBlock);
-<a href=#371 id=371 data-nosnippet>371</a>        }
-<a href=#372 id=372 data-nosnippet>372</a>    }
-<a href=#373 id=373 data-nosnippet>373</a>
-<a href=#374 id=374 data-nosnippet>374</a>    <span class="kw">let </span><span class="kw-2">mut </span>source_mailbox = {
-<a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">let </span>source = sched.tasks.get_mut(<span class="kw-2">&amp;</span>source_tid).ok_or(ViError::NotFound)<span class="question-mark">?</span>;
-<a href=#376 id=376 data-nosnippet>376</a>        source.hotswap_ingress_closed = <span class="bool-val">true</span>;
-<a href=#377 id=377 data-nosnippet>377</a>        core::mem::take(<span class="kw-2">&amp;mut </span>source.pending_msgs)
-<a href=#378 id=378 data-nosnippet>378</a>    };
-<a href=#379 id=379 data-nosnippet>379</a>
-<a href=#380 id=380 data-nosnippet>380</a>    <span class="kw">if </span>!<span class="kw">crate</span>::cell::service_registry::commit_paused(service_id, source_tid, target_tid) {
-<a href=#381 id=381 data-nosnippet>381</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(source) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>source_tid) {
-<a href=#382 id=382 data-nosnippet>382</a>            source.pending_msgs = core::mem::take(<span class="kw-2">&amp;mut </span>source_mailbox);
-<a href=#383 id=383 data-nosnippet>383</a>            source.hotswap_ingress_closed = <span class="bool-val">false</span>;
-<a href=#384 id=384 data-nosnippet>384</a>        }
-<a href=#385 id=385 data-nosnippet>385</a>        rollback_mailbox_appends(sched, target_tid, target_start);
-<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::WouldBlock);
-<a href=#387 id=387 data-nosnippet>387</a>    }
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="kw">let </span>transferable = source
+<a href=#324 id=324 data-nosnippet>324</a>            .pending_msgs
+<a href=#325 id=325 data-nosnippet>325</a>            .iter()
+<a href=#326 id=326 data-nosnippet>326</a>            .filter(|msg| !msg.wire_header().is_some_and(|header| header.async_op != <span class="number">0</span>))
+<a href=#327 id=327 data-nosnippet>327</a>            .count();
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">if </span>target.pending_msgs.len() + transferable &gt; HOTSWAP_MSG_QUEUE_DEPTH {
+<a href=#329 id=329 data-nosnippet>329</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::WouldBlock);
+<a href=#330 id=330 data-nosnippet>330</a>        }
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">let </span>wake_sender = <span class="kw">match </span>target.state {
+<a href=#332 id=332 data-nosnippet>332</a>            TaskState::Recv { mask, .. } =&gt; source
+<a href=#333 id=333 data-nosnippet>333</a>                .pending_msgs
+<a href=#334 id=334 data-nosnippet>334</a>                .iter()
+<a href=#335 id=335 data-nosnippet>335</a>                .filter(|msg| !msg.wire_header().is_some_and(|header| header.async_op != <span class="number">0</span>))
+<a href=#336 id=336 data-nosnippet>336</a>                .find(|msg| mask == <span class="number">0 </span>|| mask == msg.sender_tid)
+<a href=#337 id=337 data-nosnippet>337</a>                .map(|msg| msg.sender_tid),
+<a href=#338 id=338 data-nosnippet>338</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#339 id=339 data-nosnippet>339</a>        };
+<a href=#340 id=340 data-nosnippet>340</a>        (
+<a href=#341 id=341 data-nosnippet>341</a>            source.pending_msgs.len(),
+<a href=#342 id=342 data-nosnippet>342</a>            target.pending_msgs.len(),
+<a href=#343 id=343 data-nosnippet>343</a>            target.cell_id.<span class="number">0 </span><span class="kw">as </span>usize,
+<a href=#344 id=344 data-nosnippet>344</a>            wake_sender,
+<a href=#345 id=345 data-nosnippet>345</a>        )
+<a href=#346 id=346 data-nosnippet>346</a>    };
+<a href=#347 id=347 data-nosnippet>347</a>    <span class="kw">if </span>!<span class="kw">crate</span>::cell::service_registry::paused_matches(service_id, source_tid) {
+<a href=#348 id=348 data-nosnippet>348</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::WouldBlock);
+<a href=#349 id=349 data-nosnippet>349</a>    }
+<a href=#350 id=350 data-nosnippet>350</a>
+<a href=#351 id=351 data-nosnippet>351</a>    <span class="kw">for </span>index <span class="kw">in </span><span class="number">0</span>..source_len {
+<a href=#352 id=352 data-nosnippet>352</a>        <span class="kw">if </span>message_is_async(sched, source_tid, index) {
+<a href=#353 id=353 data-nosnippet>353</a>            <span class="kw">continue</span>;
+<a href=#354 id=354 data-nosnippet>354</a>        }
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">let </span>copied = {
+<a href=#356 id=356 data-nosnippet>356</a>            <span class="kw">let </span>source = sched.tasks.get(<span class="kw-2">&amp;</span>source_tid).ok_or(ViError::NotFound)<span class="question-mark">?</span>;
+<a href=#357 id=357 data-nosnippet>357</a>            <span class="kw">let </span>message = <span class="kw-2">&amp;</span>source.pending_msgs.as_slice()[index];
+<a href=#358 id=358 data-nosnippet>358</a>            <span class="kw">let </span>wire = <span class="kw">match </span><span class="kw-2">&amp;</span>message.wire {
+<a href=#359 id=359 data-nosnippet>359</a>                <span class="prelude-val">Some</span>(w) =&gt; w.try_clone().ok(),
+<a href=#360 id=360 data-nosnippet>360</a>                <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#361 id=361 data-nosnippet>361</a>            };
+<a href=#362 id=362 data-nosnippet>362</a>            PendingMsgData::try_copy(message.payload(), target_cell).map(|data| PendingMsg {
+<a href=#363 id=363 data-nosnippet>363</a>                sender_tid: message.sender_tid,
+<a href=#364 id=364 data-nosnippet>364</a>                data,
+<a href=#365 id=365 data-nosnippet>365</a>                wire,
+<a href=#366 id=366 data-nosnippet>366</a>                enqueued_tick: message.enqueued_tick,
+<a href=#367 id=367 data-nosnippet>367</a>            })
+<a href=#368 id=368 data-nosnippet>368</a>        };
+<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">let </span>pushed = copied.and_then(|message| {
+<a href=#370 id=370 data-nosnippet>370</a>            sched
+<a href=#371 id=371 data-nosnippet>371</a>                .tasks
+<a href=#372 id=372 data-nosnippet>372</a>                .get_mut(<span class="kw-2">&amp;</span>target_tid)
+<a href=#373 id=373 data-nosnippet>373</a>                .ok_or(())<span class="question-mark">?
+<a href=#374 id=374 data-nosnippet>374</a>                </span>.pending_msgs
+<a href=#375 id=375 data-nosnippet>375</a>                .try_push(message)
+<a href=#376 id=376 data-nosnippet>376</a>        });
+<a href=#377 id=377 data-nosnippet>377</a>        <span class="kw">if </span>pushed.is_err() {
+<a href=#378 id=378 data-nosnippet>378</a>            rollback_mailbox_appends(sched, target_tid, target_start);
+<a href=#379 id=379 data-nosnippet>379</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::WouldBlock);
+<a href=#380 id=380 data-nosnippet>380</a>        }
+<a href=#381 id=381 data-nosnippet>381</a>    }
+<a href=#382 id=382 data-nosnippet>382</a>
+<a href=#383 id=383 data-nosnippet>383</a>    <span class="kw">let </span><span class="kw-2">mut </span>source_mailbox = {
+<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">let </span>source = sched.tasks.get_mut(<span class="kw-2">&amp;</span>source_tid).ok_or(ViError::NotFound)<span class="question-mark">?</span>;
+<a href=#385 id=385 data-nosnippet>385</a>        source.hotswap_ingress_closed = <span class="bool-val">true</span>;
+<a href=#386 id=386 data-nosnippet>386</a>        core::mem::take(<span class="kw-2">&amp;mut </span>source.pending_msgs)
+<a href=#387 id=387 data-nosnippet>387</a>    };
 <a href=#388 id=388 data-nosnippet>388</a>
-<a href=#389 id=389 data-nosnippet>389</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
-<a href=#390 id=390 data-nosnippet>390</a>        target.hotswap_source_tid = <span class="prelude-val">None</span>;
-<a href=#391 id=391 data-nosnippet>391</a>    }
-<a href=#392 id=392 data-nosnippet>392</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sender_tid) = wake_sender {
-<a href=#393 id=393 data-nosnippet>393</a>        <span class="kw">let </span>sender_context = sched
-<a href=#394 id=394 data-nosnippet>394</a>            .tasks
-<a href=#395 id=395 data-nosnippet>395</a>            .get(<span class="kw-2">&amp;</span>sender_tid)
-<a href=#396 id=396 data-nosnippet>396</a>            .map(|sender| (sender_tid, sender.cell_id.<span class="number">0</span>, sender.cell_generation));
-<a href=#397 id=397 data-nosnippet>397</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
-<a href=#398 id=398 data-nosnippet>398</a>            target.state = TaskState::Ready;
-<a href=#399 id=399 data-nosnippet>399</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>((sender_tid, sender_cell_id, sender_generation)) = sender_context {
-<a href=#400 id=400 data-nosnippet>400</a>                target.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
-<a href=#401 id=401 data-nosnippet>401</a>            } <span class="kw">else </span>{
-<a href=#402 id=402 data-nosnippet>402</a>                target.clear_current_caller_context();
-<a href=#403 id=403 data-nosnippet>403</a>            }
-<a href=#404 id=404 data-nosnippet>404</a>        }
-<a href=#405 id=405 data-nosnippet>405</a>        sched.push_ready(target_tid);
-<a href=#406 id=406 data-nosnippet>406</a>    }
-<a href=#407 id=407 data-nosnippet>407</a>    <span class="prelude-val">Ok</span>(())
-<a href=#408 id=408 data-nosnippet>408</a>}
-<a href=#409 id=409 data-nosnippet>409</a>
-<a href=#410 id=410 data-nosnippet>410</a><span class="kw">fn </span>rollback_mailbox_appends(
-<a href=#411 id=411 data-nosnippet>411</a>    sched: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::task::scheduler::Scheduler,
-<a href=#412 id=412 data-nosnippet>412</a>    target_tid: usize,
-<a href=#413 id=413 data-nosnippet>413</a>    target_start: usize,
-<a href=#414 id=414 data-nosnippet>414</a>) {
-<a href=#415 id=415 data-nosnippet>415</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
-<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">while </span>target.pending_msgs.len() &gt; target_start {
-<a href=#417 id=417 data-nosnippet>417</a>            <span class="kw">let </span>last = target.pending_msgs.len() - <span class="number">1</span>;
-<a href=#418 id=418 data-nosnippet>418</a>            drop(target.pending_msgs.remove(last));
-<a href=#419 id=419 data-nosnippet>419</a>        }
-<a href=#420 id=420 data-nosnippet>420</a>    }
-<a href=#421 id=421 data-nosnippet>421</a>}
-<a href=#422 id=422 data-nosnippet>422</a>
-<a href=#423 id=423 data-nosnippet>423</a><span class="doccomment">/// Terminate `tid` via the internal path, bypassing the Frozen kill-guard.
-<a href=#424 id=424 data-nosnippet>424</a>///
-<a href=#425 id=425 data-nosnippet>425</a>/// Used at the end of a successful swap to terminate the old cell.  The old cell
-<a href=#426 id=426 data-nosnippet>426</a>/// is Frozen at this point; the regular `ForceExit` syscall would reject the
-<a href=#427 id=427 data-nosnippet>427</a>/// request with `PermissionDenied`.
-<a href=#428 id=428 data-nosnippet>428</a>///
-<a href=#429 id=429 data-nosnippet>429</a>/// Uses the same scheduler retirement funnel as every other exit path. The
-<a href=#430 id=430 data-nosnippet>430</a>/// `CellId` is retained only to preserve this internal call shape; it must not
-<a href=#431 id=431 data-nosnippet>431</a>/// authorize Cell-wide cleanup for a worker target.
-<a href=#432 id=432 data-nosnippet>432</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>exit_task_internal(tid: usize, _cell_id: CellId) {
-<a href=#433 id=433 data-nosnippet>433</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
-<a href=#434 id=434 data-nosnippet>434</a>        <span class="comment">// 0xAAAA_AAAA = hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).
-<a href=#435 id=435 data-nosnippet>435</a>        </span>sched.exit_task(tid, <span class="number">0xAAAA_AAAAusize</span>);
-<a href=#436 id=436 data-nosnippet>436</a>    }
-<a href=#437 id=437 data-nosnippet>437</a>
-<a href=#438 id=438 data-nosnippet>438</a>    <span class="kw">crate</span>::audit::log_event(
-<a href=#439 id=439 data-nosnippet>439</a>        <span class="kw">crate</span>::audit::AuditEvent::CellExit,
-<a href=#440 id=440 data-nosnippet>440</a>        <span class="kw-2">&amp;</span><span class="kw">crate</span>::audit::encode_u32x2(tid <span class="kw">as </span>u32, <span class="number">0xAA00_0000u32</span>), <span class="comment">// hot-swap marker
-<a href=#441 id=441 data-nosnippet>441</a>    </span>);
-<a href=#442 id=442 data-nosnippet>442</a>}
-<a href=#443 id=443 data-nosnippet>443</a>
-<a href=#444 id=444 data-nosnippet>444</a><span class="attr">#[cfg(test)]
-<a href=#445 id=445 data-nosnippet>445</a></span><span class="kw">mod </span>tests {
-<a href=#446 id=446 data-nosnippet>446</a>    <span class="kw">use </span>super::{CeilingState, ReplacementReservation, SWAP_CEILINGS};
-<a href=#447 id=447 data-nosnippet>447</a>    <span class="kw">use </span><span class="kw">crate</span>::task::cap::CapSet;
-<a href=#448 id=448 data-nosnippet>448</a>
-<a href=#449 id=449 data-nosnippet>449</a>    <span class="attr">#[test]
-<a href=#450 id=450 data-nosnippet>450</a>    </span><span class="kw">fn </span>stale_reservation_cannot_restore_a_new_freeze() {
-<a href=#451 id=451 data-nosnippet>451</a>        <span class="kw">const </span>TID: usize = usize::MAX - <span class="number">1</span>;
-<a href=#452 id=452 data-nosnippet>452</a>        <span class="kw">let </span>old = CapSet {
-<a href=#453 id=453 data-nosnippet>453</a>            spawn: <span class="bool-val">true</span>,
-<a href=#454 id=454 data-nosnippet>454</a>            ..CapSet::EMPTY
-<a href=#455 id=455 data-nosnippet>455</a>        };
-<a href=#456 id=456 data-nosnippet>456</a>        <span class="kw">let </span>new = CapSet {
-<a href=#457 id=457 data-nosnippet>457</a>            network: <span class="bool-val">true</span>,
-<a href=#458 id=458 data-nosnippet>458</a>            ..CapSet::EMPTY
-<a href=#459 id=459 data-nosnippet>459</a>        };
-<a href=#460 id=460 data-nosnippet>460</a>        SWAP_CEILINGS.lock().insert(
-<a href=#461 id=461 data-nosnippet>461</a>            TID,
-<a href=#462 id=462 data-nosnippet>462</a>            CeilingState::Reserved {
-<a href=#463 id=463 data-nosnippet>463</a>                generation: <span class="number">3</span>,
-<a href=#464 id=464 data-nosnippet>464</a>                swap_id: <span class="number">9</span>,
-<a href=#465 id=465 data-nosnippet>465</a>                freeze_nonce: <span class="number">41</span>,
-<a href=#466 id=466 data-nosnippet>466</a>            },
-<a href=#467 id=467 data-nosnippet>467</a>        );
-<a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">let </span>stale = ReplacementReservation {
-<a href=#469 id=469 data-nosnippet>469</a>            source_tid: TID,
-<a href=#470 id=470 data-nosnippet>470</a>            source_generation: <span class="number">3</span>,
-<a href=#471 id=471 data-nosnippet>471</a>            swap_id: <span class="number">9</span>,
-<a href=#472 id=472 data-nosnippet>472</a>            freeze_nonce: <span class="number">41</span>,
-<a href=#473 id=473 data-nosnippet>473</a>            ceiling: <span class="prelude-val">Some</span>(old),
-<a href=#474 id=474 data-nosnippet>474</a>        };
-<a href=#475 id=475 data-nosnippet>475</a>        SWAP_CEILINGS.lock().insert(
-<a href=#476 id=476 data-nosnippet>476</a>            TID,
-<a href=#477 id=477 data-nosnippet>477</a>            CeilingState::Available {
-<a href=#478 id=478 data-nosnippet>478</a>                ceiling: new,
-<a href=#479 id=479 data-nosnippet>479</a>                generation: <span class="number">3</span>,
-<a href=#480 id=480 data-nosnippet>480</a>                swap_id: <span class="number">9</span>,
-<a href=#481 id=481 data-nosnippet>481</a>                freeze_nonce: <span class="number">42</span>,
-<a href=#482 id=482 data-nosnippet>482</a>            },
-<a href=#483 id=483 data-nosnippet>483</a>        );
-<a href=#484 id=484 data-nosnippet>484</a>
-<a href=#485 id=485 data-nosnippet>485</a>        drop(stale);
-<a href=#486 id=486 data-nosnippet>486</a>
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#488 id=488 data-nosnippet>488</a>            SWAP_CEILINGS.lock().remove(<span class="kw-2">&amp;</span>TID),
-<a href=#489 id=489 data-nosnippet>489</a>            <span class="prelude-val">Some</span>(CeilingState::Available {
-<a href=#490 id=490 data-nosnippet>490</a>                ceiling,
-<a href=#491 id=491 data-nosnippet>491</a>                generation: <span class="number">3</span>,
-<a href=#492 id=492 data-nosnippet>492</a>                swap_id: <span class="number">9</span>,
-<a href=#493 id=493 data-nosnippet>493</a>                freeze_nonce: <span class="number">42</span>,
-<a href=#494 id=494 data-nosnippet>494</a>            }) <span class="kw">if </span>ceiling == new
-<a href=#495 id=495 data-nosnippet>495</a>        ));
-<a href=#496 id=496 data-nosnippet>496</a>    }
-<a href=#497 id=497 data-nosnippet>497</a>}
+<a href=#389 id=389 data-nosnippet>389</a>    <span class="kw">if </span>!<span class="kw">crate</span>::cell::service_registry::commit_paused(service_id, source_tid, target_tid) {
+<a href=#390 id=390 data-nosnippet>390</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(source) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>source_tid) {
+<a href=#391 id=391 data-nosnippet>391</a>            source.pending_msgs = core::mem::take(<span class="kw-2">&amp;mut </span>source_mailbox);
+<a href=#392 id=392 data-nosnippet>392</a>            source.hotswap_ingress_closed = <span class="bool-val">false</span>;
+<a href=#393 id=393 data-nosnippet>393</a>        }
+<a href=#394 id=394 data-nosnippet>394</a>        rollback_mailbox_appends(sched, target_tid, target_start);
+<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::WouldBlock);
+<a href=#396 id=396 data-nosnippet>396</a>    }
+<a href=#397 id=397 data-nosnippet>397</a>
+<a href=#398 id=398 data-nosnippet>398</a>    <span class="comment">// A queued async request is bound to the old provider incarnation. Unlike
+<a href=#399 id=399 data-nosnippet>399</a>    // legacy sends it cannot be replayed at the replacement: doing so could
+<a href=#400 id=400 data-nosnippet>400</a>    // execute the same side effect after the caller was told the old peer died.
+<a href=#401 id=401 data-nosnippet>401</a>    // The source mailbox remains owned by the old task until retirement.
+<a href=#402 id=402 data-nosnippet>402</a>    </span><span class="kw">let </span>(source_cell, source_generation) = {
+<a href=#403 id=403 data-nosnippet>403</a>        <span class="kw">let </span>source = sched.tasks.get(<span class="kw-2">&amp;</span>source_tid).ok_or(ViError::NotFound)<span class="question-mark">?</span>;
+<a href=#404 id=404 data-nosnippet>404</a>        (source.cell_id.<span class="number">0</span>, source.cell_generation)
+<a href=#405 id=405 data-nosnippet>405</a>    };
+<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">crate</span>::task::async_ipc::cutover_peer(sched, source_tid, source_cell, source_generation);
+<a href=#407 id=407 data-nosnippet>407</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
+<a href=#408 id=408 data-nosnippet>408</a>        target.hotswap_source_tid = <span class="prelude-val">None</span>;
+<a href=#409 id=409 data-nosnippet>409</a>    }
+<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sender_tid) = wake_sender {
+<a href=#411 id=411 data-nosnippet>411</a>        <span class="kw">let </span>sender_context = sched
+<a href=#412 id=412 data-nosnippet>412</a>            .tasks
+<a href=#413 id=413 data-nosnippet>413</a>            .get(<span class="kw-2">&amp;</span>sender_tid)
+<a href=#414 id=414 data-nosnippet>414</a>            .map(|sender| (sender_tid, sender.cell_id.<span class="number">0</span>, sender.cell_generation));
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
+<a href=#416 id=416 data-nosnippet>416</a>            target.state = TaskState::Ready;
+<a href=#417 id=417 data-nosnippet>417</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>((sender_tid, sender_cell_id, sender_generation)) = sender_context {
+<a href=#418 id=418 data-nosnippet>418</a>                target.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
+<a href=#419 id=419 data-nosnippet>419</a>            } <span class="kw">else </span>{
+<a href=#420 id=420 data-nosnippet>420</a>                target.clear_current_caller_context();
+<a href=#421 id=421 data-nosnippet>421</a>            }
+<a href=#422 id=422 data-nosnippet>422</a>        }
+<a href=#423 id=423 data-nosnippet>423</a>        sched.push_ready(target_tid);
+<a href=#424 id=424 data-nosnippet>424</a>    }
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="prelude-val">Ok</span>(())
+<a href=#426 id=426 data-nosnippet>426</a>}
+<a href=#427 id=427 data-nosnippet>427</a>
+<a href=#428 id=428 data-nosnippet>428</a><span class="kw">fn </span>message_is_async(
+<a href=#429 id=429 data-nosnippet>429</a>    sched: <span class="kw-2">&amp;</span><span class="kw">crate</span>::task::scheduler::Scheduler,
+<a href=#430 id=430 data-nosnippet>430</a>    source_tid: usize,
+<a href=#431 id=431 data-nosnippet>431</a>    index: usize,
+<a href=#432 id=432 data-nosnippet>432</a>) -&gt; bool {
+<a href=#433 id=433 data-nosnippet>433</a>    sched.tasks.get(<span class="kw-2">&amp;</span>source_tid).is_some_and(|task| {
+<a href=#434 id=434 data-nosnippet>434</a>        task.pending_msgs.as_slice()[index]
+<a href=#435 id=435 data-nosnippet>435</a>            .wire_header()
+<a href=#436 id=436 data-nosnippet>436</a>            .is_some_and(|header| header.async_op != <span class="number">0</span>)
+<a href=#437 id=437 data-nosnippet>437</a>    })
+<a href=#438 id=438 data-nosnippet>438</a>}
+<a href=#439 id=439 data-nosnippet>439</a>
+<a href=#440 id=440 data-nosnippet>440</a><span class="kw">fn </span>rollback_mailbox_appends(
+<a href=#441 id=441 data-nosnippet>441</a>    sched: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::task::scheduler::Scheduler,
+<a href=#442 id=442 data-nosnippet>442</a>    target_tid: usize,
+<a href=#443 id=443 data-nosnippet>443</a>    target_start: usize,
+<a href=#444 id=444 data-nosnippet>444</a>) {
+<a href=#445 id=445 data-nosnippet>445</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
+<a href=#446 id=446 data-nosnippet>446</a>        <span class="kw">while </span>target.pending_msgs.len() &gt; target_start {
+<a href=#447 id=447 data-nosnippet>447</a>            <span class="kw">let </span>last = target.pending_msgs.len() - <span class="number">1</span>;
+<a href=#448 id=448 data-nosnippet>448</a>            drop(target.pending_msgs.remove(last));
+<a href=#449 id=449 data-nosnippet>449</a>        }
+<a href=#450 id=450 data-nosnippet>450</a>    }
+<a href=#451 id=451 data-nosnippet>451</a>}
+<a href=#452 id=452 data-nosnippet>452</a>
+<a href=#453 id=453 data-nosnippet>453</a><span class="doccomment">/// Terminate `tid` via the internal path, bypassing the Frozen kill-guard.
+<a href=#454 id=454 data-nosnippet>454</a>///
+<a href=#455 id=455 data-nosnippet>455</a>/// Used at the end of a successful swap to terminate the old cell.  The old cell
+<a href=#456 id=456 data-nosnippet>456</a>/// is Frozen at this point; the regular `ForceExit` syscall would reject the
+<a href=#457 id=457 data-nosnippet>457</a>/// request with `PermissionDenied`.
+<a href=#458 id=458 data-nosnippet>458</a>///
+<a href=#459 id=459 data-nosnippet>459</a>/// Uses the same scheduler retirement funnel as every other exit path. The
+<a href=#460 id=460 data-nosnippet>460</a>/// `CellId` is retained only to preserve this internal call shape; it must not
+<a href=#461 id=461 data-nosnippet>461</a>/// authorize Cell-wide cleanup for a worker target.
+<a href=#462 id=462 data-nosnippet>462</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>exit_task_internal(tid: usize, _cell_id: CellId) {
+<a href=#463 id=463 data-nosnippet>463</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
+<a href=#464 id=464 data-nosnippet>464</a>        <span class="comment">// 0xAAAA_AAAA = hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).
+<a href=#465 id=465 data-nosnippet>465</a>        </span>sched.exit_task(tid, <span class="number">0xAAAA_AAAAusize</span>);
+<a href=#466 id=466 data-nosnippet>466</a>    }
+<a href=#467 id=467 data-nosnippet>467</a>
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">crate</span>::audit::log_event(
+<a href=#469 id=469 data-nosnippet>469</a>        <span class="kw">crate</span>::audit::AuditEvent::CellExit,
+<a href=#470 id=470 data-nosnippet>470</a>        <span class="kw-2">&amp;</span><span class="kw">crate</span>::audit::encode_u32x2(tid <span class="kw">as </span>u32, <span class="number">0xAA00_0000u32</span>), <span class="comment">// hot-swap marker
+<a href=#471 id=471 data-nosnippet>471</a>    </span>);
+<a href=#472 id=472 data-nosnippet>472</a>}
+<a href=#473 id=473 data-nosnippet>473</a>
+<a href=#474 id=474 data-nosnippet>474</a><span class="attr">#[cfg(test)]
+<a href=#475 id=475 data-nosnippet>475</a></span><span class="kw">mod </span>tests {
+<a href=#476 id=476 data-nosnippet>476</a>    <span class="kw">use </span>super::{CeilingState, ReplacementReservation, SWAP_CEILINGS};
+<a href=#477 id=477 data-nosnippet>477</a>    <span class="kw">use </span><span class="kw">crate</span>::task::cap::CapSet;
+<a href=#478 id=478 data-nosnippet>478</a>
+<a href=#479 id=479 data-nosnippet>479</a>    <span class="attr">#[test]
+<a href=#480 id=480 data-nosnippet>480</a>    </span><span class="kw">fn </span>stale_reservation_cannot_restore_a_new_freeze() {
+<a href=#481 id=481 data-nosnippet>481</a>        <span class="kw">const </span>TID: usize = usize::MAX - <span class="number">1</span>;
+<a href=#482 id=482 data-nosnippet>482</a>        <span class="kw">let </span>old = CapSet {
+<a href=#483 id=483 data-nosnippet>483</a>            spawn: <span class="bool-val">true</span>,
+<a href=#484 id=484 data-nosnippet>484</a>            ..CapSet::EMPTY
+<a href=#485 id=485 data-nosnippet>485</a>        };
+<a href=#486 id=486 data-nosnippet>486</a>        <span class="kw">let </span>new = CapSet {
+<a href=#487 id=487 data-nosnippet>487</a>            network: <span class="bool-val">true</span>,
+<a href=#488 id=488 data-nosnippet>488</a>            ..CapSet::EMPTY
+<a href=#489 id=489 data-nosnippet>489</a>        };
+<a href=#490 id=490 data-nosnippet>490</a>        SWAP_CEILINGS.lock().insert(
+<a href=#491 id=491 data-nosnippet>491</a>            TID,
+<a href=#492 id=492 data-nosnippet>492</a>            CeilingState::Reserved {
+<a href=#493 id=493 data-nosnippet>493</a>                generation: <span class="number">3</span>,
+<a href=#494 id=494 data-nosnippet>494</a>                swap_id: <span class="number">9</span>,
+<a href=#495 id=495 data-nosnippet>495</a>                freeze_nonce: <span class="number">41</span>,
+<a href=#496 id=496 data-nosnippet>496</a>            },
+<a href=#497 id=497 data-nosnippet>497</a>        );
+<a href=#498 id=498 data-nosnippet>498</a>        <span class="kw">let </span>stale = ReplacementReservation {
+<a href=#499 id=499 data-nosnippet>499</a>            source_tid: TID,
+<a href=#500 id=500 data-nosnippet>500</a>            source_generation: <span class="number">3</span>,
+<a href=#501 id=501 data-nosnippet>501</a>            swap_id: <span class="number">9</span>,
+<a href=#502 id=502 data-nosnippet>502</a>            freeze_nonce: <span class="number">41</span>,
+<a href=#503 id=503 data-nosnippet>503</a>            ceiling: <span class="prelude-val">Some</span>(old),
+<a href=#504 id=504 data-nosnippet>504</a>        };
+<a href=#505 id=505 data-nosnippet>505</a>        SWAP_CEILINGS.lock().insert(
+<a href=#506 id=506 data-nosnippet>506</a>            TID,
+<a href=#507 id=507 data-nosnippet>507</a>            CeilingState::Available {
+<a href=#508 id=508 data-nosnippet>508</a>                ceiling: new,
+<a href=#509 id=509 data-nosnippet>509</a>                generation: <span class="number">3</span>,
+<a href=#510 id=510 data-nosnippet>510</a>                swap_id: <span class="number">9</span>,
+<a href=#511 id=511 data-nosnippet>511</a>                freeze_nonce: <span class="number">42</span>,
+<a href=#512 id=512 data-nosnippet>512</a>            },
+<a href=#513 id=513 data-nosnippet>513</a>        );
+<a href=#514 id=514 data-nosnippet>514</a>
+<a href=#515 id=515 data-nosnippet>515</a>        drop(stale);
+<a href=#516 id=516 data-nosnippet>516</a>
+<a href=#517 id=517 data-nosnippet>517</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#518 id=518 data-nosnippet>518</a>            SWAP_CEILINGS.lock().remove(<span class="kw-2">&amp;</span>TID),
+<a href=#519 id=519 data-nosnippet>519</a>            <span class="prelude-val">Some</span>(CeilingState::Available {
+<a href=#520 id=520 data-nosnippet>520</a>                ceiling,
+<a href=#521 id=521 data-nosnippet>521</a>                generation: <span class="number">3</span>,
+<a href=#522 id=522 data-nosnippet>522</a>                swap_id: <span class="number">9</span>,
+<a href=#523 id=523 data-nosnippet>523</a>                freeze_nonce: <span class="number">42</span>,
+<a href=#524 id=524 data-nosnippet>524</a>            }) <span class="kw">if </span>ceiling == new
+<a href=#525 id=525 data-nosnippet>525</a>        ));
+<a href=#526 id=526 data-nosnippet>526</a>    }
+<a href=#527 id=527 data-nosnippet>527</a>}
 </code></pre></div></section></main></body></html>

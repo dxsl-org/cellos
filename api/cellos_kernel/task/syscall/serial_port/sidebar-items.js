@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["configure_baud","declared","present","read_byte","write_byte"]};

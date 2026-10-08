@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["OP_ATTACH","OP_REQUEST","OP_RESPONSE"],"fn":["decode_request","decode_response","encode_attach","encode_request","encode_response","is_attach"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_REQUEST","OP_ATTACH","OP_REQUEST","OP_RESPONSE"],"fn":["decode_request","encode_attach","encode_request","is_attach"]};

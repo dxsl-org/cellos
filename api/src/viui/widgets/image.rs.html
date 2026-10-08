@@ -20,13 +20,13 @@
 <a href=#20 id=20 data-nosnippet>20</a>}
 <a href=#21 id=21 data-nosnippet>21</a>
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">impl </span>ViWidget <span class="kw">for </span>Image {
-<a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;</span><span class="self">self</span>, constraints: Constraints) -&gt; LayoutNode {
-<a href=#24 id=24 data-nosnippet>24</a>        <span class="kw">let </span>desired = Size {
-<a href=#25 id=25 data-nosnippet>25</a>            w: <span class="self">self</span>.w <span class="kw">as </span>f32,
-<a href=#26 id=26 data-nosnippet>26</a>            h: <span class="self">self</span>.h <span class="kw">as </span>f32,
-<a href=#27 id=27 data-nosnippet>27</a>        };
-<a href=#28 id=28 data-nosnippet>28</a>        <span class="kw">let </span>size = constraints.constrain(desired);
-<a href=#29 id=29 data-nosnippet>29</a>        LayoutNode::leaf(Rect::from_origin_size(constraints.origin, size))
+<a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;</span><span class="self">self</span>, constraints: Constraints, _font: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::font_context::FontContext) -&gt; LayoutNode {
+<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">let </span>desired = Size {
+<a href=#25 id=25 data-nosnippet>25</a>        w: <span class="self">self</span>.w <span class="kw">as </span>f32,
+<a href=#26 id=26 data-nosnippet>26</a>        h: <span class="self">self</span>.h <span class="kw">as </span>f32,
+<a href=#27 id=27 data-nosnippet>27</a>    };
+<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">let </span>size = constraints.constrain(desired);
+<a href=#29 id=29 data-nosnippet>29</a>    LayoutNode::leaf(Rect::from_origin_size(constraints.origin, size))
 <a href=#30 id=30 data-nosnippet>30</a>    }
 <a href=#31 id=31 data-nosnippet>31</a>
 <a href=#32 id=32 data-nosnippet>32</a>    <span class="kw">fn </span>paint(<span class="kw-2">&amp;</span><span class="self">self</span>, cx: <span class="kw-2">&amp;mut </span>PaintCx) {

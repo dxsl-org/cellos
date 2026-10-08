@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_RESOURCE_BYTES"],"fn":["load_text","resolve"]};

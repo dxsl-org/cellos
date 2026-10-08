@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BACKEND_TIMEOUT","CLOSE_TIMEOUT","IDLE_TICKS","MAX_BACKENDS","MAX_CONNECTIONS","MAX_OPERATIONS","READ_TIMEOUT","SEND_TIMEOUT","STATIC_FILE_MAX_BYTES","TCP_CHUNK"],"enum":["FileStep","InferStep","NetStep","PendingKind","Phase"],"fn":["listen","push_interest","run"],"struct":["Connection","FileSession","InferSession","Pending","Reactor"]};

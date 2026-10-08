@@ -1,0 +1,257 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cells/services/ocel-quickjs/src/ffi.rs`."><title>ffi.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="ocel_quickjs" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">ocel_quickjs/</div>ffi.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! C ABI of the vendored engine, plus the shim symbols it needs that the
+<a href=#2 id=2 data-nosnippet>2</a>//! Tier-A C ABI (`api::services::posix`) does not export.
+<a href=#3 id=3 data-nosnippet>3</a>//!
+<a href=#4 id=4 data-nosnippet>4</a>//! Everything else the engine links against — `malloc`/`free`/`realloc`,
+<a href=#5 id=5 data-nosnippet>5</a>//! `mem*`/`str*`, `snprintf`/`vsnprintf`/`fprintf`/`fputc`/`fwrite`,
+<a href=#6 id=6 data-nosnippet>6</a>//! `stdout`/`stderr`, `abort`, and the C99 math set — comes from `libs/api`,
+<a href=#7 id=7 data-nosnippet>7</a>//! which every cell already links. This file therefore carries only the
+<a href=#8 id=8 data-nosnippet>8</a>//! declarations of upstream `quickjs.h` that the engine driver uses, and the
+<a href=#9 id=9 data-nosnippet>9</a>//! three bodies upstream expects from an OS: the clock and the epoch
+<a href=#10 id=10 data-nosnippet>10</a>//! conversion behind `Date`.
+<a href=#11 id=11 data-nosnippet>11</a>
+<a href=#12 id=12 data-nosnippet>12</a></span><span class="attr">#![allow(non_camel_case_types)]
+<a href=#13 id=13 data-nosnippet>13</a>
+<a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">use </span>core::ffi::{c_char, c_int, c_void};
+<a href=#15 id=15 data-nosnippet>15</a>
+<a href=#16 id=16 data-nosnippet>16</a><span class="doccomment">/// Opaque `JSRuntime`.
+<a href=#17 id=17 data-nosnippet>17</a></span><span class="attr">#[repr(C)]
+<a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">pub struct </span>JSRuntime {
+<a href=#19 id=19 data-nosnippet>19</a>    _private: [u8; <span class="number">0</span>],
+<a href=#20 id=20 data-nosnippet>20</a>}
+<a href=#21 id=21 data-nosnippet>21</a>
+<a href=#22 id=22 data-nosnippet>22</a><span class="doccomment">/// Opaque `JSContext`.
+<a href=#23 id=23 data-nosnippet>23</a></span><span class="attr">#[repr(C)]
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub struct </span>JSContext {
+<a href=#25 id=25 data-nosnippet>25</a>    _private: [u8; <span class="number">0</span>],
+<a href=#26 id=26 data-nosnippet>26</a>}
+<a href=#27 id=27 data-nosnippet>27</a>
+<a href=#28 id=28 data-nosnippet>28</a><span class="doccomment">/// `JSValue` is two words; the engine treats it as a tagged union.
+<a href=#29 id=29 data-nosnippet>29</a></span><span class="attr">#[repr(C)]
+<a href=#30 id=30 data-nosnippet>30</a>#[derive(Clone, Copy)]
+<a href=#31 id=31 data-nosnippet>31</a></span><span class="kw">pub struct </span>JSValue {
+<a href=#32 id=32 data-nosnippet>32</a>    <span class="doccomment">/// `JSValueUnion` — either the small int or the `f64`, read through the
+<a href=#33 id=33 data-nosnippet>33</a>    /// glue's `vios_js_as_*` once the glue has told us which it is.
+<a href=#34 id=34 data-nosnippet>34</a>    </span><span class="kw">pub </span>u: u64,
+<a href=#35 id=35 data-nosnippet>35</a>    <span class="doccomment">/// Tag from the header's `JS_TAG_*` table. Only the glue interprets it.
+<a href=#36 id=36 data-nosnippet>36</a>    </span><span class="kw">pub </span>tag: i64,
+<a href=#37 id=37 data-nosnippet>37</a>}
+<a href=#38 id=38 data-nosnippet>38</a>
+<a href=#39 id=39 data-nosnippet>39</a><span class="doccomment">/// `JS_EVAL_TYPE_GLOBAL`: evaluate as a global script.
+<a href=#40 id=40 data-nosnippet>40</a></span><span class="kw">pub const </span>JS_EVAL_TYPE_GLOBAL: c_int = <span class="number">0</span>;
+<a href=#41 id=41 data-nosnippet>41</a>
+<a href=#42 id=42 data-nosnippet>42</a><span class="kw">extern </span><span class="string">"C" </span>{
+<a href=#43 id=43 data-nosnippet>43</a>    <span class="doccomment">/// Upstream's default runtime: the engine allocates through the Tier-A
+<a href=#44 id=44 data-nosnippet>44</a>    /// `malloc` family (`js_def_malloc` inside the archive), so the cell heap
+<a href=#45 id=45 data-nosnippet>45</a>    /// backs it without the driver passing its own function table.
+<a href=#46 id=46 data-nosnippet>46</a>    </span><span class="kw">pub fn </span>JS_NewRuntime() -&gt; <span class="kw-2">*mut </span>JSRuntime;
+<a href=#47 id=47 data-nosnippet>47</a>    <span class="kw">pub fn </span>JS_FreeRuntime(rt: <span class="kw-2">*mut </span>JSRuntime);
+<a href=#48 id=48 data-nosnippet>48</a>    <span class="kw">pub fn </span>JS_NewContext(rt: <span class="kw-2">*mut </span>JSRuntime) -&gt; <span class="kw-2">*mut </span>JSContext;
+<a href=#49 id=49 data-nosnippet>49</a>    <span class="kw">pub fn </span>JS_FreeContext(ctx: <span class="kw-2">*mut </span>JSContext);
+<a href=#50 id=50 data-nosnippet>50</a>    <span class="kw">pub fn </span>JS_SetMaxStackSize(rt: <span class="kw-2">*mut </span>JSRuntime, stack_size: usize);
+<a href=#51 id=51 data-nosnippet>51</a>    <span class="kw">pub fn </span>JS_SetMemoryLimit(rt: <span class="kw-2">*mut </span>JSRuntime, limit: usize);
+<a href=#52 id=52 data-nosnippet>52</a>    <span class="kw">pub fn </span>JS_SetGCThreshold(rt: <span class="kw-2">*mut </span>JSRuntime, gc_threshold: usize);
+<a href=#53 id=53 data-nosnippet>53</a>    <span class="kw">pub fn </span>JS_SetInterruptHandler(rt: <span class="kw-2">*mut </span>JSRuntime,
+<a href=#54 id=54 data-nosnippet>54</a>        handler: <span class="prelude-ty">Option</span>&lt;<span class="kw">unsafe extern </span><span class="string">"C" </span><span class="kw">fn</span>(<span class="kw-2">*mut </span>JSRuntime, <span class="kw-2">*mut </span>c_void) -&gt; c_int&gt;,
+<a href=#55 id=55 data-nosnippet>55</a>        opaque: <span class="kw-2">*mut </span>c_void);
+<a href=#56 id=56 data-nosnippet>56</a>    <span class="kw">pub fn </span>JS_ExecutePendingJob(rt: <span class="kw-2">*mut </span>JSRuntime, ctx: <span class="kw-2">*mut *mut </span>JSContext) -&gt; c_int;
+<a href=#57 id=57 data-nosnippet>57</a>
+<a href=#58 id=58 data-nosnippet>58</a>    <span class="kw">pub fn </span>JS_Eval(
+<a href=#59 id=59 data-nosnippet>59</a>        ctx: <span class="kw-2">*mut </span>JSContext,
+<a href=#60 id=60 data-nosnippet>60</a>        input: <span class="kw-2">*const </span>c_char,
+<a href=#61 id=61 data-nosnippet>61</a>        input_len: usize,
+<a href=#62 id=62 data-nosnippet>62</a>        filename: <span class="kw-2">*const </span>c_char,
+<a href=#63 id=63 data-nosnippet>63</a>        eval_flags: c_int,
+<a href=#64 id=64 data-nosnippet>64</a>    ) -&gt; JSValue;
+<a href=#65 id=65 data-nosnippet>65</a>
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">pub fn </span>JS_ToBool(ctx: <span class="kw-2">*mut </span>JSContext, v: JSValue) -&gt; c_int;
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">pub fn </span>JS_ToFloat64(ctx: <span class="kw-2">*mut </span>JSContext, out: <span class="kw-2">*mut </span>f64, v: JSValue) -&gt; c_int;
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">pub fn </span>JS_ToCStringLen2(
+<a href=#69 id=69 data-nosnippet>69</a>        ctx: <span class="kw-2">*mut </span>JSContext,
+<a href=#70 id=70 data-nosnippet>70</a>        plen: <span class="kw-2">*mut </span>usize,
+<a href=#71 id=71 data-nosnippet>71</a>        v: JSValue,
+<a href=#72 id=72 data-nosnippet>72</a>        cesu8: c_int,
+<a href=#73 id=73 data-nosnippet>73</a>    ) -&gt; <span class="kw-2">*const </span>c_char;
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">pub fn </span>JS_FreeCString(ctx: <span class="kw-2">*mut </span>JSContext, ptr: <span class="kw-2">*const </span>c_char);
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">pub fn </span>JS_GetException(ctx: <span class="kw-2">*mut </span>JSContext) -&gt; JSValue;
+<a href=#76 id=76 data-nosnippet>76</a>
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="comment">// Glue (src/c/qjs_cellos_glue.c): the head's `static inline` predicates and
+<a href=#78 id=78 data-nosnippet>78</a>    // free, exported so this side never mirrors the conditional JSValue layout.
+<a href=#79 id=79 data-nosnippet>79</a>    </span><span class="kw">pub fn </span>vios_js_is_exception(v: JSValue) -&gt; c_int;
+<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">pub fn </span>vios_js_is_undefined(v: JSValue) -&gt; c_int;
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">pub fn </span>vios_js_is_null(v: JSValue) -&gt; c_int;
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">pub fn </span>vios_js_is_bool(v: JSValue) -&gt; c_int;
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">pub fn </span>vios_js_is_number(v: JSValue) -&gt; c_int;
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">pub fn </span>vios_js_is_float(v: JSValue) -&gt; c_int;
+<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">pub fn </span>vios_js_as_float(v: JSValue) -&gt; f64;
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">pub fn </span>vios_js_free(ctx: <span class="kw-2">*mut </span>JSContext, v: JSValue);
+<a href=#87 id=87 data-nosnippet>87</a>}
+<a href=#88 id=88 data-nosnippet>88</a>
+<a href=#89 id=89 data-nosnippet>89</a><span class="doccomment">/// `lrint` — round to nearest, ties to even — which the Tier-A math set does
+<a href=#90 id=90 data-nosnippet>90</a>/// not export and the engine's `Math` table takes the address of.
+<a href=#91 id=91 data-nosnippet>91</a>///
+<a href=#92 id=92 data-nosnippet>92</a>/// The engine only ever calls it on finite values in the integer range
+<a href=#93 id=93 data-nosnippet>93</a>/// (`js_math_round`-adjacent paths), so the saturating cast below is the right
+<a href=#94 id=94 data-nosnippet>94</a>/// contract: out-of-range or NaN input cannot be represented and saturates,
+<a href=#95 id=95 data-nosnippet>95</a>/// exactly like the hardware conversion instruction.
+<a href=#96 id=96 data-nosnippet>96</a></span><span class="attr">#[no_mangle]
+<a href=#97 id=97 data-nosnippet>97</a></span><span class="kw">pub extern </span><span class="string">"C" </span><span class="kw">fn </span>lrint(x: f64) -&gt; i64 {
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">if </span>!x.is_finite() {
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#100 id=100 data-nosnippet>100</a>    }
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">let </span>rounded = libm::rint(x);
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">if </span>rounded &lt;= i64::MIN <span class="kw">as </span>f64 {
+<a href=#103 id=103 data-nosnippet>103</a>        i64::MIN
+<a href=#104 id=104 data-nosnippet>104</a>    } <span class="kw">else if </span>rounded &gt;= i64::MAX <span class="kw">as </span>f64 {
+<a href=#105 id=105 data-nosnippet>105</a>        i64::MAX
+<a href=#106 id=106 data-nosnippet>106</a>    } <span class="kw">else </span>{
+<a href=#107 id=107 data-nosnippet>107</a>        rounded <span class="kw">as </span>i64
+<a href=#108 id=108 data-nosnippet>108</a>    }
+<a href=#109 id=109 data-nosnippet>109</a>}
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a><span class="comment">// ── Shim symbols the engine expects from the OS ─────────────────────────────
+<a href=#112 id=112 data-nosnippet>112</a>//
+<a href=#113 id=113 data-nosnippet>113</a>// `Date` is the only engine feature that needs wall-clock time and a
+<a href=#114 id=114 data-nosnippet>114</a>// calendar. The cell has no timezone database, so `localtime_r` reports UTC —
+<a href=#115 id=115 data-nosnippet>115</a>// documented in docs/guides/ocel-viewer.md as a limitation, not a silent
+<a href=#116 id=116 data-nosnippet>116</a>// approximation of some other zone.
+<a href=#117 id=117 data-nosnippet>117</a>
+<a href=#118 id=118 data-nosnippet>118</a></span><span class="kw">const </span>USEC_PER_SEC: u64 = <span class="number">1_000_000</span>;
+<a href=#119 id=119 data-nosnippet>119</a>
+<a href=#120 id=120 data-nosnippet>120</a><span class="doccomment">/// The only timezone this cell can name (see `localtime_r`).
+<a href=#121 id=121 data-nosnippet>121</a></span><span class="kw">static </span>UTC_ZONE: <span class="kw-2">&amp;</span>[u8] = <span class="string">b"UTC\0"</span>;
+<a href=#122 id=122 data-nosnippet>122</a><span class="kw">const </span>SECS_PER_DAY: i64 = <span class="number">86_400</span>;
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a><span class="kw">fn </span>cell_time_usec() -&gt; u64 {
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="comment">// `GetTime` op 0 is the architected counter at 10 MHz on RV64; op 1 is the
+<a href=#126 id=126 data-nosnippet>126</a>    // scheduler tick. `sys_get_time` returns the monotonic counter, which is
+<a href=#127 id=127 data-nosnippet>127</a>    // what `performance.now()`/`Date.now()` want at cell resolution.
+<a href=#128 id=128 data-nosnippet>128</a>    </span>ostd::syscall::sys_get_time()
+<a href=#129 id=129 data-nosnippet>129</a>}
+<a href=#130 id=130 data-nosnippet>130</a>
+<a href=#131 id=131 data-nosnippet>131</a><span class="doccomment">/// Convert a Unix timestamp to the civil date/time, UTC.
+<a href=#132 id=132 data-nosnippet>132</a>///
+<a href=#133 id=133 data-nosnippet>133</a>/// Howard Hinnant's `civil_from_days` algorithm, which is exact for the whole
+<a href=#134 id=134 data-nosnippet>134</a>/// `i64` range of the input and needs no lookup tables.
+<a href=#135 id=135 data-nosnippet>135</a></span><span class="kw">fn </span>civil_from_days(z: i64) -&gt; (i64, u32, u32) {
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">let </span>z = z + <span class="number">719_468</span>;
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="kw">let </span>era = <span class="kw">if </span>z &gt;= <span class="number">0 </span>{ z } <span class="kw">else </span>{ z - <span class="number">146_096 </span>} / <span class="number">146_097</span>;
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">let </span>doe = (z - era * <span class="number">146_097</span>) <span class="kw">as </span>u64;
+<a href=#139 id=139 data-nosnippet>139</a>    <span class="kw">let </span>yoe = (doe - doe / <span class="number">1460 </span>+ doe / <span class="number">36_524 </span>- doe / <span class="number">146_096</span>) / <span class="number">365</span>;
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="kw">let </span>y = yoe <span class="kw">as </span>i64 + era * <span class="number">400</span>;
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">let </span>doy = doe - (<span class="number">365 </span>* yoe + yoe / <span class="number">4 </span>- yoe / <span class="number">100</span>);
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">let </span>mp = (<span class="number">5 </span>* doy + <span class="number">2</span>) / <span class="number">153</span>;
+<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">let </span>d = (doy - (<span class="number">153 </span>* mp + <span class="number">2</span>) / <span class="number">5 </span>+ <span class="number">1</span>) <span class="kw">as </span>u32;
+<a href=#144 id=144 data-nosnippet>144</a>    <span class="kw">let </span>m = <span class="kw">if </span>mp &lt; <span class="number">10 </span>{ mp + <span class="number">3 </span>} <span class="kw">else </span>{ mp - <span class="number">9 </span>} <span class="kw">as </span>u32;
+<a href=#145 id=145 data-nosnippet>145</a>    (<span class="kw">if </span>m &lt;= <span class="number">2 </span>{ y + <span class="number">1 </span>} <span class="kw">else </span>{ y }, m, d)
+<a href=#146 id=146 data-nosnippet>146</a>}
+<a href=#147 id=147 data-nosnippet>147</a>
+<a href=#148 id=148 data-nosnippet>148</a><span class="doccomment">/// `gettimeofday` over the cell clock (ignores the (unused) timezone argument).
+<a href=#149 id=149 data-nosnippet>149</a>///
+<a href=#150 id=150 data-nosnippet>150</a>/// # Safety
+<a href=#151 id=151 data-nosnippet>151</a>/// `tv` must be null or point to a writable `struct timeval`.
+<a href=#152 id=152 data-nosnippet>152</a></span><span class="attr">#[no_mangle]
+<a href=#153 id=153 data-nosnippet>153</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>gettimeofday(tv: <span class="kw-2">*mut </span>CellosTimeval, _tz: <span class="kw-2">*mut </span>c_void) -&gt; c_int {
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">if </span>tv.is_null() {
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">return </span>-<span class="number">1</span>;
+<a href=#156 id=156 data-nosnippet>156</a>    }
+<a href=#157 id=157 data-nosnippet>157</a>    <span class="kw">let </span>now = cell_time_usec();
+<a href=#158 id=158 data-nosnippet>158</a>    (<span class="kw-2">*</span>tv).tv_sec = (now / USEC_PER_SEC) <span class="kw">as </span>i64;
+<a href=#159 id=159 data-nosnippet>159</a>    (<span class="kw-2">*</span>tv).tv_usec = (now % USEC_PER_SEC) <span class="kw">as </span>i64;
+<a href=#160 id=160 data-nosnippet>160</a>    <span class="number">0
+<a href=#161 id=161 data-nosnippet>161</a></span>}
+<a href=#162 id=162 data-nosnippet>162</a>
+<a href=#163 id=163 data-nosnippet>163</a><span class="doccomment">/// `clock_gettime` over the cell clock; both clocks this cell can be asked for
+<a href=#164 id=164 data-nosnippet>164</a>/// are the same monotonic counter.
+<a href=#165 id=165 data-nosnippet>165</a>///
+<a href=#166 id=166 data-nosnippet>166</a>/// # Safety
+<a href=#167 id=167 data-nosnippet>167</a>/// `tp` must be null or point to a writable `struct timespec`.
+<a href=#168 id=168 data-nosnippet>168</a></span><span class="attr">#[no_mangle]
+<a href=#169 id=169 data-nosnippet>169</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>clock_gettime(_clk_id: c_int, tp: <span class="kw-2">*mut </span>CellosTimespec) -&gt; c_int {
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">if </span>tp.is_null() {
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">return </span>-<span class="number">1</span>;
+<a href=#172 id=172 data-nosnippet>172</a>    }
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span>now = cell_time_usec();
+<a href=#174 id=174 data-nosnippet>174</a>    (<span class="kw-2">*</span>tp).tv_sec = (now / USEC_PER_SEC) <span class="kw">as </span>i64;
+<a href=#175 id=175 data-nosnippet>175</a>    (<span class="kw-2">*</span>tp).tv_nsec = ((now % USEC_PER_SEC) * <span class="number">1000</span>) <span class="kw">as </span>i64;
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="number">0
+<a href=#177 id=177 data-nosnippet>177</a></span>}
+<a href=#178 id=178 data-nosnippet>178</a>
+<a href=#179 id=179 data-nosnippet>179</a><span class="doccomment">/// `localtime_r`, UTC only (see the module comment).
+<a href=#180 id=180 data-nosnippet>180</a>///
+<a href=#181 id=181 data-nosnippet>181</a>/// # Safety
+<a href=#182 id=182 data-nosnippet>182</a>/// `timep` and `result` must be non-null and point to writable objects.
+<a href=#183 id=183 data-nosnippet>183</a></span><span class="attr">#[no_mangle]
+<a href=#184 id=184 data-nosnippet>184</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>localtime_r(timep: <span class="kw-2">*const </span>i64, result: <span class="kw-2">*mut </span>CellosTm) -&gt; <span class="kw-2">*mut </span>CellosTm {
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">if </span>timep.is_null() || result.is_null() {
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">return </span>core::ptr::null_mut();
+<a href=#187 id=187 data-nosnippet>187</a>    }
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">let </span>secs = <span class="kw-2">*</span>timep;
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">let </span><span class="kw-2">mut </span>days = secs.div_euclid(SECS_PER_DAY);
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">let </span><span class="kw-2">mut </span>rem = secs.rem_euclid(SECS_PER_DAY);
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="comment">// 1970-01-01 was a Thursday (wday = 4, Sunday = 0).
+<a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>wday = (days + <span class="number">4</span>).rem_euclid(<span class="number">7</span>) <span class="kw">as </span>i32;
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">if </span>wday &lt; <span class="number">0 </span>{
+<a href=#194 id=194 data-nosnippet>194</a>        wday += <span class="number">7</span>;
+<a href=#195 id=195 data-nosnippet>195</a>    }
+<a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">let </span>(year, month, day) = civil_from_days(days);
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">let </span>yday = {
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="kw">let </span>jan1 = days - (day_of_year_utc(year, month, day) <span class="kw">as </span>i64);
+<a href=#199 id=199 data-nosnippet>199</a>        days -= jan1;
+<a href=#200 id=200 data-nosnippet>200</a>        days <span class="kw">as </span>i32
+<a href=#201 id=201 data-nosnippet>201</a>    };
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">let </span>t = <span class="kw-2">&amp;mut *</span>result;
+<a href=#203 id=203 data-nosnippet>203</a>    t.tm_hour = (rem / <span class="number">3600</span>) <span class="kw">as </span>i32;
+<a href=#204 id=204 data-nosnippet>204</a>    rem %= <span class="number">3600</span>;
+<a href=#205 id=205 data-nosnippet>205</a>    t.tm_min = (rem / <span class="number">60</span>) <span class="kw">as </span>i32;
+<a href=#206 id=206 data-nosnippet>206</a>    t.tm_sec = (rem % <span class="number">60</span>) <span class="kw">as </span>i32;
+<a href=#207 id=207 data-nosnippet>207</a>    t.tm_mday = day <span class="kw">as </span>i32;
+<a href=#208 id=208 data-nosnippet>208</a>    t.tm_mon = month <span class="kw">as </span>i32 - <span class="number">1</span>;
+<a href=#209 id=209 data-nosnippet>209</a>    t.tm_year = year <span class="kw">as </span>i32 - <span class="number">1900</span>;
+<a href=#210 id=210 data-nosnippet>210</a>    t.tm_wday = wday;
+<a href=#211 id=211 data-nosnippet>211</a>    t.tm_yday = yday;
+<a href=#212 id=212 data-nosnippet>212</a>    t.tm_isdst = <span class="number">0</span>;
+<a href=#213 id=213 data-nosnippet>213</a>    t.tm_gmtoff = <span class="number">0</span>;
+<a href=#214 id=214 data-nosnippet>214</a>    t.tm_zone = UTC_ZONE.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>c_char;
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">let _ </span>= <span class="kw-2">&amp;mut </span>days;
+<a href=#216 id=216 data-nosnippet>216</a>    result
+<a href=#217 id=217 data-nosnippet>217</a>}
+<a href=#218 id=218 data-nosnippet>218</a>
+<a href=#219 id=219 data-nosnippet>219</a><span class="kw">fn </span>day_of_year_utc(year: i64, month: u32, day: u32) -&gt; u32 {
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">const </span>CUM: [u32; <span class="number">12</span>] = [<span class="number">0</span>, <span class="number">31</span>, <span class="number">59</span>, <span class="number">90</span>, <span class="number">120</span>, <span class="number">151</span>, <span class="number">181</span>, <span class="number">212</span>, <span class="number">243</span>, <span class="number">273</span>, <span class="number">304</span>, <span class="number">334</span>];
+<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">let </span>leap = (year % <span class="number">4 </span>== <span class="number">0 </span>&amp;&amp; year % <span class="number">100 </span>!= <span class="number">0</span>) || year % <span class="number">400 </span>== <span class="number">0</span>;
+<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">let </span>extra = u32::from(leap &amp;&amp; month &gt; <span class="number">2</span>);
+<a href=#223 id=223 data-nosnippet>223</a>    CUM[(month - <span class="number">1</span>) <span class="kw">as </span>usize] + day - <span class="number">1 </span>+ extra
+<a href=#224 id=224 data-nosnippet>224</a>}
+<a href=#225 id=225 data-nosnippet>225</a>
+<a href=#226 id=226 data-nosnippet>226</a><span class="doccomment">/// `struct timeval` as the engine's `&lt;sys/time.h&gt;` declares it.
+<a href=#227 id=227 data-nosnippet>227</a></span><span class="attr">#[repr(C)]
+<a href=#228 id=228 data-nosnippet>228</a></span><span class="kw">pub struct </span>CellosTimeval {
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="kw">pub </span>tv_sec: i64,
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">pub </span>tv_usec: i64,
+<a href=#231 id=231 data-nosnippet>231</a>}
+<a href=#232 id=232 data-nosnippet>232</a>
+<a href=#233 id=233 data-nosnippet>233</a><span class="doccomment">/// `struct timespec`.
+<a href=#234 id=234 data-nosnippet>234</a></span><span class="attr">#[repr(C)]
+<a href=#235 id=235 data-nosnippet>235</a></span><span class="kw">pub struct </span>CellosTimespec {
+<a href=#236 id=236 data-nosnippet>236</a>    <span class="kw">pub </span>tv_sec: i64,
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="kw">pub </span>tv_nsec: i64,
+<a href=#238 id=238 data-nosnippet>238</a>}
+<a href=#239 id=239 data-nosnippet>239</a>
+<a href=#240 id=240 data-nosnippet>240</a><span class="doccomment">/// `struct tm`, matching `vendor/include/time.h`.
+<a href=#241 id=241 data-nosnippet>241</a></span><span class="attr">#[repr(C)]
+<a href=#242 id=242 data-nosnippet>242</a></span><span class="kw">pub struct </span>CellosTm {
+<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">pub </span>tm_sec: c_int,
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">pub </span>tm_min: c_int,
+<a href=#245 id=245 data-nosnippet>245</a>    <span class="kw">pub </span>tm_hour: c_int,
+<a href=#246 id=246 data-nosnippet>246</a>    <span class="kw">pub </span>tm_mday: c_int,
+<a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">pub </span>tm_mon: c_int,
+<a href=#248 id=248 data-nosnippet>248</a>    <span class="kw">pub </span>tm_year: c_int,
+<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">pub </span>tm_wday: c_int,
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">pub </span>tm_yday: c_int,
+<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">pub </span>tm_isdst: c_int,
+<a href=#252 id=252 data-nosnippet>252</a>    <span class="doccomment">/// glibc/BSD extension: seconds east of UTC. The cell has no timezone
+<a href=#253 id=253 data-nosnippet>253</a>    /// database, so this is always 0 (UTC) and `tm_zone` always "UTC".
+<a href=#254 id=254 data-nosnippet>254</a>    </span><span class="kw">pub </span>tm_gmtoff: i64,
+<a href=#255 id=255 data-nosnippet>255</a>    <span class="kw">pub </span>tm_zone: <span class="kw-2">*const </span>c_char,
+<a href=#256 id=256 data-nosnippet>256</a>}
+</code></pre></div></section></main></body></html>

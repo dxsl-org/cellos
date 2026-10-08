@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["message","ocel_pdf_close","ocel_pdf_exit","ocel_pdf_open","ocel_pdf_read_pixels","ocel_pdf_render"],"struct":["Document"]};

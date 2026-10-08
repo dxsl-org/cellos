@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["get_help_content","get_welcome_content","load_document"],"struct":["LoadedDocument"]};
+window.SIDEBAR_ITEMS = {"fn":["get_help_content","get_welcome_content","load_document","read_image_bytes"],"struct":["LoadedDocument"]};

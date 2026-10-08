@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main"],"mod":["dhcp","dns","handlers","interface","service_runtime","socket_state","socket_table","tls","tls_handler","tls_wire"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"fn":["init_custom_heap","main"],"mod":["dhcp","dns","handlers","interface","service_runtime","socket_state","socket_table","tls","tls_handler","tls_wire"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

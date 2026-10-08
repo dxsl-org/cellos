@@ -13,7 +13,7 @@ watch another Cell’s exit.</li>
 <p>Truthfulness rules:</p>
 <ul>
 <li>No model, an unsupported architecture, or an over-budget model is reported through
-<a href="../ai_proto/enum.AiError.html" title="enum ai_proto::AiError"><code>AiError</code></a> — the service never answers with fabricated tokens.</li>
+[<code>AiError</code>] — the service never answers with fabricated tokens.</li>
 <li>A session belongs to the Cell that submitted it: another Cell polling or cancelling that id
 gets <code>UnknownRequest</code>, the same answer it would get for an id that never existed.</li>
 <li>Non-CPU device targets are refused with <code>NotSupported</code> rather than silently downgraded.</li>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DISPLAY_H","DISPLAY_W"],"fn":["build_layout","cell_main","main"],"mod":["sim"]};
+window.SIDEBAR_ITEMS = {"constant":["DISPLAY_H","DISPLAY_W"],"fn":["build_layout","cell_main","init_custom_heap","main"],"mod":["sim"],"static":["__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

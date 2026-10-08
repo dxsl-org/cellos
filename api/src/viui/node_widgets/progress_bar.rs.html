@@ -81,19 +81,19 @@
 <a href=#81 id=81 data-nosnippet>81</a>}
 <a href=#82 id=82 data-nosnippet>82</a>
 <a href=#83 id=83 data-nosnippet>83</a><span class="kw">impl </span>ViNode <span class="kw">for </span>ProgressBar {
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, constraints: Constraints) -&gt; Size {
-<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">let </span>size = <span class="kw">match </span><span class="self">self</span>.orientation {
-<a href=#86 id=86 data-nosnippet>86</a>            Orientation::Horizontal =&gt; constraints.constrain(Size {
-<a href=#87 id=87 data-nosnippet>87</a>                w: constraints.max.w,
-<a href=#88 id=88 data-nosnippet>88</a>                h: BAR_H,
-<a href=#89 id=89 data-nosnippet>89</a>            }),
-<a href=#90 id=90 data-nosnippet>90</a>            Orientation::Vertical =&gt; constraints.constrain(Size {
-<a href=#91 id=91 data-nosnippet>91</a>                w: BAR_W,
-<a href=#92 id=92 data-nosnippet>92</a>                h: constraints.max.h,
-<a href=#93 id=93 data-nosnippet>93</a>            }),
-<a href=#94 id=94 data-nosnippet>94</a>        };
-<a href=#95 id=95 data-nosnippet>95</a>        <span class="self">self</span>.bounds = Rect::from_origin_size(constraints.origin, size);
-<a href=#96 id=96 data-nosnippet>96</a>        size
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, constraints: Constraints, _font: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::font_context::FontContext) -&gt; Size {
+<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">let </span>size = <span class="kw">match </span><span class="self">self</span>.orientation {
+<a href=#86 id=86 data-nosnippet>86</a>        Orientation::Horizontal =&gt; constraints.constrain(Size {
+<a href=#87 id=87 data-nosnippet>87</a>            w: constraints.max.w,
+<a href=#88 id=88 data-nosnippet>88</a>            h: BAR_H,
+<a href=#89 id=89 data-nosnippet>89</a>        }),
+<a href=#90 id=90 data-nosnippet>90</a>        Orientation::Vertical =&gt; constraints.constrain(Size {
+<a href=#91 id=91 data-nosnippet>91</a>            w: BAR_W,
+<a href=#92 id=92 data-nosnippet>92</a>            h: constraints.max.h,
+<a href=#93 id=93 data-nosnippet>93</a>        }),
+<a href=#94 id=94 data-nosnippet>94</a>    };
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="self">self</span>.bounds = Rect::from_origin_size(constraints.origin, size);
+<a href=#96 id=96 data-nosnippet>96</a>    size
 <a href=#97 id=97 data-nosnippet>97</a>    }
 <a href=#98 id=98 data-nosnippet>98</a>
 <a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">fn </span>bounds(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Rect {
@@ -134,7 +134,7 @@
 <a href=#134 id=134 data-nosnippet>134</a>        </span><span class="kw">if </span><span class="self">self</span>.show_label {
 <a href=#135 id=135 data-nosnippet>135</a>            <span class="kw">let </span>pct = (v * <span class="number">100.0</span>) <span class="kw">as </span>u32;
 <a href=#136 id=136 data-nosnippet>136</a>            <span class="kw">let </span>label = format_pct(pct);
-<a href=#137 id=137 data-nosnippet>137</a>            <span class="kw">let </span>lx = b.x + b.w * <span class="number">0.5 </span>- label.len() <span class="kw">as </span>f32 * cx.char_width() * <span class="number">0.5</span>;
+<a href=#137 id=137 data-nosnippet>137</a>            <span class="kw">let </span>lx = b.x + b.w * <span class="number">0.5 </span>- cx.measure(<span class="kw-2">&amp;</span>label) * <span class="number">0.5</span>;
 <a href=#138 id=138 data-nosnippet>138</a>            <span class="kw">let </span>ly = b.y + b.h * <span class="number">0.5 </span>- cx.line_height() * <span class="number">0.5</span>;
 <a href=#139 id=139 data-nosnippet>139</a>            cx.draw_text(Point::new(lx.max(b.x), ly.max(b.y)), <span class="kw-2">&amp;</span>label, Color::WHITE);
 <a href=#140 id=140 data-nosnippet>140</a>        }

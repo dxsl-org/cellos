@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["extract_query_param","handle_connection"]};
+window.SIDEBAR_ITEMS = {"enum":["Route"],"fn":["classify","extract_query_param"]};

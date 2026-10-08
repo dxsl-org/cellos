@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["authenticated_time_available","handle_tls_raw","make_tcp","send_connect_reply"]};
+window.SIDEBAR_ITEMS = {"fn":["announce_tls_refusal_once","authenticated_time_available","handle_tls_raw","make_tcp","send_connect_reply"]};

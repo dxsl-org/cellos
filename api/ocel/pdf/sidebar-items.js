@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PAGE_BOUND"],"fn":["exchange","is_pdf_path","load_page","load_page_with","load_with","page_number","page_url","read_page","validated_size"],"struct":["PdfPage"]};
