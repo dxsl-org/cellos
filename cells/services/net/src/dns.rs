@@ -11,20 +11,13 @@
 //! 3. **UDP A-record query** to the DNS server from the DHCP lease (option 6),
 //!    falling back to SLIRP's 10.0.2.3 when the lease carries none.
 //!
-//! The query is synchronous: the service is a single-threaded message loop, so a
-//! lookup parks request handling for at most [`RESOLVE_BUDGET`]. Other sockets
-//! keep progressing while it waits because the wait loop polls the whole
-//! interface, not just the DNS socket.
+//! Wire queries retain a bounded smoltcp DNS slot and are polled by the net
+//! reactor alongside TCP; a slow resolver never parks other clients.
 
 use alloc::vec;
-use ostd::syscall::sys_wait_completion;
 use smoltcp::iface::{Interface, SocketHandle, SocketSet};
 use smoltcp::socket::dns;
-use smoltcp::time::Duration;
 use smoltcp::wire::{DnsQueryType, IpAddress};
-
-use crate::interface::VirtioNetDevice;
-use crate::service_runtime::now_instant;
 
 /// QEMU SLIRP's built-in resolver — the fallback when the DHCP lease carries no
 /// DNS option. SLIRP forwards it to the host's own resolvers.
@@ -34,20 +27,6 @@ pub const SLIRP_DNS_SERVER: [u8; 4] = [10, 0, 2, 3];
 /// 127.0.0.1, which is how the integration tests reach host mocks.
 const SLIRP_HOST: [u8; 4] = [10, 0, 2, 2];
 
-/// Ceiling on one A-record lookup. smoltcp retransmits at 1 s, then 2 s; a
-/// server that has not answered within this window is treated as unreachable.
-const RESOLVE_BUDGET: Duration = Duration::from_millis(3_000);
-
-/// Wake cadence while a query is in flight — one scheduler tick (10 ms).
-const RX_POLL_TICKS: u64 = 1;
-
-/// Iteration backstop for [`Resolver::resolve`].
-///
-/// The budget above is wall-clock. At one wake per tick this is twice what the
-/// budget can consume, so it only bites if the clock itself stops advancing —
-/// and then the service still answers `Err` instead of parking its message loop
-/// forever (which the watchdog would read as a hung cell).
-const RESOLVE_POLL_CEILING: usize = 600;
 
 /// Resolve without the wire: IPv4 literals and the SLIRP names.
 ///
@@ -122,47 +101,36 @@ impl Resolver {
             .update_servers(&[ip_address(server)]);
     }
 
-    /// Resolve `hostname` to an IPv4 address, or `None` if the server does not
-    /// answer within [`RESOLVE_BUDGET`] (the caller replies `Err`).
-    ///
-    /// Blocks: drives the interface in a bounded loop so the query, its
-    /// retransmits and any RX frames are all serviced.
-    pub fn resolve(
+    /// Begin a wire query without parking the net service loop. The returned
+    /// handle owns one smoltcp DNS slot until poll_result or cancel.
+    pub fn start(
         &self,
         hostname: &str,
         iface: &mut Interface,
-        device: &mut VirtioNetDevice,
         sockets: &mut SocketSet<'_>,
-    ) -> Option<[u8; 4]> {
-        let query = {
-            let socket = sockets.get_mut::<dns::Socket>(self.handle);
-            socket
-                .start_query(iface.context(), hostname, DnsQueryType::A)
-                .ok()?
-        };
-
-        let deadline = now_instant() + RESOLVE_BUDGET;
-        for _ in 0..RESOLVE_POLL_CEILING {
-            device.pump_rx_split();
-            iface.poll(now_instant(), device, sockets);
-            match sockets
-                .get_mut::<dns::Socket>(self.handle)
-                .get_query_result(query)
-            {
-                Ok(addresses) => return first_ipv4(&addresses),
-                Err(dns::GetQueryResultError::Failed) => return None,
-                Err(dns::GetQueryResultError::Pending) => {}
-            }
-            if now_instant() >= deadline {
-                break;
-            }
-            wait_for_frame();
-        }
+    ) -> Option<dns::QueryHandle> {
         sockets
             .get_mut::<dns::Socket>(self.handle)
-            .cancel_query(query);
-        None
+            .start_query(iface.context(), hostname, DnsQueryType::A)
+            .ok()
     }
+
+    pub fn poll_result(
+        &self,
+        query: dns::QueryHandle,
+        sockets: &mut SocketSet<'_>,
+    ) -> Option<Option<[u8; 4]>> {
+        match sockets.get_mut::<dns::Socket>(self.handle).get_query_result(query) {
+            Ok(addresses) => Some(first_ipv4(&addresses)),
+            Err(dns::GetQueryResultError::Failed) => Some(None),
+            Err(dns::GetQueryResultError::Pending) => None,
+        }
+    }
+
+    pub fn cancel(&self, query: dns::QueryHandle, sockets: &mut SocketSet<'_>) {
+        sockets.get_mut::<dns::Socket>(self.handle).cancel_query(query);
+    }
+
 }
 
 fn first_ipv4(addresses: &[IpAddress]) -> Option<[u8; 4]> {
@@ -177,11 +145,6 @@ fn ip_address(ip: [u8; 4]) -> IpAddress {
     IpAddress::v4(ip[0], ip[1], ip[2], ip[3])
 }
 
-/// Park until an RX frame arrives or one scheduler tick elapses. The timeout is
-/// the contract: a dropped reply must not park the service loop forever.
-fn wait_for_frame() {
-    let _ = sys_wait_completion(api::syscall::events::NET_RX, RX_POLL_TICKS);
-}
 
 #[cfg(test)]
 mod tests;

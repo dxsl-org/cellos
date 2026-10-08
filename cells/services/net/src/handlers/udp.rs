@@ -26,6 +26,10 @@ pub(crate) fn handle_udp_request(
     use NetResponse as R;
     match req {
         NetRequest::UdpCreate => {
+            if !table.can_insert(owner) {
+                send_typed(sender, R::Err(0xFF));
+                return true;
+            }
             let handle = sockets.add(udp::Socket::new(
                 udp::PacketBuffer::new(
                     alloc::vec![udp::PacketMetadata::EMPTY; 4],

@@ -23,12 +23,18 @@ compile_error!("service-net: verified TLS requires tls-roots-embedded");
 
 extern crate alloc;
 
+// 290 capped sockets, each with 4 KiB RX and 4 KiB TX, need >2.3 MiB
+// before TLS, network frames and bookkeeping. Keep a fixed, bounded arena.
+#[cfg(target_os = "none")]
+ostd::declare_custom_heap!(8 * 1024 * 1024);
+
 // Declares network capability; the kernel grants NetworkCap at spawn.
 api::declare_manifest!(block_io = false, network = true, spawn = false);
 
 // Narrow syscall allowlist -- kernel enforces this at dispatch (Phase 27).
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     TryRecv,
     RecvTimeout,
@@ -43,6 +49,8 @@ api::declare_syscalls![
     StateRestore,
     GetRandom,
     WaitCompletion,
+    WatchCellOwner,
+    CancelCellOwnerWatch,
 ];
 
 mod dhcp;
@@ -62,5 +70,6 @@ mod tls_wire;
 #[cfg(target_os = "none")]
 #[no_mangle]
 pub fn main() {
+    init_custom_heap();
     service_runtime::run();
 }

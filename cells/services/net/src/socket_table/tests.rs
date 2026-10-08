@@ -112,3 +112,43 @@ fn test_socket_table_udp_owner_check() {
     assert!(table.is_udp(cap, owner));
     assert!(!table.is_udp(cap, foreign)); // foreign caller sees false
 }
+
+#[test]
+fn http_owner_reserve_refuses_without_consuming_caps() {
+    let mut storage = [SocketStorage::EMPTY; 2];
+    let mut sockets = SocketSet::new(&mut storage[..]);
+    let handle = make_test_handle(&mut sockets);
+    let mut table = SocketTable::new();
+    let http = SocketOwner { cell_id: 10, generation: 1 };
+    let other = SocketOwner { cell_id: 20, generation: 1 };
+
+    for _ in 0..HTTP_OWNER_BUDGET {
+        table.insert(handle, http).expect("HTTP listener and 257 clients");
+    }
+    let next = table.next_cap_for_test();
+    assert!(!table.can_insert(http));
+    assert!(table.insert(handle, http).is_err());
+    assert_eq!(table.next_cap_for_test(), next);
+    for _ in 0..OTHER_OWNER_RESERVE {
+        table.insert(handle, other).expect("other services' reserve");
+    }
+    assert!(!table.can_insert(other));
+}
+
+#[test]
+fn owner_cleanup_preserves_other_generation() {
+    let mut storage = [SocketStorage::EMPTY; 4];
+    let mut sockets = SocketSet::new(&mut storage[..]);
+    let old = SocketOwner { cell_id: 10, generation: 1 };
+    let new = SocketOwner { cell_id: 10, generation: 2 };
+    let old_handle = make_test_handle(&mut sockets);
+    let new_handle = make_test_handle(&mut sockets);
+    let mut table = SocketTable::new();
+    let old_cap = table.insert(old_handle, old).expect("old owner");
+    let new_cap = table.insert(new_handle, new).expect("new owner");
+    table.begin_graceful_close(old_cap, 100);
+    table.remove_owner(old, &mut sockets);
+    assert!(table.owned_cap(old).is_none());
+    assert!(!table.is_graceful_closing(old_cap));
+    assert_eq!(table.get(new_cap, new), Some(new_handle));
+}

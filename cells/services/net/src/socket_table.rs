@@ -11,12 +11,14 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use smoltcp::iface::SocketHandle;
 use types::ViError;
 
-/// Maximum simultaneous sockets (including the DHCP management socket).
-pub const MAX_SOCKETS: usize = 18; // 16 user + 1 DHCP + 1 ARP
+/// 256 slow HTTP connections, one simultaneous fast probe and the listener;
+/// leave 32 slots for unrelated TCP/UDP/TLS consumers.
+pub const HTTP_OWNER_BUDGET: usize = 258;
+pub const OTHER_OWNER_RESERVE: usize = 32;
+pub const MAX_SOCKETS: usize = HTTP_OWNER_BUDGET + OTHER_OWNER_RESERVE;
 
-/// Socket-set storage: one slot per consumer cap the table may hand out, plus
-/// the DHCP and DNS management sockets, which are driven directly and never
-/// receive a CapId.
+/// Socket-set storage includes management sockets (DHCP and DNS) which are
+/// driven directly, without consumer capabilities.
 pub const SOCKET_SET_STORAGE: usize = MAX_SOCKETS + 2;
 
 /// Attested owner of a socket capability: bound to CellId and cell generation.
@@ -39,6 +41,7 @@ pub struct SocketTable {
     /// before calling `sockets.get_mut::<tcp::Socket>()`, which panics on a
     /// wrong-type handle.
     udp_caps: BTreeSet<u64>,
+    graceful_closes: BTreeMap<u64, u64>,
     next_cap: u64,
 }
 
@@ -50,8 +53,18 @@ impl SocketTable {
             owners: BTreeMap::new(),
             listen_ports: BTreeMap::new(),
             udp_caps: BTreeSet::new(),
+            graceful_closes: BTreeMap::new(),
             next_cap: 1,
         }
+    }
+
+    /// One owner cannot consume the capacity reserved for other services.
+    /// A refused insertion never allocates a cap or mutates the socket table.
+    pub fn can_insert(&self, owner: SocketOwner) -> bool {
+        self.entries.len() < MAX_SOCKETS
+            && self.next_cap <= u32::MAX as u64
+            && self.owners.values().filter(|candidate| **candidate == owner).count()
+                < HTTP_OWNER_BUDGET
     }
 
     /// Allocate a new `CapId` and associate it with `handle` and attested `owner`.
@@ -59,7 +72,7 @@ impl SocketTable {
     /// # Errors
     /// Returns `ViError::OutOfMemory` if `MAX_SOCKETS` is already reached.
     pub fn insert(&mut self, handle: SocketHandle, owner: SocketOwner) -> Result<u64, ViError> {
-        if self.entries.len() >= MAX_SOCKETS {
+        if !self.can_insert(owner) {
             return Err(ViError::OutOfMemory);
         }
         let cap = self.next_cap;
@@ -84,7 +97,7 @@ impl SocketTable {
         state: SocketState,
         owner: SocketOwner,
     ) -> Result<u64, ViError> {
-        if self.entries.len() >= MAX_SOCKETS {
+        if !self.can_insert(owner) {
             return Err(ViError::OutOfMemory);
         }
         let cap = self.next_cap;
@@ -107,6 +120,11 @@ impl SocketTable {
         } else {
             None
         }
+    }
+
+    /// Internal lifecycle inspection for a cap already in the close ledger.
+    pub fn get_unchecked(&self, cap: u64) -> Option<SocketHandle> {
+        self.entries.get(&cap).copied()
     }
 
     /// Read the connection state for `cap`, checking caller ownership.
@@ -163,6 +181,34 @@ impl SocketTable {
         self.is_owner(cap, caller) && self.udp_caps.contains(&cap)
     }
 
+    /// Queue FIN once and retain the first drain deadline.
+    pub fn begin_graceful_close(&mut self, cap: u64, deadline_ticks: u64) {
+        self.graceful_closes.entry(cap).or_insert(deadline_ticks);
+    }
+
+    pub fn is_graceful_closing(&self, cap: u64) -> bool {
+        self.graceful_closes.contains_key(&cap)
+    }
+
+    pub fn graceful_closes(&self) -> impl Iterator<Item = (u64, u64)> + '_ {
+        self.graceful_closes.iter().map(|(&cap, &deadline)| (cap, deadline))
+    }
+
+    pub fn owned_cap(&self, owner: SocketOwner) -> Option<u64> {
+        self.owners.iter().find_map(|(&cap, &candidate)| {
+            (candidate == owner).then_some(cap)
+        })
+    }
+
+    /// Root cell death invalidates every cap of the exact owner generation.
+    pub fn remove_owner(&mut self, owner: SocketOwner, sockets: &mut smoltcp::iface::SocketSet<'_>) {
+        while let Some(cap) = self.owned_cap(owner) {
+            if let Some(handle) = self.remove_internal(cap) {
+                sockets.remove(handle);
+            }
+        }
+    }
+
     /// Remove a socket from the table if requested by its registered owner.
     pub fn remove(&mut self, cap: u64, caller: SocketOwner) -> Option<SocketHandle> {
         if !self.is_owner(cap, caller) {
@@ -177,6 +223,7 @@ impl SocketTable {
         self.states.remove(&cap);
         self.listen_ports.remove(&cap);
         self.udp_caps.remove(&cap);
+        self.graceful_closes.remove(&cap);
         self.entries.remove(&cap)
     }
 
