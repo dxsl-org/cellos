@@ -12,3 +12,9 @@
 
 # Runtime evidence must retain the exact byte stream emitted by QEMU.
 docs/evidence/*-raw.txt -text -whitespace
+
+# Vendored upstream source keeps its bytes. The ocel-pdf PROVENANCE records a
+# per-file hash inventory (vendor/SOURCES.json) and claims those bytes unmodified,
+# so the CRLF-to-LF normalization above would silently falsify both for any
+# upstream file that ships CRLF.
+cells/services/ocel-pdf/vendor/** -text -whitespace
