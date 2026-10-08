@@ -5,6 +5,7 @@
 
 use crate::sync::Spinlock;
 use core::fmt;
+use core::fmt::Write as _;
 
 /// UART Registers (offset from base)
 const _RHR: usize = 0; // Receive Holding Register (read)
@@ -121,18 +122,152 @@ fn write_rpi3_console_byte(byte: u8) {
     }
 }
 
-/// Write a string straight to the console UART, bypassing the `log` level filter.
+/// Which writer owns the console line that is currently open.
+///
+/// The console is one UART shared by the kernel logger, every Cell and the
+/// hypervisor's guest PL011 forwarding, and each of them writes records
+/// independently. With a single "cursor is at a line start" flag, a record from
+/// one writer landed *inside* the partial line of another: the guest shell
+/// echoes one `sys_log` per keypress, so a diagnostic printed between two keys
+/// shredded the command the operator was typing
+/// (`USER: ping -c 3 192.16[net-loop] turns=215 …`). The owner is whichever
+/// writer last started a line it has not terminated; a *different* writer that
+/// begins a record closes that line first, so no writer can ever land inside
+/// another writer's partial line. Consecutive records from the same writer (the
+/// per-key echo, `print()` followed by its `println()`) stay inline as before.
+#[derive(Clone, Copy)]
+struct ConsoleLine {
+    owner: usize,
+}
+
+/// No writer owns the line: the console is at the start of a fresh line.
+const LINE_START: usize = usize::MAX;
+
+/// Owner tag for kernel `log` records. No task id can hold it, so a kernel
+/// record and a Cell record always see each other as foreign writers.
+const KERNEL_LOG_OWNER: usize = usize::MAX - 1;
+
+impl ConsoleLine {
+    const fn new() -> Self {
+        Self { owner: LINE_START }
+    }
+
+    /// Whether the console is between lines (nothing written since the last `\n`).
+    fn at_line_start(&self) -> bool {
+        self.owner == LINE_START
+    }
+
+    /// Claim the line for `writer`.
+    ///
+    /// Returns `(emit_break, owes_prefix)`: `emit_break` when the line was left
+    /// open by a *different* writer and must be closed with a newline first, and
+    /// `owes_prefix` when the record starts at a line start (either the line was
+    /// already fresh, or the break just made it so) and therefore owes the
+    /// per-line prefix.
+    fn begin_record_state(&mut self, writer: usize) -> (bool, bool) {
+        let at_start = self.at_line_start();
+        let foreign = self.owner != LINE_START && self.owner != writer;
+        self.owner = writer;
+        (foreign, at_start || foreign)
+    }
+
+    /// Record the bytes just written: a trailing newline ends the line.
+    fn wrote(&mut self, chunk: &str) {
+        if chunk.ends_with('\n') {
+            self.owner = LINE_START;
+        }
+    }
+}
+
+/// Console owner state, guarded together with the UART write so the owner a
+/// record sees cannot change between its line-break decision and its first byte.
+static CONSOLE: Spinlock<ConsoleLine> = Spinlock::new(ConsoleLine::new());
+
+/// Emit one `print_user_log` record: the `USER: ` prefix at each line start.
+///
+/// The body is a free function over an `emit` sink so the host test drives the
+/// exact loop an image drives (with a `String` in place of the UART), instead of
+/// re-implementing the discipline beside it. `line` carries the owner across
+/// records; `emit` receives the bytes in order.
+fn emit_user_record(
+    line: &mut ConsoleLine,
+    writer: usize,
+    msg: &str,
+    mut emit: impl FnMut(&str),
+) {
+    let (broke, fresh) = line.begin_record_state(writer);
+    if broke {
+        emit("\n");
+    }
+    let mut at_start = fresh;
+    let mut rest = msg;
+    while !rest.is_empty() {
+        if at_start {
+            emit("USER: ");
+            at_start = false;
+        }
+        match rest.find('\n') {
+            Some(i) => {
+                emit(&rest[..=i]);
+                line.wrote(&rest[..=i]);
+                at_start = true;
+                rest = &rest[i + 1..];
+            }
+            None => {
+                emit(rest);
+                line.wrote(rest);
+                rest = "";
+            }
+        }
+    }
+}
+
+/// Write one Cell console record owned by `writer`, with the `USER: ` prefix.
 ///
 /// USER stdout (cell `println`/`sys_log`) MUST always appear regardless of the
 /// kernel's `log::max_level` — it is application output, not kernel debug chatter.
 /// Routing it through `log::info!` (as `print_user_log` once did) meant lowering
 /// the kernel log level to silence boot spam also silenced the shell prompt.
-static LOG_LOCK: Spinlock<()> = Spinlock::new(());
+///
+/// `writer` is the calling task's id, or [`KERNEL_LOG_OWNER`] for the kernel
+/// logger. A record that would land inside another writer's open line first emits
+/// the newline that closes it — one line, one writer.
+pub fn write_user_record(writer: usize, msg: &str) {
+    let mut line = CONSOLE.lock();
+    emit_user_record(&mut line, writer, msg, |s| {
+        let _ = DirectWriter.write_str(s);
+    });
+}
 
-pub fn write_console(s: &str) {
-    use fmt::Write;
-    let _guard = LOG_LOCK.lock();
-    let _ = DirectWriter.write_str(s);
+/// One kernel `log` record: holds the console for the whole record so its bytes
+/// are emitted contiguously, and closes a foreign open line before it starts.
+struct ConsoleRecord<'a> {
+    state: crate::sync::SpinlockGuard<'a, ConsoleLine>,
+}
+
+impl ConsoleRecord<'_> {
+    /// Append `s` to this record.
+    pub fn write(&mut self, s: &str) {
+        let _ = DirectWriter.write_str(s);
+        self.state.wrote(s);
+    }
+}
+
+impl fmt::Write for ConsoleRecord<'_> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.write(s);
+        Ok(())
+    }
+}
+
+/// Begin a console record owned by `writer` (the kernel logger's entry point).
+fn begin_record(writer: usize) -> ConsoleRecord<'static> {
+    let mut state = CONSOLE.lock();
+    let (broke, _) = state.begin_record_state(writer);
+    if broke {
+        let _ = DirectWriter.write_str("\n");
+    }
+    ConsoleRecord { state }
 }
 
 // Logger integration
@@ -146,9 +281,8 @@ impl log::Log for SimpleLogger {
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
             use fmt::Write;
-            let _guard = LOG_LOCK.lock();
-            let mut writer = DirectWriter;
-            let _ = writeln!(writer, "[{:>5}] {}", record.level(), record.args());
+            let mut out = begin_record(KERNEL_LOG_OWNER);
+            let _ = writeln!(out, "[{:>5}] {}", record.level(), record.args());
         }
     }
 
@@ -315,3 +449,64 @@ pub extern "Rust" fn vi_handle_uart_irq() {
 
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 const _: crate::hal::HandleUartIrq = vi_handle_uart_irq;
+
+#[cfg(test)]
+mod tests {
+    use super::{emit_user_record, ConsoleLine, KERNEL_LOG_OWNER};
+
+    /// The bytes a real console would receive for one record, through the same
+    /// loop an image runs — only the UART is replaced by a `String`.
+    fn record(line: &mut ConsoleLine, writer: usize, msg: &str) -> alloc::string::String {
+        let mut out = alloc::string::String::new();
+        emit_user_record(line, writer, msg, |s| out.push_str(s));
+        out
+    }
+
+    /// `print()` concatenation and the `USER: ` prefix: consecutive records from
+    /// one writer stay on one line, and the prefix is paid once per line — a
+    /// per-record prefix would render `help` as four `USER: h`/`e`/`l`/`p` lines.
+    #[test]
+    fn same_writer_stays_inline() {
+        let mut line = ConsoleLine::new();
+        assert_eq!(record(&mut line, 7, "h"), "USER: h");
+        assert_eq!(record(&mut line, 7, "elp"), "elp");
+        assert_eq!(record(&mut line, 7, "\n"), "\n");
+        assert_eq!(record(&mut line, 7, "next"), "USER: next");
+    }
+
+    /// The board defect this discipline exists for: the guest echoes its command
+    /// one byte per `sys_log` from the hypervisor, so a diagnostic from another
+    /// cell used to be spliced into the middle of the line the operator was
+    /// typing (`USER: ping -c 3 192.16[net-loop] turns=215 …`). A foreign writer
+    /// now closes that line first instead of landing inside it.
+    #[test]
+    fn guest_echo_is_not_spliced_by_another_writer() {
+        const GUEST: usize = 6;
+        const NET: usize = 5;
+        let mut line = ConsoleLine::new();
+        assert_eq!(record(&mut line, GUEST, "ping -c 3 192.16"), "USER: ping -c 3 192.16");
+        assert_eq!(
+            record(&mut line, NET, "[net-loop] turns=215"),
+            "\nUSER: [net-loop] turns=215"
+        );
+        assert_eq!(record(&mut line, NET, "\n"), "\n");
+        // The guest's next byte starts a fresh line and re-owes the prefix: the
+        // command is split across two lines but never absorbed into the
+        // diagnostic's line.
+        assert_eq!(record(&mut line, GUEST, "8.42.1"), "USER: 8.42.1");
+    }
+
+    /// A kernel `log` record is its own writer: it closes a Cell's open line (the
+    /// break) and starts at a line start, and it never borrows the `USER: `
+    /// prefix — the kernel logger formats through `ConsoleRecord`, which carries
+    /// its own `[ INFO]` tag instead.
+    #[test]
+    fn kernel_record_closes_a_cell_line_first() {
+        let mut line = ConsoleLine::new();
+        assert_eq!(record(&mut line, 5, "Cellos > "), "USER: Cellos > ");
+        assert_eq!(line.begin_record_state(KERNEL_LOG_OWNER), (true, true));
+        line.wrote("[ INFO] x\n");
+        // The kernel record ended its own line, so the Cell starts a fresh one.
+        assert_eq!(record(&mut line, 5, "vfs"), "USER: vfs");
+    }
+}
