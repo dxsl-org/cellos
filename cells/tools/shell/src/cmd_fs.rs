@@ -851,10 +851,9 @@ fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize, vfs_tid: usize
     };
     ostd::syscall::sys_send(vfs_tid, &send[..n]);
     let mut reply = [0u8; 512];
-    // Masked recv — see vfs_req_ok.
-    let raw = match ostd::syscall::sys_recv(vfs_tid, &mut reply) {
-        ostd::syscall::SyscallResult::Ok(_) => &reply,
-        _ => return,
+    let raw = match ostd::ipc::recv_from(vfs_tid, &mut reply) {
+        Ok(raw) => raw,
+        Err(_) => return,
     };
     if let Ok(VfsResponse::Data(entries)) = api::ipc::decode::<VfsResponse>(raw) {
         let text = core::str::from_utf8(entries).unwrap_or("");
@@ -897,7 +896,7 @@ pub(crate) fn vfs_list_dir_details(
         .len();
     ostd::syscall::sys_send(vfs_tid, &send[..n]);
     let mut reply = [0u8; 512];
-    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_recv(vfs_tid, &mut reply) {
+    if ostd::ipc::recv_from(vfs_tid, &mut reply).is_ok() {
         if let Ok(VfsResponse::Data(entries)) = api::ipc::decode::<VfsResponse>(&reply) {
             let text = core::str::from_utf8(entries).ok()?;
             let mut list = alloc::vec::Vec::new();

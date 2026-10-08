@@ -49,7 +49,7 @@ pub fn shell_stdin() -> Vec<u8> {
 #[cfg(not(feature = "shell_test"))] // reason: tab completion only exists in the interactive REPL
 pub const BUILTINS: &[&str] = &[
     "alias", "awk", "bg", "blktest", "break", "cat", "cd", "clear", "continue", "date", "echo",
-    "env", "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "history",
+    "env", "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "history", "hv",
     "ifconfig", "ip", "jobs", "kill", "ls", "mkdir", "mv", "ps", "pwd", "read", "rm", "rmdir",
     "sed", "shutdown", "sleep", "snapshot", "sort", "source", "tail", "tee", "test", "top",
     "touch", "unalias", "uniq", "unset", "uname", "uptime", "vappend", "vcat", "vwrite", "wc",
@@ -650,6 +650,7 @@ fn dispatch_builtin(prog: &str, args: &[String], jobs: &mut Jobs) -> i32 {
         "sed" => cmd_sed_args(args),
         "awk" => cmd_awk_args(args),
         "snapshot" => crate::snapshot_client::run(),
+        "hv" => cmd_hv(args),
         "shutdown" => crate::cmd_sys::cmd_shutdown().map(|_| 0).unwrap_or(1),
         "clear" => crate::commands::cmd_clear().map(|_| 0).unwrap_or(1),
         "help" => crate::commands::cmd_help().map(|_| 0).unwrap_or(1),
@@ -950,6 +951,54 @@ fn spawn_external(prog: &str, args: &[String]) -> i32 {
             ostd::io::print("shell: command not found: ");
             ostd::io::println(prog);
             127
+        }
+    }
+}
+
+/// Start the Tier-3 hypervisor cell on demand (`hv`).
+///
+/// Cellos brings up Tier 1 and 2 and lands on this prompt; a guest is a workload
+/// the operator asks for, not part of boot. The cell's own `boot_arm` creates the
+/// VM and streams the guest image, so there is nothing to configure here beyond
+/// starting it. It is spawned detached and the shell keeps keyboard focus, which
+/// is what leaves the prompt usable while the guest boots; servers that want the
+/// VM preloaded build init with `hv-autostart` instead of typing this.
+fn cmd_hv(args: &[String]) -> i32 {
+    match args.first().map(String::as_str) {
+        None | Some("start") => {}
+        Some("help") | Some("-h") | Some("--help") => {
+            shell_println("hv: start the Tier-3 hypervisor cell (and its guest) on demand");
+            shell_println("    hv          start it (background; the prompt stays live)");
+            shell_println("    hv help     this text");
+            return 0;
+        }
+        Some(other) => {
+            shell_print("hv: unknown subcommand: ");
+            shell_println(other);
+            return 1;
+        }
+    }
+
+    // Publish an empty command line: the spawn slot is shared state and a stale
+    // one would be handed to the new cell.
+    let _ = ostd::set_spawn_argv(&[]);
+    // The raw path route first, exactly like `spawn_external`: it is the one that
+    // reaches a cell whose reviewed launch edge carries authority, and the
+    // VFS-loaded route refuses a non-empty child ceiling.
+    let mut spawned = syscall::sys_spawn_from_path_raw("/bin/hypervisor");
+    if matches!(spawned, syscall::SyscallResult::Err(_)) {
+        spawned = syscall::sys_spawn_from_path("/bin/hypervisor");
+    }
+    match spawned {
+        syscall::SyscallResult::Ok(tid) => {
+            shell_println(&alloc::format!("hv: hypervisor cell started, tid={tid}"));
+            0
+        }
+        syscall::SyscallResult::Err(_) => {
+            shell_println(
+                "hv: spawn refused — /bin/hypervisor missing from this image, or its launch edge is not reviewed",
+            );
+            1
         }
     }
 }

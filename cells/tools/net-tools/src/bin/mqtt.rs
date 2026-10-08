@@ -13,7 +13,8 @@ extern crate ostd;
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ostd::io::{print, println};
-use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult};
+use ostd::ipc::recv_from;
+use ostd::syscall::{sys_lookup_service, sys_send, sys_yield};
 
 api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
 
@@ -84,8 +85,8 @@ fn cell_main() {
         .unwrap_or(0);
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let cap_id = match sys_recv(0, &mut resp_buf) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+    let cap_id = match recv_from(net_ep, &mut resp_buf) {
+        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
             Ok(NetResponse::CapId(c)) => c,
             _ => {
                 println("mqtt: tcp connect failed");
@@ -166,8 +167,8 @@ impl MqttConn {
         .unwrap_or(0);
         sys_send(self.net_ep, &req_buf[..len]);
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match sys_recv(0, &mut resp_buf) {
-            SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+        match recv_from(self.net_ep, &mut resp_buf) {
+            Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
                 Ok(NetResponse::Data(b)) if !b.is_empty() => {
                     let n = b.len().min(space);
                     self.buf[self.len..self.len + n].copy_from_slice(&b[..n]);
@@ -380,8 +381,8 @@ fn tcp_send(cap: u32, data: &[u8], net_ep: usize) {
         .unwrap_or(0);
         sys_send(net_ep, &send_buf[..send_len]);
         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
-        match sys_recv(0, &mut cnt_buf) {
-            SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&cnt_buf) {
+        match recv_from(net_ep, &mut cnt_buf) {
+            Ok(_) => match api::ipc::decode::<NetResponse>(&cnt_buf) {
                 Ok(NetResponse::Data(b)) if b.len() >= 4 => {
                     let mut arr = [0u8; 4];
                     arr.copy_from_slice(&b[0..4]);
@@ -405,7 +406,7 @@ fn close_socket(cap: u32, net_ep: usize) {
         .unwrap_or(0);
     sys_send(net_ep, &req_buf[..len]);
     let mut r = [0u8; IPC_BUF_SIZE];
-    let _ = sys_recv(0, &mut r);
+    let _ = recv_from(net_ep, &mut r);
 }
 
 fn encode_remaining_len(mut n: usize, out: &mut [u8; 4]) -> usize {
@@ -437,8 +438,8 @@ fn resolve_host(host: &str, net_ep: usize) -> Option<[u8; 4]> {
         .len();
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match sys_recv(0, &mut resp_buf) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+    match recv_from(net_ep, &mut resp_buf) {
+        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
             Ok(NetResponse::Addr(addr)) => Some(addr),
             _ => None,
         },

@@ -14,6 +14,9 @@ pub fn cmd_help() -> ViResult<()> {
     crate::executor::shell_println(
         "  Shell:   help  history  echo  export  alias  unalias  jobs  source  .",
     );
+    crate::executor::shell_println(
+        "  Tier 3:  hv              start the hypervisor cell + guest on demand",
+    );
     crate::executor::shell_println("");
     crate::executor::shell_println("Syntax:  cmd | cmd2      (pipe)");
     crate::executor::shell_println("         cmd > file      (redirect stdout)");
@@ -135,6 +138,24 @@ struct LsEntry {
     size: u64,
 }
 
+/// Append an entry unless the directory already lists that name.
+///
+/// A directory can be served by more than one mount — `/bin` on the Pi is the
+/// VIFS1 FAT volume *and* the CellosFS overlay — and the same cell then arrives
+/// twice. `ls /` always deduplicated; `ls <dir>` did not, which is why the board
+/// showed `config config`, `input input`, `shell shell`, `vfs vfs`.
+fn push_unique(
+    entries: &mut alloc::vec::Vec<LsEntry>,
+    name: alloc::string::String,
+    is_dir: bool,
+    size: u64,
+) {
+    if entries.iter().any(|e| e.name.eq_ignore_ascii_case(&name)) {
+        return;
+    }
+    entries.push(LsEntry { name, is_dir, size });
+}
+
 pub fn cmd_ls(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut all = false;
     let mut long = false;
@@ -165,17 +186,15 @@ pub fn cmd_ls(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
         // 1. Collect from Userspace VFS service (mount points and root files)
         if let Some(vfs_list) = crate::cmd_fs::vfs_list_dir_details("/") {
             for (name, is_dir) in vfs_list {
-                if !entries.iter().any(|e| e.name == name) {
-                    let full_path = alloc::format!("/{name}");
-                    let size = if long {
-                        crate::cmd_fs::stat_file_vfs(&full_path)
-                            .map(|(s, _)| s as u64)
-                            .unwrap_or(0)
-                    } else {
-                        0
-                    };
-                    entries.push(LsEntry { name, is_dir, size });
-                }
+                let full_path = alloc::format!("/{name}");
+                let size = if long {
+                    crate::cmd_fs::stat_file_vfs(&full_path)
+                        .map(|(s, _)| s as u64)
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
+                push_unique(&mut entries, name, is_dir, size);
             }
         }
 
@@ -188,15 +207,13 @@ pub fn cmd_ls(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
                 if name.is_empty() {
                     continue;
                 }
-                let already = entries.iter().any(|e| e.name.eq_ignore_ascii_case(name));
-                if !already {
-                    let is_dir = matches!(entry.file_type, ostd::FileType::Directory);
-                    entries.push(LsEntry {
-                        name: alloc::string::String::from(name),
-                        is_dir,
-                        size: entry.size,
-                    });
-                }
+                let is_dir = matches!(entry.file_type, ostd::FileType::Directory);
+                push_unique(
+                    &mut entries,
+                    alloc::string::String::from(name),
+                    is_dir,
+                    entry.size,
+                );
             }
         }
     } else {
@@ -212,7 +229,7 @@ pub fn cmd_ls(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
                 } else {
                     0
                 };
-                entries.push(LsEntry { name, is_dir, size });
+                push_unique(&mut entries, name, is_dir, size);
             }
         } else {
             // Fallback to Kernel BootFS with resolved path
@@ -643,4 +660,39 @@ pub fn cmd_kill(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod ls_tests {
+    use super::{push_unique, LsEntry};
+
+    /// A directory served by two mounts must list each name once, whatever the
+    /// case the two views report it with — the board saw `/bin` from the VIFS1
+    /// FAT volume and from the CellosFS overlay at the same time.
+    #[test]
+    fn a_name_from_a_second_mount_is_not_listed_twice() {
+        let mut entries: alloc::vec::Vec<LsEntry> = alloc::vec::Vec::new();
+        push_unique(
+            &mut entries,
+            alloc::string::String::from("config"),
+            false,
+            0,
+        );
+        push_unique(&mut entries, alloc::string::String::from("input"), false, 0);
+        push_unique(
+            &mut entries,
+            alloc::string::String::from("config"),
+            false,
+            0,
+        );
+        push_unique(
+            &mut entries,
+            alloc::string::String::from("CONFIG"),
+            false,
+            0,
+        );
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].name, "config");
+        assert_eq!(entries[1].name, "input");
+    }
 }

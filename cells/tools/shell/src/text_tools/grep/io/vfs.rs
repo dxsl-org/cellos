@@ -4,7 +4,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use api::ipc::{VfsRequest, VfsResponse};
-use ostd::syscall::{self, SyscallResult};
+use ostd::syscall;
 
 pub(super) struct DirEntry {
     pub is_dir: bool,
@@ -75,8 +75,8 @@ fn request_vfs<'a>(len: usize, send: &[u8], recv: &'a mut [u8]) -> Result<&'a [u
         ostd::task::yield_now();
     };
     syscall::sys_send(vfs, &send[..len]);
-    match syscall::sys_recv(vfs, recv) {
-        SyscallResult::Ok(_) => Ok(recv),
+    match ostd::ipc::recv_from(vfs, recv) {
+        Ok(_) => Ok(recv),
         _ => Err(String::from("VFS request failed")),
     }
 }

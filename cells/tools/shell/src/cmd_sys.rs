@@ -193,7 +193,7 @@ pub fn cmd_ifconfig(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult
         .unwrap_or(0);
     ostd::syscall::sys_send(net_tid, &send[..len]);
 
-    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_recv(net_tid, &mut reply) {
+    if ostd::ipc::recv_from(net_tid, &mut reply).is_ok() {
         if let Ok(NetResponse::Addr(ip)) = api::ipc::decode::<NetResponse>(&reply) {
             if ip == [0, 0, 0, 0] {
                 crate::executor::shell_println("eth0: link up, waiting for DHCP lease...");

@@ -91,11 +91,18 @@ impl ViConfig for ConfigClient {
         let req = ConfigRequest::Set { key, value };
         let encoded = api::ipc::encode(&req, &mut req_buf).map_err(|_| ViError::IO)?;
 
-        ostd::syscall::sys_send(sid, encoded);
+        if !matches!(
+            ostd::syscall::sys_send(sid, encoded),
+            ostd::syscall::SyscallResult::Ok(_)
+        ) {
+            return Err(ViError::IO);
+        }
 
         let mut ack = [0u8; 64];
-        // Masked recv — see get().
-        ostd::syscall::sys_recv(sid, &mut ack);
-        Ok(())
+        let raw = ostd::ipc::recv_from(sid, &mut ack).map_err(|_| ViError::IO)?;
+        match api::ipc::decode::<ConfigResponse>(raw) {
+            Ok(ConfigResponse::Ok) => Ok(()),
+            _ => Err(ViError::IO),
+        }
     }
 }

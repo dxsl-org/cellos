@@ -6,7 +6,8 @@ extern crate ostd;
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ostd::io::{print, println};
-use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult};
+use ostd::ipc::recv_from;
+use ostd::syscall::{sys_lookup_service, sys_send, sys_yield};
 
 /// Payload sent and expected back from the echo server.
 const HELLO: &[u8] = b"HELLO_ViCell\n";
@@ -83,8 +84,8 @@ fn cell_main() {
         .unwrap_or(0);
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let cap_id = match sys_recv(0, &mut resp_buf) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+    let cap_id = match recv_from(net_ep, &mut resp_buf) {
+        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
             Ok(NetResponse::CapId(c)) => c,
             _ => {
                 println("nc: connect failed");
@@ -111,8 +112,8 @@ fn cell_main() {
             .unwrap_or(0);
         sys_send(net_ep, &send_buf[..send_len]);
         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
-        match sys_recv(0, &mut cnt_buf) {
-            SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&cnt_buf) {
+        match recv_from(net_ep, &mut cnt_buf) {
+            Ok(_) => match api::ipc::decode::<NetResponse>(&cnt_buf) {
                 Ok(NetResponse::Data(b)) if b.len() >= 4 => {
                     let mut arr = [0u8; 4];
                     arr.copy_from_slice(&b[0..4]);
@@ -143,8 +144,8 @@ fn cell_main() {
     for _ in 0..500 {
         sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
-        match sys_recv(0, &mut data_buf) {
-            SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&data_buf) {
+        match recv_from(net_ep, &mut data_buf) {
+            Ok(_) => match api::ipc::decode::<NetResponse>(&data_buf) {
                 Ok(NetResponse::Data(b)) if !b.is_empty() => {
                     if let Ok(s) = core::str::from_utf8(b) {
                         print(s);
@@ -172,8 +173,8 @@ fn server_mode(port: u16, net_ep: usize) {
         .unwrap_or(0);
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let listen_cap = match sys_recv(0, &mut resp_buf) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+    let listen_cap = match recv_from(net_ep, &mut resp_buf) {
+        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
             Ok(NetResponse::CapId(c)) => c,
             _ => {
                 println("nc: listen failed");
@@ -201,8 +202,8 @@ fn server_mode(port: u16, net_ep: usize) {
     let stream_cap: u32 = loop {
         sys_send(net_ep, &accept_req_buf[..accept_req_len]);
         let mut r = [0u8; IPC_BUF_SIZE];
-        match sys_recv(0, &mut r) {
-            SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&r) {
+        match recv_from(net_ep, &mut r) {
+            Ok(_) => match api::ipc::decode::<NetResponse>(&r) {
                 Ok(NetResponse::CapId(c)) => break c,
                 _ => {
                     sys_yield();
@@ -223,8 +224,8 @@ fn server_mode(port: u16, net_ep: usize) {
         let next_cap: u32 = loop {
             sys_send(net_ep, &accept_req_buf[..accept_req_len]);
             let mut r = [0u8; IPC_BUF_SIZE];
-            match sys_recv(0, &mut r) {
-                SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&r) {
+            match recv_from(net_ep, &mut r) {
+                Ok(_) => match api::ipc::decode::<NetResponse>(&r) {
                     Ok(NetResponse::CapId(c)) => break c,
                     _ => {
                         sys_yield();
@@ -257,8 +258,8 @@ fn serve_connection(cap: u32, net_ep: usize) {
     'recv: for _ in 0..500_000 {
         sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
-        match sys_recv(0, &mut data_buf) {
-            SyscallResult::Ok(_) => {
+        match recv_from(net_ep, &mut data_buf) {
+            Ok(_) => {
                 match api::ipc::decode::<NetResponse>(&data_buf) {
                     Ok(NetResponse::Data(b)) if !b.is_empty() => {
                         if let Ok(s) = core::str::from_utf8(b) {
@@ -277,7 +278,7 @@ fn serve_connection(cap: u32, net_ep: usize) {
                         .unwrap_or(0);
                         sys_send(net_ep, &echo_buf[..echo_len]);
                         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
-                        let _ = sys_recv(0, &mut cnt_buf);
+                        let _ = recv_from(net_ep, &mut cnt_buf);
                     }
                     Ok(NetResponse::Data(_)) => {
                         let st = query_state(cap, net_ep);
@@ -302,8 +303,8 @@ fn query_state(cap_id: u32, net_ep: usize) -> u8 {
         .unwrap_or(0);
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match sys_recv(0, &mut resp_buf) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+    match recv_from(net_ep, &mut resp_buf) {
+        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
             Ok(NetResponse::State(s)) => s,
             _ => 0x00,
         },
@@ -318,7 +319,7 @@ fn close_socket(cap_id: u32, net_ep: usize) {
         .unwrap_or(0);
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let _ = sys_recv(0, &mut resp_buf);
+    let _ = recv_from(net_ep, &mut resp_buf);
 }
 
 /// Resolve `host` through the net service (`NetRequest::Resolve`).
@@ -333,8 +334,8 @@ fn resolve_host(host: &str, net_ep: usize) -> Option<[u8; 4]> {
         .len();
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match sys_recv(0, &mut resp_buf) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+    match recv_from(net_ep, &mut resp_buf) {
+        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
             Ok(NetResponse::Addr(addr)) => Some(addr),
             _ => None,
         },
