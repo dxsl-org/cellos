@@ -45,7 +45,7 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/desktop"
         | "/bin/ocel"
         | "/bin/ocel-js"
-        | "/bin/ocel-quickjs" => CapSet::EMPTY,
+        | "/bin/ocel-quickjs" | "/bin/ocel-pdf" => CapSet::EMPTY,
         // These clients and servers use typed IPC to the net service; they do
         // not hold NetworkCap themselves. Keeping their launch ceiling empty
         // also lets exact shell SpawnFromElf edges remain capability-free.
@@ -57,6 +57,15 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         },
         "/bin/dwc2-usb" => CapSet {
             usb_driver: true,
+            ..CapSet::EMPTY
+        },
+        // Tier 3 on demand. Cellos brings up Tier 1 and 2 and lands on a shell;
+        // the guest is a workload the operator starts (`hv`), so the shell needs
+        // exactly the authority the init edge gives this cell and nothing more.
+        // The Elf route still refuses a non-empty child ceiling, so only the
+        // VIFS1-resident `/bin/hypervisor` can be launched through this row.
+        "/bin/hypervisor" => CapSet {
+            hypervisor: true,
             ..CapSet::EMPTY
         },
         "/bin/periph-demo" | "/bin/periph-test" => console_mmio_capset(),

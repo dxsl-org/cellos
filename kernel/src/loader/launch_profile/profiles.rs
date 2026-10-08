@@ -28,6 +28,8 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
         // run as a domain at all.
         | "/bin/ocel-js"
         | "/bin/ocel-quickjs"
+        // Isolated native PDF rasterizer; no additional capabilities.
+        | "/bin/ocel-pdf"
         // Phase-02 Tier-2 entry fixtures. Both carry `PROTECTION_CLASS_UNTRUSTED`
         // manifests and `boot_ceiling` already gives them `CapSet::EMPTY`, so this
         // row grants init nothing beyond the ability to launch them: the

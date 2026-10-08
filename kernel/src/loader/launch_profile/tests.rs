@@ -16,10 +16,43 @@ fn shell_edge(route: LaunchRoute, target: &str) -> LaunchProfile {
 }
 
 #[test]
+fn pdf_engine_edge_cannot_grant_authority_or_boot_without_spawn() {
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        let profile = authorize(caller("init", true, false), route, "/bin/ocel-pdf")
+            .expect("init may launch the isolated PDF engine");
+        assert_eq!(profile.child_ceiling, CapSet::EMPTY);
+        assert!(profile.requires_lifecycle_authority);
+        assert!(authorize(caller("init", false, false), route, "/bin/ocel-pdf").is_none());
+        assert!(authorize(caller("ocel", false, false), route, "/bin/ocel-pdf").is_none());
+        assert!(authorize(caller("ocel-pdf", true, false), route, "/bin/vfs").is_none());
+    }
+    for route in [LaunchRoute::Mem, LaunchRoute::Pinned] {
+        assert!(authorize(caller("init", true, false), route, "/bin/ocel-pdf").is_none());
+    }
+}
+
+#[test]
 fn shell_has_no_mem_launch_edge() {
     assert!(
         authorize(caller("shell", false, false), LaunchRoute::Mem, "/mem/demo").is_none(),
         "shell mem launches must fail closed"
+    );
+}
+
+/// Tier 3 is started on demand, so the shell carries the launch edge for the
+/// hypervisor cell — with exactly the authority the init edge gives it, and
+/// nothing else. A wider ceiling here would hand a user-typed command more than
+/// the cell itself is allowed to hold.
+#[test]
+fn shell_can_launch_the_hypervisor_cell_with_only_its_own_authority() {
+    let edge = shell_edge(LaunchRoute::Path, "/bin/hypervisor");
+    assert_eq!(
+        edge.child_ceiling,
+        CapSet {
+            hypervisor: true,
+            ..CapSet::EMPTY
+        },
+        "the shell's hypervisor edge must grant hypervisor and nothing else"
     );
 }
 
