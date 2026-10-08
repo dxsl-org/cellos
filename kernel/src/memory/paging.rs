@@ -1124,6 +1124,70 @@ pub fn prune_empty_tables(_vaddr: VAddr) -> ReclaimedPageTables {
     ReclaimedPageTables::new()
 }
 
+/// Test-hooks (x86_64): which live page-table role a frame holds, if any.
+///
+/// A frame that is still allocated after a mapping cycle is torn down is only
+/// identifiable by address — a leaked page table, segment frame and stack frame
+/// are all one 4 KiB frame — so this walks the kernel root and reports the first
+/// intermediate table entry that names it, with the VA window that entry covers.
+/// Leaf (data) frames are reported as such; anything the root cannot reach is an
+/// orphan, which is what a leaked table looks like.
+#[cfg(all(feature = "test-hooks", target_arch = "x86_64"))]
+pub fn classify_table_frame(frame: PhysAddr) -> alloc::string::String {
+    use alloc::string::String;
+    const PRESENT: u64 = 1;
+    const HUGE: u64 = 1 << 7;
+    const ADDR_MASK: u64 = 0x000F_FFFF_FFFF_F000;
+
+    let Some(root) = *KERNEL_ROOT.lock() else {
+        return String::from("no-root");
+    };
+    if root == frame {
+        return String::from("PML4-root");
+    }
+    // SAFETY: the kernel root and every table it names through present,
+    // non-huge entries are live kernel page tables.
+    let entry = |table: PhysAddr, index: usize| unsafe {
+        core::ptr::read_volatile(
+            (crate::memory::frame::phys_to_virt(table) as *const u64).add(index),
+        )
+    };
+    use alloc::format;
+    for i3 in 0..512usize {
+        let level3 = entry(root, i3);
+        if level3 & PRESENT == 0 || level3 & HUGE != 0 {
+            continue;
+        }
+        let pdpt = (level3 & ADDR_MASK) as PhysAddr;
+        if pdpt == frame {
+            return format!("PDPT for VA 0x{:X}-0x{:X}", i3 << 39, (i3 + 1) << 39);
+        }
+        for i2 in 0..512usize {
+            let level2 = entry(pdpt, i2);
+            if level2 & PRESENT == 0 || level2 & HUGE != 0 {
+                continue;
+            }
+            let pd = (level2 & ADDR_MASK) as PhysAddr;
+            let window = (i3 << 39) | (i2 << 30);
+            if pd == frame {
+                return format!("PD for VA 0x{:X}-0x{:X}", window, window + (1 << 30));
+            }
+            for i1 in 0..512usize {
+                let level1 = entry(pd, i1);
+                if level1 & PRESENT == 0 || level1 & HUGE != 0 {
+                    continue;
+                }
+                let pt = (level1 & ADDR_MASK) as PhysAddr;
+                if pt == frame {
+                    let base = window | (i1 << 21);
+                    return format!("PT for VA 0x{:X}-0x{:X}", base, base + (1 << 21));
+                }
+            }
+        }
+    }
+    String::from("not-a-live-table")
+}
+
 // ─── remap_range_user ────────────────────────────────────────────────────────
 
 /// Remap a range of already-allocated pages with user (U/S=1) permissions.

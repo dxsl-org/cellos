@@ -313,6 +313,17 @@ impl FrameAllocator {
         self.total_frames - self.used_frames
     }
 
+    /// Test-hooks: a copy of this allocator's allocation bitmap.
+    ///
+    /// A ledger mismatch is diagnosed by *which* frames moved, not only by how
+    /// many: a page table, a segment frame and a stack frame are all one 4 KiB
+    /// frame, and only the address (plus the page tables' own view of it) says
+    /// which of them was lost.
+    #[cfg(feature = "test-hooks")]
+    pub fn used_bitmap(&self) -> alloc::vec::Vec<u64> {
+        self.bitmap.slice().to_vec()
+    }
+
     /// Physical frame size used by this allocator.
     pub const fn page_size(&self) -> usize {
         PAGE_SIZE
@@ -1019,4 +1030,37 @@ pub fn largest_free_run() -> usize {
         .as_ref()
         .map(FrameAllocator::largest_free_run)
         .unwrap_or(0)
+}
+
+/// Test-hooks: frames whose allocation bit differs from `before`, capped.
+///
+/// `before` must come from [`FrameAllocator::used_bitmap`]. Used together with
+/// [`free_frames`] it separates "the count moved" from "these frames moved":
+/// the first is what a ledger test asserts, the second is what names the defect.
+#[cfg(feature = "test-hooks")]
+pub fn changed_frames(before: &[u64]) -> alloc::vec::Vec<(PhysAddr, bool)> {
+    /// A ledger delta is expected to be one or two frames. Anything larger is a
+    /// different failure and does not need a per-frame listing to be read.
+    const CAP: usize = 32;
+    let mut changed = alloc::vec::Vec::new();
+    let guard = FRAME_ALLOCATOR.lock();
+    let Some(allocator) = guard.as_ref() else {
+        return changed;
+    };
+    for (index, (was, now)) in before.iter().zip(allocator.bitmap.slice().iter()).enumerate() {
+        let mut differences = was ^ now;
+        while differences != 0 {
+            let bit = differences.trailing_zeros() as usize;
+            differences &= differences - 1;
+            let frame = index * 64 + bit;
+            if frame >= allocator.total_frames {
+                continue;
+            }
+            changed.push((allocator.frame_addr(frame), (now >> bit) & 1 != 0));
+            if changed.len() == CAP {
+                return changed;
+            }
+        }
+    }
+    changed
 }

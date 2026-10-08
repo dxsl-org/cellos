@@ -21,6 +21,14 @@ fn complete_success_part(part: u8) {
     }
 }
 
+/// Warm-up cycles the x86_64 ledger check is allowed before it must settle.
+///
+/// Chosen with headroom over the measured three (two spending a table each, the
+/// third spending none): enough that an unrelated layout change cannot fail the
+/// case, small enough that a real per-preparation leak exhausts it.
+#[cfg(target_arch = "x86_64")]
+const LEDGER_WARMUP_CYCLES: usize = 6;
+
 fn unaligned_elf_preparation_restores_state() -> bool {
     let mut storage = alloc::vec![0u64; (crate::INIT_ELF.len() + 8) / 8];
     let bytes = unsafe {
@@ -35,28 +43,51 @@ fn unaligned_elf_preparation_restores_state() -> bool {
         return false;
     }
 
-    // x86_64 starts the ledger one preparation later. There the ELF's segments
-    // are mapped into the **kernel root's** PML4 (a prepared-but-unpublished task
-    // has no root of its own), so the first preparation materializes that root's
-    // page tables for the cell's VA range: they are the SAS root's tables, not the
-    // task's, and they outlive the task by design. The measured cycle is therefore
-    // the second one — the first is the warm-up that reaches the ledger's fixed
-    // point — which is what makes a *per-preparation* leak still visible: it would
-    // move the ledger again on every later cycle.
+    // On x86_64 the ledger also carries the frame allocator's own identity-map
+    // bookkeeping, and there it is created on demand: the kernel root has no
+    // identity map of RAM (RAM is reached through the HHDM), so the first mapping
+    // that touches a 2 MiB window of low RAM — a stack's pages, or a frame handed
+    // back to the free list, which `release_frames` re-establishes at VA == PA —
+    // allocates that window's page table, and the table stays while the frames
+    // under it are free and identity-mapped. Measured 2026-10-08 on the failing
+    // boot: two cycles spent one PT each for the windows at VA 0x400000-0x800000
+    // plus their shared PD, a third cycle spent nothing.
+    //
+    // So warm the ledger to its fixed point before measuring. That cost is bounded
+    // by RAM and paid once per window; a *per-preparation* leak is not, and would
+    // keep moving the ledger on every cycle and exhaust this bound instead of
+    // settling — which is why the bound is a failure, not a shrug. RISC-V and
+    // AArch64 identity-map RAM during boot, so their first cycle is already on the
+    // fixed point and they need no warm-up.
+    // Captured before the measurement for the failure path: the frames that never
+    // come back are the ones it names.
+    let baseline_bitmap = super::snapshot::frame_bitmap();
     #[cfg(target_arch = "x86_64")]
-    {
-        let Ok(warmup) = crate::task::prepare_elf_task(
-            unaligned,
-            "atomic-unaligned",
-            types::CellId(0),
-            alloc::vec::Vec::new(),
-        ) else {
-            return false;
-        };
-        drop(warmup);
-    }
+    let ledger_settled = {
+        let mut settled = false;
+        for _ in 0..LEDGER_WARMUP_CYCLES {
+            let before_warmup = super::snapshot::free_frame_count();
+            let Ok(warmup) = crate::task::prepare_elf_task(
+                unaligned,
+                "atomic-unaligned",
+                types::CellId(0),
+                alloc::vec::Vec::new(),
+            ) else {
+                return false;
+            };
+            drop(warmup);
+            if super::snapshot::free_frame_count() == before_warmup {
+                settled = true;
+                break;
+            }
+        }
+        settled
+    };
+    #[cfg(not(target_arch = "x86_64"))]
+    let ledger_settled = true;
 
     let before = snapshot();
+    let cycle_before = super::snapshot::free_frame_count();
 
     let Ok(prepared) = crate::task::prepare_elf_task(
         unaligned,
@@ -67,11 +98,32 @@ fn unaligned_elf_preparation_restores_state() -> bool {
         return false;
     };
     drop(prepared);
+    let cycle_after = super::snapshot::free_frame_count();
+    let after = snapshot();
     // Reported field-by-field rather than as a bare `==`: this case is the only
     // one in the corpus that does not go through `snapshot_matches`, and an
     // architecture whose first test-hooks boot runs it (x86_64, phase 02) has no
     // other way to name the field that moved.
-    super::snapshot::snapshot_matches("ALIGNMENT", "unaligned-prepare", &before, &snapshot())
+    let matched =
+        super::snapshot::snapshot_matches("ALIGNMENT", "unaligned-prepare", &before, &after);
+    #[cfg(target_arch = "x86_64")]
+    if !ledger_settled {
+        log::error!(
+            "ATOMIC_PUBLICATION_ALIGNMENT: ledger never settled in {} warm-up cycles — the last one left it at {}",
+            LEDGER_WARMUP_CYCLES,
+            super::snapshot::free_frame_count(),
+        );
+    }
+    if !matched {
+        log::error!(
+            "ATOMIC_PUBLICATION_ALIGNMENT: measured cycle {} -> {} (delta {})",
+            cycle_before,
+            cycle_after,
+            cycle_after as i64 - cycle_before as i64,
+        );
+        super::snapshot::report_frame_delta("ALIGNMENT", &baseline_bitmap);
+    }
+    matched && ledger_settled
 }
 
 pub(super) fn run_all() {

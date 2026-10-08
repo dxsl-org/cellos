@@ -195,12 +195,7 @@ pub(super) fn snapshot_matches(
     );
     report_mismatch(case, stage, "hart-current", before.current != after.current);
     report_mismatch(case, stage, "ready-queues", before.ready != after.ready);
-    report_mismatch(
-        case,
-        stage,
-        "free-frames",
-        before.free_frames != after.free_frames,
-    );
+    report_frame_mismatch(case, stage, before.free_frames, after.free_frames);
     report_mismatch(case, stage, "quota", before.quota != after.quota);
     report_mismatch(
         case,
@@ -256,6 +251,62 @@ pub(super) fn snapshot_matches(
     false
 }
 
+/// Failure path for the alignment fixture: name every frame the measured cycle
+/// failed to return, with the role the page tables still give it (x86_64).
+///
+/// Counting is not enough to fix a frame leak — a page table, a segment frame and
+/// a stack frame are all one 4 KiB frame — and on x86_64 the count alone is also
+/// misleading: the ledger only moves while a mapping touches a *new* table window,
+/// so the per-cycle delta falls to zero once the same windows come back around.
+/// The frames that never came back are what this reports, taken across the whole
+/// measurement from a bitmap captured before it.
+pub(super) fn report_frame_delta(stage: &'static str, before: &[u64]) {
+    let changed = crate::memory::frame::changed_frames(before);
+    if changed.is_empty() {
+        log::error!("ATOMIC_PUBLICATION_{}: FRAME-DELTA none", stage);
+        return;
+    }
+    for (frame, used) in changed {
+        let direction = if used { "now-used" } else { "now-free" };
+        #[cfg(target_arch = "x86_64")]
+        log::error!(
+            "ATOMIC_PUBLICATION_{}: FRAME-DELTA frame=0x{:X} {} role={}",
+            stage,
+            frame,
+            direction,
+            crate::memory::paging::classify_table_frame(frame),
+        );
+        #[cfg(not(target_arch = "x86_64"))]
+        log::error!(
+            "ATOMIC_PUBLICATION_{}: FRAME-DELTA frame=0x{:X} {}",
+            stage,
+            frame,
+            direction,
+        );
+    }
+}
+
+/// A copy of the frame allocator's allocation bitmap.
+pub(super) fn frame_bitmap() -> alloc::vec::Vec<u64> {
+    crate::memory::frame::FRAME_ALLOCATOR
+        .lock()
+        .as_ref()
+        .map(|allocator| allocator.used_bitmap())
+        .unwrap_or_default()
+}
+
+/// Frames the allocator has right now, read without building a snapshot.
+///
+/// `snapshot()` allocates (it clones task, queue and stash state), so a frame
+/// delta measured through it is not exactly the delta of the work being measured.
+pub(super) fn free_frame_count() -> usize {
+    crate::memory::frame::FRAME_ALLOCATOR
+        .lock()
+        .as_ref()
+        .map(|allocator| allocator.free_frames())
+        .unwrap_or(usize::MAX)
+}
+
 fn report_mismatch(case: &'static str, stage: &'static str, field: &'static str, mismatched: bool) {
     if mismatched {
         log::error!(
@@ -264,6 +315,29 @@ fn report_mismatch(case: &'static str, stage: &'static str, field: &'static str,
             stage,
             field,
         );
+    }
+}
+
+/// Frames are the one snapshot field whose *magnitude* names the defect: a
+/// handful of frames is a page-table cycle, a segment's worth is a leak, so this
+/// field reports the counts and the delta instead of the field name alone.
+fn report_frame_mismatch(
+    case: &'static str,
+    stage: &'static str,
+    before: Option<usize>,
+    after: Option<usize>,
+) {
+    match (before, after) {
+        (Some(before), Some(after)) if before != after => log::error!(
+            "ATOMIC_PUBLICATION_{}: MISMATCH stage={} field=free-frames before={} after={} delta={}",
+            case,
+            stage,
+            before,
+            after,
+            after as i64 - before as i64,
+        ),
+        (None, None) => {}
+        (_, _) => report_mismatch(case, stage, "free-frames", before != after),
     }
 }
 

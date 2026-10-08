@@ -1,0 +1,96 @@
+x86_64 test-hooks ledger settle — resolved 2026-10-08
+=====================================================
+
+What was wrong
+--------------
+Every x86_64 `test-hooks` boot aborted in `elf_tests::run_all()` →
+`atomic_publication_tests::run_all()`, at the corpus's first case,
+`unaligned_elf_preparation_restores_state`
+(`kernel/src/loader/atomic_publication_tests/cases.rs`):
+
+  [ERROR] ATOMIC_PUBLICATION_ALIGNMENT: MISMATCH stage=unaligned-prepare field=state
+  [ERROR] ATOMIC_PUBLICATION_ALIGNMENT: MISMATCH stage=unaligned-prepare field=free-frames
+  panicked: unaligned ELF preparation must be atomic and parser-safe
+
+Only `free-frames` actually differed (the `field=state` line is that reporter's
+generic banner; `report_task_mismatches` printed nothing). Consequence: no x86_64
+`test-hooks` boot reached the task self-tests, and `scripts/x86/qemu-domain-test.sh`
+could not reach the phase-02 domain witnesses. RISC-V and AArch64 were unaffected.
+
+Cause (confirmed by naming the frames, not by counting them)
+-----------------------------------------------------------
+The case assumed the *second* preparation sat on the ledger's fixed point. On
+x86_64 it needs a third, because the ledger carries the frame allocator's own
+identity-map bookkeeping and that map is built on demand: the kernel root has no
+identity map of RAM (RAM is reached through the HHDM), so the first mapping that
+touches a 2 MiB window of low RAM — a stack's pages, or a frame handed back to the
+free list, which `release_frames` re-establishes at VA == PA — allocates that
+window's page table, and the table stays because the frames under it are free and
+identity-mapped (`kernel/src/task/stack.rs`, `release_frames` documents that
+invariant). The cost is bounded by RAM and paid once per window.
+
+Measured on the failing boot, with the whole model re-instrumented in three
+places (direct `free_frames` reads around each cycle, and the frame allocator's
+bitmap diffed across the whole measurement):
+
+  free-frames warm-up 60638 -> 60636 (delta -2), measured cycle 60636 -> 60635 (delta -1)
+  LEAK-PROBE (a third cycle, no snapshot in between)           60635 -> 60635 (delta 0)
+  FRAME-DELTA frame=0x695000 now-used role=PD for VA 0x0-0x40000000
+  FRAME-DELTA frame=0x696000 now-used role=PT for VA 0x600000-0x800000
+  FRAME-DELTA frame=0x7A7000 now-used role=PT for VA 0x400000-0x600000
+
+So the frames that never came back are one page directory and two page tables for
+the low RAM windows the stacks had touched, all still live tables of the kernel
+root — not orphans and not a per-preparation leak. A fourth cycle moves nothing:
+the delta converging to 0 is what separates this from a real leak, and it is why
+counting alone could not name the defect.
+
+Fix
+---
+`unaligned_elf_preparation_restores_state` now warms the ledger to its fixed point
+before measuring (`LEDGER_WARMUP_CYCLES`, x86_64 only, bounded at 6), then requires
+one further preparation cycle to leave the ledger exactly as it found it, and fails
+if the ledger never settles. A per-preparation leak is not bounded by RAM, so it
+exhausts that bound and still fails the case — the assertion got stricter, not
+weaker. RISC-V and AArch64 identity-map RAM during boot, need no warm-up, and keep
+the original single-cycle measurement.
+
+The diagnosis is kept, because counting is what failed here:
+
+  * `snapshot_matches` reports `free-frames` as `before=… after=… delta=…` instead
+    of only naming the field;
+  * the case names every frame that never came back, with the page-table role the
+    kernel root still gives it (`FRAME-DELTA … role=PT for VA …`), from a bitmap
+    captured before the measurement.
+
+How to reproduce
+----------------
+  bash scripts/build-x86_64-domain-test-ci.sh
+  BOOT_WINDOW=90 bash scripts/x86/qemu-domain-test.sh
+
+Observed (raw log: atomic-publication-ledger-x86-settling.log:169,487,494)
+-------------------------------------------------------------------------
+  ATOMIC_PUBLICATION_ALIGNMENT: PASS
+  S22-X86-DOMAIN-LIVE: PASS cr3=0x1bdf000 root=0x1bdf000 pcid=0 pcid_usable=false kernel_cr3=0x59000 domain=5 generation=6
+  S22-X86-DOMAIN-TEARDOWN: PASS releases=1 quarantined=0 ack_generation=6
+  PASS: x86_64 Tier-2 domain-entry lane (x86-domain-test) — every marker present
+
+The lane runs to its own end: admission, the live CR3, exactly one contained
+NULL-store fault, frame release, teardown and shell recovery.
+
+Regression coverage for the change (both re-run with it in the tree)
+--------------------------------------------------------------------
+  * AArch64 `test-hooks` (`scripts/build-aarch64-test-hooks-ci.sh`,
+    `scripts/qemu-aarch64-test-hooks.sh`): builds under `-D warnings` and boots —
+    corpus PASS through `ATOMIC_PUBLICATION_AP-15: PASS`, guest suite
+    `[vfs-test] Results: 96 PASS, 0 FAIL`.
+  * RISC-V `test-hooks` (`scripts/build-test-hooks-ci.sh`): builds under
+    `-D warnings` and the corpus passes
+    (`ATOMIC_PUBLICATION_ALIGNMENT: PASS`, `AP-00`…`AP-15`). The
+    `[fault] Cell 254 … cause=0xf` line in that boot is the documented expected
+    guard-page probe (`docs/evidence/posix-fstat-verification.txt`), not a
+    regression.
+
+Pre-fix record: `atomic-publication-x86-pre-existing-failure.{txt,log}` holds the
+same failure reproduced with the entire C2C-binding slice stashed, which is how it
+was first attributed to the baseline rather than to that slice.

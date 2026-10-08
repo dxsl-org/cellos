@@ -1,6 +1,16 @@
 Pre-existing x86_64 test-hooks boot failure — reproduced 2026-10-08
 ===================================================================
 
+**Resolved 2026-10-08** — see
+[`atomic-publication-ledger-x86-settling.{txt,log}`](atomic-publication-ledger-x86-settling.txt).
+The cause was not a leak in ELF preparation: on x86_64 the case's second cycle was
+not yet on the ledger's fixed point, because the frame allocator materializes the
+low RAM identity map on demand (RAM is reached through the HHDM, and
+`release_frames` keeps every free frame identity-mapped). The case now warms to the
+fixed point and fails if it never settles. This file is kept as the pre-fix record:
+the reproduction below, with the entire C2C-binding slice stashed, is what
+attributed the failure to the baseline rather than to that slice.
+
 Not caused by the C2C local-binding work. This is the same failure with **every**
 change of that slice stashed (kernel/ and libs/ reverted to `HEAD`), so it predates
 it and is recorded here rather than left as an unexplained red lane.

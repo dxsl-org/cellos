@@ -145,16 +145,20 @@ was recorded 2026-10-08 and the surface is FROZEN** —
 `scripts/check-lookupservicebound-law1-digests.sh` fails on drift. The kernel-repair handoff is
 satisfied for this slice.
 
-### Two pre-existing baseline blockers found (neither caused by this slice)
+### Two pre-existing baseline blockers found (neither caused by this slice) — both resolved
 
-1. **x86_64 `test-hooks` boot panics** in
-   `atomic_publication_tests::unaligned_elf_preparation_restores_state`
-   (`loader/atomic_publication_tests/cases.rs:78`). Only `free-frames` genuinely differs — a
-   frame-accounting delta across `prepare_elf_task` + drop. Reproduced with this entire slice
-   stashed. Consequence: `scripts/x86/qemu-domain-test.sh` never reaches the phase-02 witnesses,
-   and **no** x86_64 `test-hooks` boot reaches the task self-tests. Recorded as an open item in
-   the kernel-repair plan; evidence
-   `docs/evidence/atomic-publication-x86-pre-existing-failure.{txt,log}`.
+1. **x86_64 `test-hooks` boot panicked in the alignment ledger check — RESOLVED 2026-10-08.**
+   The case assumed the second preparation sat on the ledger's fixed point; on x86_64
+   it needs a third, because the frame allocator materializes the low RAM identity
+   map on demand (RAM is reached through the HHDM, and `release_frames` keeps every
+   free frame identity-mapped at VA == PA), so the windows a stack touches cost a
+   page table each. The case now warms to the fixed point (x86_64 only, bounded at 6
+   cycles) and then requires a further cycle to restore the ledger exactly, failing if
+   it never settles. `scripts/x86/qemu-domain-test.sh` now runs to its own end
+   (admission, live CR3, one contained fault, frame release, teardown, shell
+   recovery); AArch64 and RV64 `test-hooks` were re-run with the change. Evidence
+   `docs/evidence/atomic-publication-ledger-x86-settling.{txt,log}`; pre-fix
+   reproduction `docs/evidence/atomic-publication-x86-pre-existing-failure.{txt,log}`.
 2. **AArch64 `test-hooks` could not build** (`-D warnings` on a dead `IDENTITY_DMA_LOGGED` static
    in `kernel/src/task/drivers/iommu.rs`). **Fixed** with the file's own idiom
    (`#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]`); no behaviour change. That fix

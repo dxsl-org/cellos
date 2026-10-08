@@ -25,8 +25,11 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
   [`law1-lookupservicebound.md`](260927-1100-c2c-anywhere-tier-aware/law1-lookupservicebound.md) §2.2,
   drift caught by `scripts/check-lookupservicebound-law1-digests.sh`.
   Phase 03 still owns moving `LocalEndpoint::call` onto the bounded primitive.
-  Separate pre-existing blocker: no x86_64 `test-hooks` boot gets past
-  `atomic_publication_tests::unaligned_elf_preparation_restores_state` (kernel-repair plan, open).
+  Resolved 2026-10-08: the x86_64 `test-hooks` alignment ledger check now warms to the
+  ledger's fixed point (the frame allocator builds the low RAM identity map on demand
+  on x86_64) and fails only if it never settles, so `scripts/x86/qemu-domain-test.sh`
+  runs to its own end. AArch64 and RV64 `test-hooks` re-run green. Evidence
+  `docs/evidence/atomic-publication-ledger-x86-settling.{txt,log}`.
 - [ ] Reconcile one exact Intel machine against the HCL; physical bring-up and
   acquisition remain separately gated. No AMD/new ARM/RISC-V hardware program.
 - [ ] Close x86 Tier 2 admission/C/C++ gaps and Intel VMX/EPT prerequisites for
