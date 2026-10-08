@@ -1,11 +1,9 @@
 // HTTP response handlers: HTML pages, VFS file serving, and JSON REST API.
 
 extern crate alloc;
-use ai_proto::MAX_PROMPT_BYTES;
 use alloc::{format, string::String, vec::Vec};
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use ostd::clients::VfsClient;
-use ostd::ipc::service_call_typed;
+#[cfg(target_os = "none")]
+use ai_proto::MAX_PROMPT_BYTES;
 
 #[cfg(target_arch = "riscv64")]
 const ARCH: &str = "riscv64";
@@ -20,65 +18,49 @@ const ARCH: &str = "x86_64";
 )))]
 const ARCH: &str = "unknown";
 
-use crate::net_ipc;
-use crate::static_files::{
-    classify_static_file_preflight_wire, classify_static_file_read, StaticFileResult,
-    STATIC_FILE_MAX_BYTES,
-};
 
 // ── Response helpers ──────────────────────────────────────────────────────────
 
-pub fn send_response(
-    cap: u32,
-    net_ep: usize,
-    status: u16,
-    content_type: &str,
-    body: &[u8],
-) -> bool {
-    let status_text = match status {
-        200 => "OK",
-        204 => "No Content",
-        400 => "Bad Request",
-        404 => "Not Found",
-        500 => "Internal Server Error",
-        503 => "Service Unavailable",
-        _ => "OK",
-    };
-    let header = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        status,
-        status_text,
-        content_type,
-        body.len()
-    );
-    let mut payload = header.into_bytes();
-    payload.extend_from_slice(body);
-    net_ipc::tcp_send_all(cap, net_ep, &payload)
+pub(crate) struct Response {
+    pub header: alloc::vec::Vec<u8>,
+    pub body: alloc::vec::Vec<u8>,
 }
-fn send_json(cap: u32, net_ep: usize, status: u16, json: &str) -> bool {
-    let body = json.as_bytes();
+
+pub(crate) fn response(status: u16, content_type: &str, body: &[u8], json: bool) -> Response {
     let status_text = match status {
-        200 => "OK",
-        204 => "No Content",
-        400 => "Bad Request",
-        404 => "Not Found",
-        500 => "Internal Server Error",
-        503 => "Service Unavailable",
-        _ => "OK",
+        200 => "OK", 204 => "No Content", 400 => "Bad Request",
+        408 => "Request Timeout", 413 => "Payload Too Large", 404 => "Not Found",
+        500 => "Internal Server Error", 503 => "Service Unavailable", _ => "OK",
     };
-    let header = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
-        status, status_text, body.len()
-    );
-    let payload = format!("{header}{json}");
-    net_ipc::tcp_send_all(cap, net_ep, payload.as_bytes())
+    let cors = if json { "Access-Control-Allow-Origin: *\r\n" } else { "" };
+    Response {
+        header: format!(
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n",
+            status, status_text, content_type, body.len(), cors
+        ).into_bytes(),
+        body: body.to_vec(),
+    }
+}
+
+pub(crate) fn response_owned(status: u16, content_type: &str, body: Vec<u8>) -> Response {
+    Response {
+        header: format!(
+            "HTTP/1.1 {} OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            status, content_type, body.len()
+        ).into_bytes(),
+        body,
+    }
+}
+
+pub(crate) fn json(status: u16, text: &str) -> Response {
+    response(status, "application/json", text.as_bytes(), true)
 }
 // ── HTML pages ────────────────────────────────────────────────────────────────
 
 // Note: askama compile-time templates are the intended long-term approach.
 // format! is used here for simplicity pending no_std askama validation.
 
-pub fn index(cap: u32, net_ep: usize) -> bool {
+pub(crate) fn index() -> Response {
     let html = format!(
         r#"<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Cellos Mini-Server Dashboard</title>
@@ -113,16 +95,10 @@ pub fn index(cap: u32, net_ep: usize) -> bool {
 </body></html>"#,
         ARCH
     );
-    send_response(
-        cap,
-        net_ep,
-        200,
-        "text/html; charset=utf-8",
-        html.as_bytes(),
-    )
+    response(200, "text/html; charset=utf-8", html.as_bytes(), false)
 }
 
-pub fn status_page(cap: u32, net_ep: usize) -> bool {
+pub(crate) fn status_page() -> Response {
     let html = format!(
         r#"<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Cellos - System Status</title>
@@ -147,48 +123,14 @@ pub fn status_page(cap: u32, net_ep: usize) -> bool {
 </body></html>"#,
         ARCH
     );
-    send_response(
-        cap,
-        net_ep,
-        200,
-        "text/html; charset=utf-8",
-        html.as_bytes(),
-    )
+    response(200, "text/html; charset=utf-8", html.as_bytes(), false)
 }
 
-pub fn not_found(cap: u32, net_ep: usize) -> bool {
-    send_response(cap, net_ep, 404, "text/plain", b"404 Not Found")
+pub(crate) fn not_found() -> Response {
+    response(404, "text/plain", b"404 Not Found", false)
 }
 
-// ── Static file serving ───────────────────────────────────────────────────────
-
-pub fn serve_file(cap: u32, net_ep: usize, vfs_ep: usize, path: &str) -> bool {
-    let mut vfs = VfsClient::new();
-    let mut stat_req = [0u8; IPC_BUF_SIZE];
-    let mut stat_resp = [0u8; IPC_BUF_SIZE];
-    match classify_static_file_preflight_wire(service_call_typed::<_, VfsResponse>(
-        vfs_ep,
-        &VfsRequest::Stat(path),
-        &mut stat_req,
-        &mut stat_resp,
-    )) {
-        Ok(()) => {}
-        Err(StaticFileResult::NotFound) => return not_found(cap, net_ep),
-        Err(_) => {
-            return send_response(cap, net_ep, 500, "text/plain", b"500 Internal Server Error");
-        }
-    }
-    let content_type = mime_from_ext(path);
-    match classify_static_file_read(vfs.read_file_bounded(path, STATIC_FILE_MAX_BYTES)) {
-        StaticFileResult::Body(data) => send_response(cap, net_ep, 200, content_type, &data),
-        StaticFileResult::NotFound => not_found(cap, net_ep),
-        StaticFileResult::InternalError => {
-            send_response(cap, net_ep, 500, "text/plain", b"500 Internal Server Error")
-        }
-    }
-}
-
-fn mime_from_ext(path: &str) -> &'static str {
+pub(crate) fn mime_from_ext(path: &str) -> &'static str {
     match path.rsplit('.').next() {
         Some("html") | Some("htm") => "text/html; charset=utf-8",
         Some("css") => "text/css",
@@ -205,15 +147,15 @@ fn mime_from_ext(path: &str) -> &'static str {
 
 // ── JSON REST API ─────────────────────────────────────────────────────────────
 
-pub fn api_status(cap: u32, net_ep: usize) -> bool {
-    let json = format!(
-        r#"{{"status":"running","arch":"{}","http_port":8080,"protocol":"HTTP/1.1"}}"#,
-        ARCH
+pub(crate) fn api_status(inflight: usize, peak: usize, refused: usize) -> Response {
+    let text = format!(
+        r#"{{"status":"running","arch":"{}","http_port":8080,"protocol":"HTTP/1.1","accepted_inflight":{},"accepted_peak":{},"refused":{}}}"#,
+        ARCH, inflight, peak, refused
     );
-    send_json(cap, net_ep, 200, &json)
+    json(200, &text)
 }
 
-pub fn api_cells(cap: u32, net_ep: usize) -> bool {
+pub(crate) fn api_cells() -> Response {
     // Well-known service IDs probed via service registry
     use ostd::service::{lookup, service};
     let mut entries = Vec::new();
@@ -233,116 +175,44 @@ pub fn api_cells(cap: u32, net_ep: usize) -> bool {
         }
     }
     let list = entries.join(",");
-    let json = format!(r#"{{"cells":[{}]}}"#, list);
-    send_json(cap, net_ep, 200, &json)
+    let text = format!(r#"{{"cells":[{}]}}"#, list);
+    json(200, &text)
 }
 
-pub fn api_files(cap: u32, net_ep: usize, vfs_ep: usize, path: &str) -> bool {
-    let raw = net_ipc::vfs_list_dir(path, vfs_ep);
-    let listing = core::str::from_utf8(&raw).unwrap_or("");
-    let entries: Vec<String> = listing
-        .lines()
-        .filter(|l| !l.is_empty())
-        .map(|name| format!(r#"{{"name":"{}"}}"#, name))
-        .collect();
-    let list = entries.join(",");
-    let json = format!(r#"{{"path":"{}","entries":[{}]}}"#, path, list);
-    send_json(cap, net_ep, 200, &json)
+pub(crate) fn api_files(path: &str, raw: &[u8]) -> Response {
+    let listing = core::str::from_utf8(raw).unwrap_or("");
+    let entries: Vec<String> = listing.lines().filter(|l| !l.is_empty())
+        .map(|name| format!(r#"{{"name":"{}"}}"#, name)).collect();
+    let text = format!(r#"{{"path":"{}","entries":[{}]}}"#, path, entries.join(","));
+    json(200, &text)
 }
 
-/// `POST /api/infer` — run the local AI inference service and return the completion as JSON.
-///
-/// The request body is the prompt, verbatim: no JSON envelope and therefore no parser in the trusted
-/// path. `?max_tokens=N` sets the cap (default [`INFER_DEFAULT_TOKENS`], clamped to
-/// [`INFER_MAX_TOKENS`] so the reply fits one TCP payload).
-/// The prompt is bounded by the AI wire limit and the generated text is capped at 64 tokens, so the
-/// JSON reply remains a bounded one-shot response. Callers that need streaming use the service's
-/// poll API directly (`ai_sdk::AiClient`) rather than this front door.
-/// The inference front door needs `ai_sdk::ostd_transport`, which exists only for the
-/// bare-metal target: the client resolves the AI service through this cell's own IPC.
-/// A hosted build therefore has every other route and not this one — which is what the
-/// fifteen host tests in this crate exercise.
 #[cfg(target_os = "none")]
-pub fn api_infer(cap: u32, net_ep: usize, request: &[u8], path: &str) -> bool {
-    use ai_sdk::AiClient;
+pub(crate) fn infer_prompt(body: &[u8]) -> Result<&str, Response> {
+    if body.is_empty() {
+        return Err(json(400, r#"{"error":"body must contain the prompt"}"#));
+    }
+    if body.len() > MAX_PROMPT_BYTES {
+        return Err(json(400, r#"{"error":"prompt is too large"}"#));
+    }
+    core::str::from_utf8(body).map_err(|_| json(400, r#"{"error":"prompt is not UTF-8"}"#))
+}
 
-    let prompt = match request_body(request) {
-        Some(body) if !body.is_empty() => {
-            if body.len() > MAX_PROMPT_BYTES {
-                return send_json(cap, net_ep, 400, r#"{"error":"prompt is too large"}"#);
-            }
-            match core::str::from_utf8(body) {
-                Ok(text) => text,
-                Err(_) => {
-                    return send_json(cap, net_ep, 400, r#"{"error":"prompt is not UTF-8"}"#);
-                }
-            }
-        }
-        _ => {
-            return send_json(
-                cap,
-                net_ep,
-                400,
-                r#"{"error":"body must contain the prompt"}"#,
-            );
-        }
-    };
-
-    let max_tokens = crate::router::extract_query_param(path, "max_tokens")
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(INFER_DEFAULT_TOKENS)
-        .clamp(1, INFER_MAX_TOKENS);
-
-    // The client resolves the service through the registry, so this works whether init or the shell
-    // spawned the inference cell.
-    let mut client = AiClient::new(ai_sdk::ostd_transport::OstdTransport::new());
-    // The reply names the model that actually served it, so a caller can tell which deployment it
-    // reached without a second endpoint.
-    let model = client.describe().map(|info| info.model).unwrap_or_default();
-    let params = ai_sdk::InferParams::greedy(prompt, max_tokens);
-    let generation = match client.generate(&params, INFER_MAX_POLLS) {
-        Ok(generation) => generation,
-        Err(error) => {
-            // Report the typed refusal instead of an empty 200: a caller must be able to tell
-            // "no model" from "no service" from "generation failed".
-            let json = format!(
-                r#"{{"error":"inference unavailable","cause":"{:?}"}}"#,
-                error
-            );
-            return send_json(cap, net_ep, 503, &json);
-        }
-    };
-
-    let json = format!(
+#[cfg(target_os = "none")]
+pub(crate) fn infer_success(model: &str, prompt_bytes: usize, tokens: usize, finish: ai_proto::FinishReason, text: &str) -> Response {
+    let text = format!(
         r#"{{"model":"{}","prompt_bytes":{},"tokens":{},"finish":"{:?}","text":"{}"}}"#,
-        json_escape(model.as_str()),
-        prompt.len(),
-        generation.ids.len(),
-        generation.finish,
-        json_escape(generation.text.as_str())
+        json_escape(model), prompt_bytes, tokens, finish, json_escape(text)
     );
-    send_json(cap, net_ep, 200, &json)
+    json(200, &text)
 }
 
-/// Tokens generated when the request does not ask for a count.
-const INFER_DEFAULT_TOKENS: u16 = 24;
-
-/// Hard cap for this endpoint: the reply has to fit one inline TCP payload alongside its JSON.
-const INFER_MAX_TOKENS: u16 = 64;
-
-/// Poll round trips allowed per request; the service advances four model steps per poll.
-const INFER_MAX_POLLS: usize = 96;
-
-/// The request body: everything after the header terminator.
-fn request_body(request: &[u8]) -> Option<&[u8]> {
-    let separator = b"\r\n\r\n";
-    let start = request
-        .windows(separator.len())
-        .position(|window| window == separator)?
-        + separator.len();
-    request.get(start..)
+#[cfg(target_os = "none")]
+pub(crate) fn infer_failed(error: &str) -> Response {
+    json(503, &format!(r#"{{"error":"inference unavailable","cause":"{}"}}"#, json_escape(error)))
 }
 
+#[cfg(target_os = "none")]
 /// Escape a string for a JSON string literal.
 fn json_escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len() + 8);
@@ -360,12 +230,7 @@ fn json_escape(text: &str) -> String {
     out
 }
 
-pub fn api_restart(cap: u32, net_ep: usize, _cell_name: &str) -> bool {
-    // Restart via init IPC is not yet implemented — return accepted.
-    send_json(
-        cap,
-        net_ep,
-        200,
-        r#"{"ok":true,"note":"restart not yet wired to init"}"#,
-    )
+pub(crate) fn api_restart() -> Response {
+    // Restart via init IPC is not yet implemented — preserve the existing accepted response.
+    json(200, r#"{"ok":true,"note":"restart not yet wired to init"}"#)
 }

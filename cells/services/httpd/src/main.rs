@@ -1,16 +1,10 @@
-//! httpd — HTTP/1.1 web server Cell for ViCell.
-//!
-//! Listens on port 8080. Serves HTML pages (format!-built), static files from VFS,
-//! and a JSON REST API. One connection at a time (sufficient for G1 robot LAN use).
-//!
-//! # Library note
-//! Uses httparse for request parsing instead of edge-http: the workspace pins
-//! embedded-io-async 0.7 while edge-http 0.7 requires 0.6, and implementing
-//! TcpSplit over ViCell's synchronous IPC adds complexity with no G1 benefit.
+//! httpd — cooperative single-cell HTTP/1.1 server for ViCell.
+//! One owner manages up to 257 sockets, including 256 concurrent active clients.
 
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_code)]
+// The ostd custom heap macro contains its own audited unsafe initialization.
 
 extern crate alloc;
 
@@ -21,12 +15,13 @@ use ostd::syscall::{sys_lookup_service, sys_yield};
 
 mod handlers;
 mod net_ipc;
-#[cfg(test)]
-mod net_ipc_tests;
+mod reactor;
 mod router;
-mod static_files;
 
-api::declare_syscalls![Send, Recv, Log, LookupService, StateRestore];
+api::declare_syscalls![Send, Recv, Log, LookupService, StateRestore, GetTime];
+
+#[cfg(target_os = "none")]
+ostd::declare_custom_heap!(8 * 1024 * 1024);
 
 const HTTPD_PORT: u16 = 8080;
 
@@ -50,6 +45,8 @@ fn parse_u16(s: &str) -> Option<u16> {
 }
 
 fn cell_main() {
+    #[cfg(target_os = "none")]
+    init_custom_heap();
     let argv = ostd::args();
     let mut port = HTTPD_PORT;
     let mut file_to_serve: Option<String> = None;
@@ -70,7 +67,7 @@ fn cell_main() {
     let net_ep = wait_for_service(service::NET, "net");
     let vfs_ep = wait_for_service(service::VFS, "vfs");
 
-    let listen_cap = match net_ipc::tcp_listen(port, net_ep) {
+    let listen_cap = match reactor::listen(net_ep, port) {
         Some(c) => c,
         None => {
             println("httpd: TcpListen failed");
@@ -85,27 +82,7 @@ fn cell_main() {
         ostd::io::print_usize(port as usize);
         println("");
     }
-    loop {
-        // TcpAccept blocks in the kernel until a client connects.
-        let stream_cap = loop {
-            match net_ipc::tcp_accept(listen_cap, net_ep) {
-                Some(c) => break c,
-                None => {
-                    sys_yield();
-                }
-            }
-        };
-
-        if !router::handle_connection(stream_cap, net_ep, vfs_ep, file_to_serve.as_deref()) {
-            println("httpd: response send failed");
-        }
-
-        // Yield so smoltcp can flush the TX ring before we send FIN.
-        for _ in 0..200 {
-            sys_yield();
-        }
-        net_ipc::tcp_close(stream_cap, net_ep);
-    }
+    reactor::run(listen_cap, net_ep, vfs_ep, file_to_serve.as_deref());
 }
 
 /// Resolve a well-known service TID, retrying up to 100 times with yield.

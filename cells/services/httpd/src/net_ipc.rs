@@ -1,200 +1,116 @@
-// TCP helper wrappers over ViCell IPC.
-// All calls are synchronous — sys_recv blocks in the kernel until the net service responds.
+//! Owned, nonblocking IPC submissions for the HTTP reactor.
+//! Every request is copied into the kernel's bounded operation queue before returning.
 
-extern crate alloc;
-use alloc::vec::Vec;
+use api::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use ostd::ipc::{self, IpcOpId, IpcSubmitError, IpcTakeResult, IpcTerminal};
+use serde::Serialize;
 
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
-use ostd::clients::VfsClient;
-use ostd::ipc::{service_call_typed, IpcError};
-use ostd::syscall::sys_yield;
+pub(crate) type Op = IpcOpId;
 
-const TCP_SEND_ZERO_PROGRESS_RETRY_LIMIT: usize = 4;
-
-fn net_call<'a>(
-    net_ep: usize,
-    req: &NetRequest<'_>,
-    send_buf: &mut [u8; IPC_BUF_SIZE],
-    recv_buf: &'a mut [u8; IPC_BUF_SIZE],
-) -> Result<NetResponse<'a>, IpcError> {
-    service_call_typed(net_ep, req, send_buf, recv_buf)
+pub(crate) fn submit<T: Serialize>(peer: usize, req: &T) -> Result<Op, IpcSubmitError> {
+    let mut bytes = [0u8; IPC_BUF_SIZE];
+    let encoded = api::ipc::encode(req, &mut bytes).map_err(|_| IpcSubmitError::InvalidRequest)?;
+    ipc::submit(peer, encoded)
 }
 
-pub(crate) fn decode_net_send_progress(
-    response: Result<NetResponse<'_>, IpcError>,
-    chunk_len: usize,
-) -> Option<usize> {
-    match response {
-        Ok(NetResponse::Ok) => Some(chunk_len),
-        Ok(NetResponse::Data(b)) if b.len() >= 4 => {
-            let mut arr = [0u8; 4];
-            arr.copy_from_slice(&b[..4]);
-            Some((u32::from_le_bytes(arr) as usize).min(chunk_len))
-        }
-        _ => None,
+/// A terminal operation is removed from kernel storage on successful take.
+/// The borrowed response must not outlive `reply`.
+pub(crate) fn take<'a>(op: Op, reply: &'a mut [u8; IPC_BUF_SIZE]) -> Option<Result<&'a [u8], IpcTerminal>> {
+    match ipc::take(op, reply) {
+        Ok(IpcTakeResult::Pending) => None,
+        Ok(IpcTakeResult::Terminal { status: IpcTerminal::Reply, len }) if len <= reply.len() => Some(Ok(&reply[..len])),
+        Ok(IpcTakeResult::Terminal { status, .. }) => Some(Err(status)),
+        Err(_) => Some(Err(IpcTerminal::Indeterminate)),
     }
 }
 
-pub(crate) fn map_tcp_recv_response(
-    response: Result<NetResponse<'_>, IpcError>,
-) -> Option<Option<&[u8]>> {
-    match response {
-        Ok(NetResponse::Data(data)) if !data.is_empty() => Some(Some(data)),
-        Ok(NetResponse::Ok) | Ok(NetResponse::Data(_)) => Some(None),
-        _ => None,
-    }
+pub(crate) fn net<'a>(reply: &'a [u8]) -> Option<NetResponse<'a>> {
+    api::ipc::decode(reply).ok()
 }
 
-pub(crate) fn tcp_send_all_with<F, Y>(data: &[u8], mut send_chunk: F, mut on_retry: Y) -> bool
-where
-    F: FnMut(&[u8]) -> Option<usize>,
-    Y: FnMut(),
-{
-    let mut sent = 0usize;
-    let mut zero_progress_retries = 0usize;
-    while sent < data.len() {
-        let chunk_len = (data.len() - sent).min(480);
-        let chunk = &data[sent..sent + chunk_len];
-        match send_chunk(chunk) {
-            Some(written) if written > 0 => {
-                sent += written.min(chunk_len);
-                zero_progress_retries = 0;
-            }
-            _ => {
-                zero_progress_retries += 1;
-                if zero_progress_retries >= TCP_SEND_ZERO_PROGRESS_RETRY_LIMIT {
-                    return false;
-                }
-                on_retry();
-            }
-        }
-    }
-    true
+pub(crate) fn vfs<'a>(reply: &'a [u8]) -> Option<VfsResponse<'a>> {
+    api::ipc::decode(reply).ok()
 }
 
-/// Create a listening TCP socket on `port`. Returns listen cap_id or None.
-pub fn tcp_listen(port: u16, net_ep: usize) -> Option<u32> {
-    let mut req = [0u8; IPC_BUF_SIZE];
-    let mut resp = [0u8; IPC_BUF_SIZE];
-    match net_call(net_ep, &NetRequest::TcpListen { port }, &mut req, &mut resp) {
-        Ok(NetResponse::CapId(c)) => Some(c),
-        _ => None,
-    }
+pub(crate) fn send_net(peer: usize, req: &NetRequest<'_>) -> Result<Op, IpcSubmitError> {
+    submit(peer, req)
 }
 
-/// Accept one incoming connection on `listen_cap`. Returns stream cap_id or None.
-pub fn tcp_accept(listen_cap: u32, net_ep: usize) -> Option<u32> {
-    let mut req = [0u8; IPC_BUF_SIZE];
-    let mut resp = [0u8; IPC_BUF_SIZE];
-    match net_call(
-        net_ep,
-        &NetRequest::TcpAccept { cap_id: listen_cap },
-        &mut req,
-        &mut resp,
-    ) {
-        Ok(NetResponse::CapId(c)) => Some(c),
-        _ => None,
-    }
+pub(crate) fn send_vfs(peer: usize, req: &VfsRequest<'_>) -> Result<Op, IpcSubmitError> {
+    submit(peer, req)
 }
 
-/// Send all of `data` to `cap` in ≤480-byte chunks (leaves room for IPC encoding overhead).
-pub fn tcp_send_all(cap: u32, net_ep: usize, data: &[u8]) -> bool {
-    let mut req = [0u8; IPC_BUF_SIZE];
-    let mut resp = [0u8; IPC_BUF_SIZE];
-    tcp_send_all_with(
-        data,
-        |chunk| {
-            decode_net_send_progress(
-                net_call(
-                    net_ep,
-                    &NetRequest::TcpSend {
-                        cap_id: cap,
-                        data: chunk,
-                    },
-                    &mut req,
-                    &mut resp,
-                ),
-                chunk.len(),
-            )
-        },
-        sys_yield,
-    )
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RequestReadError {
+    Incomplete,
+    BadRequest,
+    TooLarge,
 }
 
-const MAX_HTTP_REQUEST_BYTES: usize = 4096;
+pub(crate) const MAX_HTTP_REQUEST_BYTES: usize = 4096;
 
-/// Return the number of bytes needed for one complete HTTP request.
-///
-/// Headers without a `Content-Length` are complete at `\r\n\r\n` (the existing GET path). For
-/// bodies, retain the connection until the advertised bytes have arrived; TCP segmentation must
-/// not turn a valid POST into an empty prompt.
-pub(crate) fn request_complete_len(buf: &[u8]) -> Option<usize> {
-    let header_end = buf
-        .windows(4)
-        .position(|window| window == b"\r\n\r\n")?
-        .checked_add(4)?;
+/// Exactly one HTTP/1.1 request, never dispatch a partially received body.
+pub(crate) fn request_complete_len(buf: &[u8]) -> Result<Option<usize>, RequestReadError> {
+    let Some(header_end) = buf.windows(4).position(|part| part == b"\r\n\r\n") else {
+        return Ok(None);
+    };
+    let header_end = header_end + 4;
     let mut headers = [httparse::EMPTY_HEADER; 16];
     let mut request = httparse::Request::new(&mut headers);
-    request.parse(&buf[..header_end]).ok()?;
-    let body_len = request
-        .headers
-        .iter()
-        .find(|header| header.name.eq_ignore_ascii_case("Content-Length"))
-        .and_then(|header| core::str::from_utf8(header.value).ok())
-        .and_then(|value| value.trim().parse::<usize>().ok())
-        .unwrap_or(0);
-    header_end.checked_add(body_len)
-}
-
-/// Receive incoming HTTP request bytes until the complete request or 4096 bytes is reached.
-pub fn recv_request(cap: u32, net_ep: usize) -> Vec<u8> {
-    let mut buf: Vec<u8> = Vec::with_capacity(512);
-    let mut req = [0u8; IPC_BUF_SIZE];
-    let mut resp = [0u8; IPC_BUF_SIZE];
-    let recv_req = NetRequest::TcpRecv {
-        cap_id: cap,
-        buf_len: 256,
-    };
-    for _ in 0..200 {
-        if buf.len() >= MAX_HTTP_REQUEST_BYTES {
-            break;
+    if !matches!(request.parse(&buf[..header_end]), Ok(httparse::Status::Complete(_))) {
+        return Err(RequestReadError::BadRequest);
+    }
+    let mut body_len = None;
+    for header in request.headers.iter() {
+        if header.name.eq_ignore_ascii_case("Transfer-Encoding") {
+            return Err(RequestReadError::BadRequest);
         }
-        match map_tcp_recv_response(net_call(net_ep, &recv_req, &mut req, &mut resp)) {
-            Some(Some(data)) => {
-                buf.extend_from_slice(data);
-                let header_complete = buf.windows(4).any(|window| window == b"\r\n\r\n");
-                if let Some(expected_len) = request_complete_len(&buf) {
-                    if buf.len() >= expected_len {
-                        break;
-                    }
-                } else if header_complete {
-                    // Malformed headers are handed to httparse in the router for a 400 response.
-                    break;
-                }
+        if header.name.eq_ignore_ascii_case("Content-Length") {
+            if body_len.is_some() {
+                return Err(RequestReadError::BadRequest);
             }
-            Some(None) => {
-                sys_yield();
-            }
-            None => break,
+            let value = core::str::from_utf8(header.value).map_err(|_| RequestReadError::BadRequest)?;
+            body_len = Some(value.trim().parse::<usize>().map_err(|_| RequestReadError::BadRequest)?);
         }
     }
-    buf
+    let expected = header_end.checked_add(body_len.unwrap_or(0)).ok_or(RequestReadError::TooLarge)?;
+    if expected > MAX_HTTP_REQUEST_BYTES {
+        return Err(RequestReadError::TooLarge);
+    }
+    Ok(Some(expected))
 }
 
-/// Close a TCP connection.
-pub fn tcp_close(cap: u32, net_ep: usize) {
-    let mut req = [0u8; IPC_BUF_SIZE];
-    let mut resp = [0u8; IPC_BUF_SIZE];
-    let _ = net_call(
-        net_ep,
-        &NetRequest::TcpClose { cap_id: cap },
-        &mut req,
-        &mut resp,
-    );
-}
+#[cfg(test)]
+mod framing_tests {
+    use super::{request_complete_len, RequestReadError};
 
-/// List a VFS directory. Returns newline-separated names or empty.
-pub fn vfs_list_dir(path: &str, _vfs_ep: usize) -> Vec<u8> {
-    let mut vfs = VfsClient::new();
-    vfs.list_dir(path).unwrap_or_default()
+    #[test]
+    fn fragmented_header_and_body_remain_incomplete() {
+        let header = b"POST /api/infer HTTP/1.1\r\nContent-Length: 5\r\n\r\n";
+        assert_eq!(request_complete_len(&header[..header.len() - 1]), Ok(None));
+        assert_eq!(request_complete_len(header), Ok(Some(header.len() + 5)));
+        let mut partial = header.to_vec();
+        partial.extend_from_slice(b"abc");
+        assert_eq!(request_complete_len(&partial), Ok(Some(header.len() + 5)));
+    }
+
+    #[test]
+    fn conflicting_framing_never_dispatches() {
+        for header in [
+            b"POST / HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\nx".as_slice(),
+            b"POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n".as_slice(),
+            b"POST / HTTP/1.1\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\nx".as_slice(),
+            b"POST / HTTP/1.1\r\nContent-Length: -2\r\n\r\n".as_slice(),
+        ] {
+            assert_eq!(request_complete_len(header), Err(RequestReadError::BadRequest));
+        }
+    }
+
+    #[test]
+    fn oversized_or_overflowing_length_is_rejected_before_dispatch() {
+        let huge = b"POST / HTTP/1.1\r\nContent-Length: 18446744073709551615\r\n\r\n";
+        assert_eq!(request_complete_len(huge), Err(RequestReadError::TooLarge));
+        let big = b"POST / HTTP/1.1\r\nContent-Length: 4096\r\n\r\n";
+        assert_eq!(request_complete_len(big), Err(RequestReadError::TooLarge));
+    }
 }
