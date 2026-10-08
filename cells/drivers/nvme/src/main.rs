@@ -109,6 +109,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                     ostd::syscall::sys_exit(1)
                 }
             };
+            let _ = print_fmt(format_args!("[nvme] io buffer iova=0x{:x}\n", io_buf.iova()));
             let _ = print_fmt(format_args!(
                 "[nvme] DMA authorized for bus {} device {} function {}\n",
                 (bdf >> 8) & 0xFF,

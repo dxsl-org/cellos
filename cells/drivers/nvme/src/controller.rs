@@ -47,7 +47,19 @@ const NVM_OPC_WRITE: u8 = 0x01;
 const NVM_OPC_READ: u8 = 0x02;
 const NVM_OPC_FLUSH: u8 = 0x00;
 
-const POLL_WARN_ITERS: u64 = 1_000_000;
+/// Poll budget for a command that should complete in microseconds.
+///
+/// 1e6 was too short for what this driver actually waits on: a Flush is a host
+/// fsync, and on a loaded CI runner that can outlast a tight 1e6-iteration loop
+/// (~tens of ms). A timed-out command is not aborted - the device still posts
+/// its completion later - so giving up early wedged the queue for every command
+/// after it. The loop yields periodically so the budget is wall-clock time
+/// rather than a spin, and a late completion is now recognised by its CID.
+const POLL_WARN_ITERS: u64 = 50_000_000;
+
+/// Yield every this many polls so a long wait does not starve the rest of the
+/// system (the driver cell shares the machine with the VFS and the guest).
+const POLL_YIELD_EVERY: u64 = 8192;
 
 /// How many expected io rejections (reads past the namespace end) to log.
 static IO_ERR_LOG: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(3);
@@ -103,6 +115,9 @@ impl NvmeController {
                 break;
             }
             spin += 1;
+            if spin % POLL_YIELD_EVERY == 0 {
+                ostd::task::yield_now();
+            }
             if spin > POLL_WARN_ITERS {
                 let _ = print_fmt(format_args!(
                     "[nvme] reset wait failed: CSTS=0x{:x} never dropped RDY in {} polls\n",
@@ -149,6 +164,9 @@ impl NvmeController {
                 break;
             }
             spin += 1;
+            if spin % POLL_YIELD_EVERY == 0 {
+                ostd::task::yield_now();
+            }
             if spin > POLL_WARN_ITERS {
                 let _ = print_fmt(format_args!(
                     "[nvme] RDY wait failed: CSTS=0x{:x} never reached RDY in {} polls\n",
@@ -347,6 +365,19 @@ impl NvmeController {
             let phase_status =
                 unsafe { core::ptr::read_volatile(&(*self.admin.cq_entry(cq_head)).phase_status) };
             if (phase_status & 1 != 0) == expected_phase {
+                // Same guard as submit_io: skip a completion that belongs to a
+                // command whose submitter already timed out.
+                let done_cid =
+                    unsafe { core::ptr::read_volatile(&(*self.admin.cq_entry(cq_head)).cid) };
+                if done_cid != cid {
+                    let new_head = (cq_head + 1) % depth;
+                    if new_head == 0 {
+                        self.admin.cq_phase = !self.admin.cq_phase;
+                    }
+                    self.admin.cq_head = new_head as u16;
+                    self.ring_cq_head(0, self.admin.cq_head);
+                    continue;
+                }
                 let status = phase_status >> 1;
                 let new_head = (cq_head + 1) % depth;
                 if new_head == 0 {
@@ -365,6 +396,9 @@ impl NvmeController {
                 return Ok(());
             }
             iters += 1;
+            if iters % POLL_YIELD_EVERY == 0 {
+                ostd::task::yield_now();
+            }
             if iters == POLL_WARN_ITERS {
                 ostd::io::println(&alloc::format!(
                     "[nvme] admin timeout after {} polls",
@@ -405,6 +439,22 @@ impl NvmeController {
             let phase_status =
                 unsafe { core::ptr::read_volatile(&(*self.io.cq_entry(cq_head)).phase_status) };
             if (phase_status & 1 != 0) == expected_phase {
+                // The phase bit is written last, so a matching phase means the
+                // whole entry is visible - including the CID. A completion for a
+                // different command is one whose submitter already gave up
+                // (its own poll hit the budget); consume it so the queue keeps
+                // advancing instead of mis-attributing it to this command.
+                let done_cid =
+                    unsafe { core::ptr::read_volatile(&(*self.io.cq_entry(cq_head)).cid) };
+                if done_cid != cid {
+                    let new_head = (cq_head + 1) % depth;
+                    if new_head == 0 {
+                        self.io.cq_phase = !self.io.cq_phase;
+                    }
+                    self.io.cq_head = new_head as u16;
+                    self.ring_cq_head(1, self.io.cq_head);
+                    continue;
+                }
                 let status = phase_status >> 1;
                 let new_head = (cq_head + 1) % depth;
                 if new_head == 0 {
@@ -431,6 +481,9 @@ impl NvmeController {
                 return Ok(());
             }
             iters += 1;
+            if iters % POLL_YIELD_EVERY == 0 {
+                ostd::task::yield_now();
+            }
             if iters == POLL_WARN_ITERS {
                 // Never expected: an unanswered command is always worth a line,
                 // and the queue state is what says why the completion was never
