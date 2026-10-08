@@ -1,6 +1,5 @@
 //! Receiver-owned storage for deferred IPC delivery.
 
-use super::tcb::HOTSWAP_MSG_QUEUE_DEPTH;
 use alloc::vec::Vec;
 
 /// Kernel interrupt producers currently emit four- or nine-byte messages.
@@ -132,13 +131,18 @@ pub struct PendingMailbox {
 }
 
 impl PendingMailbox {
-    /// Create a mailbox with enough kernel-owned capacity for interrupt producers.
+    /// Create an empty mailbox.
+    ///
+    /// The container is deliberately *not* pre-reserved: `HOTSWAP_MSG_QUEUE_DEPTH`
+    /// records cost 6 656 bytes per task, and a parked cell never receives one, so
+    /// the reservation was pure per-cell overhead. It was also the allocation that
+    /// halted the capacity sweep at ~150 cells, because `Vec::with_capacity` is
+    /// infallible. `try_push` reserves fallibly on first use, charged to the
+    /// kernel — the same path the overflow case already takes.
     pub fn new() -> Self {
-        let previous_cell = super::hart_local::current_cell_id();
-        super::hart_local::set_current_cell_id(0);
-        let messages = Vec::with_capacity(HOTSWAP_MSG_QUEUE_DEPTH);
-        super::hart_local::set_current_cell_id(previous_cell);
-        Self { messages }
+        Self {
+            messages: Vec::new(),
+        }
     }
 
     pub fn len(&self) -> usize {

@@ -49,6 +49,7 @@ fn header(delivery_id: u64) -> IpcWireHeader {
         sender_cell_id: SENDER_CELL,
         sender_generation: SENDER_GENERATION,
         delivery_id,
+        async_op: 0,
     }
 }
 

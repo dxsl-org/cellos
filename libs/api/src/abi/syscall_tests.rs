@@ -14,6 +14,7 @@ mod tests {
         ProcessInfo, ProcessInfoV2, SyscallSet, ViFstatV1, ViMemInfoV1, ViSyscall,
         VI_FSTAT_ACCESS_READ, VI_FSTAT_ACCESS_WRITE, VI_FSTAT_KIND_CHARACTER,
         VI_FSTAT_KIND_DIRECTORY, VI_FSTAT_KIND_REGULAR, VI_FSTAT_V1_LEN,
+        ipc_status, IPC_STATUS_LEN, IPC_STATUS_VERSION,
     };
 
     /// All (id, expected_variant) pairs that must round-trip correctly.
@@ -184,7 +185,6 @@ mod tests {
         assert_eq!(ViSyscall::from(400), ViSyscall::Unknown);
         assert_eq!(ViSyscall::from(423), ViSyscall::RegisterUsbHidProducer);
         assert_eq!(ViSyscall::from(424), ViSyscall::FindPcieDeviceByVendor);
-        assert_eq!(ViSyscall::from(425), ViSyscall::Unknown);
     }
 
     #[test]
@@ -230,7 +230,9 @@ mod tests {
             (1u64 << 60) | (1u64 << 61) | (1u64 << 62)
         );
         assert_eq!(ViSyscall::from(255), ViSyscall::Rename);
-        assert_eq!(ViSyscall::from(256), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::from(256), ViSyscall::IpcSubmit);
+        assert_eq!(ViSyscall::from(261), ViSyscall::IpcReply);
+        assert_eq!(ViSyscall::from(262), ViSyscall::Unknown);
         assert!(
             CASES
                 .iter()
@@ -360,7 +362,7 @@ mod tests {
         // If a future opcode claims one of these numbers, drop it here and pick
         // another free one — id 9 was in this list until `SetTlsBase` took it
         // (ADR-0018's per-task TLS base), which is what broke this test.
-        let unassigned = [50, 99, 100, 108, 256, 999, usize::MAX];
+        let unassigned = [50, 99, 100, 108, 262, 999, usize::MAX];
         for id in unassigned {
             let got = ViSyscall::from(id);
             assert_eq!(
@@ -371,6 +373,33 @@ mod tests {
                 got
             );
         }
+    }
+
+    #[test]
+    fn ipc_opcodes_and_existing_authority_bits_are_stable() {
+        let calls = [
+            (256, ViSyscall::IpcSubmit, 0),
+            (257, ViSyscall::IpcTake, 1),
+            (258, ViSyscall::IpcWait, 1),
+            (259, ViSyscall::IpcCancel, 1),
+            (260, ViSyscall::IpcCurrent, 1),
+            (261, ViSyscall::IpcReply, 0),
+        ];
+        for (id, call, bit) in calls {
+            assert_eq!(ViSyscall::from(id), call);
+            assert_eq!(call.allowlist_bit(), Some(bit));
+        }
+    }
+
+    #[test]
+    fn ipc_status_encoding_is_fixed_width() {
+        assert_eq!(IPC_STATUS_LEN, 16);
+        assert_eq!(IPC_STATUS_VERSION, 1);
+        assert_eq!(ipc_status::REPLY, 0);
+        assert_eq!(ipc_status::PEER_GONE, 1);
+        assert_eq!(ipc_status::PRE_DISPATCH_TIMEOUT, 2);
+        assert_eq!(ipc_status::INDETERMINATE, 3);
+        assert_eq!(ipc_status::CANCELLED, 4);
     }
 
     #[test]

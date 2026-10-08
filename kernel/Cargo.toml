@@ -135,6 +135,12 @@ test-hooks = ["dep:qemu-exit", "hal/test-hooks"]
 x86-idt-cpl3-test = ["test-hooks", "hal/x86-idt-cpl3-test"]
 # Isolated x86 SVM NPF/MMIO decode fixture; does not enable the global test suite.
 x86-mmio-smoke = []
+# Diagnostic image: name the reason a `TrySend` admission was refused, with the
+# target's task state. A refused admission is how a bounded caller learns its
+# request never reached the service, and the state is what separates a healthy
+# service idling in a completion wait from one wedged behind a masked receive.
+# Rate-limited; never a shipped image.
+ipc-trace = []
 # Isolated RV64 boot path for the GetRandom SAS ownership fixture. Test-only;
 # exits QEMU before unrelated boot suites execute.
 getrandom-sas-test = ["native-domains", "test-hooks"]

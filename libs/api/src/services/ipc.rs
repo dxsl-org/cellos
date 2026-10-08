@@ -318,6 +318,68 @@ pub enum VfsResponse<'a> {
 
 // ── Network service ───────────────────────────────────────────────────────────
 
+/// Readiness interests and returned readiness bits. EOF and ERROR are always
+/// reported, even when they were not explicitly armed by the caller.
+pub mod net_ready {
+    pub const ACCEPT: u8 = 1;
+    pub const READ: u8 = 2;
+    pub const WRITE: u8 = 4;
+    pub const EOF: u8 = 8;
+    pub const ERROR: u8 = 16;
+}
+
+/// Packed TCP readiness record: cap_id (u32 LE) followed by one flags byte.
+/// Unlike borrowed structured slices, `&[u8]` deserializes without allocating.
+pub const NET_READY_RECORD_BYTES: usize = 5;
+
+/// Attested-owner-scoped TCP interest; cap ids are validated by the net cell.
+#[derive(Debug, Clone, Copy)]
+pub struct TcpInterest {
+    pub cap_id: u32,
+    pub mask: u8,
+}
+
+/// One level-triggered socket result within a paginated readiness batch.
+#[derive(Debug, Clone, Copy)]
+pub struct TcpReadyEvent {
+    pub cap_id: u32,
+    pub ready: u8,
+}
+
+impl TcpInterest {
+    pub fn decode(record: &[u8]) -> Option<Self> {
+        if record.len() != NET_READY_RECORD_BYTES { return None; }
+        Some(Self {
+            cap_id: u32::from_le_bytes(record[..4].try_into().ok()?),
+            mask: record[4],
+        })
+    }
+}
+
+impl TcpReadyEvent {
+    pub fn decode(record: &[u8]) -> Option<Self> {
+        if record.len() != NET_READY_RECORD_BYTES { return None; }
+        Some(Self {
+            cap_id: u32::from_le_bytes(record[..4].try_into().ok()?),
+            ready: record[4],
+        })
+    }
+}
+
+/// Pack interests into caller-owned storage for `NetRequest::TcpReady`.
+pub fn encode_tcp_interests<'a>(
+    interests: &[TcpInterest],
+    output: &'a mut [u8],
+) -> Option<&'a [u8]> {
+    let len = interests.len().checked_mul(NET_READY_RECORD_BYTES)?;
+    if output.len() < len { return None; }
+    for (interest, chunk) in interests.iter().zip(output[..len].chunks_exact_mut(NET_READY_RECORD_BYTES)) {
+        chunk[..4].copy_from_slice(&interest.cap_id.to_le_bytes());
+        chunk[4] = interest.mask;
+    }
+    Some(&output[..len])
+}
+
 /// Requests sent to the network service (`/bin/net`).
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NetRequest<'a> {
@@ -387,6 +449,24 @@ pub enum NetRequest<'a> {
     L2Recv {
         guest_mac: [u8; 6],
     },
+    /// Return up to one bounded page of level-triggered readiness. `cursor`
+    /// rotates the scan start across `interests`; 0 is a valid initial cursor.
+    /// `interests` is a packed sequence of five-byte records
+    /// `[cap_id:u32 LE, mask:u8]`; at most 256 records per request.
+    /// `wait=true` retains one owner-generation-scoped batch until ready or
+    /// a bounded deadline; `wait=false` returns an immediate level snapshot.
+    TcpReady {
+        interests: &'a [u8],
+        cursor: u16,
+        wait: bool,
+    },
+    /// Explicit no-data / EOF TCP read, unlike legacy TcpRecv's empty Data.
+    TcpRecvReady { cap_id: u32, buf_len: u32 },
+    /// Explicit partial progress / not-ready / EOF TCP send.
+    TcpSendReady { cap_id: u32, data: &'a [u8] },
+    /// Queue FIN after accepted TCP output; net reclaims at terminal/deadline.
+    /// Legacy TcpClose remains an immediate abort and is unchanged.
+    TcpCloseGraceful { cap_id: u32 },
 }
 
 /// Responses from the network service.
@@ -398,6 +478,13 @@ pub enum NetResponse<'a> {
     State(u8),
     Ok,
     Err(u8),
+    TcpReady {
+        events: &'a [u8],
+        next_cursor: u16,
+    },
+    NotReady,
+    Eof,
+    WriteProgress(u32),
 }
 
 // ── Input service ─────────────────────────────────────────────────────────────

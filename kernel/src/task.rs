@@ -105,6 +105,7 @@ pub mod ipc_pending_selftest;
 pub mod ipc_test;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod path_selftest;
+pub mod async_ipc;
 pub mod pending_mailbox;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod retirement_selftest;
@@ -1966,7 +1967,7 @@ pub fn file_write(fd: usize, buf: &[u8]) -> usize {
     if fd == 1 || fd == 2 {
         // Stdout/Stderr
         if let Ok(s) = core::str::from_utf8(buf) {
-            crate::task::print_user_log(s);
+            crate::task::print_user_log(s, crate::task::current_task_id());
             return buf.len();
         }
         return 0;
@@ -2212,6 +2213,7 @@ pub fn ipc_send_kernel(
             sender_cell_id,
             sender_generation,
             delivery_id: next_delivery_id(),
+            async_op: 0,
         }
     };
     let wire_msg =
@@ -2233,6 +2235,16 @@ pub fn ipc_send_kernel(
     let recv_eligible =
         matches!(target.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id);
     let target_frozen = matches!(target.state, TaskState::Frozen { .. });
+    // A target already blocked sending *to this caller* is the other half of a
+    // send cycle: it cannot consume this message until its own send completes,
+    // and its own send completes only once this caller returns to receive.
+    // Parking here would strand both cells (the board's Net Cell and its NIC
+    // driver did exactly that, and the liveness heartbeat then killed the Net
+    // Cell every ~1 s). Queueing is safe instead: the message is owned by the
+    // receiver's mailbox, so the target consumes it as soon as its own send
+    // lands, and the caller is free to receive the message that unblocks it.
+    let target_sending_to_caller =
+        matches!(target.state, TaskState::Sending { target: peer, .. } if peer == caller_id);
     let wake = if let Some(target) = sched.tasks.get_mut(&target_id) {
         queue_wire_msg(target, wire_msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
             .map_err(|_| IpcSendError::Backpressure)?;
@@ -2240,7 +2252,7 @@ pub fn ipc_send_kernel(
     } else {
         IpcWakeCause::None
     };
-    if target_frozen {
+    if target_frozen || target_sending_to_caller {
         return Ok(0);
     }
     if wake.made_runnable() {
@@ -2303,6 +2315,7 @@ pub fn ipc_post_nonblock(
             sender_cell_id,
             sender_generation,
             delivery_id: next_delivery_id(),
+            async_op: 0,
         };
         let wire = ipc_wire::IpcWireMessage::try_new(header, msg)?;
         let wake = if let Some(target) = sched.tasks.get_mut(&target_id) {
@@ -2363,6 +2376,7 @@ pub fn ipc_recv(
         let header = wire.header;
         let snapshot = wire.try_clone()?;
         let receiver_view = copy_glue::TaskCopyView::of(receiver_task);
+        async_ipc::dispatch(sched, caller_id, header);
         (sender_id, header, snapshot, receiver_view)
     };
 
@@ -2391,6 +2405,7 @@ pub fn ipc_recv(
             header.sender_cell_id,
             header.sender_generation,
         );
+        receiver_task.set_received_async_op(sender_id, header.async_op);
     }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(sender_id)
@@ -2449,6 +2464,10 @@ pub fn ipc_recv_kernel(
         );
         (sender_id, header, len)
     };
+    async_ipc::dispatch(sched, caller_id, header);
+    if let Some(receiver) = sched.tasks.get_mut(&caller_id) {
+        receiver.set_received_async_op(sender_id, header.async_op);
+    }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(Some((sender_id, len)))
 }
@@ -2462,8 +2481,8 @@ pub fn ipc_try_recv(
     // Peek without removal: identical commit contract to ipc_recv, but
     // non-blocking — no matching record yields Ok(0).
     let (sender_id, header, snapshot, receiver_view) = {
-        let guard = SCHEDULER.lock();
-        let sched = guard.as_ref().ok_or(())?;
+        let mut guard = SCHEDULER.lock();
+        let sched = guard.as_mut().ok_or(())?;
         let slot = sched
             .tasks
             .get(&caller_id)
@@ -2483,6 +2502,7 @@ pub fn ipc_try_recv(
         let header = wire.header;
         let snapshot = wire.try_clone()?;
         let receiver_view = copy_glue::TaskCopyView::of(receiver_task);
+        async_ipc::dispatch(sched, caller_id, header);
         (sender_id, header, snapshot, receiver_view)
     };
 
@@ -2509,6 +2529,7 @@ pub fn ipc_try_recv(
             header.sender_cell_id,
             header.sender_generation,
         );
+        receiver_task.set_received_async_op(sender_id, header.async_op);
     }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(sender_id)
@@ -2555,6 +2576,72 @@ fn is_trusted_input_sender(caller_id: usize) -> bool {
         || (caller_id == compositor_tid && compositor_tid != 0)
 }
 
+/// Report a refused `TrySend` admission (`ipc-trace` images).
+///
+/// A refused admission is how a bounded caller (`service_call_bounded` retrying
+/// `sys_try_send` until its deadline) learns the request never reached the
+/// service. The target's state is what separates a healthy service that idles in
+/// a completion wait from one wedged behind a masked receive, so it is printed
+/// with the reason. Rate-limited per `(caller, target)` pair — one hot pair must
+/// not consume another pair's budget, and the admission loop retries thousands
+/// of times per deadline while the console is a 115200-baud UART.
+#[cfg(feature = "ipc-trace")]
+fn trace_try_send_refusal(caller_id: usize, target_id: usize, reason: &str, state: &str) {
+    use core::sync::atomic::{AtomicU64, Ordering};
+
+    /// Distinct `(caller, target)` pairs tracked before falling back to one
+    /// shared counter.
+    const PAIRS: usize = 6;
+    /// High 32 bits: refusals seen. Low 32 bits: `caller<<16 | target`; 0 is
+    /// unclaimed, so a tid of 0 must never be a trace key (it never is: task ids
+    /// start at 1).
+    const EMPTY: AtomicU64 = AtomicU64::new(0);
+    static SLOTS: [AtomicU64; PAIRS] = [EMPTY; PAIRS];
+
+    let key = (((caller_id as u64) & 0xffff) << 16) | ((target_id as u64) & 0xffff);
+    let mut count = 0u64;
+    let mut tracked = false;
+    for slot in SLOTS.iter() {
+        let current = slot.load(Ordering::Relaxed);
+        if current & 0xffff_ffff == key {
+            count = (current >> 32) + 1;
+            slot.store((count << 32) | key, Ordering::Relaxed);
+            tracked = true;
+            break;
+        }
+    }
+    if !tracked {
+        for slot in SLOTS.iter() {
+            if slot
+                .compare_exchange(0, (1u64 << 32) | key, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok()
+            {
+                count = 1;
+                tracked = true;
+                break;
+            }
+        }
+    }
+    if !tracked {
+        static OVERFLOW: AtomicU64 = AtomicU64::new(0);
+        count = OVERFLOW.fetch_add(1, Ordering::Relaxed) + 1;
+    }
+    if count <= 4 || count % 4096 == 0 {
+        log::info!(
+            "[ipc-trace] try_send refused n={} caller={} target={} reason={} state={}",
+            count,
+            caller_id,
+            target_id,
+            reason,
+            state
+        );
+    }
+}
+
+/// No-op without `ipc-trace`.
+#[cfg(not(feature = "ipc-trace"))]
+fn trace_try_send_refusal(_caller_id: usize, _target_id: usize, _reason: &str, _state: &str) {}
+
 pub fn ipc_try_send(
     caller_id: usize,
     target_id: usize,
@@ -2563,39 +2650,49 @@ pub fn ipc_try_send(
 ) -> core::result::Result<(), ()> {
     enum TrySendAction {
         Publish(copy_glue::TaskCopyView),
-        Reject,
+        /// Refused before delivery: the reason, and the target's state.
+        Reject(&'static str, &'static str),
     }
 
     let action = {
         let guard = SCHEDULER.lock();
         let sched = guard.as_ref().ok_or(())?;
-        if !sched.tasks.contains_key(&target_id)
-            || paused_target_rejects(sched, caller_id, target_id)
-        {
-            return Err(());
-        }
-        if msg_len > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
-            return Err(());
-        }
-        let target_ready = sched
-            .tasks
-            .get(&target_id)
-            .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
-            .unwrap_or(false);
-        if target_ready || is_trusted_input_sender(caller_id) {
-            let caller_view = sched
-                .tasks
-                .get(&caller_id)
-                .map(|t| copy_glue::TaskCopyView::of(t))
-                .ok_or(())?;
-            TrySendAction::Publish(caller_view)
+        if !sched.tasks.contains_key(&target_id) {
+            TrySendAction::Reject("target-missing", "gone")
+        } else if paused_target_rejects(sched, caller_id, target_id) {
+            TrySendAction::Reject("paused", "paused")
+        } else if msg_len > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
+            TrySendAction::Reject("payload-too-big", "n/a")
         } else {
-            TrySendAction::Reject
+            let target_ready = sched
+                .tasks
+                .get(&target_id)
+                .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
+                .unwrap_or(false);
+            if target_ready || is_trusted_input_sender(caller_id) {
+                let caller_view = sched
+                    .tasks
+                    .get(&caller_id)
+                    .map(|t| copy_glue::TaskCopyView::of(t))
+                    .ok_or(())?;
+                TrySendAction::Publish(caller_view)
+            } else {
+                let state = sched
+                    .tasks
+                    .get(&target_id)
+                    .map(|t| tcb::task_state_name(&t.state))
+                    .unwrap_or("gone");
+                TrySendAction::Reject("not-recv", state)
+            }
         }
     };
 
-    let TrySendAction::Publish(caller_view) = action else {
-        return Err(());
+    let caller_view = match action {
+        TrySendAction::Publish(caller_view) => caller_view,
+        TrySendAction::Reject(reason, state) => {
+            trace_try_send_refusal(caller_id, target_id, reason, state);
+            return Err(());
+        }
     };
     let msg_bytes = caller_view.read_bytes(msg_ptr, msg_len).map_err(|_| ())?;
     let mut guard = SCHEDULER.lock();
@@ -2604,6 +2701,13 @@ pub fn ipc_try_send(
     // released. A sender outside the trusted input route that raced a target
     // leaving Recv must be rejected; trusted input-route senders queue regardless.
     if !sched.tasks.contains_key(&target_id) || paused_target_rejects(sched, caller_id, target_id) {
+        let reason = if sched.tasks.contains_key(&target_id) {
+            "paused-revalidate"
+        } else {
+            "target-missing-revalidate"
+        };
+        drop(guard);
+        trace_try_send_refusal(caller_id, target_id, reason, "n/a");
         return Err(());
     }
     let recv_eligible = sched
@@ -2612,6 +2716,13 @@ pub fn ipc_try_send(
         .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
         .unwrap_or(false);
     if !recv_eligible && !is_trusted_input_sender(caller_id) {
+        let state = sched
+            .tasks
+            .get(&target_id)
+            .map(|t| tcb::task_state_name(&t.state))
+            .unwrap_or("gone");
+        drop(guard);
+        trace_try_send_refusal(caller_id, target_id, "not-recv-revalidate", state);
         return Err(());
     }
     let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
@@ -2620,6 +2731,7 @@ pub fn ipc_try_send(
         sender_cell_id,
         sender_generation,
         delivery_id: next_delivery_id(),
+        async_op: 0,
     };
     let wire = ipc_wire::IpcWireMessage::try_new(header, &msg_bytes)?;
     let wake = if let Some(target) = sched.tasks.get_mut(&target_id) {
@@ -2811,16 +2923,15 @@ pub fn read_log_ring(buf: &mut [u8]) -> usize {
     LOG_RING.lock().drain(buf)
 }
 
-/// Tracks whether the console cursor is at the start of a line, so the "USER: "
-/// prefix is emitted ONCE per line rather than once per `sys_log` call. Without
-/// this, `print()` (no trailing newline — used for the shell prompt and per-key
-/// echo) would force a prefix+newline on every byte, so typing "help" rendered as
-/// four "USER: h/e/l/p" lines instead of an inline "USER: help".
-static USER_LOG_AT_LINE_START: core::sync::atomic::AtomicBool =
-    core::sync::atomic::AtomicBool::new(true);
-
-pub fn print_user_log(msg: &str) {
-    use core::sync::atomic::Ordering;
+/// Write one Cell record to the console, owned by `writer`.
+///
+/// `writer` is the calling task's id, handed to
+/// [`drivers::uart::write_user_record`](crate::task::drivers::uart::write_user_record)
+/// as the console line's owner. The guest's shell echo is the case that matters:
+/// it arrives one `sys_log` per keypress from the hypervisor, so a diagnostic
+/// from another cell used to be spliced into the middle of the command being
+/// typed.
+pub fn print_user_log(msg: &str, writer: usize) {
     // USER stdout must ALWAYS reach the console, independent of the kernel log
     // level — it is cell application output, not kernel debug chatter. Writing
     // straight to the UART (not via info!) lets us quiet boot-time kernel Info
@@ -2835,24 +2946,7 @@ pub fn print_user_log(msg: &str) {
     // them via ReadLog without reconstructing the UART prefix logic.
     LOG_RING.lock().push(msg.as_bytes());
 
-    let mut rest = msg;
-    while !rest.is_empty() {
-        if USER_LOG_AT_LINE_START.load(Ordering::Relaxed) {
-            crate::task::drivers::uart::write_console("USER: ");
-            USER_LOG_AT_LINE_START.store(false, Ordering::Relaxed);
-        }
-        match rest.find('\n') {
-            Some(i) => {
-                crate::task::drivers::uart::write_console(&rest[..=i]);
-                USER_LOG_AT_LINE_START.store(true, Ordering::Relaxed);
-                rest = &rest[i + 1..];
-            }
-            None => {
-                crate::task::drivers::uart::write_console(rest);
-                rest = "";
-            }
-        }
-    }
+    crate::task::drivers::uart::write_user_record(writer, msg);
 }
 
 /// Spawns a synthetic task for testing User Mode without filesystem

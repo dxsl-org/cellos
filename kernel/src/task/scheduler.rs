@@ -1321,6 +1321,8 @@ impl Scheduler {
         for id in to_wake {
             self.push_ready(id);
         }
+        super::async_ipc::owner_died(self, tid, dead_caller.0, dead_caller.1);
+        super::async_ipc::peer_died(self, tid, dead_caller.0, dead_caller.1);
 
         // Deliver NotifyOnExit death notifications. The subscriber map, its
         // nested vectors, and pending-death storage are scheduler-owned. Their
@@ -1612,6 +1614,7 @@ impl Scheduler {
                 self.last_global_sweep_tick = now;
             }
 
+            super::async_ipc::expire(self, now as u64);
             // 1. Wake tasks whose deadline elapsed: Sleeping (timer) and RecvTimeout
             //    (a Recv with a deadline). Without the RecvTimeout sweep a cell that
             //    RecvTimeout's a peer that never replies would block forever — the
@@ -1675,6 +1678,12 @@ impl Scheduler {
                             should_wake = true;
                             timed_out = true;
                         }
+                    }
+                    TaskState::WaitIpc { deadline }
+                        if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
+                    {
+                        task.trap_frame.regs[10] = 0;
+                        should_wake = true;
                     }
                     TaskState::WaitCompletion {
                         source, deadline, ..

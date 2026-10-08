@@ -155,6 +155,7 @@ pub fn run_primary(harts: usize) {
             sender_cell_id: 0,
             sender_generation: 0,
             delivery_id: 0,
+            async_op: 0,
         },
         &[],
     )

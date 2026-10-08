@@ -26,6 +26,8 @@ pub struct IpcWireHeader {
     pub sender_cell_id: u64,
     pub sender_generation: u64,
     pub delivery_id: u64,
+    /// Exact async operation token, or zero for every legacy send.
+    pub async_op: usize,
 }
 
 /// Owned kernel buffer representing an in-flight IPC message. The payload is
@@ -57,6 +59,28 @@ impl IpcWireMessage {
         result.map(|payload| Self { header, payload })
     }
 
+    /// Construct a kernel-owned wire record directly from a caller's copy view
+    /// without a second heap allocation or an intermediate payload copy.
+    pub(crate) fn try_from_user(
+        header: IpcWireHeader,
+        view: &super::copy_glue::TaskCopyView,
+        ptr: usize,
+        len: usize,
+    ) -> Result<Self, ()> {
+        if len > MAX_IPC_WIRE_PAYLOAD { return Err(()); }
+        let previous_cell = super::hart_local::current_cell_id();
+        super::hart_local::set_current_cell_id(0);
+        let allocated = (|| {
+            let mut vec = Vec::new();
+            vec.try_reserve_exact(len).map_err(|_| ())?;
+            vec.resize(len, 0);
+            Ok(vec.into_boxed_slice())
+        })();
+        super::hart_local::set_current_cell_id(previous_cell);
+        let mut message = Self { header, payload: allocated? };
+        view.read_into(ptr, message.as_mut_slice())?;
+        Ok(message)
+    }
     /// Length of payload in bytes.
     #[inline]
     pub fn len(&self) -> usize {
@@ -73,6 +97,10 @@ impl IpcWireMessage {
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
         &self.payload
+    }
+    /// Kernel-owned reply storage reserved before an async request is accepted.
+    pub(crate) fn as_mut_slice(&mut self) -> &mut [u8] {
+        &mut self.payload
     }
 
     /// Fallibly duplicate this message. Unlike `Clone`, allocation failure is

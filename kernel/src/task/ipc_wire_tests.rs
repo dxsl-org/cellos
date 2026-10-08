@@ -9,6 +9,7 @@ fn wire_message_bounds() {
         sender_cell_id: 10,
         sender_generation: 1,
         delivery_id: 7,
+        async_op: 0,
     };
     let small_payload = [0xabu8; 128];
     let msg =

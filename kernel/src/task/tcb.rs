@@ -106,6 +106,8 @@ pub enum TaskState {
         source: u32,
         deadline: Option<u64>,
     },
+    /// Parked only when there is no retained terminal async RPC result.
+    WaitIpc { deadline: Option<u64> },
     /// Cell is suspended during a hot-swap sequence identified by `swap_id`.
     ///
     /// Invariants while Frozen:
@@ -126,6 +128,33 @@ pub enum TaskState {
     WaitIrq {
         irq: u8,
     },
+}
+
+/// Short name for a task state, for admission-failure diagnostics.
+///
+/// The scheduler already has `TaskState` as a value everywhere an admission is
+/// decided; a name is what a log line needs, and `Debug` would print the whole
+/// payload (buffer pointers, deadlines) into a console line.
+pub fn task_state_name(state: &TaskState) -> &'static str {
+    match state {
+        TaskState::Ready => "ready",
+        TaskState::Running => "running",
+        TaskState::Sleeping { .. } => "sleeping",
+        TaskState::Sending { .. } => "sending",
+        TaskState::Recv { .. } => "recv",
+        TaskState::Terminated => "terminated",
+        TaskState::Retiring => "retiring",
+        TaskState::PipeRead { .. } => "pipe-read",
+        TaskState::PipeWrite { .. } => "pipe-write",
+        TaskState::FutexWait { .. } => "futex-wait",
+        TaskState::Waiting { .. } => "waiting",
+        TaskState::Polling => "polling",
+        TaskState::WaitEvent { .. } => "wait-event",
+        TaskState::WaitCompletion { .. } => "wait-completion",
+        TaskState::WaitIpc { .. } => "wait-ipc",
+        TaskState::Frozen { .. } => "frozen",
+        TaskState::WaitIrq { .. } => "wait-irq",
+    }
 }
 
 /// The address-space binding is fixed before a task can enter a ready queue.
@@ -257,6 +286,10 @@ pub struct Task {
     pub current_caller_request_generation: u64,
     /// Next request generation to assign when this task accepts a sender.
     next_caller_request_generation: u64,
+    /// Exact request token last received, zero for a legacy request.
+    pub current_async_op: usize,
+    /// Kernel-owned bounded async RPC storage; no borrowed user pointers.
+    pub async_operations: super::async_ipc::Operations,
     // Last Reply Value received
     pub reply_value: Option<usize>,
     // Current Working Directory
@@ -575,6 +608,8 @@ impl Task {
             current_caller_cell_generation: 0,
             current_caller_request_generation: 0,
             next_caller_request_generation: 1,
+            current_async_op: 0,
+            async_operations: super::async_ipc::Operations::new(),
             reply_value: None,
             cwd: String::from("/"),
             kernel_stack: None,
@@ -746,6 +781,7 @@ impl Task {
         self.current_caller_cell_generation = sender_generation;
         self.current_caller_request_generation = self.next_caller_request_generation;
         self.next_caller_request_generation = self.next_caller_request_generation.saturating_add(1);
+        self.current_async_op = 0;
     }
 
     pub fn set_received_caller_context(
@@ -763,6 +799,12 @@ impl Task {
             return;
         }
         self.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
+    }
+
+    pub fn set_received_async_op(&mut self, sender_tid: usize, token: usize) {
+        if self.current_caller == Some(sender_tid) {
+            self.current_async_op = token;
+        }
     }
 
     /// Drop VFS's public request context and return the exact lease identity
@@ -796,6 +838,7 @@ impl Task {
         self.current_caller_cell_id = 0;
         self.current_caller_cell_generation = 0;
         self.current_caller_request_generation = 0;
+        self.current_async_op = 0;
     }
 
     pub fn clear_current_caller_context_if(

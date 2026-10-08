@@ -1515,6 +1515,32 @@ pub enum SyscallError {
     OutOfMemory,
 }
 
+fn ipc_error(error: super::async_ipc::Failure) -> SyscallError {
+    match error {
+        super::async_ipc::Failure::Busy => SyscallError::TryAgain,
+        super::async_ipc::Failure::PeerGone => SyscallError::FileNotFound,
+        super::async_ipc::Failure::Invalid => SyscallError::InvalidInput,
+        super::async_ipc::Failure::TooSmall => SyscallError::BufferTooSmall,
+    }
+}
+
+fn encode_ipc_result(result: SyscallResult) -> usize {
+    match result {
+        Ok(value) => value,
+        Err(SyscallError::TryAgain) => usize::MAX - 1,
+        Err(SyscallError::FileNotFound) => usize::MAX - 2,
+        Err(SyscallError::InvalidInput | SyscallError::InvalidCommand) => usize::MAX - 3,
+        Err(SyscallError::BufferTooSmall) => usize::MAX - 4,
+        Err(_) => usize::MAX,
+    }
+}
+
+fn is_ipc_operation(syscall: &Syscall) -> bool {
+    matches!(syscall, Syscall::IpcSubmit { .. } | Syscall::IpcTake { .. }
+        | Syscall::IpcWait { .. } | Syscall::IpcCancel { .. }
+        | Syscall::IpcCurrent | Syscall::IpcReply { .. })
+}
+
 /// Encode the additive spawn-OOM result while preserving all other legacy errors.
 fn encode_syscall_result(
     result: SyscallResult,
@@ -2489,6 +2515,23 @@ pub(super) fn snapshot_resume(task: &super::Task, mask: usize) -> Result<ResumeS
     })
 }
 
+/// Bind the dispatch boundary while the receive snapshot owns the scheduler
+/// lock, before an independent caller can cancel and remove the queued record.
+fn snapshot_resume_dispatched(
+    sched: &mut super::scheduler::Scheduler,
+    caller_id: usize,
+    mask: usize,
+) -> Result<ResumeSnapshot, ()> {
+    let snap = match sched.tasks.get(&caller_id) {
+        Some(task) => snapshot_resume(task, mask)?,
+        None => ResumeSnapshot::Wake { sender_tid: 0 },
+    };
+    if let ResumeSnapshot::Message { wire_header: Some(header), .. } = &snap {
+        super::async_ipc::dispatch(sched, caller_id, *header);
+    }
+    Ok(snap)
+}
+
 /// Commit the exact event that was peeked by `snapshot_resume`.
 /// Must be called under the scheduler lock with the same `task`.
 pub(super) fn commit_resume(task: &mut super::Task, snap: &ResumeSnapshot) {
@@ -3238,6 +3281,12 @@ pub enum Syscall {
         msg_ptr: usize,
         msg_len: usize,
     },
+    IpcSubmit { target: usize, ptr: usize, len: usize },
+    IpcTake { token: usize, ptr: usize, len: usize, status_ptr: usize },
+    IpcWait { ticks: u64 },
+    IpcCancel { token: usize },
+    IpcCurrent,
+    IpcReply { token: usize, ptr: usize, len: usize },
     /// 4: TrySend (Non-blocking send — drops if target not in Recv)
     TrySend {
         target: usize,
@@ -3800,6 +3849,12 @@ fn syscall_allowlist_for(caller_id: usize) -> Option<u64> {
 fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
     use api::syscall::ViSyscall as V;
     Some(match syscall {
+        Syscall::IpcSubmit { .. } => V::IpcSubmit,
+        Syscall::IpcTake { .. } => V::IpcTake,
+        Syscall::IpcWait { .. } => V::IpcWait,
+        Syscall::IpcCancel { .. } => V::IpcCancel,
+        Syscall::IpcCurrent => V::IpcCurrent,
+        Syscall::IpcReply { .. } => V::IpcReply,
         Syscall::Send { .. } => V::Send,
         Syscall::TrySend { .. } => V::TrySend,
         Syscall::Recv { .. } => V::Recv,
@@ -4053,6 +4108,19 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
     match syscall {
         // --- Hubris ABI Implementation ---
+        Syscall::IpcSubmit { target, ptr, len } =>
+            super::async_ipc::submit(caller_id, target, ptr, len).map_err(ipc_error),
+        Syscall::IpcTake { token, ptr, len, status_ptr } =>
+            super::async_ipc::take(caller_id, token, ptr, len, status_ptr)
+                .map(|done| usize::from(done)).map_err(ipc_error),
+        Syscall::IpcWait { ticks } =>
+            super::async_ipc::wait(caller_id, ticks)
+                .map(|ready| usize::from(ready)).map_err(ipc_error),
+        Syscall::IpcCancel { token } =>
+            super::async_ipc::cancel(caller_id, token).map(|()| 0).map_err(ipc_error),
+        Syscall::IpcCurrent => Ok(super::async_ipc::current(caller_id)),
+        Syscall::IpcReply { token, ptr, len } =>
+            super::async_ipc::reply(caller_id, token, ptr, len).map(|()| 0).map_err(ipc_error),
         Syscall::Send {
             target,
             msg_ptr,
@@ -4066,6 +4134,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 VfsGrantLookup::Active(context) => Some(context),
                 VfsGrantLookup::NotVfs | VfsGrantLookup::MissingContext => None,
             };
+            if let Some(outcome) = super::async_ipc::reply_current(caller_id, target, msg_ptr, msg_len) {
+                let out = outcome.map(|()| 0).map_err(ipc_error);
+                finish_vfs_send_release(caller_id, target, vfs_release);
+                return out;
+            }
             let res = super::ipc_send(caller_id, target, msg_ptr, msg_len);
             let out = match res {
                 Ok(0) => Ok(0),
@@ -4193,15 +4266,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         Some(header) => (header.sender_cell_id, header.sender_generation),
                         None => sender_cell_context_in_sched(sched, sender_tid),
                     };
-                    Ok(Some((
-                        pos,
-                        sender_tid,
-                        sender_cell_id,
-                        sender_generation,
-                        wire_header,
-                        caller_view,
-                        data,
-                    )))
+                    let info = (
+                        pos, sender_tid, sender_cell_id, sender_generation,
+                        wire_header, caller_view, data,
+                    );
+                    if let Some(header) = wire_header {
+                        super::async_ipc::dispatch(sched, caller_id, header);
+                    }
+                    Ok(Some(info))
                 })
             };
             let (
@@ -4222,15 +4294,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                             // Peek the next event without removing it,
                             // copy payload, then commit the exact record.
                             let snap = {
-                                let guard = super::SCHEDULER.lock();
-                                guard.as_ref().map_or(
+                                let mut guard = super::SCHEDULER.lock();
+                                guard.as_mut().map_or(
                                     Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
-                                    |sched| {
-                                        sched.tasks.get(&caller_id).map_or(
-                                            Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
-                                            |task| snapshot_resume(task, mask),
-                                        )
-                                    },
+                                    |sched| snapshot_resume_dispatched(sched, caller_id, mask),
                                 )
                             };
                             let snap = match snap {
@@ -4279,6 +4346,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                                         sender_tid,
                                         sender_cell_id,
                                         sender_generation,
+                                        wire_header,
                                         ..
                                     } = &snap
                                     {
@@ -4286,6 +4354,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                                             *sender_tid,
                                             *sender_cell_id,
                                             *sender_generation,
+                                        );
+                                        task.set_received_async_op(
+                                            *sender_tid,
+                                            wire_header.map_or(0, |header| header.async_op),
                                         );
                                     }
                                 }
@@ -4325,6 +4397,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         t.pending_msgs.remove(pos);
                     }
                     t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
+                    t.set_received_async_op(
+                        sender_tid, wire_header.map_or(0, |header| header.async_op));
                 }
                 if let Some(header) = wire_header {
                     super::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -4450,6 +4524,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         return Err(());
                     }
                     tmp.extend_from_slice(record.payload());
+                    if let Some(header) = wire_header {
+                        super::async_ipc::dispatch(sched, caller_id, header);
+                    }
                     Ok(Some((pos, sender_tid, wire_header, tmp)))
                 })
             };
@@ -4478,6 +4555,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                             header.sender_cell_id,
                             header.sender_generation,
                         );
+                        t.set_received_async_op(sender_tid, header.async_op);
                     }
                 }
                 if let Some(header) = wire_header {
@@ -4529,15 +4607,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         Some(header) => (header.sender_cell_id, header.sender_generation),
                         None => sender_cell_context_in_sched(sched, sender_tid),
                     };
-                    Ok(Some((
-                        pos,
-                        sender_tid,
-                        sender_cell_id,
-                        sender_generation,
-                        wire_header,
-                        caller_view,
-                        data,
-                    )))
+                    let info = (
+                        pos, sender_tid, sender_cell_id, sender_generation,
+                        wire_header, caller_view, data,
+                    );
+                    if let Some(header) = wire_header {
+                        super::async_ipc::dispatch(sched, caller_id, header);
+                    }
+                    Ok(Some(info))
                 })
             };
             finish_vfs_context_drop(caller_id, vfs_context_drop);
@@ -4572,15 +4649,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                             // Yield so the scheduler runs other tasks and can fire the timeout.
                             super::yield_cpu();
                             let snap = {
-                                let guard = super::SCHEDULER.lock();
-                                guard.as_ref().map_or(
+                                let mut guard = super::SCHEDULER.lock();
+                                guard.as_mut().map_or(
                                     Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
-                                    |sched| {
-                                        sched.tasks.get(&caller_id).map_or(
-                                            Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
-                                            |task| snapshot_resume(task, mask),
-                                        )
-                                    },
+                                    |sched| snapshot_resume_dispatched(sched, caller_id, mask),
                                 )
                             };
                             let snap = match snap {
@@ -4627,6 +4699,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                                         sender_tid,
                                         sender_cell_id,
                                         sender_generation,
+                                        wire_header,
                                         ..
                                     } = &snap
                                     {
@@ -4634,6 +4707,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                                             *sender_tid,
                                             *sender_cell_id,
                                             *sender_generation,
+                                        );
+                                        task.set_received_async_op(
+                                            *sender_tid,
+                                            wire_header.map_or(0, |header| header.async_op),
                                         );
                                     }
                                 }
@@ -4669,6 +4746,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         t.pending_msgs.remove(pos);
                     }
                     t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
+                    t.set_received_async_op(
+                        sender_tid, wire_header.map_or(0, |header| header.async_op));
                 }
                 if let Some(header) = wire_header {
                     super::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -4716,16 +4795,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     // t is no longer borrowed here.
                     let (sender_cell_id, sender_generation) = inline_cell_context
                         .unwrap_or_else(|| sender_cell_context_in_sched(sched, sender_tid));
-                    Ok(Some((
-                        pos,
-                        sender_tid,
-                        sender_cell_id,
-                        sender_generation,
-                        wire_header,
-                        delivery_id,
-                        caller_view,
-                        data,
-                    )))
+                    let info = (
+                        pos, sender_tid, sender_cell_id, sender_generation,
+                        wire_header, delivery_id, caller_view, data,
+                    );
+                    if let Some(header) = wire_header {
+                        super::async_ipc::dispatch(sched, caller_id, header);
+                    }
+                    Ok(Some(info))
                 })
             };
             finish_vfs_context_drop(caller_id, vfs_context_drop);
@@ -4774,6 +4851,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                             sender_cell_id,
                             sender_generation,
                         );
+                        t.set_received_async_op(
+                            sender_tid, wire_header.map_or(0, |header| header.async_op));
                     }
                     if let Some(header) = wire_header {
                         super::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -5150,7 +5229,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
         Syscall::Log { msg_ptr, msg_len } => {
             if let Ok(msg) = read_user_string(caller_id, msg_ptr, msg_len, MAX_LOG_MSG) {
-                crate::task::print_user_log(&msg);
+                crate::task::print_user_log(&msg, caller_id);
             }
             Ok(0)
         }
@@ -8374,6 +8453,16 @@ use api::syscall::ViSyscall;
 /// arch-appropriate sentinel (usize::MAX or u32::MAX) to the return register.
 fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) -> Option<Syscall> {
     let sc = match ViSyscall::from(syscall_id) {
+        ViSyscall::IpcSubmit => Syscall::IpcSubmit { target: a0, ptr: a1, len: a2 },
+        ViSyscall::IpcTake => Syscall::IpcTake {
+            token: a0, ptr: a1, len: a2, status_ptr: a3,
+        },
+        ViSyscall::IpcWait => Syscall::IpcWait {
+            ticks: (a0 as u64) | ((a1 as u64) << 32),
+        },
+        ViSyscall::IpcCancel => Syscall::IpcCancel { token: a0 },
+        ViSyscall::IpcCurrent => Syscall::IpcCurrent,
+        ViSyscall::IpcReply => Syscall::IpcReply { token: a0, ptr: a1, len: a2 },
         ViSyscall::Send => Syscall::Send {
             target: a0,
             msg_ptr: a1,
@@ -9050,6 +9139,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     }
 
     let supports_typed_oom = supports_typed_spawn_oom(&syscall);
+    let typed_ipc = is_ipc_operation(&syscall);
     let result = handle_syscall(caller_id, syscall);
 
     #[cfg(target_arch = "riscv64")]
@@ -9057,7 +9147,8 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
     }
 
-    frame.regs[10] = encode_syscall_result(result, usize::MAX, supports_typed_oom);
+    frame.regs[10] = if typed_ipc { encode_ipc_result(result) }
+        else { encode_syscall_result(result, usize::MAX, supports_typed_oom) };
 }
 
 #[cfg(not(target_arch = "riscv32"))]
@@ -9108,13 +9199,15 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
     }
 
     let supports_typed_oom = supports_typed_spawn_oom(&syscall);
+    let typed_ipc = is_ipc_operation(&syscall);
     let result = handle_syscall(caller_id, syscall);
 
     unsafe {
         core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
     }
 
-    frame.regs[10] = encode_syscall_result(result, u32::MAX as usize, supports_typed_oom) as u32;
+    frame.regs[10] = if typed_ipc { encode_ipc_result(result) as u32 }
+        else { encode_syscall_result(result, u32::MAX as usize, supports_typed_oom) as u32 };
 }
 
 #[cfg(target_arch = "riscv32")]

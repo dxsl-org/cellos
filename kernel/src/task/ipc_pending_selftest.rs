@@ -103,6 +103,48 @@ fn all_producers_defer_foreign_writes() -> bool {
     ok
 }
 
+/// A target already blocked sending to this caller must not park the caller too.
+///
+/// Two single-threaded cells that send to each other deadlock if the second send
+/// blocks: neither can receive the message that would complete the other's send.
+/// The board hit exactly this (Net Cell in `Sending { target: 4 }`, NIC driver in
+/// `Sending { target: 5 }`) and the liveness heartbeat then killed the Net Cell
+/// every second, so the kernel queues instead and lets the caller return to
+/// receive.
+fn send_to_a_target_blocked_sending_to_us_queues() -> bool {
+    let payload = b"cycle-break";
+    insert(SENDER, TEST_CELL);
+    insert(RECEIVER, TEST_CELL + 1);
+    if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        if let Some(task) = sched.tasks.get_mut(&RECEIVER) {
+            task.state = TaskState::Sending {
+                target: SENDER,
+                delivery_id: 1,
+            };
+        }
+    }
+    let result = super::ipc_send(SENDER, RECEIVER, payload.as_ptr() as usize, payload.len());
+    let ok = if result != Ok(0) {
+        fail("ipc_send parked behind a target blocked sending to the caller")
+    } else {
+        let guard = super::SCHEDULER.lock();
+        match guard.as_ref().and_then(|sched| sched.tasks.get(&RECEIVER)) {
+            Some(task)
+                if matches!(task.state, TaskState::Sending { target, .. } if target == SENDER)
+                    && matches!(
+                        task.pending_msgs.as_slice(),
+                        [msg] if msg.sender_tid == SENDER && msg.payload() == payload
+                    ) =>
+            {
+                true
+            }
+            _ => fail("cycle break did not leave the message queued for the target"),
+        }
+    };
+    reset();
+    ok
+}
+
 /// `ipc_send_kernel` backs raw Rename. Unlike `ipc_post_nonblock`, it must not
 /// wake a VFS task parked in a nested receive for a different sender.
 fn kernel_send_respects_receiver_mask() -> bool {
@@ -805,6 +847,7 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
 /// Returns true iff IPC publication is receiver-owned, bounded and wake-safe.
 pub fn self_test() -> bool {
     let ok = all_producers_defer_foreign_writes()
+        & send_to_a_target_blocked_sending_to_us_queues()
         & kernel_send_respects_receiver_mask()
         & all_producers_wake_net_rx_completion_wait()
         & ready_receiver_is_not_enqueued_twice()

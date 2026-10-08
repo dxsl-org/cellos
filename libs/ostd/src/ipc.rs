@@ -284,6 +284,106 @@ where
     api::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
 }
 
+/// [`service_call_bounded`] whose request admission **queues** instead of
+/// rendezvousing.
+///
+/// [`service_call_bounded`] offers the request with nonblocking [`sys_try_send`],
+/// which the kernel admits only while the target sits in `Recv` with a mask that
+/// matches the caller. A service that idles in a completion wait — the Net Cell
+/// sleeps on the `NET_RX` completion source — or that is simply running its own
+/// loop is never in that state, so the offer is refused for the whole deadline
+/// and the caller sees [`IpcError::Send`] against a perfectly healthy service.
+///
+/// This variant sends with [`sys_send`], which queues into the receiver's
+/// mailbox and wakes a `Recv` or a `NET_RX` completion waiter, then waits for
+/// the reply with the same bounded, sender-masked receive. Admission is
+/// therefore unbounded: a service that never receives leaves the caller blocked
+/// in the kernel's `Sending` state. Use it for a service that is known to drain
+/// its mailbox on every turn (the Net Cell does, before it parks).
+///
+/// `timeout_ticks` bounds only the reply wait. Errors are as in
+/// [`service_call_bounded`].
+pub fn service_call_bounded_queued<'r, Req: Serialize>(
+    service_tid: usize,
+    req: &Req,
+    send_buf: &mut [u8],
+    recv_buf: &'r mut [u8],
+    timeout_ticks: u64,
+) -> Result<&'r [u8], IpcError> {
+    /// Most foreign messages tolerated before the call gives up. The time base
+    /// below bounds the wait; this bounds the loop for a kernel that does not
+    /// provide one, so "keep waiting" can never become an unbounded spin.
+    const MAX_FOREIGN_MESSAGES: u32 = 4;
+
+    let encoded = api::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
+    if let SyscallResult::Err(_) = sys_send(service_tid, encoded) {
+        return Err(IpcError::Send);
+    }
+    // A sender-masked receive can still return a *death notification*: the kernel
+    // serves those regardless of the mask and documents that the caller must tell
+    // them apart by the returned sender. Failing the whole call on the first one
+    // is what cost the board's guest its traffic — the hypervisor's `L2Send` came
+    // back `wrong sender`, so `transmit` returned false, the guest's TX descriptor
+    // was never completed (`[hv-virtio-host] net-tx-complete` never printed) and
+    // everything the guest sent died in its own TX queue. The foreign message is
+    // consumed either way, so the wait names it once and continues under the
+    // *same* deadline; `sys_get_scheduler_ticks` is the time base
+    // `sys_recv_timeout` itself uses, and a kernel without it keeps the old
+    // single-wait behaviour.
+    let deadline = sys_get_scheduler_ticks().map(|now| now.saturating_add(timeout_ticks));
+    let mut foreign = 0u32;
+    loop {
+        let remaining = match deadline {
+            Some(deadline) => {
+                let now = sys_get_scheduler_ticks().unwrap_or(0);
+                if now >= deadline {
+                    return Err(IpcError::Recv);
+                }
+                deadline - now
+            }
+            None => timeout_ticks,
+        };
+        match sys_recv_timeout(service_tid, recv_buf, remaining) {
+            SyscallResult::Ok(sender) if sender == service_tid => {
+                let len = recv_buf.len();
+                return Ok(&recv_buf[..len]);
+            }
+            SyscallResult::Ok(sender) => {
+                use core::sync::atomic::{AtomicBool, Ordering};
+                static FIRST_FOREIGN: AtomicBool = AtomicBool::new(false);
+                if !FIRST_FOREIGN.swap(true, Ordering::Relaxed) {
+                    crate::io::print("[ipc] message from tid ");
+                    crate::io::print_usize(sender);
+                    crate::io::print(", expected ");
+                    crate::io::print_usize(service_tid);
+                    crate::io::println(" — consumed, still waiting for the reply");
+                }
+                foreign += 1;
+                if deadline.is_none() || foreign > MAX_FOREIGN_MESSAGES {
+                    return Err(IpcError::WrongSender);
+                }
+            }
+            SyscallResult::Err(_) => return Err(IpcError::Recv),
+        }
+    }
+}
+
+/// [`service_call_bounded_queued`] that decodes the reply into `Resp`.
+pub fn service_call_typed_bounded_queued<'r, Req, Resp>(
+    service_tid: usize,
+    req: &Req,
+    send_buf: &mut [u8],
+    recv_buf: &'r mut [u8],
+    timeout_ticks: u64,
+) -> Result<Resp, IpcError>
+where
+    Req: Serialize,
+    Resp: Deserialize<'r>,
+{
+    let raw = service_call_bounded_queued(service_tid, req, send_buf, recv_buf, timeout_ticks)?;
+    api::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
+}
+
 /// Fastpath zero-trap RPC service call over an established SPSC ring channel endpoint.
 ///
 /// Encodes `req` into `send_buf` via postcard, transmits it directly into the SPSC
