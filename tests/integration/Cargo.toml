@@ -116,6 +116,10 @@ name = "http-smoke"
 path = "tests/http-smoke.rs"
 
 [[test]]
+name = "http-concurrency"
+path = "tests/http-concurrency.rs"
+
+[[test]]
 name = "hotswap-smoke"
 path = "tests/hotswap-smoke.rs"
 

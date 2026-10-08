@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 //! Pluggable JavaScript Engine implementation for Tier 2 ocel-js.
 //!
-//! Provides a DOM-aware evaluation context that records batched DOM mutations,
-//! manages synthetic DOM proxy objects (keyed by `NodeId`), and handles DOM event listeners.
+//! Legacy line-oriented statement matcher, not a public-web JavaScript engine.
+//! Document synchronization explicitly refuses this backend rather than
+//! advertising fabricated DOM objects or silently substituting it for QuickJS.
 
 extern crate alloc;
 
@@ -10,7 +11,7 @@ use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use dom_arena::{DomEvent, DomMutation, JsContext, JsEngine, JsError, NodeId};
+use dom_arena::{DocumentArena, DomEvent, DomMutation, JsContext, JsEngine, JsError, NodeId};
 
 pub struct OcelJsServiceEngine;
 
@@ -71,6 +72,9 @@ impl OcelJsExecutionContext {
 }
 
 impl JsContext for OcelJsExecutionContext {
+    fn sync_document(&mut self, _: &DocumentArena, _: &str) -> Result<(), JsError> {
+        Err(JsError { message: String::from("ocel-js is a statement matcher; document-backed DOM requires ocel-quickjs"), line: 0 })
+    }
     fn eval(&mut self, script: &str) -> Result<String, JsError> {
         let mut last_result = String::from("undefined");
 

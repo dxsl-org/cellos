@@ -50,6 +50,10 @@ extern "C" {
     pub fn JS_SetMaxStackSize(rt: *mut JSRuntime, stack_size: usize);
     pub fn JS_SetMemoryLimit(rt: *mut JSRuntime, limit: usize);
     pub fn JS_SetGCThreshold(rt: *mut JSRuntime, gc_threshold: usize);
+    pub fn JS_SetInterruptHandler(rt: *mut JSRuntime,
+        handler: Option<unsafe extern "C" fn(*mut JSRuntime, *mut c_void) -> c_int>,
+        opaque: *mut c_void);
+    pub fn JS_ExecutePendingJob(rt: *mut JSRuntime, ctx: *mut *mut JSContext) -> c_int;
 
     pub fn JS_Eval(
         ctx: *mut JSContext,

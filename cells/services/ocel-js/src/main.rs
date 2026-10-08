@@ -13,7 +13,7 @@ extern crate alloc;
 
 mod engine;
 
-use dom_arena::{JsContext, JsEngine, OcelJsRequest, OcelJsResponse, OCEL_JS_IPC_BUF_SIZE};
+use dom_arena::{ipc::JsServiceSession, JsEngine, OcelJsRequest, OCEL_JS_IPC_BUF_SIZE};
 use engine::OcelJsServiceEngine;
 use ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
 
@@ -41,6 +41,7 @@ fn cell_main() {
 
     let mut recv_buf = [0u8; OCEL_JS_IPC_BUF_SIZE];
     let mut send_buf = [0u8; OCEL_JS_IPC_BUF_SIZE];
+    let mut session = JsServiceSession::default();
 
     ostd::io::println("[ocel-js] Ready to process scripts and DOM events.");
 
@@ -49,45 +50,8 @@ fn cell_main() {
         match sys_recv(0, &mut recv_buf) {
             SyscallResult::Ok(caller_tid) if caller_tid > 0 => {
                 let response = match postcard::from_bytes::<OcelJsRequest>(&recv_buf) {
-                    Ok(OcelJsRequest::Eval { script }) => match ctx.eval(&script) {
-                        Ok(res) => {
-                            let mutations = ctx.take_mutations();
-                            OcelJsResponse::Success {
-                                mutations,
-                                result_repr: res,
-                            }
-                        }
-                        Err(e) => OcelJsResponse::Error {
-                            message: e.message,
-                            line: e.line,
-                        },
-                    },
-                    Ok(OcelJsRequest::DispatchEvent { event }) => {
-                        match ctx.dispatch_event(&event) {
-                            Ok(_) => {
-                                let mutations = ctx.take_mutations();
-                                OcelJsResponse::Success {
-                                    mutations,
-                                    result_repr: alloc::string::String::from("event_dispatched"),
-                                }
-                            }
-                            Err(e) => OcelJsResponse::Error {
-                                message: e.message,
-                                line: e.line,
-                            },
-                        }
-                    }
-                    Ok(OcelJsRequest::ResetContext) => {
-                        ctx.reset();
-                        OcelJsResponse::Success {
-                            mutations: alloc::vec::Vec::new(),
-                            result_repr: alloc::string::String::from("context_reset"),
-                        }
-                    }
-                    Err(_) => OcelJsResponse::Error {
-                        message: alloc::string::String::from("Malformed OcelJsRequest IPC payload"),
-                        line: 0,
-                    },
+                    Ok(request) => session.handle(caller_tid, request, &mut ctx),
+                    Err(_) => JsServiceSession::error("Malformed OcelJsRequest IPC payload"),
                 };
 
                 if let Ok(encoded) = postcard::to_slice(&response, &mut send_buf) {

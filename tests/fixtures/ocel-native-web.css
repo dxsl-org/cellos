@@ -1,0 +1,6 @@
+body { background-color: #ffffff; color: #17243a; padding: 16px; }
+h1 { color: #245ac7; font-size: 24px; }
+.cards { display: flex; gap: 12px; }
+.card { flex-grow: 1; padding: 12px; background-color: #dce8fc; }
+#result { color: #137333; }
+@media (max-width: 480px) { .cards { flex-direction: column; } }

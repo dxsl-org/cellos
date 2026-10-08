@@ -1,128 +1,193 @@
-/* Ocel DOM dialect for the QuickJS engine.
- *
- * Evaluated once per context. It defines exactly the surface the viewer's
- * documents use — the same surface `ocel-js`'s statement matcher implemented,
- * but as real JavaScript, so a document script can use control flow,
- * functions, closures, arrays and the standard library.
- *
- * Every side effect is pushed onto a queue; Rust drains both queues after each
- * evaluation ("<kind>\t<fields…>", records separated by "\n") and turns them
- * into `DomMutation`s. Nothing here talks to the C API: that is what keeps the
- * FFI surface in `ffi.rs` to a dozen entry points.
+/* SPDX-License-Identifier: MIT
+ * Document-backed DOM subset. No network, navigation, timers or fake Web APIs.
+ * Strings in the mutation wire are percent-encoded so tabs/newlines/NUL survive.
  */
-var __vios_mutations = [];
-var __vios_logs = [];
-var __vios_listeners = [];
-var __vios_title = "";
-
-function __vios_mut(s) { __vios_mutations.push(s); }
-function __vios_takeMutations() {
-    var out = __vios_mutations.join("\n");
-    __vios_mutations = [];
-    return out;
-}
-function __vios_takeLogs() {
-    var out = __vios_logs.join("\n");
-    __vios_logs = [];
-    return out;
-}
-
-function __vios_str(v) {
-    if (v === undefined) return "undefined";
-    if (v === null) return "null";
-    return String(v);
-}
-
-var console = {
-    log: function () {
-        var parts = [];
-        for (var i = 0; i < arguments.length; i++) parts.push(__vios_str(arguments[i]));
-        var line = "[script] " + parts.join(" ");
-        __vios_logs.push(line);
+(function () {
+    "use strict";
+    let nodes = new Map(), records = new WeakMap(), nextId = 0;
+    let mutations = [], logs = [], title = "";
+    // Arena strings are Unicode scalar UTF-8, so lone JS surrogates become U+FFFD.
+    const str = value => String(value).toWellFormed();
+    const enc = value => encodeURIComponent(str(value));
+    function emit(kind, ...fields) { mutations.push([kind, ...fields.map(enc)].join("\t")); }
+    function record(node) {
+        const r = records.get(node);
+        if (!r || nodes.get(r.id) !== node) throw new TypeError("Node belongs to a different document");
+        return r;
     }
-};
-
-var document = {
-    get title() { return __vios_title; },
-    set title(v) {
-        __vios_title = __vios_str(v);
-        __vios_mut("T\t" + __vios_title);
-    },
-    /* Documents in the wild (and the fixture) query by id; Ocel routes
-       mutations by NodeId, and the viewer's own hit testing decides which node
-       a click belongs to, so this returns the matching node_<id> when the id is
-       numeric and `null` otherwise. */
-    getElementById: function (id) {
-        var n = String(id);
-        var node = globalThis["node_" + n];
-        return node === undefined ? null : node;
-    },
-    createElement: function (tag) { return __vios_makeNode(-1, tag); },
-    addEventListener: function (kind, handler) {
-        __vios_listeners.push({ node: -1, kind: String(kind), handler: handler });
-    }
-};
-
-/* DOM nodes are addressed by arena id (`node_<id>`), which is how Ocel's
-   documents and its mutation protocol both name them. */
-function __vios_makeNode(id, tag) {
-    var node = {
-        __id: id,
-        __tag: tag || "div",
-        __attrs: {},
-        get nodeName() { return (this.__tag || "div").toUpperCase(); },
-        get textContent() { return this.__text || ""; },
-        set textContent(v) {
-            this.__text = __vios_str(v);
-            __vios_mut("X\t" + this.__id + "\t" + this.__text);
-        },
-        get innerText() { return this.textContent; },
-        set innerText(v) { this.textContent = v; },
-        setAttribute: function (key, val) {
-            this.__attrs[String(key)] = __vios_str(val);
-            __vios_mut("A\t" + this.__id + "\t" + String(key) + "\t" + __vios_str(val));
-        },
-        getAttribute: function (key) {
-            var v = this.__attrs[String(key)];
-            return v === undefined ? null : v;
-        },
-        removeAttribute: function (key) {
-            delete this.__attrs[String(key)];
-            __vios_mut("R\t" + this.__id + "\t" + String(key));
-        },
-        appendChild: function (child) {
-            __vios_mut("P\t" + this.__id + "\t" + child.__id);
-            return child;
-        },
-        removeChild: function (child) {
-            __vios_mut("D\t" + this.__id + "\t" + child.__id);
-            return child;
-        },
-        addEventListener: function (kind, handler) {
-            __vios_listeners.push({ node: this.__id, kind: String(kind), handler: handler });
-        },
-        style: {}
-    };
-    return node;
-}
-
-/* node_0 … node_255, matching NODE_WINDOW in src/engine.rs. */
-for (var __vios_i = 0; __vios_i < NODE_WINDOW; __vios_i++) {
-    globalThis["node_" + __vios_i] = __vios_makeNode(__vios_i, "div");
-}
-
-function __vios_dispatch(node_id, kind) {
-    var fired = 0;
-    for (var i = 0; i < __vios_listeners.length; i++) {
-        var l = __vios_listeners[i];
-        if (String(l.kind) !== String(kind)) continue;
-        if (l.node !== -1 && l.node !== node_id) continue;
-        try {
-            l.handler({ type: kind, target: globalThis["node_" + node_id] });
-            fired++;
-        } catch (e) {
-            __vios_logs.push("[script] listener error: " + __vios_str(e));
+    function detach(node) {
+        const r = record(node);
+        if (r.parent) {
+            const children = record(r.parent).children;
+            children.splice(children.indexOf(node), 1);
+            r.parent = null;
         }
     }
-    return fired;
-}
+    function append(parent, child) {
+        const p = record(parent), c = record(child);
+        if ((p.type !== 1 && p.type !== 9) || c.type === 9) throw new Error("HierarchyRequestError");
+        for (let cursor = parent; cursor; cursor = record(cursor).parent) {
+            if (cursor === child) throw new Error("HierarchyRequestError");
+        }
+        detach(child);
+        p.children.push(child);
+        c.parent = parent;
+    }
+    function textOf(node) {
+        const r = record(node);
+        if (r.type === 9) return null;
+        if (r.type === 3 || r.type === 8) return r.text;
+        let text = "", stack = r.children.slice().reverse();
+        while (stack.length) {
+            const current = record(stack.pop());
+            if (current.type === 3) text += current.text;
+            for (let i = current.children.length - 1; i >= 0; --i) stack.push(current.children[i]);
+        }
+        return text;
+    }
+    function makeNode(id, type, tag, text, attrs) {
+        const node = Object.create(Node.prototype);
+        records.set(node, { id, type, tag, text, attrs: Object.assign(Object.create(null), Object.fromEntries(attrs)), parent: null, children: [], listeners: [] });
+        nodes.set(id, node);
+        globalThis["node_" + id] = node;
+        return node;
+    }
+    function create(type, tag, text, notify = true) {
+        const id = nextId++;
+        const node = makeNode(id, type, tag, text, []);
+        if (notify) emit("C", id, type, tag, text);
+        return node;
+    }
+    function Node() { throw new TypeError("Use document.createElement/createTextNode/createComment"); }
+    Object.defineProperties(Node.prototype, {
+        nodeType: { get() { return record(this).type; } },
+        nodeName: { get() { const r = record(this); return r.type === 1 ? r.tag.toUpperCase() : r.type === 3 ? "#text" : r.type === 8 ? "#comment" : "#document"; } },
+        parentNode: { get() { return record(this).parent; } },
+        firstChild: { get() { return record(this).children[0] || null; } },
+        lastChild: { get() { const c = record(this).children; return c[c.length - 1] || null; } },
+        childNodes: { get() { return record(this).children.slice(); } },
+        children: { get() { return record(this).children.filter(n => record(n).type === 1); } },
+        nextSibling: { get() { const p = this.parentNode; return p ? record(p).children[record(p).children.indexOf(this) + 1] || null : null; } },
+        previousSibling: { get() { const p = this.parentNode; return p ? record(p).children[record(p).children.indexOf(this) - 1] || null : null; } },
+        textContent: {
+            get() { return textOf(this); },
+            set(value) {
+                const r = record(this), text = value == null ? "" : str(value);
+                if (r.type === 9) return;
+                if (r.type === 3 || r.type === 8) r.text = text;
+                else {
+                    for (const child of r.children) record(child).parent = null;
+                    r.children = [];
+                    // Arena SetText allocates exactly this ID; no duplicate CreateNode.
+                    if (text) append(this, create(3, "", text, false));
+                }
+                emit("X", r.id, text);
+            }
+        },
+        id: { get() { return this.getAttribute("id") || ""; }, set(v) { this.setAttribute("id", v); } },
+        className: { get() { return this.getAttribute("class") || ""; }, set(v) { this.setAttribute("class", v); } }
+    });
+    Node.prototype.appendChild = function (child) { append(this, child); emit("P", record(this).id, record(child).id); return child; };
+    Node.prototype.removeChild = function (child) {
+        if (record(child).parent !== this) throw new Error("NotFoundError");
+        detach(child); emit("D", record(this).id, record(child).id); return child;
+    };
+    Node.prototype.remove = function () { const p = this.parentNode; if (p) p.removeChild(this); };
+    Node.prototype.setAttribute = function (key, value) {
+        const r = record(this);
+        if (r.type !== 1) throw new TypeError("Attributes require an element");
+        key = str(key).toLowerCase(); value = str(value);
+        if (!key || /[\s\0"'>/=]/.test(key)) throw new Error("InvalidCharacterError");
+        r.attrs[key] = value; emit("A", r.id, key, value);
+    };
+    Node.prototype.getAttribute = function (key) {
+        const r = record(this); key = String(key).toLowerCase();
+        return Object.prototype.hasOwnProperty.call(r.attrs, key) ? r.attrs[key] : null;
+    };
+    Node.prototype.hasAttribute = function (key) { return this.getAttribute(key) !== null; };
+    Node.prototype.removeAttribute = function (key) {
+        const r = record(this);
+        if (r.type !== 1) throw new TypeError("Attributes require an element");
+        key = String(key).toLowerCase(); delete r.attrs[key]; emit("R", r.id, key);
+    };
+    Node.prototype.addEventListener = function (kind, handler) {
+        if (typeof handler !== "function") throw new TypeError("Listener must be a function");
+        const list = record(this).listeners;
+        kind = String(kind);
+        if (!list.some(l => l.kind === kind && l.handler === handler)) list.push({ kind, handler });
+    };
+    Node.prototype.removeEventListener = function (kind, handler) {
+        const r = record(this); r.listeners = r.listeners.filter(l => l.kind !== String(kind) || l.handler !== handler);
+    };
+    function descendants(root, predicate) {
+        const found = [], stack = record(root).children.slice().reverse();
+        while (stack.length) {
+            const node = stack.pop(), r = record(node);
+            if (r.type === 1 && predicate(node)) found.push(node);
+            for (let i = r.children.length - 1; i >= 0; --i) stack.push(r.children[i]);
+        }
+        return found;
+    }
+    Node.prototype.getElementsByTagName = function (tag) { tag = String(tag).toLowerCase(); return descendants(this, n => tag === "*" || record(n).tag === tag); };
+    function configureDocument(doc) {
+        Object.defineProperties(doc, {
+            title: { get() { return title; }, set(v) { title = str(v); emit("T", title); }, configurable: true },
+            documentElement: { get() { return record(doc).children.find(n => record(n).type === 1) || null; }, configurable: true },
+            body: { get() { return doc.getElementsByTagName("body")[0] || null; }, configurable: true },
+            head: { get() { return doc.getElementsByTagName("head")[0] || null; }, configurable: true }
+        });
+        doc.getElementById = function (id) { id = String(id); return descendants(doc, n => n.getAttribute("id") === id)[0] || null; };
+        doc.createElement = function (tag) {
+            tag = String(tag).toLowerCase();
+            if (!/^[a-z][a-z0-9:_-]*$/.test(tag)) throw new Error("InvalidCharacterError");
+            return create(1, tag, "");
+        };
+        doc.createTextNode = text => create(3, "", str(text));
+        doc.createComment = text => create(8, "", str(text));
+    }
+    globalThis.__vios_sync = function (snapshot, newTitle) {
+        // Reuse wrappers for existing IDs, preserving listeners and JS references.
+        const old = nodes; nodes = new Map();
+        for (const [id, type, tag, text, attrs] of snapshot) {
+            let node = old.get(id);
+            if (node && records.get(node).type === type) {
+                const r = records.get(node);
+                r.tag = tag; r.text = text; r.attrs = Object.assign(Object.create(null), Object.fromEntries(attrs));
+                r.parent = null; r.children = [];
+                nodes.set(id, node);
+            } else node = makeNode(id, type, tag, text, attrs);
+            globalThis["node_" + id] = node;
+        }
+        for (const [id, node] of old) if (!nodes.has(id)) delete globalThis["node_" + id];
+        for (const row of snapshot) {
+            for (let child = row[6]; child !== null; child = snapshot[child][7]) {
+                // Rust validated topology; direct linking avoids quadratic ancestor walks.
+                record(nodes.get(row[0])).children.push(nodes.get(child));
+                record(nodes.get(child)).parent = nodes.get(row[0]);
+            }
+        }
+        nextId = snapshot.length;
+        title = newTitle;
+        globalThis.document = nodes.get(0);
+        configureDocument(globalThis.document);
+    };
+    globalThis.__vios_takeMutations = function () { const out = mutations.join("\n"); mutations = []; return out; };
+    globalThis.__vios_takeLogs = function () { const out = logs.join("\n"); logs = []; return out; };
+    globalThis.__vios_dispatch = function (id, kind, x, y, key) {
+        const target = nodes.get(id);
+        if (!target) throw new Error("Event target does not exist");
+        let stopped = false, prevented = false;
+        const event = { type: kind, target, currentTarget: null, clientX: x, clientY: y, key,
+            stopPropagation() { stopped = true; }, preventDefault() { prevented = true; },
+            get defaultPrevented() { return prevented; } };
+        for (let cursor = target; cursor; cursor = record(cursor).parent) {
+            event.currentTarget = cursor;
+            for (const l of record(cursor).listeners.slice()) if (l.kind === kind) {
+                try { l.handler.call(cursor, event); } catch (e) { logs.push("[script] listener error: " + String(e)); }
+            }
+            if (stopped) break;
+        }
+        event.currentTarget = null;
+    };
+    globalThis.console = { log(...args) { logs.push("[script] " + args.map(String).join(" ")); } };
+})();
