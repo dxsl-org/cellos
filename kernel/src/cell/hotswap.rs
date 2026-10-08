@@ -320,13 +320,19 @@ pub(crate) fn commit_hotswap_barrier(
         {
             return Err(ViError::PermissionDenied);
         }
-        if target.pending_msgs.len() + source.pending_msgs.len() > HOTSWAP_MSG_QUEUE_DEPTH {
+        let transferable = source
+            .pending_msgs
+            .iter()
+            .filter(|msg| !msg.wire_header().is_some_and(|header| header.async_op != 0))
+            .count();
+        if target.pending_msgs.len() + transferable > HOTSWAP_MSG_QUEUE_DEPTH {
             return Err(ViError::WouldBlock);
         }
         let wake_sender = match target.state {
             TaskState::Recv { mask, .. } => source
                 .pending_msgs
                 .iter()
+                .filter(|msg| !msg.wire_header().is_some_and(|header| header.async_op != 0))
                 .find(|msg| mask == 0 || mask == msg.sender_tid)
                 .map(|msg| msg.sender_tid),
             _ => None,
@@ -343,6 +349,9 @@ pub(crate) fn commit_hotswap_barrier(
     }
 
     for index in 0..source_len {
+        if message_is_async(sched, source_tid, index) {
+            continue;
+        }
         let copied = {
             let source = sched.tasks.get(&source_tid).ok_or(ViError::NotFound)?;
             let message = &source.pending_msgs.as_slice()[index];
@@ -386,6 +395,15 @@ pub(crate) fn commit_hotswap_barrier(
         return Err(ViError::WouldBlock);
     }
 
+    // A queued async request is bound to the old provider incarnation. Unlike
+    // legacy sends it cannot be replayed at the replacement: doing so could
+    // execute the same side effect after the caller was told the old peer died.
+    // The source mailbox remains owned by the old task until retirement.
+    let (source_cell, source_generation) = {
+        let source = sched.tasks.get(&source_tid).ok_or(ViError::NotFound)?;
+        (source.cell_id.0, source.cell_generation)
+    };
+    crate::task::async_ipc::cutover_peer(sched, source_tid, source_cell, source_generation);
     if let Some(target) = sched.tasks.get_mut(&target_tid) {
         target.hotswap_source_tid = None;
     }
@@ -405,6 +423,18 @@ pub(crate) fn commit_hotswap_barrier(
         sched.push_ready(target_tid);
     }
     Ok(())
+}
+
+fn message_is_async(
+    sched: &crate::task::scheduler::Scheduler,
+    source_tid: usize,
+    index: usize,
+) -> bool {
+    sched.tasks.get(&source_tid).is_some_and(|task| {
+        task.pending_msgs.as_slice()[index]
+            .wire_header()
+            .is_some_and(|header| header.async_op != 0)
+    })
 }
 
 fn rollback_mailbox_appends(
