@@ -243,10 +243,11 @@ Recorded explicitly: **within one boot, a task id is never re-issued.** Everythi
 
 Observed: `[selftest] TASK-ID-REUSE: PASS (monotonic across spawn/exit)` on an AArch64
 `test-hooks` boot which then runs its guest suite to `96 PASS, 0 FAIL`
-(`docs/evidence/task-id-reuse-guard-aarch64-qemu.{txt,log}`). The x86_64 `test-hooks` lane cannot
-reach it: it panics earlier in an **unrelated, pre-existing** frame-accounting case
-(`docs/evidence/atomic-publication-x86-pre-existing-failure.{txt,log}`, reproduced with this whole
-slice stashed).
+(`docs/evidence/task-id-reuse-guard-aarch64-qemu.{txt,log}`). That lane was the witness because
+the x86_64 `test-hooks` boot then aborted earlier, in an **unrelated, pre-existing**
+frame-accounting case; that case was root-caused and fixed the same day, and the x86_64 lane now
+runs to its own end (`docs/evidence/atomic-publication-ledger-x86-settling.{txt,log}`, pre-fix
+reproduction in `docs/evidence/atomic-publication-x86-pre-existing-failure.{txt,log}`).
 
 ### 2.6 Remote `ServerEpoch` is the same node-local axis, not a second concept
 
@@ -326,4 +327,4 @@ remote epoch reuse; conflating them is explicitly refused.
 | Generation axis consumers | `libs/api/src/abi/caller_identity.rs`, `libs/api/src/abi/cell_owner.rs`, `kernel/src/task/async_ipc.rs`, `kernel/src/task/ipc_wire.rs` |
 | Observed evidence (x86_64 QEMU) | `docs/evidence/local-service-lifecycle-x86-qemu.{txt,log}`; scenario `cells/tests/bench/src/scenarios/local_service_lifecycle.rs`; image `scripts/build-x86_64-c2c-lifecycle-ci.sh`; test `tests/integration/tests/local-service-lifecycle-x86.rs` |
 | Guard evidence (AArch64 test-hooks QEMU) | `docs/evidence/task-id-reuse-guard-aarch64-qemu.{txt,log}` |
-| Pre-existing x86 test-hooks failure (not this slice) | `docs/evidence/atomic-publication-x86-pre-existing-failure.{txt,log}`; open item in `.agents/260927-0739-kernel-architecture-repair/plan.md` |
+| Pre-existing x86 test-hooks failure (not this slice; resolved 2026-10-08) | `docs/evidence/atomic-publication-ledger-x86-settling.{txt,log}`; pre-fix reproduction `docs/evidence/atomic-publication-x86-pre-existing-failure.{txt,log}`; closed in `.agents/260927-0739-kernel-architecture-repair/plan.md` |

@@ -30,19 +30,28 @@ The boot continues normally past the guard to the guest service suite
 sequence: it snapshots and restores `next_task_id`, removes its synthetic parent and
 reaps every spawned thread.
 
-Why this lane and not x86
--------------------------
-The x86_64 test-hooks lane is currently blocked by a **pre-existing** failure that
-aborts boot before any task self-test runs — a frame-count delta in
-`atomic_publication_tests::unaligned_elf_preparation_restores_state`. It reproduces
-with every change of this slice stashed, so it is not caused here; see
-`docs/evidence/atomic-publication-x86-pre-existing-failure.log` and the open item
-recorded in `.agents/260927-0739-kernel-architecture-repair/plan.md`.
+Why this lane and not x86 (updated 2026-10-08)
+---------------------------------------------
+When this guard landed, the x86_64 test-hooks lane was blocked by a **pre-existing**
+failure that aborted boot before any task self-test ran — a frame-count delta in
+`atomic_publication_tests::unaligned_elf_preparation_restores_state`, reproduced with
+every change of this slice stashed, so not caused here. That case was root-caused and
+fixed the same day (the ledger needed warming to its fixed point before the case
+measured it), and the x86_64 lane now runs to its own end:
+`PASS: x86_64 Tier-2 domain-entry lane (x86-domain-test) — every marker present` in
+`docs/evidence/atomic-publication-ledger-x86-settling.{txt,log}`. The pre-fix
+reproduction is kept in `docs/evidence/atomic-publication-x86-pre-existing-failure.{txt,log}`
+and the kernel-repair plan row is closed.
+
+This file still records the AArch64 witness, and the lane was re-run with that fix in
+the tree: corpus through `ATOMIC_PUBLICATION_AP-15: PASS`, guest suite
+`[vfs-test] Results: 96 PASS, 0 FAIL`.
 
 What this does NOT prove
 ------------------------
   * Nothing about the x86 counter specifically: the guard is architecture-neutral
-    code that compiles on riscv64, aarch64 and x86_64, but only this lane booted far
-    enough to run it. The production (non-test-hooks) images do not run it at all.
+    code that compiles on riscv64, aarch64 and x86_64, and the x86_64 boot that now
+    reaches it exercises it too — but this file's witness remains the AArch64 run.
+    The production (non-test-hooks) images do not run it at all.
   * No claim that a future free-list would be *corrected* by this guard; it only
     refuses to boot, which is the point.
