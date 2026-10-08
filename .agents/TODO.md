@@ -16,11 +16,22 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
 
 - [ ] Close the tier-aware C2C Phase 01 contract/review entry gates; identify the
   next local Intel/x86 C2C acceptance scenario without enabling blocked routes.
+  Local generation binding is **design-decided** ([ADR-0023](../docs/decisions/0023-local-service-generation-binding.md))
+  and **implemented 2026-10-08**: kernel-repair handoff granted, `LookupServiceBound = 429` +
+  registry `(tid, cell_id, generation)` + dispatch + both `next_task_id` guards landed, verified on
+  Intel x86_64 QEMU and the AArch64 test-hooks lane.
+  Outstanding: **contract-owner sign-off** for Phase 01. Law-1 is complete — checkpoint 2 recorded
+  2026-10-08, surface **FROZEN**, confirmed revision and digests in
+  [`law1-lookupservicebound.md`](260927-1100-c2c-anywhere-tier-aware/law1-lookupservicebound.md) §2.2,
+  drift caught by `scripts/check-lookupservicebound-law1-digests.sh`.
+  Phase 03 still owns moving `LocalEndpoint::call` onto the bounded primitive.
+  Separate pre-existing blocker: no x86_64 `test-hooks` boot gets past
+  `atomic_publication_tests::unaligned_elf_preparation_restores_state` (kernel-repair plan, open).
 - [ ] Reconcile one exact Intel machine against the HCL; physical bring-up and
   acquisition remain separately gated. No AMD/new ARM/RISC-V hardware program.
 - [ ] Close x86 Tier 2 admission/C/C++ gaps and Intel VMX/EPT prerequisites for
   the corresponding C2C consumers; preserve existing ABI/security review gates.
-- [ ] Qualify two same-model Intel nodes for LAN C2C after first-node bring-up,
+- [ ] Qualify two independently verified Intel nodes for LAN C2C after first-node bring-up,
   including restart, authority denial, disconnect/reconnect and uncertain outcomes.
 - [ ] Close explicit all-tier adapters and relay identity/time/persistence gates;
   measure a bounded workload against Linux on identical hardware/semantics.

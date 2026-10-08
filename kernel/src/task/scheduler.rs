@@ -627,6 +627,25 @@ impl Scheduler {
         self.spawn_with_stacks_configured(name, cell_id, allowed_drivers, kstack, ustack, |_| {})
     }
 
+    /// Advance the task-id counter, failing closed on exhaustion.
+    ///
+    /// Task ids are never re-issued within one boot. That invariant is load-bearing
+    /// well outside the allocator: a cached local endpoint that still names a dead
+    /// tid must fail closed (`TargetGone`) rather than reach a *different* provider,
+    /// the service registry treats a tid as naming exactly one task for the life of
+    /// the boot, and the exact-operation IPC path binds a peer as
+    /// `(tid, cell_id, generation)`. A wrapping `+= 1` would re-issue id 0 — the
+    /// reserved "no provider"/"none" sentinel — and could collide with a live task.
+    /// The cell/ELF path already panics on exhaustion (`task/launch.rs`); these
+    /// paths must agree rather than wrap. `task::task_id_selftest` guards the
+    /// resulting no-re-issue property at boot under `test-hooks`.
+    fn advance_task_id(&mut self) {
+        self.next_task_id = self
+            .next_task_id
+            .checked_add(1)
+            .expect("task id space exhausted");
+    }
+
     /// Build, configure, then publish a task while the scheduler remains locked.
     ///
     /// The callback runs after stack ownership and the default context are
@@ -708,7 +727,7 @@ impl Scheduler {
 
         self.tasks.insert(id, task);
         self.push_ready(id);
-        self.next_task_id += 1;
+        self.advance_task_id();
         id
     }
 
@@ -938,7 +957,7 @@ impl Scheduler {
 
         self.tasks.insert(id, task);
         self.push_ready(id);
-        self.next_task_id += 1;
+        self.advance_task_id();
         Ok(id)
     }
 

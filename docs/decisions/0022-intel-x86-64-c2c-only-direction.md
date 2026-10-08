@@ -109,9 +109,11 @@ apply to an otherwise in-scope task.
 3. Complete x86 Tier 2 admission/runtime support and Intel VMX prerequisites for
    the corresponding C2C consumers. SVM/TCG results remain reference evidence,
    never evidence that Intel guests work.
-4. After the first machine's required bring-up gates pass, qualify a second node
-   of the same configuration and exercise real two-node C2C. Software-only
-   two-node QEMU work can precede procurement but cannot satisfy physical acceptance.
+4. After the first machine's required bring-up gates pass, qualify a second Intel
+   node and exercise real two-node C2C. Reusing the configuration is preferred
+   to reduce support work, not required; a different model needs independent
+   qualification and bounded driver scope. Software-only two-node QEMU work
+   can precede procurement but cannot satisfy physical acceptance.
 5. Close guest participation, remote/relay authority and performance milestones
    under their own prerequisites. The final destination remains all three tiers;
    passing a local native demo is not C2C Anywhere completion.

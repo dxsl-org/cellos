@@ -69,6 +69,7 @@ The index below retains technical and historical references. Older proposals, ma
 - [ADR-0019 — One Tier 2 admission control, on the path](docs/decisions/0019-tier2-admission-control-on-path.md)
 - [ADR-0020 — Stage USB HID isolation behind a reliable transport](docs/decisions/0020-staged-usb-hid-isolation.md)
 - [ADR-0021 — Give applications an actor/supervisor library in userspace, not a supervision ABI](docs/decisions/0021-actor-supervisor-library-in-userspace.md)
+- [ADR-0023 — Bind local service identity to the Cell generation, and carry local service calls on the bounded exact-operation primitive](docs/decisions/0023-local-service-generation-binding.md)
 - [Spec 23 — Native SDK Contract](docs/evidence/spec23-native-sdk-contract-027e1a2bbfb1.md)
 - [Spec 23 — Native SDK Contract](docs/evidence/spec23-native-sdk-contract-9265afc81b15.md)
 - [Spec 23 — Native SDK Contract](docs/evidence/spec23-native-sdk-contract-99146be984d6.md)

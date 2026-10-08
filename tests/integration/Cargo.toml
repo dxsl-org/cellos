@@ -207,6 +207,10 @@ path = "tests/ocel-quickjs.rs"
 name = "actor-supervisor"
 path = "tests/actor-supervisor.rs"
 
+[[test]]
+name = "local-service-lifecycle-x86"
+path = "tests/local-service-lifecycle-x86.rs"
+
 [dev-dependencies]
 tempfile = "3"
 api = { path = "../../libs/api" }

@@ -15,6 +15,7 @@ GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V
 | File | Purpose |
 |------|---------|
 | [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md) | Canonical sole-program decision |
+| [ADR-0023](decisions/0023-local-service-generation-binding.md) | Local service binding axis `(cell_id, generation)`; additive `LookupServiceBound = 429` (Law-1 FROZEN) |
 | [roadmap/current-focus.md](roadmap/current-focus.md) | Current Intel C2C priorities and evidence gates |
 | [QEMU q35 x86-64](../boards/qemu/q35-x86_64/README.md) | Documented x86 build/test path; software evidence, not physical qualification |
 | [getting-started.md](getting-started.md) | Setup, build, run, first contribution |

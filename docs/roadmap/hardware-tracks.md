@@ -12,8 +12,8 @@ shared drivers, see [system-architecture.md](../system-architecture.md).
 Cell-to-Cell Anywhere on one fixed, headless Intel x86-64 configuration the
 sole program. Every hardware task must name its direct C2C deliverable,
 dependency, or regression obligation. Select and qualify one exact Intel
-machine first; only then consider a second node of the identical model and
-configuration, with its own capture. This is not purchase authorization:
+machine first; only then consider a second independently qualified Intel node.
+Matching configuration is preferred, not mandatory. This is not purchase authorization:
 phase 07 and an explicit procurement decision remain mandatory.
 
 AMD, new ARM/RISC-V ports and expansion, GUI/browser, AI, robotics, and
@@ -78,7 +78,7 @@ qualified machine.
 
 | Gate | Missing capability | Blocking evidence | Notes |
 |---|---|---|---|
-| X86-PC-0 | Exact Intel configuration, machine-specific descriptor and HCL capture | Generic `pc/x86_64-pc` descriptor and HCL model landed in phase 01; no machine-specific descriptor or physical HCL row | First exact Intel machine, then an identical second node only after first-machine qualification; phase 07 and procurement approval remain gates |
+| X86-PC-0 | Exact Intel configurations, machine-specific descriptor and HCL capture | Generic `pc/x86_64-pc` descriptor and HCL model landed in phase 01; no machine-specific descriptor or physical HCL row | First exact Intel machine, then a separately qualified second Intel node; matching preferred, not required; phase 07 and procurement approval remain gates |
 | X86-PC-1 | AHCI/SATA storage | Phases 02a/02b completed at `qemu` only, including two-boot FAT32 persistence | Exact physical storage controller still needs capture |
 | X86-PC-2 | xHCI + HID | Phases 03/03b completed at `qemu` only, including shell key delivery | Retain as a substrate/regression dependency; no GUI program or physical USB claim |
 | X86-PC-3 | Ethernet with a shipped exact device ID | Phases 04a/04b completed at `qemu` only; `igb` supports `8086:10c9` (QEMU 82576) and `8086:1533` (flash-backed i210) | i210/i211 was the family research target, not broad SKU support; neither i211 nor flashless i210 is admitted by that claim; no actual NIC is qualified |

@@ -186,6 +186,31 @@ impl RemoteExports {
     pub fn export_count(&self) -> usize {
         self.registry.len()
     }
+
+    /// Read-only intersection for the isolated ingress prototype, not admission.
+    ///
+    /// A config record cannot authenticate a peer or make a destination live.
+    /// Public promotion remains gated; this prototype accepts only exact remote
+    /// records and never changes `disabled_reason`.
+    pub(crate) fn prototype_method_matches(
+        &self,
+        service_id: u16,
+        export_id: u16,
+        version: u8,
+        retry_class: crate::c2c_envelope::RetryClass,
+    ) -> bool {
+        let Some(record) = self.registry.find(service_id, export_id) else {
+            return false;
+        };
+        record.version == version
+            && record.scope == ExportScope::Remote
+            && matches!(
+                (record.retry_class, retry_class),
+                (RetryClass::Idempotent, crate::c2c_envelope::RetryClass::Idempotent)
+                    | (RetryClass::Conditional, crate::c2c_envelope::RetryClass::Conditional)
+                    | (RetryClass::Never, crate::c2c_envelope::RetryClass::Never)
+            )
+    }
 }
 
 pub(crate) use source::{load_remote_exports, RegistrySource, EXPORT_REGISTRY_MAX_BYTES};

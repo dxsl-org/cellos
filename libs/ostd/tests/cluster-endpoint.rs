@@ -76,3 +76,29 @@ fn cell_endpoint_requires_an_explicit_locality_branch() {
     };
     assert_eq!(tid, 3);
 }
+
+#[test]
+fn local_endpoint_binds_only_raw_tid_without_generation() {
+    // Proof of the Phase-01 contract finding:
+    // LocalEndpoint stores only `tid: usize`. It has no provider generation,
+    // cell ID, or server epoch.
+    let endpoint_v1 = LocalEndpoint::<Ping>::new(42).unwrap();
+    let endpoint_v2 = LocalEndpoint::<Ping>::new(42).unwrap();
+
+    // Both descriptors are identical even if they were acquired across a provider
+    // crash and restart where generation incremented.
+    assert_eq!(endpoint_v1.tid(), endpoint_v2.tid());
+}
+
+#[test]
+fn local_endpoint_stale_tid_drift_witness() {
+    // Demonstrates that if a provider dies and respawns on a different TID,
+    // a cached LocalEndpoint retains the stale TID and cannot detect the drift
+    // without attempting a send.
+    let original_provider_tid = 15;
+    let respawned_provider_tid = 18;
+
+    let cached_endpoint = LocalEndpoint::<Ping>::new(original_provider_tid).unwrap();
+    assert_ne!(cached_endpoint.tid(), respawned_provider_tid);
+    assert_eq!(cached_endpoint.tid(), original_provider_tid);
+}

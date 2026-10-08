@@ -10,6 +10,9 @@ pub mod bench_oracle;
 pub mod c2c_deadline;
 pub mod c2c_dedup;
 pub mod c2c_envelope;
+// Phase-01 decision prototype only: no runtime receiver or proof producer.
+#[allow(dead_code)]
+mod c2c_ingress;
 pub mod c2c_receive;
 pub mod export_registry;
 #[path = "ipc-deadline.rs"]

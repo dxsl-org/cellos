@@ -49,7 +49,14 @@ Replace the draft's local-SAS-versus-remote simplification with a two-axis contr
 - **Ingress design proposal:** The legacy broker oracle treats its first eight bytes as an unrestricted sequence, so no byte-0 tag can coexist safely on the same receiver. Prefer mutually exclusive broker image profiles on existing `service::NET_BROKER = 8`: legacy benchmark vs strictly typed RPC, one parser per TID and no fallback. `tests/bench` oracle callers stay in the legacy regression profile until cutover; the typed two-node profile must exclude them. A simultaneous image instead needs a separate registered receiver/service ID and Law-1 review. Nothing has been packaged or enabled.
 - **Replay-floor discovery:** `source_window.rs` orders a peer's source boot epoch numerically; the existing beacon derives its boot epoch from `sys_get_time_ms()`, not a protected monotonic cross-reboot source. If that value were reused for C2C, reboot could make the new node look older. Require authority-bound nonrollback C2C incarnation evidence or a separately reviewed replay-model change before Phase-05 ingress. This requirement is an external gate, not solved by the current KMS/relay scaffold.
 - **Policy/deadline audit:** `RemoteExports` parses five static fields and stays `NoSecureIdentity`; it contains no peer allowlist or live target binding. Draft v3 now requires the intersection of separately provisioned peer policy, authenticated NodeId, exact typed method/retry class and live destination **before** dedup. V1's `relative_deadline` is a `u32` duration, not a cross-node absolute time: an origin admission deadline survives authority queueing, while any destination-arrival budget is separately local. After possibly submitted work, origin expiry without completion is `Indeterminate`. Phase-05/06 negatives now cover config-only export and delayed delivery. These are design findings, not passing runtime evidence.
-- **Stop / blocker:** The draft now proposes ingress profiles and retains the existing remote error enum, but Phase-01 ratification still needs kernel-repair owner review of live local generation binding, a source-backed ingress/quota prototype under portfolio promotion, replay-epoch provenance with the protected authority, independent Law-1 confirmations for genuinely needed ABI changes, and contract-owner sign-off. Phase-02 Tier-2 runtime also waits for exact-profile safe-root proof and file-owner handoff. KMS/Silo relay Phase 04 remains `blocked` on its AC-001..AC-012 gates. No kernel/ABI work or remote enablement has started; the local oracle was **not** rerun for documentation-only edits.
+- **Stop / blocker:** The draft now proposes ingress profiles and retains the existing remote error enum, but Phase-01 ratification still needs kernel-repair owner review of live local generation binding (**design now decided in [ADR-0023](../../docs/decisions/0023-local-service-generation-binding.md); owner handoff still outstanding**), a source-backed ingress/quota prototype under portfolio promotion (**non-activating core now implemented**, see below), replay-epoch provenance with the protected authority, independent Law-1 confirmations for genuinely needed ABI changes (**opcode 429 needed and unconfirmed**), and contract-owner sign-off. Phase-02 Tier-2 runtime also waits for exact-profile safe-root proof and file-owner handoff. KMS/Silo relay Phase 04 remains `blocked` on its AC-001..AC-012 gates. No kernel/ABI work or remote enablement has started; the local oracle was **not** rerun for documentation-only edits.
+
+## Admitted QEMU/host preparation progress (2026-10-08; non-activating)
+
+- **Broker ingress & quota decision core:** Implemented `cells/services/net-broker/src/c2c_ingress.rs` with `IngressDecisionCore` and private-field trust types (`AuthenticatedPeer`, `ProvisionedPeerPolicy`, `LiveDestinationProof`, `ProtectedEpochProof`). Enforces reject-before-dispatch across peer identity mismatch, destination mismatch, unauthorized method, disabled/unmatched export registry, unverified epoch provenance, per-peer work quota (max 4 in-flight), per-peer byte quota (max 2 frames), and global capacity (max 16 in-flight). Cached completed replays return without consuming work quota. Verified by 123 unit tests via `cargo test --locked -p service-net-broker --lib --target x86_64-unknown-linux-gnu`.
+- **Local endpoint lifecycle witness:** Implemented tests in `libs/ostd/tests/cluster-endpoint.rs` demonstrating that `LocalEndpoint` holds strictly a raw TID (`usize`) with no generation or epoch field. Confirmed that cached endpoints cannot distinguish a recycled TID or detect provider restart without an attempted send or explicit generation tokens.
+- **Intel x86 QEMU runner verification:** Executed `BOOT_WINDOW=45 bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso`, verifying clean boot to interactive shell on QEMU q35 with serial COM1.
+- **Hardware qualification clarification:** Updated ADR-0022, HCL, and plan records so that matching configuration for the second node is preferred to minimize bring-up friction, but not mandatory; each node requires independent qualification against applicable HCL gates.
 
 ## Broker image / oracle consumer inventory (preparatory; not approval)
 
@@ -73,7 +80,7 @@ This inventory establishes packaging and callsites, **not** mutually exclusive t
 
 Review ordering remains Spec 20 Draft v3 §2.2; this table identifies missing inputs, not an implemented remote ingress. No quota, identity, replay, ABI or transport change is authorized here.
 
-## Local binding review handoff (kernel-owner decision pending)
+## Local binding handoff (design decided 2026-10-08; kernel-owner handoff pending)
 
 `LookupService=206` returns only the current provider TID or zero (`kernel/src/task/syscall.rs:5500-5505`). The kernel registry stores `service_id → Active(tid) | Paused(tid)`, clears dead providers and replaces a service on respawn (`kernel/src/cell/service_registry.rs:1-11,25-33,43-71`); it does **not** return a provider generation. `LocalEndpoint::new(tid)` checks only nonzero and `call` sends to that stored TID (`libs/ostd/src/cluster_endpoint.rs:57-95`). Thus lookup followed by a send has no atomic live `(service_id, cell_id, generation, tid)` binding in the exported endpoint contract; lookup alone cannot prove a cached descriptor still names the same provider after a restart.
 
@@ -88,6 +95,96 @@ Separate **caller** identity already exists on opt-in `Recv`: kernel-written `Ca
 | Reply arrives after caller timeout or provider restart | `service_call_typed` receives masked by sender TID, not by generation/request ID (`libs/ostd/src/ipc.rs:57-76,95-110`); the bounded helper explicitly requires poisoning the service generation after a receive error (`libs/ostd/src/ipc.rs:120-126`). | Demonstrate stale replies cannot satisfy a later request, including any TID reuse; otherwise classify the outcome as unresolved rather than attributing it to the new provider. |
 
 These are proposed behavioral witnesses, **not** tests added or results observed. The kernel owner must confirm the binding mechanism and the feasible negative oracle before Phase 01 can close.
+
+### Decision recorded 2026-10-08: [ADR-0023](../../docs/decisions/0023-local-service-generation-binding.md)
+
+The design review this section asked for is done. Findings that change the handoff above:
+
+- **Premise corrected.** TIDs are **never re-issued within one boot** (`kernel/src/task/scheduler.rs:290,333`,
+  `kernel/src/task/launch.rs:118,246,251`; no free list exists). A stale cached TID therefore
+  fails hard through `TargetGone` (`kernel/src/task.rs:2166`), not by misdelivery. The reuse that
+  is real is on **`CellId` slots**, which is why a per-Cell `cell_generation` epoch exists
+  (`kernel/src/task/tcb.rs:547-556,479-493`).
+- **The binding axis is `(cell_id, generation)`**, the kernel's existing epoch already consumed by
+  `CallerIdentity`, `CellOwner`, dir attestation, hot swap, retirement matching and the
+  exact-operation IPC path. No new token type or per-task generation is introduced.
+- **The real defect is the sync reply path**, which the kernel itself documents as unfinished: a
+  reply waiter that has already left `Sending` is not woken on provider death
+  (`kernel/src/task/scheduler.rs:1279-1284`).
+- **The kernel already ships the correct primitive**: bounded exact-operation IPC binds the peer
+  as `(cell_id, cell_generation)`, and `peer_died` delivers terminal `PEER_GONE` keyed on
+  `(tid, cell, generation)` (`kernel/src/task/async_ipc.rs:106-138,165-172,298-307`;
+  `kernel/src/task/scheduler.rs:1324-1325`). Local service calls must move onto it.
+
+ADR-0023 therefore decides: registry records the provider `(cell_id, generation)` (kernel-internal);
+**one** append-only opcode `LookupServiceBound` (**429**, next free after `SerialConfigure = 428`)
+returns the binding and leaves `LookupService = 206` untouched; **no new send opcode**; and the
+TID non-reuse invariant gets two guards (fail-closed `checked_add` at the two bare `+= 1` sites,
+plus a boot-time `test-hooks` no-re-issue guard).
+
+### Implemented 2026-10-08 under the granted handoff
+
+Law-1 checkpoint 1 covered the ABI items; the kernel-repair owner granted the **full** file-owner
+handoff the same day (registry record + dispatch + the two `next_task_id` guard sites). Landed:
+
+| Item | Location | Evidence |
+|---|---|---|
+| `LookupServiceBound = 429`, record type, tests | `libs/api/src/abi/{syscall.rs,service_binding.rs,syscall_tests.rs}` | `cargo test -p api` 109 passed |
+| Client wrapper | `libs/ostd/src/syscall.rs` | reachable from a cell; leg 0 of the witness |
+| Registry records/returns `(tid, cell_id, generation)` | `kernel/src/cell/service_registry.rs` | 8 unit tests incl. absent/paused/identity-less |
+| Provider identity captured at every `register` site | `kernel/src/task/syscall.rs`, `kernel/src/cell/hotswap.rs`, `kernel/src/loader/atomic_publication_tests/baseline.rs` | witnessed: `VFS-BINDING tid=4 cell=1 gen=109` |
+| Fail-closed id advance + boot no-re-issue guard | `kernel/src/task/scheduler.rs`, `kernel/src/task/task_id_selftest.rs` | `TASK-ID-REUSE: PASS` on AArch64 test-hooks |
+
+End-to-end on Intel x86_64 QEMU (production feature set): `docs/evidence/local-service-lifecycle-x86-qemu.{txt,log}`,
+driven by `tests/integration/tests/local-service-lifecycle-x86.rs` (passes; also fails against an
+image without `/bin/bench`, so it is not vacuous).
+
+**Still open before Phase 01 can close:** contract-owner sign-off. Law-1 is complete: **checkpoint 2
+was recorded 2026-10-08 and the surface is FROZEN** —
+[`law1-lookupservicebound.md`](law1-lookupservicebound.md) §2.2 pins the confirmed revision and
+`scripts/check-lookupservicebound-law1-digests.sh` fails on drift. The kernel-repair handoff is
+satisfied for this slice.
+
+### Two pre-existing baseline blockers found (neither caused by this slice)
+
+1. **x86_64 `test-hooks` boot panics** in
+   `atomic_publication_tests::unaligned_elf_preparation_restores_state`
+   (`loader/atomic_publication_tests/cases.rs:78`). Only `free-frames` genuinely differs — a
+   frame-accounting delta across `prepare_elf_task` + drop. Reproduced with this entire slice
+   stashed. Consequence: `scripts/x86/qemu-domain-test.sh` never reaches the phase-02 witnesses,
+   and **no** x86_64 `test-hooks` boot reaches the task self-tests. Recorded as an open item in
+   the kernel-repair plan; evidence
+   `docs/evidence/atomic-publication-x86-pre-existing-failure.{txt,log}`.
+2. **AArch64 `test-hooks` could not build** (`-D warnings` on a dead `IDENTITY_DMA_LOGGED` static
+   in `kernel/src/task/drivers/iommu.rs`). **Fixed** with the file's own idiom
+   (`#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]`); no behaviour change. That fix
+   is what made the guard witness above possible.
+
+### Witness observed on Intel x86_64 QEMU (2026-10-08)
+
+ADR-0023's defect 2 is no longer source-only. `bench local-service-lifecycle`
+(`cells/tests/bench/src/scenarios/local_service_lifecycle.rs`) runs both paths against the same
+provider task, which consumes one request and then exits **without replying**:
+
+| Leg | Path | Observed |
+|---|---|---|
+| A | `ostd::ipc::service_call_typed` (what `LocalEndpoint::call` uses) | caller never returns; `SYNC-RESULT=RETURNED` absent; reclaimed only by `sys_force_exit` |
+| B | `ostd::ipc::submit`/`wait`/`take` | `ASYNC-TERMINAL=PEER-GONE` |
+
+Image: `scripts/build-x86_64-c2c-lifecycle-ci.sh` (production feature set, no `test-hooks`;
+isolated `CARGO_TARGET_DIR`, `EMBEDDED_OVERRIDE` and ISO root). Test:
+`tests/integration/tests/local-service-lifecycle-x86.rs`. Evidence:
+`docs/evidence/local-service-lifecycle-x86-qemu.{txt,log}`. The test also fails against an image
+without `/bin/bench`, so its assertions cannot pass vacuously.
+
+Not covered: provider **restart** (the provider is not respawned), any remote/relay path, and the
+TID non-reuse invariant. The existing RV64 broker oracle covers restart-and-re-lookup, but its
+client is never a plain reply waiter blocked in a masked `Recv`.
+
+Incidental repair admitted with this slice: `scripts/unsafe-allowlist.toml` carried a stale entry
+for `cells/services/net/src/tls_handler.rs` (now `unsafe`-free) and omitted the file the `unsafe`
+actually moved to, `cells/services/net/src/tls/dispatch.rs`. `cellos-sign`'s F1 check therefore
+refused **every** image signing step. The entry was retargeted; no source changed.
 
 ## Assumptions
 

@@ -55,8 +55,8 @@ and unsigned code, governed by the [evolution plan](../.agents/260906-dual-mode-
 [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md) supersedes
 [ADR-0007](decisions/0007-development-first-hardware-constrained-execution.md)
 only for hardware focus and independent-lane scheduling. Target one exact Intel
-headless machine, then a second of the same configuration after first-node
-qualification. Existing x86 controller QEMU evidence is not a qualified physical
+headless machine, then a separately qualified second Intel node after first-node
+qualification; matching configuration is preferred, not mandatory. Existing x86 controller QEMU evidence is not a qualified physical
 machine; Intel VMX and x86 Tier 2/C++ gaps remain required work.
 
 ARM/RPi3/RISC-V/AMD code and evidence stay in-tree, but new platform/peripheral
@@ -106,7 +106,7 @@ proposal, commit, and evidence.
 | Current C2C workstream | Required result | Entry boundary |
 |---|---|---|
 | Contract and local service lifecycle | Typed calls, authority, bounded waits, restart and stale-reference behavior | Tier-aware C2C Phase 01 review/ABI gates |
-| Fixed Intel hardware | One qualified physical node, then two same-model nodes with stable wired networking and persistence | Existing PC plan/HCL; procurement and exact-device qualification remain separate |
+| Bounded Intel hardware | One qualified physical node, then two independently qualified Intel nodes with stable wired networking and persistence; matching preferred, not mandatory | Existing PC plan/HCL; procurement and exact-device qualification remain separate |
 | Tier 2 C/C++ | Qualified x86 domain admission and runtime/adapters | Test-only admission and C++ runtime gap are not closed by this decision |
 | Tier 3 Intel | VMX/EPT guest lifecycle, storage/network and explicit C2C bridge | VMX plan P09; existing SVM/TCG evidence is not Intel qualification |
 | LAN and remote/relay | Two-node behavior, authority enforcement, restart/reconnect and explicit uncertain outcomes | Each transport's identity/security contract; no automatic remote activation |
@@ -129,7 +129,7 @@ still determine implementation truth.
 | LAB-01 / BASE-01 / ASSEMBLY-01 software contracts | Current executable work | `ready` | `contract`; host/QEMU only after the named milestone evidence | SAS/LBI 06A LAB-01 and 07A BASE-01 bounded private contracts pass independent host plants at the model-only ceiling; ASSEMBLY-01 is the next slice | Consume the reviewed shared identity/dispatch/observation/reconciliation contract for 08A; native QEMU roles wait for the real Phase05 backend/oracles |
 | Robot physical workflow acceptance | External-gated prerequisite | `external-gated` | `physical` development target, unexercised | SAS/LBI plan 06C/07C/08C | Exact mechanism/controller/fixture/observation/metrology/safety package and applicable activation approvals; no procurement or motion authorization from the plan alone |
 | Organizational server and office profiles | Future capability | `scope-gated` | `contract` | ORG-SRV-01 / ORG-PC-01 profile document | Actual application/hardware inventory, compatibility/disposition matrix and separately activated implementation/qualification lane; no prerequisite on physical robot completion |
-| Intel x86-64 C2C physical substrate | Required dependency | `external-gated` | `qemu` controller evidence; no physical row | PC phases 01–06 have QEMU evidence; first exact Intel node needs separately authorized phase 07 capture | First Intel qualification then separately authorized identical second node; VMX remains a separate prerequisite; former Intel/AMD pair superseded |
+| Intel x86-64 C2C physical substrate | Required dependency | `external-gated` | `qemu` controller evidence; no physical row | PC phases 01–06 have QEMU evidence; first exact Intel node needs separately authorized phase 07 capture | First Intel qualification then separately authorized second Intel node with independent capture; matching preferred, not mandatory; VMX remains separate; former Intel/AMD pair superseded |
 | RPi3 HDMI software and exact-device boundary | Completed / regression-only | `scope-gated` | `physical` development evidence on the prior captured revision `a22082` / Model B / serial `000000003d042795` device; mapping to current inventory unresolved | Phases 04 and 05 completed; no active HDMI slice | Reopen only for a regression: the exact mailbox unsafe island is approved by `lungmat8`, strict F1/F5 passes, and the separately recorded TFTP deployment, later UART boot block, and user visual observation close the reviewed exact-device gate |
 | RPi3 peripheral hardware integration | Current executable work | `ready` | `host` now; `physical` development evidence after exact-device exercise | G1 board/peripheral lane using the two available Raspberry Pi 3 Model B+ boards; HDMI external-display work is completed and regression-only | Reconcile each current board's exact serial, revision, and condition before attributing evidence; stop before any production-security qualification claim |
 | Camera and other sensor integration | Current executable work | `deferred` | `contract` until resumed; then exact-device `physical` development evidence | Deferred in the current session order; the available camera must be identified before use | Resume the sensor lane in a later session and record the exact sensor/interface before exercise |

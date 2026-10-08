@@ -16,8 +16,9 @@ tags: [x86, pc, ahci, xhci, igb, dmar, iommu, hcl, qemu-first, g2]
 As of 2026-10-08, [ADR-0022](../../docs/decisions/0022-intel-x86-64-c2c-only-direction.md)
 makes Cell-to-Cell Anywhere on Intel x86-64 the sole program. This plan supplies
 its fixed, headless hardware substrate, not general PC/industrial support.
-Select one exact Intel machine, qualify it, then consider an identical second
-node with its own capture and separate procurement authorization. No AMD row,
+Select one exact Intel machine, qualify it, then consider a second Intel
+node with its own capture and separate procurement authorization. Matching
+configuration is preferred, not mandatory. No AMD row,
 new ARM/RISC-V platform work, or autonomous GUI/browser/AI/robotics/OS program
 is scheduled. Every remaining task must name its direct Intel C2C deliverable,
 dependency, or required regression.
@@ -88,8 +89,8 @@ Completed phases' exact device arguments and evidence below remain QEMU-only.
 - **Phase 07 remains held.** Green QEMU gates for 02b / 03 / 04b / 05 are
   prerequisites, not purchase authorization. An explicit procurement decision
   is still required before acquiring the first Intel machine. A second node
-  must be the identical model/configuration and wait for first-machine
-  qualification plus separate approval.
+  may use a different model/configuration, independently qualified after
+  first-machine qualification plus separate approval; matching is preferred.
 - **No automatic NIC expansion.** The historical e1000e/I219 follow-up is
   parked; the selected fixed Intel configuration must match the supported
   exact-ID HCL. Any new driver work needs a direct C2C dependency and scope decision.

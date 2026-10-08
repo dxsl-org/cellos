@@ -1,0 +1,101 @@
+Local service-call lifecycle witness — x86_64 QEMU q35, observed 2026-10-08
+==========================================================================
+
+What this records
+-----------------
+Three legs produced by one run of `bench local-service-lifecycle` on a real x86_64
+QEMU boot. This is behaviour evidence for
+`docs/decisions/0023-local-service-generation-binding.md`: the synchronous masked
+reply wait versus the bounded exact-operation call, and the end-to-end
+reachability of the additive `LookupServiceBound = 429`.
+
+Image (isolated; no shared artifact is written)
+-----------------------------------------------
+  builder : scripts/build-x86_64-c2c-lifecycle-ci.sh
+  iso     : build/vicell-x86-c2c-lifecycle.iso
+  kernel  : target/x86-c2c-lifecycle/x86_64-unknown-none/release/cellos-kernel
+            production feature set (no `test-hooks`)
+  cells   : /bin/{shell,vfs,config,platform,nvme,e1000,ls,cat,echo,ps,bench,bench-probe}
+            signed F1/F5; bench and bench-probe already hold `spawn` in the
+            default policy (scripts/sign-policy.py), which is all the witness needs
+
+How to reproduce
+----------------
+  bash scripts/build-x86_64-c2c-lifecycle-ci.sh
+  cargo test --manifest-path tests/integration/Cargo.toml \
+      --target x86_64-unknown-linux-gnu --test local-service-lifecycle-x86
+
+The integration test asserts the six anchors below, the bound-lookup semantics, and
+decisively the **absence** of `SYNC-RESULT=RETURNED`. Against an image without
+`/bin/bench` the same test fails, so the assertions cannot pass vacuously.
+
+Observed output (raw log: local-service-lifecycle-x86-qemu.log:192-204)
+---------------------------------------------------------------------
+  Cellos > bench local-service-lifecycle
+  [local-lifecycle] START
+  [local-lifecycle] VFS-BINDING tid=4 cell=1 gen=109 matches_lookup=true
+  [local-lifecycle] ABSENT-BINDING lookup=None bound_is_none=true
+  [bench-probe] Started with role: 'c2c-provider'
+  [local-lifecycle] provider-ready
+  [bench-probe] Started with role: 'c2c-sync-caller:9'
+  [local-lifecycle] sync-caller-start provider=9
+  [local-lifecycle] provider-exiting-without-reply
+  [local-lifecycle] SYNC-LEG=complete
+  [bench-probe] Started with role: 'c2c-provider'
+  [local-lifecycle] provider-ready
+  [local-lifecycle] provider-exiting-without-reply
+  [local-lifecycle] ASYNC-TERMINAL=PEER-GONE
+  [local-lifecycle] PASS
+
+Leg 0 — the additive `LookupServiceBound = 429`
+-----------------------------------------------
+  `VFS-BINDING tid=4 cell=1 gen=109 matches_lookup=true`, while `LookupService(VFS)`
+  answers the same tid. Every layer has to work for that line to appear: the opcode's
+  allowlist bit 37, the kernel dispatch, the registry's recorded identity, the fixed
+  24-byte write into a caller buffer, and `ServiceBinding::from_bytes`. A capture bug
+  (identity stored as 0/0) makes the kernel report *no* binding, so the leg fails
+  loudly instead of passing on a stub.
+
+  `ABSENT-BINDING lookup=None bound_is_none=true` for an id this image does not
+  provide (the AI cell is neither built nor launched here): absence is stated the same
+  way by both opcodes.
+
+Leg A — synchronous (`ostd::ipc::service_call_typed`, the path
+`LocalEndpoint::call` / `ServiceRef::call` use)
+-----------------------------------------------
+  1. caller `sys_send`s the request to the provider tid;
+  2. the provider prints `provider-exiting-without-reply`, which it can only do
+     after `sys_recv` delivered the request — so the caller's handoff completed
+     and the caller left `Sending`;
+  3. the provider calls `sys_exit(0)`, i.e. the ordinary `exit_task` path;
+  4. the caller parks in a sender-masked `Recv` and is **never woken**:
+     `SYNC-RESULT=RETURNED` does not appear, and `SYNC-LEG=complete` is printed
+     only after the orchestrator's `sys_force_exit(caller)` succeeds — which
+     itself proves the caller was still live and still blocked.
+
+  This is the gap the kernel documents at `kernel/src/task/scheduler.rs:1279-1284`
+  ("a plain reply waiter that has already left `Sending` is still not woken
+  here"). It is not a blocked *send*: `exit_task` does clean up `Sending` waiters
+  (`:1285-1298`), and such a waiter returns and would have printed RETURNED.
+
+Leg B — bounded exact-operation (`ostd::ipc::submit`/`wait`/`take`)
+------------------------------------------------------------------
+  Same dead peer, same kernel: the operation is bound to the peer as
+  `(cell_id, cell_generation)` (`kernel/src/task/async_ipc.rs:106-138`) and
+  `peer_died` transitions it to a terminal
+  (`kernel/src/task/async_ipc.rs:298-307`, wired at
+  `kernel/src/task/scheduler.rs:1324-1325`). The caller observes
+  `ASYNC-TERMINAL=PEER-GONE` instead of hanging.
+
+What this does NOT prove
+------------------------
+  * Nothing about a *restart*: the provider exits and is not respawned. The
+    provider-restart leg (re-lookup, stale-tid send refusal, state reset) is the
+    separate RV64 broker oracle, which covers a different shape — its client is
+    never a plain reply waiter blocked in a masked recv.
+  * Nothing about a *remote* peer, a relay route, or authenticated identity.
+  * Nothing about TID non-reuse enforcement at boot under `test-hooks` here: that
+    guard is exercised on the AArch64 test-hooks lane instead
+    (`docs/evidence/task-id-reuse-guard-aarch64-qemu.log`).
+  * No fix to the synchronous path: `LocalEndpoint::call` still uses it. Moving the
+    SDK onto the bounded primitive is C2C Phase 03 work under its own gates.

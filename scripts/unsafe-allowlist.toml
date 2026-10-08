@@ -403,11 +403,11 @@ approver = "lungmat8"
 date = "2026-08-25"
 
 [[file]]
-path = "cells/services/net/src/tls_handler.rs"
+path = "cells/services/net/src/tls/dispatch.rs"
 class = "legacy-raw-ptr"
-reason = "Raw-pointer plumbing for single-threaded TLS context and handshake passing to underlying embedded-tls transport."
+reason = "`poll_future` erases the `SocketSet<'_>` borrow into a task-local TLS context slot that the transport callbacks read for the duration of one poll; the context is cleared on the same stack frame before returning."
 approver = "cellos-maintainers"
-date = "2026-08-23"
+date = "2026-10-08"
 
 [[file]]
 path = "cells/services/net/src/tls/socket.rs"

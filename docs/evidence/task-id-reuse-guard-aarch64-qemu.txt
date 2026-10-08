@@ -1,0 +1,48 @@
+TID non-reuse guard — AArch64 test-hooks QEMU, observed 2026-10-08
+==================================================================
+
+What this records
+-----------------
+`kernel::task::task_id_selftest` runs at boot under `test-hooks` and proves the
+invariant ADR-0023 §2.5 records: **a task id is never re-issued within one boot**.
+The guard spawns real threads through the ordinary syscall path, retires each one
+through the real death funnel (`exit_task`), and asserts no later allocation returns
+a number that was already issued and that the sequence is strictly increasing.
+
+Why the invariant is load-bearing: local IPC safety (a cached endpoint naming a dead
+tid must fail closed), the service registry (a tid names exactly one provider for the
+life of the boot), and the exact-operation IPC peer binding
+`(tid, cell_id, generation)` all depend on it. A later change turning the counter into
+a free list would silently weaken all three; this guard makes that a boot failure.
+
+How to reproduce
+----------------
+  bash scripts/build-aarch64-test-hooks-ci.sh
+  BOOT_WINDOW=45 bash scripts/qemu-aarch64-test-hooks.sh
+
+Observed (raw log: task-id-reuse-guard-aarch64-qemu.log:232-233)
+---------------------------------------------------------------
+  [ INFO] [selftest] TASK-ID-REUSE: PASS (monotonic across spawn/exit)
+  [INFO] task-id-reuse self-test PASS (monotonic across spawn/exit)
+
+The boot continues normally past the guard to the guest service suite
+(`[vfs-test] Results: 96 PASS, 0 FAIL`), so the guard is transparent to the boot
+sequence: it snapshots and restores `next_task_id`, removes its synthetic parent and
+reaps every spawned thread.
+
+Why this lane and not x86
+-------------------------
+The x86_64 test-hooks lane is currently blocked by a **pre-existing** failure that
+aborts boot before any task self-test runs — a frame-count delta in
+`atomic_publication_tests::unaligned_elf_preparation_restores_state`. It reproduces
+with every change of this slice stashed, so it is not caused here; see
+`docs/evidence/atomic-publication-x86-pre-existing-failure.log` and the open item
+recorded in `.agents/260927-0739-kernel-architecture-repair/plan.md`.
+
+What this does NOT prove
+------------------------
+  * Nothing about the x86 counter specifically: the guard is architecture-neutral
+    code that compiles on riscv64, aarch64 and x86_64, but only this lane booted far
+    enough to run it. The production (non-test-hooks) images do not run it at all.
+  * No claim that a future free-list would be *corrected* by this guard; it only
+    refuses to boot, which is the point.

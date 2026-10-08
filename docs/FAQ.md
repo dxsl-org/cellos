@@ -61,8 +61,9 @@ incomplete. See [current focus](roadmap/current-focus.md).
 
 ## 6. What hardware does Cellos run on?
 
-**Current target:** one exact Intel x86-64 configuration, then a second identical
-node for physical C2C. The [HCL](hardware-compatibility-list.md) has no qualified
+**Current target:** one exact Intel x86-64 configuration, then a second independently
+qualified Intel node for physical C2C. Matching models are preferred, not required.
+The [HCL](hardware-compatibility-list.md) has no qualified
 physical Intel row yet. x86 QEMU/controller and SVM guest evidence is software-only;
 it does not prove Intel VMX guest execution.
 

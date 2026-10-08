@@ -938,6 +938,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("thread-quota self-test FAIL");
         }
+        #[cfg(feature = "test-hooks")]
+        if task::task_id_selftest::self_test() {
+            log_info("task-id-reuse self-test PASS (monotonic across spawn/exit)");
+        } else {
+            log_info("task-id-reuse self-test FAIL");
+        }
         match task::thread_user_entry_selftest::self_test() {
             Some(true) => log_info("thread-user-entry self-test PASS (U-mode entry+arg+exit)"),
             Some(false) => log_info("thread-user-entry self-test FAIL"),

@@ -50,6 +50,12 @@ pub const fn dma_without_remapper(required: DmaIsolation) -> DmaWithoutRemapper 
 
 /// Set once when a machine without a remapper is allowed identity DMA, so the
 /// condition appears in the boot log without repeating on every buffer.
+///
+/// Only the x86_64 arm reaches the identity-DMA branch, so every other target
+/// would otherwise carry a dead static — and `-D warnings` turns that into a
+/// build failure for the whole lane (e.g. `scripts/build-aarch64-test-hooks-ci.sh`).
+/// Same idiom as `dma_without_remapper` above.
+#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
 static IDENTITY_DMA_LOGGED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

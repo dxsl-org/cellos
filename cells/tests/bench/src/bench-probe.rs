@@ -40,8 +40,12 @@ fn cell_main() {
     if role.starts_with("native-stateful-cached-inc:") {
         scenarios::native_stateful::run_cached_sender_probe(role);
     }
+    if role.starts_with("c2c-sync-caller:") {
+        scenarios::local_service_lifecycle::run_sync_caller(role);
+    }
     match role {
         "c2c-client" => scenarios::c2c_broker_oracle::run_client(),
+        "c2c-provider" => scenarios::local_service_lifecycle::run_provider(),
         "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),
         "ctl-loop" => scenarios::control_loop::run_control_loop(),

@@ -18,10 +18,11 @@ created: 2026-09-27
 [ADR-0022](../../docs/decisions/0022-intel-x86-64-c2c-only-direction.md) makes
 this Cellos's primary and only program for the coming period. All work must
 name a direct Intel C2C deliverable, dependency, or regression obligation.
-The target is one fixed headless Intel x86-64 configuration: first qualify one
-exact machine, then a separately authorized identical second node. Phase 07
-of the x86-PC plan remains the procurement gate; strategy is not purchase
-authorization.
+The target is a bounded headless Intel x86-64 profile: first qualify one exact
+machine, then a separately authorized second Intel node. Matching configuration
+is preferred to reduce work, not mandatory; different models require independent
+qualification. Phase 07 of the x86-PC plan remains the procurement gate;
+strategy is not purchase authorization.
 
 The intended capability spans Tier 1 native Cells, Tier 2 C/C++ workloads and
 Tier 3 VM guests through explicit adapters, with local, LAN and relay paths.

@@ -75,6 +75,7 @@ mod tests {
         (422, ViSyscall::PauseService),
         (423, ViSyscall::RegisterUsbHidProducer),
         (424, ViSyscall::FindPcieDeviceByVendor),
+        (429, ViSyscall::LookupServiceBound),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -129,6 +130,7 @@ mod tests {
         assert_eq!(ViSyscall::PauseService as usize, 422);
         assert_eq!(ViSyscall::RegisterUsbHidProducer as usize, 423);
         assert_eq!(ViSyscall::FindPcieDeviceByVendor as usize, 424);
+        assert_eq!(ViSyscall::LookupServiceBound as usize, 429);
         assert_eq!(ViSyscall::Chdir as usize, 252);
         assert_eq!(ViSyscall::Getcwd as usize, 253);
         assert_eq!(ViSyscall::Fstat as usize, 254);
@@ -275,6 +277,24 @@ mod tests {
         let legacy = SyscallSet::EMPTY.with(ViSyscall::FindPcieDevice);
         assert!(legacy.permits(ViSyscall::FindPcieDeviceByVendor));
         assert_eq!(ViSyscall::FindPcieDeviceByVendor as usize, 424);
+    }
+
+    /// `LookupServiceBound` answers the same question as `LookupService` with the
+    /// provider's identity instead of a bare tid, so it shares that opcode's open
+    /// allowlist bit 37 and consumes no fresh bit — the `u64` allowlist is full
+    /// (bits 0-62 syscalls, 63 the VFS-mutate declaration). An image whose
+    /// `__ViCell_syscalls` section was generated for `LookupService` keeps working.
+    #[test]
+    fn lookup_bound_shares_open_lookup_authority() {
+        assert_eq!(ViSyscall::LookupService.allowlist_bit(), Some(37));
+        assert_eq!(ViSyscall::LookupServiceBound.allowlist_bit(), Some(37));
+        let legacy = SyscallSet::EMPTY.with(ViSyscall::LookupService);
+        assert!(legacy.permits(ViSyscall::LookupServiceBound));
+        assert_eq!(ViSyscall::LookupServiceBound as usize, 429);
+        // 429 is the next free opcode after SerialConfigure = 428, and 400 stays
+        // unmapped so retired whole-sequence hot-swap callers fail closed.
+        assert_eq!(ViSyscall::SerialConfigure as usize, 428);
+        assert_eq!(ViSyscall::from(429), ViSyscall::LookupServiceBound);
     }
 
     #[test]

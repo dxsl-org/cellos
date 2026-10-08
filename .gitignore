@@ -128,5 +128,28 @@ cells/apps/vove/
 /test_ls*
 /run_test.sh
 
+# Generated QEMU/test output workdirs from local evidence runs.
+# Scope to these output families; do not ignore the entire /build tree.
+/build/cell-scale-target/
+/build/rpi3-gate/
+/build/tier3-hostile-current/
+/build/tier3-hostile-segmax/
+/build/tier3-nginx-segmax/
+/build/tier3-persistence-isolated/
+/build/tier3-python-nettrace/
+/build/tier3-python-segmax/
+/build/tier3-qemu-stability-1790640945358/
+/build/tier3-segmax-*/
+/build/tier3-stability-current-1790644936314/
+/build/x86-c2c-lifecycle-iso-root/
+/build/x86-domain-test-iso-root/
+/build/x86-nginx-gate/
+/build/x86-nginx-initramfs.cpio.gz
+/build/x86-nginx-regression/
+/build/x86-pc-lane/
+/build/x86-prod-check-iso/
+/build/x86-prod-refusal-iso-root/
+/build/x86-python-gate/
+
 # Real-weight AI validation checkpoints (scripts/fetch-ai-test-model.sh)
 .ai-models/

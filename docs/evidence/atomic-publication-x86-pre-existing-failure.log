@@ -1,0 +1,164 @@
+c[?7l[2JSeaBIOS (version 1.16.3-debian-1.16.3-2)
+
+
+iPXE (https://ipxe.org) 00:02.0 CA00 PCI2.10 PnP PMM+0EFCACF0+0EF0ACF0 CA00
+Press Ctrl-B to configure iPXE (PCI 00:02.0)...                                                                               
+
+
+Booting from DVD/CD...
+c[?7l[2Jc[?7l[2Jvbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+limine: Loading executable `boot():/boot/kernel.elf`...
+limine: Physical base:   0xf208000
+limine: Virtual base:    0xffffffff80000000
+limine: Slide:           0x0
+limine: ELF entry point: 0xffffffff80000000
+limine: Base revision:   3
+limine: Requests count:  6
+limine: Top of HHDM:     0x40000000
+acpi: Found RSDP at 0xf52c0
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Mode was already set, perfect!
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+paging: 1GiB pages are supported!
+[x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64
+[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT
+[INFO] CET-IBT: unavailable
+[INFO] PKU: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[boot] kernel_phys_base=0x000000000f208000
+[INFO] Frame allocator initialized
+[INFO] Initializing x86_64 paging (kernel PML4)...
+[INFO] x86_64 paging initialized
+[INFO] Activating x86_64 paging (mov cr3)...
+
+[kernel] x86_64 paging: PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x59000 — domain roots use tag 0 with a full CR3 flush)
+QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
+[INFO] x86 virt: root operation active (SVM)
+[INFO] Heap initialized
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] RAM Disk: read-only, 4096 KB (8192 sectors)
+[ INFO] UART Input Buffer Initialized
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ WARN] [x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 2 base=0x3e8 irq=4 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 3 base=0x2e8 irq=3 absent (16550 probe failed)
+[INFO] x86_64: ramdisk + UART RX IRQ initialised
+[ INFO] [pcie] ECAM fallback scan bus 0 @ 0xb0000000 (1 MiB window)
+[ INFO] [pcie] 00:00.0 vendor=8086 device=29c0 class=06:00:00 bar0=0x0
+[ INFO] [pcie] 00:01.0 vendor=1234 device=1111 class=03:00:00 bar0=0xfd000000
+[ INFO] [pcie] 00:02.0 vendor=8086 device=10d3 class=02:00:00 bar0=0xfeb80000
+[ WARN] [e1000] unsupported Ethernet 8086:10d3; driver gate closed
+[ INFO] [pcie] 00:1f.0 vendor=8086 device=2918 class=06:01:00 bar0=0x0
+[ INFO] [pcie] 00:1f.2 vendor=8086 device=2922 class=01:06:01 bar0=0x0
+[ INFO] [pcie] 00:1f.3 vendor=8086 device=2930 class=0c:05:00 bar0=0x0
+[ INFO] [pcie] ECAM scan complete: 6 device(s) found
+[ WARN] [vtd] no ACPI DMAR unit; using the board-declared q35 register base 0xfed90000 (fallback)
+[ INFO] [vtd] Intel VT-d not present (GCAP=0x0)
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 64
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [policy] no /POLICY.BIN in VIFS1 — absent
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] [selftest] DEATH-SUBSCRIBER-QUOTA: PASS pairs=32 duplicates=8 owner 0->0->0 exit 0->0
+[INFO] death-subscriber quota self-test PASS
+[INFO] [selftest] PCIE-BAR-WINDOW: PASS (bounded, aligned, overflow-safe)
+[ INFO] === ELF Loader Tests ===
+[ INFO]   [ok] empty path rejected
+[ INFO]   [ok] path without leading '/' rejected
+[ INFO]   [ok] path longer than MAX_CELL_PATH rejected
+[ INFO]   [ok] well-formed path passes format validation
+[ INFO]   [ok] forged "/bin/vfs" name → /mem/vfs
+[ INFO]   [ok] every label component is non-empty and separator-free
+[ INFO]   [ok] no forged name selects a path-derived capability
+[ INFO]   [ok] 300-char name truncated to 69 bytes
+[ INFO]   [ok] empty .rela.dyn → Ok
+[ERROR] [reloc] .rela.dyn size 7 not a multiple of Rela64 size 24
+[ INFO]   [ok] non-multiple rela size → InvalidInput
+[ERROR] [reloc] too many relocations: 65537 > 65536
+[ INFO]   [ok] 65537 entries (> 65536) → InvalidInput
+[ERROR] [reloc] unsupported relocation type 255
+[ INFO]   [ok] unknown reloc type 0xFF → NotSupported
+[ INFO]   [ok] R_RISCV_NONE → no-op, Ok
+[ INFO]   [ok] R_RISCV_RELATIVE patched 0xFFFF800000146000 → 0xFFFF800000146400
+[ INFO]   [ok] relocation target outside owned pages rejected
+[ INFO]   [ok] relocation target in owned-page hole rejected
+[ INFO]   [ok] cross-page relocation word rejected
+[ INFO]   [ok] overflowing relocation target rejected
+[ INFO]   [ok] CellManifest is 16 bytes (v2)
+[ INFO]   [ok] valid v2 manifest parses with correct flags + protection class
+[ INFO]   [ok] v1 manifest upcasts to v2 with PROTECTION_CLASS_LEGACY
+[ INFO]   [ok] bad magic rejected
+[ INFO]   [ok] short slice rejected (both v1 floor and v2 16-byte floor)
+[ INFO]   [ok] bad version rejected
+[ INFO]   [ok] reserved flag bits rejected
+[ INFO]   [ok] v2 reserved fields (cap_args_off, reserved) rejected when non-zero
+[ INFO]   [ok] out-of-range tier values rejected
+[ INFO]   [ok] PROTECTION_CLASS_LEGACY parses as a valid native v2 class (tier-less constructor output)
+[ INFO]   [ok] network=false → no NetworkCap granted
+[ INFO]   [ok] manifest-section admission corpus
+[ INFO]   [ok] opcode 61 → ForceExit
+[ INFO]   [ok] ForceExit allowlist_bit = None
+[ INFO]   [ok] signing::self_test() passed
+[ INFO]   [ok] extract_sig(&[]) → None
+[ INFO]   [ok] extract_sig(non-elf) → None
+[ INFO]   [ok] extract_sig(constructed elf) → Some([0xAB; 64])
+[ INFO]   [ok] extract_sig tolerates unrelated non-UTF-8 section name
+[ INFO]   [ok] extract_sig rejects NOBITS signature declaration
+[ INFO]   [ok] signing_required() -> true (Tier 1 SAS admission gate active)
+[ INFO]   [ok] CELLOS-LOADER-SIG-001: metadata and segment mutations rejected
+[ERROR] [wx] refusing to spawn 'selftest': page 0x5000 is W+X after the boundary merge — two PT_LOADs with different permissions share it; align the segments to 4 KiB
+[ERROR] ELF: rejecting spawn — PT_LOAD #0 at 0x1000 declares W+X; writable code is refused (split the segment or drop PF_X in the linker script)
+[ INFO] [wx] self-tests PASSED
+[ INFO] ELF LOAD: 0x100000000-0x100009AEA flags=R-X
+[ INFO] ELF LOAD: 0x100009AF0-0x10000A978 flags=R--
+[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
+[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
+[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
+[ INFO] [wx] 'atomic-unaligned': 12/270 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x100009AEA flags=R-X
+[ INFO] ELF LOAD: 0x100009AF0-0x10000A978 flags=R--
+[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
+[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
+[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
+[ INFO] [wx] 'atomic-unaligned': 12/270 cell pages lowered to read-only/execute-only
+[ERROR] ATOMIC_PUBLICATION_ALIGNMENT: MISMATCH stage=unaligned-prepare field=state
+[ERROR] ATOMIC_PUBLICATION_ALIGNMENT: MISMATCH stage=unaligned-prepare field=free-frames
+
+[KERNEL PANIC] Critical failure.
+panicked at kernel/src/loader/atomic_publication_tests/cases.rs:78:5:
+unaligned ELF preparation must be atomic and parser-safe
+[KERNEL PANIC] halting...
+qemu-system-x86_64: terminating on signal 15 from pid 188859 (timeout)

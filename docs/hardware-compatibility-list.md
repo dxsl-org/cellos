@@ -8,9 +8,10 @@ fills rows; phase 01 defines the model).
 `docs/specs/04-hardware.md` §7 (x86 PC driver order).
 
 **Current direction (2026-10-08):** [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md)
-limits qualification to the fixed headless Intel x86-64 Cell-to-Cell Anywhere
-configuration. Select one exact machine first; qualify it before a separately
-authorized identical second node. AMD/new ARM/RISC-V expansion is parked.
+limits qualification to the headless Intel x86-64 Cell-to-Cell Anywhere profile.
+Select one exact machine first; qualify it before a separately authorized second
+node. Reusing its configuration is preferred, not required; each different
+configuration needs independent qualification. AMD/new ARM/RISC-V expansion is parked.
 This list and completed QEMU gates authorize neither purchase nor remote/production
 activation; phase 07 and the existing security/authority gates still apply.
 
@@ -71,8 +72,9 @@ C2C guest adapter require their own evidence even after R9 passes.
 
 Empty. No `S2`/`S3` row exists yet. Phase 07 first captures one exact Intel
 machine. Only after first-machine qualification and separate procurement
-approval may it add a second node of the identical model/configuration;
-the second unit still needs its own capture. No Intel/AMD pair is planned.
+approval may it add a second Intel node. Matching the first configuration is
+preferred to reduce bring-up work, not mandatory; every unit needs its own
+capture, and a different model must meet the same applicable gates. No Intel/AMD pair is planned.
 
 | Machine / serial | Chipset / CPU | BIOS (version, date) | R1 COM1/SOL | R2 HPET | R4 storage | R5 ISO boot | R6 NIC / PCI ID | R9 Intel VT-x / EPT | R8 VT-d / DMAR | R3 Secure Boot off | Level | Captured | Log | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|

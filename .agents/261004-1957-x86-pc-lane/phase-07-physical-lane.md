@@ -26,8 +26,9 @@ approval and completed QEMU prerequisites do not authorize a purchase.
 
 - Select **one exact Intel machine** against the HCL. Acquire it only after
   explicit procurement approval; capture it and obtain first-machine
-  qualification before considering a separately authorized second node of
-  the **identical model/configuration**, with its own evidence. No AMD
+  qualification before considering a separately authorized second Intel node.
+  Identical configuration is preferred to reduce work, not mandatory; a different
+  model needs independent qualification and bounded driver scope. No AMD
   qualification row is an objective.
 - For each machine, capture and record: vendor/model, chipset/PCH, CPU family,
   BIOS version **and date**, COM1 verified at `0x3F8`/IRQ 4 (or BMC SOL
@@ -54,8 +55,8 @@ approval and completed QEMU prerequisites do not authorize a purchase.
 - **Procurement gate.** QEMU prerequisites 02b/03/04b/05 must remain satisfied
   and an explicit purchase decision must name the first configuration.
   First-machine qualification and a separate purchase decision gate the
-  identical second node. No further machines or new hardware platforms are
-  authorized by this phase.
+  second Intel node, whether matching or different. No further machines or new
+  hardware platforms are authorized by this phase.
 - No production-qualification, fleet, or security claim. The production root and
   secure/measured boot remain separate external gates.
 
@@ -63,7 +64,7 @@ approval and completed QEMU prerequisites do not authorize a purchase.
 
 - First-machine milestone: one exact Intel HCL row with complete captures and
   a separately recorded qualification decision before second-node acquisition.
-  Two-node milestone: a second row for the identical model/configuration, bound
+  Two-node milestone: a second independently qualified Intel row, bound
   to that unit's own logs; no transfer of first-unit evidence by model name.
 - Every mandatory requirement (HCL R1–R9) has its specified capture for the machine. A
   machine that fails any of them is recorded in the HCL refusal register instead
@@ -79,7 +80,7 @@ approval and completed QEMU prerequisites do not authorize a purchase.
 - AMD qualification/AMD-Vi and new ARM/RISC-V ports: paused.
 - RS485 claims, watchdog, SIO GPIO or other peripheral programs without a
   direct C2C dependency: paused; optional inventory does not authorize work.
-- Acquiring an unmatched second model or expanding beyond the gated identical pair.
+- Expanding beyond the separately gated two-node Intel setup or adding unrelated drivers.
 
 ## Risk assessment
 

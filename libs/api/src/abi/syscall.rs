@@ -565,6 +565,37 @@ pub enum ViSyscall {
     /// (115200, 57600, 38400, 19200, 9600). Anything else is refused rather than
     /// rounded to a rate the caller did not ask for.
     SerialConfigure = 428,
+    /// 429: Resolve a well-known `service_id` to its **live provider binding**,
+    /// not just its tid.
+    ///
+    /// ABI: a0 = service_id (u16), a1 = out_ptr, a2 = out_len →
+    /// [`crate::service_binding::SERVICE_BINDING_LEN`] (24) bytes written on
+    /// success; `0` if no live provider is registered (the same absence sentinel
+    /// [`Self::LookupService`] returns, and also the answer for a provider hidden
+    /// behind a hot-swap pause); `Err` for a buffer shorter than the record —
+    /// never a partial write.
+    ///
+    /// The record is
+    /// [`crate::service_binding::ServiceBinding`] `{ tid, cell_id, generation }`,
+    /// resolved and written in one instant under the scheduler lock. It is
+    /// deliberately separate from `LookupService = 206`, whose bare-tid return with
+    /// `0 = absent` is stable ABI that must not be reinterpreted.
+    ///
+    /// `tid` alone is not an identity: it says where to send, not which Cell
+    /// incarnation is there. `cell_id` alone is not one either, because Cell slots
+    /// are reused. `generation` is the per-Cell epoch the kernel mints at cell
+    /// creation, and it is the same axis [`crate::caller_identity::CallerIdentity`]
+    /// and [`crate::cell_owner::CellOwner`] already use — one identity concept, not
+    /// two.
+    ///
+    /// The binding is **boot-local**. It is not a remote replay epoch and carries no
+    /// cross-reboot meaning; it grants no authority, and the kernel re-verifies the
+    /// live binding when the returned tid is actually used.
+    ///
+    /// Allowlist: shares bit 37 with [`Self::LookupService`], which owns that bit as
+    /// an open syscall, so any client that may resolve a service endpoint today may
+    /// resolve its binding tomorrow.
+    LookupServiceBound = 429,
     ///
     /// Allowlist: all four share the DriverRegistration bit (50) with
     /// `RegisterBlockDriver`/`FindPcieDevice`/`FindPcieDeviceByVendor`, exactly
@@ -998,7 +1029,11 @@ impl ViSyscall {
             // (allowlist-only here; the kernel authority gate requires SupervisorCap).
             Self::Snapshot => Some(HOTSWAP_STATE_TRANSFER_BIT),
             // LookupService is an open syscall (any client resolves a service endpoint).
-            Self::LookupService => Some(37),
+            // LookupServiceBound shares the same bit: it answers the same question with
+            // the provider's identity instead of a bare tid, so a client that may resolve
+            // an endpoint may resolve its binding. It consumes no fresh bit — the u64
+            // allowlist is full (bits 0-62 syscalls, 63 the VFS-mutate declaration).
+            Self::LookupService | Self::LookupServiceBound => Some(37),
             // Heartbeat is an open syscall (any cell asserts its own liveness).
             Self::Heartbeat => Some(38),
             // GrantCap (bit 39): cells that need zero-copy large-file I/O via Grant API.
@@ -1279,6 +1314,7 @@ impl From<usize> for ViSyscall {
             426 => ViSyscall::SerialWrite,
             427 => ViSyscall::SerialRead,
             428 => ViSyscall::SerialConfigure,
+            429 => ViSyscall::LookupServiceBound,
             _ => ViSyscall::Unknown,
         }
     }

@@ -1593,6 +1593,20 @@ fn caller_has_block_io(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.block_io_cap.is_some())
 }
 
+/// Read a task's live Cell identity `(cell_id, generation)`.
+///
+/// Takes the scheduler lock itself, so a caller must not already hold it. The
+/// service registry records this identity so `LookupServiceBound` can answer with
+/// a binding instead of a bare tid; a task whose identity is missing yields
+/// `None` and the caller decides whether that is a refusal or an unbindable route.
+fn live_cell_identity(tid: usize) -> Option<(u64, u64)> {
+    super::SCHEDULER
+        .lock()
+        .as_ref()
+        .and_then(|sched| sched.tasks.get(&tid))
+        .map(|t| (t.cell_id.0, t.cell_generation))
+}
+
 /// Per-cell block-I/O range gate (Milestone 2.5 P03).
 ///
 /// Replaces the old global `sector >= CELL_TABLE_BASE_LBA` check: the caller's
@@ -1894,10 +1908,22 @@ fn register_driver_service(
         return Err(SyscallError::PermissionDenied);
     }
 
+    // The identity is read under the same scheduler lock that authorized the
+    // caller, so the published binding names an incarnation the kernel can stand
+    // behind. A task with no live Cell identity is refused rather than recorded
+    // as an unbindable route.
+    let Some((cell_id, generation)) = scheduler
+        .as_ref()
+        .and_then(|s| s.tasks.get(&caller_id))
+        .map(|task| (task.cell_id.0, task.cell_generation))
+    else {
+        return Err(SyscallError::InvalidInput);
+    };
+
     let published = crate::task::drivers::driver_cell::publish_role_or_rollback(
         caller_id,
         publish_role,
-        || crate::cell::service_registry::register(service_id, caller_id),
+        || crate::cell::service_registry::register(service_id, caller_id, cell_id, generation),
         rollback_role,
     );
     drop(scheduler);
@@ -1935,6 +1961,14 @@ fn register_usb_hid_producer_role(caller_id: usize) -> Result<usize, SyscallErro
         return Err(SyscallError::PermissionDenied);
     }
 
+    let Some((cell_id, generation)) = scheduler
+        .as_ref()
+        .and_then(|s| s.tasks.get(&caller_id))
+        .map(|task| (task.cell_id.0, task.cell_generation))
+    else {
+        return Err(SyscallError::InvalidInput);
+    };
+
     let published = crate::task::drivers::driver_cell::publish_role_or_rollback(
         caller_id,
         crate::task::drivers::driver_cell::register_usb_hid_producer,
@@ -1942,6 +1976,8 @@ fn register_usb_hid_producer_role(caller_id: usize) -> Result<usize, SyscallErro
             crate::cell::service_registry::register(
                 api::syscall::service::USB_HID_PRODUCER,
                 caller_id,
+                cell_id,
+                generation,
             )
         },
         crate::task::drivers::driver_cell::deregister_usb_hid_producer,
@@ -3388,6 +3424,14 @@ pub enum Syscall {
     RegisterService { service_id: u16, tid: usize },
     /// 206: LookupService — resolve `service_id` to its live provider tid (open; 0 = none).
     LookupService { service_id: u16 },
+    /// 429: LookupServiceBound — resolve `service_id` to its live provider binding
+    /// `{ tid, cell_id, generation }` (open; 0 = none). The record is written whole
+    /// or refused, never partially.
+    LookupServiceBound {
+        service_id: u16,
+        out_ptr: usize,
+        out_len: usize,
+    },
     /// 207: Heartbeat — caller asserts liveness; (re)arm the hung-detection deadline
     /// `interval` ticks ahead (0 = disable).
     Heartbeat { interval: usize },
@@ -3933,6 +3977,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::SerialConfigure { .. } => V::SerialConfigure,
         Syscall::Exec { .. } => V::Exec,
         Syscall::LookupService { .. } => V::LookupService,
+        Syscall::LookupServiceBound { .. } => V::LookupServiceBound,
         Syscall::Heartbeat { .. } => V::Heartbeat,
         Syscall::GrantAlloc { .. } => V::GrantAlloc,
         Syscall::GrantShare { .. } => V::GrantShare,
@@ -5530,7 +5575,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 && tid == 0
                 && caller_has_development_silo_registration(caller_id)
             {
-                return if crate::cell::service_registry::register(service_id, caller_id) {
+                let Some((cell_id, generation)) = live_cell_identity(caller_id) else {
+                    return Err(SyscallError::InvalidInput);
+                };
+                return if crate::cell::service_registry::register(
+                    service_id,
+                    caller_id,
+                    cell_id,
+                    generation,
+                ) {
                     Ok(0)
                 } else {
                     Err(SyscallError::InvalidInput)
@@ -5542,7 +5595,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 && tid == 0
                 && caller_has_spawn(caller_id)
             {
-                crate::cell::service_registry::register(service_id, caller_id);
+                // The caller is executing, so its identity is present. If it were
+                // somehow absent, the entry records 0/0 and the legacy `lookup`
+                // path keeps working while `LookupServiceBound` correctly reports
+                // that no binding exists for it.
+                let (cell_id, generation) = live_cell_identity(caller_id).unwrap_or((0, 0));
+                crate::cell::service_registry::register(
+                    service_id,
+                    caller_id,
+                    cell_id,
+                    generation,
+                );
                 return Ok(0);
             }
             // Driver Cell self-registration path: a PCIe GPU driver or the
@@ -5553,7 +5616,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 && service_id == api::syscall::service::GPU_DRIVER
             {
                 crate::task::drivers::driver_cell::register_gpu_driver(caller_id);
-                crate::cell::service_registry::register(service_id, caller_id);
+                let (cell_id, generation) = live_cell_identity(caller_id).unwrap_or((0, 0));
+                crate::cell::service_registry::register(
+                    service_id,
+                    caller_id,
+                    cell_id,
+                    generation,
+                );
                 return Ok(0);
             }
             // Privileged: only SpawnCap holders (the supervisor) own the service
@@ -5562,15 +5631,19 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !caller_has_spawn(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            let tid_is_live = super::SCHEDULER.lock().as_ref().is_some_and(|scheduler| {
-                scheduler.tasks.get(&tid).is_some_and(|task| {
-                    !matches!(task.state, TaskState::Retiring | TaskState::Terminated)
+            // The liveness check and the identity capture share one scheduler lock,
+            // so a provider cannot be recorded with a binding that was already stale
+            // when it was written.
+            let provider = super::SCHEDULER.lock().as_ref().and_then(|scheduler| {
+                scheduler.tasks.get(&tid).and_then(|task| {
+                    (!matches!(task.state, TaskState::Retiring | TaskState::Terminated))
+                        .then_some((task.cell_id.0, task.cell_generation))
                 })
             });
-            if !tid_is_live {
+            let Some((cell_id, generation)) = provider else {
                 return Err(SyscallError::InvalidInput);
-            }
-            if crate::cell::service_registry::register(service_id, tid) {
+            };
+            if crate::cell::service_registry::register(service_id, tid, cell_id, generation) {
                 Ok(0)
             } else {
                 Err(SyscallError::InvalidInput)
@@ -5581,6 +5654,33 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // so a client reconnects transparently after the supervisor respawns a
             // service. The dynamic replacement for the boot-order `ServiceLookup` hardcode.
             Ok(crate::cell::service_registry::lookup(service_id).unwrap_or(0))
+        }
+        Syscall::LookupServiceBound {
+            service_id,
+            out_ptr,
+            out_len,
+        } => {
+            // Open to all cells, same allowlist bit as `LookupService`: this answers
+            // the same question with the provider's identity instead of a bare tid.
+            //
+            // The record is written whole or not at all. A short buffer is refused
+            // with the same `BufferTooSmall` error the other fixed-record writers
+            // use (`QueryDirHandles`, `ResolveCellOwner`) rather than partially
+            // filled; an absent, paused or identity-less provider returns the `0`
+            // absence sentinel `LookupService` uses — never a binding the kernel
+            // cannot stand behind.
+            if out_len < api::service_binding::SERVICE_BINDING_LEN {
+                return Err(SyscallError::BufferTooSmall);
+            }
+            let Some((tid, cell_id, generation)) =
+                crate::cell::service_registry::lookup_bound(service_id)
+            else {
+                return Ok(0);
+            };
+            let binding =
+                api::service_binding::ServiceBinding::new(tid as u64, cell_id, generation);
+            write_user_slice(caller_id, out_ptr, &binding.to_bytes(), MAX_USER_BUF)?;
+            Ok(api::service_binding::SERVICE_BINDING_LEN)
         }
         Syscall::Heartbeat { interval } => {
             // Open: a cell asserts its own liveness. Arms a deadline `interval` ticks
@@ -8639,6 +8739,11 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         },
         ViSyscall::LookupService => Syscall::LookupService {
             service_id: a0 as u16,
+        },
+        ViSyscall::LookupServiceBound => Syscall::LookupServiceBound {
+            service_id: a0 as u16,
+            out_ptr: a1,
+            out_len: a2,
         },
         ViSyscall::Heartbeat => Syscall::Heartbeat { interval: a0 },
         ViSyscall::Yield => Syscall::Yield,

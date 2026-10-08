@@ -127,8 +127,8 @@ those remain fail-closed production gates.
   evidence, not machine-specific boot, network, persistence or isolation evidence.
   Current `igb` admits `8086:10c9` and flash-backed i210 `8086:1533`, not every
   i210/i211 SKU. Qualify one exact Intel machine against HCL R1–R9, then a
-  separately authorized second node of the identical configuration; the earlier
-  Intel/AMD pair is superseded. COM1, HPET, disable-able Secure Boot, exact
+  separately authorized and independently qualified second Intel node; matching
+  configuration is preferred, not required. The earlier Intel/AMD pair is superseded. COM1, HPET, disable-able Secure Boot, exact
   NIC/storage, VT-d/DMAR and VT-x/EPT availability are prerequisites, not evidence
   that VMX or C2C works. See [hardware tracks](hardware-tracks.md) and the
   [HCL](../hardware-compatibility-list.md). Procurement is separately gated.

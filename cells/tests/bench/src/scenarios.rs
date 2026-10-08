@@ -20,6 +20,7 @@ pub mod ipc_send_recv;
 pub mod lab_carrier_transfer;
 #[allow(dead_code)]
 pub mod lab_transfer_contract;
+pub mod local_service_lifecycle;
 pub mod memory_footprint;
 pub mod native_stateful;
 pub mod preempt_latency;

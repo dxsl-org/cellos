@@ -74,6 +74,8 @@ pub mod tcb;
 pub mod thread_cap_selftest;
 pub mod thread_quota_selftest;
 pub mod thread_user_entry_selftest;
+#[cfg(feature = "test-hooks")]
+pub mod task_id_selftest;
 /// Per-task user thread pointer (TLS base) — ADR-0018 §2.1 primitive.
 pub(crate) mod tls;
 #[cfg(all(feature = "x86-idt-cpl3-test", target_arch = "x86_64"))]

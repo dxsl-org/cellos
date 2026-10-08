@@ -380,13 +380,29 @@ pub(crate) fn commit_hotswap_barrier(
         }
     }
 
+    // The replacement's identity is read under the same SCHEDULER lock that the
+    // cutover runs inside, so the published binding names the incarnation that is
+    // actually being handed the route rather than the source it replaces. Read it
+    // before any mutation below, so a missing target cannot strand the source with
+    // a taken mailbox or a closed ingress.
+    let (target_cell_id, target_generation) = {
+        let target = sched.tasks.get(&target_tid).ok_or(ViError::NotFound)?;
+        (target.cell_id.0, target.cell_generation)
+    };
+
     let mut source_mailbox = {
         let source = sched.tasks.get_mut(&source_tid).ok_or(ViError::NotFound)?;
         source.hotswap_ingress_closed = true;
         core::mem::take(&mut source.pending_msgs)
     };
 
-    if !crate::cell::service_registry::commit_paused(service_id, source_tid, target_tid) {
+    if !crate::cell::service_registry::commit_paused(
+        service_id,
+        source_tid,
+        target_tid,
+        target_cell_id,
+        target_generation,
+    ) {
         if let Some(source) = sched.tasks.get_mut(&source_tid) {
             source.pending_msgs = core::mem::take(&mut source_mailbox);
             source.hotswap_ingress_closed = false;

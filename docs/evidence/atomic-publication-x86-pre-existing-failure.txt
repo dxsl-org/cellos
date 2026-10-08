@@ -1,0 +1,52 @@
+Pre-existing x86_64 test-hooks boot failure — reproduced 2026-10-08
+===================================================================
+
+Not caused by the C2C local-binding work. This is the same failure with **every**
+change of that slice stashed (kernel/ and libs/ reverted to `HEAD`), so it predates
+it and is recorded here rather than left as an unexplained red lane.
+
+What fails
+----------
+`kernel/src/loader/elf_tests.rs:64` calls
+`super::atomic_publication_tests::run_all()` (guarded only by
+`#[cfg(feature = "test-hooks")]`, no architecture gate), which runs very early —
+before the task self-test chain at `kernel/src/main.rs:915-975` and before any cell
+spawns. Its first case, `unaligned_elf_preparation_restores_state`
+(`kernel/src/loader/atomic_publication_tests/cases.rs:78`), panics:
+
+  [ERROR] ATOMIC_PUBLICATION_ALIGNMENT: MISMATCH stage=unaligned-prepare field=state
+  [ERROR] ATOMIC_PUBLICATION_ALIGNMENT: MISMATCH stage=unaligned-prepare field=free-frames
+  [KERNEL PANIC] Critical failure.
+  panicked at kernel/src/loader/atomic_publication_tests/cases.rs:78:5:
+  unaligned ELF preparation must be atomic and parser-safe
+
+Narrowing
+---------
+`snapshot_matches` prints `field=state` as a generic banner when the whole
+`StateSnapshot` differs, then reports each field. Only these two lines appear, so:
+
+  * `report_task_mismatches` printed **nothing** → the `tasks` list (and therefore
+    every task's `TaskState`) is identical before and after;
+  * among the granular non-task reports, only `free-frames` differs.
+
+So the delta is a **frame-accounting** change across `prepare_elf_task(...)` plus
+`drop(prepared)`: the free-frame count is not restored. The `state` banner is not a
+separate finding.
+
+How to reproduce
+----------------
+  bash scripts/build-x86_64-domain-test-ci.sh
+  BOOT_WINDOW=90 bash scripts/x86/qemu-domain-test.sh
+
+Raw log: atomic-publication-x86-pre-existing-failure.log:157-163.
+
+Consequences
+------------
+  * `build/vicell-x86-domain-test.iso` / `scripts/x86/qemu-domain-test.sh` cannot
+    reach the phase-02 domain witnesses: boot panics first.
+  * Any x86_64 `test-hooks` boot is affected. AArch64 `test-hooks` boots are not
+    (the AArch64 test-hooks lane boots through this point and runs the full guest
+    suite), so the defect is architecture-specific.
+  * Not fixed here: it is a kernel frame-accounting bug in ELF preparation, outside
+    the granted scope of the C2C binding slice. Recorded as an open item in
+    `.agents/260927-0739-kernel-architecture-repair/plan.md`.

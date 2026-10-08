@@ -27,6 +27,46 @@ authorization. Plans not admitted below are parked/historical.
   ownership handoff from the kernel-repair owner after its applicable gates.
 - Required child work is admitted only for this program; it is not permission
   to run all children simultaneously. **WIP: one implementation slice.**
+- **Admitted preparatory slice (owner: current C2C implementation session):**
+  non-activating broker ingress/quota prototype and local restart/stale-endpoint
+  behavioral evidence, including an Intel x86 QEMU runner. No kernel ownership
+  handoff, ABI ratification, protected-authority proof or remote activation is
+  inferred. Prototype peer facts are harness inputs, not authentication evidence.
+  **Landed 2026-10-08:** the ingress/quota decision core (host tests only) and the
+  local lifecycle witness on Intel x86_64 QEMU
+  (`scripts/build-x86_64-c2c-lifecycle-ci.sh`,
+  `tests/integration/tests/local-service-lifecycle-x86.rs`,
+  `docs/evidence/local-service-lifecycle-x86-qemu.{txt,log}`). The witness measures
+  a synchronous masked reply wait that is never woken versus the bounded
+  exact-operation terminal on the same dead peer. Witness only: no kernel, ABI,
+  Spec-17 or production call-site change. Provider *restart* and the TID non-reuse
+  invariant remain unmeasured.
+- **Decision record admitted 2026-10-08:**
+  [ADR-0023](../docs/decisions/0023-local-service-generation-binding.md) fixes the
+  local binding axis as the existing per-Cell `(cell_id, generation)`, proposes
+  exactly one additive opcode (`LookupServiceBound = 429`) with
+  `LookupService = 206` untouched and no send opcode, and requires the
+  task-id non-reuse invariant to be guarded. Recording the decision itself
+  authorized **no** kernel, ABI or remote change: the registry record and guard
+  sites need the kernel-repair owner handoff, and the opcode needed Law-1
+  approval (see the next bullet).
+- **Law-1 design approval recorded 2026-10-08** for the single additive opcode in
+  [ADR-0023](../docs/decisions/0023-local-service-generation-binding.md) §2.3: item list,
+  compatibility review and digests in
+  [law1-lookupservicebound.md](260927-1100-c2c-anywhere-tier-aware/law1-lookupservicebound.md).
+  This is checkpoint 1 only — it permits editing `libs/api/` for those items and freezes nothing.
+  **Checkpoint 2 was recorded the same day, so the surface is now FROZEN**; the confirmed revision
+  and its digests are in that record's §2.2, and
+  `scripts/check-lookupservicebound-law1-digests.sh` fails on drift. A future change to a confirmed
+  item needs the ABI process again.
+- **Kernel-repair file-owner handoff granted 2026-10-08 (full slice)** and the work landed the same
+  day: `libs/api` opcode `LookupServiceBound = 429`, the registry's `(tid, cell_id, generation)`
+  record, provider-identity capture at every `register` site, dispatch, and the two
+  `next_task_id` fail-closed guard sites plus a boot no-re-issue guard. Kernel paths touched are
+  exactly those the handoff named. Verified on Intel x86_64 QEMU (production image) and on the
+  AArch64 `test-hooks` lane; the x86_64 `test-hooks` lane is blocked by a **pre-existing**
+  frame-accounting panic recorded in the kernel-repair plan, not by this work.
+  `LocalEndpoint::call` is unchanged: Phase 03 owns moving the SDK onto the bounded primitive.
 - `261004-1957-x86-pc-lane` — **Intel-only supporting hardware lane**,
   one exact headless configuration ([plan](261004-1957-x86-pc-lane/plan.md)).
   **Authorized scope: phases 01–06** — 01 `x86_64-pc` descriptor + HCL model
@@ -44,7 +84,8 @@ authorization. Plans not admitted below are parked/historical.
   capability + policy blob v4, owner-approved; RS485 declared, not claimed).
   **Phase 07 remains hardware/procurement-gated and is not activated here.**
   Qualify one exact Intel machine after the existing QEMU gates and separately
-  approved acquisition; a second same-model node follows the first-node gates.
+  approved acquisition; a separately qualified second Intel node follows the
+  first-node gates. Matching model is preferred, not mandatory.
   The former Intel-plus-AMD machine objective is superseded. No physical HCL row
   exists. WIP remains one controller family at a time, only when needed by C2C.
   Intel VMX is a required Tier 3 dependency in `260711-1917-tier3b-x86-vtx` P09;

@@ -72,6 +72,7 @@ pub(super) struct Entry {
     pub(super) payload: [u8; MAX_C2C_PAYLOAD],
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CachedReply<'a> {
     pub status: C2cStatus,
     pub payload: &'a [u8],

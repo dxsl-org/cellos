@@ -124,6 +124,30 @@ impl DedupCache {
         })
     }
 
+    /// Check whether a completed reply is already cached for `key`.
+    pub fn has_completed_replay(&self, key: DedupKey, now_ms: u64) -> Option<usize> {
+        let slot = self.find(key)?;
+        let entry = self.entries.get(slot)?.as_ref()?;
+        if entry.key == key
+            && entry.state == EntryState::Completed
+            && now_ms.saturating_sub(entry.first_seen_ms) < DEDUP_TTL_MS
+        {
+            Some(slot)
+        } else {
+            None
+        }
+    }
+    /// Cancel an admitted entry that was rejected before local dispatch.
+    pub(crate) fn cancel_admitted(&mut self, key: DedupKey) {
+        if let Some(index) = self.find(key) {
+            if let Some(entry) = &self.entries[index] {
+                if entry.state == EntryState::Accepted {
+                    self.entries[index] = None;
+                }
+            }
+        }
+    }
+
     /// Return whether the cache contains no admitted entries.
     pub fn is_empty(&self) -> bool {
         self.entries.iter().all(Option::is_none)

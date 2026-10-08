@@ -1008,6 +1008,47 @@ pub fn sys_lookup_service(service_id: u16) -> Option<usize> {
     }
 }
 
+/// Resolve a well-known `service_id` to its live provider **binding**.
+///
+/// Returns the provider's `{ tid, cell_id, generation }` — the identity
+/// [`sys_lookup_service`] cannot carry, because a tid says where to send rather
+/// than which Cell incarnation is there. `generation` is the per-Cell epoch the
+/// kernel mints at cell creation, the same axis `CallerIdentity` and `CellOwner`
+/// already use.
+///
+/// Returns `None` when nothing is registered, when the provider is hidden behind a
+/// hot-swap pause, when the caller's buffer is too small, and when no live binding
+/// exists at all — every one of those is "no binding", and the only correct
+/// response is to refuse the call rather than send to a stale tid.
+///
+/// The binding is **boot-local**: it is not a remote replay epoch, it grants no
+/// authority, and the kernel re-verifies the live binding when the tid is used.
+/// Open to all cells under the same allowlist bit as [`sys_lookup_service`].
+pub fn sys_lookup_service_bound(
+    service_id: u16,
+    buf: &mut [u8],
+) -> Option<api::service_binding::ServiceBinding> {
+    if buf.len() < api::service_binding::SERVICE_BINDING_LEN {
+        return None;
+    }
+    // SAFETY: `buf` is a live writable slice for the whole call and its length is
+    // passed alongside the pointer, so the kernel writes only inside it. A buffer
+    // shorter than the record is refused there, never partially filled.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::LookupServiceBound,
+            service_id as usize,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+        )
+    };
+    if (ret as usize) != api::service_binding::SERVICE_BINDING_LEN {
+        return None;
+    }
+    api::service_binding::ServiceBinding::from_bytes(buf)
+}
+
 pub fn sys_shm_alloc(size: usize) -> SyscallResult {
     unsafe {
         let ret = syscall(ViSyscall::ShmAlloc, size, 0, 0, 0);

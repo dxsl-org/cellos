@@ -29,6 +29,7 @@ pub mod manifest_macro;
 pub mod manifest_parse;
 #[cfg(test)]
 mod manifest_tests;
+pub mod service_binding;
 pub mod syscall;
 pub mod syscall_tests;
 pub mod task;

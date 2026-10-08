@@ -417,6 +417,7 @@ fn cell_main() {
     }
     match role {
         "c2c-broker-oracle" => scenarios::c2c_broker_oracle::run(),
+        "local-service-lifecycle" => scenarios::local_service_lifecycle::run(),
         "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),
         "ctl-loop" => scenarios::control_loop::run_control_loop(),
