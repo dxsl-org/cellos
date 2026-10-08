@@ -39,33 +39,93 @@ preempts a non-yielding guest. The boot-time capability gate runs a real
 HVC/Stage-2 MMIO/virtual-IRQ/preemption smoke before admitting any VM.
 
 ```bash
-# Fetch the pinned Alpine artifacts if .alpine-cache is empty; omit
-# --skip-fetch on that first build.
-bash scripts/make-hypervisor-fs-rpi3.sh --skip-fetch --volatile-disk
+# One front end for images: it resolves the board, checks the option combination
+# and prints the gate. `--list` shows the boards and their options.
+bash scripts/build-image.sh --list
+
+# Default: prompt-first. Cellos boots to its shell and the guest is started on
+# demand with `hv`; no VM exists until then.
+bash scripts/build-image.sh --board raspberry-pi/3-model-b --skip-fetch --volatile-disk
+RPI3_GATE=host BOOT_WINDOW=180 bash scripts/qemu-rpi3-tier3.sh \
+  target/rpi3-hv-embedded/kernel8.img
+
+# Server flavour: preload the VM at boot so the first Tier-3 app starts fast.
+# The machinery/boot gates below need this build.
+bash scripts/build-image.sh --board raspberry-pi/3-model-b --skip-fetch --volatile-disk --autostart
 RPI3_GATE=machinery BOOT_WINDOW=90 bash scripts/qemu-rpi3-tier3.sh \
   target/rpi3-hv-embedded/kernel8.img
 
 # Strict gate: only PASS when the Alpine guest reaches its own shell.
-RPI3_GATE=boot BOOT_WINDOW=900 bash scripts/qemu-rpi3-tier3.sh \
+RPI3_GATE=boot BOOT_WINDOW=2400 bash scripts/qemu-rpi3-tier3.sh \
   target/rpi3-hv-embedded/kernel8.img
+
+# Tier 3 off (a machine that must be safer than it is capable): the guest cell
+# and the guest files are not packaged, so no VM can be started at all.
+bash scripts/build-image.sh --board raspberry-pi/3-model-b --skip-fetch --volatile-disk --no-tier3
 ```
 
 Use the **raw** `kernel8.img`, not the linked ELF: QEMU `raspi3b` loads
 these at different exception levels. The mini UART is serial1, so the runner
 uses `-serial null -serial stdio`. The volatile profile has no persistent SD
 disk; guest writes disappear on restart. The default builder packages an
-ext4 `guest_disk.img` on the first FAT partition of `disk_rpi3_hv.img`, but
-that SD-backed profile must pass its own QEMU boot/persistence gate before
-it can be called qualified. See
+ext4 `guest_disk.img` on the first FAT partition of `disk_rpi3_hv.img`, adds
+the pinned Alpine ext4 modules to the guest initramfs, and mounts `/dev/vda`
+at `/mnt/disk` before launching the guest shell. Its strict SD-backed boot
+gate requires that mount marker as well as the shell prompt. See
 [the Pi board instructions](../baremetal/load-cellos.md#8-tier-3-direct-firmware-boot).
 
-**Observed here:** QEMU `raspi3b` passed the machinery gate: host
-initialization, monitor smoke, VM creation, guest kernel/initrd streaming and
-vCPU entry. Alpine Linux 6.12.13 printed its PSCI, CPU and early memory
-initialization. The strict guest-shell gate did **not** pass in a 900-second
-TCG run (last output: `software IO TLB`); do not equate Linux boot messages
-or `[hv] vCPU ready` with a usable guest shell. No physical-board Tier 3 VM
-execution has been observed yet.
+**Observed here:** QEMU `raspi3b` passed the monitor/machinery gate, and
+Alpine Linux 6.12.13 reached its own `~ #` prompt. The volatile-profile
+guest executed `echo PI_TIER3_EXEC_OK` through the emulated PL011 UART.
+The SD-backed guest mounted `/dev/vda` as ext4 at `/mnt/disk`, wrote
+`PI_DATA_123456` to `/mnt/disk/pi-proof`, synced, and read the same data
+after a full QEMU restart with the same SD image. Host inspection of the
+backing ext4 image also returned the marker. The earlier block-probe
+stall came from using DTB SPI 17 as GIC INTID 17 rather than 49; the
+direct `/bin/sh` initramfs had also skipped loading virtio/ext4 drivers.
+QEMU TCG emitted a guest soft-lockup warning during early boot; the
+shell and persistence checks subsequently succeeded. On the physical
+board the coherent-EL2 build ran on 2026-10-01: the two EL2 `first-run`
+lines agree field for field with what EL1 holds
+(`entry=0x40000000 insn=0xd2800540 s2=[0x406e003,0x406f003,0x406b7ff]`,
+`exit=[0x5a000000,0x40000008,irq=0]` on both sides), the smoke reports
+`HVC/MMIO/VI/PREEMPT smoke PASS; HypervisorCap open`, `[hv] vCPU ready —
+entering run loop` follows and Linux 6.12.13 starts on the physical
+Cortex-A53 with the PL011 early console. The captured board trace ended
+there, so that run recorded no hardware `~ #`, and it ended
+with no keyboard: the trace shows the low-speed devices on hub ports
+3/5 exhausting their complete-splits inside the start-split's own
+microframe. The paced-split build (the one now served as `cellos.uimg`)
+fixed that on the board: the halves are one microframe apart, the
+low-speed device on hub port 3 enumerates as a HID boot keyboard
+(`10c4:0005`, class 3 / subclass 1 / protocol 2) and the driver reports
+`driving 1 HID interface(s)`, while the device on port 5 answers every
+complete-split with NAK. What is still unproven is a **keystroke
+reaching the guest** — no key was pressed on the board. See
+[the Pi board instructions](../baremetal/load-cellos.md#8-tier-3-direct-firmware-boot)
+for the exact lines a passing board trace must show.
+
+**Board observation (2026-10-06, volatile profile over TFTP):** the physical
+board reached the guest's own `~ #` prompt. The UART trace shows
+`[hv] volatile disk selected by build policy — no persistent guest disk`,
+`[hv] vCPU ready — entering run loop`, Linux 6.12.13 starting, and then the
+guest's `ifconfig eth0 192.168.42.50 netmask 255.255.255.0 up` and
+`ping -c 3 192.168.42.1` output at `~ #`, typed through the UART because the
+USB keyboard still delivers no keystrokes to the guest. Guest networking is
+**not** working: the first virtio-net receive poll reports
+`[hv-net-rx] first L2Recv tid=5 result=send deadline`, the net cell reports
+`[net-bridge] TX not accepted: no reply from tid 4 within the timeout`, and the
+guest's ping loses every packet. Both messages name host cells, not guest
+resources — this board runs Cellos single-hart (`BCM2836 has no SGI path in
+this kernel`), the hypervisor models GICD/GICC in software, and the Ethernet
+controller and the keyboard share one USB 2.0 hub behind the single-loop
+`dwc2-usb` cell.
+
+**Practical ceiling on this board:** memory is not the limit (~928 MiB usable
+against a 128 MiB default guest); CPU time is. Every cell and the guest vCPU
+share one 1.2 GHz Cortex-A53, so treat the Pi as the EL2 correctness and
+evidence lane for the narrow musl Alpine guest. Wide guests, fast-clone/CoW and
+snapshot performance work belong on a multi-core lane.
 
 ---
 
@@ -126,11 +186,13 @@ vm exit <vm_id>
 
 ## Guest Filesystem Access
 
-The guest's virtio-blk device backing is currently a 16 MiB **volatile, zero-filled** in-memory buffer — writes are accepted (BLK_T_OUT works) but are lost on cell restart, and there is no bootable filesystem image loaded onto it today (Alpine itself boots from initramfs, not this device). Persistent, image-backed storage is planned (see `.agents/260712-0952-tier3b-vm-hardening-compat/phase-04-writable-storage.md`). Until then:
-
-1. **Create an overlay** (writable tmpfs on top) — survives only for the VM's lifetime
-2. **Write to /tmp** (ramdisk, shared with Cellos)
-3. Persistent image-backed disk — **planned**, not yet shipped
+The Alpine guest boots from initramfs. Its separate virtio-blk device is
+backed by either a volatile in-memory image or, with the SD-backed Pi profile,
+the ext4 file `/mnt/sd/guest_disk.img` opened by the hypervisor Cell through
+VFS. The persistent Pi guest's initramfs loads the pinned virtio/ext4 modules
+and mounts that device at `/mnt/disk` before launching `/bin/sh`. The volatile
+image is discarded at VM restart. QEMU read-back after reboot proves the
+SD-backed path there; physical-board durability is not yet established.
 
 ---
 

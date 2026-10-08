@@ -265,7 +265,7 @@ This remains `qemu`-ceiling work.
   `service::OCEL_JS` (16) on its behalf; the kernel admits that cell to Tier 2
   with private page tables (`[domain] admitted cell 'ocel-js' to Tier 2 Paged
   Domain (SATP isolation)`); the viewer loads a document by argument or through
-  its address bar, renders Markdown / an HTML subset / plain text / BMP, and
+  its address bar, renders Markdown / an HTML subset / plain text / images, and
   sends the `<script>` blocks it extracts to that domain over 4 KiB IPC. The
   lane witnesses the round trip, in-document search, and tab-bar input.
 - The engine is an **opt-in choice**: `cells/services/ocel-quickjs/` vendors
@@ -274,8 +274,13 @@ This remains `qemu`-ceiling work.
   that do not package it. `init` prefers QuickJS and says which cell it
   registered; the `ocel-quickjs` lane asserts the engine's own start-up
   self-check and a document script that only a real engine can compute.
-- Still not a browser: no CSS cascade, no `fetch`/modules/workers, no
-  PDF/EPUB/SVG, and BMP is the only image decoder — the gap table lives in
+- Local PNG/JPEG/BMP viewing now has host loader/codec/layout/paint smoke and an
+  RV64 release build. PNG alpha, grayscale/palette and 16-bit input, progressive
+  JPEG, bounded errors and viewport-fit scaling are exercised; no new guest
+  image-viewing evidence is claimed.
+- Native public-web compatibility is now the target, not a shipped claim.
+  CSS cascade, browser DOM and `fetch`/modules/workers are still missing;
+  PDF/EPUB/SVG remain unimplemented. The exact gap table lives in
   [the Ocel guide](../guides/ocel-viewer.md).
 - Reopening / next events: add a lane that kills the engine cell mid-session to
   witness the viewer's fallback to the in-process engine; decide whether the
