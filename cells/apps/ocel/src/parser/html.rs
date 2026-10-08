@@ -9,9 +9,14 @@ use dom_arena::{DocumentArena, NodeData, NodeId};
 use crate::doc::{DocNode, StyledSpan};
 use crate::draw::theme;
 
+pub enum ScriptSource {
+    Inline(String),
+    External(String),
+}
+
 pub struct HtmlOutput {
     pub nodes: Vec<DocNode>,
-    pub scripts: Vec<String>,
+    pub scripts: Vec<ScriptSource>,
     #[allow(dead_code)]
     pub arena: DocumentArena,
 }
@@ -29,7 +34,7 @@ enum HtmlToken {
 }
 
 /// Tokenize an HTML string into tags and text chunks.
-fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<String>) {
+fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<ScriptSource>) {
     let mut tokens = Vec::new();
     let mut scripts = Vec::new();
     let mut chars = input.chars().peekable();
@@ -55,9 +60,13 @@ fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<String>) {
 
             // Read tag content
             let mut tag_content = String::new();
-            while let Some(&ch) = chars.peek() {
-                chars.next();
-                if ch == '>' {
+            let mut quote = None;
+            while let Some(ch) = chars.next() {
+                if quote == Some(ch) {
+                    quote = None;
+                } else if quote.is_none() && matches!(ch, '"' | '\'') {
+                    quote = Some(ch);
+                } else if ch == '>' && quote.is_none() {
                     break;
                 }
                 tag_content.push(ch);
@@ -75,18 +84,9 @@ fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<String>) {
                     trimmed_tag
                 };
 
-                let mut parts = tag_body.split_whitespace();
-                let name = parts.next().unwrap_or("").to_ascii_lowercase();
-                let mut attributes = Vec::new();
-
-                for part in parts {
-                    if let Some((k, v)) = part.split_once('=') {
-                        let clean_v = v.trim_matches('"').trim_matches('\'');
-                        attributes.push((k.to_ascii_lowercase(), String::from(clean_v)));
-                    } else if !part.is_empty() {
-                        attributes.push((part.to_ascii_lowercase(), String::new()));
-                    }
-                }
+                let name_end = tag_body.find(char::is_whitespace).unwrap_or(tag_body.len());
+                let name = tag_body[..name_end].to_ascii_lowercase();
+                let attributes = parse_attributes(&tag_body[name_end..]);
 
                 // If this is a <script> tag, capture the script body directly
                 if name == "script" && !self_closing {
@@ -106,7 +106,28 @@ fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<String>) {
                         }
                         script_body.push(sc);
                     }
-                    scripts.push(script_body);
+                    let kind = attributes.iter().find(|(key, _)| key == "type").map(|(_, value)| value.as_str()).unwrap_or("");
+                    if matches!(kind, "" | "text/javascript" | "application/javascript") {
+                        if let Some((_, src)) = attributes.iter().find(|(key, _)| key == "src") {
+                            scripts.push(ScriptSource::External(src.clone()));
+                        } else {
+                            scripts.push(ScriptSource::Inline(script_body));
+                        }
+                    }
+                    continue;
+                }
+                if name == "style" && !self_closing {
+                    tokens.push(HtmlToken::StartTag { name: name.clone(), attributes, self_closing });
+                    let mut body = String::new();
+                    while let Some(ch) = chars.next() {
+                        if ch == '<' && chars.clone().take(7).collect::<String>().eq_ignore_ascii_case("/style>") {
+                            for _ in 0..7 { chars.next(); }
+                            break;
+                        }
+                        body.push(ch);
+                    }
+                    tokens.push(HtmlToken::Text(body));
+                    tokens.push(HtmlToken::EndTag { name });
                     continue;
                 }
 
@@ -128,13 +149,47 @@ fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<String>) {
                 chars.next();
             }
             let decoded = decode_entities(&text);
-            if !decoded.trim().is_empty() {
-                tokens.push(HtmlToken::Text(decoded));
-            }
+            // Preserve DOM whitespace; inline layout performs CSS collapsing.
+            tokens.push(HtmlToken::Text(decoded));
         }
     }
 
     (tokens, scripts)
+}
+
+fn parse_attributes(input: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut chars = input.chars().peekable();
+    while chars.peek().is_some() {
+        while chars.peek().is_some_and(|ch| ch.is_whitespace()) { chars.next(); }
+        let mut key = String::new();
+        while chars.peek().is_some_and(|ch| !ch.is_whitespace() && *ch != '=') {
+            key.push(chars.next().unwrap());
+        }
+        if key.is_empty() { break; }
+        while chars.peek().is_some_and(|ch| ch.is_whitespace()) { chars.next(); }
+        let mut value = String::new();
+        if chars.peek() == Some(&'=') {
+            chars.next();
+            while chars.peek().is_some_and(|ch| ch.is_whitespace()) { chars.next(); }
+            if chars.peek().is_some_and(|ch| matches!(ch, '"' | '\'')) {
+                let quote = chars.next().unwrap();
+                for ch in chars.by_ref() {
+                    if ch == quote { break; }
+                    value.push(ch);
+                }
+            } else {
+                while chars.peek().is_some_and(|ch| !ch.is_whitespace()) {
+                    value.push(chars.next().unwrap());
+                }
+            }
+        }
+        let key = key.to_ascii_lowercase();
+        if !out.iter().any(|(existing, _)| existing == &key) {
+            out.push((key, decode_entities(&value)));
+        }
+    }
+    out
 }
 
 /// Parse HTML text into a `DocumentArena` and renderable `DocNode`s.
@@ -434,4 +489,26 @@ pub fn strip_tags(input: &str) -> String {
     }
 
     decode_entities(&out)
+}
+
+#[cfg(test)]
+mod tokenizer_tests {
+    use super::*;
+    #[test]
+    fn quoted_attributes_and_raw_styles_survive_tokenization() {
+        let parsed = parse_html("<style>.a > .b { color: red; }</style><p class=\"a b\" title='x > y' data-x=\"a&amp;b\">hello</p>");
+        let paragraph = parsed.arena.nodes.iter().find(|node| node.tag() == Some("p")).unwrap();
+        assert_eq!(paragraph.get_attribute("class"), Some("a b"));
+        assert_eq!(paragraph.get_attribute("title"), Some("x > y"));
+        assert_eq!(paragraph.get_attribute("data-x"), Some("a&b"));
+        let style = parsed.arena.nodes.iter().find(|node| node.tag() == Some("style")).unwrap();
+        assert_eq!(parsed.arena.get_text_content(style.id), ".a > .b { color: red; }");
+    }
+    #[test]
+    fn classic_scripts_preserve_source_order_without_executing_data_or_modules() {
+        let parsed = parse_html("<script src='app.js'>ignored()</script><script>second()</script><script type='application/json'>{}</script><script type='module'>module()</script>");
+        assert!(matches!(&parsed.scripts[0], ScriptSource::External(src) if src == "app.js"));
+        assert!(matches!(&parsed.scripts[1], ScriptSource::Inline(src) if src == "second()"));
+        assert_eq!(parsed.scripts.len(), 2);
+    }
 }

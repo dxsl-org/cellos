@@ -62,24 +62,27 @@ pub struct PaintCx<'a> {
     pub origin: Point,
     /// Active theme. Widgets read colours/spacing from here instead of hardcoding.
     pub theme: &'a dyn ViTheme,
+    pub font: &'a mut crate::font_context::FontContext,
 }
 
 impl<'a> PaintCx<'a> {
     /// Root PaintCx with `DarkTheme` default and origin at (0, 0).
-    pub fn root(canvas: &'a mut dyn ViCanvas) -> Self {
+    pub fn root(canvas: &'a mut dyn ViCanvas, font: &'a mut crate::font_context::FontContext) -> Self {
         Self {
             canvas,
             origin: Point::ZERO,
             theme: &DARK_THEME,
+            font,
         }
     }
 
     /// Root PaintCx with an explicit theme.
-    pub fn with_theme(canvas: &'a mut dyn ViCanvas, theme: &'a dyn ViTheme) -> Self {
+    pub fn with_theme(canvas: &'a mut dyn ViCanvas, theme: &'a dyn ViTheme, font: &'a mut crate::font_context::FontContext) -> Self {
         Self {
             canvas,
             origin: Point::ZERO,
             theme,
+            font,
         }
     }
 
@@ -89,7 +92,13 @@ impl<'a> PaintCx<'a> {
             canvas: self.canvas,
             origin: child_origin,
             theme: self.theme,
+            font: self.font,
         }
+    }
+
+    pub fn draw_text(&mut self, pos: Point, text: &str, color: crate::canvas::Color, size_px: f32) {
+        let px = if size_px > 0.0 { size_px } else { self.font.size_px };
+        self.canvas.draw_text_scaled(pos, text, px, color, &mut self.font.atlas);
     }
 
     /// Translate a widget-local rect to screen-space.
@@ -118,7 +127,7 @@ pub trait ViWidget: 'static {
     ///
     /// Returns screen-space `LayoutNode`. `constraints.origin` is the top-left
     /// of the allocated slot; the returned `bounds` must fit within `constraints.max`.
-    fn layout(&self, constraints: Constraints) -> LayoutNode;
+    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode;
 
     /// Paint this widget (and its children) into `cx.canvas`.
     fn paint(&self, cx: &mut PaintCx);
@@ -175,9 +184,9 @@ impl WidgetTree {
     /// Run the layout pass with the available screen area.
     ///
     /// Must be called before `paint()` or `dispatch_event()`.
-    pub fn layout(&mut self, available: Size) {
+    pub fn layout(&mut self, available: Size, font: &mut crate::font_context::FontContext) {
         let constraints = Constraints::root(available);
-        self.layout_cache = self.root.layout(constraints);
+        self.layout_cache = self.root.layout(constraints, font);
         // post_layout pass — widget receives its final bounds
         self.root.post_layout(self.layout_cache.bounds);
     }

@@ -43,38 +43,38 @@ impl Row {
 }
 
 impl ViNode for Row {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let pad = self.padding;
-        let sp = self.spacing;
-        let mut x = constraints.origin.x + pad;
-        let y = constraints.origin.y + pad;
-        let inner_h = (constraints.max.h - 2.0 * pad).max(0.0);
-        let mut used_w = pad;
-
-        for child in &mut self.children {
-            let avail_w = (constraints.max.w - used_w - pad).max(0.0);
-            let child_size = child.layout(Constraints::new(
-                Point::new(x, y),
-                Size {
-                    w: avail_w,
-                    h: inner_h,
-                },
-            ));
-            x += child_size.w + sp;
-            used_w += child_size.w + sp;
-        }
-
-        if !self.children.is_empty() {
-            used_w -= sp;
-        }
-        used_w += pad;
-
-        let size = constraints.constrain(Size {
-            w: used_w,
-            h: constraints.max.h,
-        });
-        self.bounds = Rect::from_origin_size(constraints.origin, size);
-        size
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    let pad = self.padding;
+    let sp = self.spacing;
+    let mut x = constraints.origin.x + pad;
+    let y = constraints.origin.y + pad;
+    let inner_h = (constraints.max.h - 2.0 * pad).max(0.0);
+    let mut used_w = pad;
+    
+    for child in &mut self.children {
+        let avail_w = (constraints.max.w - used_w - pad).max(0.0);
+        let child_size = child.layout(Constraints::new(
+            Point::new(x, y),
+            Size {
+                w: avail_w,
+                h: inner_h,
+            },
+        ), font);
+        x += child_size.w + sp;
+        used_w += child_size.w + sp;
+    }
+    
+    if !self.children.is_empty() {
+        used_w -= sp;
+    }
+    used_w += pad;
+    
+    let size = constraints.constrain(Size {
+        w: used_w,
+        h: constraints.max.h,
+    });
+    self.bounds = Rect::from_origin_size(constraints.origin, size);
+    size
     }
 
     fn bounds(&self) -> Rect {

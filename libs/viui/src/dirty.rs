@@ -24,11 +24,12 @@ pub type DirtyRegion = Rc<RefCell<DirtyRect>>;
 /// 2. Per frame: `renderer.render(dirty.take(), |canvas| { ... })`
 pub struct DirtyRect {
     region: Option<Rect>,
+    layout_dirty: bool,
 }
 
 impl DirtyRect {
     pub const fn new() -> Self {
-        Self { region: None }
+        Self { region: None, layout_dirty: false }
     }
 
     /// Union `rect` into the accumulated damage region.
@@ -37,6 +38,16 @@ impl DirtyRect {
             Some(acc) => acc.union(rect),
             None => rect,
         });
+    }
+
+    /// Text content may change intrinsic size and following siblings' positions.
+    pub fn mark_layout(&mut self, rect: Rect) {
+        self.mark(rect);
+        self.layout_dirty = true;
+    }
+
+    pub fn take_layout_dirty(&mut self) -> bool {
+        core::mem::replace(&mut self.layout_dirty, false)
     }
 
     /// Mark the entire surface as dirty.

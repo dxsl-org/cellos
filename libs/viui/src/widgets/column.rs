@@ -32,36 +32,36 @@ impl Column {
 }
 
 impl ViWidget for Column {
-    fn layout(&self, constraints: Constraints) -> LayoutNode {
-        let ox = constraints.origin.x + self.padding.left;
-        let mut oy = constraints.origin.y + self.padding.top;
-        let inner_w = (constraints.max.w - self.padding.h_total()).max(0.0);
-        let inner_h = (constraints.max.h - self.padding.v_total()).max(0.0);
-        let mut child_nodes = Vec::new();
-
-        for child in &self.children {
-            let remaining = (constraints.origin.y + inner_h - oy).max(0.0);
-            let child_c = Constraints::new(
-                Point::new(ox, oy),
-                Size {
-                    w: inner_w,
-                    h: remaining,
-                },
-            );
-            let node = child.layout(child_c);
-            let h = node.bounds.h;
-            child_nodes.push(node);
-            oy += h + self.spacing;
-        }
-
-        let total_h = (oy - constraints.origin.y - self.spacing).max(0.0) + self.padding.v_total();
-        let bounds = Rect {
-            x: constraints.origin.x,
-            y: constraints.origin.y,
-            w: constraints.max.w,
-            h: total_h.min(constraints.max.h),
-        };
-        LayoutNode::with_children(bounds, child_nodes)
+    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+    let ox = constraints.origin.x + self.padding.left;
+    let mut oy = constraints.origin.y + self.padding.top;
+    let inner_w = (constraints.max.w - self.padding.h_total()).max(0.0);
+    let inner_h = (constraints.max.h - self.padding.v_total()).max(0.0);
+    let mut child_nodes = Vec::new();
+    
+    for child in &self.children {
+        let remaining = (constraints.origin.y + inner_h - oy).max(0.0);
+        let child_c = Constraints::new(
+            Point::new(ox, oy),
+            Size {
+                w: inner_w,
+                h: remaining,
+            },
+        );
+        let node = child.layout(child_c, font);
+        let h = node.bounds.h;
+        child_nodes.push(node);
+        oy += h + self.spacing;
+    }
+    
+    let total_h = (oy - constraints.origin.y - self.spacing).max(0.0) + self.padding.v_total();
+    let bounds = Rect {
+        x: constraints.origin.x,
+        y: constraints.origin.y,
+        w: constraints.max.w,
+        h: total_h.min(constraints.max.h),
+    };
+    LayoutNode::with_children(bounds, child_nodes)
     }
 
     fn paint(&self, cx: &mut PaintCx) {

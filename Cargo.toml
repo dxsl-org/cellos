@@ -203,7 +203,7 @@ authors = ["DXSL"]
 
 [workspace.dependencies]
 spin     = { version = "0.9",  default-features = false, features = ["spin_mutex"] }
-fontdue  = { version = "0.9",  default-features = false, features = ["hashbrown"] }
+ab_glyph = { version = "0.2.32", default-features = false, features = ["libm"] }
 vm-fdt   = { version = "0.3",  default-features = false, features = ["alloc"] }
 
 [patch.crates-io]

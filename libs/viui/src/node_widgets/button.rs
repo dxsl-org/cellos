@@ -37,15 +37,14 @@ impl Button {
 }
 
 impl ViNode for Button {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let chars = self.label.chars().count();
-        let desired = Size {
-            w: chars as f32 * 8.0 + PAD * 2.0,
-            h: 16.0 + PAD * 2.0,
-        };
-        let size = constraints.constrain(desired);
-        self.bounds = Rect::from_origin_size(constraints.origin, size);
-        size
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    let desired = Size {
+        w: font.measure(&self.label) + PAD * 2.0,
+        h: font.line_height() + PAD * 2.0,
+    };
+    let size = constraints.constrain(desired);
+    self.bounds = Rect::from_origin_size(constraints.origin, size);
+    size
     }
 
     fn bounds(&self) -> Rect {
@@ -73,7 +72,9 @@ impl ViNode for Button {
             cx.canvas.draw_line(a, bb, border);
         }
 
-        cx.draw_text(Point::new(b.x + PAD, b.y + PAD), &self.label, Color::WHITE);
+        let x = b.x + (b.w - cx.measure(&self.label)) * 0.5;
+        let y = b.y + (b.h - cx.line_height()) * 0.5;
+        cx.draw_text(Point::new(x, y), &self.label, Color::WHITE);
     }
 
     fn is_focusable(&self) -> bool {
@@ -150,7 +151,7 @@ mod tests {
         let mut button = Button::new("Apply", move || {
             callback_calls.set(callback_calls.get() + 1);
         });
-        button.layout(Constraints::root(Size::new(100.0, 40.0)));
+        button.layout(Constraints::root(Size::new(100.0, 40.0)), &mut crate::font_context::FontContext::default());
 
         assert!(button.event(&Event::MousePress {
             pos: Point::new(1.0, 1.0),

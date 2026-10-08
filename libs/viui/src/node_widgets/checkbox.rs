@@ -62,14 +62,14 @@ impl CheckBox {
 }
 
 impl ViNode for CheckBox {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = constraints.constrain(Size {
-            w: constraints.max.w,
-            h: HEIGHT,
-        });
-        self.bounds_cache
-            .set(Rect::from_origin_size(constraints.origin, size));
-        size
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    let size = constraints.constrain(Size {
+        w: constraints.max.w,
+        h: HEIGHT.max(font.line_height() + 4.0),
+    });
+    self.bounds_cache
+        .set(Rect::from_origin_size(constraints.origin, size));
+    size
     }
 
     fn bounds(&self) -> Rect {

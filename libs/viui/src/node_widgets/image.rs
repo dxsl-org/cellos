@@ -48,14 +48,14 @@ impl Image {
 }
 
 impl ViNode for Image {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = constraints.constrain(Size {
-            w: self.width as f32,
-            h: self.height as f32,
-        });
-        self.bounds_cache
-            .set(Rect::from_origin_size(constraints.origin, size));
-        size
+    fn layout(&mut self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> Size {
+    let size = constraints.constrain(Size {
+        w: self.width as f32,
+        h: self.height as f32,
+    });
+    self.bounds_cache
+        .set(Rect::from_origin_size(constraints.origin, size));
+    size
     }
 
     fn bounds(&self) -> Rect {

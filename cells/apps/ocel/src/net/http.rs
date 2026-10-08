@@ -8,7 +8,8 @@ use alloc::vec::Vec;
 
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult};
+use ostd::ipc::recv_from;
+use ostd::syscall::{sys_lookup_service, sys_send, sys_yield};
 
 const RESP_BUF: usize = 32768; // 32 KB response buffer
 
@@ -30,8 +31,8 @@ pub fn fetch_http(url: &str) -> Result<String, String> {
 
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let cap_id = match sys_recv(0, &mut resp_buf) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+    let cap_id = match recv_from(net_ep, &mut resp_buf) {
+        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
             Ok(NetResponse::CapId(c)) => c,
             _ => return Err(String::from("TCP Connection refused or failed")),
         },
@@ -66,8 +67,8 @@ pub fn fetch_http(url: &str) -> Result<String, String> {
 
         sys_send(net_ep, &send_buf[..send_len]);
         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
-        match sys_recv(0, &mut cnt_buf) {
-            SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&cnt_buf) {
+        match recv_from(net_ep, &mut cnt_buf) {
+            Ok(_) => match api::ipc::decode::<NetResponse>(&cnt_buf) {
                 Ok(NetResponse::Data(b)) if b.len() >= 4 => {
                     let n = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize;
                     sent += n;
@@ -97,8 +98,8 @@ pub fn fetch_http(url: &str) -> Result<String, String> {
     for _ in 0..1000 {
         sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
-        match sys_recv(0, &mut data_buf) {
-            SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&data_buf) {
+        match recv_from(net_ep, &mut data_buf) {
+            Ok(_) => match api::ipc::decode::<NetResponse>(&data_buf) {
                 Ok(NetResponse::Data(b)) if !b.is_empty() => {
                     response.extend_from_slice(b);
                     if response.len() >= RESP_BUF {
@@ -111,7 +112,7 @@ pub fn fetch_http(url: &str) -> Result<String, String> {
                         // CloseWait or Closed -> final recv
                         sys_send(net_ep, &recv_req_buf[..recv_req_len]);
                         let mut fb = [0u8; IPC_BUF_SIZE];
-                        if let SyscallResult::Ok(_) = sys_recv(0, &mut fb) {
+                        if recv_from(net_ep, &mut fb).is_ok() {
                             if let Ok(NetResponse::Data(b)) = api::ipc::decode::<NetResponse>(&fb) {
                                 response.extend_from_slice(b);
                             }
@@ -225,8 +226,8 @@ fn query_state(cap_id: u32, net_ep: usize) -> u8 {
         .unwrap_or(0);
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match sys_recv(0, &mut resp_buf) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+    match recv_from(net_ep, &mut resp_buf) {
+        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
             Ok(NetResponse::Data(b)) if !b.is_empty() => b[0],
             _ => 0,
         },
@@ -241,7 +242,7 @@ fn close_socket(cap_id: u32, net_ep: usize) {
         .unwrap_or(0);
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let _ = sys_recv(0, &mut resp_buf);
+    let _ = recv_from(net_ep, &mut resp_buf);
 }
 
 fn parse_url(s: &str) -> Option<(&str, u16, &str)> {
@@ -280,8 +281,8 @@ fn resolve_host(host: &str, net_ep: usize) -> Option<[u8; 4]> {
         .len();
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match sys_recv(0, &mut resp_buf) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+    match recv_from(net_ep, &mut resp_buf) {
+        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
             Ok(NetResponse::Addr(addr)) => Some(addr),
             _ => None,
         },

@@ -9,8 +9,9 @@ license = "MPL-2.0"
 types   = { path = "../types", version = "0.1.0" }
 api     = { path = "../api", version = "0.1.0" }
 spin    = { workspace = true }
-fontdue = { workspace = true }
+ab_glyph = { workspace = true }
 linked_list_allocator = "0.10"
+unicode-normalization = { version = "0.1", default-features = false }
 # hashbrown 0.15 uses foldhash as the default hasher — no ahash, no once_cell.
 # hashbrown 0.14 (ahash) pulled in once_cell 1.21.x which fails to compile for
 # riscv64gc-unknown-none-elf with Rust nightly 1.97+ (race.rs prelude regression).

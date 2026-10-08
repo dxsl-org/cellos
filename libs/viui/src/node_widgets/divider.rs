@@ -50,20 +50,20 @@ impl Divider {
 }
 
 impl ViNode for Divider {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = match self.axis {
-            Axis::Horizontal => constraints.constrain(Size {
-                w: constraints.max.w,
-                h: 1.0,
-            }),
-            Axis::Vertical => constraints.constrain(Size {
-                w: 1.0,
-                h: constraints.max.h,
-            }),
-        };
-        self.bounds_cache
-            .set(Rect::from_origin_size(constraints.origin, size));
-        size
+    fn layout(&mut self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> Size {
+    let size = match self.axis {
+        Axis::Horizontal => constraints.constrain(Size {
+            w: constraints.max.w,
+            h: 1.0,
+        }),
+        Axis::Vertical => constraints.constrain(Size {
+            w: 1.0,
+            h: constraints.max.h,
+        }),
+    };
+    self.bounds_cache
+        .set(Rect::from_origin_size(constraints.origin, size));
+    size
     }
 
     fn bounds(&self) -> Rect {

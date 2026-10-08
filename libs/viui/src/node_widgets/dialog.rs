@@ -128,32 +128,32 @@ impl Dialog {
 }
 
 impl ViNode for Dialog {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        // Card: 320×160 px centred on screen, clamped to available space.
-        let w = 320.0f32.min(constraints.max.w - 32.0).max(120.0);
-        let h = 160.0f32;
-        let x = constraints.origin.x + (constraints.max.w - w) / 2.0;
-        let y = constraints.origin.y + (constraints.max.h - h) / 2.0;
-        self.bounds.set(Rect { x, y, w, h });
-
-        // Buttons: right-aligned row at bottom of card (12 px margin).
-        let btn_w = 80.0f32;
-        let btn_h = 32.0f32;
-        let btn_y = y + h - btn_h - 12.0;
-        let n = self.buttons.len() as f32;
-        for (i, btn) in self.buttons.iter_mut().enumerate() {
-            // Stack right-to-left: primary button is rightmost.
-            let slot = n - 1.0 - i as f32;
-            let btn_x = x + w - 12.0 - (slot + 1.0) * (btn_w + 8.0) + 8.0;
-            btn.bounds.set(Rect {
-                x: btn_x,
-                y: btn_y,
-                w: btn_w,
-                h: btn_h,
-            });
-        }
-
-        Size::new(w, h)
+    fn layout(&mut self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> Size {
+    // Card: 320×160 px centred on screen, clamped to available space.
+    let w = 320.0f32.min(constraints.max.w - 32.0).max(120.0);
+    let h = 160.0f32;
+    let x = constraints.origin.x + (constraints.max.w - w) / 2.0;
+    let y = constraints.origin.y + (constraints.max.h - h) / 2.0;
+    self.bounds.set(Rect { x, y, w, h });
+    
+    // Buttons: right-aligned row at bottom of card (12 px margin).
+    let btn_w = 80.0f32;
+    let btn_h = 32.0f32;
+    let btn_y = y + h - btn_h - 12.0;
+    let n = self.buttons.len() as f32;
+    for (i, btn) in self.buttons.iter_mut().enumerate() {
+        // Stack right-to-left: primary button is rightmost.
+        let slot = n - 1.0 - i as f32;
+        let btn_x = x + w - 12.0 - (slot + 1.0) * (btn_w + 8.0) + 8.0;
+        btn.bounds.set(Rect {
+            x: btn_x,
+            y: btn_y,
+            w: btn_w,
+            h: btn_h,
+        });
+    }
+    
+    Size::new(w, h)
     }
 
     fn bounds(&self) -> Rect {
@@ -203,10 +203,8 @@ impl ViNode for Dialog {
             };
             cx.canvas.fill_rect(bb, bg);
 
-            // Centre label in button (approx: 8 px/char, 8 px glyph height).
-            let chars = btn.label.chars().count() as f32;
-            let text_x = bb.x + (bb.w - chars * 8.0) / 2.0;
-            let text_y = bb.y + (bb.h - 8.0) / 2.0;
+            let text_x = bb.x + (bb.w - cx.measure(&btn.label)) / 2.0;
+            let text_y = bb.y + (bb.h - cx.line_height()) / 2.0;
             cx.draw_text(Point::new(text_x, text_y), &btn.label, Color::WHITE);
         }
     }

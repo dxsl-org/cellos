@@ -3,11 +3,14 @@
 
 extern crate alloc;
 use alloc::format;
+use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::draw::{self, fill_rect, stroke_rect, theme, Color};
+use crate::draw::{self, theme, Color};
+use crate::parser::web::{paint_lines, wrap_runs, TextLine, TextRun};
 use ostd::display::ViSurface;
+use ostd::typography::{FontFace, TextFonts};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StyledSpan {
@@ -41,6 +44,19 @@ impl StyledSpan {
             color: Some(theme::ACCENT_CYAN),
         }
     }
+
+    pub fn face(&self) -> FontFace {
+        if self.code {
+            if self.bold { FontFace::MonoBold } else { FontFace::MonoRegular }
+        } else {
+            match (self.bold, self.italic) {
+                (false, false) => FontFace::UiRegular,
+                (true, false) => FontFace::UiSemibold,
+                (false, true) => FontFace::UiItalic,
+                (true, true) => FontFace::UiSemiboldItalic,
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -72,7 +88,7 @@ pub enum DocNode {
     Image {
         width: u32,
         height: u32,
-        pixels: Vec<u8>,
+        pixels: Rc<Vec<u8>>,
     },
     Table {
         headers: Vec<String>,
@@ -85,22 +101,11 @@ pub enum DocNode {
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
-pub struct LayoutLine {
-    pub spans: Vec<StyledSpan>,
-    pub is_code: bool,
-    pub is_heading: bool,
-    pub scale: u32,
-    pub custom_color: Option<Color>,
-}
-
-#[derive(Clone, Debug)]
 pub struct TableCellLayout {
-    pub text: String,
+    pub lines: Vec<TextLine>,
     pub x: i32,
     pub width: u32,
 }
-
 #[derive(Clone, Debug)]
 pub struct TableRowLayout {
     pub y_rel: i32,
@@ -108,717 +113,273 @@ pub struct TableRowLayout {
     pub cells: Vec<TableCellLayout>,
     pub is_header: bool,
 }
-
 #[derive(Clone, Debug)]
 pub struct LayoutBox {
     pub y_offset: i32,
     pub height: i32,
-    pub lines: Vec<LayoutLine>,
+    pub lines: Vec<TextLine>,
     pub bg_color: Option<Color>,
     pub border_color: Option<Color>,
     pub is_rule: bool,
     pub left_margin: i32,
-    pub image: Option<(u32, u32, Vec<u8>)>,
+    pub image: Option<(u32, u32, Rc<Vec<u8>>)>,
     pub table_rows: Option<Vec<TableRowLayout>>,
     pub table_width: u32,
     pub node_id: Option<dom_arena::NodeId>,
 }
-
+impl LayoutBox {
+    fn new(y: i32) -> Self {
+        Self { y_offset:y, height:0, lines:Vec::new(), bg_color:None,
+            border_color:None, is_rule:false, left_margin:0, image:None,
+            table_rows:None, table_width:0, node_id:None }
+    }
+}
 pub struct Document {
     pub nodes: Vec<DocNode>,
     pub layout_boxes: Vec<LayoutBox>,
     pub total_height: i32,
     pub arena: Option<dom_arena::DocumentArena>,
+    /// Loaded CSS keyed by its DOM link node, preserving style/link source order.
+    pub external_stylesheets: Vec<(dom_arena::NodeId, String)>,
+    pub web_layout: Option<crate::parser::web::WebLayout>,
 }
+
+fn lines_for(fonts:&mut TextFonts,spans:&[StyledSpan],px:f32,width:f32,pre:bool)->Vec<TextLine> {
+    let mut runs=Vec::new();
+    for span in spans {crate::parser::web::append_run(&mut runs,TextRun::new(span.clone(),px,None,0.0));}
+    let height=crate::parser::web::ceil_pixel(fonts.line_height(
+        spans.first().map_or(FontFace::UiRegular,StyledSpan::face),px));
+    wrap_runs(fonts,&runs,width,height,pre,true,0)
+}
+fn lines_height(lines:&[TextLine])->i32 { lines.iter().map(|l|l.height as i32).sum() }
 
 impl Document {
     pub fn new() -> Self {
-        Self {
-            nodes: Vec::new(),
-            layout_boxes: Vec::new(),
-            total_height: 0,
-            arena: None,
-        }
+        Self { nodes:Vec::new(), layout_boxes:Vec::new(), total_height:0,
+            arena:None, external_stylesheets:Vec::new(), web_layout:None }
     }
-
     pub fn clear(&mut self) {
-        self.nodes.clear();
-        self.layout_boxes.clear();
-        self.total_height = 0;
+        self.nodes.clear();self.layout_boxes.clear();self.total_height=0;
+        self.arena=None;self.external_stylesheets.clear();self.web_layout=None;
     }
-
-    /// Case-insensitive search across styling/token boundaries, once per box.
-    pub fn search(&self, query: &str) -> Vec<i32> {
-        let query = query.trim().to_ascii_lowercase();
-        let mut matches = Vec::new();
-        if query.is_empty() {
-            return matches;
-        }
-        let mut text = String::new();
+    pub fn search(&self,query:&str)->Vec<i32> {
+        if let Some(web)=&self.web_layout {return web.search(query);}
+        let query:String=ostd::typography::normalized_chars(query.trim()).map(|c|c.to_ascii_lowercase()).collect();
+        if query.is_empty(){return Vec::new();}
+        let mut matches=Vec::new();let mut text=String::new();
         for b in &self.layout_boxes {
+            let mut found=false;
             for line in &b.lines {
-                text.clear();
-                for span in &line.spans {
-                    text.push_str(&span.text);
-                }
-                text.make_ascii_lowercase();
-                if text.contains(&query) {
-                    matches.push(b.y_offset);
-                    break;
-                }
+                text.clear();for run in &line.runs {text.push_str(&run.span.text);}
+                text.make_ascii_lowercase();found|=text.contains(&query);
             }
+            if let Some(rows)=&b.table_rows {for row in rows {for cell in &row.cells {for line in &cell.lines {
+                text.clear();for run in &line.runs {text.push_str(&run.span.text);}
+                text.make_ascii_lowercase();found|=text.contains(&query);
+            }}}}
+            if found {matches.push(b.y_offset);}
         }
         matches
     }
-
-    /// Compute pixel layout coordinates for all document nodes given viewport width.
-    pub fn compute_layout(&mut self, content_width: u32) {
-        self.layout_boxes.clear();
-        let mut curr_y = 16i32;
-        let line_width_chars = (content_width.saturating_sub(40) / 8) as usize;
-        let wrap_chars = line_width_chars.max(20);
-
+    pub fn relayout_from_arena(&mut self,fonts:&mut TextFonts,width:u32,height:u32)->bool {
+        let Some(arena)=&self.arena else{return false;};
+        match crate::parser::web::layout(fonts,arena,&self.external_stylesheets,width,height) {
+            Ok(layout)=>{
+                self.nodes=crate::parser::html::arena_to_doc_nodes(arena);
+                self.layout_boxes.clear();self.total_height=layout.height;
+                self.web_layout=Some(layout);true
+            }
+            Err(_)=>{self.layout_boxes.clear();self.web_layout=None;self.total_height=0;false}
+        }
+    }
+    pub fn compute_layout(&mut self,fonts:&mut TextFonts,content_width:u32) {
+        if self.arena.is_some(){self.relayout_from_arena(fonts,content_width,600);return;}
+        self.web_layout=None;self.layout_boxes.clear();
+        let mut y=16;
+        let width=content_width.saturating_sub(40).max(1) as f32;
         for node in &self.nodes {
+            let mut b=LayoutBox::new(y);
+            let mut gap=0;
             match node {
-                DocNode::Heading { level, text } => {
-                    let scale = match level {
-                        1 => 2,
-                        2 => 2,
-                        _ => 1,
-                    };
-                    let line_height = (8 * scale + 6) as i32;
-                    let color = if *level == 1 {
-                        theme::ACCENT_BLUE
-                    } else {
-                        theme::TEXT_PRIMARY
-                    };
-
-                    let box_item = LayoutBox {
-                        y_offset: curr_y,
-                        height: line_height + 8,
-                        lines: alloc::vec![LayoutLine {
-                            spans: alloc::vec![StyledSpan::plain(text)],
-                            is_code: false,
-                            is_heading: true,
-                            scale,
-                            custom_color: Some(color),
-                        }],
-                        bg_color: None,
-                        border_color: None,
-                        is_rule: false,
-                        left_margin: 0,
-                        image: None,
-                        table_rows: None,
-                        table_width: 0,
-                        node_id: None,
-                    };
-
-                    curr_y += box_item.height;
-                    self.layout_boxes.push(box_item);
+                DocNode::Heading{level,text}=>{
+                    let px=match level {1=>32.0,2=>26.0,3=>22.0,_=>18.0};
+                    let mut span=StyledSpan::plain(text);span.bold=true;
+                    if *level==1 {span.color=Some(theme::ACCENT_BLUE);}
+                    b.lines=lines_for(fonts,&[span],px,width,false);gap=8;
                 }
-
-                DocNode::Paragraph { spans } => {
-                    // Wrap spans into lines
-                    let mut lines = Vec::new();
-                    let mut current_line_spans = Vec::new();
-                    let mut current_len = 0;
-
-                    for span in spans {
-                        let words = span.text.split(' ');
-                        for (i, word) in words.enumerate() {
-                            let prefix = if i > 0 { " " } else { "" };
-                            let word_len = word.len() + prefix.len();
-
-                            if current_len + word_len > wrap_chars && current_len > 0 {
-                                lines.push(LayoutLine {
-                                    spans: core::mem::take(&mut current_line_spans),
-                                    is_code: false,
-                                    is_heading: false,
-                                    scale: 1,
-                                    custom_color: None,
-                                });
-                                current_len = 0;
-                            }
-
-                            let mut piece = span.clone();
-                            piece.text = format!("{}{}", prefix, word);
-                            current_len += word_len;
-                            current_line_spans.push(piece);
+                DocNode::Paragraph{spans}=>{
+                    b.lines=lines_for(fonts,spans,16.0,width,false);gap=6;
+                }
+                DocNode::CodeBlock{lang,lines}=>{
+                    let mut highlighter=crate::parser::syntax::Highlighter::new(lang);
+                    for text in lines {
+                        let mut spans=highlighter.line(text);
+                        for span in &mut spans {span.code=true;}
+                        b.lines.extend(lines_for(fonts,&spans,14.0,(width-8.0).max(1.0),true));
+                    }
+                    b.bg_color=Some(theme::BG_INPUT);b.border_color=Some(theme::BORDER);
+                    b.left_margin=8;gap=8;
+                }
+                DocNode::ListItem{bullet,indent,spans}=>{
+                    b.left_margin=*indent as i32*20+12;
+                    let mut list=alloc::vec![StyledSpan::plain(&format!("{} ",bullet))];
+                    list[0].bold=true;list[0].color=Some(theme::ACCENT_CYAN);
+                    list.extend_from_slice(spans);
+                    b.lines=lines_for(fonts,&list,16.0,(width-b.left_margin as f32).max(1.0),false);
+                }
+                DocNode::Blockquote{lines}=>{
+                    b.left_margin=16;b.border_color=Some(theme::ACCENT_BLUE);
+                    for text in lines {
+                        let mut span=StyledSpan::plain(text);span.italic=true;span.color=Some(theme::TEXT_MUTED);
+                        b.lines.extend(lines_for(fonts,&[span],16.0,(width-16.0).max(1.0),false));
+                    }
+                    gap=4;
+                }
+                DocNode::RawLines{lines}=>{
+                    b.left_margin=4;
+                    for text in lines {
+                        b.lines.extend(lines_for(fonts,&[StyledSpan::plain(text)],16.0,(width-4.0).max(1.0),true));
+                    }
+                }
+                DocNode::Rule=>{b.is_rule=true;b.height=16;}
+                DocNode::Image{width:iw,height:ih,pixels}=>{
+                    let display_w=(*iw).min(content_width.saturating_sub(32).max(1));
+                    let display_h=((*ih as u64*display_w as u64)/(*iw).max(1) as u64).max(1) as u32;
+                    b.height=display_h as i32+16;b.left_margin=16;
+                    b.image=Some((*iw,*ih,pixels.clone()));
+                }
+                DocNode::Table{headers,rows}=>{
+                    let count=headers.len().max(rows.iter().map(|r|r.len()).max().unwrap_or(0));
+                    if count==0{continue;}
+                    let mut desired=alloc::vec![12.0f32;count];
+                    for (i,text) in headers.iter().enumerate() {
+                        desired[i]=desired[i].max(fonts.measure(FontFace::UiSemibold,text,16.0)+12.0);
+                    }
+                    for row in rows {for (i,text) in row.iter().enumerate() {
+                        desired[i]=desired[i].max(fonts.measure(FontFace::UiRegular,text,16.0)+12.0);
+                    }}
+                    let sum: f32=desired.iter().sum();
+                    let available=content_width.saturating_sub(40).max(1);
+                    let mut widths=Vec::new();let mut used=0;
+                    for (i,w) in desired.iter().enumerate() {
+                        let w=if i+1==count {available.saturating_sub(used)}
+                            else {(*w/sum*available as f32) as u32};
+                        widths.push(w);used+=w;
+                    }
+                    let mut table_rows=Vec::new();let mut row_y=0;
+                    for (header,row) in core::iter::once((true,headers)).filter(|(_,r)|!r.is_empty())
+                        .chain(rows.iter().map(|r|(false,r))) {
+                        let mut cells=Vec::new();let mut x=0;let mut row_h=0;
+                        for (i,&w) in widths.iter().enumerate() {
+                            let mut span=StyledSpan::plain(row.get(i).map_or("",String::as_str));
+                            span.bold=header;span.color=Some(if header{theme::ACCENT_CYAN}else{theme::TEXT_PRIMARY});
+                            let lines=lines_for(fonts,&[span],16.0,w.saturating_sub(12).max(1) as f32,false);
+                            row_h=row_h.max(lines_height(&lines) as u32+12);
+                            cells.push(TableCellLayout{lines,x,width:w});x+=w as i32;
                         }
+                        table_rows.push(TableRowLayout{y_rel:row_y,height:row_h,cells,is_header:header});
+                        row_y+=row_h as i32;
                     }
-
-                    if !current_line_spans.is_empty() {
-                        lines.push(LayoutLine {
-                            spans: current_line_spans,
-                            is_code: false,
-                            is_heading: false,
-                            scale: 1,
-                            custom_color: None,
-                        });
-                    }
-
-                    let line_count = lines.len().max(1);
-                    let height = (line_count as i32) * 16 + 6;
-
-                    let box_item = LayoutBox {
-                        y_offset: curr_y,
-                        height,
-                        lines,
-                        bg_color: None,
-                        border_color: None,
-                        is_rule: false,
-                        left_margin: 0,
-                        image: None,
-                        table_rows: None,
-                        table_width: 0,
-                        node_id: None,
-                    };
-
-                    curr_y += height;
-                    self.layout_boxes.push(box_item);
+                    b.table_rows=Some(table_rows);b.table_width=used;
+                    b.left_margin=16;b.height=row_y+12;gap=8;
                 }
-
-                DocNode::CodeBlock { lang, lines } => {
-                    let mut layout_lines = Vec::new();
-                    let mut highlighter = crate::parser::syntax::Highlighter::new(lang);
-                    for l in lines {
-                        layout_lines.push(LayoutLine {
-                            spans: highlighter.line(l),
-                            is_code: true,
-                            is_heading: false,
-                            scale: 1,
-                            custom_color: Some(theme::ACCENT_CYAN),
-                        });
-                    }
-
-                    let height = (lines.len() as i32) * 14 + 16;
-                    let box_item = LayoutBox {
-                        y_offset: curr_y,
-                        height,
-                        lines: layout_lines,
-                        bg_color: Some(theme::BG_INPUT),
-                        border_color: Some(theme::BORDER),
-                        is_rule: false,
-                        left_margin: 8,
-                        image: None,
-                        table_rows: None,
-                        table_width: 0,
-                        node_id: None,
-                    };
-
-                    curr_y += height + 8;
-                    self.layout_boxes.push(box_item);
-                }
-
-                DocNode::ListItem {
-                    bullet,
-                    indent,
-                    spans,
-                } => {
-                    let indent_px = (*indent as i32) * 16 + 12;
-                    let mut spans_with_bullet = Vec::new();
-                    spans_with_bullet.push(StyledSpan {
-                        text: format!("{} ", bullet),
-                        bold: true,
-                        italic: false,
-                        code: false,
-                        link: None,
-                        color: Some(theme::ACCENT_CYAN),
-                    });
-                    spans_with_bullet.extend_from_slice(spans);
-
-                    let box_item = LayoutBox {
-                        y_offset: curr_y,
-                        height: 18,
-                        lines: alloc::vec![LayoutLine {
-                            spans: spans_with_bullet,
-                            is_code: false,
-                            is_heading: false,
-                            scale: 1,
-                            custom_color: None,
-                        }],
-                        bg_color: None,
-                        border_color: None,
-                        is_rule: false,
-                        left_margin: indent_px,
-                        image: None,
-                        table_rows: None,
-                        table_width: 0,
-                        node_id: None,
-                    };
-                    curr_y += 18;
-                    self.layout_boxes.push(box_item);
-                }
-
-                DocNode::Blockquote { lines } => {
-                    let mut layout_lines = Vec::new();
-                    for l in lines {
-                        layout_lines.push(LayoutLine {
-                            spans: alloc::vec![StyledSpan::plain(l)],
-                            is_code: false,
-                            is_heading: false,
-                            scale: 1,
-                            custom_color: Some(theme::TEXT_MUTED),
-                        });
-                    }
-
-                    let height = (lines.len() as i32) * 16 + 8;
-                    let box_item = LayoutBox {
-                        y_offset: curr_y,
-                        height,
-                        lines: layout_lines,
-                        bg_color: None,
-                        border_color: Some(theme::ACCENT_BLUE),
-                        is_rule: false,
-                        left_margin: 16,
-                        image: None,
-                        table_rows: None,
-                        table_width: 0,
-                        node_id: None,
-                    };
-
-                    curr_y += height + 4;
-                    self.layout_boxes.push(box_item);
-                }
-
-                DocNode::Rule => {
-                    let box_item = LayoutBox {
-                        y_offset: curr_y + 6,
-                        height: 12,
-                        lines: Vec::new(),
-                        bg_color: None,
-                        border_color: None,
-                        is_rule: true,
-                        left_margin: 0,
-                        image: None,
-                        table_rows: None,
-                        table_width: 0,
-                        node_id: None,
-                    };
-                    curr_y += 16;
-                    self.layout_boxes.push(box_item);
-                }
-
-                DocNode::RawLines { lines } => {
-                    let mut layout_lines = Vec::new();
-                    for l in lines {
-                        layout_lines.push(LayoutLine {
-                            spans: alloc::vec![StyledSpan::plain(l)],
-                            is_code: false,
-                            is_heading: false,
-                            scale: 1,
-                            custom_color: Some(theme::TEXT_PRIMARY),
-                        });
-                    }
-
-                    let height = (lines.len() as i32) * 14 + 10;
-                    let box_item = LayoutBox {
-                        y_offset: curr_y,
-                        height,
-                        lines: layout_lines,
-                        bg_color: None,
-                        border_color: None,
-                        is_rule: false,
-                        left_margin: 4,
-                        image: None,
-                        table_rows: None,
-                        table_width: 0,
-                        node_id: None,
-                    };
-
-                    curr_y += height;
-                    self.layout_boxes.push(box_item);
-                }
-
-                DocNode::Image {
-                    width,
-                    height,
-                    pixels,
-                } => {
-                    let box_h = (*height as i32) + 16;
-                    let box_item = LayoutBox {
-                        y_offset: curr_y,
-                        height: box_h,
-                        lines: Vec::new(),
-                        bg_color: None,
-                        border_color: None,
-                        is_rule: false,
-                        left_margin: 16,
-                        image: Some((*width, *height, pixels.clone())),
-                        table_rows: None,
-                        table_width: 0,
-                        node_id: None,
-                    };
-                    self.layout_boxes.push(box_item);
-                }
-
-                DocNode::Table { headers, rows } => {
-                    let col_count = headers
-                        .len()
-                        .max(rows.iter().map(|r| r.len()).max().unwrap_or(0));
-                    if col_count == 0 {
-                        continue;
-                    }
-
-                    let mut col_chars = alloc::vec![6usize; col_count];
-                    for (i, h) in headers.iter().enumerate() {
-                        if i < col_count {
-                            col_chars[i] = col_chars[i].max(h.len());
-                        }
-                    }
-                    for row in rows {
-                        for (i, cell) in row.iter().enumerate() {
-                            if i < col_count {
-                                col_chars[i] = col_chars[i].max(cell.len());
-                            }
-                        }
-                    }
-
-                    let avail_w = content_width.saturating_sub(40);
-                    let total_chars: usize = col_chars.iter().sum();
-                    let mut col_widths = Vec::with_capacity(col_count);
-                    for &chars in &col_chars {
-                        let w = ((chars as f32 / total_chars.max(1) as f32) * (avail_w as f32))
-                            .max(48.0) as u32;
-                        col_widths.push(w);
-                    }
-                    let table_w: u32 = col_widths.iter().sum();
-
-                    let row_h = 24u32;
-                    let mut table_rows = Vec::new();
-                    let mut rel_y = 0i32;
-
-                    if !headers.is_empty() {
-                        let mut cells = Vec::new();
-                        let mut cell_x = 0i32;
-                        for (i, w) in col_widths.iter().enumerate() {
-                            let text = headers.get(i).cloned().unwrap_or_default();
-                            cells.push(TableCellLayout {
-                                text,
-                                x: cell_x,
-                                width: *w,
-                            });
-                            cell_x += *w as i32;
-                        }
-                        table_rows.push(TableRowLayout {
-                            y_rel: rel_y,
-                            height: row_h,
-                            cells,
-                            is_header: true,
-                        });
-                        rel_y += row_h as i32;
-                    }
-
-                    for row in rows {
-                        let mut cells = Vec::new();
-                        let mut cell_x = 0i32;
-                        for (i, w) in col_widths.iter().enumerate() {
-                            let text = row.get(i).cloned().unwrap_or_default();
-                            cells.push(TableCellLayout {
-                                text,
-                                x: cell_x,
-                                width: *w,
-                            });
-                            cell_x += *w as i32;
-                        }
-                        table_rows.push(TableRowLayout {
-                            y_rel: rel_y,
-                            height: row_h,
-                            cells,
-                            is_header: false,
-                        });
-                        rel_y += row_h as i32;
-                    }
-
-                    let box_h = rel_y + 12;
-                    let box_item = LayoutBox {
-                        y_offset: curr_y,
-                        height: box_h,
-                        lines: Vec::new(),
-                        bg_color: None,
-                        border_color: None,
-                        is_rule: false,
-                        left_margin: 16,
-                        image: None,
-                        table_rows: Some(table_rows),
-                        table_width: table_w,
-                        node_id: None,
-                    };
-
-                    curr_y += box_h + 8;
-                    self.layout_boxes.push(box_item);
-                }
-                DocNode::Button { text, node_id } => {
-                    let btn_text = alloc::format!("[ {} ]", text.trim());
-                    let btn_width = ((btn_text.len() * 8) + 24) as i32;
-                    let box_item = LayoutBox {
-                        y_offset: curr_y,
-                        height: 28,
-                        lines: alloc::vec![LayoutLine {
-                            spans: alloc::vec![StyledSpan {
-                                text: btn_text,
-                                bold: true,
-                                italic: false,
-                                code: true,
-                                link: None,
-                                color: Some(theme::TEXT_PRIMARY),
-                            }],
-                            is_code: true,
-                            is_heading: false,
-                            scale: 1,
-                            custom_color: Some(theme::TEXT_PRIMARY),
-                        }],
-                        bg_color: Some(theme::ACCENT_BLUE),
-                        border_color: Some(theme::BORDER),
-                        is_rule: false,
-                        left_margin: 8,
-                        image: None,
-                        table_rows: None,
-                        table_width: btn_width as u32,
-                        node_id: *node_id,
-                    };
-                    curr_y += 36;
-                    self.layout_boxes.push(box_item);
+                DocNode::Button{text,node_id}=>{
+                    let mut span=StyledSpan::plain(text.trim());span.bold=true;
+                    b.lines=lines_for(fonts,&[span],16.0,width,false);
+                    b.table_width=b.lines.iter().map(|l|l.width as u32+16).max().unwrap_or(16);
+                    b.left_margin=8;b.bg_color=Some(theme::ACCENT_BLUE);
+                    b.border_color=Some(theme::BORDER);b.node_id=*node_id;gap=8;
                 }
             }
+            if b.height==0 {b.height=lines_height(&b.lines)+8;}
+            y+=b.height+gap;self.layout_boxes.push(b);
         }
-
-        self.total_height = curr_y + 32;
+        self.total_height=y+32;
     }
 
-    /// Render visible document boxes onto the surface given current scroll_y and viewport bounds.
-    pub fn render_viewport(
-        &self,
-        surf: &mut ViSurface,
-        view_x: i32,
-        view_y: i32,
-        view_w: u32,
-        view_h: u32,
-        scroll_y: i32,
-    ) {
-        let view_bottom = view_y + view_h as i32;
-
+    pub fn render_viewport(&self,fonts:&mut TextFonts,surf:&mut ViSurface,
+        view_x:i32,view_y:i32,view_w:u32,view_h:u32,scroll_y:i32) {
+        if let Some(web)=&self.web_layout {web.render(fonts,surf,(view_x,view_y,view_w,view_h),scroll_y);return;}
+        let clip=(view_x,view_y,view_x+view_w as i32,view_y+view_h as i32);
         for b in &self.layout_boxes {
-            let screen_y = view_y + b.y_offset - scroll_y;
-            let screen_bottom = screen_y + b.height;
-
-            // Frustum / Culling check: skip boxes outside the viewport
-            if screen_bottom <= view_y || screen_y >= view_bottom {
-                continue;
-            }
-
-            // Draw background if specified (e.g. for code blocks)
-            if let Some(bg) = b.bg_color {
-                let draw_y = screen_y.max(view_y);
-                let draw_h = (screen_bottom.min(view_bottom) - draw_y).max(0) as u32;
-                let draw_w = view_w.saturating_sub((b.left_margin as u32) + 20);
-                fill_rect(surf, view_x + b.left_margin, draw_y, draw_w, draw_h, bg);
-
-                if let Some(border) = b.border_color {
-                    stroke_rect(surf, view_x + b.left_margin, draw_y, draw_w, draw_h, border);
+            let y=view_y+b.y_offset-scroll_y;
+            if y+b.height<=clip.1 || y>=clip.3 {continue;}
+            let text_x=view_x+16+b.left_margin;
+            if let Some(bg)=b.bg_color {
+                let w=if b.node_id.is_some(){b.table_width}else{view_w.saturating_sub(b.left_margin as u32+20)};
+                draw::clipped_rect(surf,text_x-8,y,w,b.height as u32,bg,clip);
+                if let Some(border)=b.border_color {
+                    draw::clipped_rect(surf,text_x-8,y,w,1,border,clip);
+                    draw::clipped_rect(surf,text_x-8,y+b.height-1,w,1,border,clip);
                 }
+            } else if let Some(border)=b.border_color {
+                draw::clipped_rect(surf,text_x-8,y,2,b.height as u32,border,clip);
             }
-
-            // Draw horizontal rule
             if b.is_rule {
-                let rule_y = screen_y + 4;
-                if rule_y >= view_y && rule_y < view_bottom {
-                    fill_rect(
-                        surf,
-                        view_x + 10,
-                        rule_y,
-                        view_w.saturating_sub(30),
-                        1,
-                        theme::BORDER,
-                    );
-                }
-                continue;
+                draw::clipped_rect(surf,view_x+10,y+4,view_w.saturating_sub(30),1,theme::BORDER,clip);continue;
             }
-
-            // Draw image if present
-            if let Some((iw, ih, image_pixels)) = &b.image {
-                let img_y = screen_y + 8;
-                if img_y + (*ih as i32) > view_y && img_y < view_bottom {
-                    draw::draw_image(
-                        surf,
-                        view_x + b.left_margin,
-                        img_y,
-                        *iw,
-                        *ih,
-                        image_pixels,
-                        (*iw * 4) as usize,
-                    );
-                }
-                continue;
+            if let Some((iw,ih,pixels))=&b.image {
+                draw::draw_image_clipped(surf,view_x+b.left_margin,y+8,
+                    (*iw).min(view_w.saturating_sub(32).max(1)),(b.height-16) as u32,
+                    pixels,(*iw*4) as usize,*ih,clip);continue;
             }
-
-            // Draw table if present
-            if let Some(table_rows) = &b.table_rows {
-                let tbl_x = view_x + b.left_margin;
-                for row in table_rows {
-                    let row_y = screen_y + row.y_rel;
-                    if row_y + (row.height as i32) <= view_y || row_y >= view_bottom {
-                        continue;
-                    }
-
-                    if row.is_header {
-                        fill_rect(
-                            surf,
-                            tbl_x,
-                            row_y,
-                            b.table_width,
-                            row.height,
-                            theme::BG_INPUT,
-                        );
-                    }
-
-                    fill_rect(
-                        surf,
-                        tbl_x,
-                        row_y + row.height as i32 - 1,
-                        b.table_width,
-                        1,
-                        theme::BORDER,
-                    );
-
+            if let Some(rows)=&b.table_rows {
+                let x=view_x+b.left_margin;
+                for row in rows {
+                    let ry=y+row.y_rel;
+                    if row.is_header {draw::clipped_rect(surf,x,ry,b.table_width,row.height,theme::BG_INPUT,clip);}
+                    draw::clipped_rect(surf,x,ry+row.height as i32-1,b.table_width,1,theme::BORDER,clip);
                     for cell in &row.cells {
-                        let cell_screen_x = tbl_x + cell.x;
-                        fill_rect(
-                            surf,
-                            cell_screen_x + cell.width as i32 - 1,
-                            row_y,
-                            1,
-                            row.height,
-                            theme::BORDER,
-                        );
-
-                        let color = if row.is_header {
-                            theme::ACCENT_CYAN
-                        } else {
-                            theme::TEXT_PRIMARY
-                        };
-                        draw::draw_str(surf, cell_screen_x + 6, row_y + 6, &cell.text, color, 1);
+                        draw::clipped_rect(surf,x+cell.x+cell.width as i32-1,ry,1,row.height,theme::BORDER,clip);
+                        let cell_clip=((x+cell.x).max(clip.0),ry.max(clip.1),
+                            (x+cell.x+cell.width as i32).min(clip.2),(ry+row.height as i32).min(clip.3));
+                        paint_lines(fonts,surf,&cell.lines,(x+cell.x+6) as f32,(ry+6) as f32,theme::TEXT_PRIMARY,cell_clip);
                     }
                 }
-                stroke_rect(
-                    surf,
-                    tbl_x,
-                    screen_y,
-                    b.table_width,
-                    (b.height - 12).max(1) as u32,
-                    theme::BORDER,
-                );
                 continue;
             }
-
-            // Draw lines of text
-            let mut line_y = screen_y + 4;
-            for line in &b.lines {
-                let line_h = (8 * line.scale + 6) as i32;
-                if line_y + line_h > view_y && line_y < view_bottom {
-                    let mut cursor_x = view_x + 16 + b.left_margin;
-
-                    for span in &line.spans {
-                        let text_color = span
-                            .color
-                            .or(line.custom_color)
-                            .unwrap_or(theme::TEXT_PRIMARY);
-
-                        // Draw background pill for inline code
-                        if span.code {
-                            let span_w = (span.text.chars().count() * 8) as u32 + 6;
-                            fill_rect(
-                                surf,
-                                cursor_x - 2,
-                                line_y - 1,
-                                span_w,
-                                8 * line.scale + 2,
-                                theme::BG_INPUT,
-                            );
+            if b.bg_color.is_none() {
+                let mut line_y=y+4;
+                for line in &b.lines {
+                    for run in &line.runs {
+                        if run.span.code {
+                            draw::clipped_rect(surf,text_x+run.x as i32-2,line_y,
+                                crate::parser::web::ceil_pixel(run.width)+4,line.height,
+                                theme::BG_INPUT,clip);
                         }
-
-                        draw::draw_str(surf, cursor_x, line_y, &span.text, text_color, line.scale);
-                        cursor_x += (span.text.chars().count() as i32) * (8 * line.scale as i32);
                     }
+                    line_y+=line.height as i32;
                 }
-                line_y += line_h;
             }
+            paint_lines(fonts,surf,&b.lines,text_x as f32,(y+4) as f32,theme::TEXT_PRIMARY,clip);
         }
     }
 
-    /// Check if coordinates (click_x, click_y) hit any link span.
-    pub fn hit_test_link(
-        &self,
-        click_x: i32,
-        click_y: i32,
-        view_x: i32,
-        view_y: i32,
-        scroll_y: i32,
-    ) -> Option<String> {
+    pub fn hit_test_link(&self,click_x:i32,click_y:i32,view_x:i32,view_y:i32,scroll_y:i32)->Option<String> {
+        if let Some(web)=&self.web_layout {return web.hit_link(click_x-view_x,click_y-view_y+scroll_y);}
         for b in &self.layout_boxes {
-            let screen_y = view_y + b.y_offset - scroll_y;
-            let screen_bottom = screen_y + b.height;
-
-            if click_y < screen_y || click_y >= screen_bottom {
-                continue;
-            }
-
-            let mut line_y = screen_y + 4;
+            let mut y=view_y+b.y_offset-scroll_y+4;
             for line in &b.lines {
-                let line_h = (8 * line.scale + 6) as i32;
-                if click_y >= line_y && click_y < line_y + line_h {
-                    let mut cursor_x = view_x + 16 + b.left_margin;
-                    for span in &line.spans {
-                        let span_w = (span.text.chars().count() as i32) * (8 * line.scale as i32);
-                        if click_x >= cursor_x && click_x < cursor_x + span_w {
-                            if let Some(url) = &span.link {
-                                return Some(url.clone());
-                            }
+                if click_y>=y && click_y<y+line.height as i32 {
+                    for run in &line.runs {
+                        let x=(view_x+16+b.left_margin) as f32+run.x;
+                        if (click_x as f32)>=x && (click_x as f32)<x+run.width {
+                            if let Some(link)=&run.span.link{return Some(link.clone());}
                         }
-                        cursor_x += span_w;
                     }
                 }
-                line_y += line_h;
+                y+=line.height as i32;
             }
         }
         None
     }
-
-    /// Check if coordinates (click_x, click_y) hit any layout box with a registered NodeId.
-    pub fn hit_test_node(
-        &self,
-        click_x: i32,
-        click_y: i32,
-        view_x: i32,
-        view_y: i32,
-        scroll_y: i32,
-    ) -> Option<dom_arena::NodeId> {
+    pub fn hit_test_node(&self,click_x:i32,click_y:i32,view_x:i32,view_y:i32,scroll_y:i32)->Option<dom_arena::NodeId> {
+        if let Some(web)=&self.web_layout {return web.hit_node(click_x-view_x,click_y-view_y+scroll_y);}
         for b in &self.layout_boxes {
-            let screen_y = view_y + b.y_offset - scroll_y;
-            let screen_bottom = screen_y + b.height;
-
-            if click_y >= screen_y && click_y < screen_bottom {
-                let box_x = view_x + 16 + b.left_margin;
-                let box_w = if b.table_width > 0 {
-                    b.table_width as i32
-                } else {
-                    b.lines
-                        .iter()
-                        .map(|l| {
-                            l.spans
-                                .iter()
-                                .map(|s| (s.text.len() as i32) * (8 * l.scale as i32))
-                                .sum::<i32>()
-                        })
-                        .max()
-                        .unwrap_or(80)
-                };
-
-                if click_x >= box_x && click_x < box_x + box_w {
-                    if let Some(id) = b.node_id {
-                        return Some(id);
-                    }
-                }
+            let y=view_y+b.y_offset-scroll_y;
+            let x=view_x+8+b.left_margin;
+            if click_y>=y && click_y<y+b.height && click_x>=x && click_x<x+b.table_width as i32 {
+                if let Some(id)=b.node_id{return Some(id);}
             }
         }
         None

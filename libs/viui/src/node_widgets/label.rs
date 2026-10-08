@@ -20,8 +20,6 @@ pub struct Label {
     pub text: Signal<String>,
     pub color: Color,
     bounds: Rect,
-    cached_byte_len: usize,
-    cached_char_count: usize,
 }
 
 impl Label {
@@ -30,8 +28,6 @@ impl Label {
             text,
             color: Color::WHITE,
             bounds: Rect::ZERO,
-            cached_byte_len: 0,
-            cached_char_count: 0,
         }
     }
 
@@ -42,21 +38,14 @@ impl Label {
 }
 
 impl ViNode for Label {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let byte_len = self.text.get().len();
-        if byte_len != self.cached_byte_len {
-            self.cached_char_count = self.text.get().chars().count();
-            self.cached_byte_len = byte_len;
-        }
-        // Use 8.0px char width as conservative fallback; RenderCtx provides
-        // better metrics at paint time but layout doesn't have cx access.
-        let desired = Size {
-            w: self.cached_char_count as f32 * 8.0,
-            h: 16.0, // accommodate scalable font (no longer hard-coded 8px)
-        };
-        let size = constraints.constrain(desired);
-        self.bounds = Rect::from_origin_size(constraints.origin, size);
-        size
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    let desired = Size {
+        w: font.measure(&self.text.get()),
+        h: font.line_height(),
+    };
+    let size = constraints.constrain(desired);
+    self.bounds = Rect::from_origin_size(constraints.origin, size);
+    size
     }
 
     fn bounds(&self) -> Rect {
@@ -75,7 +64,7 @@ impl ViNode for Label {
     fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
         let rect = self.bounds;
         let h = self.text.subscribe(move || {
-            region.borrow_mut().mark(rect);
+            region.borrow_mut().mark_layout(rect);
         });
         alloc::vec![h]
     }
@@ -98,7 +87,7 @@ mod tests {
     fn signal_update_marks_the_label_bounds_dirty() {
         let text = Signal::new(alloc::string::String::from("idle"));
         let mut label = Label::new(text.clone());
-        label.layout(Constraints::root(Size::new(80.0, 24.0)));
+        label.layout(Constraints::root(Size::new(80.0, 24.0)), &mut crate::font_context::FontContext::default());
         let dirty = Rc::new(RefCell::new(DirtyRect::new()));
         let _handles = label.collect_dirty_handles(Rc::clone(&dirty));
 

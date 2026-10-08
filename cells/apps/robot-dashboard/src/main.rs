@@ -74,11 +74,16 @@ use sim::{SimState, SIM_TICK_MS};
 const DISPLAY_W: u32 = 800;
 const DISPLAY_H: u32 = 480;
 
+#[cfg(target_os = "none")]
+ostd::declare_custom_heap!(4 * 1024 * 1024);
+
 // ─── Entry ────────────────────────────────────────────────────────────────────
 
 ostd::cell_main!(extern "C" cell_main);
 
 fn cell_main() {
+    #[cfg(target_os = "none")]
+    init_custom_heap();
     ostd::io::println("[robot-dashboard] starting");
 
     // ── Surface + renderer ────────────────────────────────────────────────────

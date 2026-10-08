@@ -38,9 +38,14 @@ const DISPLAY_H: u32 = 400;
 const SURFACE_X: i32 = 80;
 const SURFACE_Y: i32 = 80;
 
+#[cfg(target_os = "none")]
+ostd::declare_custom_heap!(4 * 1024 * 1024);
+
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
+    #[cfg(target_os = "none")]
+    init_custom_heap();
     ostd::io::println("[viui-demo] starting managed Counter surface");
 
     let compositor_tid = wait_for_compositor();

@@ -68,24 +68,24 @@ impl TabNavigator {
 }
 
 impl ViNode for TabNavigator {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let full = Size::new(constraints.max.w, constraints.max.h);
-        self.bounds
-            .set(Rect::from_origin_size(constraints.origin, full));
-
-        self.ensure_page(self.active);
-
-        let page_h = (constraints.max.h - self.tab_bar_h).max(0.0);
-        let page_constraints =
-            Constraints::new(constraints.origin, Size::new(constraints.max.w, page_h));
-
-        if let Some(tab) = self.tabs.get_mut(self.active) {
-            if let Some(page) = &mut tab.cached {
-                page.layout(page_constraints);
-            }
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    let full = Size::new(constraints.max.w, constraints.max.h);
+    self.bounds
+        .set(Rect::from_origin_size(constraints.origin, full));
+    
+    self.ensure_page(self.active);
+    
+    let page_h = (constraints.max.h - self.tab_bar_h).max(0.0);
+    let page_constraints =
+        Constraints::new(constraints.origin, Size::new(constraints.max.w, page_h));
+    
+    if let Some(tab) = self.tabs.get_mut(self.active) {
+        if let Some(page) = &mut tab.cached {
+            page.layout(page_constraints, font);
         }
-
-        full
+    }
+    
+    full
     }
 
     fn bounds(&self) -> Rect {
@@ -143,8 +143,9 @@ impl ViNode for TabNavigator {
             }
 
             // Tab label centered horizontally
-            let label_x = tx + (tab_w / 2.0) - (tab.label.chars().count() as f32 * 4.0);
-            cx.draw_text(Point::new(label_x, bar_y + 16.0), &tab.label, text_color);
+            let label_x = tx + (tab_w - cx.measure(&tab.label)) * 0.5;
+            let label_y = bar_y + (self.tab_bar_h - cx.line_height()) * 0.5;
+            cx.draw_text(Point::new(label_x, label_y), &tab.label, text_color);
         }
     }
 

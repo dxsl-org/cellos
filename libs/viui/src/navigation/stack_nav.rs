@@ -105,14 +105,14 @@ impl<K: Clone + PartialEq + 'static> StackNavigator<K> {
 }
 
 impl<K: Clone + PartialEq + 'static> ViNode for StackNavigator<K> {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = self.current.layout(constraints);
-        if let Some(prev) = &mut self.prev {
-            prev.layout(constraints);
-        }
-        self.bounds
-            .set(Rect::from_origin_size(constraints.origin, size));
-        size
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    let size = self.current.layout(constraints, font);
+    if let Some(prev) = &mut self.prev {
+        prev.layout(constraints, font);
+    }
+    self.bounds
+        .set(Rect::from_origin_size(constraints.origin, size));
+    size
     }
 
     fn bounds(&self) -> Rect {

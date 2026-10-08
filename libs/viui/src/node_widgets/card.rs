@@ -57,27 +57,27 @@ impl Card {
 }
 
 impl ViNode for Card {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let pad = self.padding;
-
-        // Give child the interior area — origin shifted in by padding.
-        let inner = Constraints {
-            origin: Point::new(constraints.origin.x + pad, constraints.origin.y + pad),
-            min: Size { w: 0.0, h: 0.0 },
-            max: Size {
-                w: (constraints.max.w - pad * 2.0).max(0.0),
-                h: (constraints.max.h - pad * 2.0).max(0.0),
-            },
-        };
-        let inner_size = self.child.layout(inner);
-
-        let size = constraints.constrain(Size {
-            w: inner_size.w + pad * 2.0,
-            h: inner_size.h + pad * 2.0,
-        });
-        self.bounds_cache
-            .set(Rect::from_origin_size(constraints.origin, size));
-        size
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    let pad = self.padding;
+    
+    // Give child the interior area — origin shifted in by padding.
+    let inner = Constraints {
+        origin: Point::new(constraints.origin.x + pad, constraints.origin.y + pad),
+        min: Size { w: 0.0, h: 0.0 },
+        max: Size {
+            w: (constraints.max.w - pad * 2.0).max(0.0),
+            h: (constraints.max.h - pad * 2.0).max(0.0),
+        },
+    };
+    let inner_size = self.child.layout(inner, font);
+    
+    let size = constraints.constrain(Size {
+        w: inner_size.w + pad * 2.0,
+        h: inner_size.h + pad * 2.0,
+    });
+    self.bounds_cache
+        .set(Rect::from_origin_size(constraints.origin, size));
+    size
     }
 
     fn bounds(&self) -> Rect {

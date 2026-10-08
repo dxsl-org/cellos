@@ -75,7 +75,7 @@ assert!(*alarm.get());
 
 Use `Computed::into_parts()` when a widget needs the derived `Signal<T>` itself, and retain the returned handle as in the application example. Calling `set` from a subscriber updates the stored value but does not recursively start another notification pass; schedule dependent work through the App Cell's next frame when it needs a separate pass.
 
-After layout, reactive widgets subscribe to their signals. A signal-only update marks the cached widget bounds dirty and the next tick repaints that region without a layout pass. A consumed input event and `ViApp::mark_dirty()` request a full layout and repaint.
+After layout, reactive widgets subscribe to their signals. Paint-only updates mark cached bounds dirty and repaint without layout. Text content updates also invalidate layout because proportional advances can change intrinsic size and sibling positions. A consumed input event and `ViApp::mark_dirty()` request a full layout and repaint.
 
 ### Explicit input and frame driving
 
@@ -101,6 +101,26 @@ fn tick_frame(app: &mut ViApp, elapsed_ms: u32) {
 `ViNode` implementations cache their final `Rect` in `layout()`. They use that same rectangle for `paint()`, hit testing, and signal dirty subscriptions. Node widgets include labels, buttons, checkboxes, sliders, progress bars, text editing, lists, charts, navigation, and overlays.
 
 Buttons invoke their callback synchronously only after a left press followed by a left release inside their bounds. Signal-driven labels and other reactive widgets mark their cached bounds dirty when their source signals change.
+
+GUI typography defaults to the bundled static Inter Regular font at 16px, rendered with grayscale coverage antialiasing. `ViNode::layout(constraints, &mut FontContext)` and the v1 `ViWidget` layout trait receive the same context used by paint; containers forward it to children. Widths include NFC normalization and kerning, and vertical alignment uses the font's line metrics. `ViApp::with_font(bytes, size)` replaces both layout and framebuffer paint typography; invalid bytes retain Inter.
+
+Low-level `FramebufferCanvas::draw_text` remains an explicit bitmap/debug primitive; GUI widgets use `draw_text_scaled`. GPU command recording is not hardware text rendering: `CpuExecutor` caches Inter and rasterizes recorded text at playback, while the GLES2 backend explicitly reports unsupported scalable text. Recorded commands do not carry custom font identities, so custom fonts require the framebuffer renderer.
+
+Each repaint clears its damage clip to the theme's opaque background before replaying the intersecting content, so grayscale glyph coverage does not accumulate and replaced text does not leave stale ink. Elm/window full-frame paths clear their whole surface. Recorded text stores its exact `f32` pixel size (including fractional and subpixel sizes); CPU playback preserves the recording clip stack.
+
+Bundled fonts borrow static TTF data and rasterize outlines on demand using
+`ab_glyph` (`no_std` + `libm`); only requested glyph bitmaps are cached.
+Each face's bitmap cache is bounded to 512 entries and a 256KiB reclamation
+threshold; a miss at the threshold discards old entries. Missing glyphs
+share one entry rather than growing with unsupported Unicode scalars.
+Layout reads font metrics without rasterizing or allocating. Cells still
+need heap space for their widget tree and glyph cache; the desktop, console,
+dashboard and managed demo initialize a 4MiB custom heap before allocations.
+Supported scalable sizes are finite values in `(0, 128]` pixels. Custom font
+contexts reject unsupported sizes; direct atlas calls fail explicitly before
+rasterization. Each glyph's coverage allocation is checked and limited to
+64KiB, in addition to the cache reclamation threshold.
+The rasterizer does not perform OpenType GPOS/GSUB shaping or bidi layout.
 
 ## Declarative `.vi` components
 

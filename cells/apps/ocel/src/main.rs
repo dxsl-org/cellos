@@ -14,7 +14,6 @@ use alloc::vec::Vec;
 
 mod doc;
 mod draw;
-mod font;
 mod image;
 mod js;
 mod lease;
@@ -25,7 +24,7 @@ mod pdf;
 mod resources;
 
 use doc::Document;
-use draw::{clear, draw_str, fill_rect, stroke_rect, theme, Color};
+use draw::{clear, fill_rect, stroke_rect, theme, Color};
 use loader::load_document;
 use parser::DocFormat;
 
@@ -33,6 +32,7 @@ use api::display::PixelFormat;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{sys_get_resolution, sys_get_time, sys_yield};
+use ostd::typography::{FontFace, TextFonts};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 
@@ -75,6 +75,14 @@ const TOOLBAR_HEIGHT: u32 = 44;
 const TABBAR_HEIGHT: u32 = 28;
 const STATUS_HEIGHT: u32 = 24;
 
+fn ui_text(fonts:&mut TextFonts,surf:&mut ViSurface,rect:(i32,i32,u32,u32),
+    value:&str,color:Color,face:FontFace,px:f32,center:bool) {
+    let (x,y,w,h)=rect;
+    let left=if center {x as f32+((w as f32-fonts.measure(face,value,px))*0.5).max(0.0)}else{x as f32};
+    let top=y as f32+((h as f32-fonts.line_height(face,px))*0.5).max(0.0);
+    draw::text(fonts,surf,left,top,value,face,px,color,(x,y,x+w as i32,y+h as i32));
+}
+
 struct Tab {
     pub title: String,
     pub url: String,
@@ -86,7 +94,7 @@ struct Tab {
 }
 
 impl Tab {
-    fn new(url: &str, viewport_w: u32, viewport_h: u32, js_runtime: &mut js::Tier2JsBridge) -> Self {
+    fn new(url: &str, viewport_w: u32, viewport_h: u32, js_runtime: &mut js::Tier2JsBridge, fonts:&mut TextFonts) -> Self {
         let mut tab = Self {
             title: String::new(),
             url: String::new(),
@@ -96,7 +104,7 @@ impl Tab {
             history_idx: 0,
             js_context_id: 0,
         };
-        let (loaded_url, _fmt) = tab.load(url, viewport_w, viewport_h, js_runtime);
+        let (loaded_url, _fmt) = tab.load(url, viewport_w, viewport_h, js_runtime, fonts);
         tab.history = alloc::vec![loaded_url];
         tab
     }
@@ -114,6 +122,7 @@ impl Tab {
         viewport_w: u32,
         viewport_h: u32,
         js_runtime: &mut js::Tier2JsBridge,
+        fonts: &mut TextFonts,
     ) -> (String, &'static str) {
         // Navigation relinquishes the old context before loading another engine.
         js_runtime.reset();
@@ -201,9 +210,9 @@ impl Tab {
         self.scroll_y = 0;
         self.doc.nodes = nodes;
         if self.doc.arena.is_some() {
-            self.doc.relayout_from_arena(viewport_w, viewport_h);
+            self.doc.relayout_from_arena(fonts, viewport_w, viewport_h);
         } else {
-            self.doc.compute_layout(viewport_w);
+            self.doc.compute_layout(fonts, viewport_w);
         }
         ostd::io::println(&format!(
             "[ocel] loaded {} ({}, {} items)",
@@ -222,6 +231,7 @@ struct OcelViewer {
     tabs: Vec<Tab>,
     active_tab: usize,
     js_runtime: js::Tier2JsBridge,
+    fonts: TextFonts,
     cursor_x: i32,
     cursor_y: i32,
     // In-Document Search (Ctrl+F)
@@ -239,8 +249,9 @@ impl OcelViewer {
         let _ = surface.set_title("Ocel Document Viewer");
 
         let mut js_runtime = js::Tier2JsBridge::new();
-        let viewport_w = width.saturating_sub(24);
-        let first_tab = Tab::new(initial_url, viewport_w, height.saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT), &mut js_runtime);
+        let mut fonts = TextFonts::new();
+        let viewport_w = width.saturating_sub(16);
+        let first_tab = Tab::new(initial_url, viewport_w, height.saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT), &mut js_runtime, &mut fonts);
         let initial_url = first_tab.url.clone();
 
         let viewer = Self {
@@ -250,6 +261,7 @@ impl OcelViewer {
             tabs: alloc::vec![first_tab],
             active_tab: 0,
             js_runtime,
+            fonts,
             cursor_x: 0,
             cursor_y: 0,
             search_open: false,
@@ -272,8 +284,8 @@ impl OcelViewer {
     }
 
     fn new_tab(&mut self, url: &str) {
-        let viewport_w = self.width.saturating_sub(24);
-        let tab = Tab::new(url, viewport_w, self.height.saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT), &mut self.js_runtime);
+        let viewport_w = self.width.saturating_sub(16);
+        let tab = Tab::new(url, viewport_w, self.height.saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT), &mut self.js_runtime, &mut self.fonts);
         self.tabs.push(tab);
         self.active_tab = self.tabs.len().saturating_sub(1);
         self.url_input = self.current_tab().url.clone();
@@ -366,17 +378,18 @@ impl OcelViewer {
     }
 
     fn load_url(&mut self, url: &str) {
-        let viewport_w = self.width.saturating_sub(24);
+        let viewport_w = self.width.saturating_sub(16);
         let viewport_h = self.height.saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT);
         let (loaded_url, fmt_name, items, height) = {
             let Self {
                 tabs,
                 active_tab,
                 js_runtime,
+                fonts,
                 ..
             } = self;
             let tab = &mut tabs[*active_tab];
-            let (loaded_url, fmt_name) = tab.load(url, viewport_w, viewport_h, js_runtime);
+            let (loaded_url, fmt_name) = tab.load(url, viewport_w, viewport_h, js_runtime, fonts);
             (
                 loaded_url,
                 fmt_name,
@@ -465,6 +478,7 @@ impl OcelViewer {
         // 2. Render Active Tab Document in Viewport
         let active_scroll = self.tabs[self.active_tab].scroll_y;
         self.tabs[self.active_tab].doc.render_viewport(
+            &mut self.fonts,
             &mut self.surface,
             0,
             view_y,
@@ -503,269 +517,82 @@ impl OcelViewer {
             );
         }
 
-        // 4. Top Navigation & Toolbar (Height: 44px)
-        fill_rect(
-            &mut self.surface,
-            0,
-            0,
-            w,
-            TOOLBAR_HEIGHT,
-            theme::BG_TOOLBAR,
-        );
-        stroke_rect(
-            &mut self.surface,
-            0,
-            (TOOLBAR_HEIGHT - 1) as i32,
-            w,
-            1,
-            theme::BORDER,
-        );
+        // Navigation chrome uses bounded, vertically centered Inter text.
+        let fonts=&mut self.fonts;
+        let surf=&mut self.surface;
+        let regular=FontFace::UiRegular;
+        let semibold=FontFace::UiSemibold;
+        fill_rect(surf,0,0,w,TOOLBAR_HEIGHT,theme::BG_TOOLBAR);
+        fill_rect(surf,0,TOOLBAR_HEIGHT as i32-1,w,1,theme::BORDER);
+        ui_text(fonts,surf,(10,8,48,28),"Ocel",theme::ACCENT_CYAN,semibold,16.0,false);
+        let tab=&self.tabs[self.active_tab];
+        let can_back=tab.history_idx>0;
+        let can_fwd=tab.history_idx+1<tab.history.len();
+        for (x,label,enabled) in [(64,"<",can_back),(94,">",can_fwd)] {
+            fill_rect(surf,x,8,26,28,if enabled {theme::ACCENT_BLUE}else{theme::BORDER});
+            ui_text(fonts,surf,(x,8,26,28),label,
+                if enabled {Color::rgb(17,17,27)}else{theme::TEXT_MUTED},semibold,16.0,true);
+        }
+        let addr_x=126;
+        let addr_w=w.saturating_sub(180);
+        fill_rect(surf,addr_x,8,addr_w,28,theme::BG_INPUT);
+        stroke_rect(surf,addr_x,8,addr_w,28,theme::BORDER);
+        ui_text(fonts,surf,(addr_x+8,8,addr_w.saturating_sub(16),28),
+            &self.url_input,theme::TEXT_PRIMARY,regular,15.0,false);
+        let btn_x=addr_x+addr_w as i32+8;
+        fill_rect(surf,btn_x,8,38,28,theme::ACCENT_BLUE);
+        ui_text(fonts,surf,(btn_x,8,38,28),"Go",Color::rgb(17,17,27),semibold,14.0,true);
 
-        // App Logo: [Ocel]
-        draw_str(&mut self.surface, 10, 14, "[Ocel]", theme::ACCENT_CYAN, 1);
-
-        // [<] Back button (x=64..90)
-        let can_back = self.current_tab().history_idx > 0;
-        let back_bg = if can_back {
-            theme::ACCENT_BLUE
-        } else {
-            theme::BORDER
-        };
-        fill_rect(&mut self.surface, 64, 8, 26, 28, back_bg);
-        draw_str(
-            &mut self.surface,
-            73,
-            14,
-            "<",
-            if can_back {
-                Color::rgb(17, 17, 27)
-            } else {
-                theme::TEXT_MUTED
-            },
-            1,
-        );
-
-        // [>] Forward button (x=94..120)
-        let can_fwd = self.current_tab().history_idx + 1 < self.current_tab().history.len();
-        let fwd_bg = if can_fwd {
-            theme::ACCENT_BLUE
-        } else {
-            theme::BORDER
-        };
-        fill_rect(&mut self.surface, 94, 8, 26, 28, fwd_bg);
-        draw_str(
-            &mut self.surface,
-            103,
-            14,
-            ">",
-            if can_fwd {
-                Color::rgb(17, 17, 27)
-            } else {
-                theme::TEXT_MUTED
-            },
-            1,
-        );
-
-        // Address bar box (x=126 .. w - 54)
-        let addr_x = 126;
-        let addr_w = w.saturating_sub(180);
-        fill_rect(&mut self.surface, addr_x, 8, addr_w, 28, theme::BG_INPUT);
-        stroke_rect(&mut self.surface, addr_x, 8, addr_w, 28, theme::BORDER);
-        draw_str(
-            &mut self.surface,
-            addr_x + 8,
-            14,
-            &self.url_input,
-            theme::TEXT_PRIMARY,
-            1,
-        );
-
-        // Action button [Go]
-        let btn_x = addr_x + addr_w as i32 + 8;
-        fill_rect(&mut self.surface, btn_x, 8, 38, 28, theme::ACCENT_BLUE);
-        draw_str(
-            &mut self.surface,
-            btn_x + 11,
-            14,
-            "Go",
-            Color::rgb(17, 17, 27),
-            1,
-        );
-
-        // 5. Tab Bar (Height: 28px, y = 44..72)
-        let tabbar_y = TOOLBAR_HEIGHT as i32;
-        fill_rect(
-            &mut self.surface,
-            0,
-            tabbar_y,
-            w,
-            TABBAR_HEIGHT,
-            theme::BG_TOOLBAR,
-        );
-        stroke_rect(
-            &mut self.surface,
-            0,
-            tabbar_y + TABBAR_HEIGHT as i32 - 1,
-            w,
-            1,
-            theme::BORDER,
-        );
-
-        let max_tab_w = 140u32;
-        let num_tabs = self.tabs.len() as u32;
-        let tab_w = max_tab_w.min(w.saturating_sub(60) / num_tabs.max(1));
-
-        for (i, tab) in self.tabs.iter().enumerate() {
-            let tab_x = 10 + (i as i32) * (tab_w as i32);
-            let is_active = i == self.active_tab;
-
-            let tab_bg = if is_active {
-                theme::BG_DARK
-            } else {
-                theme::BG_INPUT
-            };
-            fill_rect(
-                &mut self.surface,
-                tab_x,
-                tabbar_y + 2,
-                tab_w - 2,
-                TABBAR_HEIGHT - 2,
-                tab_bg,
-            );
-
-            if is_active {
-                // Top accent indicator line
-                fill_rect(
-                    &mut self.surface,
-                    tab_x,
-                    tabbar_y,
-                    tab_w - 2,
-                    2,
-                    theme::ACCENT_CYAN,
-                );
+        let tabbar_y=TOOLBAR_HEIGHT as i32;
+        fill_rect(surf,0,tabbar_y,w,TABBAR_HEIGHT,theme::BG_TOOLBAR);
+        fill_rect(surf,0,tabbar_y+TABBAR_HEIGHT as i32-1,w,1,theme::BORDER);
+        let num_tabs=self.tabs.len() as u32;
+        let tab_w=140u32.min(w.saturating_sub(60)/num_tabs.max(1));
+        for (i,tab) in self.tabs.iter().enumerate() {
+            let x=10+i as i32*tab_w as i32;
+            let active=i==self.active_tab;
+            fill_rect(surf,x,tabbar_y+2,tab_w.saturating_sub(2),TABBAR_HEIGHT-2,
+                if active {theme::BG_DARK}else{theme::BG_INPUT});
+            if active {fill_rect(surf,x,tabbar_y,tab_w.saturating_sub(2),2,theme::ACCENT_CYAN);}
+            ui_text(fonts,surf,(x+6,tabbar_y+2,tab_w.saturating_sub(30),TABBAR_HEIGHT-4),
+                &tab.title,if active{theme::TEXT_PRIMARY}else{theme::TEXT_MUTED},regular,14.0,false);
+            if tab_w>=24 {
+                ui_text(fonts,surf,(x+tab_w as i32-20,tabbar_y+2,18,TABBAR_HEIGHT-4),
+                    "×",theme::TEXT_MUTED,regular,14.0,true);
             }
-
-            // Truncate title for tab display
-            let title_chars: Vec<char> = tab.title.chars().collect();
-            let max_display_chars = (tab_w.saturating_sub(28) / 8) as usize;
-            let display_title: String = if title_chars.len() > max_display_chars {
-                title_chars[..max_display_chars.max(1)].iter().collect()
-            } else {
-                tab.title.clone()
-            };
-
-            let title_color = if is_active {
-                theme::TEXT_PRIMARY
-            } else {
-                theme::TEXT_MUTED
-            };
-            draw_str(
-                &mut self.surface,
-                tab_x + 6,
-                tabbar_y + 8,
-                &display_title,
-                title_color,
-                1,
-            );
-
-            // [x] close tab button
-            let close_x = tab_x + tab_w as i32 - 16;
-            draw_str(
-                &mut self.surface,
-                close_x,
-                tabbar_y + 8,
-                "x",
-                theme::TEXT_MUTED,
-                1,
-            );
+        }
+        let plus_x=10+num_tabs as i32*tab_w as i32+6;
+        if plus_x+22<w as i32 {
+            fill_rect(surf,plus_x,tabbar_y+3,22,22,theme::BG_INPUT);
+            ui_text(fonts,surf,(plus_x,tabbar_y+3,22,22),"+",theme::ACCENT_BLUE,regular,16.0,true);
         }
 
-        // [+] New Tab Button
-        let plus_x = 10 + (num_tabs as i32) * (tab_w as i32) + 6;
-        if plus_x + 22 < w as i32 {
-            fill_rect(
-                &mut self.surface,
-                plus_x,
-                tabbar_y + 3,
-                22,
-                22,
-                theme::BG_INPUT,
-            );
-            draw_str(
-                &mut self.surface,
-                plus_x + 7,
-                tabbar_y + 7,
-                "+",
-                theme::ACCENT_BLUE,
-                1,
-            );
-        }
-
-        // 6. In-Document Search Bar (Floating at top-right if open)
         if self.search_open {
-            let sb_w = 320u32;
-            let sb_h = 32u32;
-            let sb_x = (w.saturating_sub(sb_w + 30)) as i32;
-            let sb_y = (TOOLBAR_HEIGHT + TABBAR_HEIGHT + 8) as i32;
-
-            fill_rect(&mut self.surface, sb_x, sb_y, sb_w, sb_h, theme::BG_INPUT);
-            stroke_rect(
-                &mut self.surface,
-                sb_x,
-                sb_y,
-                sb_w,
-                sb_h,
-                theme::ACCENT_BLUE,
-            );
-
-            let count_info = if self.search_matches.is_empty() {
-                String::from("0/0")
-            } else {
-                format!("{}/{}", self.search_idx + 1, self.search_matches.len())
-            };
-            let search_text = format!("Find: {} [{}]", self.search_query, count_info);
-            draw_str(
-                &mut self.surface,
-                sb_x + 10,
-                sb_y + 8,
-                &search_text,
-                theme::TEXT_PRIMARY,
-                1,
-            );
+            let sb_w=320u32.min(w.saturating_sub(30));
+            let sb_x=w.saturating_sub(sb_w+30) as i32;
+            let sb_y=(TOOLBAR_HEIGHT+TABBAR_HEIGHT+8) as i32;
+            fill_rect(surf,sb_x,sb_y,sb_w,34,theme::BG_INPUT);
+            stroke_rect(surf,sb_x,sb_y,sb_w,34,theme::ACCENT_BLUE);
+            let count=if self.search_matches.is_empty(){String::from("0/0")}
+                else{format!("{}/{}",self.search_idx+1,self.search_matches.len())};
+            let count_w=fonts.measure(regular,&count,14.0) as u32+12;
+            let label_w=fonts.measure(semibold,"Find:",14.0) as u32+8;
+            ui_text(fonts,surf,(sb_x+8,sb_y,label_w,34),"Find:",theme::TEXT_MUTED,semibold,14.0,false);
+            ui_text(fonts,surf,(sb_x+8+label_w as i32,sb_y,
+                sb_w.saturating_sub(label_w+count_w+20),34),&self.search_query,theme::TEXT_PRIMARY,regular,14.0,false);
+            ui_text(fonts,surf,(sb_x+sb_w.saturating_sub(count_w+8) as i32,sb_y,count_w,34),
+                &count,theme::TEXT_MUTED,regular,14.0,true);
         }
-
-        // 7. Bottom Status Bar (Height: 24px)
-        let status_y = (h.saturating_sub(STATUS_HEIGHT)) as i32;
-        fill_rect(
-            &mut self.surface,
-            0,
-            status_y,
-            w,
-            STATUS_HEIGHT,
-            theme::BG_TOOLBAR,
-        );
-        stroke_rect(&mut self.surface, 0, status_y, w, 1, theme::BORDER);
-
-        let scroll_pct = if max_s > 0 {
-            (active_scroll * 100) / max_s
-        } else {
-            100
-        };
-        let status_line = format!(
-            "{} | Tab {}/{} | Scroll: {}%",
-            self.status_text,
-            self.active_tab + 1,
-            self.tabs.len(),
-            scroll_pct
-        );
-        draw_str(
-            &mut self.surface,
-            10,
-            status_y + 6,
-            &status_line,
-            theme::TEXT_MUTED,
-            1,
-        );
+        let status_y=h.saturating_sub(STATUS_HEIGHT) as i32;
+        fill_rect(surf,0,status_y,w,STATUS_HEIGHT,theme::BG_TOOLBAR);
+        fill_rect(surf,0,status_y,w,1,theme::BORDER);
+        let pct=if max_s>0{active_scroll*100/max_s}else{100};
+        let info=format!("Tab {}/{} · {}%",self.active_tab+1,self.tabs.len(),pct);
+        let info_w=fonts.measure(regular,&info,14.0) as u32+16;
+        ui_text(fonts,surf,(10,status_y+1,w.saturating_sub(info_w+30),STATUS_HEIGHT-2),
+            &self.status_text,theme::TEXT_MUTED,regular,14.0,false);
+        ui_text(fonts,surf,(w.saturating_sub(info_w+8) as i32,status_y+1,info_w,STATUS_HEIGHT-2),
+            &info,theme::TEXT_MUTED,regular,14.0,true);
 
         // Flush update to Compositor
         self.surface.damage_all();
@@ -911,8 +738,8 @@ impl OcelViewer {
 
                 let mutations = self.js_runtime.take_mutations();
                 if !mutations.is_empty() {
-                    let viewport_w = self.width.saturating_sub(24);
-                    let tab = self.current_tab_mut();
+                    let viewport_w = self.width.saturating_sub(16);
+                    let tab = &mut self.tabs[self.active_tab];
                     let mut layout_dirty = false;
 
                     for mutation in mutations {
@@ -933,7 +760,7 @@ impl OcelViewer {
                     }
 
                     if layout_dirty {
-                        tab.doc.relayout_from_arena(viewport_w, view_h as u32);
+                        tab.doc.relayout_from_arena(&mut self.fonts, viewport_w, view_h as u32);
                     }
                     self.render();
                 }

@@ -75,3 +75,19 @@ doomgeneric (cells/demos/doom/src/c/doomgeneric/)
   component. MPL-2.0 §3.3 permits combination with GPL-2.0.
 
 ──────────────────────────────────────────────────────────────────────
+
+Inter 4.1 (libs/ostd/assets/fonts/inter/)
+
+  Copyright (c) 2016 The Inter Project Authors
+  Source: https://github.com/rsms/inter/releases/tag/v4.1
+  Original static TTFs: Regular, SemiBold, Italic, SemiBoldItalic.
+  Licensed under the SIL Open Font License 1.1.
+  Full copyright and license: libs/ostd/assets/fonts/inter/OFL.txt
+
+JetBrains Mono 2.304 (libs/ostd/assets/fonts/jetbrains-mono/)
+
+  Copyright 2020 The JetBrains Mono Project Authors
+  Source: https://github.com/JetBrains/JetBrainsMono/releases/tag/v2.304
+  Original static TTFs: Regular and Bold.
+  Licensed under the SIL Open Font License 1.1.
+  Full copyright and license: libs/ostd/assets/fonts/jetbrains-mono/OFL.txt

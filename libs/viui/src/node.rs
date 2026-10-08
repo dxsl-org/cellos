@@ -27,7 +27,7 @@ pub trait ViNode: 'static {
     ///
     /// `constraints.origin` is the top-left of the assigned slot.
     /// Returns the actual size consumed (≤ `constraints.max`).
-    fn layout(&mut self, constraints: Constraints) -> Size;
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size;
 
     /// Cached bounds from the last `layout()` call. Returns `Rect::ZERO` before
     /// first layout.

@@ -81,7 +81,8 @@ impl Color {
 #[derive(Copy, Clone, Debug)]
 pub struct TextStyle {
     pub color: Color,
-    /// Font size in pixels. `0` = use bitmap 8×8 fallback font.
+    /// Explicit size for GUI contexts; `0` inherits their default. The low-level
+    /// bitmap/debug `draw_text` primitive ignores scalable sizes.
     pub size_px: u16,
 }
 
@@ -119,17 +120,16 @@ pub trait ViCanvas {
 
     /// Draw scalable text at `pos` (top-left) using a GlyphAtlas.
     ///
-    /// `px` is the font size in pixels. Default impl falls back to bitmap 8×8.
+    /// Backends must implement scalable text explicitly; command-only GPU
+    /// canvases record text but do not promise glyph rendering.
     fn draw_text_scaled(
         &mut self,
         pos: Point,
         text: &str,
-        _px: f32,
+        px: f32,
         color: Color,
-        _atlas: &mut ostd::font_atlas::GlyphAtlas,
-    ) {
-        self.draw_text(pos, text, TextStyle { color, size_px: 0 });
-    }
+        atlas: &mut ostd::font_atlas::GlyphAtlas,
+    );
 
     /// Blit raw BGRA pixels from `pixels` into `dest`.
     ///
@@ -449,35 +449,12 @@ impl<'fb> ViCanvas for FramebufferCanvas<'fb> {
         color: Color,
         atlas: &mut ostd::font_atlas::GlyphAtlas,
     ) {
-        let baseline_y = pos.y + atlas.ascender(px);
-        let mut draw_x = pos.x;
-
-        for c in text.chars() {
-            let (metrics, bitmap) = atlas.rasterize(c, px);
-            if metrics.width == 0 {
-                draw_x += metrics.advance_width;
-                continue;
-            }
-            // Convert math y-up metrics to screen y-down position.
-            // glyph top in screen coords = baseline_y - (ymin + height)
-            let gx = draw_x + metrics.xmin as f32;
-            let gy = baseline_y - (metrics.ymin as f32 + metrics.height as f32);
-
-            for row in 0..metrics.height {
-                for col in 0..metrics.width {
-                    let coverage = bitmap[row * metrics.width + col];
-                    if coverage == 0 {
-                        continue;
-                    }
-                    let screen_x = (gx + col as f32) as i32;
-                    let screen_y = (gy + row as f32) as i32;
-                    // Modulate alpha by coverage
-                    let alpha = ((color.a() as u32 * coverage as u32) / 255) as u8;
-                    self.put_pixel(screen_x, screen_y, color.with_alpha(alpha));
-                }
-            }
-            draw_x += metrics.advance_width;
-        }
+        let clip = self.active_clip();
+        atlas.draw_text(
+            self.pixels, self.width, self.height, self.stride as usize,
+            pos.x, pos.y, text, px, [color.b(), color.g(), color.r(), color.a()],
+            (clip.x as i32, clip.y as i32, (clip.x + clip.w) as i32, (clip.y + clip.h) as i32),
+        );
     }
 
     fn draw_image(&mut self, dest: Rect, pixels: &[u8], src_stride: u32) {

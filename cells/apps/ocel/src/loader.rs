@@ -100,13 +100,39 @@ pub fn load_document(url: &str) -> LoadedDocument {
         };
     }
 
-    // 2. Check if binary image (.bmp)
-    if path.to_ascii_lowercase().ends_with(".bmp") {
+    // PDFs are binary and are owned/decoded only by the isolated PDF service.
+    // Keep the original URL for history and links; fragments never reach VFS.
+    if crate::pdf::is_pdf_path(path) {
+        let pdf_path = path.split('#').next().unwrap_or(path);
+        let result = crate::pdf::page_number(clean_url)
+            .and_then(|page| crate::pdf::load_page(pdf_path, page));
+        return match result {
+            Ok(page) => LoadedDocument {
+                url: String::from(clean_url),
+                title: format!("Ocel — PDF ({})", pdf_path.rsplit('/').next().unwrap_or(pdf_path)),
+                content: String::new(),
+                direct_nodes: Some(page.into_nodes(clean_url)),
+            },
+            Err(error) => LoadedDocument {
+                url: String::from(clean_url),
+                title: String::from("Ocel — PDF Error"),
+                content: String::new(),
+                direct_nodes: Some(alloc::vec![
+                    DocNode::Heading { level: 1, text: String::from("PDF Viewing Error") },
+                    DocNode::Paragraph {
+                        spans: alloc::vec![crate::doc::StyledSpan::plain(&format!("Could not view {}: {}", pdf_path, error))],
+                    },
+                ]),
+            },
+        };
+    }
+
+    // Binary image files must bypass the UTF-8 document reader.
+    if crate::image::is_image_path(path) {
         match ostd::fs::File::open(path) {
             Ok(mut file) => {
-                let mut bytes = Vec::new();
-                if file.read_to_end(&mut bytes).is_ok() {
-                    if let Some(img) = crate::image::decode_bmp(&bytes) {
+                if let Some(bytes) = read_image_bytes(&mut file) {
+                    if let Some(img) = crate::image::decode(&bytes) {
                         let filename = path.rsplit('/').next().unwrap_or(path);
                         return LoadedDocument {
                             url: String::from(clean_url),
@@ -115,7 +141,7 @@ pub fn load_document(url: &str) -> LoadedDocument {
                             direct_nodes: Some(alloc::vec![DocNode::Image {
                                 width: img.width,
                                 height: img.height,
-                                pixels: img.pixels,
+                                pixels: alloc::rc::Rc::new(img.pixels),
                             }]),
                         };
                     }
@@ -123,7 +149,7 @@ pub fn load_document(url: &str) -> LoadedDocument {
                 return LoadedDocument {
                     url: String::from(clean_url),
                     title: String::from("Ocel — Image Decode Error"),
-                    content: format!("# Error Decoding BMP\n\nCould not decode `{}`.", path),
+                    content: format!("# Error Decoding Image\n\nCould not decode `{}`. Supported formats: PNG, JPEG and BMP. Limits: 2 MiB encoded, 4096 pixels per dimension and 1,048,576 pixels total.", path),
                     direct_nodes: None,
                 };
             }
@@ -172,6 +198,21 @@ pub fn load_document(url: &str) -> LoadedDocument {
     }
 }
 
+fn read_image_bytes(file: &mut ostd::fs::File) -> Option<Vec<u8>> {
+    let mut bytes = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        let count = file.read(&mut chunk).ok()?;
+        if count == 0 {
+            return Some(bytes);
+        }
+        if bytes.len() + count > 2 * 1024 * 1024 {
+            return None;
+        }
+        bytes.extend_from_slice(&chunk[..count]);
+    }
+}
+
 fn get_welcome_content() -> String {
     String::from(
         r#"# Welcome to Ocel
@@ -181,9 +222,9 @@ fn get_welcome_content() -> String {
 ---
 
 ### Key Capabilities
-- **Lightweight & Fast:** Starts up in <100 ms with sub-10 MB memory footprint.
-- **Universal Viewing:** Formats include Markdown, plain text, HTML/CSS subset, and PDF.
-- **Dual Engine Architecture:** Ocel handles document viewing natively on Tier 2, while full web apps (like Gmail) run on Tier 3 Chrome.
+- **Native Rendering:** Documents and images use the CellOS display pipeline without a guest OS.
+- **Native Viewing:** Markdown, plain text, source code, an HTML subset, PNG/JPEG/BMP images, and local PDFs rendered by the isolated native `ocel-pdf` service.
+- **JavaScript Engine:** Images that package the Tier 2 QuickJS cell execute real JavaScript. Browser DOM, CSS and Web API compatibility remain under development.
 
 ### Tiếng Việt & Đa ngôn ngữ
 Hỗ trợ đầy đủ bảng chữ cái tiếng Việt có dấu:
@@ -196,9 +237,8 @@ Hỗ trợ đầy đủ bảng chữ cái tiếng Việt có dấu:
 
 | Tiêu chí | Ocel (Tier 2) | Chrome (Tier 3) |
 | -------- | ------------- | --------------- |
-| Khởi động | < 100 ms | 5 - 10 giây |
-| Bộ nhớ RAM | < 10 MB | > 256 MB |
-| Định dạng | MD, HTML, PDF, BMP | Full Web Apps, SPA |
+| Bộ nhớ | Viewer heap: 16 MiB; display and engine allocations are additional | Depends on guest and workload |
+| Định dạng | MD, HTML subset, code, PNG/JPEG/BMP, local PDF | Full Web Apps, SPA |
 | Bảo mật | Hardware MMU | Stage-2 Hypervisor |
 ---
 
@@ -237,6 +277,9 @@ fn get_help_content() -> String {
 - `file:///path/to/file.md` — Open Markdown file from VFS.
 - `file:///path/to/file.txt` — Open plain text or source code.
 - `file:///path/to/file.html` — Open HTML document.
+- `file:///path/to/file.pdf#page=2` — View a local PDF page (one-based; no fragment opens page 1).
+- **PDF navigation:** Click Previous page / Next page above the raster. PageUp / PageDown still scroll; tab shortcuts are unchanged.
+- **PDF availability:** Requires the registered native `ocel-pdf` service. One opaque page at a time, bounded to 1024 × 1024 pixels; the service accepts PDFs up to 2 MiB. No fallback renderer or PDF-source text view.
 - `file:///welcome.md` — Built-in Welcome guide.
 - `file:///help.md` — This help page.
 "#,

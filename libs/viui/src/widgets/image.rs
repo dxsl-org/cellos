@@ -20,13 +20,13 @@ impl Image {
 }
 
 impl ViWidget for Image {
-    fn layout(&self, constraints: Constraints) -> LayoutNode {
-        let desired = Size {
-            w: self.w as f32,
-            h: self.h as f32,
-        };
-        let size = constraints.constrain(desired);
-        LayoutNode::leaf(Rect::from_origin_size(constraints.origin, size))
+    fn layout(&self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> LayoutNode {
+    let desired = Size {
+        w: self.w as f32,
+        h: self.h as f32,
+    };
+    let size = constraints.constrain(desired);
+    LayoutNode::leaf(Rect::from_origin_size(constraints.origin, size))
     }
 
     fn paint(&self, cx: &mut PaintCx) {

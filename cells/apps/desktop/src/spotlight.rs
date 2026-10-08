@@ -6,13 +6,28 @@ use alloc::string::String;
 
 use ostd::display::ViSurface;
 use ostd::input::KeySym;
+use ostd::typography::{FontFace, TextFonts};
 
 use crate::apps::AppRegistry;
-use crate::draw::{draw_button, draw_str, fill_rect, stroke_rect, theme, Color};
+use crate::draw::{draw_button, draw_label, draw_text, fill_rect, stroke_rect, theme, Color};
 
-pub const SPOTLIGHT_WIDTH: u32 = 500;
-pub const SPOTLIGHT_HEIGHT: u32 = 280;
+pub const SPOTLIGHT_WIDTH: u32 = 600;
+pub const SPOTLIGHT_HEIGHT: u32 = 392;
 pub const MAX_RESULTS: usize = 4;
+const LIST_START_Y: i32 = 76;
+const ROW_HEIGHT: u32 = 64;
+const ROW_STEP: i32 = ROW_HEIGHT as i32 + 6;
+const ACTION_WIDTH: u32 = 64;
+const ACTION_HEIGHT: u32 = 32;
+const ACTION_Y: i32 = (ROW_HEIGHT as i32 - ACTION_HEIGHT as i32) / 2;
+
+fn pin_x(width: u32) -> i32 {
+    width as i32 - 164
+}
+
+fn run_x(width: u32) -> i32 {
+    width as i32 - 92
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SpotlightAction {
@@ -54,81 +69,68 @@ impl SpotlightState {
     }
 }
 
-pub fn render(surf: &mut ViSurface, registry: &AppRegistry, state: &SpotlightState) {
+pub fn render(
+    surf: &mut ViSurface,
+    fonts: &mut TextFonts,
+    registry: &AppRegistry,
+    state: &SpotlightState,
+) {
     let sw = surf.width();
     let sh = surf.height();
-
-    // ── 1. Modal Background & Outer Frame ─────────────────────────────────────
     fill_rect(surf, 0, 0, sw, sh, theme::MODAL_BG);
     stroke_rect(surf, 0, 0, sw, sh, theme::MODAL_BORDER);
 
-    // ── 2. Header: Search Input Box ───────────────────────────────────────────
-    let input_x = 14i32;
-    let input_y = 12i32;
-    let input_w = sw - 28;
-    let input_h = 34u32;
-    fill_rect(
-        surf,
-        input_x,
-        input_y,
-        input_w,
-        input_h,
-        Color::rgb(32, 35, 45),
-    );
+    let input_x = 14;
+    let input_y = 12;
+    let input_w = sw.saturating_sub(28);
+    let input_h = 44;
+    fill_rect(surf, input_x, input_y, input_w, input_h, Color::rgb(32, 35, 45));
     stroke_rect(surf, input_x, input_y, input_w, input_h, theme::ACCENT_BLUE);
-
-    // Icon prefix
-    draw_str(surf, input_x + 10, input_y + 13, "?", theme::ACCENT_CYAN, 1);
-
-    // Search Query
+    draw_label(
+        surf, fonts, input_x + 8, input_y, 22, input_h, "?",
+        FontFace::UiSemibold, 16.0, theme::ACCENT_CYAN, true,
+    );
+    let query_x = input_x + 36;
+    let query_w = input_w.saturating_sub(48);
+    let query_y = input_y as f32 + (input_h as f32
+        - fonts.line_height(FontFace::UiRegular, 16.0)) / 2.0;
     if state.query.is_empty() {
-        draw_str(
-            surf,
-            input_x + 28,
-            input_y + 13,
-            "Type app name or description...",
-            theme::TEXT_MUTED,
-            1,
+        draw_label(
+            surf, fonts, query_x, input_y, query_w, input_h,
+            "Type app name or description...", FontFace::UiRegular,
+            16.0, theme::TEXT_MUTED, false,
         );
     } else {
-        let mut display_query = state.query.clone();
-        display_query.push('_'); // blinking cursor indicator
-        draw_str(
-            surf,
-            input_x + 28,
-            input_y + 13,
-            &display_query,
-            theme::TEXT_PRIMARY,
-            1,
+        let clip = (query_x, input_y, query_x + query_w as i32, input_y + input_h as i32);
+        let query_width = fonts.measure(FontFace::UiRegular, &state.query, 16.0);
+        // Scroll the input horizontally without cloning or splitting Unicode text.
+        let visible_width = query_w.saturating_sub(3) as f32;
+        let offset = (query_width - visible_width).max(0.0);
+        draw_text(
+            surf, fonts, query_x as f32 - offset, query_y, &state.query,
+            FontFace::UiRegular, 16.0, theme::TEXT_PRIMARY, clip,
         );
+        let caret_x = query_x + (query_width.min(visible_width) + 0.5) as i32;
+        fill_rect(surf, caret_x, input_y + 12, 1, input_h - 24, theme::TEXT_PRIMARY);
     }
+    fill_rect(surf, 0, 68, sw, 1, theme::MODAL_BORDER);
 
-    // Divider line below search bar
-    fill_rect(surf, 0, 54, sw, 1, theme::MODAL_BORDER);
-
-    // ── 3. Filtered Results List ──────────────────────────────────────────────
     let results = registry.filtered(&state.query);
-    let total_results = results.len();
-
-    let list_start_y = 60i32;
-    let row_h = 44u32;
-
     if results.is_empty() {
-        draw_str(
-            surf,
-            24,
-            list_start_y + 40,
-            "No matching applications found",
-            theme::TEXT_MUTED,
-            1,
+        draw_label(
+            surf, fonts, 24, LIST_START_Y + 28, sw.saturating_sub(48), 32,
+            "No matching applications found", FontFace::UiRegular,
+            16.0, theme::TEXT_MUTED, true,
         );
     } else {
-        let max_display = total_results.min(MAX_RESULTS);
-        for (i, app) in results.iter().take(max_display).enumerate() {
-            let row_y = list_start_y + (i as i32 * (row_h as i32 + 4));
+        // Round line boxes outward so fractional metrics cannot clip their bottom.
+        let name_height = (fonts.line_height(FontFace::UiSemibold, 16.0) + 1.0) as u32;
+        let description_height = (fonts.line_height(FontFace::UiRegular, 14.0) + 1.0) as u32;
+        for (i, app) in results.iter().take(MAX_RESULTS).enumerate() {
+            let row_y = LIST_START_Y + i as i32 * ROW_STEP;
+            let row_w = sw.saturating_sub(28);
             let is_selected = i == state.selected_index;
-            let is_hover = is_inside(state.mouse_x, state.mouse_y, 14, row_y, sw - 28, row_h);
-
+            let is_hover = is_inside(state.mouse_x, state.mouse_y, 14, row_y, row_w, ROW_HEIGHT);
             let row_bg = if is_selected {
                 theme::BTN_ACTIVE
             } else if is_hover {
@@ -136,76 +138,71 @@ pub fn render(surf: &mut ViSurface, registry: &AppRegistry, state: &SpotlightSta
             } else {
                 theme::BTN_NORMAL
             };
-
-            // Row container
-            fill_rect(surf, 14, row_y, sw - 28, row_h, row_bg);
+            fill_rect(surf, 14, row_y, row_w, ROW_HEIGHT, row_bg);
             if is_selected {
-                fill_rect(surf, 14, row_y, 4, row_h, theme::ACCENT_CYAN); // accent strip
-                stroke_rect(surf, 14, row_y, sw - 28, row_h, theme::ACCENT_BLUE);
-            } else {
-                stroke_rect(surf, 14, row_y, sw - 28, row_h, theme::TASKBAR_BORDER);
+                fill_rect(surf, 14, row_y, 4, ROW_HEIGHT, theme::ACCENT_CYAN);
             }
+            stroke_rect(
+                surf, 14, row_y, row_w, ROW_HEIGHT,
+                if is_selected { theme::ACCENT_BLUE } else { theme::TASKBAR_BORDER },
+            );
+            draw_label(
+                surf, fonts, 24, row_y, 34, ROW_HEIGHT, app.icon,
+                FontFace::UiRegular, 14.0, theme::ACCENT_CYAN, true,
+            );
 
-            // Icon badge
-            draw_str(surf, 26, row_y + 18, app.icon, theme::ACCENT_CYAN, 1);
+            let text_x = 70;
+            let text_w = (pin_x(sw) - 10 - text_x).max(0) as u32;
+            let text_y = row_y + (ROW_HEIGHT as i32
+                - name_height as i32 - description_height as i32 - 4) / 2;
+            draw_label(
+                surf, fonts, text_x, text_y, text_w, name_height, app.name,
+                FontFace::UiSemibold, 16.0, theme::TEXT_PRIMARY, false,
+            );
+            draw_label(
+                surf, fonts, text_x, text_y + name_height as i32 + 4,
+                text_w, description_height, app.description,
+                FontFace::UiRegular, 14.0, theme::TEXT_MUTED, false,
+            );
 
-            // App Name & Description
-            draw_str(surf, 58, row_y + 10, app.name, theme::TEXT_PRIMARY, 1);
-            draw_str(surf, 58, row_y + 24, app.description, theme::TEXT_MUTED, 1);
-
-            // ── Pin / Unpin Button ──
-            let pin_x = sw as i32 - 146;
-            let pin_y = row_y + 9;
+            let pin_y = row_y + ACTION_Y;
             let (pin_text, pin_color) = if app.is_pinned {
                 ("Unpin", theme::ACCENT_RED)
             } else {
                 ("+Pin", theme::ACCENT_GREEN)
             };
-            let pin_hover = is_inside(state.mouse_x, state.mouse_y, pin_x, pin_y, 56, 26);
-            let pin_bg = if pin_hover {
+            let pin_bg = if is_inside(
+                state.mouse_x, state.mouse_y, pin_x(sw), pin_y, ACTION_WIDTH, ACTION_HEIGHT,
+            ) {
                 theme::BTN_HOVER
             } else {
                 Color::rgb(28, 30, 38)
             };
             draw_button(
-                surf, pin_x, pin_y, 56, 26, pin_text, pin_bg, pin_color, pin_color,
+                surf, fonts, pin_x(sw), pin_y, ACTION_WIDTH, ACTION_HEIGHT,
+                pin_text, pin_bg, pin_color, pin_color,
             );
-
-            // ── Run Button ──
-            let run_x = sw as i32 - 82;
-            let run_y = row_y + 9;
-            let run_hover = is_inside(state.mouse_x, state.mouse_y, run_x, run_y, 60, 26);
-            let run_bg = if run_hover {
+            let run_bg = if is_inside(
+                state.mouse_x, state.mouse_y, run_x(sw), pin_y, ACTION_WIDTH, ACTION_HEIGHT,
+            ) {
                 theme::ACCENT_BLUE
             } else {
                 theme::BTN_NORMAL
             };
             draw_button(
-                surf,
-                run_x,
-                run_y,
-                60,
-                26,
-                "Open",
-                run_bg,
-                theme::ACCENT_CYAN,
-                theme::TEXT_PRIMARY,
+                surf, fonts, run_x(sw), pin_y, ACTION_WIDTH, ACTION_HEIGHT,
+                "Open", run_bg, theme::ACCENT_CYAN, theme::TEXT_PRIMARY,
             );
         }
     }
 
-    // ── 4. Footer: Keyboard & Action Hints ────────────────────────────────────
-    let footer_y = sh as i32 - 24;
-    fill_rect(surf, 0, footer_y - 2, sw, 1, theme::MODAL_BORDER);
-    draw_str(
-        surf,
-        14,
-        footer_y + 4,
-        "[ESC] Close   [ENTER] Open   [UP/DN] Navigate",
-        theme::TEXT_MUTED,
-        1,
+    let footer_y = sh as i32 - 28;
+    fill_rect(surf, 0, footer_y, sw, 1, theme::MODAL_BORDER);
+    draw_label(
+        surf, fonts, 14, footer_y + 1, sw.saturating_sub(28), 26,
+        "Esc Close    Enter Open    Up / Down Navigate",
+        FontFace::UiRegular, 14.0, theme::TEXT_MUTED, false,
     );
-
     surf.damage_all();
 }
 
@@ -271,25 +268,21 @@ pub fn handle_click(
     let total_results = results.len();
     let max_display = total_results.min(MAX_RESULTS);
 
-    let list_start_y = 60i32;
-    let row_h = 44i32;
+    let row_h = ROW_HEIGHT as i32;
 
     for (i, app) in results.iter().take(max_display).enumerate() {
-        let row_y = list_start_y + (i as i32 * (row_h + 4));
+        let row_y = LIST_START_Y + i as i32 * ROW_STEP;
 
         // Check Pin button
-        let pin_x = sw as i32 - 146;
-        let pin_y = row_y + 9;
-        if is_inside(x, y, pin_x, pin_y, 56, 26) {
+        let pin_y = row_y + ACTION_Y;
+        if is_inside(x, y, pin_x(sw), pin_y, ACTION_WIDTH, ACTION_HEIGHT) {
             let id = app.id;
             registry.toggle_pin(id);
             return SpotlightAction::TogglePin(id);
         }
 
         // Check Run button
-        let run_x = sw as i32 - 82;
-        let run_y = row_y + 9;
-        if is_inside(x, y, run_x, run_y, 60, 26) {
+        if is_inside(x, y, run_x(sw), pin_y, ACTION_WIDTH, ACTION_HEIGHT) {
             let path = app.path;
             state.close();
             return SpotlightAction::LaunchApp(path);

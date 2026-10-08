@@ -108,6 +108,10 @@ impl ViCanvas for Gles2Canvas<'_> {
         let _ = (pos, text, style);
     }
 
+    fn draw_text_scaled(&mut self, _pos: Point, _text: &str, _px: f32, _color: Color, _atlas: &mut ostd::font_atlas::GlyphAtlas) {
+        panic!("Gles2Canvas scalable text is not implemented by the GPU backend");
+    }
+
     fn draw_image(&mut self, dest: Rect, pixels: &[u8], src_stride: u32) {
         // G2: upload pixels as a 2D texture; emit textured quad.
         let _ = (dest, pixels, src_stride);

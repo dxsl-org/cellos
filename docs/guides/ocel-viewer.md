@@ -116,6 +116,45 @@ APIs, browser font shaping, positioned/float/table layout, and replaced
 HTML image elements are not implemented. General public-web compatibility
 belongs to the separate future browser, not Ocel viewer.
 
+## Typography
+
+Ocel uses the bundled static Inter 4.1 faces for UI and document text:
+Regular, Semibold, Italic and Semibold Italic. Code and monospace runs use
+JetBrains Mono 2.304 Regular/Bold. These unmodified TTFs retain their SIL OFL
+1.1 licenses under `libs/ostd/assets/fonts/`.
+
+HTML uses CSS pixel sizes, while Markdown/plain text/tables use measured
+pixel-width wrapping. Layout and paint share one lazy `TextFonts` context,
+including baseline/line metrics, alignment and link hit rectangles.
+Grayscale glyph coverage is clipped to the viewport and composited in BGRA.
+Computed CSS font sizes are limited to 128px before layout and rasterization
+to preserve the previous renderer's bounded size range and avoid allocating
+offscreen giant glyphs.
+Vietnamese precomposed and decomposed input is normalized to NFC; the old
+8×8 bitmap diacritic synthesis is removed.
+
+`GlyphAtlas` borrows bundled font bytes and rasterizes requested outlines
+using `ab_glyph` rather than retaining eager geometry for every glyph.
+This is not full browser typography: OpenType GPOS/GSUB shaping, bidi,
+arbitrary CSS font-family loading and cross-script Noto fallback are not
+implemented. Font glyph coverage alone does not provide those features.
+
+Typography verification (2026-10-08): hosted behavior suites passed
+186 tests, with 9 ignored tests not exercised; the five changed display
+apps built in RV64 release mode. Actual source paint was exercised on
+host pixel buffers for desktop/Ocel/console, and the default ViUI app
+rendered through its real headless renderer with input and relayout.
+Ocel HTML inline whitespace, Vietnamese NFC/NFD, style faces, clipping
+and measured table/text layout were exercised.
+
+A signed minimal input+UI QEMU image displayed the newly built
+JetBrains Mono console through the compositor. Desktop/Ocel guest paint
+was not reached: the VFS cell exhausted its heap and exited with code
+238 (allocation requests of 1MiB in the full profile and 2MiB in the
+minimal profile). These runs do not establish physical-display quality
+or guest desktop/Ocel verification, and no VFS/grant changes were made
+as part of typography.
+
 ## Using it
 
 ```text

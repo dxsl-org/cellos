@@ -152,7 +152,7 @@ fn code_search_crosses_token_boundaries_without_duplicate_box_matches() {
             alloc::string::String::from("let café = 43;"),
         ],
     }];
-    doc.compute_layout(800);
+    doc.compute_layout(&mut ostd::typography::TextFonts::new(), 800);
     let offset = doc.layout_boxes[0].y_offset;
     assert_eq!(doc.search("LET café ="), alloc::vec![offset]);
     assert_eq!(doc.search("= 42;"), alloc::vec![offset]);

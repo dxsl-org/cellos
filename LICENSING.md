@@ -32,6 +32,14 @@ Cells are independent, dynamically-loaded modules that interact with the kernel 
 
 This design ensures that Cell authors have complete freedom over their licensing choices, enabling both open-source collaboration and commercial innovation.
 
+## Bundled Fonts: SIL OFL 1.1
+
+Inter 4.1 and JetBrains Mono 2.304 are embedded as unmodified static TTF
+assets under `libs/ostd/assets/fonts/`. The fonts remain licensed under
+the **SIL Open Font License 1.1**, not the source-code license of `ostd`.
+Keep each family's `OFL.txt` and the corresponding `NOTICE` entries when
+redistributing the fonts or Cellos binaries containing them.
+
 ## License Headers
 
 All kernel and libs source files include SPDX license identifiers:

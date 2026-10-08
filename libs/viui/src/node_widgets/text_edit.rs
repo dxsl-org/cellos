@@ -13,7 +13,6 @@ use crate::node::ViNode;
 use crate::render_ctx::RenderCtx;
 use crate::signal::{Signal, SubscriptionHandle};
 
-const HEIGHT: f32 = 28.0;
 const PADDING: f32 = 4.0;
 
 /// Single-line text input field.
@@ -39,6 +38,7 @@ pub struct TextEdit {
     cursor_pos: Cell<usize>,
     focused: Cell<bool>,
     bounds_cache: Cell<Rect>,
+    cursor_positions: Vec<(usize, f32)>,
 }
 
 impl TextEdit {
@@ -50,6 +50,7 @@ impl TextEdit {
             cursor_pos: Cell::new(0),
             focused: Cell::new(false),
             bounds_cache: Cell::new(Rect::ZERO),
+            cursor_positions: Vec::new(),
         }
     }
 
@@ -70,34 +71,32 @@ impl TextEdit {
         self
     }
 
-    /// Advance `pos` by one Unicode scalar in `text`.
+    /// Advance by a base scalar and all its following combining marks.
     fn advance_cursor(text: &str, pos: usize) -> usize {
-        text[pos..]
-            .char_indices()
-            .nth(1)
-            .map(|(i, _)| pos + i)
-            .unwrap_or(text.len())
+        text[pos..].char_indices().skip(1)
+            .find(|(_, ch)| !ostd::typography::is_combining_mark(*ch))
+            .map_or(text.len(), |(i, _)| pos + i)
     }
 
-    /// Retreat `pos` by one Unicode scalar in `text`.
     fn retreat_cursor(text: &str, pos: usize) -> usize {
-        text[..pos]
-            .char_indices()
-            .last()
-            .map(|(i, _)| i)
-            .unwrap_or(0)
+        text[..pos].char_indices().rev()
+            .find(|(_, ch)| !ostd::typography::is_combining_mark(*ch))
+            .map_or(0, |(i, _)| i)
     }
 }
 
 impl ViNode for TextEdit {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = constraints.constrain(Size {
-            w: constraints.max.w,
-            h: HEIGHT,
-        });
-        self.bounds_cache
-            .set(Rect::from_origin_size(constraints.origin, size));
-        size
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    font.cursor_positions(&self.text.get(), &mut self.cursor_positions);
+    let cursor = self.cursor_pos.get().min(self.text.get().len());
+    self.cursor_pos.set(self.cursor_positions.iter().rev().find(|p| p.0 <= cursor).map_or(0, |p| p.0));
+    let size = constraints.constrain(Size {
+        w: constraints.max.w,
+        h: font.line_height() + PADDING * 2.0,
+    });
+    self.bounds_cache
+        .set(Rect::from_origin_size(constraints.origin, size));
+    size
     }
 
     fn bounds(&self) -> Rect {
@@ -166,8 +165,7 @@ impl ViNode for TextEdit {
             // Draw cursor bar while focused
             if self.focused.get() {
                 let cursor_byte = self.cursor_pos.get().min(text.len());
-                let char_count = text[..cursor_byte].chars().count() as f32;
-                let cursor_x = b.x + PADDING + char_count * cx.char_width();
+                let cursor_x = b.x + PADDING + cx.measure(&text[..cursor_byte]);
                 cx.canvas.draw_line(
                     Point::new(cursor_x, b.y + 3.0),
                     Point::new(cursor_x, b.y + b.h - 3.0),
@@ -217,7 +215,7 @@ impl ViNode for TextEdit {
                                 Self::retreat_cursor(&text, pos)
                             };
                             self.text.update(|s| {
-                                s.remove(new_pos);
+                                s.replace_range(new_pos..pos, "");
                             });
                             self.cursor_pos.set(new_pos);
                         }
@@ -227,8 +225,9 @@ impl ViNode for TextEdit {
                         let pos = self.cursor_pos.get();
                         let len = self.text.get().len();
                         if pos < len {
+                            let end = Self::advance_cursor(&self.text.get(), pos);
                             self.text.update(|s| {
-                                s.remove(pos);
+                                s.replace_range(pos..end, "");
                             });
                         }
                         true
@@ -275,6 +274,9 @@ impl ViNode for TextEdit {
             // Gain focus on click
             Event::MousePress { pos, .. } if self.bounds_cache.get().contains(*pos) => {
                 self.focused.set(true);
+                self.cursor_pos.set(crate::font_context::FontContext::hit_position(
+                    &self.cursor_positions, pos.x - self.bounds_cache.get().x - PADDING,
+                ));
                 true
             }
 
@@ -285,8 +287,40 @@ impl ViNode for TextEdit {
     fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
         let bounds = self.bounds_cache.get();
         let h = self.text.subscribe(move || {
-            region.borrow_mut().mark(bounds);
+            region.borrow_mut().mark_layout(bounds);
         });
         alloc::vec![h]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::font_context::FontContext;
+
+    #[test]
+    fn clicking_proportional_text_places_cursor_at_measured_boundary() {
+        let text = Signal::new(String::from("Wiii"));
+        let mut edit = TextEdit::new(text.clone());
+        let mut font = FontContext::default();
+        edit.layout(Constraints::root(Size::new(200.0, 80.0)), &mut font);
+        edit.event(&Event::MousePress {
+            pos: Point::new(PADDING + font.measure("W"), 6.0),
+            button: crate::event::MouseButton::Left,
+        });
+        assert_eq!(edit.cursor_pos.get(), 1);
+        edit.event(&Event::Char('x'));
+        assert_eq!(&*text.get(), "Wxiii");
+    }
+
+    #[test]
+    fn vietnamese_navigation_and_deletion_keep_combining_sequence_whole() {
+        let text = Signal::new(String::from("e\u{0302}\u{0301}W"));
+        let mut edit = TextEdit::new(text.clone());
+        edit.focused.set(true);
+        edit.cursor_pos.set("e\u{0302}\u{0301}".len());
+        edit.event(&Event::KeyPress { key: KeyCode::Backspace, modifiers: crate::event::Modifiers::default() });
+        assert_eq!(&*text.get(), "W");
+        assert_eq!(edit.cursor_pos.get(), 0);
     }
 }

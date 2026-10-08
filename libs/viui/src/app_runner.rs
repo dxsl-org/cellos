@@ -4,13 +4,12 @@
 //! # Repaint strategy
 //!
 //! Two independent dirty flags:
-//! - `layout_dirty`: set by consumed events or `mark_dirty()`. Triggers full
-//!   layout + Signal re-subscribe (updates captured bounds) + full repaint.
-//! - `dirty_region`: set by Signal subscriptions. Triggers partial repaint with
-//!   the cached layout — no layout pass, O(m) paint where m = dirty widgets.
+//! - `layout_dirty`: set by consumed events, intrinsic text changes, or
+//!   `mark_dirty()`. Triggers layout + Signal re-subscribe + full repaint.
+//! - `dirty_region`: paint-only Signal changes repaint their cached bounds.
 //!
-//! Path A (structural): event consumed → layout → re-subscribe → mark_all
-//! Path B (signal-only): signal fires → mark(widget_bounds) → partial repaint
+//! Text signals additionally request layout because proportional metrics can
+//! change geometry even when the new string has the same byte length.
 //!
 //! # Animation
 //!
@@ -191,7 +190,7 @@ pub struct ViApp {
 }
 
 impl ViApp {
-    /// Create a new app with no scalable font (8×8 bitmap fallback).
+    /// Create a new app using bundled Inter at 16px.
     ///
     /// The first tick always renders a full frame.
     pub fn new(root: Box<dyn ViNode>, renderer: Box<dyn ViRenderer>) -> Self {
@@ -199,7 +198,7 @@ impl ViApp {
         Self {
             root,
             renderer,
-            font_ctx: FontContext::no_font(),
+            font_ctx: FontContext::default(),
             animations: Vec::new(),
             dirty_region,
             dirty_handles: Vec::new(),
@@ -261,7 +260,7 @@ impl ViApp {
         self.layout_dirty = true;
     }
 
-    /// Override the default 8×8 bitmap font with a scalable TTF font.
+    /// Override bundled Inter with a scalable custom TTF used for layout and paint.
     ///
     /// `font_bytes`: raw TTF/OTF data (use `include_bytes!` for embedded fonts).
     /// `size_px`: default text height in pixels.
@@ -269,6 +268,7 @@ impl ViApp {
     pub fn with_font(mut self, font_bytes: &[u8], size_px: f32) -> Self {
         if let Some(ctx) = FontContext::with_font(font_bytes, size_px) {
             self.font_ctx = ctx;
+            self.layout_dirty = true;
         }
         self
     }
@@ -508,6 +508,7 @@ impl ViApp {
             }
         }
 
+        self.layout_dirty |= self.dirty_region.borrow_mut().take_layout_dirty();
         // ── Path A: structural change → full layout + re-subscribe ────────────
         if self.layout_dirty {
             self.layout_dirty = false;
@@ -515,16 +516,16 @@ impl ViApp {
             let screen = Constraints::root(Size::new(w as f32, h as f32));
 
             // Layout root widget.
-            self.root.layout(screen);
+            self.root.layout(screen, &mut self.font_ctx);
 
             // Layout all overlay widgets (they need fresh screen constraints).
             for entry in &mut self.overlays {
-                entry.widget.layout(screen);
+                entry.widget.layout(screen, &mut self.font_ctx);
             }
 
             // Layout toast widgets.
             for entry in &mut self.toast_entries {
-                entry.widget.layout(screen);
+                entry.widget.layout(screen, &mut self.font_ctx);
             }
 
             // Rebuild focus list.  When a blocking overlay is active, focus is
@@ -578,6 +579,10 @@ impl ViApp {
         let toast_entries = &self.toast_entries;
 
         renderer.render(damage, &mut |canvas| {
+            let surface = crate::layout::Rect::new(0.0, 0.0, canvas.width() as f32, canvas.height() as f32);
+            let repaint = damage.unwrap_or(surface);
+            canvas.clip_push(repaint);
+            canvas.fill_rect(repaint, theme.bg().with_alpha(255));
             let mut cx = RenderCtx {
                 canvas,
                 font: font_ctx,
@@ -607,6 +612,7 @@ impl ViApp {
             if let Some(b) = focus_bounds {
                 cx.canvas.draw_rect_border(b, cx.theme.accent(), 2.0);
             }
+            cx.canvas.clip_pop();
         });
         true
     }
@@ -697,10 +703,10 @@ mod tests {
     }
 
     impl ViNode for ProbeNode {
-        fn layout(&mut self, constraints: Constraints) -> Size {
-            self.stats.layouts.set(self.stats.layouts.get() + 1);
-            self.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
-            constraints.max
+        fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+        self.stats.layouts.set(self.stats.layouts.get() + 1);
+        self.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
+        constraints.max
         }
 
         fn bounds(&self) -> Rect {
@@ -792,5 +798,66 @@ mod tests {
         assert!(app.tick(&[]));
         assert_eq!(stats.layouts.get(), 1);
         assert_eq!(stats.paints.get(), 2);
+    }
+
+    #[test]
+    fn default_gui_font_relayouts_reactive_proportional_text() {
+        let text = Signal::new(alloc::string::String::from("iii"));
+        let root = crate::node_widgets::label::Label::new(text.clone());
+        let mut app = ViApp::new(Box::new(root), Box::new(ViSurfaceRenderer::new(200, 60)));
+        assert_eq!(app.font_ctx.size_px, 16.0);
+        assert!(app.tick(&[]));
+        let initial = app.root.bounds();
+        assert_eq!(initial.w, app.font_ctx.measure("iii"));
+        assert_eq!(initial.h, app.font_ctx.line_height());
+        text.set(alloc::string::String::from("WWW"));
+        assert!(app.tick(&[]));
+        assert!(app.root.bounds().w > initial.w);
+        assert_eq!(app.root.bounds().w, app.font_ctx.measure("WWW"));
+        assert!(!app.tick(&[]));
+    }
+
+    struct CapturedRenderer {
+        surface: ViSurfaceRenderer,
+        pixels: Rc<core::cell::RefCell<Vec<u8>>>,
+    }
+
+    impl crate::renderer::ViRenderer for CapturedRenderer {
+        fn render(&mut self, damage: Option<Rect>, draw: &mut dyn FnMut(&mut dyn crate::canvas::ViCanvas)) {
+            crate::renderer::ViRenderer::render(&mut self.surface, damage, draw);
+            *self.pixels.borrow_mut() = self.surface.pixels().to_vec();
+        }
+
+        fn size(&self) -> (u32, u32) { (200, 60) }
+    }
+
+    fn captured_label(text: Signal<alloc::string::String>) -> (ViApp, Rc<core::cell::RefCell<Vec<u8>>>) {
+        let pixels = Rc::new(core::cell::RefCell::new(Vec::new()));
+        let renderer = CapturedRenderer { surface: ViSurfaceRenderer::new(200, 60), pixels: pixels.clone() };
+        let root = crate::node_widgets::label::Label::new(text);
+        (ViApp::new(Box::new(root), Box::new(renderer)), pixels)
+    }
+
+    #[test]
+    fn retained_antialiased_text_repaint_is_idempotent_and_erases_old_ink() {
+        let text = Signal::new(alloc::string::String::from("WWW Việt"));
+        let (mut app, pixels) = captured_label(text.clone());
+        app.tick(&[]);
+        let first = pixels.borrow().clone();
+        app.mark_dirty();
+        app.tick(&[]);
+        assert_eq!(*pixels.borrow(), first, "coverage accumulated on repeated paint");
+
+        // A paint-only dirty region still clears before blending, and leaves
+        // unaffected surface bytes untouched.
+        app.dirty_region.borrow_mut().mark(app.root.bounds());
+        app.tick(&[]);
+        assert_eq!(*pixels.borrow(), first, "partial paint accumulated coverage");
+
+        text.set(alloc::string::String::from("i"));
+        app.tick(&[]);
+        let (mut fresh, expected) = captured_label(Signal::new(alloc::string::String::from("i")));
+        fresh.tick(&[]);
+        assert_eq!(*pixels.borrow(), *expected.borrow(), "shorter label retained old glyph ink");
     }
 }

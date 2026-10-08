@@ -12,10 +12,10 @@ const CLICKED_FRAME: &str = "/tmp/cellos-viui-clicked.ppm";
 const MAXIMIZED_FRAME: &str = "/tmp/cellos-viui-maximized.ppm";
 const RESTORED_FRAME: &str = "/tmp/cellos-viui-restored.ppm";
 
-// The surface content origin is (80, 80). Generated layout adds 16 px padding,
-// then a 16 px label and 8 px spacing before the Increment button.
-const LABEL_REGION: (usize, usize, usize, usize) = (96, 96, 160, 112);
-const BUTTON_CLICK: (u32, u32) = (100, 124);
+// The content origin is (80, 80). Generated layout adds 16px padding;
+// Inter's measured 16px line box and the 8px gap precede the button.
+const LABEL_REGION: (usize, usize, usize, usize) = (96, 96, 176, 116);
+const BUTTON_CLICK: (u32, u32) = (100, 128);
 const INITIAL_MAXIMIZE: (u32, u32) = (698, 70);
 const MAXIMIZED_RESTORE: (u32, u32) = (1254, 10);
 const INITIAL_CLOSE: (u32, u32) = (714, 70);

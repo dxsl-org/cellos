@@ -83,14 +83,14 @@ impl Toast {
 }
 
 impl ViNode for Toast {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let w = constraints.max.w.min(400.0);
-        let h = 44.0f32;
-        // Centre horizontally; sit 16 px above the bottom edge.
-        let x = constraints.origin.x + (constraints.max.w - w) / 2.0;
-        let y = constraints.origin.y + constraints.max.h - h - 16.0;
-        self.bounds.set(Rect { x, y, w, h });
-        Size::new(w, h)
+    fn layout(&mut self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> Size {
+    let w = constraints.max.w.min(400.0);
+    let h = 44.0f32;
+    // Centre horizontally; sit 16 px above the bottom edge.
+    let x = constraints.origin.x + (constraints.max.w - w) / 2.0;
+    let y = constraints.origin.y + constraints.max.h - h - 16.0;
+    self.bounds.set(Rect { x, y, w, h });
+    Size::new(w, h)
     }
 
     fn bounds(&self) -> Rect {
@@ -100,9 +100,9 @@ impl ViNode for Toast {
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds.get();
         cx.canvas.fill_rect(b, self.bg_color());
-        // 12 px left pad, vertical centre of 44 px = ~14 px from top (8 px glyph).
+        let text_y = b.y + (b.h - cx.line_height()) * 0.5;
         cx.draw_text(
-            Point::new(b.x + 12.0, b.y + 14.0),
+            Point::new(b.x + 12.0, text_y),
             &self.message,
             Color::WHITE,
         );

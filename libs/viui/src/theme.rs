@@ -36,7 +36,7 @@ pub trait ViTheme: 'static {
         16.0
     }
 
-    // Font sizes (px). 0 = bitmap 8×8 fallback.
+    // Font sizes (px). 0 inherits the GUI FontContext size (Inter 16px by default).
     fn font_size_body(&self) -> u16 {
         0
     }

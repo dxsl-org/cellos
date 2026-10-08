@@ -7,7 +7,7 @@
 extern crate alloc;
 use alloc::{rc::Rc, string::String, vec::Vec};
 
-use crate::canvas::{Color, TextStyle};
+use crate::canvas::Color;
 use crate::dirty::DirtyRegion;
 use crate::event::Event;
 use crate::layout::{Constraints, Point, Rect, Size};
@@ -97,9 +97,9 @@ fn downsample(data: &[f32], target_len: usize) -> Vec<f32> {
 }
 
 impl ViNode for LineChart {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        self.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
-        constraints.max
+    fn layout(&mut self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> Size {
+    self.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
+    constraints.max
     }
 
     fn bounds(&self) -> Rect {
@@ -153,14 +153,9 @@ impl ViNode for LineChart {
                 );
                 let val = y_lo + t * y_range;
                 let label = format_f32_label(val);
-                cx.canvas.draw_text(
-                    Point::new(b.x + 2.0, gy - 6.0),
-                    &label,
-                    TextStyle {
-                        color: Color::rgb(120, 130, 150),
-                        size_px: 0,
-                    },
-                );
+                let x = plot.x - cx.measure(&label) - 4.0;
+                let y = gy - cx.line_height() * 0.5;
+                cx.draw_text(Point::new(x, y), &label, Color::rgb(120, 130, 150));
             }
         }
 

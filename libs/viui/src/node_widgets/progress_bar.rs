@@ -81,19 +81,19 @@ impl ProgressBar {
 }
 
 impl ViNode for ProgressBar {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = match self.orientation {
-            Orientation::Horizontal => constraints.constrain(Size {
-                w: constraints.max.w,
-                h: BAR_H,
-            }),
-            Orientation::Vertical => constraints.constrain(Size {
-                w: BAR_W,
-                h: constraints.max.h,
-            }),
-        };
-        self.bounds = Rect::from_origin_size(constraints.origin, size);
-        size
+    fn layout(&mut self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> Size {
+    let size = match self.orientation {
+        Orientation::Horizontal => constraints.constrain(Size {
+            w: constraints.max.w,
+            h: BAR_H,
+        }),
+        Orientation::Vertical => constraints.constrain(Size {
+            w: BAR_W,
+            h: constraints.max.h,
+        }),
+    };
+    self.bounds = Rect::from_origin_size(constraints.origin, size);
+    size
     }
 
     fn bounds(&self) -> Rect {
@@ -134,7 +134,7 @@ impl ViNode for ProgressBar {
         if self.show_label {
             let pct = (v * 100.0) as u32;
             let label = format_pct(pct);
-            let lx = b.x + b.w * 0.5 - label.len() as f32 * cx.char_width() * 0.5;
+            let lx = b.x + b.w * 0.5 - cx.measure(&label) * 0.5;
             let ly = b.y + b.h * 0.5 - cx.line_height() * 0.5;
             cx.draw_text(Point::new(lx.max(b.x), ly.max(b.y)), &label, Color::WHITE);
         }

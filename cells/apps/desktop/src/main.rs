@@ -4,7 +4,7 @@
 //! Conforms to Cell Trust Tier 1 (Pure Rust, SAS, `#![forbid(unsafe_code)]`).
 
 #![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_code)]
 
 mod apps;
@@ -18,6 +18,7 @@ use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{
     sys_get_resolution, sys_get_time, sys_spawn_from_path, sys_yield, SyscallResult,
 };
+use ostd::typography::TextFonts;
 
 use crate::apps::AppRegistry;
 use crate::spotlight::{SpotlightAction, SpotlightState};
@@ -42,7 +43,13 @@ api::declare_syscalls![
 
 ostd::cell_main!(cell_main);
 
+#[cfg(target_os = "none")]
+ostd::declare_custom_heap!(4 * 1024 * 1024);
+
 fn cell_main() {
+    #[cfg(target_os = "none")]
+    init_custom_heap();
+
     ostd::io::println("[desktop] CellOS Desktop initializing...");
 
     // 1. Connect to Display Compositor
@@ -80,6 +87,7 @@ fn cell_main() {
     let mut registry = AppRegistry::new();
     let mut tb_state = TaskbarState::new();
     let mut sp_state = SpotlightState::new();
+    let mut fonts = TextFonts::new();
 
     // 6. Request Input Focus
     while !ostd::input::request_focus() {
@@ -88,7 +96,7 @@ fn cell_main() {
 
     // 7. Initial Paint
     tb_state.update_daemons();
-    taskbar::render(&mut tb_surf, &registry, &tb_state);
+    taskbar::render(&mut tb_surf, &mut fonts, &registry, &tb_state);
 
     let mut last_tick = sys_get_time();
     let mut cursor_x = 0i32;
@@ -183,6 +191,7 @@ fn cell_main() {
                                 &mut tb_state,
                                 cursor_x,
                                 cursor_y,
+                                tb_w,
                             ) {
                                 TaskbarAction::OpenSpotlight => {
                                     ostd::io::println(
@@ -254,10 +263,10 @@ fn cell_main() {
 
         // Re-paint damaged components
         if need_tb_render {
-            taskbar::render(&mut tb_surf, &registry, &tb_state);
+            taskbar::render(&mut tb_surf, &mut fonts, &registry, &tb_state);
         }
         if need_sp_render && sp_state.is_open {
-            spotlight::render(&mut sp_surf, &registry, &sp_state);
+            spotlight::render(&mut sp_surf, &mut fonts, &registry, &sp_state);
         }
 
         sys_yield();

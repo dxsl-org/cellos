@@ -31,7 +31,7 @@ pub fn decode_bmp(data: &[u8]) -> Option<DecodedImage> {
 
     let width_i = i32::from_le_bytes([data[18], data[19], data[20], data[21]]);
     let height_i = i32::from_le_bytes([data[22], data[23], data[24], data[25]]);
-    if width_i <= 0 || width_i > 4096 || height_i.abs() > 4096 {
+    if width_i <= 0 || width_i > 4096 || height_i == 0 || height_i.unsigned_abs() > 4096 {
         return None;
     }
 
@@ -41,6 +41,7 @@ pub fn decode_bmp(data: &[u8]) -> Option<DecodedImage> {
     } else {
         (height_i as u32, true)
     };
+    super::checked_pixels(width as usize, height as usize)?;
 
     let planes = u16::from_le_bytes([data[26], data[27]]);
     if planes != 1 {

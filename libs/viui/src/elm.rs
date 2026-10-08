@@ -51,8 +51,8 @@ impl<Msg: 'static> Element<Msg> {
     pub fn inert(widget: impl ViWidget) -> Self {
         struct Inert<W>(W);
         impl<W: ViWidget, M: 'static> ErasedWidget<M> for Inert<W> {
-            fn layout(&self, c: Constraints) -> LayoutNode {
-                self.0.layout(c)
+            fn layout(&self, c: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+            self.0.layout(c, font)
             }
             fn paint(&self, cx: &mut PaintCx) {
                 self.0.paint(cx)
@@ -83,8 +83,8 @@ impl<Msg: 'static> Element<Msg> {
         impl<W: ViWidget, F: Fn(&EventCx) -> Option<M> + 'static, M: 'static> ErasedWidget<M>
             for Emitter<W, F, M>
         {
-            fn layout(&self, c: Constraints) -> LayoutNode {
-                self.widget.layout(c)
+            fn layout(&self, c: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+            self.widget.layout(c, font)
             }
             fn paint(&self, cx: &mut PaintCx) {
                 self.widget.paint(cx)
@@ -104,8 +104,8 @@ impl<Msg: 'static> Element<Msg> {
         }
     }
 
-    pub fn layout(&self, c: Constraints) -> LayoutNode {
-        self.inner.layout(c)
+    pub fn layout(&self, c: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+        self.inner.layout(c, font)
     }
     pub fn paint(&self, cx: &mut PaintCx) {
         self.inner.paint(cx)
@@ -118,7 +118,7 @@ impl<Msg: 'static> Element<Msg> {
 // ─── ErasedWidget ────────────────────────────────────────────────────────────
 
 trait ErasedWidget<Msg: 'static>: 'static {
-    fn layout(&self, constraints: Constraints) -> LayoutNode;
+    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode;
     fn paint(&self, cx: &mut PaintCx);
     fn event(&mut self, cx: &mut EventCx, e: &Event) -> (EventStatus, Option<Msg>);
 }
@@ -139,31 +139,31 @@ struct ElmRow<Msg: 'static> {
 }
 
 impl<Msg: 'static> ErasedWidget<Msg> for ElmColumn<Msg> {
-    fn layout(&self, c: Constraints) -> LayoutNode {
-        let ox = c.origin.x + self.padding.left;
-        let mut oy = c.origin.y + self.padding.top;
-        let iw = (c.max.w - self.padding.h_total()).max(0.0);
-        let ih = (c.max.h - self.padding.v_total()).max(0.0);
-        let mut nodes = Vec::new();
-        for child in &self.children {
-            let rem = (c.origin.y + ih - oy + c.origin.y).max(0.0);
-            let cc = Constraints::new(Point::new(ox, oy), Size { w: iw, h: rem });
-            let node = child.layout(cc);
-            let h = node.bounds.h;
-            nodes.push(node);
-            oy += h + self.spacing;
-        }
-        let total_h =
-            ((oy - c.origin.y - self.spacing).max(0.0) + self.padding.v_total()).min(c.max.h);
-        LayoutNode::with_children(
-            Rect {
-                x: c.origin.x,
-                y: c.origin.y,
-                w: c.max.w,
-                h: total_h,
-            },
-            nodes,
-        )
+    fn layout(&self, c: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+    let ox = c.origin.x + self.padding.left;
+    let mut oy = c.origin.y + self.padding.top;
+    let iw = (c.max.w - self.padding.h_total()).max(0.0);
+    let ih = (c.max.h - self.padding.v_total()).max(0.0);
+    let mut nodes = Vec::new();
+    for child in &self.children {
+        let rem = (c.origin.y + ih - oy + c.origin.y).max(0.0);
+        let cc = Constraints::new(Point::new(ox, oy), Size { w: iw, h: rem });
+        let node = child.layout(cc, font);
+        let h = node.bounds.h;
+        nodes.push(node);
+        oy += h + self.spacing;
+    }
+    let total_h =
+        ((oy - c.origin.y - self.spacing).max(0.0) + self.padding.v_total()).min(c.max.h);
+    LayoutNode::with_children(
+        Rect {
+            x: c.origin.x,
+            y: c.origin.y,
+            w: c.max.w,
+            h: total_h,
+        },
+        nodes,
+    )
     }
     fn paint(&self, cx: &mut PaintCx) {
         for child in &self.children {
@@ -193,31 +193,31 @@ impl<Msg: 'static> ErasedWidget<Msg> for ElmColumn<Msg> {
 }
 
 impl<Msg: 'static> ErasedWidget<Msg> for ElmRow<Msg> {
-    fn layout(&self, c: Constraints) -> LayoutNode {
-        let oy = c.origin.y + self.padding.top;
-        let mut ox = c.origin.x + self.padding.left;
-        let iw = (c.max.w - self.padding.h_total()).max(0.0);
-        let ih = (c.max.h - self.padding.v_total()).max(0.0);
-        let mut nodes = Vec::new();
-        for child in &self.children {
-            let rem = (c.origin.x + iw - ox + c.origin.x).max(0.0);
-            let cc = Constraints::new(Point::new(ox, oy), Size { w: rem, h: ih });
-            let node = child.layout(cc);
-            let w = node.bounds.w;
-            nodes.push(node);
-            ox += w + self.spacing;
-        }
-        let total_w =
-            ((ox - c.origin.x - self.spacing).max(0.0) + self.padding.h_total()).min(c.max.w);
-        LayoutNode::with_children(
-            Rect {
-                x: c.origin.x,
-                y: c.origin.y,
-                w: total_w,
-                h: ih + self.padding.v_total(),
-            },
-            nodes,
-        )
+    fn layout(&self, c: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+    let oy = c.origin.y + self.padding.top;
+    let mut ox = c.origin.x + self.padding.left;
+    let iw = (c.max.w - self.padding.h_total()).max(0.0);
+    let ih = (c.max.h - self.padding.v_total()).max(0.0);
+    let mut nodes = Vec::new();
+    for child in &self.children {
+        let rem = (c.origin.x + iw - ox + c.origin.x).max(0.0);
+        let cc = Constraints::new(Point::new(ox, oy), Size { w: rem, h: ih });
+        let node = child.layout(cc, font);
+        let w = node.bounds.w;
+        nodes.push(node);
+        ox += w + self.spacing;
+    }
+    let total_w =
+        ((ox - c.origin.x - self.spacing).max(0.0) + self.padding.h_total()).min(c.max.w);
+    LayoutNode::with_children(
+        Rect {
+            x: c.origin.x,
+            y: c.origin.y,
+            w: total_w,
+            h: ih + self.padding.v_total(),
+        },
+        nodes,
+    )
     }
     fn paint(&self, cx: &mut PaintCx) {
         for child in &self.children {
@@ -366,18 +366,18 @@ pub fn scrollable<Msg: 'static>(id: WidgetId, content: Element<Msg>) -> Element<
         id: WidgetId,
     }
     impl<M: 'static> ErasedWidget<M> for ElmScrollable<M> {
-        fn layout(&self, c: Constraints) -> LayoutNode {
-            let own_size = c.constrain(c.max);
-            let child_c = Constraints::new(
-                c.origin,
-                Size {
-                    w: own_size.w,
-                    h: own_size.h * 4.0,
-                },
-            );
-            let child_node = self.inner.layout(child_c);
-            let bounds = Rect::from_origin_size(c.origin, own_size);
-            LayoutNode::with_children(bounds, alloc::vec![child_node])
+        fn layout(&self, c: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+        let own_size = c.constrain(c.max);
+        let child_c = Constraints::new(
+            c.origin,
+            Size {
+                w: own_size.w,
+                h: own_size.h * 4.0,
+            },
+        );
+        let child_node = self.inner.layout(child_c, font);
+        let bounds = Rect::from_origin_size(c.origin, own_size);
+        LayoutNode::with_children(bounds, alloc::vec![child_node])
         }
         fn paint(&self, cx: &mut PaintCx) {
             self.inner.paint(cx);
@@ -413,7 +413,7 @@ pub fn scrollable<Msg: 'static>(id: WidgetId, content: Element<Msg>) -> Element<
 /// Creates a single window for the app, connects to the compositor, and runs
 /// the Elm event loop: recv input → dispatch → update(msg) → view() → repaint.
 pub fn run_app<App: ViApp>(mut app: App) -> ! {
-    use crate::canvas::FramebufferCanvas;
+    use crate::canvas::{FramebufferCanvas, ViCanvas};
     use crate::theme::DARK_THEME;
     use crate::widget::PaintCx;
     use crate::window::{decode_input_event, translate_input, WindowChrome};
@@ -438,28 +438,30 @@ pub fn run_app<App: ViApp>(mut app: App) -> ! {
     let mut state = crate::state_store::WidgetStateStore::new();
     let mut focus = crate::state_store::FocusManager::new();
     let mut root = root_el;
+    let mut font_ctx = crate::font_context::FontContext::default();
 
     // Initial layout + paint
     let screen = crate::layout::Size {
         w: w as f32,
         h: h as f32,
     };
-    let mut layout_cache = root.layout(crate::layout::Constraints::root(screen));
+    let mut layout_cache = root.layout(crate::layout::Constraints::root(screen), &mut font_ctx);
 
     let paint =
-        |surf: &mut ViSurface, root: &crate::elm::Element<App::Message>, chrome: &WindowChrome| {
+        |surf: &mut ViSurface, root: &crate::elm::Element<App::Message>, chrome: &WindowChrome, font: &mut crate::font_context::FontContext| {
             let stride = surf.stride() as u32;
             let sw = surf.width();
             let sh = surf.height();
             let pixels = surf.pixels_mut();
             let mut canvas = FramebufferCanvas::new(pixels, stride, sw, sh);
-            chrome.paint(&mut canvas);
-            let mut cx = PaintCx::with_theme(&mut canvas, &DARK_THEME);
+            canvas.fill_rect(crate::layout::Rect::new(0.0, 0.0, sw as f32, sh as f32), crate::theme::ViTheme::bg(&DARK_THEME).with_alpha(255));
+            chrome.paint(&mut canvas, font);
+            let mut cx = PaintCx::with_theme(&mut canvas, &DARK_THEME, font);
             cx.origin = crate::layout::Point::new(0.0, chrome_h as f32);
             root.paint(&mut cx);
             surf.damage_all();
         };
-    paint(&mut surf, &root, &chrome);
+    paint(&mut surf, &root, &chrome, &mut font_ctx);
 
     loop {
         let mut buf = [0u8; 64];
@@ -501,10 +503,11 @@ pub fn run_app<App: ViApp>(mut app: App) -> ! {
                     if let Some(m) = msg {
                         app.update(m);
                         root = app.view();
-                        layout_cache = root.layout(crate::layout::Constraints::root(screen));
-                        paint(&mut surf, &root, &chrome);
+                        layout_cache = root.layout(crate::layout::Constraints::root(screen), &mut font_ctx);
+                        paint(&mut surf, &root, &chrome, &mut font_ctx);
                     } else if dirty {
-                        paint(&mut surf, &root, &chrome);
+                        layout_cache = root.layout(crate::layout::Constraints::root(screen), &mut font_ctx);
+                        paint(&mut surf, &root, &chrome, &mut font_ctx);
                     }
                 }
             }

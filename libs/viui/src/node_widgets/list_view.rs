@@ -180,16 +180,16 @@ impl ListView {
 }
 
 impl ViNode for ListView {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        // Constrain height to a reasonable maximum; full width.
-        let desired_h = constraints.max.h.min(200.0);
-        let size = constraints.constrain(Size {
-            w: constraints.max.w,
-            h: desired_h,
-        });
-        self.bounds_cache
-            .set(Rect::from_origin_size(constraints.origin, size));
-        size
+    fn layout(&mut self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> Size {
+    // Constrain height to a reasonable maximum; full width.
+    let desired_h = constraints.max.h.min(200.0);
+    let size = constraints.constrain(Size {
+        w: constraints.max.w,
+        h: desired_h,
+    });
+    self.bounds_cache
+        .set(Rect::from_origin_size(constraints.origin, size));
+    size
     }
 
     fn bounds(&self) -> Rect {
@@ -642,31 +642,31 @@ impl VirtualListView {
 }
 
 impl crate::node::ViNode for VirtualListView {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = constraints.constrain(Size {
-            w: constraints.max.w,
-            h: constraints.max.h,
-        });
-        let b = Rect::from_origin_size(constraints.origin, size);
-        self.bounds_cache.set(b);
-
-        self.ensure_slots(b.h);
-        self.rebind_slots();
-
-        // Position each slot at its absolute screen-space Y coordinate.
-        let item_h = self.provider.item_height();
-        let first = self.first_visible_idx();
-        for (i, slot) in self.slots.iter_mut().enumerate() {
-            if slot.bound_idx.is_none() {
-                continue;
-            }
-            let slot_y = b.y + (first + i) as f32 * item_h - self.scroll_y;
-            let slot_constraints =
-                Constraints::new(Point::new(b.x, slot_y), Size::new(b.w, item_h));
-            slot.widget.layout(slot_constraints);
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    let size = constraints.constrain(Size {
+        w: constraints.max.w,
+        h: constraints.max.h,
+    });
+    let b = Rect::from_origin_size(constraints.origin, size);
+    self.bounds_cache.set(b);
+    
+    self.ensure_slots(b.h);
+    self.rebind_slots();
+    
+    // Position each slot at its absolute screen-space Y coordinate.
+    let item_h = self.provider.item_height();
+    let first = self.first_visible_idx();
+    for (i, slot) in self.slots.iter_mut().enumerate() {
+        if slot.bound_idx.is_none() {
+            continue;
         }
-
-        size
+        let slot_y = b.y + (first + i) as f32 * item_h - self.scroll_y;
+        let slot_constraints =
+            Constraints::new(Point::new(b.x, slot_y), Size::new(b.w, item_h));
+        slot.widget.layout(slot_constraints, font);
+    }
+    
+    size
     }
 
     fn bounds(&self) -> Rect {

@@ -43,14 +43,14 @@ impl Space {
 }
 
 impl ViNode for Space {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = constraints.constrain(Size {
-            w: self.width,
-            h: self.height,
-        });
-        self.bounds_cache
-            .set(Rect::from_origin_size(constraints.origin, size));
-        size
+    fn layout(&mut self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> Size {
+    let size = constraints.constrain(Size {
+        w: self.width,
+        h: self.height,
+    });
+    self.bounds_cache
+        .set(Rect::from_origin_size(constraints.origin, size));
+    size
     }
 
     fn bounds(&self) -> Rect {

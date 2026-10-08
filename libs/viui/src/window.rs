@@ -15,7 +15,7 @@ use ostd::syscall::sys_recv;
 
 use api::display::PixelFormat;
 
-use crate::canvas::{Color, FramebufferCanvas, TextStyle, ViCanvas};
+use crate::canvas::{Color, FramebufferCanvas, ViCanvas};
 use crate::event::{Event, KeyCode, Modifiers, MouseButton};
 use crate::layout::{Point, Rect};
 use crate::theme::DARK_THEME;
@@ -86,7 +86,7 @@ impl WindowChrome {
     }
 
     /// Paint the titlebar onto `canvas` (writes from y=0).
-    pub fn paint(&self, canvas: &mut dyn ViCanvas) {
+    pub fn paint(&self, canvas: &mut dyn ViCanvas, font: &mut crate::font_context::FontContext) {
         let w = canvas.width();
         let bg = Rect::new(0.0, 0.0, w as f32, TITLEBAR_H);
         canvas.fill_rect(bg, CHROME_BG);
@@ -99,13 +99,9 @@ impl WindowChrome {
         );
 
         // Title text (left-padded)
-        canvas.draw_text(
-            Point::new(8.0, (TITLEBAR_H - 8.0) / 2.0),
-            &self.title,
-            TextStyle {
-                color: TITLE_CLR,
-                size_px: 0,
-            },
+        canvas.draw_text_scaled(
+            Point::new(8.0, (TITLEBAR_H - font.line_height()) * 0.5),
+            &self.title, font.size_px, TITLE_CLR, &mut font.atlas,
         );
 
         // Buttons: close, max, min (right-aligned)
@@ -336,6 +332,7 @@ struct ManagedWindow {
     surf: ViSurface,
     chrome: WindowChrome,
     tree: WidgetTree,
+    font: crate::font_context::FontContext,
     x: i32,
     y: i32,
 }
@@ -347,12 +344,13 @@ impl ManagedWindow {
         let stride = self.surf.stride() as u32;
         let pixels = self.surf.pixels_mut();
         let mut canvas = FramebufferCanvas::new(pixels, stride, w, h);
+        canvas.fill_rect(Rect::new(0.0, 0.0, w as f32, h as f32), crate::theme::ViTheme::bg(&DARK_THEME).with_alpha(255));
 
         // Chrome occupies top TITLEBAR_H rows; content paints below
-        self.chrome.paint(&mut canvas);
+        self.chrome.paint(&mut canvas, &mut self.font);
 
         let content_origin = Point::new(0.0, TITLEBAR_H);
-        let mut cx = PaintCx::with_theme(&mut canvas, &DARK_THEME);
+        let mut cx = PaintCx::with_theme(&mut canvas, &DARK_THEME, &mut self.font);
         cx.origin = content_origin;
         self.tree.paint(&mut cx);
 
@@ -391,15 +389,17 @@ impl WindowManager {
         .expect("ViSurface::create failed");
         let chrome = WindowChrome::new(title);
         let mut tree = WidgetTree::rebuild(content);
+        let mut font = crate::font_context::FontContext::default();
         tree.layout(crate::layout::Size {
             w: w as f32,
             h: h as f32,
-        });
+        }, &mut font);
         let id = WindowId(self.windows.len());
         self.windows.push(ManagedWindow {
             surf,
             chrome,
             tree,
+            font,
             x: 0,
             y: 0,
         });

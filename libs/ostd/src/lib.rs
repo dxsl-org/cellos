@@ -88,8 +88,11 @@ pub mod display;
 /// Bitmap font renderer — `draw_text` for ASCII output on any pixel buffer.
 pub mod font;
 
-/// Scalable glyph atlas backed by fontdue (no_std + hashbrown feature).
+/// On-demand outline rasterization and cached grayscale glyph bitmaps.
 pub mod font_atlas;
+
+/// Bundled GUI/terminal fonts and measured, Unicode-normalized text drawing.
+pub mod typography;
 
 /// Service discovery helpers (lookup / register well-known services).
 pub mod service;

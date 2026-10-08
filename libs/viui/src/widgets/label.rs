@@ -7,12 +7,11 @@ use crate::event::{Event, EventCx, EventStatus};
 use crate::layout::{Constraints, LayoutNode, Rect, Size};
 use crate::widget::{PaintCx, ViWidget};
 
-const GLYPH_W: f32 = 8.0;
-const GLYPH_H: f32 = 8.0;
 
 pub struct Label {
     pub text: String,
     pub style: TextStyle,
+    bounds: core::cell::Cell<Rect>,
 }
 
 impl Label {
@@ -20,6 +19,7 @@ impl Label {
         Self {
             text: text.into(),
             style: TextStyle::DEFAULT,
+            bounds: core::cell::Cell::new(Rect::ZERO),
         }
     }
 
@@ -28,28 +28,25 @@ impl Label {
         self
     }
 
-    /// Measure text width/height using the 8×8 bitmap font.
-    pub fn measure(&self) -> Size {
-        // Simple single-line measurement: no line wrapping.
-        let chars = self.text.chars().count();
-        Size {
-            w: chars as f32 * GLYPH_W,
-            h: GLYPH_H,
-        }
+    /// Measure with the font and size used to paint this label.
+    pub fn measure(&self, font: &mut crate::font_context::FontContext) -> Size {
+        let px = if self.style.size_px > 0 { self.style.size_px as f32 } else { font.size_px };
+        Size { w: font.atlas.measure(&self.text, px), h: font.atlas.line_height(px) }
     }
 }
 
 impl ViWidget for Label {
-    fn layout(&self, constraints: Constraints) -> LayoutNode {
-        let desired = self.measure();
-        let size = constraints.constrain(desired);
-        let bounds = Rect::from_origin_size(constraints.origin, size);
-        LayoutNode::leaf(bounds)
+    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+    let desired = self.measure(font);
+    let size = constraints.constrain(desired);
+    let bounds = Rect::from_origin_size(constraints.origin, size);
+    self.bounds.set(bounds);
+    LayoutNode::leaf(bounds)
     }
 
     fn paint(&self, cx: &mut PaintCx) {
-        let pos = cx.origin;
-        cx.canvas.draw_text(pos, &self.text, self.style);
+        let pos = self.bounds.get().origin().offset(cx.origin.x, cx.origin.y);
+        cx.draw_text(pos, &self.text, self.style.color, self.style.size_px as f32);
     }
 
     fn event(&mut self, _cx: &mut EventCx, _e: &Event) -> EventStatus {

@@ -22,12 +22,12 @@ impl Space {
 }
 
 impl ViWidget for Space {
-    fn layout(&self, constraints: Constraints) -> LayoutNode {
-        let size = constraints.constrain(Size {
-            w: self.w,
-            h: self.h,
-        });
-        LayoutNode::leaf(Rect::from_origin_size(constraints.origin, size))
+    fn layout(&self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> LayoutNode {
+    let size = constraints.constrain(Size {
+        w: self.w,
+        h: self.h,
+    });
+    LayoutNode::leaf(Rect::from_origin_size(constraints.origin, size))
     }
     fn paint(&self, _cx: &mut PaintCx) {}
     fn event(&mut self, _cx: &mut EventCx, _e: &Event) -> EventStatus {

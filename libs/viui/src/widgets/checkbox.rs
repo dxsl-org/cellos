@@ -2,7 +2,7 @@
 
 use alloc::string::String;
 
-use crate::canvas::{Color, TextStyle};
+use crate::canvas::Color;
 use crate::event::{Event, EventCx, EventStatus, MouseButton};
 use crate::layout::{Constraints, LayoutNode, Point, Rect, Size};
 use crate::widget::{PaintCx, ViWidget, WidgetId};
@@ -17,6 +17,7 @@ pub struct Checkbox {
     pub checked: bool,
     label: Label,
     hovered: bool,
+    bounds: core::cell::Cell<Rect>,
 }
 
 impl Checkbox {
@@ -26,6 +27,7 @@ impl Checkbox {
             checked,
             label: Label::new(label),
             hovered: false,
+            bounds: core::cell::Cell::new(Rect::ZERO),
         }
     }
 
@@ -36,18 +38,21 @@ impl Checkbox {
 }
 
 impl ViWidget for Checkbox {
-    fn layout(&self, constraints: Constraints) -> LayoutNode {
-        let label_w = self.label.measure().w;
-        let desired = Size {
-            w: BOX_SIZE + GAP + label_w,
-            h: BOX_SIZE,
-        };
-        let size = constraints.constrain(desired);
-        LayoutNode::leaf(Rect::from_origin_size(constraints.origin, size))
+    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+    let label_size = self.label.measure(font);
+    let desired = Size {
+        w: BOX_SIZE + GAP + label_size.w,
+        h: BOX_SIZE.max(label_size.h),
+    };
+    let size = constraints.constrain(desired);
+    let bounds = Rect::from_origin_size(constraints.origin, size);
+    self.bounds.set(bounds);
+    LayoutNode::leaf(bounds)
     }
 
     fn paint(&self, cx: &mut PaintCx) {
-        let orig = cx.origin;
+        let bounds = self.bounds.get().translate(cx.origin.x, cx.origin.y);
+        let orig = Point::new(bounds.x, bounds.y + (bounds.h - BOX_SIZE) * 0.5);
         let box_rect = Rect::new(orig.x, orig.y, BOX_SIZE, BOX_SIZE);
 
         let bg = if self.hovered {
@@ -94,15 +99,8 @@ impl ViWidget for Checkbox {
             );
         }
 
-        let text_pos = Point::new(orig.x + BOX_SIZE + GAP, orig.y + (BOX_SIZE - 8.0) / 2.0);
-        cx.canvas.draw_text(
-            text_pos,
-            &self.label.text,
-            TextStyle {
-                color: cx.theme.text_primary(),
-                size_px: cx.theme.font_size_body(),
-            },
-        );
+        let text_pos = Point::new(bounds.x + BOX_SIZE + GAP, bounds.y + (bounds.h - cx.font.line_height()) * 0.5);
+        cx.draw_text(text_pos, &self.label.text, cx.theme.text_primary(), 0.0);
     }
 
     fn event(&mut self, cx: &mut EventCx, e: &Event) -> EventStatus {

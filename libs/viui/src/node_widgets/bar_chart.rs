@@ -7,7 +7,7 @@
 extern crate alloc;
 use alloc::{rc::Rc, string::String, vec::Vec};
 
-use crate::canvas::{Color, TextStyle};
+use crate::canvas::Color;
 use crate::dirty::DirtyRegion;
 use crate::event::Event;
 use crate::layout::{Constraints, Point, Rect, Size};
@@ -59,9 +59,9 @@ impl BarChart {
 }
 
 impl ViNode for BarChart {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        self.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
-        constraints.max
+    fn layout(&mut self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> Size {
+    self.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
+    constraints.max
     }
 
     fn bounds(&self) -> Rect {
@@ -105,26 +105,15 @@ impl ViNode for BarChart {
             );
 
             if let Some(label) = self.labels.get(i) {
-                cx.canvas.draw_text(
-                    Point::new(bx, b.y + b.h - mb + 4.0),
-                    label,
-                    TextStyle {
-                        color: Color::rgb(120, 130, 150),
-                        size_px: 0,
-                    },
-                );
+                let x = bx + (bar_w - cx.measure(label)) * 0.5;
+                cx.draw_text(Point::new(x, b.y + b.h - mb + 4.0), label, Color::rgb(120, 130, 150));
             }
 
-            if self.show_values && bar_h > 14.0 {
+            if self.show_values && bar_h > cx.line_height() {
                 let label = format_f32_short(v);
-                cx.canvas.draw_text(
-                    Point::new(bx, by - 14.0),
-                    &label,
-                    TextStyle {
-                        color: Color::WHITE,
-                        size_px: 0,
-                    },
-                );
+                let x = bx + (bar_w - cx.measure(&label)) * 0.5;
+                let y = by - cx.line_height();
+                cx.draw_text(Point::new(x, y), &label, Color::WHITE);
             }
         }
     }

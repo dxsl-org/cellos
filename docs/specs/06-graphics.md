@@ -43,7 +43,7 @@ ViUI là UI toolkit `no_std`-native của Cellos với:
 * **Dual authoring layer**: Rust `ViNode` API + declarative `.vi` DSL (`vi_design!` inline hoặc `viui-build` lúc build), cùng tạo một Reactive Signal Tree.
 * **Direct pixel rendering**: widget → app-owned pixel surface → DamageNotify. Comparative performance requires a checked-in benchmark artifact; no egui/iced compatibility or speed multiplier is promised.
 * **Event-driven**: 0 CPU khi idle (retained mode + DamageNotify, không phải game loop).
-* **Text**: Bitmap 8×8 cho CLI mode + `GlyphAtlas` + fontdue cho scalable Unicode text.
+* **Text**: Inter TTF cho GUI, JetBrains Mono TTF cho console/code; `GlyphAtlas` rasterize outline theo nhu cầu, cache coverage grayscale và chuẩn hóa NFC. Bitmap 8×8 chỉ còn cho boot/debug hoặc pixel-art có chủ đích.
 * **MIT license**: không viral, không per-device fee — safe cho toàn bộ Cellos ecosystem.
 
 Mode 3 (Desktop) dùng ViUI thay vì Slint.

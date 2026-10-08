@@ -48,14 +48,14 @@ impl Slider {
 }
 
 impl ViNode for Slider {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = constraints.constrain(Size {
-            w: constraints.max.w,
-            h: HEIGHT,
-        });
-        let bounds = Rect::from_origin_size(constraints.origin, size);
-        self.bounds_cache.set(bounds);
-        size
+    fn layout(&mut self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> Size {
+    let size = constraints.constrain(Size {
+        w: constraints.max.w,
+        h: HEIGHT,
+    });
+    let bounds = Rect::from_origin_size(constraints.origin, size);
+    self.bounds_cache.set(bounds);
+    size
     }
 
     fn bounds(&self) -> Rect {

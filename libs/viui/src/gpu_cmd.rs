@@ -6,7 +6,7 @@
 //! a `CommandExecutor` — allowing damage-rect filtering and future hardware
 //! GPU execution without changing widget code.
 
-use crate::canvas::{Color, TextStyle};
+use crate::canvas::Color;
 use crate::layout::{Point, Rect};
 use alloc::{string::String, vec::Vec};
 
@@ -19,11 +19,12 @@ pub enum GpuCmd {
     FillRect { rect: Rect, color: Color },
     /// Draw a line from `a` to `b` (Bresenham, handled by executor).
     DrawLine { a: Point, b: Point, color: Color },
-    /// Draw text at `pos`. `style.size_px == 0` = bitmap 8×8 fallback.
+    /// Record Inter text at its exact scalable pixel size.
     DrawText {
         pos: Point,
         text: String,
-        style: TextStyle,
+        color: Color,
+        size_px: f32,
     },
     /// Blit raw BGRA pixels. Destination may extend beyond current clip —
     /// executor applies clipping during playback.
@@ -38,8 +39,12 @@ pub enum GpuCmd {
         pos: Point,
         bytes: [u8; 128],
         len: u8,
-        style: TextStyle,
+        color: Color,
+        size_px: f32,
     },
+    /// Clip state is replayed so recorded text observes the paint damage clip.
+    ClipPush { rect: Rect },
+    ClipPop,
 }
 
 impl GpuCmd {
@@ -63,22 +68,10 @@ impl GpuCmd {
                     h: (y2 - y).max(1.0),
                 })
             }
-            GpuCmd::DrawText { pos, text, .. } => {
-                // 8×8 bitmap font: estimate width = chars × 8px
-                Some(Rect {
-                    x: pos.x,
-                    y: pos.y,
-                    w: text.len() as f32 * 8.0,
-                    h: 8.0,
-                })
-            }
+            GpuCmd::DrawText { .. } => None,
             GpuCmd::DrawImage { dest, .. } => Some(*dest),
-            GpuCmd::DrawTextShort { pos, len, .. } => Some(Rect {
-                x: pos.x,
-                y: pos.y,
-                w: *len as f32 * 8.0,
-                h: 8.0,
-            }),
+            GpuCmd::DrawTextShort { .. } => None,
+            GpuCmd::ClipPush { .. } | GpuCmd::ClipPop => None,
         }
     }
 }
@@ -111,6 +104,11 @@ impl GpuCommandBuffer {
     pub fn push(&mut self, cmd: GpuCmd) {
         let bounds = cmd.bounding_rect();
         self.cmds.push(RecordedCmd { cmd, bounds });
+    }
+
+    /// Supply bounds measured by the recording font instead of guessing advances.
+    pub fn set_last_bounds(&mut self, bounds: Option<Rect>) {
+        if let Some(last) = self.cmds.last_mut() { last.bounds = bounds; }
     }
 
     /// Iterate recorded commands with pre-computed bounds.

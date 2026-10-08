@@ -2,7 +2,7 @@
 //! Drawing primitives for CellOS Desktop.
 
 use ostd::display::ViSurface;
-use ostd::font::FONT8X8;
+use ostd::typography::{FontFace, TextFonts};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Color {
@@ -81,60 +81,77 @@ pub fn stroke_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, border:
     fill_rect(surf, x + w as i32 - 1, y, 1, h, border);
 }
 
-pub fn draw_char(surf: &mut ViSurface, x: i32, y: i32, c: u8, color: Color, scale: u32) {
-    let sw = surf.width() as i32;
-    let sh = surf.height() as i32;
+#[allow(clippy::too_many_arguments)]
+pub fn draw_text(
+    surf: &mut ViSurface,
+    fonts: &mut TextFonts,
+    x: f32,
+    y: f32,
+    text: &str,
+    face: FontFace,
+    px: f32,
+    color: Color,
+    clip: (i32, i32, i32, i32),
+) {
+    let width = surf.width();
+    let height = surf.height();
     let stride = surf.stride();
-    let pixels = surf.pixels_mut();
-    let [b, g, r, a] = color.as_bgra_bytes();
-
-    let idx = if (0x20..=0x7E).contains(&c) {
-        (c - 0x20) as usize
-    } else {
-        0
-    };
-
-    let scale_i = scale as i32;
-    for row in 0..8i32 {
-        let mask = FONT8X8[idx][row as usize];
-        for col in 0..8i32 {
-            if mask & (0x80u8 >> col as u32) == 0 {
-                continue;
-            }
-            for dy in 0..scale_i {
-                let py = y + row * scale_i + dy;
-                if py < 0 || py >= sh {
-                    continue;
-                }
-                let row_start = py as usize * stride;
-                for dx in 0..scale_i {
-                    let px = x + col * scale_i + dx;
-                    if px < 0 || px >= sw {
-                        continue;
-                    }
-                    let offset = row_start + px as usize * 4;
-                    pixels[offset] = b;
-                    pixels[offset + 1] = g;
-                    pixels[offset + 2] = r;
-                    pixels[offset + 3] = a;
-                }
-            }
-        }
-    }
+    fonts.draw_text(
+        surf.pixels_mut(),
+        width,
+        height,
+        stride,
+        x,
+        y,
+        text,
+        face,
+        px,
+        color.as_bgra_bytes(),
+        clip,
+    );
 }
 
-pub fn draw_str(surf: &mut ViSurface, x: i32, y: i32, text: &str, color: Color, scale: u32) {
-    let mut cursor_x = x;
-    let char_w = 8 * scale as i32;
-    for &byte in text.as_bytes() {
-        draw_char(surf, cursor_x, y, byte, color, scale);
-        cursor_x += char_w;
+/// Fit a single line into a rectangle; long labels are clipped at its edge.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_label(
+    surf: &mut ViSurface,
+    fonts: &mut TextFonts,
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+    text: &str,
+    face: FontFace,
+    px: f32,
+    color: Color,
+    centered: bool,
+) {
+    if w == 0 || h == 0 {
+        return;
     }
+    let text_x = if centered {
+        x as f32 + (w as f32 - fonts.measure(face, text, px).min(w as f32)) / 2.0
+    } else {
+        x as f32
+    };
+    let text_y = y as f32 + (h as f32 - fonts.line_height(face, px)) / 2.0;
+    draw_text(
+        surf,
+        fonts,
+        text_x,
+        text_y,
+        text,
+        face,
+        px,
+        color,
+        (x, y, x + w as i32, y + h as i32),
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn draw_button(
     surf: &mut ViSurface,
+    fonts: &mut TextFonts,
     x: i32,
     y: i32,
     w: u32,
@@ -146,8 +163,17 @@ pub fn draw_button(
 ) {
     fill_rect(surf, x, y, w, h, bg);
     stroke_rect(surf, x, y, w, h, border);
-    let text_w = text.len() as i32 * 8;
-    let text_x = x + (w as i32 - text_w) / 2;
-    let text_y = y + (h as i32 - 8) / 2;
-    draw_str(surf, text_x, text_y, text, fg, 1);
+    draw_label(
+        surf,
+        fonts,
+        x + 6,
+        y + 1,
+        w.saturating_sub(12),
+        h.saturating_sub(2),
+        text,
+        FontFace::UiSemibold,
+        14.0,
+        fg,
+        true,
+    );
 }

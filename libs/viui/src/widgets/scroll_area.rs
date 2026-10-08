@@ -28,24 +28,24 @@ impl ScrollArea {
 }
 
 impl ViWidget for ScrollArea {
-    fn layout(&self, constraints: Constraints) -> LayoutNode {
-        // Own size: fill available space
-        let own_size = Size {
-            w: constraints.max.w,
-            h: constraints.max.h,
-        };
-        let own_size = constraints.constrain(own_size);
-
-        // Child: unconstrained height (up to 4× own to limit allocation)
-        let child_max = Size {
-            w: own_size.w,
-            h: own_size.h * 4.0,
-        };
-        let child_constraints = Constraints::new(constraints.origin, child_max);
-        let child_node = self.child.layout(child_constraints);
-
-        let bounds = Rect::from_origin_size(constraints.origin, own_size);
-        LayoutNode::with_children(bounds, alloc::vec![child_node])
+    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+    // Own size: fill available space
+    let own_size = Size {
+        w: constraints.max.w,
+        h: constraints.max.h,
+    };
+    let own_size = constraints.constrain(own_size);
+    
+    // Child: unconstrained height (up to 4× own to limit allocation)
+    let child_max = Size {
+        w: own_size.w,
+        h: own_size.h * 4.0,
+    };
+    let child_constraints = Constraints::new(constraints.origin, child_max);
+    let child_node = self.child.layout(child_constraints, font);
+    
+    let bounds = Rect::from_origin_size(constraints.origin, own_size);
+    LayoutNode::with_children(bounds, alloc::vec![child_node])
     }
 
     fn post_layout(&mut self, bounds: Rect) {

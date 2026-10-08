@@ -77,9 +77,12 @@ generated project status, not this normative specification.
 ## 5. Rendering and text
 
 ViUI paints directly into the app-owned pixel surface. It does not require a triangle
-tessellation pipeline or compositor-side widget knowledge. Text may use the small bitmap
-path for diagnostics or the cached scalable-font path for application UI. Applications
-must damage every pixel region affected by a visual or layout change.
+tessellation pipeline or compositor-side widget knowledge. Application UI defaults to
+bundled Inter at 16px; layout and paint share the same `FontContext` and exact advances
+and line metrics. The cached scalable-font path uses on-demand outline rasterization,
+NFC normalization and grayscale coverage. The small bitmap path is explicit diagnostics
+or pixel-art only, not an implicit GUI fallback. The displayed console uses JetBrains Mono.
+Applications must damage every pixel region affected by a visual or layout change.
 
 ## 6. Non-goals
 

@@ -58,31 +58,31 @@ impl ScrollArea {
 }
 
 impl ViNode for ScrollArea {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = constraints.constrain(Size {
-            w: constraints.max.w,
-            h: constraints.max.h,
-        });
-        self.bounds_cache
-            .set(Rect::from_origin_size(constraints.origin, size));
-
-        let scroll = self.scroll_y.get();
-
-        // Child gets full width minus scrollbar, unbounded height.
-        // Origin is shifted up by scroll_y so child bounds are already scrolled.
-        let child_constraints = Constraints {
-            origin: Point::new(constraints.origin.x, constraints.origin.y - scroll),
-            min: Size { w: 0.0, h: 0.0 },
-            max: Size {
-                w: (size.w - SCROLLBAR_W).max(0.0),
-                // Unlimited height — measure the full content.
-                h: f32::MAX,
-            },
-        };
-        let child_size = self.child.layout(child_constraints);
-        self.content_height.set(child_size.h);
-
-        size
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    let size = constraints.constrain(Size {
+        w: constraints.max.w,
+        h: constraints.max.h,
+    });
+    self.bounds_cache
+        .set(Rect::from_origin_size(constraints.origin, size));
+    
+    let scroll = self.scroll_y.get();
+    
+    // Child gets full width minus scrollbar, unbounded height.
+    // Origin is shifted up by scroll_y so child bounds are already scrolled.
+    let child_constraints = Constraints {
+        origin: Point::new(constraints.origin.x, constraints.origin.y - scroll),
+        min: Size { w: 0.0, h: 0.0 },
+        max: Size {
+            w: (size.w - SCROLLBAR_W).max(0.0),
+            // Unlimited height — measure the full content.
+            h: f32::MAX,
+        },
+    };
+    let child_size = self.child.layout(child_constraints, font);
+    self.content_height.set(child_size.h);
+    
+    size
     }
 
     fn bounds(&self) -> Rect {

@@ -8,6 +8,8 @@ use alloc::vec::Vec;
 pub mod html;
 pub mod markdown;
 pub mod syntax;
+pub mod css;
+pub mod web;
 
 use crate::doc::DocNode;
 
@@ -59,7 +61,7 @@ impl DocFormat {
 pub fn parse_content(
     format: DocFormat,
     content: &str,
-) -> (Vec<DocNode>, Vec<String>, Option<dom_arena::DocumentArena>) {
+) -> (Vec<DocNode>, Vec<html::ScriptSource>, Option<dom_arena::DocumentArena>) {
     match format {
         DocFormat::Markdown => (markdown::parse_markdown(content), Vec::new(), None),
         DocFormat::Html => {

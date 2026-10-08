@@ -2,7 +2,6 @@
 
 use alloc::string::String;
 
-use crate::canvas::TextStyle;
 use crate::event::{Event, EventCx, EventStatus, MouseButton};
 use crate::layout::{Constraints, LayoutNode, Padding, Point, Rect, Size};
 use crate::widget::{PaintCx, ViWidget, WidgetId};
@@ -17,6 +16,7 @@ pub struct Button {
     pressed: bool,
     /// True for exactly one frame after a completed click. Reset each dispatch cycle.
     pub just_clicked: bool,
+    bounds: core::cell::Cell<Rect>,
 }
 
 impl Button {
@@ -28,6 +28,7 @@ impl Button {
             hovered: false,
             pressed: false,
             just_clicked: false,
+            bounds: core::cell::Cell::new(Rect::ZERO),
         }
     }
 
@@ -45,26 +46,21 @@ impl Button {
 }
 
 impl ViWidget for Button {
-    fn layout(&self, constraints: Constraints) -> LayoutNode {
-        let text_size = self.label.measure();
-        let desired = Size {
-            w: text_size.w + self.padding.h_total(),
-            h: text_size.h + self.padding.v_total(),
-        };
-        let size = constraints.constrain(desired);
-        let bounds = Rect::from_origin_size(constraints.origin, size);
-        LayoutNode::leaf(bounds)
+    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+    let text_size = self.label.measure(font);
+    let desired = Size {
+        w: text_size.w + self.padding.h_total(),
+        h: text_size.h + self.padding.v_total(),
+    };
+    let size = constraints.constrain(desired);
+    let bounds = Rect::from_origin_size(constraints.origin, size);
+    self.bounds.set(bounds);
+    LayoutNode::leaf(bounds)
     }
 
     fn paint(&self, cx: &mut PaintCx) {
-        let ts = self.label.measure();
-        let bounds = Rect::from_origin_size(
-            cx.origin,
-            Size {
-                w: ts.w + self.padding.h_total(),
-                h: ts.h + self.padding.v_total(),
-            },
-        );
+        let ts = self.label.measure(cx.font);
+        let bounds = self.bounds.get().translate(cx.origin.x, cx.origin.y);
 
         let bg = if self.pressed {
             cx.theme.button_pressed()
@@ -86,18 +82,8 @@ impl ViWidget for Button {
             cx.canvas.draw_line(a, bb, border);
         }
 
-        let text_pos = Point::new(
-            cx.origin.x + self.padding.left,
-            cx.origin.y + self.padding.top,
-        );
-        cx.canvas.draw_text(
-            text_pos,
-            &self.label.text,
-            TextStyle {
-                color: cx.theme.text_primary(),
-                size_px: cx.theme.font_size_body(),
-            },
-        );
+        let text_pos = Point::new(bounds.x + (bounds.w - ts.w) * 0.5, bounds.y + (bounds.h - ts.h) * 0.5);
+        cx.draw_text(text_pos, &self.label.text, cx.theme.text_primary(), 0.0);
     }
 
     fn event(&mut self, cx: &mut EventCx, e: &Event) -> EventStatus {

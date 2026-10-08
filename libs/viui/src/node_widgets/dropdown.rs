@@ -83,16 +83,16 @@ impl DropDown {
 }
 
 impl ViNode for DropDown {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let w = constraints.max.w.min(200.0);
-        let h = 36.0f32;
-        self.bounds.set(Rect {
-            x: constraints.origin.x,
-            y: constraints.origin.y,
-            w,
-            h,
-        });
-        Size::new(w, h)
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    let w = constraints.max.w.min(200.0);
+    let h = 36.0f32.max(font.line_height() + 16.0).min(constraints.max.h);
+    self.bounds.set(Rect {
+        x: constraints.origin.x,
+        y: constraints.origin.y,
+        w,
+        h,
+    });
+    Size::new(w, h)
     }
 
     fn bounds(&self) -> Rect {
@@ -110,11 +110,12 @@ impl ViNode for DropDown {
         cx.canvas.draw_rect_border(b, Color::rgb(80, 85, 110), 1.0);
 
         let text = self.selected.get();
-        cx.draw_text(Point::new(b.x + 8.0, b.y + 10.0), &text, Color::WHITE);
+        let y = b.y + (b.h - cx.line_height()) * 0.5;
+        cx.draw_text(Point::new(b.x + 8.0, y), &text, Color::WHITE);
 
         // Down-arrow indicator (right-aligned).
         cx.draw_text(
-            Point::new(b.x + b.w - 18.0, b.y + 10.0),
+            Point::new(b.x + b.w - 18.0, y),
             "v",
             Color::rgb(150, 150, 180),
         );
@@ -159,6 +160,7 @@ struct DropDownPopup {
     queue: OverlayActionQueue,
     bounds: Cell<Rect>,
     hovered: Option<usize>,
+    item_height: f32,
 }
 
 impl DropDownPopup {
@@ -175,6 +177,7 @@ impl DropDownPopup {
             queue,
             bounds: Cell::new(Rect::ZERO),
             hovered: None,
+            item_height: Self::ITEM_H,
         }
     }
 
@@ -185,19 +188,20 @@ impl DropDownPopup {
 }
 
 impl ViNode for DropDownPopup {
-    fn layout(&mut self, constraints: Constraints) -> Size {
-        let item_h = Self::ITEM_H;
-        let w = self.anchor.w;
-        let h = (self.items.len() as f32 * item_h).min(Self::MAX_H);
-        let x = self.anchor.x;
-        // Prefer below; fall back to above when not enough room.
-        let y = if self.anchor.y + self.anchor.h + h <= constraints.max.h {
-            self.anchor.y + self.anchor.h
-        } else {
-            (self.anchor.y - h).max(0.0)
-        };
-        self.bounds.set(Rect { x, y, w, h });
-        Size::new(w, h)
+    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    self.item_height = Self::ITEM_H.max(font.line_height() + 16.0);
+    let item_h = self.item_height;
+    let w = self.anchor.w;
+    let h = (self.items.len() as f32 * item_h).min(Self::MAX_H);
+    let x = self.anchor.x;
+    // Prefer below; fall back to above when not enough room.
+    let y = if self.anchor.y + self.anchor.h + h <= constraints.max.h {
+        self.anchor.y + self.anchor.h
+    } else {
+        (self.anchor.y - h).max(0.0)
+    };
+    self.bounds.set(Rect { x, y, w, h });
+    Size::new(w, h)
     }
 
     fn bounds(&self) -> Rect {
@@ -206,7 +210,7 @@ impl ViNode for DropDownPopup {
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds.get();
-        let item_h = Self::ITEM_H;
+        let item_h = self.item_height;
         let current = self.selected.get();
 
         cx.canvas.fill_rect(b, Color::rgb(35, 38, 52));
@@ -232,12 +236,13 @@ impl ViNode for DropDownPopup {
                 },
                 bg,
             );
-            cx.draw_text(Point::new(b.x + 8.0, iy + 8.0), item, Color::WHITE);
+            let text_y = iy + (item_h - cx.line_height()) * 0.5;
+            cx.draw_text(Point::new(b.x + 8.0, text_y), item, Color::WHITE);
         }
     }
 
     fn event(&mut self, event: &Event) -> bool {
-        let item_h = Self::ITEM_H;
+        let item_h = self.item_height;
         let b = self.bounds.get();
 
         match event {
