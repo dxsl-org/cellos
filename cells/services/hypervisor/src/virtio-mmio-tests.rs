@@ -231,3 +231,56 @@ fn notify_without_published_used_entries_does_not_signal_interrupt() {
     assert!(mmio.interrupt_pending());
     assert_eq!(mmio.mmio_read(0x060, &device), 1);
 }
+
+/// Device whose config space answers one aligned 32-bit word per offset, which is
+/// the contract `config_read` documents.
+#[derive(Default)]
+struct ConfigWordDevice([u32; 2]);
+
+impl VirtioDevice for ConfigWordDevice {
+    fn device_id(&self) -> u32 {
+        1
+    }
+    fn notify(&mut self, _: usize, _: &QueueCfg, _: usize, _: usize) -> bool {
+        false
+    }
+    fn config_read(&self, offset: usize) -> u32 {
+        match offset {
+            0 => self.0[0],
+            4 => self.0[1],
+            _ => 0,
+        }
+    }
+}
+
+/// The guest reads a multi-byte config field with **byte** accesses (`memcpy_fromio`),
+/// so the transport has to serve a byte offset inside a word. The ARM guest's `eth0`
+/// came up as `52:00:00:00:BB:00` instead of the advertised `52:54:00:AA:BB:CC`
+/// because only offsets 0 and 4 answered, and the L2 bridge then routed the guest's
+/// replies to an address it never used.
+#[test]
+fn config_space_answers_byte_offsets_inside_a_word() {
+    let mmio = VirtioMmio::default();
+    let device = ConfigWordDevice([0xAA00_5452, 0x1234_CCBB]);
+
+    for (byte, expected) in [
+        (0u64, 0x52u64),
+        (1, 0x54),
+        (2, 0x00),
+        (3, 0xAA),
+        (4, 0xBB),
+        (5, 0xCC),
+    ] {
+        assert_eq!(
+            mmio.mmio_read(0x100 + byte, &device) & 0xff,
+            expected,
+            "byte {byte} of the config space"
+        );
+    }
+
+    // A word access still returns the whole word, and a 16-bit field at offset 6
+    // (virtio-net `status`) comes out of the second word.
+    assert_eq!(mmio.mmio_read(0x100, &device) & 0xffff_ffff, 0xAA00_5452);
+    assert_eq!(mmio.mmio_read(0x104, &device) & 0xffff_ffff, 0x1234_CCBB);
+    assert_eq!(mmio.mmio_read(0x106, &device) & 0xffff, 0x1234);
+}

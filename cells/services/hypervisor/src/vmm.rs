@@ -123,6 +123,16 @@ pub fn guest_timer_regs(vm_id: usize, vcpu_id: usize, regs: &mut [u64; 32]) -> u
     }
 }
 
+/// DTB SPI specifiers are relative to the GIC SPI base (INTID 32). x86
+/// virtio device lines already use their PIC/APIC IRQ numbers directly.
+pub const fn device_irq(spi: u32) -> u32 {
+    if cfg!(target_arch = "aarch64") {
+        spi + 32
+    } else {
+        spi
+    }
+}
+
 /// Signal a device interrupt. On Pi the software GIC owns the pending state;
 /// the run loop requests HCR_EL2.VI only for a deliverable interrupt.
 pub fn inject_irq(vm_id: usize, vcpu_id: usize, intid: u32) -> usize {

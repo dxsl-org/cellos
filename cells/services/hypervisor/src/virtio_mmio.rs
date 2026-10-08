@@ -99,7 +99,21 @@ impl VirtioMmio {
             0x044 if q < MAX_QUEUES && self.queues[q].ready => 1,
             0x060 => self.intr_status as u64,
             0x070 => self.status as u64,
-            o if o >= 0x100 => dev.config_read((o - 0x100) as usize) as u64,
+            // Config space is addressed in **bytes**: the guest reads a `u8` field,
+            // or the 6-byte virtio-net MAC (which `memcpy_fromio` copies one byte
+            // per access), with an MMIO access at `0x100 + byte_offset`, while a
+            // device answers one 32-bit word per *aligned* offset. Shifting the
+            // containing word down puts the requested byte in the low bits, which
+            // is where a sub-word load reads it (a 4-byte access still sees the
+            // whole aligned word). Answering only offsets 0 and 4 made every other
+            // byte zero — the ARM guest's `eth0` came up as `52:00:00:00:BB:00`
+            // instead of the advertised `52:54:00:AA:BB:CC`, and the L2 bridge then
+            // routed its replies to an address the guest never used. x86's dispatch
+            // has had the equivalent `size == 1` shift.
+            o if o >= 0x100 => {
+                let off = o - 0x100;
+                (dev.config_read((off & !3) as usize) as u64) >> ((off & 3) * 8)
+            }
             _ => 0,
         }
     }

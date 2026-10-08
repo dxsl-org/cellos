@@ -39,6 +39,36 @@ impl NetDev {
         }
     }
 
+    /// Whether the guest can accept an inbound frame right now.
+    ///
+    /// The RX path asks the Net Cell for a frame and then fills a guest buffer;
+    /// when the guest has none posted the frame is lost, and the request itself
+    /// is an IPC round trip taken on every guest idle exit — which is exactly
+    /// the path a keystroke waits behind. Checking the queue first costs a
+    /// two-byte guest-memory read and skips both.
+    ///
+    /// The check is a superset of `push_rx_frame`'s own early failure: if this
+    /// returns false, that call would have returned false too, so no frame the
+    /// guest could have received is withheld.
+    pub fn rx_available(&self, vm_id: usize, net_vmio: &VirtioMmio) -> bool {
+        let qcfg = net_vmio.queue_cfg(0);
+        if !qcfg.ready || !qcfg.is_valid() {
+            return false;
+        }
+        let Some(avail_idx_gpa) = crate::virtqueue_guard::checked_gpa(qcfg.avail_gpa, 2, 2) else {
+            return false;
+        };
+        let mut b2 = [0u8; 2];
+        if crate::vmm::read_guest_memory(vm_id, avail_idx_gpa, &mut b2) != 2 {
+            return false;
+        }
+        let avail_idx = u16::from_le_bytes(b2);
+        matches!(
+            crate::virtqueue_guard::pending_count(qcfg.num as usize, self.rx_last_avail, avail_idx),
+            Some(count) if count > 0
+        )
+    }
+
     /// Inject one received Ethernet frame into the guest RX virtqueue.
     ///
     /// Prepends a 12-byte `virtio_net_hdr_v1`, fills one available descriptor

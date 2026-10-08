@@ -108,7 +108,7 @@ impl VirtioDevice for GpuDev {
                 });
             }
         }
-        crate::vmm::inject_irq(vm_id, vcpu_id, GPU_SPI);
+        crate::vmm::inject_irq(vm_id, vcpu_id, crate::vmm::device_irq(GPU_SPI));
         true
     }
 

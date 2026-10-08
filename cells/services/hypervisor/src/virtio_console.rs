@@ -73,7 +73,7 @@ impl VirtioDevice for Console {
                 );
                 if published > 0 {
                     // Inject SPI so the guest interrupt handler runs and processes the used ring.
-                    crate::vmm::inject_irq(vm_id, vcpu_id, CONSOLE_SPI);
+                    crate::vmm::inject_irq(vm_id, vcpu_id, crate::vmm::device_irq(CONSOLE_SPI));
                     true
                 } else {
                     false
