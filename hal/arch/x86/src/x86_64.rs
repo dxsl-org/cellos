@@ -224,6 +224,7 @@ impl Arch for X86_64Arch {
         pku::init(); // LAYER2-PKU-INIT — requires IBT (checked inside)
         syscall::init();
         apic::init_lapic();
+        init_sse();
     }
 
     /// # Safety
@@ -279,3 +280,25 @@ pub fn set_kernel_stack(sp: usize) {
     gdt::set_kernel_stack(sp as u64);
     syscall::set_kernel_stack(sp as u64);
 }
+
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
+pub fn init_sse() {
+    unsafe {
+        let mut cr0: u64;
+        core::arch::asm!("mov {}, cr0", out(reg) cr0, options(nomem, nostack));
+        cr0 &= !(1 << 2);
+        cr0 |= 1 << 1;
+        core::arch::asm!("mov cr0, {}", in(reg) cr0, options(nomem, nostack));
+
+        let mut cr4: u64;
+        core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack));
+        cr4 |= (1 << 9) | (1 << 10);
+        core::arch::asm!("mov cr4, {}", in(reg) cr4, options(nomem, nostack));
+
+        let mxcsr: u32 = 0x1F80;
+        core::arch::asm!("ldmxcsr [{}]", in(reg) &mxcsr, options(nostack));
+    }
+}
+
+#[cfg(all(target_arch = "x86_64", not(target_os = "none")))]
+pub fn init_sse() {}

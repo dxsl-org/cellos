@@ -51,10 +51,10 @@ api::declare_syscalls![
 ostd::cell_main!(cell_main);
 
 const STATIC_CTOR_SENTINEL: u32 = 0xC0FFEE11;
-const VFS_PATH: &str = "/srv/cpp-smoke.txt";
-/// `/BIN/INIT` is the embedded init ELF: the kernel file table resolves it, and
-/// the shim's C `open`/`read` ABI goes through that table (not the VFS service).
-const BIN_INIT_NUL: &[u8] = b"/BIN/INIT\0";
+const VFS_PATH: &str = "/tmp/cpp-smoke.txt";
+/// Candidates for the C-ABI file read: an embedded ELF file in the kernel file table.
+/// RV64 embeds `/BIN/INIT`; x86_64 embeds `/bin/shell`. Both start with `\x7fELF`.
+const CANDIDATES: [&[u8]; 2] = [b"/BIN/INIT\0", b"/bin/shell\0"];
 const ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
 const PAYLOAD: &[u8] = b"cpp-freestanding payload read through the VFS service";
 const HEAP_ITERATIONS: i32 = 64;
@@ -148,7 +148,13 @@ fn cell_main() {
     ));
 
     let mut magic = [0u8; 4];
-    let read = cpp::read_file(BIN_INIT_NUL, &mut magic);
+    let mut read = -1;
+    for candidate in CANDIDATES {
+        read = cpp::read_file(candidate, &mut magic);
+        if read == 4 {
+            break;
+        }
+    }
     expect_eq("c-abi-read", read as i64, 4);
     if magic != ELF_MAGIC {
         fail("c-abi-content");

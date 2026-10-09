@@ -151,7 +151,7 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         "/bin/ocel" | "/bin/ocel-js" | "/bin/ocel-quickjs" | "/bin/ocel-pdf" => CapSet::EMPTY,
         "/bin/config" | "/bin/compositor" | "/bin/fb-console" | "/bin/kms" | "/bin/silo-test"
         | "/bin/vfs-test" | "/bin/srv-test" | "/bin/std-smoke" | "/bin/desktop"
-        | "/bin/tier2-exploit" | "/bin/tier2-smoke"
+        | "/bin/tier2-exploit" | "/bin/tier2-smoke" | "/bin/cpp-smoke"
         | "/bin/tier2-rpc-provider" | "/bin/tier2-rpc-driver" => CapSet::EMPTY,
         _ => return None,
     };

@@ -1,0 +1,33 @@
+x86_64 Tier 2 C++ freestanding runtime profile qualification (2026-10-09)
+
+Scope: `cpp-freestanding` runtime profile (ADR-0018 §2.3) on x86_64. Closes the x86 C++ runtime gap identified in ADR-0022 and roadmap current focus.
+
+Root causes identified and repaired:
+1. `libs/api/src/services/posix.rs`: omitted `target_arch = "x86_64"` from crate root cfg, disabling the POSIX/C++ ABI shim on x86_64. Added `x86_64`.
+2. `libs/api/src/services/posix/sysio.rs`: implemented `raw_syscall` for x86_64 Syscall ABI (RAX=syscall_nr, RDI=a0, RSI=a1, RDX=a2, R10=a3; RCX/R11 clobbered by hardware).
+3. `cells/tests/cpp-smoke/build.rs`: added x86_64 compiler discovery (`g++` / `clang++` with `-mno-red-zone -mcmodel=small`).
+4. Kernel x86_64 FPU/SSE initialization: `kernel/src/main.rs` bypassed `hal::ARCH.init()` on x86_64 and omitted FPU/SSE setup. Executing compiler-generated SSE instructions (`movd`, `movdqa`) triggered #UD (exception vector 6). Implemented `init_sse` in `hal/arch/x86/src/x86_64.rs` (clearing CR0.EM, setting CR0.MP, setting CR4.OSFXSR and CR4.OSXMMEXCPT, masking SIMD exceptions via LDMXCSR 0x1F80) and called it from `main.rs`.
+5. Kernel launch authorization: added `/bin/cpp-smoke` to `kernel/src/loader/boot_ceiling.rs` and `kernel/src/loader/launch_profile/profiles.rs` with `CapSet::EMPTY`.
+6. File paths: `cells/tests/cpp-smoke/src/main.rs` uses `/tmp/cpp-smoke.txt` (RamFS) for typed VFS IPC and checks candidate embedded ELF files (`/BIN/INIT`, `/bin/shell`) for C-ABI `open`/`read`.
+
+Verification command:
+  bash scripts/build-x86_64-domain-test-ci.sh
+  BOOT_WINDOW=90 bash scripts/x86/qemu-domain-test.sh
+
+Observed runtime markers (qemu-x86-domain-test.log):
+  [domain] admitted cell 'cpp-smoke' to Tier 2 Paged Domain (CR3 isolation)
+  Init: cpp-smoke admitted.
+  [cpp-smoke] start (Tier 2 FFI cell, cpp-freestanding profile)
+  [cpp-smoke] static-ctor marker=0xC0FFEE11
+  [cpp-smoke] virtual-dispatch area=37
+  [cpp-smoke] virtual-delete area=36
+  [cpp-smoke] templates total=64
+  [cpp-smoke] heap churn checksum=3067 iterations=64
+  [cpp-smoke] vfs client roundtrip bytes=53
+  [cpp-smoke] c-abi read magic=ELF
+  CPP-SMOKE: PASS
+  Syscall::Exit: task 9 exited with code 0
+  [selftest] DOMAIN-FRAME-RELEASE: PASS tag=1 frames=5 quarantined=0
+
+Evidence ceiling:
+Exercised on the x86_64 QEMU test-hooks lane. Production admission without test-hooks requires verified switch ordering without test-hooks bypass. Intel VMX/EPT guest execution remains open.

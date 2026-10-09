@@ -228,6 +228,15 @@ REQUIRED_MARKERS=(
     "pin-dying window:::S22-X86-PIN-DYING: PASS"
     "tier2-smoke launch:::Init: tier2-smoke admitted."
     "tier2-exploit launch:::Init: tier2-exploit admitted."
+    "cpp-smoke launch:::Init: cpp-smoke admitted."
+    "cpp-smoke static ctor:::[cpp-smoke] static-ctor marker=0xC0FFEE11"
+    "cpp-smoke virtual dispatch:::[cpp-smoke] virtual-dispatch area=37"
+    "cpp-smoke virtual delete:::[cpp-smoke] virtual-delete area=36"
+    "cpp-smoke templates:::[cpp-smoke] templates total=64"
+    "cpp-smoke heap churn:::[cpp-smoke] heap churn checksum="
+    "cpp-smoke vfs roundtrip:::[cpp-smoke] vfs client roundtrip bytes="
+    "cpp-smoke c-abi read:::[cpp-smoke] c-abi read magic=ELF"
+    "cpp-smoke complete:::CPP-SMOKE: PASS"
     "cross-tier provider launch:::Init: tier2-rpc-provider admitted."
     "cross-tier provider registration:::Init: tier2-rpc-provider registered."
     "cross-tier driver launch:::Init: tier2-rpc-driver launched."
@@ -236,6 +245,7 @@ REQUIRED_MARKERS=(
     "cross-tier Tier-1 to Tier-2:::[tier2-rpc] TIER1-TO-TIER2=OK"
     "cross-tier Tier-2 to Tier-1:::[tier2-rpc] TIER2-TO-TIER1=OK root_is_dir="
     "cross-tier oversize refusal:::[tier2-rpc] OVERSIZE=REFUSED"
+    "cross-tier invalid buffer refusal:::[tier2-rpc] INVALID-BUFFER=REFUSED"
     "cross-tier unauthorized method:::[tier2-rpc] UNAUTHORIZED-METHOD=REFUSED"
     "cross-tier provider gone:::[tier2-rpc] PROVIDER-GONE=none"
     "cross-tier stale descriptor:::[tier2-rpc] STALE-BINDING=REFUSED"
@@ -262,7 +272,7 @@ if grep -Fqa "[tier2-rpc] FAIL" "$LOG"; then
     grep -a "\[tier2-rpc\]" "$LOG" >&2
     exit 1
 fi
-for rejected in "OVERSIZE=ACCEPTED" "UNAUTHORIZED-METHOD=ACCEPTED" "STALE-BINDING=SERVED" "STALE-BINDING=ERROR"; do
+for rejected in "OVERSIZE=ACCEPTED" "INVALID-BUFFER=ACCEPTED" "UNAUTHORIZED-METHOD=ACCEPTED" "STALE-BINDING=SERVED" "STALE-BINDING=ERROR"; do
     if grep -Fqa "$rejected" "$LOG"; then
         echo "FAIL: the cross-tier exchange reported $rejected" >&2
         grep -a "\[tier2-rpc\]" "$LOG" >&2

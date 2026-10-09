@@ -36,7 +36,7 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
         // admission policy is still the only thing that decides whether they may
         // run as domains, and a production image (which has no such cells and no
         // qualified switch ordering) refuses them there.
-        | "/bin/tier2-smoke" | "/bin/tier2-exploit"
+        | "/bin/tier2-smoke" | "/bin/tier2-exploit" | "/bin/cpp-smoke"
         // Phase-02 slice B cross-tier exchange: the Tier-2 provider and the Tier-1
         // driver. Both ceilings are `CapSet::EMPTY` (neither spawns anything), so
         // this edge grants init nothing but the ability to launch them, and the

@@ -63,7 +63,7 @@ echo "==> Building Tier-2 domain cells (tier2-smoke, tier2-exploit)..."
 # loader classify them domain-class. They are the only cells in this image the
 # admission policy can admit to a private root.
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    -p tier2-smoke -p tier2-exploit
+    -p tier2-smoke -p tier2-exploit -p app-cpp-smoke
 
 echo "==> Building the cross-tier exchange cells (tier2-rpc-*), phase-02 slice B..."
 # The provider carries `PROTECTION_CLASS_UNTRUSTED` (domain-class); the driver is
@@ -88,6 +88,7 @@ CELL_BINARIES=(
     "$REL/tier2-exploit"
     "$REL/tier2-rpc-provider"
     "$REL/tier2-rpc-driver"
+    "$REL/cpp-smoke"
 )
 CELL_IMAGE_PATHS=(
     /bin/shell
@@ -104,6 +105,7 @@ CELL_IMAGE_PATHS=(
     /bin/tier2-exploit
     /bin/tier2-rpc-provider
     /bin/tier2-rpc-driver
+    /bin/cpp-smoke
 )
 
 echo "==> Verifying ${#CELL_BINARIES[@]} cell binaries..."

@@ -216,6 +216,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         crate::hal::cet::init_kernel_cet(); // LAYER2-CET-INIT
         crate::hal::pku::init(); // LAYER2-PKU-INIT (requires IBT, checked inside)
         crate::hal::syscall::init();
+        crate::hal::init_sse();
         // apic::init_lapic() deferred — needs MMIO mapped via custom PML4
     }
     #[cfg(not(target_arch = "x86_64"))]

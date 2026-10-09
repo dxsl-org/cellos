@@ -216,8 +216,8 @@ against a rebuilt kernel. The operator-facing `DRAINING` trigger is still absent
 is in-kernel and selftest-exercised). **Phase 02 is complete**: `cpp-freestanding` ships as a
 language subset whose C++ ABI runtime is the POSIX shim itself, with reference cell
 `cells/tests/cpp-smoke` and runner `scripts/qemu-cpp-smoke.sh` (`CPP-SMOKE-QEMU: PASS`, 9/9
-assertions on RV64; AArch64 build clean; x86_64 refused by design because the shim's C++ ABI layer
-is complete**. **Phase 03 is complete**: `SetTlsBase` gives each task its own user thread pointer
+assertions on RV64; AArch64 build clean; x86_64 qualified end-to-end in Tier 2 domain
+under CR3 isolation, `docs/evidence/c2c-x86-cpp-freestanding-runtime.txt`).
 (RV64 trap-frame `tp`, AArch64 `TPIDR_EL0`, x86_64 `FS_BASE`), and a thread inherits its creator's
 base. The scheduler publishes it under lock; AArch64/x86 install it before fresh `__trap_exit`
 entry and after switched-back resume; RV64 writes the child trap-frame carrier before scheduling.
