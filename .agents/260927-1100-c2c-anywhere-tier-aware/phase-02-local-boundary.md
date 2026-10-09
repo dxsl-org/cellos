@@ -152,6 +152,44 @@ Evidence: `docs/evidence/c2c-sdk-binding-x86.{txt,log}`; the lane is the x86_64
 `local-service-lifecycle` witness, whose leg S exercises the SDK itself, and the AArch64/RV64 `test-hooks`
 suites plus the local broker oracle were re-run with the change.
 
-**Not in this slice:** the stale-after-death half has no runtime witness yet (it needs a registered
-provider that dies, which is slice B's fixture); `libs/ai-sdk` keeps its own coarse transport error
-mapping; and `LocalEndpoint::call` still uses the synchronous path, which Phase 03 owns.
+**Not in this slice:** the stale-after-death half still has no runtime witness — it needs a *registered*
+provider that dies, and slice B's provider is tid-addressed because a private-root Cell cannot register
+(see § *Slice B progress*); `libs/ai-sdk` keeps its own coarse transport error mapping; and
+`LocalEndpoint::call` still uses the synchronous path, which Phase 03 owns.
+
+## Slice B progress (2026-10-09) — implemented and verified
+
+Admitted 2026-10-09 (owner: same C2C session) and landed the same day. The x86_64 test-hooks domain
+lane now runs a real cross-tier exchange, which it could not before: its only two Tier-2 fixtures did
+no IPC.
+
+| Piece | Location | Evidence |
+|---|---|---|
+| One postcard record each way, plus the FNV-1a checksum and the fixture's deliberately unregistered service id | `cells/tests/tier2-rpc-proto` | both cells share it, so they cannot drift |
+| Tier-2 provider: `PROTECTION_CLASS_UNTRUSTED`, capability-free, `Log/Exit/Send/Recv/LookupService`; serves two requests then exits | `cells/tests/tier2-rpc-provider` | `[domain] admitted cell 'tier2-rpc-provider' to Tier 2 Paged Domain (CR3 isolation)`, `provider-served 2` |
+| Tier-1 driver: reads the provider tid from the argv `init` stashed, drives every leg | `cells/tests/tier2-rpc-driver` | `driver-start provider=9` … `DRIVER-DONE` |
+| Boot order: provider first, then the driver handed the tid through the reviewed argv stash | `cells/tools/init` (`tier2-rpc-entry`) | `Init: tier2-rpc-provider admitted.` / `Init: tier2-rpc-driver launched.` |
+| Empty-cap loader rows for both paths | `kernel/src/loader/launch_profile/{profiles,targets}.rs`, `kernel/src/loader/boot_ceiling.rs` | the lane's markers |
+| Image packaging + asserted markers, including the refusals' *absence* forms | `scripts/build-x86_64-domain-test-ci.sh`, `scripts/x86/qemu-domain-test.sh` | `PASS: x86_64 Tier-2 domain-entry lane … every marker present` |
+
+Witnessed: **Tier-1 → Tier-2** (typed 512-byte payload, length *and* checksum verified);
+**Tier-2 → Tier-1** (the private-root provider calls the named VFS service through `ServiceRef`, i.e.
+through the frozen binding, and reports `is_dir=true` in its reply); **oversize frame** refused by the
+kernel before delivery while the provider was still waiting (it never accounted for it);
+**unauthorized method** refused by the receiver with no side effect; **stale descriptor** refused once
+the provider exited, with no retry onto another incarnation. Full evidence:
+`docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`; AArch64/RV64 `test-hooks` re-run with the shared
+kernel rows.
+
+**Not claimed here, and why:**
+
+1. **A named Tier-2 service.** `RegisterService` stays `SpawnCap`-gated, so a private-root Cell cannot
+   register; the exchange is tid-addressed through the argv handoff and the driver witnesses the
+   consequence (`PROVIDER-REGISTRY=NONE`). A registry-named Tier-2 service needs its own authority
+   decision — the next thing this phase wants and does not have.
+2. **A wrong user buffer on the syscall copy path.** Of the four pre-delivery refusals, this is the one
+   not re-created: a `#![forbid(unsafe_code)]` Cell cannot fabricate a pointer, and the
+   address-containment witness for that class already runs as `/bin/tier2-exploit` on the same lane.
+   A raw-pointer fixture would need its own unsafe-allowlist entry and review.
+3. **The unauthorized-method gate is receiver-side.** Generic local IPC has no per-method or byte-0
+   routing to enforce it in the kernel; that remains the open design question for the remote profile.

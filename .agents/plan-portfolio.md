@@ -70,6 +70,31 @@ authorization. Plans not admitted below are parked/historical.
   the Intel domain lane now runs to its own end.
   `LocalEndpoint::call` is unchanged: Phase 03 owns moving the SDK onto the bounded primitive; Phase 02
   step 1 owns making the SDK *consume* the frozen binding.
+- **Slice B admitted 2026-10-09 (same owner) — the cross-tier exchange**, still the only implementation
+  slice in flight after A landed: a new Tier-2 fixture provider (`/bin/tier2-rpc-provider`,
+  `PROTECTION_CLASS_UNTRUSTED`, capability-free) plus a Tier-1 driver (`/bin/tier2-rpc-driver`,
+  capability-free), both launched by `init` under a **new** `tier2-rpc-entry` feature so no other
+  image changes. The driver addresses the Tier-2 cell by the tid `init` hands it through the reviewed
+  argv stash, and the Tier-2 cell calls the *named* Tier-1 VFS service through the SDK. Touches: two
+  fixture crates, `cells/tools/init`, `kernel/src/loader/launch_profile/{profiles,targets}.rs`,
+  `kernel/src/loader/boot_ceiling.rs`, `scripts/build-x86_64-domain-test-ci.sh` and
+  `scripts/x86/qemu-domain-test.sh`. No new ABI, no new authority for any cell, no `RegisterService`
+  from a private root, no remote route.
+  **Landed 2026-10-09, evidence complete:** a new `tier2-rpc-entry` init feature (that image only)
+  launches the Tier-2 provider and then the Tier-1 driver with the provider's tid through the
+  reviewed argv stash; the driver's typed 512-byte request is answered with a verified length and
+  checksum, the private-root provider calls the **named** VFS service through `ServiceRef` (slice
+  A's binding) and reports `is_dir=true` in its reply, and the lane asserts the refusals as well as
+  their *absence* forms: `OVERSIZE=REFUSED`, `UNAUTHORIZED-METHOD=REFUSED`, `PROVIDER-REGISTRY=NONE`,
+  `STALE-PEER=REFUSED`. AArch64/RV64 `test-hooks` re-run green with the shared loader rows.
+  Evidence `docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`.
+  **Limitations recorded with the admission:** a private-root cell **cannot** register a service
+  (`RegisterService` stays `SpawnCap`-gated), so the Tier-2 side is tid-addressed rather than
+  registry-named — a genuinely *named* Tier-2 service needs its own authority decision and is not
+  claimed here. Of the phase's four pre-delivery refusals, three are witnessed (oversize frame,
+  dead/stale peer, unauthorized method) and the fourth — a wrong **user buffer** on the syscall copy
+  path — is not re-created: a `#![forbid(unsafe_code)]` cell cannot fabricate a pointer, and the
+  address-containment witness already runs as `/bin/tier2-exploit`.
 - **Phase 01 closed 2026-10-09 by contract-owner sign-off**, and with it **slice A of Phase 02
   admitted — the only implementation slice in flight** (WIP: one):
   **caller-side binding consumer** in `libs/ostd`: `ServiceRef` resolves and caches the frozen
@@ -89,8 +114,8 @@ authorization. Plans not admitted below are parked/historical.
   `SDK-BINDING-LIVE resolved=true unresolved=false`, `SDK-ABSENT-BINDING=REFUSED` — with the
   AArch64/RV64 `test-hooks` suites and the local broker oracle re-run green:
   `docs/evidence/c2c-sdk-binding-x86.{txt,log}`. **Not proven there:** the stale-after-death half has no
-  runtime witness yet — it needs a registered provider that dies, which is slice B's fixture — so the
-  rule itself is covered by host tests only. Slice B remains **not** admitted.
+  runtime witness yet — it needs a *registered* provider that dies, and slice B's provider is
+  tid-addressed (a private-root Cell cannot register) — so the rule is covered by host tests only.
 - **Phase-01 exit evidence recorded 2026-10-09:** all four success criteria carry evidence (contract
   table; the §2.4 state-transition matrix; Spec-20/Spec-17/ADR-0015/Spec-22/ADR-0008/0009 consistency,
   including the Spec 17 §9 record of the changed syscall surface; and the local oracle re-run —

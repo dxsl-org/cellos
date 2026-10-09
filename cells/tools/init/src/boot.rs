@@ -236,6 +236,32 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
         }
     }
 
+    // Phase-02 slice B: the cross-tier exchange. The Tier-2 provider goes first so
+    // the driver can be handed its tid; a private-root Cell cannot register a
+    // service (`RegisterService` is `SpawnCap`-gated), so the tid travels through
+    // the reviewed argv stash rather than the registry.
+    #[cfg(feature = "tier2-rpc-entry")]
+    {
+        match sys_spawn_from_path("/bin/tier2-rpc-provider") {
+            SyscallResult::Ok(provider) => {
+                ostd::io::println("Init: tier2-rpc-provider admitted.");
+                if !ostd::syscall::sys_set_spawn_args(&alloc::format!("{provider}")) {
+                    ostd::io::println("Init: tier2-rpc-driver argv stash failed.");
+                } else {
+                    match sys_spawn_from_path("/bin/tier2-rpc-driver") {
+                        SyscallResult::Ok(_) => {
+                            ostd::io::println("Init: tier2-rpc-driver launched.")
+                        }
+                        SyscallResult::Err(_) => {
+                            ostd::io::println("Init: tier2-rpc-driver spawn failed.")
+                        }
+                    }
+                }
+            }
+            SyscallResult::Err(_) => ostd::io::println("Init: tier2-rpc-provider spawn failed."),
+        }
+    }
+
     // Phase-03 step-5 pair, from the boot order (see `run_grant_pair`). It runs
     // before the services below so a generation's terminal fault can never race
     // the image's own test root, whose exit is what ends the boot.

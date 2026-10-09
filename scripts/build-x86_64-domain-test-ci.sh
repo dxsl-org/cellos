@@ -51,7 +51,7 @@ echo "==> Building base cells (init with tier2-entry, shell, vfs, config, platfo
 # `tier2-entry` is init-only: a multi-package `--features` would have to exist on
 # every selected package, so init is built on its own.
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    --features tier2-entry \
+    --features tier2-entry,tier2-rpc-entry \
     -p app-init
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p app-shell -p service-vfs -p service-config -p service-platform
@@ -64,6 +64,14 @@ echo "==> Building Tier-2 domain cells (tier2-smoke, tier2-exploit)..."
 # admission policy can admit to a private root.
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p tier2-smoke -p tier2-exploit
+
+echo "==> Building the cross-tier exchange cells (tier2-rpc-*), phase-02 slice B..."
+# The provider carries `PROTECTION_CLASS_UNTRUSTED` (domain-class); the driver is
+# an ordinary Tier-1 Cell. Neither holds a capability: the copied IPC path and the
+# shared `LookupService`/`LookupServiceBound` allowlist bit are all this fixture
+# needs, and `tier2-rpc-entry` in init is what schedules the pair.
+cargo build --release --target "$TARGET" -Z build-std=core,alloc \
+    -p tier2-rpc-provider -p tier2-rpc-driver
 
 CELL_BINARIES=(
     "$REL/app-shell"
@@ -78,6 +86,8 @@ CELL_BINARIES=(
     "$REL/ps"
     "$REL/tier2-smoke"
     "$REL/tier2-exploit"
+    "$REL/tier2-rpc-provider"
+    "$REL/tier2-rpc-driver"
 )
 CELL_IMAGE_PATHS=(
     /bin/shell
@@ -92,6 +102,8 @@ CELL_IMAGE_PATHS=(
     /bin/ps
     /bin/tier2-smoke
     /bin/tier2-exploit
+    /bin/tier2-rpc-provider
+    /bin/tier2-rpc-driver
 )
 
 echo "==> Verifying ${#CELL_BINARIES[@]} cell binaries..."

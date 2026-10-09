@@ -1,0 +1,17 @@
+[package]
+name = "tier2-rpc-provider"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+api  = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+tier2-rpc-proto = { path = "../tier2-rpc-proto", version = "0.1.0" }
+
+[[bin]]
+name = "tier2-rpc-provider"
+path = "src/main.rs"
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

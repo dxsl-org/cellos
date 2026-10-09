@@ -22,6 +22,12 @@ test-hooks = []
 # one whose boot ends before its shell becomes interactive, so the fixtures have
 # to be scheduled from the boot order rather than typed at a prompt.
 tier2-entry = []
+# When enabled, init launches the phase-02 slice B cross-tier exchange
+# (/bin/tier2-rpc-provider = Tier-2 private-root provider, then
+# /bin/tier2-rpc-driver = Tier-1 driver, handed the provider's tid through the
+# argv stash). Opted into only by scripts/build-x86_64-domain-test-ci.sh: those
+# two cells are packaged only in that image.
+tier2-rpc-entry = []
 # When enabled, init launches the phase-03 step-5 Tier-2 grant pair
 # (/bin/silo = owner, /bin/net-broker = receiver) from the boot order and drives
 # its five receiver generations to their deliberate store faults, so the pair runs

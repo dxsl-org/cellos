@@ -14,13 +14,16 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
 [current focus](../docs/roadmap/current-focus.md) before selecting any task.
 
-- [ ] **Slice B / Phase 03 await admission (owner decision).** Slice A landed 2026-10-09 (history in
-  `CHANGELOG.md`,
-  [`phase-02-local-boundary.md`](260927-1100-c2c-anywhere-tier-aware/phase-02-local-boundary.md) §
-  *Slice A progress*, evidence `docs/evidence/c2c-sdk-binding-x86.{txt,log}`). Slice B is the
-  Tier-1↔Tier-2 typed exchange on the x86 test-hooks domain lane — it adds cell fixtures and loader
-  launch-profile/ceiling rows, so it needs its own admission and review. Phase 03 owns moving
-  `LocalEndpoint::call` onto the bounded exact-operation primitive.
+- [ ] **Phase 03 (async lifecycle) and the two Phase-02 remainders await admission.** Slices A and B
+  both landed 2026-10-09 (history in `CHANGELOG.md`; records in
+  [`phase-02-local-boundary.md`](260927-1100-c2c-anywhere-tier-aware/phase-02-local-boundary.md) §§
+  *Slice A/Slice B progress*; evidence `docs/evidence/c2c-sdk-binding-x86.{txt,log}` and
+  `docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`).
+  Phase 03 owns moving `LocalEndpoint::call` onto the bounded exact-operation primitive.
+  Two Phase-02 remainders are **not** claimed by either slice and need their own decisions:
+  a registry-**named** Tier-2 service (a private-root Cell cannot `RegisterService`; that authority is
+  a decision, not a bug fix) and a wrong-**user-buffer** witness on the syscall copy path (needs a
+  raw-pointer fixture plus its own unsafe-allowlist entry).
   Law-1 is complete — checkpoint 2 recorded 2026-10-08, surface **FROZEN**, drift caught by
   `scripts/check-lookupservicebound-law1-digests.sh`.
   Resolved 2026-10-08: the x86_64 `test-hooks` alignment ledger check now warms to the

@@ -228,6 +228,15 @@ REQUIRED_MARKERS=(
     "pin-dying window:::S22-X86-PIN-DYING: PASS"
     "tier2-smoke launch:::Init: tier2-smoke admitted."
     "tier2-exploit launch:::Init: tier2-exploit admitted."
+    "cross-tier provider launch:::Init: tier2-rpc-provider admitted."
+    "cross-tier driver launch:::Init: tier2-rpc-driver launched."
+    "cross-tier Tier-1 to Tier-2:::[tier2-rpc] TIER1-TO-TIER2=OK"
+    "cross-tier Tier-2 to Tier-1:::[tier2-rpc] TIER2-TO-TIER1=OK root_is_dir="
+    "cross-tier oversize refusal:::[tier2-rpc] OVERSIZE=REFUSED"
+    "cross-tier unauthorized method:::[tier2-rpc] UNAUTHORIZED-METHOD=REFUSED"
+    "cross-tier provider unregistered:::[tier2-rpc] PROVIDER-REGISTRY=NONE"
+    "cross-tier stale descriptor:::[tier2-rpc] STALE-PEER=REFUSED"
+    "cross-tier driver done:::[tier2-rpc] DRIVER-DONE"
     "domain admission:::Tier 2 Paged Domain (CR3 isolation)"
     "domain cell ran:::S22-X86-DOMAIN-LIVE: PASS"
     "domain cell completed:::[tier2-smoke] PASS: All Tier 2 runtime invariants verified successfully!"
@@ -238,6 +247,24 @@ REQUIRED_MARKERS=(
 )
 
 bash scripts/assert-boot-markers.sh "$LOG" "$LABEL" "${REQUIRED_MARKERS[@]}"
+
+# --- Cross-tier exchange negatives -------------------------------------------
+# The fixture's own failure marker must be absent, and no leg may report that a
+# refusal was accepted: those are exactly the outcomes the exchange exists to rule
+# out, so their absence is asserted rather than assumed. `grep -Fqa` because the
+# markers contain characters the log's own ANSI stripping must not be re-interpreted.
+if grep -Fqa "[tier2-rpc] FAIL" "$LOG"; then
+    echo "FAIL: the cross-tier fixture reported a failure:" >&2
+    grep -a "\[tier2-rpc\]" "$LOG" >&2
+    exit 1
+fi
+for rejected in "OVERSIZE=ACCEPTED" "UNAUTHORIZED-METHOD=ACCEPTED" "PROVIDER-REGISTRY={"; do
+    if grep -Fqa "$rejected" "$LOG"; then
+        echo "FAIL: the cross-tier exchange reported $rejected" >&2
+        grep -a "\[tier2-rpc\]" "$LOG" >&2
+        exit 1
+    fi
+done
 
 echo "PCID decision: $DECISION"
 echo "Domain live:   $LIVE"

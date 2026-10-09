@@ -1,0 +1,104 @@
+C2C Phase-02 slice B — the cross-tier exchange (x86_64 QEMU, 2026-10-09)
+==========================================================================
+
+What this records
+-----------------
+A real typed request/reply between a Tier-1 Cell and an admitted private-root Tier-2
+Cell, in **both** directions, on the Intel test-hooks domain lane — plus the
+pre-delivery refusals the phase's step 2 asks for. Phase 02 step 2 was previously
+unreachable on Intel: the image's only two Tier-2 fixtures (`/bin/tier2-smoke`,
+`/bin/tier2-exploit`) do no IPC at all.
+
+What was built
+--------------
+  * `cells/tests/tier2-rpc-proto` — the fixture's one postcard record each way, so the
+    two cells cannot drift from one shape: `EchoRequest { method, nonce, payload }`,
+    `EchoResponse { …, payload_len, payload_checksum, vfs_stat_ok, vfs_root_is_dir,
+    error }`, an FNV-1a checksum and the fixture's (deliberately unregistered) service
+    id.
+  * `cells/tests/tier2-rpc-provider` — `/bin/tier2-rpc-provider`, launched into a
+    private root: manifest `PROTECTION_CLASS_UNTRUSTED`, **no** capability bits, and
+    only `Log, Exit, Send, Recv, LookupService` declared. It serves two requests and
+    exits.
+  * `cells/tests/tier2-rpc-driver` — `/bin/tier2-rpc-driver`, an ordinary Tier-1 Cell
+    with `Log, Exit, Send, Recv, Yield, LookupService, StateRestore`. It reads the
+    provider's tid from the argv `init` stashed and drives every leg.
+  * Wiring: a new `tier2-rpc-entry` init feature (opted into by
+    `scripts/build-x86_64-domain-test-ci.sh` alone, so no other image changes), the
+    provider-then-driver boot order in `cells/tools/init/src/boot.rs`, and empty-cap
+    loader rows for both paths in
+    `kernel/src/loader/launch_profile/{profiles,targets}.rs` and
+    `kernel/src/loader/boot_ceiling.rs`.
+
+No new ABI, no new authority for any cell, no `RegisterService` from a private root, no
+remote route, and no change to any other lane's image.
+
+How to reproduce
+----------------
+  bash scripts/build-x86_64-domain-test-ci.sh
+  BOOT_WINDOW=90 bash scripts/x86/qemu-domain-test.sh
+
+The lane asserts every marker below, and asserts the **absence** of the refusal legs'
+accepted forms and of the fixture's own failure marker. Raw log:
+`c2c-cross-tier-exchange-x86.log`.
+
+Observed (raw log lines, this run)
+----------------------------------
+  [domain] admitted cell 'tier2-rpc-provider' to Tier 2 Paged Domain (CR3 isolation)
+  Init: tier2-rpc-provider admitted.
+  Init: tier2-rpc-driver launched.
+  [tier2-rpc] driver-start provider=9
+  [tier2-rpc] provider-vfs-stat ok is_dir=true
+  [tier2-rpc] provider-echo nonce=1511456769 len=512 vfs_ok=true
+  [tier2-rpc] TIER1-TO-TIER2=OK
+  [tier2-rpc] TIER2-TO-TIER1=OK root_is_dir=true
+  [tier2-rpc] OVERSIZE=REFUSED
+  [tier2-rpc] provider-refused-unauthorized-method
+  [tier2-rpc] provider-served 2
+  [tier2-rpc] UNAUTHORIZED-METHOD=REFUSED
+  [tier2-rpc] PROVIDER-REGISTRY=NONE
+  [tier2-rpc] provider-exiting
+  [tier2-rpc] STALE-PEER=REFUSED
+  [tier2-rpc] DRIVER-DONE
+
+Leg by leg
+----------
+  * **Tier-1 → Tier-2** — the Tier-1 driver's typed call with a 512-byte payload is
+    delivered to the private-root provider and answered. The reply carries the
+    payload's length *and* checksum, so a truncated, reordered or substituted body
+    cannot pass as an echo; the driver fails the boot if either disagrees.
+  * **Tier-2 → Tier-1** — the provider resolves the **named** Tier-1 VFS service
+    through the shipped SDK (`ServiceRef`, which since slice A resolves the
+    `LookupServiceBound` binding) and performs a typed `Stat("/")` from inside its
+    private root, reporting the outcome inside its reply. `is_dir=true` is the
+    service's own answer, not the fixture's.
+  * **Oversize frame** — while the provider is still waiting for its second request,
+    the driver sends `IPC_BUF_SIZE + 1` bytes. The kernel refuses it before delivery,
+    and the provider never sees it: its own `provider-served 2` line accounts for
+    exactly the two typed requests.
+  * **Unauthorized method** — the driver asks for `METHOD_UNAUTHORIZED`; the provider
+    answers a typed refusal (`error="unauthorized-method"`) with no side effect and
+    logs that it refused. Note this is a **receiver-side** gate: generic local IPC has
+    no per-method or byte-0 routing to enforce it in the kernel, which is the design
+    question the phase file records for the remote profile.
+  * **Stale descriptor** — the provider exits after its budget; the driver retries a
+    send to the dead tid until the kernel refuses it, and fails the boot if the tid
+    keeps accepting frames. Nothing is delivered and nothing is retried onto another
+    incarnation. The retry exists because a message to a peer that is still shutting
+    down is not a stale descriptor — the refusal must be observed, not assumed.
+
+What this does **not** claim
+----------------------------
+  * **A named Tier-2 service.** A private-root Cell cannot register
+    (`RegisterService` stays `SpawnCap`-gated), so the Tier-2 side of this exchange is
+    addressed by the tid `init` hands the driver, not by the registry — the driver
+    witnesses that consequence (`PROVIDER-REGISTRY=NONE`). A genuinely registry-named
+    Tier-2 service needs its own authority decision.
+  * **A wrong user buffer on the syscall copy path.** Of the phase's four pre-delivery
+    refusals, this is the one not re-created here: a `#![forbid(unsafe_code)]` Cell
+    cannot fabricate a pointer, and the address-containment witness for that class
+    already runs as `/bin/tier2-exploit` on this same lane (a private-root write to
+    peer/kernel/NULL memory). Creating a raw-pointer fixture would need its own
+    unsafe-allowlist entry and its own review.
+  * **Anything about the bounded/async lifecycle**: the exchange is the synchronous
+    copied typed call, which Phase 03 owns moving onto the exact-operation primitive.

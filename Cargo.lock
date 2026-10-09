@@ -3041,6 +3041,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "tier2-rpc-driver"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "tier2-rpc-proto",
+]
+
+[[package]]
+name = "tier2-rpc-proto"
+version = "0.1.0"
+dependencies = [
+ "postcard",
+ "serde",
+]
+
+[[package]]
+name = "tier2-rpc-provider"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "tier2-rpc-proto",
+]
+
+[[package]]
 name = "tier2-smoke"
 version = "0.1.0"
 dependencies = [

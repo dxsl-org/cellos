@@ -41,6 +41,8 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/wx-test"
         | "/bin/tier2-exploit"
         | "/bin/tier2-smoke"
+        | "/bin/tier2-rpc-provider"
+        | "/bin/tier2-rpc-driver"
         | "/bin/std-smoke"
         | "/bin/desktop"
         | "/bin/ocel"
