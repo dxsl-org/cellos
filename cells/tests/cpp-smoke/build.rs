@@ -43,7 +43,21 @@ fn main() {
         .flag("-Wall")
         .flag("-Wextra");
 
-    if target.starts_with("riscv64") {
+    let env_key = target.replace('-', "_");
+    let custom_cxx = std::env::var(format!("CXX_{env_key}"))
+        .or_else(|_| std::env::var("CXX"))
+        .ok();
+
+    if let Some(cxx) = custom_cxx {
+        build.compiler(cxx);
+        if target.starts_with("riscv64") {
+            build.flag("-mabi=lp64d");
+        } else if target.starts_with("aarch64") {
+            build.flag("-mgeneral-regs-only");
+        } else if target.starts_with("x86_64") {
+            build.flag("-mno-red-zone").flag("-mcmodel=small");
+        }
+    } else if target.starts_with("riscv64") {
         if have("riscv64-unknown-elf-g++") {
             build
                 .compiler("riscv64-unknown-elf-g++")
@@ -79,6 +93,21 @@ fn main() {
                 "no AArch64 C++ compiler: install `g++-aarch64-linux-gnu` (or clang) — \
                  see docs/guides/tier1b-c-zig.md"
             );
+        }
+    } else if target.starts_with("x86_64") {
+        if have("g++") {
+            build
+                .compiler("g++")
+                .flag("-mno-red-zone")
+                .flag("-mcmodel=small");
+        } else if have("clang++") {
+            build
+                .compiler("clang++")
+                .flag("--target=x86_64-unknown-none-elf")
+                .flag("-mno-red-zone")
+                .flag("-mcmodel=small");
+        } else {
+            panic!("no x86_64 C++ compiler: install g++ or clang++");
         }
     } else {
         // The profile's runtime layer is the POSIX shim's C++ ABI
