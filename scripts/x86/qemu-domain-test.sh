@@ -226,6 +226,7 @@ REQUIRED_MARKERS=(
     "private-root plan:::S22-X86-PLAN: PASS"
     "same-domain resume:::S22-X86-RESUME-ROOT: PASS"
     "pin-dying window:::S22-X86-PIN-DYING: PASS"
+    "vfs-lifetime and grant quarantine:::vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)"
     "tier2-smoke launch:::Init: tier2-smoke admitted."
     "tier2-exploit launch:::Init: tier2-exploit admitted."
     "cpp-smoke launch:::Init: cpp-smoke admitted."

@@ -1,0 +1,39 @@
+C2C Phase 03: concurrent input streaming under pending RPC witness (2026-10-09)
+
+Scope: new fixture witness in cells/tests/bench/src/scenarios/local_service_lifecycle.rs and bench-probe role dispatch (`c2c-input-provider`, `c2c-input-source`). Proves that active asynchronous RPCs remain pending and uncorrupted while an independent input source streams continuous input events to the caller, and that neither stream corrupts, settles, or leaks into the other.
+
+Scenario and observed behavior:
+- Caller submits 8 outstanding asynchronous RPC calls to `c2c-input-provider` using `ostd::ipc::PendingCall::submit`.
+- Provider captures all 8 operations and deliberately holds them without replying until signaled.
+- Caller spawns `c2c-input-source`, which generates a continuous burst of 32 synthetic input event frames (`[tag=0 (Key), state=seq%2, scancode=seq, marker=0xAA]`) to the caller's mailbox.
+- Caller drains all 32 input frames one-by-one from its mailbox, verifying:
+  1. Exact sequence, sender identity, and frame payload integrity.
+  2. Every one of the 8 in-flight RPC calls remains strictly pending (`try_take == Ok(None)`).
+- After all 32 input events are drained, caller signals provider to release all 8 replies (`ostd::ipc::reply`).
+- Caller drains all 8 RPC replies with `take_reply`, verifying:
+  1. Exact sequence and 2-byte payload correlation (`[REQ_TAG, seq]`).
+  2. Each token transitions to terminal `Reply` and rejects subsequent retries (`InvalidOperation`).
+- Caller inspects its raw IPC mailbox with `sys_try_recv`: zero leaked RPC replies or misplaced frames (misplaced=0).
+- Observed marker:
+  `[local-lifecycle] CONCURRENT-INPUT=OK rpc_calls=8 input_events=32 rpc_settled=false rpc_drained=8 input_drained=32 misplaced=0`
+  `[local-lifecycle] PASS`
+  `[async-lifecycle] PASS`
+
+Verification:
+- bash scripts/build-x86_64-c2c-lifecycle-ci.sh: PASS; F1/F5 signing PASS.
+- cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test local-service-lifecycle-x86: 2 passed in 38.06s.
+- bash scripts/check-lookupservicebound-law1-digests.sh: PASS.
+
+Independent serial smoke runtime:
+- QEMU q35, cpu qemu64,+pdpe1gb, 256 MiB, nographic, CD-ROM boot d, no reboot, monitor none, localhost TCP socket serial.
+- Settle 0.5s before commands, fresh prompt after each command.
+- ISO: build/vicell-x86-c2c-lifecycle.iso (sha256: d182b367b65a43c14e334789e05c625d297d4f5adfe6fb894aedcf328628fecb)
+- Kernel: build/x86-c2c-lifecycle-iso-root/boot/kernel.elf (sha256: 917052ad3beb5cb205b4eacb29febb244c9fa5aa6962810ede8b0033471f0c1c)
+- Raw serial log: docs/evidence/c2c-concurrent-input-x86.log (28534 bytes)
+- vwrite /tmp/c2c-input.txt CONCURRENT_INPUT_SERIAL_OK then vcat returned exact string.
+- local lifecycle: 36.96s wallclock (PASS, no FAIL).
+- async lifecycle: 0.08s wallclock (PASS, no FAIL).
+- Total QEMU session: 43.86s.
+
+Evidence ceiling:
+Demonstrates non-interference and channel isolation between streaming input frames (mailbox) and asynchronous RPC operations (kernel operation table) in single-caller x86 QEMU. Multi-source completion waiting (`WaitCompletion` expansion), deterministic two-hart publication/wake race proof, abandoned-caller grant lifetime, and physical Intel qualification remain separate open obligations.

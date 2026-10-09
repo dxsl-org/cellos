@@ -15,8 +15,8 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
 [current focus](../docs/roadmap/current-focus.md) before selecting any task.
 
 - [ ] **Phase 03 remaining proof obligations:** multi-source waiting, deterministic
-  two-hart publication/wake, full restart/multi-caller fairness/concurrent-input
-  matrix and abandoned caller grant-lifetime proof. The single-caller saturation,
+  two-hart publication/wake, and full restart/multi-caller fairness matrix.
+  The single-caller saturation,
   real deadline and queued caller-death witnesses now run on x86 QEMU:
   `docs/evidence/c2c-saturation-deadline-caller-death-x86.{txt,log}`.
   Provider task replacement and third-Cell raw-event coexistence are exercised
@@ -29,6 +29,12 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
   (192 calls across A/B) are exercised in
   `docs/evidence/c2c-peer-pressure-x86.{txt,log}`; unbounded queue monopolization
   fairness remains open.
+  Concurrent input streaming (8 RPCs held pending during 32 input frames, zero
+  interference, exact drain) is exercised in
+  `docs/evidence/c2c-concurrent-input-x86.{txt,log}`.
+  Abandoned caller grant lifetime, exact lease release and quarantine retention
+  are asserted on the x86 domain lane (`scripts/x86/qemu-domain-test.sh`
+  `vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)`).
   No new completion source or remote route.
   Contract: [Spec 20 §2.6](../docs/specs/20-unified-ipc-contract.md); implementation
   and exercised evidence are recorded in
@@ -48,9 +54,9 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
 - [ ] **Chuyển đổi từng bước sang Zig CC (`zig cc` / `zig c++`) làm C/C++ cross-compiler backend:**
   Thống nhất hạ tầng cross-compilation C/C++ (thay thế bộ ba `gcc-riscv64-unknown-elf`, `gcc-aarch64-linux-gnu`, `g++`/`clang` phân tán) bằng 1 binary `zig cc`/`zig c++` đóng gói Clang/LLD cho cả 3 kiến trúc đích (`riscv64`, `aarch64`, `x86_64` freestanding).
   - *Nguyên tắc:* Không thay thế Cargo, rustc hay rust-lld; giữ nguyên linker script `libs/cell-build`, crt0 `libs/ostd`, và POSIX shim / mlibc runtime của Cellos.
-  - *Pha 1 (Tooling wrapper & flag adapter):* Tạo `tools/cellos-zig-cc` và `tools/cellos-zig-cxx` bọc `zig cc`, tự động chuyển `-march=rv64gc` thành `-mcpu=generic_rv64+m+a+f+d+c` và ép `-target <arch>-freestanding-none`.
-  - *Pha 2 (Thí điểm cell C độc lập):* Áp dụng thử nghiệm trên các cell kiểm thử nhỏ (`cells/tests/c-pthread`, `cells/demos/tetris-c`).
-  - *Pha 3 (C++ freestanding):* Cập nhật `cells/tests/cpp-smoke/build.rs` tôn trọng biến `CXX_<target>` wrapper thay vì hardcode tên compiler `g++`/`clang++`.
+  - *Pha 1 (Tooling wrapper & flag adapter) [done]:* Tạo `tools/cellos-zig-cc` và `tools/cellos-zig-cxx` bọc `zig cc`, tự động chuyển `-march=rv64gc` thành `-mcpu=generic_rv64+m+a+f+d+c` và ép `-target <arch>-freestanding-none`.
+  - *Pha 2 (Thí điểm cell C độc lập) [done]:* Áp dụng thành công trên `cells/tests/c-pthread` và `cells/demos/tetris-c`, tích hợp tự động qua `repo_wrapper` và cờ `CELLOS_USE_ZIG`.
+  - *Pha 3 (C++ freestanding) [done]:* Cập nhật `cells/tests/cpp-smoke/build.rs` tôn trọng wrapper `tools/cellos-zig-cxx` và cờ C++ freestanding trên cả 3 kiến trúc (`riscv64`, `x86_64`, `aarch64`).
   - *Pha 4 (Crate phức tạp):* Đánh giá và di chuyển có kiểm soát cho `cells/runtimes/lua`, `cells/services/ocel-quickjs`, `cells/demos/doom`, và `cells/services/ocel-pdf`. `littlefs2-sys` vẫn giữ `libclang-dev` cho bindgen.
   - *Báo cáo nghiên cứu cơ sở:* `.agents/reports/research-261009-1530-zig-compiler-cross-compile-c-cpp-evaluation.md`.
 

@@ -716,6 +716,126 @@ fn event_coexistence_leg() {
     println("[local-lifecycle] EVENT-COEXISTENCE=OK raw_event=received rpc_pending=true reply=correlated raw_reply_absent=true");
 }
 
+/// Exercise concurrent input streaming while multiple RPC calls remain pending.
+///
+/// Submits 8 outstanding calls to an RPC provider, then receives a stream of 32 input
+/// events (key and pointer scancodes) from an independent input source. Verifies that
+/// throughout the entire input stream, none of the 8 RPC operations settle or leak.
+/// Then releases the provider to answer all 8 calls, takes each reply, and verifies
+/// zero misplaced frames in the raw mailbox.
+#[allow(dead_code)]
+pub fn run_concurrent_input_provider() -> ! {
+    let mut bytes = [0u8; 32];
+    let caller = bounded_recv(0, &mut bytes);
+    if bytes[..2] != [CONTROL_TAG, 0] {
+        fail("concurrent input provider setup");
+    }
+    raw_send(caller, &[CONTROL_TAG, 0]);
+    let mut operations = [0usize; 8];
+    for (i, op) in operations.iter_mut().enumerate() {
+        let sender = bounded_recv(caller, &mut bytes);
+        if sender != caller || bytes[..2] != [REQ_TAG, i as u8] {
+            fail("concurrent input provider request sequence");
+        }
+        *op = ostd::ipc::current().unwrap_or_else(|| fail("concurrent input token"));
+        raw_send(caller, &[CONTROL_TAG, i as u8]);
+    }
+    // Hold all 8 operations pending until caller signals input stream is drained
+    control_recv(caller, 0xFE);
+    for (i, op) in operations.iter().enumerate() {
+        if ostd::ipc::reply(*op, &[REQ_TAG, i as u8]).is_err() {
+            fail("concurrent input provider reply");
+        }
+    }
+    raw_send(caller, &[CONTROL_TAG, 0xFF]);
+    sys_exit(0)
+}
+
+#[allow(dead_code)]
+pub fn run_concurrent_input_source() -> ! {
+    let mut bytes = [0u8; 32];
+    let caller = bounded_recv(0, &mut bytes);
+    if bytes[..2] != [CONTROL_TAG, 0] {
+        fail("concurrent input source setup");
+    }
+    for seq in 0..32u8 {
+        // Encode synthetic input event: [tag=0 (Key), state=(seq % 2), scancode=seq, marker=0xAA]
+        let event_frame = [0x00, seq % 2, seq, 0xAA];
+        raw_send(caller, &event_frame);
+    }
+    raw_send(caller, &[CONTROL_TAG, 0xEE]);
+    sys_exit(0)
+}
+
+fn concurrent_input_leg() {
+    let provider = spawn_probe("c2c-input-provider")
+        .unwrap_or_else(|_| fail("concurrent input provider spawn"));
+    raw_send(provider, &[CONTROL_TAG, 0]);
+    control_recv(provider, 0);
+
+    let mut calls = Vec::with_capacity(8);
+    for i in 0..8u8 {
+        calls.push(ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, i])
+            .unwrap_or_else(|_| fail("concurrent input submit")));
+        control_recv(provider, i);
+    }
+
+    let mut bytes = [0u8; 32];
+    for call in &calls {
+        if call.try_take(&mut bytes) != Ok(None) {
+            fail("concurrent input RPC settled before input stream");
+        }
+    }
+
+    let source = spawn_probe("c2c-input-source")
+        .unwrap_or_else(|_| fail("concurrent input source spawn"));
+    raw_send(source, &[CONTROL_TAG, 0]);
+
+    let mut input_events_drained = 0u8;
+    for seq in 0..32u8 {
+        let sender = bounded_recv(source, &mut bytes);
+        if sender != source || bytes[..4] != [0x00, seq % 2, seq, 0xAA] {
+            fail("concurrent input event mismatch");
+        }
+        input_events_drained += 1;
+        // Verify none of the pending RPCs was settled or corrupted by this input event
+        for call in &calls {
+            if call.try_take(&mut bytes) != Ok(None) {
+                fail("concurrent input event settled pending RPC");
+            }
+        }
+    }
+    control_recv(source, 0xEE);
+
+    // Release provider to reply to all 8 calls
+    raw_send(provider, &[CONTROL_TAG, 0xFE]);
+    control_recv(provider, 0xFF);
+
+    let mut rpc_drained = 0u8;
+    for (i, call) in calls.iter().enumerate() {
+        take_reply(call, i as u8);
+        rpc_drained += 1;
+    }
+
+    // Verify raw mailbox is clean (no leaked RPC replies)
+    let misplaced = match ostd::syscall::sys_try_recv(0, &mut bytes) {
+        SyscallResult::Ok(0) => 0,
+        _ => 1,
+    };
+    if misplaced != 0 {
+        fail("concurrent input misplaced messages in raw mailbox");
+    }
+
+    println(&format!(
+        "[local-lifecycle] CONCURRENT-INPUT=OK rpc_calls={} input_events={} rpc_settled=false rpc_drained={} input_drained={} misplaced={}",
+        calls.len(),
+        input_events_drained,
+        rpc_drained,
+        input_events_drained,
+        misplaced
+    ));
+}
+
 /// Accept A's full owner quota without replying, then serve independent caller B.
 #[allow(dead_code)]
 pub fn run_multi_caller_provider() -> ! {
@@ -1163,6 +1283,7 @@ pub fn run() -> ! {
     caller_death_leg();
     restart_leg();
     event_coexistence_leg();
+    concurrent_input_leg();
     multi_caller_leg();
     peer_pressure_leg();
     println("[local-lifecycle] PASS");

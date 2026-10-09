@@ -8,6 +8,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- C2C Phase 03 abandoned caller grant-lifetime proof: asserted kernel VFS lease
+  quarantine and atomic release invariants as a required gate on the x86 domain lane
+  (`scripts/x86/qemu-domain-test.sh`). Proves that owner death leaves in-flight grant
+  leases quarantined, spurious releases with wrong owner or generation are refused,
+  underlying memory frames remain withheld from the allocator, and only exact holder
+  completion clears quarantine and restores baseline frame counts.
+- Unified Zig C/C++ cross-compiler pilot (Phases 2 & 3): integrated `tools/cellos-zig-cc`
+  and `tools/cellos-zig-cxx` into build recipes for independent C cells (`c-pthread`,
+  `tetris-c`) and freestanding C++ (`cpp-smoke`). Added automatic in-tree wrapper
+  detection and `CELLOS_USE_ZIG` environment toggle. Verified clean compilation across
+  all 3 targets (`riscv64gc-unknown-none-elf`, `x86_64-unknown-none`, and
+  `aarch64-unknown-none-softfloat`) with exact ELF64 relocation and ABI compatibility.
+- C2C concurrent input streaming under pending RPC witness: active Cell holding
+  8 outstanding asynchronous RPC calls receives a sustained stream of 32 synthetic
+  input event frames (key and pointer scancodes) from an independent input source;
+  verified zero premature settlements, exact ordered input delivery, exact 8 RPC
+  reply correlations, and zero leaked messages in the raw mailbox. Fixture and
+  integration regression only; production kernel/SDK and ABI unchanged.
+  Evidence: `docs/evidence/c2c-concurrent-input-x86.{txt,log}`.
 - Three-file cold-boot TOML configuration: `/etc/cellos/system.toml` supplies
   kernel logging and bounded default cell heap charges directly from VIFS1;
   `services.toml` selects services after fixed storage/VFS bootstrap; and

@@ -300,6 +300,35 @@ socket serial smoke: local lifecycle PASS in 33.37s, async lifecycle PASS in
 0.10s, shell prompts settled and returned cleanly.
 Evidence ceiling: finite contention only; unbounded anti-starvation remains open.
 
+## Concurrent input streaming under pending RPC slice
+
+Exercise an active Cell holding 8 outstanding asynchronous RPC calls while concurrently
+receiving a sustained stream of 32 synthetic input event frames (key and pointer scancodes)
+from an independent input source. Prove that raw mailbox input frames do not settle or corrupt
+pending RPC operations, that all input frames are drained in order without interference,
+and that subsequently released RPC replies correlate exactly without leaking into the raw mailbox.
+
+Completed evidence: `docs/evidence/c2c-concurrent-input-x86.{txt,log}`.
+Observed 8 pending calls held throughout 32 input event deliveries, zero premature or
+corrupted settlements during the stream, 8 exact correlated RPC completions taken once,
+and empty mailbox (`misplaced=0`).
+No production kernel/SDK or ABI changes. Integration tests (2 PASS in 38.06s),
+F1/F5 signing and frozen LookupServiceBound check passed. Independent QEMU
+socket serial smoke: local lifecycle PASS in 36.96s, async lifecycle PASS in
+0.08s, fresh shell prompts.
+Evidence ceiling: software-only x86 QEMU single-caller input non-interference.
+Multi-source completion waiting, two-hart publication/wake proof, and physical Intel qualification remain open.
+
+## Abandoned caller grant-lifetime proof
+
+The kernel's `vfs_lifecycle_selftest` verifies that caller grant leases cannot be freed,
+corrupted or reused across cancellation or owner exit. When an operation's owner dies,
+`mark_vfs_lease_pending_revoke` transitions the lease to quarantined; unassociated or
+stale releases are refused and the underlying memory frames remain withheld from the frame
+allocator until the service completes or drops the exact request generation. This invariant
+is asserted as a required gate on the x86 domain lane (`scripts/x86/qemu-domain-test.sh`:
+`vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)`).
+
 ## Deviation log
 
 The replacement witness exposed premature round exhaustion in the SDK helper.

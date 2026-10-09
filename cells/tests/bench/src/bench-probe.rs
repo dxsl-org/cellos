@@ -70,6 +70,8 @@ fn cell_main() {
         "c2c-restart-new" => scenarios::local_service_lifecycle::run_restart_new(),
         "c2c-event-provider" => scenarios::local_service_lifecycle::run_event_provider(),
         "c2c-raw-event" => scenarios::local_service_lifecycle::run_raw_event_source(),
+        "c2c-input-provider" => scenarios::local_service_lifecycle::run_concurrent_input_provider(),
+        "c2c-input-source" => scenarios::local_service_lifecycle::run_concurrent_input_source(),
         "c2c-multi-provider" => scenarios::local_service_lifecycle::run_multi_caller_provider(),
         "c2c-pressure-provider" => scenarios::local_service_lifecycle::run_pressure_provider(),
         "load" => scenarios::rt_load::run_load(),

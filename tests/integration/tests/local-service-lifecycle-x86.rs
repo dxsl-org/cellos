@@ -129,6 +129,7 @@ fn x86_dead_provider_terminates_sync_and_async_calls() {
         "[local-lifecycle] CALLER-DEATH=OK queued=4 exit_observed=true dead_delivered=0 fresh=Reply",
         "[local-lifecycle] RESTART=OK old=PeerGone replacement=Reply old_token=refused dead_submit=PeerGone",
         "[local-lifecycle] EVENT-COEXISTENCE=OK raw_event=received rpc_pending=true reply=correlated raw_reply_absent=true",
+        "[local-lifecycle] CONCURRENT-INPUT=OK rpc_calls=8 input_events=32 rpc_settled=false rpc_drained=8 input_drained=32 misplaced=0",
         "[local-lifecycle] MULTI-CALLER=OK a_held=64 a_busy=2 a_drained=64 b_replies=2 wrong_correlation=0 busy_delivered=0",
         "[local-lifecycle] PRESSURE-PROVIDER=OK a=128 b=64 duplicate=0 extra_delivery=0",
         "[local-lifecycle] PEER-PRESSURE=OK a=128 b=64 completions=192 initial_peer_busy=true duplicate=0 wrong_correlation=0",
