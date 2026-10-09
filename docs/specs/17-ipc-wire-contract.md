@@ -273,6 +273,24 @@ the reason the value is safe against existing owners.
   hot-swap does not serialize open handles, and the handle path stays message-
   only with no fast arm, async, grant, or raw-pointer lifetime. The §3 postcard
   range widens to `0x19`.
+- 2026-10-08 — **Recorded for a changed syscall surface; no ratified wire rule moved:**
+  `ViSyscall::LookupServiceBound = 429` was added (`libs/api/src/abi/syscall.rs`) and shares
+  the syscall **allowlist bit 37** with `LookupService = 206`, which owns it as an open
+  syscall — the same sharing form already used by the `ReadCap`/`WriteCap` cap syscalls, and
+  the reason no cell's pre-existing `__ViCell_syscalls` section is silently denied. No frame,
+  byte-0 discriminant, envelope layout, attested tail, buffer size or reply discipline
+  changes: the opcode carries no message leg, writes one fixed 24-byte
+  `{tid, cell_id, generation}` record, and `LookupService = 206` stays byte-compatible. The
+  §9 checklist items that concern message legs therefore do not apply; the one that does —
+  no silent-empty/drop/fallback (§7) — holds, because a short buffer returns
+  `SyscallError::BufferTooSmall` and a provider with no live recorded identity answers `0`
+  rather than a binding the kernel cannot stand behind. Governance is separate and complete:
+  [ADR-0023](../decisions/0023-local-service-generation-binding.md) plus both Law-1
+  confirmations (`.agents/260927-1100-c2c-anywhere-tier-aware/law1-lookupservicebound.md`),
+  with the confirmed revision pinned by
+  `scripts/check-lookupservicebound-law1-digests.sh`. Recorded here because §9 is the
+  amendment log for a ratified IPC surface and this surface changed — not as a wire
+  amendment.
 
 ---
 

@@ -14,14 +14,24 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
 [current focus](../docs/roadmap/current-focus.md) before selecting any task.
 
-- [ ] Close the tier-aware C2C Phase 01 contract/review entry gates; identify the
-  next local Intel/x86 C2C acceptance scenario without enabling blocked routes.
+- [ ] Close the tier-aware C2C Phase 01 contract/review entry gates; the next local
+  Intel/x86 C2C acceptance scenario is now identified and awaits activation.
   Local generation binding is **design-decided** ([ADR-0023](../docs/decisions/0023-local-service-generation-binding.md))
   and **implemented 2026-10-08**: kernel-repair handoff granted, `LookupServiceBound = 429` +
   registry `(tid, cell_id, generation)` + dispatch + both `next_task_id` guards landed, verified on
   Intel x86_64 QEMU and the AArch64 test-hooks lane.
-  Outstanding: **contract-owner sign-off** for Phase 01. Law-1 is complete — checkpoint 2 recorded
-  2026-10-08, surface **FROZEN**, confirmed revision and digests in
+  **Exit evidence for all four Phase-01 success criteria is recorded 2026-10-09**
+  ([`phase-01-contract.md`](260927-1100-c2c-anywhere-tier-aware/phase-01-contract.md) § *Exit-gate
+  evidence review*): the contract table, the §2.4 state-transition matrix, the Spec-20/Spec-17/
+  ADR-0015/Spec-22/ADR-0008/0009 consistency pass (including the Spec 17 §9 record of the changed
+  syscall surface) and the local oracle re-run
+  (`docs/evidence/c2c-broker-oracle-qemu-local.{txt,log}`). None of the four is ticked — they are
+  contract-owner acceptances — so **contract-owner sign-off** stays the open item, and with it the
+  decision to activate a Phase-02 slice:
+  [slice A](260927-1100-c2c-anywhere-tier-aware/phase-02-local-boundary.md) (SDK consumes the frozen
+  binding; no new ABI) then slice B (the Tier-1↔Tier-2 exchange on the x86 test-hooks domain lane).
+  Law-1 is complete — checkpoint 2 recorded 2026-10-08, surface **FROZEN**, confirmed revision and
+  digests in
   [`law1-lookupservicebound.md`](260927-1100-c2c-anywhere-tier-aware/law1-lookupservicebound.md) §2.2,
   drift caught by `scripts/check-lookupservicebound-law1-digests.sh`.
   Phase 03 still owns moving `LocalEndpoint::call` onto the bounded primitive.

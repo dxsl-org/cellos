@@ -1,0 +1,60 @@
+Local C2C broker oracle — re-run on the current tree, 2026-10-09
+===============================================================
+
+What this records
+-----------------
+Phase 01's exit criterion 4 is "no remote route is opened and the existing local
+oracle still passes after documentation-only changes". This is that run, on the tree
+at `19a10d6fa`, after the x86_64 ledger fix and the Spec-20/ADR-0023 documentation
+work. It is also Phase 02's "existing local C2C broker oracle ... still passes"
+precondition.
+
+How to reproduce
+----------------
+  bash scripts/run-c2c-broker-oracle-qemu.sh
+
+The runner builds an isolated RV64 `test-hooks` kernel (own embedded ramdisk and
+`EMBEDDED_OVERRIDE`, so no shared build artifact is touched), assembles the oracle
+disk, boots QEMU and drives `tests/integration/tests/c2c-broker-oracle.rs`.
+
+Observed (raw log: c2c-broker-oracle-qemu-local.log)
+---------------------------------------------------
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out
+
+  baseline warmup=100 samples=1000 success=1000 busy=0 indeterminate=0 correlation=0
+           warmup_failures=0 timing_invalid=0 p50_ns=... p99_ns=...
+           calibration=MEASURED direct_ipc_ref_ns=... heartbeat_miss_delta=0
+           watchdog_expired_delta=0
+  sweep n=1,2,4,8,16   attempted=success, busy=0 indeterminate=0 duplicate=0 stale=0
+           correlation=0, heartbeat_miss_delta=0 watchdog_expired_delta=0
+  soak attempted=10000 success=10000 busy=0 indeterminate=0 duplicate=0 stale=0
+           correlation=0 accepted_delta=10000 completed_delta=10000 terminal_delta=0
+           silent_drop=0 peak_bytes=65216 static_footprint_bytes=143930
+  overflow status=PASS attempted=18 success=17 busy=1 indeterminate=0 correlation=0
+           queue_peak=16 busy_frame=0x7f01
+  restart status=PASS old_tid=7 registry_gap=OBSERVED stale_send=INDETERMINATE
+           new_tid=67 state_reset=PASS retry=PASS accepted=1 completed=0 stale=0
+           duplicate=0 heartbeat_miss=0 watchdog_expired=0
+  role_gate=PASS broker_tid=7
+  idle_ipc_wake verdict=sub-ceiling-wake armed=21 closed=2 passes=1 inconclusive=1
+           min_return_ticks=450505 max_drain_gap_ticks=8282 proof_ceiling_ticks=900000
+
+Notes
+-----
+  * The bounded-queue refusal is the legacy oracle's own `busy_frame=0x7f01` on
+    18 attempts with `queue_peak=16`, i.e. congestion is a refusal, not a drop
+    (`indeterminate=0`, `stale=0`, `correlation=0`, `silent_drop=0`).
+  * `restart status=PASS ... stale_send=INDETERMINATE` is the local half of the
+    stale-binding contract: after the broker respawns with a new tid, a send to the
+    old one is reported indeterminate, not silently retried.
+  * `idle_ipc_wake` is honest about its own ceiling: one recordless return landed
+    under `proof_ceiling_ticks`, one did not, so the verdict is
+    `sub-ceiling-wake` on this host. A previous run of the same lane reported
+    `quantum-spanning-idle-out` for the same sub-metric, which is why the lane
+    asserts the drain/return bounds rather than a fixed verdict.
+  * No remote route is involved: this is the local broker oracle only.
+
+Why it is here
+--------------
+Phase 01 exit evidence (criterion 4) and Phase 02's precondition, recorded with the
+run's own markers so the claim does not rest on a passing exit code alone.

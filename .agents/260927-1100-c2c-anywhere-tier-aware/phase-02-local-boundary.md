@@ -54,3 +54,83 @@ Cost: a tier dispatch or binding lookup could regress Tier-1 hot calls. Preserve
 ## Deviation log
 
 None.
+
+## Next acceptance scenario (identified 2026-10-09; pending portfolio activation)
+
+### Target, re-pointed to Intel
+
+[ADR-0022](../../docs/decisions/0022-intel-x86-64-c2c-only-direction.md) makes Intel x86-64 the sole
+active program, so this phase's success criteria are read on the Intel target rather than RV64 (the
+RV64 native-domain lane stays the historical qualified-root reference, not the program's oracle).
+The qualified safe-root/admission evidence the plan requires on "the exact architecture/profile" is
+the x86_64 **test-hooks** domain lane: it admits `/bin/tier2-smoke` and `/bin/tier2-exploit` to a
+Paged Domain with CR3 isolation (`[domain] admitted cell … (CR3 isolation)`, `S22-X86-DOMAIN-LIVE`)
+and, since 2026-10-08, boots to its own end (`docs/evidence/atomic-publication-ledger-x86-settling.{txt,log}`).
+Shipping Intel admission stays refused by design ([Spec 22](../../docs/specs/22-native-domain-cell-implementation-gate.md)), so the exchange below is a test-image witness and the production
+lane must keep asserting the denial — the two lanes must disagree.
+
+### What the exchange would witness
+
+One real named-service exchange in both directions between an admitted private-root Tier-2 Cell and a
+Tier-1 Cell, with a nontrivial typed payload and reply, and four refusals **before** delivery: a wrong
+user buffer, a stale provider generation, an unauthorized service method, and an oversize frame —
+plus unchanged Tier-1↔Tier-1 typed calls and no private-root grant, raw pointer or remote broker
+anywhere in the path.
+
+### What exists (re-derived from the tree, 2026-10-09)
+
+- A private-root task already uses the ordinary copied IPC: nothing refuses `TaskAddressSpace::Domain`
+  in `Send`/`Recv`/`TrySend`, and the copy views are chosen per direction — sender view out
+  (`kernel/src/task.rs:2175-2178`), receiver view in (`:2380-2383`, `:2470-2473`) through
+  `kernel/src/task/copy_glue/mod.rs:65-104,211-268`. Admission itself already requires copied IPC
+  (`kernel/src/loader/domain_admission.rs:278-284`).
+- Refusals that already exist and fire before delivery: oversize (`kernel/src/task/ipc_wire.rs:13-17`;
+  `task.rs:2161-2163,2670-2685`), bounded queue/backpressure (`task.rs:2240-2242`), a paused or dead
+  provider (`task.rs:2170-2172,2214-2216`; `kernel/src/cell/service_registry.rs:225-233`), a wrong
+  user buffer (domain ledger/PTE probe plus the guarded copy, `kernel/src/task/user_copy/mod.rs:4-25`,
+  `copy.rs:61-89`), and a stale peer incarnation for wake and async completion
+  (`task.rs:2528-2544`; `kernel/src/task/async_ipc.rs:127-143,157-161`). The sender's
+  `(cell_id, generation)` rides in the wire header (`ipc_wire.rs:23-30`).
+- The bound lookup exists on both sides but is unused by callers: the kernel returns only an
+  active, nonzero identity (`service_registry.rs:131-145`; `kernel/src/task/syscall.rs:5658-5686`) and
+  `ostd` has the 24-byte wrapper (`libs/ostd/src/syscall.rs:1027-1057`), while `ServiceRef` still
+  caches a tid from the legacy `LookupService` (`libs/ostd/src/service.rs:67-136`) and
+  `LocalEndpoint::call` goes straight to `service_call_typed(tid, …)`
+  (`libs/ostd/src/cluster_endpoint.rs:86-102`).
+
+### What is missing
+
+1. **No caller-side binding consumer.** A stale *service* binding is not detectable today; only the
+   wake/async paths check the peer incarnation. Consuming `LookupServiceBound` on the caller side is
+   this phase's step 1 and needs no new ABI — the opcode is implemented and frozen.
+2. **No receiver service allowlist, byte-0 routing or per-method gate in generic local IPC.** Nothing
+   of the sort happens before `queue_wire_msg` (`kernel/src/task.rs:2155-2277,2647-2755`);
+   `CallerIdentity` is written *after* the payload copy as a trailer
+   (`kernel/src/task/syscall.rs:2732-2752,3181-3196`), and byte-0 framing is an application convention
+   (`libs/ostd/src/app.rs:11-15,303-345`). Method authorization is service-specific today, e.g.
+   `cells/services/vfs/src/caller.rs:74-82` derives `may_mutate` from the attested flag. Whether the
+   exchange needs a new kernel gate or a service-side check is an open design question for it.
+3. **No image with both participants.** The x86 domain image admits only `/bin/tier2-smoke`
+   (Log/Yield/GetTime/Exit/GrantRegister, `cells/tests/tier2-smoke/src/main.rs:40-136`) and
+   `/bin/tier2-exploit` (Log/Exit/StateRestore, `cells/tests/tier2-exploit/src/main.rs:14-57`); neither
+   sends, receives, resolves or registers, and the lane asserts admission/fault/teardown markers only
+   (`scripts/x86/qemu-domain-test.sh:89-113,142-179,228-245`). The typed-IPC bench lane is the mirror
+   image of the problem: it has the SDK surface but is production posture with no Tier-2 Cell, and its
+   provider deliberately never replies (`scripts/build-x86_64-c2c-lifecycle-ci.sh:13-22,57-100`;
+   `cells/tests/bench/src/scenarios/local_service_lifecycle.rs:68-108,158-220`).
+4. **Packaging for a new `/bin` path.** A new fixture needs reviewed loader rows
+   (`kernel/src/loader/launch_profile/targets.rs`, `profiles.rs`, `kernel/src/loader/boot_ceiling.rs`)
+   and init launch ordering (`cells/tools/init/src/boot.rs:227-236`), plus the image builder and its
+   marker assertions. The existing markers and the smoke/exploit fixtures stay as they are — admission
+   and fault containment are not re-purposed into an RPC witness.
+
+### Two slices, in the order this phase's own steps take them
+
+| Slice | Deliverable | Why first / gate |
+|---|---|---|
+| **A — step 1: caller-side binding** | Resolve local service calls through the frozen `LookupServiceBound` binding: `ServiceRef`/`LocalEndpoint` bind a live `(cell_id, generation)` and keep `recv(service_tid)` + attested receiver semantics; a stale binding is refused rather than used. | Needs no new ABI, no new `/bin` path and no kernel IPC change: host-testable (`libs/ostd/tests/`), plus the x86 c2c-lifecycle lane (`VFS-BINDING … matches_lookup=true`) and the local broker oracle. It is what makes the stale-generation negative of slice B writable. |
+| **B — step 2: the cross-tier exchange** | One IPC-capable admitted Tier-2 fixture (named provider) plus a Tier-1 driver, on the x86 test-hooks domain lane, witnessing the two directions and the four refusals above. | Consumes slice A; touches new cell fixtures, loader rows and the lane's assertions, so it needs its own review and the lane must stay green end to end. |
+
+Both slices are copied-IPC only: no `DomainGrant` to a private root, no ring, no raw pointer, no remote
+path. Nothing above is activated by this note — implementation starts only when the portfolio admits
+the slice.

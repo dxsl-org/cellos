@@ -64,9 +64,32 @@ authorization. Plans not admitted below are parked/historical.
   record, provider-identity capture at every `register` site, dispatch, and the two
   `next_task_id` fail-closed guard sites plus a boot no-re-issue guard. Kernel paths touched are
   exactly those the handoff named. Verified on Intel x86_64 QEMU (production image) and on the
-  AArch64 `test-hooks` lane; the x86_64 `test-hooks` lane is blocked by a **pre-existing**
-  frame-accounting panic recorded in the kernel-repair plan, not by this work.
-  `LocalEndpoint::call` is unchanged: Phase 03 owns moving the SDK onto the bounded primitive.
+  AArch64 `test-hooks` lane. The x86_64 `test-hooks` lane, blocked at the time by a pre-existing
+  frame-accounting panic, was unblocked on 2026-10-08 — the ledger needed warming to its fixed point
+  before the case measured it (`docs/evidence/atomic-publication-ledger-x86-settling.{txt,log}`) — so
+  the Intel domain lane now runs to its own end.
+  `LocalEndpoint::call` is unchanged: Phase 03 owns moving the SDK onto the bounded primitive; Phase 02
+  step 1 owns making the SDK *consume* the frozen binding.
+- **Phase-01 exit evidence complete 2026-10-09, awaiting the contract owner:** all four success criteria
+  carry evidence (contract table; the §2.4 state-transition matrix; Spec-20/Spec-17/ADR-0015/Spec-22/
+  ADR-0008/0009 consistency, including the Spec 17 §9 record of the changed syscall surface; and the
+  local oracle re-run — `docs/evidence/c2c-broker-oracle-qemu-local.{txt,log}`, soak 10000/10000,
+  `overflow status=PASS busy=1 queue_peak=16`, `restart status=PASS stale_send=INDETERMINATE`). No
+  criterion is ticked: they are contract-owner acceptances. See
+  [phase-01-contract.md](260927-1100-c2c-anywhere-tier-aware/phase-01-contract.md) § *Exit-gate evidence
+  review*.
+- **Next slice identified 2026-10-09, not yet admitted:**
+  [phase-02-local-boundary.md](260927-1100-c2c-anywhere-tier-aware/phase-02-local-boundary.md) § *Next
+  acceptance scenario* names two, in this phase's own step order. **A (step 1) — caller-side binding
+  consumer:** `ServiceRef`/`LocalEndpoint` resolve through the frozen `LookupServiceBound` binding and
+  refuse a stale one, with no new ABI, no new `/bin` path and no kernel IPC change (host tests plus the
+  x86 c2c-lifecycle lane and the local oracle). **B (step 2) — the cross-tier exchange:** one
+  IPC-capable admitted Tier-2 fixture plus a Tier-1 driver on the x86 test-hooks domain lane, witnessing
+  both directions and wrong-buffer / stale-generation / unauthorized-method / oversize refusals *before*
+  delivery, with Tier-1↔Tier-1 unchanged and the production lane still asserting Tier-2 denial. Slice B
+  touches new cell fixtures, loader launch-profile/ceiling rows and lane assertions, so it needs its own
+  review. The phase's RV64 wording is superseded by ADR-0022; the Intel test-hooks lane is the qualified
+  target. **Activation is the owner's decision; nothing above is enabled by this note.**
 - `261004-1957-x86-pc-lane` — **Intel-only supporting hardware lane**,
   one exact headless configuration ([plan](261004-1957-x86-pc-lane/plan.md)).
   **Authorized scope: phases 01–06** — 01 `x86_64-pc` descriptor + HCL model
