@@ -58,76 +58,62 @@ api::declare_syscalls![
 mod boot;
 mod activation;
 mod activation_state;
+mod configuration;
 mod service_table;
 mod supervisor;
 
 use ostd::io::println;
-use ostd::syscall::{sys_lookup_service, sys_notify_on_exit};
+use alloc::vec::Vec;
+use cellos_boot_config::{ordered_indices, CellConfig};
 
 ostd::cell_main!(extern "C" cell_main);
 
 fn cell_main() {
     println("Init: Starting Cellos Orchestrator...");
-    let mut services = service_table::configured();
-
     boot::start_block_drivers();
-    for service in &mut services {
-        if service.path == "/bin/shell" {
-            continue;
-        }
-        boot::prepare_service(service.path);
-        let tid = match service_table::spawn(service) {
-            Some(tid) => tid,
-            None => {
-                #[cfg(feature = "development-silo-provider")]
-                if matches!(
-                    service.registration,
-                    service_table::Registration::SelfReady(api::syscall::service::SILO)
-                ) {
-                    println("Init: Silo spawn failed — KMS not started.");
-                    return;
-                }
-                println("Init: cell not found — skipping:");
-                println(service.path);
-                ostd::task::yield_now();
-                continue;
-            }
-        };
-        #[cfg(not(feature = "development-silo-provider"))]
-        let _ = tid;
-        #[cfg(feature = "development-silo-provider")]
-        if matches!(
-            service.registration,
-            service_table::Registration::SelfReady(api::syscall::service::SILO)
-        ) && !service_table::wait_for_exact_registration(api::syscall::service::SILO, tid)
-        {
-            println("Init: Silo readiness registration failed — KMS not started.");
+    let mut services = Vec::with_capacity(cellos_boot_config::MAX_CELLS + 1);
+    services.push(service_table::Service::bootstrap_vfs());
+    match service_table::spawn(&mut services[0]) {
+        Some(_) => {}
+        None => {
+            println("Init: required VFS bootstrap failed — boot stopped.");
             return;
         }
-        ostd::task::yield_now();
-        if service.path == "/bin/vfs" {
-            ostd::task::yield_now();
+    };
+    let (service_config, autoload_config) = match configuration::load() {
+        Ok(config) => config,
+        Err(error) => {
+            println(&alloc::format!("Init: configuration failure — {error}"));
+            supervisor::run(&mut services);
         }
-    }
-    println("Init: services spawned.");
-
-    if services
-        .iter()
-        .all(|service| match (service.service_id(), service.tid) {
-            (Some(service_id), Some(tid)) => sys_lookup_service(service_id) == Some(tid),
-            _ => true,
-        })
-    {
-        println("Init: service registry verified.");
-    } else {
-        println("Init: WARN service registry mismatch.");
+    };
+    let service_order = match ordered_indices(&service_config, &CellConfig::default()) {
+        Ok(order) => order,
+        Err(error) => {
+            println(&alloc::format!("Init: service ordering failure — {error}"));
+            supervisor::run(&mut services);
+        }
+    };
+    let autoload_order = match ordered_indices(&autoload_config, &service_config) {
+        Ok(order) => order,
+        Err(error) => {
+            println(&alloc::format!("Init: autoload ordering failure — {error}"));
+            supervisor::run(&mut services);
+        }
+    };
+    let autoload_offset = 1 + service_config.cells.len();
+    services.extend(service_config.cells.into_iter().map(service_table::Service::new));
+    services.extend(autoload_config.cells.into_iter().map(service_table::Service::new));
+    if !launch_order(&mut services, &service_order, 1) {
+        println("Init: required service failed — autoload and OS ready blocked.");
+        supervisor::run(&mut services);
     }
 
     let init_tid = {
         let mut procs = [api::syscall::ProcessInfo::default(); 16];
         let mut tid = 2;
         if let Ok(count) = ostd::syscall::sys_get_procs(&mut procs) {
-            for proc in &procs[..count] {
+            for proc in procs.iter().take(count) {
                 if &proc.name[..4] == b"init" && (proc.name[4] == 0 || proc.name[4] == b' ') {
                     tid = proc.id;
                     break;
@@ -136,33 +122,61 @@ fn cell_main() {
         }
         tid
     };
-
     if !matches!(
         ostd::syscall::sys_register_service(api::syscall::service::OCEL_ACTIVATOR, init_tid),
         ostd::syscall::SyscallResult::Ok(0)
     ) {
-        println("Init: Ocel activator registration failed — shell not started.");
-        return;
+        println("Init: Ocel activator registration failed — autoload blocked.");
+        supervisor::run(&mut services);
     }
 
-    let hypervisor_tid = boot::spawn_optional_services();
-
-    // The shell is the last table entry in both profiles, and both boot to it:
-    // the full profile's desktop prompt, and the Tier-3 profile's prompt where
-    // the guest is started on demand (`hv`). Spawning it here rather than from
-    // the table loop is what keeps it last, so the cells it may launch are up.
-    let shell = services.last_mut().expect("service table is nonempty");
-    if shell.path != "/bin/shell" {
-        println("Init: invalid service table — shell must remain last.");
-        return;
+    // Test fixtures retain their reviewed boot lanes. Production optional cells,
+    // including shell and hypervisor autostart, come exclusively from the plan.
+    boot::spawn_test_fixtures();
+    if !required_services_available(&services[..autoload_offset]) {
+        println("Init: required service lost before autoload — OS ready blocked.");
+        supervisor::run(&mut services);
     }
-    if service_table::spawn(shell).is_none() {
-        println("Init: shell spawn failed.");
-    }
-
-    for tid in services.iter().filter_map(|service| service.tid) {
-        let _ = sys_notify_on_exit(tid);
+    println("Init: services spawned.");
+    println("Init: service registry verified (init registration is publication, not application readiness).");
+    println("Init: OS ready.");
+    if !launch_order(&mut services, &autoload_order, autoload_offset)
+        || !required_services_available(&services)
+    {
+        println("Init: required cell unavailable — remaining autoload blocked.");
+        supervisor::run(&mut services);
     }
     println("Init: supervising services (auto-restart on crash)...");
-    supervisor::run(&mut services, hypervisor_tid)
+    supervisor::run(&mut services)
+}
+
+fn required_services_available(services: &[service_table::Service]) -> bool {
+    services.iter().all(|service| {
+        !service.spec.enabled || !service.spec.required || service.available()
+    })
+}
+
+fn launch_order(services: &mut [service_table::Service], order: &[usize], offset: usize) -> bool {
+    for &entry in order {
+        if services.iter().any(|service| {
+            service.spec.enabled && service.spec.required && service.tid.is_some() && !service.available()
+        }) {
+            println("Init: required service lost during launch — remaining cells blocked.");
+            return false;
+        }
+        let index = offset + entry;
+        if !service_table::dependencies_available(services, index) {
+            println(&alloc::format!("Init: {} blocked — dependency unavailable.", services[index].spec.name));
+            if services[index].spec.required { return false; }
+            continue;
+        }
+        if service_table::spawn(&mut services[index]).is_none() {
+            println(&alloc::format!("Init: {} spawn/registration failed.", services[index].spec.name));
+            if services[index].spec.required { return false; }
+        } else {
+            println(&alloc::format!("Init: {} launched.", services[index].spec.name));
+        }
+        ostd::task::yield_now();
+    }
+    true
 }

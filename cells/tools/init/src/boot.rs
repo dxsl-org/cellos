@@ -1,8 +1,7 @@
 use api::syscall::service;
-use ostd::syscall::{
-    sys_lookup_service, sys_notify_on_exit, sys_register_service, sys_spawn_from_path,
-    SyscallResult,
-};
+use ostd::syscall::{sys_lookup_service, sys_spawn_from_path};
+#[cfg(any(feature = "tier2-grant-pair", feature = "tier2-entry", feature = "tier2-rpc-entry"))]
+use ostd::syscall::SyscallResult;
 
 // ── Phase-03 step-5 Tier-2 grant pair (opt-in `tier2-grant-pair`) ───────────
 //
@@ -132,18 +131,11 @@ pub(crate) fn run_grant_pair() {
     ostd::io::println("Init: tier2-grant-pair complete.");
 }
 
-#[cfg(feature = "board-rpi3")]
-const DISPLAY_DRIVER_PATH: &str = "/bin/bcm-display";
-#[cfg(not(feature = "board-rpi3"))]
-const DISPLAY_DRIVER_PATH: &str = "/bin/virtio-gpu";
 
-// QEMU-virt VirtIO drivers. BCM2837 exposes no VirtIO MMIO window, so probing
-// them on board-rpi3 is a guaranteed data abort at 0x0A000000; storage is the
-// in-kernel Arasan SDHCI path and networking is the LAN9514 via /bin/dwc2-usb.
+// Storage bootstrap is fixed; optional network/display drivers are selected by
+// the generated service configuration rather than compiled runtime choices.
 #[cfg(not(feature = "board-rpi3"))]
 const VIRTIO_BLOCK_DRIVER: &str = "/bin/block";
-#[cfg(not(feature = "board-rpi3"))]
-const VIRTIO_NET_DRIVER: &str = "/bin/virtio-net";
 
 pub(crate) fn start_block_drivers() {
     #[cfg(not(feature = "board-rpi3"))]
@@ -162,58 +154,6 @@ pub(crate) fn start_block_drivers() {
     }
 }
 
-pub(crate) fn prepare_service(path: &str) {
-    if path == "/bin/net" {
-        #[cfg(not(feature = "board-rpi3"))]
-        let _ = sys_spawn_from_path(VIRTIO_NET_DRIVER);
-        let _ = sys_spawn_from_path("/bin/e1000");
-        // x86_64 PC lane (phase 04a): the igb (i210/i211) NIC cell, on the same
-        // NIC edge as e1000. It confirms the PCI identity is its own family and
-        // idles when the machine has no igb, so this spawn is inert on every
-        // other profile and on an e1000-only machine.
-        let _ = sys_spawn_from_path("/bin/igb");
-        // x86_64 PC lane (phase 06): the 16550 serial cell. The kernel owns the
-        // ports and probes them at boot; this cell drives only the ones that
-        // answered, so the spawn is inert on a machine with just a console.
-        let _ = sys_spawn_from_path("/bin/serial");
-        #[cfg(feature = "usb-host")]
-        let _ = sys_spawn_from_path("/bin/dwc2-usb");
-        // x86_64 PC lane (phase 03): the xHCI USB host cell, on the same USB
-        // edge. It idles when the machine has no xHCI controller, so this spawn
-        // is inert on every other profile.
-        #[cfg(target_arch = "x86_64")]
-        let _ = sys_spawn_from_path("/bin/xhci");
-        if sys_lookup_service(service::BLOCK_DRIVER).is_none() {
-            let _ = sys_spawn_from_path("/bin/nvme");
-        }
-        for _ in 0..4 {
-            ostd::task::yield_now();
-        }
-    }
-    if path == "/bin/compositor" {
-        let _ = sys_spawn_from_path(DISPLAY_DRIVER_PATH);
-        for _ in 0..4 {
-            ostd::task::yield_now();
-        }
-    }
-}
-
-pub(crate) fn spawn_hypervisor() -> Option<usize> {
-    match sys_spawn_from_path("/bin/hypervisor") {
-        SyscallResult::Ok(tid) => {
-            let _ = sys_notify_on_exit(tid);
-            if let SyscallResult::Err(_) =
-                sys_register_service(api::hypervisor::HYPERVISOR_SERVICE_ID, tid)
-            {
-                ostd::io::println("Init: hypervisor service registration failed.");
-                None
-            } else {
-                Some(tid)
-            }
-        }
-        _ => None,
-    }
-}
 
 /// The Phase-02 cross-tier fixture's service id (`tier2-rpc-proto::SERVICE_ID`).
 ///
@@ -223,7 +163,7 @@ pub(crate) fn spawn_hypervisor() -> Option<usize> {
 #[cfg(feature = "tier2-rpc-entry")]
 const TIER2_RPC_FIXTURE_SERVICE: u16 = 0x7A01;
 
-pub(crate) fn spawn_optional_services() -> Option<usize> {
+pub(crate) fn spawn_test_fixtures() {
     // Tier-2 entry fixtures (phase 02). Only the AArch64 test-hooks image can
     // admit a domain-class cell, and it is also the one image whose boot ends
     // before its shell becomes interactive: the shell sleeps ~2 s before its
@@ -280,38 +220,6 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
     #[cfg(feature = "tier2-grant-pair")]
     run_grant_pair();
 
-    // fb-console mirrors the kernel user log to the display, so it stays on for
-    // RPi3: a board whose only console is the serial header shows nothing on
-    // HDMI otherwise. JetBrains Mono text on a compositor surface, not a TTY.
-    #[cfg(feature = "ui")]
-    match sys_spawn_from_path("/bin/fb-console") {
-        SyscallResult::Ok(_) => ostd::io::println("Init: fb-console spawned."),
-        SyscallResult::Err(_) => ostd::io::println("Init: fb-console spawn failed."),
-    }
-    // The desktop shell is not auto-started on RPi3: it is packaged in the
-    // image and launched on demand (`desktop &`), which keeps the board's
-    // console and compositor free during device bring-up.
-    #[cfg(all(feature = "ui", not(feature = "board-rpi3")))]
-    match sys_spawn_from_path("/bin/desktop") {
-        SyscallResult::Ok(_) => ostd::io::println("Init: desktop spawned."),
-        SyscallResult::Err(_) => ostd::io::println("Init: desktop spawn failed."),
-    }
-
-    // Tier 3 is an option, not a profile: `tier3` puts the guest-hosting cell in
-    // this image, `tier3-autostart` preloads the VM so the first app starts
-    // fast, and without `tier3` there is nothing to start at all.
-    #[cfg(all(feature = "tier3", feature = "tier3-autostart"))]
-    let hypervisor_tid = spawn_hypervisor();
-    #[cfg(all(feature = "tier3", not(feature = "tier3-autostart")))]
-    let hypervisor_tid = {
-        ostd::io::println("Init: tier-3 VM idle — run 'hv' in the shell to start a guest");
-        None
-    };
-    #[cfg(not(feature = "tier3"))]
-    let hypervisor_tid = {
-        ostd::io::println("Init: Tier 3 is not part of this image — no guest can be started");
-        None
-    };
 
     #[cfg(not(feature = "board-rpi3"))]
     {
@@ -322,5 +230,4 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
         let _ = sys_spawn_from_path("/bin/srv-test");
         let _ = sys_spawn_from_path("/bin/std-smoke");
     }
-    hypervisor_tid
 }

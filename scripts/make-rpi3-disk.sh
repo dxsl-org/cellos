@@ -12,6 +12,15 @@ FIRMWARE="tools/rpi3-firmware"
 CELL_DIR="target/aarch64-unknown-none-softfloat/release"
 RAW_KERNEL="kernel8.img"
 
+EMBEDDED="${EMBEDDED_OVERRIDE:-kernel/src/embedded-aarch64}"
+if [[ -z "${EMBEDDED_OVERRIDE:-}" && -d target/rpi3-embedded ]]; then
+    EMBEDDED=target/rpi3-embedded
+fi
+CONFIG_DIR=target/rpi3-disk-config
+python3 scripts/generate-boot-config.py --extract-image "$EMBEDDED/kernel_fs.img" \
+    --output-dir "$CONFIG_DIR"
+python3 scripts/generate-boot-config.py --preserve-persistent "$OUTPUT" \
+    --output-dir "$CONFIG_DIR"
 echo "[rpi3] Building $OUTPUT with mtools..."
 
 # 1. Ensure kernel8.img is built and up to date
@@ -33,6 +42,10 @@ if [ -f "$FIRMWARE/bcm2710-rpi-3-b.dtb" ]; then
     mcopy -i "$BOOT_IMG" "$FIRMWARE/bcm2710-rpi-3-b.dtb" ::
 fi
 mcopy -i "$BOOT_IMG" "$RAW_KERNEL" ::kernel8.img
+mmd -i "$BOOT_IMG" ::/etc ::/etc/cellos
+for name in system services autoload; do
+    mcopy -i "$BOOT_IMG" "$CONFIG_DIR/$name.toml" "::/etc/cellos/$name.toml"
+done
 echo "[rpi3]   P1 (BOOT): VideoCore firmware + kernel8.img"
 
 # 3. Build Partition 2: CELL (FAT32, 256 MiB)

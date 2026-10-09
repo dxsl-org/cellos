@@ -251,7 +251,8 @@ $imgArgs += @((Convert-ToolPath $policyTmp), "/POLICY.BIN")
 
 Write-Host ""
 Write-Host "=== Creating x86_64 kernel_fs.img ==="
-& $python (Join-Path 'tools' 'mkfat32.py') @imgArgs
+& $python (Join-Path 'tools' 'mkfat32.py') --config-features input `
+    --config-output-dir (Convert-ToolPath "$embedded/boot-config") @imgArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Error "mkfat32.py failed (exit $LASTEXITCODE)"
     exit 1

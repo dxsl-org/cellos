@@ -1,7 +1,7 @@
 """mkfat32_inplace.py — Write an empty FAT32 filesystem to LBA 0 of an existing image.
 
 Usage:
-    python mkfat32_inplace.py <image_path> <total_sectors>
+    python mkfat32_inplace.py [--config-dir GENERATED_DIR] <image_path> <total_sectors> [base_lba]
 
 Writes IN-PLACE into an already-allocated disk image WITHOUT extending it. The caller
 is responsible for ensuring the image is large enough.
@@ -9,12 +9,50 @@ is responsible for ensuring the image is large enough.
 FAT32 minimum: 65,525 data clusters. At 8 sectors/cluster (4096-byte clusters):
   minimum total_sectors ≥ 65,525 × 8 + overhead ≈ 524,200 sectors (~256 MB).
 
-This script is idempotent: re-running it overwrites the BPB, FSInfo, and FATs
-but leaves the data region untouched.
+This formats a fresh volume: re-running overwrites the BPB, FSInfo and FATs.
+--config-dir optionally seeds /etc/cellos/*.toml with proper long filenames.
+It is not an insertion tool for existing filesystems; callers preserve operator
+services/autoload files before formatting an existing disk or device.
 """
 
 import struct
-import sys
+import argparse
+from pathlib import Path
+
+
+def config_clusters(directory, cluster_bytes, fat):
+    """Populate the newly formatted volume, never a pre-existing filesystem."""
+    from mkfat32 import dir_entry, dot_entries, lfn_entries_for, make_sfn_for_lfn
+
+    def entry(name, cluster, size=0, attr=0x20):
+        sfn = make_sfn_for_lfn(name)
+        return b"".join(lfn_entries_for(name, sfn)) + dir_entry(sfn, cluster, size, attr)
+
+    blobs = {}
+    for cluster in (3, 4):
+        struct.pack_into("<I", fat, cluster * 4, 0x0FFFFFFF)
+    root = entry("etc", 3, attr=0x10)
+    etc = dot_entries(3, 0) + entry("cellos", 4, attr=0x10)
+    cellos = dot_entries(4, 3)
+    next_cluster = 5
+    for name in ("system", "services", "autoload"):
+        data = (Path(directory) / (name + ".toml")).read_bytes()
+        if len(data) > 16384:
+            raise ValueError("config exceeds 16384 bytes: " + name)
+        count = max(1, (len(data) + cluster_bytes - 1) // cluster_bytes)
+        first = next_cluster
+        for index in range(count):
+            cluster = next_cluster
+            next_cluster += 1
+            following = next_cluster if index + 1 < count else 0x0FFFFFFF
+            struct.pack_into("<I", fat, cluster * 4, following)
+            blobs[cluster] = data[index * cluster_bytes:(index + 1) * cluster_bytes]
+        cellos += entry(name + ".toml", first, len(data))
+    for cluster, data in ((2, root), (3, etc), (4, cellos)):
+        if len(data) >= cluster_bytes:
+            raise ValueError("config directory exceeds one cluster")
+        blobs[cluster] = data
+    return blobs, next_cluster
 
 SECTOR_SIZE       = 512
 # Preferred cluster sizes, largest first. The formatter picks the first one
@@ -62,17 +100,15 @@ def fat32_geometry(total_sectors: int):
 
 
 def main():
-    if len(sys.argv) not in (3, 4):
-        raise SystemExit(
-            "Usage: python mkfat32_inplace.py <image_path> <total_sectors> [base_lba]"
-        )
-
-    img_path      = sys.argv[1]
-    total_sectors = int(sys.argv[2])
-    # MBR layout (write-mbr.py): the FAT32 volume lives inside partition P1,
-    # so all structures are offset by the partition start. Default 0 keeps the
-    # legacy whole-disk behavior for kernel_fs.img-style images.
-    base_lba      = int(sys.argv[3]) if len(sys.argv) == 4 else 0
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config-dir")
+    parser.add_argument("image_path")
+    parser.add_argument("total_sectors", type=int)
+    parser.add_argument("base_lba", nargs="?", type=int, default=0)
+    args = parser.parse_args()
+    img_path = args.image_path
+    total_sectors = args.total_sectors
+    base_lba = args.base_lba
 
     # Guard: stay clear of the cell bootstrap table.
     if base_lba + total_sectors > CELL_TABLE_BASE_LBA:
@@ -140,6 +176,13 @@ def main():
 
     # ── Root directory cluster (zeroed = empty) ────────────────────────────────
     root_dir = bytearray(sec_per_clus * SECTOR_SIZE)
+    blobs = {}
+    if args.config_dir:
+        cluster_bytes = sec_per_clus * SECTOR_SIZE
+        blobs, next_free = config_clusters(args.config_dir, cluster_bytes, fat)
+        root_dir[:] = blobs.pop(ROOT_CLUSTER).ljust(cluster_bytes, b"\0")
+        struct.pack_into("<I", fsinfo, 488, clusters - (next_free - 2))
+        struct.pack_into("<I", fsinfo, 492, next_free)
 
     # ── Write IN-PLACE (r+b — never extends the file) ─────────────────────────
     # All LBAs below are relative to the partition start (base_lba).
@@ -163,6 +206,9 @@ def main():
         root_lba = base_lba + data_start + (ROOT_CLUSTER - 2) * sec_per_clus
         f.seek(root_lba * SECTOR_SIZE)
         f.write(root_dir)
+        for cluster, data in sorted(blobs.items()):
+            f.seek((base_lba + data_start + (cluster - 2) * sec_per_clus) * SECTOR_SIZE)
+            f.write(data.ljust(sec_per_clus * SECTOR_SIZE, b"\0"))
 
     print(
         f"[mkfat32] {img_path}: base=LBA {base_lba}, {total_sectors} sectors, "

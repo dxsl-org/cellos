@@ -1,17 +1,17 @@
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::{sys_lookup_service, sys_notify_on_exit, sys_send};
+use ostd::syscall::{sys_lookup_service, sys_send};
+use cellos_boot_config::RestartPolicy;
 
-use crate::service_table::{self, now_ticks, RestartPolicy, Service};
+use crate::service_table::{self, now_ticks, Service};
 
 const MAX_RESTARTS_PER_WINDOW: u32 = 5;
 const RESTART_WINDOW_TICKS: u64 = 1000;
 
-pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -> ! {
+pub(crate) fn run(services: &mut [Service]) -> ! {
     let mut activator = crate::activation::Activator::new();
-    let mut hypervisor_restarts = 0u32;
-    let mut hypervisor_window_start = 0u64;
     loop {
+        restart_pending(services);
         let Some(message) = activator.next_message() else {
             ostd::task::yield_now();
             continue;
@@ -28,67 +28,26 @@ pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -
             continue;
         }
         let dead = message.sender;
-        // Exit reason semantics and the Tier-3 restart branch remain unchanged.
+        // Exit reasons retain their existing clean/crash restart semantics.
         let reason = message.reason();
 
-        if hypervisor_tid == Some(dead) {
-            relay_hypervisor_exit(dead);
-            let now = now_ticks();
-            if now.wrapping_sub(hypervisor_window_start) > RESTART_WINDOW_TICKS {
-                hypervisor_window_start = now;
-                hypervisor_restarts = 0;
-            }
-            if hypervisor_restarts >= MAX_RESTARTS_PER_WINDOW {
-                println("Init: hypervisor restart storm — giving up.");
-                hypervisor_tid = None;
-                continue;
-            }
-            hypervisor_restarts += 1;
-            hypervisor_tid = crate::boot::spawn_hypervisor();
-            if hypervisor_tid.is_some() {
-                println("Init: hypervisor restarted.");
-            } else {
-                println("Init: hypervisor restart FAILED.");
-            }
-            continue;
-        }
-
-        #[cfg(feature = "development-silo-provider")]
-        if services
-            .iter()
-            .any(|candidate| candidate.tid == Some(dead) && candidate.path == "/bin/kms")
-        {
-            let silo_ready = services
-                .iter()
-                .find(|candidate| candidate.path == "/bin/silo")
-                .and_then(|silo| silo.tid)
-                .is_some_and(|tid| service_table::wait_for_exact_registration(service::SILO, tid));
-            if !silo_ready {
-                if let Some(kms) = services
-                    .iter_mut()
-                    .find(|candidate| candidate.tid == Some(dead))
-                {
-                    kms.tid = None;
-                }
-                println("Init: KMS restart blocked — exact Silo instance not ready.");
-                continue;
-            }
-        }
-
-        let Some(service) = services
-            .iter_mut()
-            .find(|service| service.tid == Some(dead))
-        else {
+        let Some(index) = services.iter().position(|service| service.tid == Some(dead)) else {
             continue;
         };
-        let should_restart = match service.policy {
-            RestartPolicy::Temporary => false,
-            RestartPolicy::Transient => reason != 0,
-            RestartPolicy::Permanent => true,
+        if services[index].spec.path == "/bin/hypervisor" {
+            relay_hypervisor_exit(dead);
+        }
+        let service = &mut services[index];
+        service.ready = false;
+        service.tid = None;
+        service.restart_pending = false;
+        let should_restart = match service.spec.restart {
+            RestartPolicy::Never => false,
+            RestartPolicy::OnFailure => reason != 0,
+            RestartPolicy::Always => true,
         };
         if !should_restart {
             println("Init: service exited cleanly — policy says no restart.");
-            service.tid = None;
             continue;
         }
 
@@ -112,18 +71,52 @@ pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -
             service.restart_count = 0;
         }
         if service.restart_count >= MAX_RESTARTS_PER_WINDOW {
-            println("Init: restart storm — giving up on this service (escalate).");
-            service.tid = None;
+            println(if service.spec.path == "/bin/hypervisor" {
+                "Init: hypervisor restart storm — giving up."
+            } else {
+                "Init: restart storm — giving up on this service (escalate)."
+            });
             continue;
         }
         service.restart_count += 1;
+        // Reserve the existing crash budget once for this observed death.
+        // Dependency recovery must neither discard this restart nor give a
+        // crash-storm victim a new budget merely because time has passed.
+        service.restart_pending = true;
+        if !service_table::dependencies_available(services, index) {
+            println("Init: service restart blocked — exact dependency instance unavailable.");
+        }
+    }
+}
 
+fn restart_pending(services: &mut [Service]) {
+    // Choose the first eligible entry afresh after each attempt. A pending
+    // provider is unavailable until its exact new instance is ready, so this
+    // yields a stable dependency order even for forward TOML references.
+    while let Some(index) = (0..services.len()).find(|&index| {
+        services[index].restart_pending
+            && service_table::dependencies_available(services, index)
+    }) {
+        let service = &mut services[index];
+        // Consume before attempting: a real spawn/registration failure must
+        // not become an idle-loop retry. Only a new watched death can rearm it.
+        service.restart_pending = false;
         println("Init: service died — restarting...");
-        if let Some(tid) = service_table::spawn(service) {
-            let _ = sys_notify_on_exit(tid);
-            println("Init: service restarted.");
+        if service_table::spawn(service).is_some() {
+            println(if service.spec.path == "/bin/hypervisor" {
+                "Init: hypervisor restarted."
+            } else {
+                "Init: service restarted."
+            });
         } else {
-            println("Init: service restart FAILED.");
+            println(if service.spec.path == "/bin/hypervisor" {
+                "Init: hypervisor restart FAILED."
+            } else {
+                "Init: service restart FAILED."
+            });
+            if service.spec.required {
+                println("Init: required service unavailable — recovery failed.");
+            }
         }
     }
 }

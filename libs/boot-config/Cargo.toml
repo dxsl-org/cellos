@@ -1,0 +1,11 @@
+[package]
+name = "cellos-boot-config"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Bounded no_std TOML boot configuration and dependency validation"
+
+[dependencies]
+api = { path = "../api" }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
+toml = { version = "0.9.8", default-features = false, features = ["parse", "serde"] }

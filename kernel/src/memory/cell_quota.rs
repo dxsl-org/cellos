@@ -30,6 +30,19 @@ pub const MAX_CELLS: usize = 64;
 /// is a runtime charge limit — no physical pages are pre-allocated.
 pub const DEFAULT_QUOTA_BYTES: usize = 16 * 1024 * 1024;
 
+// The constant above remains the hard default/ceiling used by limit tests.
+// Cold boot may lower the default for subsequently spawned cells only.
+static RUNTIME_DEFAULT_QUOTA_BYTES: AtomicUsize = AtomicUsize::new(DEFAULT_QUOTA_BYTES);
+
+pub fn default_quota_bytes() -> usize {
+    RUNTIME_DEFAULT_QUOTA_BYTES.load(Ordering::Acquire)
+}
+
+pub(crate) fn set_default_quota_bytes(bytes: usize) {
+    assert!((1024 * 1024..=DEFAULT_QUOTA_BYTES).contains(&bytes));
+    RUNTIME_DEFAULT_QUOTA_BYTES.store(bytes, Ordering::Release);
+}
+
 /// Limit store — BTreeMap keyed by CellId raw value, stores the byte limit.
 /// Locked only in `register`/`deregister` — NOT inside the allocator hot path.
 static QUOTA_LIMITS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::new());
@@ -253,7 +266,7 @@ pub(crate) fn try_reserve_dma(cell_id_raw: usize, size: usize) -> Option<DmaQuot
         .lock()
         .get(&cell_id_raw)
         .copied()
-        .unwrap_or(DEFAULT_QUOTA_BYTES);
+        .unwrap_or_else(default_quota_bytes);
     DMA_IN_USE[cell_id_raw]
         .fetch_update(Ordering::AcqRel, Ordering::Relaxed, |current| {
             current.checked_add(size).filter(|next| *next <= limit)

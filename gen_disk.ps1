@@ -566,68 +566,6 @@ if (Test-Path $hypha_tool_spawn_bin)  { $kfs_args += @($hypha_tool_spawn_bin, "/
 if ($include_capacity_probe -and (Test-Path $capacity_probe_bin)) {
     $kfs_args += @($capacity_probe_bin, "/bin/capacity-probe")
 }
-& $python "$tools_dir/mkfat32.py" @kfs_args 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "FATAL: mkfat32.py failed — kernel_fs.img is invalid." -ForegroundColor Red
-    exit 1
-}
-# Assert the layout instead of trusting the exit code. mkfat32 exits 0 for images
-# whose destination paths were mangled (Git Bash rewrote /bin/... once, producing a
-# well-formed FAT with a root directory literally named "C:"), and a missing
-# /POLICY.BIN degrades silently to the dev-permissive branch.
-$kfs_layout = & $python "$tools_dir/inspect_fat.py" "kernel/src/embedded/kernel_fs.img" 2>&1
-if (($kfs_layout | Select-String -Quiet -SimpleMatch 'SFN POLICY.BIN') -eq $false -or
-    ($kfs_layout | Select-String -Quiet -SimpleMatch "LFN 'vfs'") -eq $false) {
-    Write-Host "FATAL: kernel_fs.img lacks /POLICY.BIN or /bin/vfs." -ForegroundColor Red
-    $kfs_layout | Write-Host
-    exit 1
-}
-Remove-Item -Recurse -Force $tmpDir
-$kfs_mb = [Math]::Round((Get-Item "kernel/src/embedded/kernel_fs.img").Length/1MB,1)
-Write-Host "  kernel_fs.img: ${kfs_mb} MB"
-
-# 3b. Rebuild the kernel binary (embeds the new kernel_fs.img via include_bytes!).
-#     Must be done before creating disk_v3.img so the test runner picks up the latest kernel.
-Write-Host "Rebuilding kernel (embedding updated kernel_fs.img)..."
-$env:RUSTFLAGS = "-C relocation-model=pic"
-$kernOut = & cargo build --release -p cellos-kernel `
-    --target riscv64gc-unknown-none-elf `
-    -Z build-std=core,alloc 2>&1
-$kernCode = $LASTEXITCODE                     # capture BEFORE the pipe (see Build-Cargo)
-$kernOut | Select-Object -Last 3
-Remove-Item Env:/RUSTFLAGS
-if ($kernCode -ne 0) {
-    Write-Host "FATAL: kernel rebuild failed — disk would ship a stale kernel with an old kernel_fs.img." -ForegroundColor Red
-    exit 1
-}
-
-# 3c. Create a blank disk image for VirtIO block — MBR layout (Milestone 2.5 P03).
-#     P1 FAT32 @2048+524288 · P2 cell-table @526336 · P3 snapshot @560000 · P4 littlefs @800000
-#     Must match tools/write-mbr.py and kernel/src/loader/disk_layout.rs.
-Write-Host "Creating blank disk image (disk_v3.img, MBR, ~577 MB)..."
-# Grown for the P6 FAT cell-store (G2 loader redesign): base LBA 1_062_144 +
-# 65_536 sectors = 1_127_680. Written non-sparsely below, so the array is large
-# but transient. P1-P4 in the MBR; P5/P6 are constant-addressed (see api::disk).
-$disk_sectors = 1127680
-$diskSize = $disk_sectors * 512
-$blankImg = New-Object byte[] $diskSize
-[System.IO.File]::WriteAllBytes("disk_v3.img", $blankImg)
-Write-Host "  Blank image created ($disk_sectors sectors)."
-
-# 3c. Write the MBR partition table at LBA 0.
-& $python "$tools_dir/write-mbr.py" "disk_v3.img" 2>&1
-if ($LASTEXITCODE -ne 0) { throw "MBR write failed" }
-
-# 3d. Format an empty FAT32 filesystem inside P1 (base LBA 2048).
-#     65525+ data clusters at 8 sec/clus satisfy the FAT32 minimum.
-Write-Host "Formatting FAT32 partition P1 (LBA 2048 + 524288 sectors)..."
-& $python "$tools_dir/mkfat32_inplace.py" "disk_v3.img" 524288 2048 2>&1
-if ($LASTEXITCODE -ne 0) { throw "FAT32 format failed - disk_v3.img may be corrupt" }
-
-# 4. Append cell bootstrap table (for kernel early loader).
-# Only include the cells that the kernel early loader needs: VFS, config, shell.
-# Optionally include lua and bench when built.
-Write-Host "Appending cell bootstrap table..."
 $table_args = @(
     "disk_v3.img",
     "/bin/vfs=$vfs_bin",
@@ -715,6 +653,75 @@ if (Test-Path $ps_bin)   { $table_args += "/bin/ps=$ps_bin" }
 if (Test-Path $kill_bin) { $table_args += "/bin/kill=$kill_bin" }
 if (Test-Path $free_bin) { $table_args += "/bin/free=$free_bin" }
 if (Test-Path $hotswap_bin) { $table_args += "/bin/hotswap=$hotswap_bin" }
+$configArgs = @('--config-output-dir', "$embedded/boot-config")
+foreach ($entry in $table_args) {
+    if ($entry -match '=') { $configArgs += @('--config-artifact', $entry) }
+}
+& $python "$tools_dir/mkfat32.py" @configArgs @kfs_args 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FATAL: mkfat32.py failed — kernel_fs.img is invalid." -ForegroundColor Red
+    exit 1
+}
+# Assert the layout instead of trusting the exit code. mkfat32 exits 0 for images
+# whose destination paths were mangled (Git Bash rewrote /bin/... once, producing a
+# well-formed FAT with a root directory literally named "C:"), and a missing
+# /POLICY.BIN degrades silently to the dev-permissive branch.
+$kfs_layout = & $python "$tools_dir/inspect_fat.py" "kernel/src/embedded/kernel_fs.img" 2>&1
+if (($kfs_layout | Select-String -Quiet -SimpleMatch 'SFN POLICY.BIN') -eq $false -or
+    ($kfs_layout | Select-String -Quiet -SimpleMatch "LFN 'vfs'") -eq $false) {
+    Write-Host "FATAL: kernel_fs.img lacks /POLICY.BIN or /bin/vfs." -ForegroundColor Red
+    $kfs_layout | Write-Host
+    exit 1
+}
+Remove-Item -Recurse -Force $tmpDir
+$kfs_mb = [Math]::Round((Get-Item "kernel/src/embedded/kernel_fs.img").Length/1MB,1)
+Write-Host "  kernel_fs.img: ${kfs_mb} MB"
+
+# 3b. Rebuild the kernel binary (embeds the new kernel_fs.img via include_bytes!).
+#     Must be done before creating disk_v3.img so the test runner picks up the latest kernel.
+Write-Host "Rebuilding kernel (embedding updated kernel_fs.img)..."
+$env:RUSTFLAGS = "-C relocation-model=pic"
+$kernOut = & cargo build --release -p cellos-kernel `
+    --target riscv64gc-unknown-none-elf `
+    -Z build-std=core,alloc 2>&1
+$kernCode = $LASTEXITCODE                     # capture BEFORE the pipe (see Build-Cargo)
+$kernOut | Select-Object -Last 3
+Remove-Item Env:/RUSTFLAGS
+if ($kernCode -ne 0) {
+    Write-Host "FATAL: kernel rebuild failed — disk would ship a stale kernel with an old kernel_fs.img." -ForegroundColor Red
+    exit 1
+}
+
+# 3c. Create a blank disk image for VirtIO block — MBR layout (Milestone 2.5 P03).
+#     P1 FAT32 @2048+524288 · P2 cell-table @526336 · P3 snapshot @560000 · P4 littlefs @800000
+#     Must match tools/write-mbr.py and kernel/src/loader/disk_layout.rs.
+& $python "scripts/generate-boot-config.py" --preserve-persistent "disk_v3.img" `
+    --output-dir "$embedded/boot-config"
+if ($LASTEXITCODE -ne 0) { throw "Cannot preserve operator boot configuration" }
+Write-Host "Creating blank disk image (disk_v3.img, MBR, ~577 MB)..."
+# Grown for the P6 FAT cell-store (G2 loader redesign): base LBA 1_062_144 +
+# 65_536 sectors = 1_127_680. Written non-sparsely below, so the array is large
+# but transient. P1-P4 in the MBR; P5/P6 are constant-addressed (see api::disk).
+$disk_sectors = 1127680
+$diskSize = $disk_sectors * 512
+$blankImg = New-Object byte[] $diskSize
+[System.IO.File]::WriteAllBytes("disk_v3.img", $blankImg)
+Write-Host "  Blank image created ($disk_sectors sectors)."
+
+# 3c. Write the MBR partition table at LBA 0.
+& $python "$tools_dir/write-mbr.py" "disk_v3.img" 2>&1
+if ($LASTEXITCODE -ne 0) { throw "MBR write failed" }
+
+# 3d. Format an empty FAT32 filesystem inside P1 (base LBA 2048).
+#     65525+ data clusters at 8 sec/clus satisfy the FAT32 minimum.
+Write-Host "Formatting FAT32 partition P1 (LBA 2048 + 524288 sectors)..."
+& $python "$tools_dir/mkfat32_inplace.py" --config-dir "$embedded/boot-config" "disk_v3.img" 524288 2048 2>&1
+if ($LASTEXITCODE -ne 0) { throw "FAT32 format failed - disk_v3.img may be corrupt" }
+
+# 4. Append cell bootstrap table (for kernel early loader).
+# Only include the cells that the kernel early loader needs: VFS, config, shell.
+# Optionally include lua and bench when built.
+Write-Host "Appending cell bootstrap table..."
 & $python "$tools_dir/write-cell-table.py" @table_args
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FATAL: write-cell-table.py failed — disk_v3.img bootstrap table is invalid." -ForegroundColor Red

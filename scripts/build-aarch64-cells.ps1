@@ -395,7 +395,9 @@ $imgArgs += @($policyTmp, "/POLICY.BIN")
 
 Write-Host ""
 Write-Host "=== Creating aarch64 kernel_fs.img ==="
-& $python @pythonArgs (Join-Path 'tools' 'mkfat32.py') @imgArgs
+$configFeatures = if ($BoardRpi3) { 'board-rpi3' } else { '' }
+& $python @pythonArgs (Join-Path 'tools' 'mkfat32.py') "--config-features=$configFeatures" `
+    --config-output-dir "$embeddedDir/boot-config" @imgArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Error "mkfat32.py failed (exit $LASTEXITCODE)"
     exit 1

@@ -67,6 +67,14 @@ $fw_wsl      = Convert-ToWslPath (Resolve-Path $firmware_dir).ProviderPath
 $output_wsl  = Convert-ToWslPath $output_path
 $wsl_uid     = (& wsl.exe --exec id -u).Trim()
 $wsl_gid     = (& wsl.exe --exec id -g).Trim()
+$embeddedDir = if ($env:EMBEDDED_OVERRIDE) {
+    $env:EMBEDDED_OVERRIDE
+} elseif (Test-Path 'target/rpi3-embedded') {
+    'target/rpi3-embedded'
+} else {
+    'kernel/src/embedded-aarch64'
+}
+$embeddedWsl = Convert-ToWslPath (Resolve-Path $embeddedDir).ProviderPath
 
 Write-Host "[rpi3] Building SD image: $Output ($img_size_mb MiB)"
 Write-Host "[rpi3] Kernel: $kernel_path"
@@ -85,6 +93,12 @@ OWNER_GID="$7"
 BOOT_SIZE_MB=256
 
 cd "$ROOT"
+EMBEDDED="$8"
+CONFIG_DIR=target/rpi3-powershell-config
+python3 scripts/generate-boot-config.py --extract-image "$EMBEDDED/kernel_fs.img" \
+    --output-dir "$CONFIG_DIR"
+python3 scripts/generate-boot-config.py --preserve-persistent "$IMG" \
+    --output-dir "$CONFIG_DIR"
 
 for tool in aarch64-linux-gnu-objcopy parted mkfs.fat losetup mount umount dd; do
     command -v "$tool" >/dev/null 2>&1 || {
@@ -156,6 +170,12 @@ cp "$FIRMWARE/start.elf"   "$BOOT/"
 cp "$FIRMWARE/fixup.dat"   "$BOOT/"
 cp "$FIRMWARE/config.txt"  "$BOOT/"
 cp "$RAW_KERNEL"           "$BOOT/kernel8.img"
+mkdir -p "$BOOT/etc/cellos"
+for name in system services autoload; do
+    if [[ ! -e "$BOOT/etc/cellos/$name.toml" ]]; then
+        cp "$CONFIG_DIR/$name.toml" "$BOOT/etc/cellos/$name.toml"
+    fi
+done
 echo "[rpi3]   boot: bootcode.bin start.elf fixup.dat config.txt kernel8.img"
 
 # Cell partition: copy cell binaries built for aarch64
@@ -171,7 +191,7 @@ echo "[rpi3] Done: $IMG ($IMG_SIZE_MB MiB)"
 chown "$OWNER_UID:$OWNER_GID" "$IMG"
 '@
 
-wsl.exe -u root --exec bash -c $bash_script bash $pwd_wsl $output_wsl $kernel_wsl $fw_wsl $img_size_mb $wsl_uid $wsl_gid
+wsl.exe -u root --exec bash -c $bash_script bash $pwd_wsl $output_wsl $kernel_wsl $fw_wsl $img_size_mb $wsl_uid $wsl_gid $embeddedWsl
 if ($LASTEXITCODE -ne 0) {
     throw "WSL image generation failed with exit code $LASTEXITCODE"
 }

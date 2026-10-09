@@ -25,8 +25,15 @@ if (-not $NoBuild) {
 }
 
 Write-Host "[pioneer-build] Delegating image creation to WSL2..."
-wsl bash scripts/pioneer-flash.sh
-if ($LASTEXITCODE -ne 0) { throw "pioneer-flash.sh failed in WSL2" }
+$previousWslEnv = $env:WSLENV
+try {
+    $configExports = 'CELLOS_CONFIG_DIR/p:CELLOS_INIT_FEATURES:EMBEDDED_OVERRIDE/p'
+    $env:WSLENV = if ($previousWslEnv) { "$previousWslEnv`:$configExports" } else { $configExports }
+    wsl bash scripts/pioneer-flash.sh
+    if ($LASTEXITCODE -ne 0) { throw "pioneer-flash.sh failed in WSL2" }
+} finally {
+    $env:WSLENV = $previousWslEnv
+}
 
 Write-Host ""
 Write-Host "[pioneer-build] Image: pioneer-boot.img"

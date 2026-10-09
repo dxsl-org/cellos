@@ -53,6 +53,7 @@ pub mod loader;
 pub mod measurement_log; // Per-Cell integrity measurement (IMA-style, TPM-free)
 pub mod memory;
 pub mod policy; // Signed operator policy (P5b) — headless consent
+pub mod system_config; // Bounded cold-boot settings, loaded after embedded FS mount
 pub mod resource_registry;
 pub mod sha256; // Self-contained SHA-256 for measurement
 pub mod signing; // Cell binary signing (Ed25519) — verification gate at spawn time
@@ -841,6 +842,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     ))]
     fs::init();
 
+    #[cfg(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    ))]
+    system_config::load_from_vifs1();
+
     // Load + verify the signed operator policy (P5b) NOW: after VIFS1 is mounted,
     // before any cap-bearing cell spawns. Absent → dev-permissive (this G1 build);
     // invalid → fail-closed. Phase 04 folds policy::lookup into the spawn grant.
@@ -1519,16 +1527,20 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // `S22-AARCH64-DOMAIN-*` witnesses disappear — a lane reading them fails on
     // an image that is working. Quieting is a console policy for interactive and
     // production boots; a test image is read by its own lane.
-    #[cfg(all(
-        feature = "test-hooks",
-        any(target_arch = "x86_64", target_arch = "aarch64")
-    ))]
-    log::set_max_level(log::LevelFilter::Info);
-    #[cfg(not(all(
-        feature = "test-hooks",
-        any(target_arch = "x86_64", target_arch = "aarch64")
-    )))]
-    log::set_max_level(log::LevelFilter::Warn);
+    // An explicit [logging] is authoritative for the whole cold boot. Only old
+    // images / omitted sections retain this later interactive/test default.
+    if !system_config::logging_explicit() {
+        #[cfg(all(
+            feature = "test-hooks",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ))]
+        log::set_max_level(log::LevelFilter::Info);
+        #[cfg(not(all(
+            feature = "test-hooks",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        )))]
+        log::set_max_level(log::LevelFilter::Warn);
+    }
 
     // Probe 'Q': fires ONLY if no IRQ preempted the code between daifclr and here.
     // Q fires  → BCM2835 IRQ is not actually delivered to CPU on QEMU (pending but silent).

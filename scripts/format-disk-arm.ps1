@@ -51,6 +51,35 @@ if ($optionalArgs.Count -gt 0) { $buildArgs += $optionalArgs }
 
 cargo build @buildArgs 2>&1 | Select-Object -Last 10
 
+$cells = @(
+    @{ Bin = "app-init";          Dst = "init"        },
+    @{ Bin = "app-shell";         Dst = "shell"       },
+    @{ Bin = "service-vfs";       Dst = "vfs"         },
+    @{ Bin = "service-config";    Dst = "config"      },
+    @{ Bin = "service-net";       Dst = "net"         },
+    @{ Bin = "robot-demo";         Dst = "robot-demo"   },
+    @{ Bin = "periph-demo";       Dst = "periph-demo"  },
+    @{ Bin = "sensor-demo";       Dst = "sensor-demo"  },
+    @{ Bin = "spi-demo";          Dst = "spi-demo"     },
+    @{ Bin = "pwm-demo";          Dst = "pwm-demo"     },
+    @{ Bin = "adc-demo";          Dst = "adc-demo"     },
+    @{ Bin = "can-demo";          Dst = "can-demo"     },
+    @{ Bin = "service-input";     Dst = "input"       },
+    @{ Bin = "service-compositor";Dst = "compositor"  },
+    @{ Bin = "input-test";        Dst = "input-test"  }
+)
+New-Item -ItemType Directory -Force $StagingDir | Out-Null
+$configDir = "$StagingDir\boot-config"
+$configArgs = @('--output-dir', $configDir)
+foreach ($c in $cells) {
+    $src = "$BinDir\$($c.Bin)"
+    if (Test-Path $src) { $configArgs += @('--artifact', "/bin/$($c.Dst)=$src") }
+}
+python scripts/generate-boot-config.py @configArgs
+if ($LASTEXITCODE -ne 0) { throw "Boot config generation failed" }
+python scripts/generate-boot-config.py --preserve-persistent $OutFile --base-lba 0 `
+    --output-dir $configDir
+if ($LASTEXITCODE -ne 0) { throw "Cannot preserve operator boot configuration" }
 # ----- Step 2: Create blank image -----
 Write-Host "[format-disk-arm] Creating $OutFile ($SizeMiB MiB)..."
 $bytes = $SizeMiB * 1024 * 1024
@@ -76,28 +105,16 @@ Write-Host "[format-disk-arm] Creating /bin, /etc, /tmp..."
 New-Item -ItemType Directory -Force $StagingDir | Out-Null
 Set-Content -Path "$StagingDir\hostname" -Value "ViCell-ARM" -NoNewline -Encoding ascii
 & mcopy -i $OutFile "$StagingDir\hostname" ::/etc/hostname
+& mmd -i $OutFile ::/etc/cellos
+foreach ($name in @('system', 'services', 'autoload')) {
+    & mcopy -i $OutFile "$configDir\$name.toml" "::/etc/cellos/$name.toml"
+    if ($LASTEXITCODE -ne 0) { throw "Cannot install $name.toml" }
+}
 
 # ----- Step 6: Populate /bin/ -----
 Write-Host "[format-disk-arm] Copying aarch64 cell binaries to /bin/..."
 
 # Map cargo binary name → /bin/<name>
-$cells = @(
-    @{ Bin = "app-init";          Dst = "init"        },
-    @{ Bin = "app-shell";         Dst = "shell"       },
-    @{ Bin = "service-vfs";       Dst = "vfs"         },
-    @{ Bin = "service-config";    Dst = "config"      },
-    @{ Bin = "service-net";       Dst = "net"         },
-    @{ Bin = "robot-demo";         Dst = "robot-demo"   },
-    @{ Bin = "periph-demo";       Dst = "periph-demo"  },
-    @{ Bin = "sensor-demo";       Dst = "sensor-demo"  },
-    @{ Bin = "spi-demo";          Dst = "spi-demo"     },
-    @{ Bin = "pwm-demo";          Dst = "pwm-demo"     },
-    @{ Bin = "adc-demo";          Dst = "adc-demo"     },
-    @{ Bin = "can-demo";          Dst = "can-demo"     },
-    @{ Bin = "service-input";     Dst = "input"       },
-    @{ Bin = "service-compositor";Dst = "compositor"  },
-    @{ Bin = "input-test";        Dst = "input-test"  }
-)
 
 foreach ($c in $cells) {
     $src = "$BinDir\$($c.Bin)"

@@ -147,6 +147,8 @@ MKFAT_ARGS+=("$POLICY_TMP/POLICY.BIN" "/POLICY.BIN")
 # holds "Program Files" instead of the cells. mkfat32 still exits 0. The aarch64
 # sibling dodges this by using slash-free destinations; this lane needs the guard.
 MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
+    --config-features "$INIT_FEATURES" \
+    --config-output-dir "$EMBEDDED_HV/boot-config" \
     "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
 
 # Prove the runtime layout rather than trusting mkfat32's exit code.

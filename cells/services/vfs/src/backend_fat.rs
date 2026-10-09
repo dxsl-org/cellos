@@ -205,7 +205,6 @@ impl FsBackend for FatBackend {
     }
 
     fn stat(&self, path: &str) -> Option<(u64, bool)> {
-        use fatfs::Seek as _;
         let fs = self.fs.as_ref()?;
         let rel = self.rel_allow_root(path);
         if rel.is_empty() {
@@ -214,9 +213,19 @@ impl FsBackend for FatBackend {
         if rel.split('/').any(|c| c == "..") {
             return None;
         }
-        if let Ok(mut file) = fs.root_dir().open_file(rel) {
-            let size = file.seek(fatfs::SeekFrom::End(0)).unwrap_or(0);
-            return Some((size, false));
+        // Seek(End) may clamp to a corrupt cluster chain's reachable bytes.
+        // Stat must report the declared directory length so boot-config readers
+        // can reject a valid TOML prefix from a truncated file.
+        let (parent, name) = rel.rsplit_once('/').unwrap_or(("", rel));
+        let root = fs.root_dir();
+        let directory = if parent.is_empty() { root } else { root.open_dir(parent).ok()? };
+        for entry in directory.iter() {
+            let entry = entry.ok()?;
+            if entry.file_name().eq_ignore_ascii_case(name)
+                || entry.short_file_name().eq_ignore_ascii_case(name)
+            {
+                return Some((entry.len(), entry.is_dir()));
+            }
         }
         if fs.root_dir().open_dir(rel).is_ok() {
             return Some((0, true));
@@ -225,20 +234,7 @@ impl FsBackend for FatBackend {
     }
 
     fn file_size(&self, path: &str) -> u64 {
-        use fatfs::Seek as _;
-        let fs = match &self.fs {
-            Some(f) => f,
-            None => return 0,
-        };
-        let rel = match self.rel_nonempty(path) {
-            Some(r) => r,
-            None => return 0,
-        };
-        let mut file = match fs.root_dir().open_file(rel) {
-            Ok(f) => f,
-            Err(_) => return 0,
-        };
-        file.seek(fatfs::SeekFrom::End(0)).unwrap_or(0)
+        self.stat(path).filter(|(_, is_dir)| !is_dir).map_or(0, |(size, _)| size)
     }
 
     fn read_to_vec(&self, path: &str) -> Vec<u8> {

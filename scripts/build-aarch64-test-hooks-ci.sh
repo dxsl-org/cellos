@@ -246,7 +246,12 @@ printf 'ViCell-aarch64-test' > "$TMPDIR_KFS/hostname"
 source scripts/lib-bake-policy.sh
 bake_policy "$TMPDIR_KFS/POLICY.BIN"
 
+CONFIG_FEATURES=""
+if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
+    CONFIG_FEATURES=development-silo-provider,input,ui,ai,supervisor
+fi
 "$PYTHON_BIN" tools/mkfat32.py \
+    --config-features "$CONFIG_FEATURES" \
     "$TH_DIR/kernel_fs.img" \
     "${FAT_CELL_ARGS[@]}" \
     "$TMPDIR_KFS/hostname" /etc/hostname \

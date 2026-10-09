@@ -303,7 +303,8 @@ kfs_args+=(
     "$KFS_TMP/POLICY.BIN" "/POLICY.BIN"
 )
 
-"$PYTHON_BIN" tools/mkfat32.py "${kfs_args[@]}"
+"$PYTHON_BIN" tools/mkfat32.py \
+    --config-output-dir "$EMB/boot-config" "${kfs_args[@]}"
 if [[ ! -s "$KFS" ]]; then
     echo "FAIL: mkfat32.py did not produce a nonempty kernel_fs.img" >&2
     exit 1
@@ -381,11 +382,14 @@ CELLSTORE_BASE_LBA=1062144
 CELLSTORE_SECTORS=65536
 
 mkdir -p "$(dirname "$DISK")"
+"$PYTHON_BIN" scripts/generate-boot-config.py --preserve-persistent "$DISK" \
+    --output-dir "$EMB/boot-config"
 NEW_DISK="$DISK.new"
 rm -f "$NEW_DISK"
 truncate -s $((DISK_SECTORS * 512)) "$NEW_DISK"
 "$PYTHON_BIN" tools/write-mbr.py "$NEW_DISK"
-"$PYTHON_BIN" tools/mkfat32_inplace.py "$NEW_DISK" 524288 2048
+"$PYTHON_BIN" tools/mkfat32_inplace.py --config-dir "$EMB/boot-config" \
+    "$NEW_DISK" 524288 2048
 
 # P2 bootstrap table. Host-side paths and image-side paths are the same list as
 # VIFS1 above: the loader's fallback reads it when a VIFS1 lookup misses, and a

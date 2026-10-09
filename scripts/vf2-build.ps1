@@ -26,8 +26,15 @@ if (-not $NoBuild) {
 }
 
 Write-Host "[vf2-build] Delegating image creation to WSL2..."
-wsl bash scripts/vf2-flash.sh
-if ($LASTEXITCODE -ne 0) { throw "vf2-flash.sh failed in WSL2" }
+$previousWslEnv = $env:WSLENV
+try {
+    $configExports = 'CELLOS_CONFIG_DIR/p:CELLOS_INIT_FEATURES:EMBEDDED_OVERRIDE/p'
+    $env:WSLENV = if ($previousWslEnv) { "$previousWslEnv`:$configExports" } else { $configExports }
+    wsl bash scripts/vf2-flash.sh
+    if ($LASTEXITCODE -ne 0) { throw "vf2-flash.sh failed in WSL2" }
+} finally {
+    $env:WSLENV = $previousWslEnv
+}
 
 Write-Host ""
 Write-Host "[vf2-build] Image: vf2-boot.img"

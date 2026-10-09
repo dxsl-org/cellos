@@ -314,7 +314,12 @@ if (( TIER3 )); then
         "$INITRD" initrd.gz)
 fi
 FAT_ARGS+=("$POLICY_TMP/POLICY.BIN" POLICY.BIN)
-"$PYTHON_BIN" tools/mkfat32.py "$EMBEDDED/kernel_fs.img" "${FAT_ARGS[@]}"
+CONFIG_FEATURES="$INIT_FEATURES"
+if (( SUPERVISOR )); then CONFIG_FEATURES+=,app-init/supervisor; fi
+"$PYTHON_BIN" tools/mkfat32.py \
+    --config-features "$CONFIG_FEATURES" \
+    --config-output-dir "$EMBEDDED/boot-config" \
+    "$EMBEDDED/kernel_fs.img" "${FAT_ARGS[@]}"
 "$PYTHON_BIN" tools/inspect_fat.py "$EMBEDDED/kernel_fs.img" > "$POLICY_TMP/layout.txt"
 assert_policy_in_image "$POLICY_TMP/layout.txt"
 if ! grep -qiF -- '--- /bin ---' "$POLICY_TMP/layout.txt"; then
@@ -372,7 +377,7 @@ if [[ ! -s "$RAW_KERNEL" ]]; then
 fi
 
 if (( ! VOLATILE )); then
-    for program in mformat mcopy mkfs.ext4; do
+    for program in mformat mcopy mmd mkfs.ext4; do
         if ! command -v "$program" >/dev/null 2>&1; then
             echo "ERROR: required Pi SD image tool not installed: $program" >&2
             exit 1
@@ -398,6 +403,12 @@ if (( ! VOLATILE )); then
     fi
     mcopy -i "$BOOT_IMG" "$RAW_KERNEL" ::kernel8.img
     mcopy -i "$BOOT_IMG" "$GUEST_DISK" ::guest_disk.img
+    "$PYTHON_BIN" scripts/generate-boot-config.py --preserve-persistent "$SD_IMAGE" \
+        --output-dir "$EMBEDDED/boot-config"
+    mmd -i "$BOOT_IMG" ::/etc ::/etc/cellos
+    for name in system services autoload; do
+        mcopy -i "$BOOT_IMG" "$EMBEDDED/boot-config/$name.toml" "::/etc/cellos/$name.toml"
+    done
     # raspi3b models an SD card only when its byte length is a power of two.
     # P2/P3/P4 follow the kernel's non-overlapping canonical partition map.
     truncate -s 1G "$SD_IMAGE"

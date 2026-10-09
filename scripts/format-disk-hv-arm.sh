@@ -147,6 +147,15 @@ if [[ -z "$PYTHON_BIN" ]]; then
         PYTHON_BIN=python
     fi
 fi
+CONFIG_DIR="$TMPDIR_WORK/boot-config"
+"$PYTHON_BIN" scripts/generate-boot-config.py \
+    --extract-image "${EMBEDDED_OVERRIDE:-kernel/src/embedded-hv}/kernel_fs.img" \
+    --output-dir "$CONFIG_DIR"
+"$PYTHON_BIN" scripts/generate-boot-config.py --preserve-persistent "$OUT" \
+    --output-dir "$CONFIG_DIR"
+for name in system services autoload; do
+    MKFAT_ARGS+=("$CONFIG_DIR/$name.toml" "etc/cellos/$name.toml")
+done
 P1_IMG="$TMPDIR_WORK/p1.img"
 "$PYTHON_BIN" tools/mkfat32.py "$P1_IMG" "${MKFAT_ARGS[@]}"
 PART_FAT32_BASE_LBA=2048

@@ -106,6 +106,12 @@ impl AccessTable {
     }
 
     fn decide(&self, caller: Caller, path: &str, kind: AccessKind) -> bool {
+        // Runtime boot configuration is operator input, not a writable mailbox.
+        // FAT names are case-insensitive; protect both the subtree and ancestors
+        // against replacement, rename and recursive removal by ordinary cells.
+        if matches!(kind, AccessKind::Write) && touches_boot_configuration(path) {
+            return false;
+        }
         if !is_canonical_policy_path(path) {
             return false;
         }
@@ -142,6 +148,21 @@ impl AccessTable {
 impl Default for AccessTable {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+fn touches_boot_configuration(path: &str) -> bool {
+    const ROOT: &str = "/mnt/sd/etc/cellos";
+    if path == "/" {
+        return true;
+    }
+    let path = path.strip_suffix('/').unwrap_or(path);
+    if path.len() <= ROOT.len() {
+        ROOT.get(..path.len()).is_some_and(|prefix| prefix.eq_ignore_ascii_case(path))
+            && (path.len() == ROOT.len() || ROOT.as_bytes()[path.len()] == b'/')
+    } else {
+        path.get(..ROOT.len()).is_some_and(|prefix| prefix.eq_ignore_ascii_case(ROOT))
+            && path.as_bytes()[ROOT.len()] == b'/'
     }
 }
 

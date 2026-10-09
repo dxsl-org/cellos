@@ -357,3 +357,24 @@ fn shell_reaches_the_backend_cells_with_the_intended_ceilings() {
         "the worker stays capability-free when launched by hand"
     );
 }
+
+#[test]
+fn init_autoload_keeps_reviewed_application_ceiling_and_authority_gate() {
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        let echo = authorize(caller("init", true, false), route, "/bin/echo")
+            .expect("reviewed applications may be autoloaded");
+        assert_eq!(echo.child_ceiling, CapSet::EMPTY);
+        assert!(echo.requires_lifecycle_authority);
+        let bench = authorize(caller("init", true, false), route, "/bin/bench")
+            .expect("reviewed spawning application may be autoloaded");
+        assert!(bench.child_ceiling.spawn);
+        assert!(!bench.child_ceiling.block_io);
+        assert!(!bench.child_ceiling.network);
+        assert!(!bench.child_ceiling.hypervisor);
+        assert!(authorize(caller("init", false, false), route, "/bin/echo").is_none());
+        assert!(authorize(caller("init", true, false), route, "/bin/unreviewed-app").is_none());
+    }
+    for route in [LaunchRoute::Mem, LaunchRoute::Pinned] {
+        assert!(authorize(caller("init", true, false), route, "/bin/echo").is_none());
+    }
+}

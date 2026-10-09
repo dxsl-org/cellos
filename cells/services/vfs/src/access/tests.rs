@@ -88,3 +88,25 @@ fn unflagged_caller_is_denied_mutation_regardless_of_path_policy() {
     assert!(!table.can_remove_dir(unflagged, "/srv/test"));
     assert!(!table.can_remove_tree(unflagged, "/srv/test"));
 }
+
+#[test]
+fn boot_configuration_cannot_be_replaced_through_fat_aliases_or_ancestors() {
+    let table = AccessTable::new();
+    for path in [
+        "/mnt/sd/etc/cellos/services.toml",
+        "/mnt/sd/ETC/CELLOS/AUTOLOAD.TOML",
+        "/mnt/sd/etc/cellos",
+        "/mnt/sd/etc",
+        "/mnt/sd/etc/",
+        "/mnt/sd/EtC/",
+        "/mnt/sd/etc/cellos/",
+        "/mnt/sd/",
+    ] {
+        assert!(table.can_read(CELL, path));
+        assert!(!table.can_write(CELL, path), "{path}");
+        assert!(!table.can_remove_tree(CELL, path), "{path}");
+        assert!(!table.can_remove_dir(CELL, path), "{path}");
+    }
+    assert!(table.can_write(CELL, "/mnt/sd/etc/cellos-other/file"));
+    assert!(table.can_write(CELL, "/mnt/sd/other"));
+}

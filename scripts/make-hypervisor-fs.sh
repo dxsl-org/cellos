@@ -190,7 +190,10 @@ bake_policy "$POLICY_TMP/POLICY.BIN"
 echo "  /POLICY.BIN <- signed operator policy"
 MKFAT_ARGS+=("$POLICY_TMP/POLICY.BIN" "POLICY.BIN")
 
-"$PYTHON_BIN" tools/mkfat32.py "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
+"$PYTHON_BIN" tools/mkfat32.py \
+    --config-features "${INIT_FEATURES#--features }" \
+    --config-output-dir "$EMBEDDED_HV/boot-config" \
+    "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
 
 # Prove the layout rather than trusting the exit code: mkfat32 exits 0 for an image
 # whose destinations were mangled, and a missing /POLICY.BIN degrades silently.

@@ -46,7 +46,11 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
             "init-launch-edge",
             true,
         )),
-        _ => None,
+        // Autoload may select applications already reviewed for interactive
+        // launch. Reuse their exact ceiling, never init's union of authority;
+        // unknown paths still fail closed and lifecycle authority is required.
+        _ => reviewed_user_target_ceiling(target)
+            .map(|ceiling| LaunchProfile::new(ceiling, "init-autoload-edge", true)),
     }
 }
 

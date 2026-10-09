@@ -138,6 +138,7 @@ printf 'Cellos-C2C-Oracle\n' > "$WORK/hostname"
 printf 'Cellos C2C broker oracle\n' > "$WORK/readme.txt"
 
 "$PYTHON_BIN" tools/mkfat32.py \
+    --config-features c2c-broker \
     "$EMBEDDED/kernel_fs.img" \
     "$REL/app-init"          /bin/init \
     "$REL/app-shell"         /bin/shell \

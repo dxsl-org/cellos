@@ -76,6 +76,18 @@ MKFAT_ARGS+=("$HOSTNAME_TMP" "/etc/hostname")
 
 TMPDIR_WORK=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_WORK" "$HOSTNAME_TMP"' EXIT
+CONFIG_ARGS=()
+for ((index = 0; index < ${#MKFAT_ARGS[@]}; index += 2)); do
+    if [[ "${MKFAT_ARGS[index + 1]}" == /bin/* ]]; then
+        CONFIG_ARGS+=(--artifact "${MKFAT_ARGS[index + 1]}=${MKFAT_ARGS[index]}")
+    fi
+done
+CONFIG_DIR="$TMPDIR_WORK/boot-config"
+python3 scripts/generate-boot-config.py --output-dir "$CONFIG_DIR" "${CONFIG_ARGS[@]}"
+python3 scripts/generate-boot-config.py --preserve-persistent "$OUT" --output-dir "$CONFIG_DIR"
+for name in system services autoload; do
+    MKFAT_ARGS+=("$CONFIG_DIR/$name.toml" "/etc/cellos/$name.toml")
+done
 
 # ---------- 1. Build P1 FAT32 Partition Image ----------
 P1_IMG="$TMPDIR_WORK/p1_fat32.img"

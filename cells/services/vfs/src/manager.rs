@@ -15,6 +15,8 @@ use alloc::vec::Vec;
 
 use crate::access::AccessTable;
 use crate::backend_bin_overlay::BinOverlay;
+use crate::backend::FsBackend;
+use crate::backend_bootfs::BootFsProxy;
 use crate::backend_cellosfs::CellosFsBackend;
 use crate::backend_fat::FatBackend;
 use crate::backend_ramfs::RamFsBackend;
@@ -34,6 +36,9 @@ pub(crate) struct WatchedOwner {
 }
 pub struct VfsManager {
     pub(crate) mounts: MountTable,
+    /// Boot-image configuration fallback; runtime files may override only
+    /// services/autoload, never the kernel's already-applied system config.
+    boot_config: BootFsProxy,
     pub handles: HandleTable,
     pub quota: QuotaTracker,
     pub access: AccessTable,
@@ -85,6 +90,7 @@ impl VfsManager {
 
         Self {
             mounts,
+            boot_config: BootFsProxy::new(),
             handles: HandleTable::new(),
             // test-hooks: 1.1 KiB quota so vfs-test can hit the limit with
             // 400-byte chunks (must fit within the 512-byte IPC buffer).
@@ -142,14 +148,47 @@ impl VfsManager {
                 pos += entry_len;
             }
         }
+        let configured: &[&str] = match path.trim_end_matches('/') {
+            "" => &["etc"],
+            "/etc" => &["cellos"],
+            "/etc/cellos" => &["system.toml", "services.toml", "autoload.toml"],
+            _ => &[],
+        };
+        for name in configured {
+            let full_path = alloc::format!("{}/{}", path.trim_end_matches('/'), name);
+            let Some((_, directory)) = self.stat(&full_path) else {
+                continue;
+            };
+            if out[..pos].split(|&byte| byte == b'\n').any(|entry| {
+                entry.get(2..) == Some(name.as_bytes())
+            }) {
+                continue;
+            }
+            let needed = 2 + name.len() + 1;
+            if pos + needed > out.len().min(480) {
+                break;
+            }
+            out[pos..pos + 2].copy_from_slice(if directory { b"d:" } else { b"f:" });
+            pos += 2;
+            out[pos..pos + name.len()].copy_from_slice(name.as_bytes());
+            pos += name.len();
+            out[pos] = b'\n';
+            pos += 1;
+        }
         pos
     }
 
     pub fn stat(&self, path: &str) -> Option<(u64, bool)> {
+        if let Some((backend, source)) = self.config_source(path) {
+            return backend.stat(source);
+        }
         if let Some(res) = self.mounts.backend(path).and_then(|b| b.stat(path)) {
             return Some(res);
         }
         if self.mounts.is_mount_ancestor(path) {
+            return Some((0, true));
+        }
+        if matches!(path, "/etc" | "/etc/cellos") {
             return Some((0, true));
         }
         None
@@ -164,6 +203,9 @@ impl VfsManager {
     }
 
     pub fn file_size(&self, path: &str) -> u64 {
+        if let Some((backend, source)) = self.config_source(path) {
+            return backend.file_size(source);
+        }
         self.mounts
             .backend(path)
             .map(|b| b.file_size(path))
@@ -171,6 +213,9 @@ impl VfsManager {
     }
 
     pub fn read_to_vec(&self, path: &str) -> Vec<u8> {
+        if let Some((backend, source)) = self.config_source(path) {
+            return backend.read_to_vec(source);
+        }
         self.mounts
             .backend(path)
             .map(|b| b.read_to_vec(path))
@@ -185,6 +230,9 @@ impl VfsManager {
     }
 
     pub fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
+        if let Some((backend, source)) = self.config_source(path) {
+            return backend.read_at(source, offset, buf);
+        }
         self.mounts
             .backend(path)
             .map(|b| b.read_at(path, offset, buf))
@@ -245,5 +293,24 @@ impl VfsManager {
             .backend_mut(old)
             .map(|b| b.rename_no_replace(old, new))
             .unwrap_or(false)
+    }
+
+    /// Only the three public configuration paths use this source rule. Secrets
+    /// and C2C configuration elsewhere in /etc keep their existing routing.
+    fn config_source<'a>(&'a self, path: &'a str) -> Option<(&'a dyn FsBackend, &'a str)> {
+        let persistent = match path {
+            "/etc/cellos/system.toml" => return Some((&self.boot_config, path)),
+            "/etc/cellos/services.toml" => "/mnt/sd/etc/cellos/services.toml",
+            "/etc/cellos/autoload.toml" => "/mnt/sd/etc/cellos/autoload.toml",
+            _ => return None,
+        };
+        if let Some(backend) = self.mounts.backend(persistent) {
+            // Presence, not nonempty content, selects an override. Invalid or
+            // empty runtime files must be diagnosed rather than silently ignored.
+            if backend.stat(persistent).is_some() {
+                return Some((backend, persistent));
+            }
+        }
+        Some((&self.boot_config, path))
     }
 }

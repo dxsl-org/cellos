@@ -350,72 +350,8 @@ if [[ "${CELLOS_INCLUDE_CAPACITY_PROBE:-0}" == "1" ]]; then
     add_kfs "$REL/heavy-probe"      "/bin/heavy-probe"
 fi
 
-"$PYTHON_BIN" tools/mkfat32.py "${kfs_args[@]}"
-
-# Prove the layout rather than trusting the exit code: mkfat32.py exits 0 for an
-# image whose destination paths went astray, and a missing /POLICY.BIN degrades
-# silently to the dev-permissive branch (an image that looks provisioned and
-# enforces nothing).
-"$PYTHON_BIN" tools/inspect_fat.py "$KFS" > "$KFS_TMP/fat-layout.txt"
-if ! grep -q -- '--- /bin ---' "$KFS_TMP/fat-layout.txt" ||
-   ! grep -q -- "LFN 'vfs'" "$KFS_TMP/fat-layout.txt" ||
-   ! grep -q -- "LFN 'shell'" "$KFS_TMP/fat-layout.txt" ||
-   ! grep -q -- "LFN 'bench-probe'" "$KFS_TMP/fat-layout.txt"; then
-    echo "FAIL: kernel_fs.img lacks a required bootstrap cell" >&2
-    cat "$KFS_TMP/fat-layout.txt" >&2
-    exit 1
-fi
-assert_policy_in_image "$KFS_TMP/fat-layout.txt"
-
-# ── 5. Kernel (embeds VIFS1 via include_bytes!) ───────────────────────────────
-# EMBEDDED_OVERRIDE points the build script at our staging dir, so the committed
-# kernel/src/embedded/init is never rewritten (gen_disk.ps1 copies app-init over
-# it; the embedded bytes are identical either way). The image copy below keeps
-# kernel/src/embedded/kernel_fs.img current for the lanes that read it directly.
-echo "==> building kernel (PIC, VIFS1 embedded)"
-cp "$REL/app-init" "$EMBED_DIR/init"
-RUSTFLAGS="-C relocation-model=pic" EMBEDDED_OVERRIDE="$EMBED_DIR" \
-    cargo build --release -p cellos-kernel --target "$TARGET" -Z build-std=core,alloc
-
-# A concurrent test-hooks build clobbers the production kernel path. Both
-# build-test-hooks-ci.sh and build-aarch64-test-hooks-ci.sh build the test-hooks
-# kernel at $REL/cellos-kernel and only THEN copy it to `cellos-kernel-test-hooks`,
-# and lanes that shell out to them (build-native-domain-test-ci.sh,
-# qemu-native-domain-test.sh) inherit the clobber. The integration lanes boot
-# $REL/cellos-kernel, so a clobber makes them fail on phantom causes: the
-# test-hooks VIFS1 carries the test-hooks /bin/vfs, whose FAT /bin mount fails
-# against a production disk, so every cell-store cell becomes "command not found".
-# Catching it here costs nothing; booting it costs an hour of misdirected debugging.
-if [[ -f "$REL/cellos-kernel-test-hooks" ]] && cmp -s "$REL/cellos-kernel" "$REL/cellos-kernel-test-hooks"; then
-    echo "FAIL: $REL/cellos-kernel is byte-identical to cellos-kernel-test-hooks — the" >&2
-    echo "      TEST-HOOKS kernel is sitting on the production path. Re-run once no" >&2
-    echo "      build-*-test-hooks-ci.sh lane is running." >&2
-    exit 1
-fi
-
-cp "$KFS" kernel/src/embedded/kernel_fs.img
-
-# ── 6. disk_v3.img ───────────────────────────────────────────────────────────
-# MBR layout (tools/write-mbr.py, kernel/src/loader/disk_layout.rs):
-#   P1 FAT32 @2048+524288 · P2 cell table @526336 · P3 snapshot @560000
-#   P4 littlefs @800000 · P6 FAT cell-store @1062144 +65536
-echo "==> assembling $DISK"
-DISK_SECTORS=1127680                       # P6 end: 1062144 + 65536
-CELLSTORE_BASE_LBA=1062144                 # MUST match api::disk::PART_CELLSTORE_BASE_LBA
-CELLSTORE_SECTORS=65536                    # MUST match api::disk::PART_CELLSTORE_SECTORS
-
-NEW_DISK="$DISK.new"
-rm -f "$NEW_DISK"
-truncate -s $((DISK_SECTORS * 512)) "$NEW_DISK"
-"$PYTHON_BIN" tools/write-mbr.py "$NEW_DISK"
-"$PYTHON_BIN" tools/mkfat32_inplace.py "$NEW_DISK" 524288 2048
-
-# P2 bootstrap table. Paths and order mirror gen_disk.ps1's $table_args; the
-# presence guards are what make a partially-built target/ still produce a bootable
-# disk (as gen_disk.ps1 does), while the required artifacts above stop the
-# dangerous cases.
 table_args=(
-    "$NEW_DISK"
+    "$DISK.new"
     "/bin/vfs=$REL/service-vfs"
     "/bin/config=$REL/service-config"
     "/bin/shell=$REL/app-shell"
@@ -497,6 +433,82 @@ add_row "$REL/ps"                     "/bin/ps"
 add_row "$REL/kill"                   "/bin/kill"
 add_row "$REL/free"                   "/bin/free"
 add_row "$REL/hotswap"                "/bin/hotswap"
+config_args=()
+for row in "${table_args[@]:1}"; do
+    config_args+=(--config-artifact "$row")
+done
+"$PYTHON_BIN" tools/mkfat32.py \
+    --config-features "${CELLOS_INIT_FEATURES:-}" \
+    --config-output-dir "$EMBED_DIR/boot-config" \
+    "${config_args[@]}" "${kfs_args[@]}"
+
+# Prove the layout rather than trusting the exit code: mkfat32.py exits 0 for an
+# image whose destination paths went astray, and a missing /POLICY.BIN degrades
+# silently to the dev-permissive branch (an image that looks provisioned and
+# enforces nothing).
+"$PYTHON_BIN" tools/inspect_fat.py "$KFS" > "$KFS_TMP/fat-layout.txt"
+if ! grep -q -- '--- /bin ---' "$KFS_TMP/fat-layout.txt" ||
+   ! grep -q -- "LFN 'vfs'" "$KFS_TMP/fat-layout.txt" ||
+   ! grep -q -- "LFN 'shell'" "$KFS_TMP/fat-layout.txt" ||
+   ! grep -q -- "LFN 'bench-probe'" "$KFS_TMP/fat-layout.txt"; then
+    echo "FAIL: kernel_fs.img lacks a required bootstrap cell" >&2
+    cat "$KFS_TMP/fat-layout.txt" >&2
+    exit 1
+fi
+assert_policy_in_image "$KFS_TMP/fat-layout.txt"
+
+# ── 5. Kernel (embeds VIFS1 via include_bytes!) ───────────────────────────────
+# EMBEDDED_OVERRIDE points the build script at our staging dir, so the committed
+# kernel/src/embedded/init is never rewritten (gen_disk.ps1 copies app-init over
+# it; the embedded bytes are identical either way). The image copy below keeps
+# kernel/src/embedded/kernel_fs.img current for the lanes that read it directly.
+echo "==> building kernel (PIC, VIFS1 embedded)"
+cp "$REL/app-init" "$EMBED_DIR/init"
+RUSTFLAGS="-C relocation-model=pic" EMBEDDED_OVERRIDE="$EMBED_DIR" \
+    cargo build --release -p cellos-kernel --target "$TARGET" -Z build-std=core,alloc
+
+# A concurrent test-hooks build clobbers the production kernel path. Both
+# build-test-hooks-ci.sh and build-aarch64-test-hooks-ci.sh build the test-hooks
+# kernel at $REL/cellos-kernel and only THEN copy it to `cellos-kernel-test-hooks`,
+# and lanes that shell out to them (build-native-domain-test-ci.sh,
+# qemu-native-domain-test.sh) inherit the clobber. The integration lanes boot
+# $REL/cellos-kernel, so a clobber makes them fail on phantom causes: the
+# test-hooks VIFS1 carries the test-hooks /bin/vfs, whose FAT /bin mount fails
+# against a production disk, so every cell-store cell becomes "command not found".
+# Catching it here costs nothing; booting it costs an hour of misdirected debugging.
+if [[ -f "$REL/cellos-kernel-test-hooks" ]] && cmp -s "$REL/cellos-kernel" "$REL/cellos-kernel-test-hooks"; then
+    echo "FAIL: $REL/cellos-kernel is byte-identical to cellos-kernel-test-hooks — the" >&2
+    echo "      TEST-HOOKS kernel is sitting on the production path. Re-run once no" >&2
+    echo "      build-*-test-hooks-ci.sh lane is running." >&2
+    exit 1
+fi
+
+cp "$KFS" kernel/src/embedded/kernel_fs.img
+
+# ── 6. disk_v3.img ───────────────────────────────────────────────────────────
+# MBR layout (tools/write-mbr.py, kernel/src/loader/disk_layout.rs):
+#   P1 FAT32 @2048+524288 · P2 cell table @526336 · P3 snapshot @560000
+#   P4 littlefs @800000 · P6 FAT cell-store @1062144 +65536
+echo "==> assembling $DISK"
+DISK_SECTORS=1127680                       # P6 end: 1062144 + 65536
+CELLSTORE_BASE_LBA=1062144                 # MUST match api::disk::PART_CELLSTORE_BASE_LBA
+CELLSTORE_SECTORS=65536                    # MUST match api::disk::PART_CELLSTORE_SECTORS
+
+# Keep operator runtime overrides across disk recreation; even empty/invalid
+# files remain authoritative for init rather than silently becoming defaults.
+"$PYTHON_BIN" scripts/generate-boot-config.py --preserve-persistent "$DISK" \
+    --output-dir "$EMBED_DIR/boot-config"
+NEW_DISK="$DISK.new"
+rm -f "$NEW_DISK"
+truncate -s $((DISK_SECTORS * 512)) "$NEW_DISK"
+"$PYTHON_BIN" tools/write-mbr.py "$NEW_DISK"
+"$PYTHON_BIN" tools/mkfat32_inplace.py --config-dir "$EMBED_DIR/boot-config" \
+    "$NEW_DISK" 524288 2048
+
+# P2 bootstrap table. Paths and order mirror gen_disk.ps1's $table_args; the
+# presence guards are what make a partially-built target/ still produce a bootable
+# disk (as gen_disk.ps1 does), while the required artifacts above stop the
+# dangerous cases.
 
 "$PYTHON_BIN" tools/write-cell-table.py "${table_args[@]}"
 

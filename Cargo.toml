@@ -37,6 +37,7 @@ members = [
     "libs/mlibc-shim",
     "libs/agent-proto",
     "libs/authority-protocol",
+    "libs/boot-config",
     "libs/viui",
     "libs/viui-macros",
     "libs/cellos-fs",

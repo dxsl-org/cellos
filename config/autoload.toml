@@ -1,0 +1,25 @@
+# Applications start after the configured required services are ready.
+version = 1
+
+[[cells]]
+name = "fb-console"
+path = "/bin/fb-console"
+after = ["compositor"]
+restart = "never"
+
+[[cells]]
+name = "desktop"
+path = "/bin/desktop"
+after = ["compositor"]
+restart = "never"
+
+[[cells]]
+name = "hypervisor"
+path = "/bin/hypervisor"
+service_id = 14
+restart = "always"
+
+[[cells]]
+name = "shell"
+path = "/bin/shell"
+restart = "on-failure"

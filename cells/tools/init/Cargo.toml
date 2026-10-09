@@ -10,6 +10,7 @@ ostd = { path = "../../../libs/ostd", version = "0.2.0" }
 ocel-service-proto = { path = "../../../libs/ocel-service-proto", version = "0.1.0" }
 ocel-pdf-proto = { path = "../../../libs/ocel-pdf-proto", version = "0.1.0" }
 dom-arena = { path = "../../../libs/dom-arena", version = "0.1.0" }
+cellos-boot-config = { path = "../../../libs/boot-config", version = "0.1.0" }
 
 [features]
 default = []
@@ -37,13 +38,9 @@ tier2-rpc-entry = []
 # with development-silo-provider or c2c-broker is a compile error.
 tier2-grant-pair = []
 # ── Options ─────────────────────────────────────────────────────────────────
-# Cellos is embedded-first: every image boots to a prompt with the base set
-# (vfs, net, shell on a serial console), and everything else is an option here.
-# Options are orthogonal -- a server that must not run guests is `tier3` off, a
-# kiosk is `ui` + `input` with `tier3` off, a full desktop is everything. An
-# option chooses what is packaged and booted; it never decides what may *run*
-# (admission tiers, launch profiles and ceilings are runtime policy and are the
-# same in every image).
+# Features select packaged artifacts and platform/test fixtures. Ordinary boot
+# choices are generated into /etc/cellos/services.toml and autoload.toml, not
+# compiled into init. They do not change admission policy or launch ceilings.
 #
 # input: keyboard/mouse event routing (HID sources, VirtIO input).
 input = []
@@ -71,11 +68,11 @@ tier3-autostart = []
 hv-autostart = []
 # Include the hostile-only supervisor control Cell (implies `supervisor`).
 hostile-backend-recovery = ["api/hostile-backend-recovery"]
-# Admit the development/reference AArch64 Silo service into the supervised table.
+# Package the development/reference Silo service with exact self-ready registration.
 development-silo-provider = []
-# Spawn the fail-closed C2C broker only in images that provision its cluster key.
+# Package the fail-closed C2C broker only in images provisioning its cluster key.
 c2c-broker = []
-# Select the VideoCore mailbox display driver during RPi3 boot.
+# Select the RPi3 platform's fixed storage bootstrap and generated display profile.
 board-rpi3 = []
 
 [build-dependencies]

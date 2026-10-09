@@ -73,6 +73,11 @@ impl RamFsBackend {
         Self { root }
     }
 
+    #[cfg(test)]
+    pub(crate) fn seed_test_file(&mut self, path: &str, content: &[u8]) -> bool {
+        self.write_node(path, content)
+    }
+
     fn find_node(&self, path: &str) -> Option<&RamFile> {
         if path == "/" {
             return Some(&self.root);

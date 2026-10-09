@@ -22,6 +22,9 @@ import struct
 import os
 import sys
 from collections import defaultdict
+import argparse
+import importlib.util
+from pathlib import Path
 
 
 # ── FAT16 constants ────────────────────────────────────────────────────────────
@@ -198,7 +201,8 @@ def dot_entries(self_cluster: int, parent_cluster: int) -> bytes:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def create_fat32_image(output_path: str, files: list):
+def create_fat32_image(output_path: str, files: list, config_features="",
+                       config_artifacts=(), config_dir=None, config_output_dir=None):
     """
     Create a FAT16 disk image at *output_path* containing *files*.
 
@@ -217,6 +221,30 @@ def create_fat32_image(output_path: str, files: list):
             continue
         with open(src, 'rb') as fh:
             file_data[dst] = fh.read()
+
+    # Every boot image uses the same canonical paths, including images which
+    # embed init separately and carry only /bin/vfs in the ramdisk. LFN entries
+    # preserve the four-character .toml extension (never an 8.3 truncation).
+    canonical = {f"etc/cellos/{name}.toml" for name in ("system", "services", "autoload")}
+    boot_image = "bin/init" in file_data or "bin/vfs" in file_data
+    if boot_image and not canonical.issubset(file_data):
+        generator_path = Path(__file__).resolve().parent.parent / "scripts" / "generate-boot-config.py"
+        spec = importlib.util.spec_from_file_location("cellos_boot_config", generator_path)
+        generator = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(generator)
+        configs = generator.generate_configs(
+            list(files) + list(config_artifacts), config_features, config_dir)
+        for path, raw in configs.items():
+            file_data.setdefault(path.lstrip("/"), raw)
+    if boot_image and config_output_dir:
+        destination = Path(config_output_dir)
+        templates = Path(config_dir or os.environ.get("CELLOS_CONFIG_DIR") or
+                         Path(__file__).resolve().parent.parent / "config")
+        if destination.resolve() == templates.resolve():
+            raise ValueError("config output directory must not overwrite source templates")
+        destination.mkdir(parents=True, exist_ok=True)
+        for path in sorted(canonical):
+            (destination / Path(path).name).write_bytes(file_data[path])
 
     # ── 2. Compute disk geometry ─────────────────────────────────────────────
     root_dir_sectors = (ROOT_ENTRIES * 32 + SECTOR_SIZE - 1) // SECTOR_SIZE
@@ -441,10 +469,23 @@ def create_fat32_image(output_path: str, files: list):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print('Usage: mkfat32.py <output.img> [<src> <dst>] ...')
-        sys.exit(1)
-    out   = sys.argv[1]
-    args  = sys.argv[2:]
-    pairs = [(args[i], args[i+1]) for i in range(0, len(args) - 1, 2)]
-    create_fat32_image(out, pairs)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config-features", default=os.environ.get("CELLOS_INIT_FEATURES", ""))
+    parser.add_argument("--config-dir", default=os.environ.get("CELLOS_CONFIG_DIR"))
+    parser.add_argument("--config-output-dir")
+    parser.add_argument("--config-artifact", action="append", default=[],
+                        metavar="/bin/NAME=HOST_FILE")
+    parser.add_argument("output")
+    parser.add_argument("pairs", nargs="*")
+    args = parser.parse_args()
+    if len(args.pairs) % 2:
+        parser.error("files must be supplied as complete source/destination pairs")
+    artifacts = []
+    for artifact in args.config_artifact:
+        dst, separator, src = artifact.partition("=")
+        if not separator or not dst.startswith("/bin/"):
+            parser.error("--config-artifact must be /bin/NAME=HOST_FILE")
+        artifacts.append((src, dst))
+    pairs = list(zip(args.pairs[::2], args.pairs[1::2]))
+    create_fat32_image(args.output, pairs, args.config_features, artifacts,
+                       args.config_dir, args.config_output_dir)

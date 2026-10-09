@@ -116,6 +116,7 @@ printf 'Welcome to ViCell!' > "$TMPDIR_KFS/readme"
 "$PYTHON_BIN" scripts/sign-policy.py --out "$TMPDIR_KFS/POLICY.BIN" >/dev/null
 
 "$PYTHON_BIN" tools/mkfat32.py \
+    --config-output-dir "$EMB/boot-config" \
     "$EMB/kernel_fs.img" \
     "$REL/app-init"          /bin/init \
     "$REL/app-shell"         /bin/shell \

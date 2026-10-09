@@ -62,9 +62,13 @@ echo " Board:  $BOARD"
 echo " Target: ${DEVICE:-$OUTPUT}"
 echo "======================================================="
 
+CONFIG_DIR="target/physical-$BOARD-boot-config"
 # 1. Compile board kernel
 if [[ "$BOARD" == "vf2" ]]; then
     echo "==> Building Cellos Kernel for StarFive VisionFive 2 (RV64GC)..."
+    python3 scripts/generate-boot-config.py \
+        --refresh-image "${EMBEDDED_OVERRIDE:-kernel/src/embedded}/kernel_fs.img" \
+        --output-dir "$CONFIG_DIR"
     RUSTFLAGS="-C relocation-model=pic" \
         cargo build --release -p cellos-kernel \
         --target riscv64gc-unknown-none-elf \
@@ -72,7 +76,13 @@ if [[ "$BOARD" == "vf2" ]]; then
     KERNEL_BIN="target/riscv64gc-unknown-none-elf/release/cellos-kernel"
 elif [[ "$BOARD" == "rpi3" ]]; then
     echo "==> Building Cellos Kernel for Raspberry Pi 3 Model B+ (AArch64)..."
-    cargo build --release -p cellos-kernel \
+    EMBEDDED="${EMBEDDED_OVERRIDE:-kernel/src/embedded-aarch64}"
+    if [[ -z "${EMBEDDED_OVERRIDE:-}" && -d target/rpi3-embedded ]]; then
+        EMBEDDED=target/rpi3-embedded
+    fi
+    python3 scripts/generate-boot-config.py --refresh-image "$EMBEDDED/kernel_fs.img" \
+        --features "board-rpi3,${CELLOS_INIT_FEATURES:-}" --output-dir "$CONFIG_DIR"
+    EMBEDDED_OVERRIDE="$(realpath "$EMBEDDED")" cargo build --release -p cellos-kernel \
         --target aarch64-unknown-none-softfloat \
         --features board-rpi3
     KERNEL_BIN="target/aarch64-unknown-none-softfloat/release/cellos-kernel"
@@ -92,6 +102,10 @@ fi
 echo "==> Verifying Cellos F1/F5 Security Signing Policy..."
 python3 scripts/cellos-sign --check --strict
 
+# Retain runtime operator files before formatting P1. The existing formatter
+# remains the owner of destructive image/device preparation.
+python3 scripts/generate-boot-config.py --preserve-persistent "${DEVICE:-$OUTPUT}" \
+    --output-dir "$CONFIG_DIR"
 # 3. Create or prepare target image
 IMG_TARGET="${DEVICE:-$OUTPUT}"
 if [[ -n "$OUTPUT" ]]; then
@@ -105,7 +119,7 @@ python3 tools/write-mbr.py "$IMG_TARGET"
 
 # 5. Format FAT32 Boot Partition P1 (LBA 2048, 524288 sectors = 256MB)
 echo "==> Formatting FAT32 Boot Partition (P1)..."
-python3 tools/mkfat32_inplace.py "$IMG_TARGET" 524288 2048
+python3 tools/mkfat32_inplace.py --config-dir "$CONFIG_DIR" "$IMG_TARGET" 524288 2048
 
 # 6. Populate Boot Partition P1 with firmware and kernel
 if [[ "$BOARD" == "rpi3" ]]; then

@@ -31,6 +31,14 @@ fi
 # ── 2. Build kernel (board-vf2 feature, release) ──────────────────────────────
 echo "[vf2-flash] Building Cellos kernel for VisionFive2..."
 cd "$REPO_ROOT"
+# Refresh the embedded defaults before the kernel's include_bytes! step. Preserve
+# every non-config ramdisk file; optional services select only carried artifacts.
+CONFIG_DIR="$REPO_ROOT/target/vf2-boot-config"
+python3 scripts/generate-boot-config.py \
+    --refresh-image "${EMBEDDED_OVERRIDE:-kernel/src/embedded}/kernel_fs.img" \
+    --output-dir "$CONFIG_DIR"
+python3 scripts/generate-boot-config.py --preserve-persistent "$OUT" --base-lba 4096 \
+    --output-dir "$CONFIG_DIR"
 RUSTFLAGS="-C relocation-model=pic" \
     cargo build --release -p cellos-kernel \
     --target riscv64gc-unknown-none-elf \
@@ -71,6 +79,12 @@ mkdir -p "$MNT/EFI/BOOT"
 cp "$LIMINE_EFI"                 "$MNT/EFI/BOOT/BOOTRISCV64.EFI"
 cp "$REPO_ROOT/limine-vf2.conf"  "$MNT/limine.conf"
 cp "$KERNEL"                     "$MNT/cellos-kernel"
+mkdir -p "$MNT/etc/cellos"
+for name in system services autoload; do
+    if [[ ! -e "$MNT/etc/cellos/$name.toml" ]]; then
+        cp "$CONFIG_DIR/$name.toml" "$MNT/etc/cellos/$name.toml"
+    fi
+done
 
 echo "[vf2-flash] Boot partition contents:"
 ls -lh "$MNT/EFI/BOOT/BOOTRISCV64.EFI" "$MNT/limine.conf" "$MNT/cellos-kernel"

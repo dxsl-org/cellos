@@ -1,0 +1,105 @@
+# The host generator selects the entries for an image's packaging features and
+# actual artifacts. Edit these defaults, or set CELLOS_CONFIG_DIR to a directory
+# containing your own system.toml, services.toml and autoload.toml.
+version = 1
+
+# Hardware probe cells precede their consumers, but are not readiness dependencies:
+# a driver can exit normally when its hardware is absent.
+[[cells]]
+name = "virtio-net"
+path = "/bin/virtio-net"
+restart = "never"
+
+[[cells]]
+name = "e1000"
+path = "/bin/e1000"
+restart = "never"
+
+[[cells]]
+name = "igb"
+path = "/bin/igb"
+restart = "never"
+
+[[cells]]
+name = "serial"
+path = "/bin/serial"
+restart = "never"
+
+[[cells]]
+name = "dwc2-usb"
+path = "/bin/dwc2-usb"
+restart = "never"
+
+[[cells]]
+name = "xhci"
+path = "/bin/xhci"
+restart = "never"
+
+[[cells]]
+name = "config"
+path = "/bin/config"
+service_id = 4
+restart = "always"
+
+[[cells]]
+name = "ai"
+path = "/bin/ai"
+service_id = 15
+restart = "always"
+after = ["config"]
+
+[[cells]]
+name = "input"
+path = "/bin/input"
+service_id = 3
+restart = "always"
+
+[[cells]]
+name = "net"
+path = "/bin/net"
+service_id = 2
+required = true
+restart = "always"
+
+[[cells]]
+name = "virtio-gpu"
+path = "/bin/virtio-gpu"
+restart = "never"
+
+[[cells]]
+name = "bcm-display"
+path = "/bin/bcm-display"
+restart = "never"
+
+[[cells]]
+name = "compositor"
+path = "/bin/compositor"
+service_id = 5
+restart = "always"
+
+[[cells]]
+name = "silo"
+path = "/bin/silo"
+service_id = 6
+registration = "self-ready"
+required = true
+ready_timeout_ticks = 5000
+restart = "always"
+
+[[cells]]
+name = "kms"
+path = "/bin/kms"
+service_id = 13
+restart = "always"
+
+[[cells]]
+name = "net-broker"
+path = "/bin/net-broker"
+service_id = 8
+restart = "always"
+
+[[cells]]
+name = "supervisor"
+path = "/bin/supervisor"
+service_id = 11
+restart = "always"
