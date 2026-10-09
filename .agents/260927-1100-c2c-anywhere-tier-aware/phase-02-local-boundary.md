@@ -55,7 +55,7 @@ Cost: a tier dispatch or binding lookup could regress Tier-1 hot calls. Preserve
 
 None.
 
-## Next acceptance scenario (identified 2026-10-09; pending portfolio activation)
+## Next acceptance scenario (identified 2026-10-09; slice A admitted, slice B pending)
 
 ### Target, re-pointed to Intel
 
@@ -134,3 +134,24 @@ anywhere in the path.
 Both slices are copied-IPC only: no `DomainGrant` to a private root, no ring, no raw pointer, no remote
 path. Nothing above is activated by this note — implementation starts only when the portfolio admits
 the slice.
+
+## Slice A progress (2026-10-09) — implemented and verified
+
+Admitted 2026-10-09 with the Phase-01 exit sign-off, and landed the same day. The SDK now consumes the
+binding the kernel already returns:
+
+| Item | Location | Evidence |
+|---|---|---|
+| `ServiceRef` caches and resolves the binding `{tid, cell_id, generation}` through `sys_lookup_service_bound`; failures are classified against the registry (`NotFound` when the descriptor is stale, `IO` when the same live endpoint failed) | `libs/ostd/src/service.rs` | `SDK-BINDING matches_raw=true`, `SDK-VFS-CALL=OK` |
+| `binding()` and `is_live()` — resolve the whole descriptor; answer whether the held descriptor is still the live one | `libs/ostd/src/service.rs` | `SDK-BINDING-LIVE resolved=true unresolved=false` |
+| `LocalEndpoint::bind()` resolves the method's service and refuses with `EndpointError::NoLiveBinding`; `new(tid)` stays identity-free and keeps `IO` | `libs/ostd/src/cluster_endpoint.rs` | `SDK-ABSENT-BINDING=REFUSED` |
+| The rule, pure and host-tested: whole-descriptor match, including the tid (a Cell can re-register under a new tid without its generation changing) | `ostd::service::classify_call_failure` | `libs/ostd/tests/cluster-endpoint.rs` |
+
+No new ABI, no new `/bin` path, no kernel IPC change, `LookupService = 206` untouched.
+Evidence: `docs/evidence/c2c-sdk-binding-x86.{txt,log}`; the lane is the x86_64
+`local-service-lifecycle` witness, whose leg S exercises the SDK itself, and the AArch64/RV64 `test-hooks`
+suites plus the local broker oracle were re-run with the change.
+
+**Not in this slice:** the stale-after-death half has no runtime witness yet (it needs a registered
+provider that dies, which is slice B's fixture); `libs/ai-sdk` keeps its own coarse transport error
+mapping; and `LocalEndpoint::call` still uses the synchronous path, which Phase 03 owns.

@@ -6,6 +6,7 @@
 //! method while remote dispatch remains disabled.
 
 use api::ipc::IPC_BUF_SIZE;
+use api::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
 use api::services::cluster::{CellNetId, ClusterId};
 use core::marker::PhantomData;
 use serde::{Deserialize, Serialize};
@@ -33,6 +34,8 @@ pub trait CellMethod {
 pub enum EndpointError {
     InvalidLocalTid,
     InvalidRemoteIdentity,
+    /// No live provider binding exists for the method's service.
+    NoLiveBinding,
 }
 
 /// Observable remote-call outcomes; never collapse these into local IPC errors.
@@ -51,24 +54,63 @@ pub enum RemoteCallError {
 /// Direct local endpoint. Calls never resolve or contact the net-broker.
 pub struct LocalEndpoint<M: CellMethod> {
     tid: usize,
+    /// The provider binding this endpoint resolved, when it was created by
+    /// [`LocalEndpoint::bind`]. A tid-only endpoint has none, and then this type makes
+    /// no claim about the provider behind the tid.
+    binding: Option<ServiceBinding>,
     marker: PhantomData<fn() -> M>,
 }
 
 impl<M: CellMethod> LocalEndpoint<M> {
     /// Bind a typed endpoint to `tid`, rejecting the reserved zero TID.
+    ///
+    /// This trusts a caller-supplied tid: it resolves nothing, so the endpoint carries no
+    /// provider identity and a failed exchange is reported as `IO` rather than classified
+    /// against the registry. Use [`bind`][Self::bind] when the service identity matters.
     pub const fn new(tid: usize) -> Result<Self, EndpointError> {
         if tid == 0 {
             return Err(EndpointError::InvalidLocalTid);
         }
         Ok(Self {
             tid,
+            binding: None,
             marker: PhantomData,
         })
+    }
+
+    /// Resolve the method's service to its live provider binding and bind to it.
+    ///
+    /// Where [`new`][Self::new] trusts a caller-supplied tid, this asks the kernel which
+    /// provider incarnation is live for `M::SERVICE_ID` and refuses when there is none —
+    /// no binding means the call is refused, never sent to a tid that may belong to a
+    /// dead incarnation. The endpoint then carries that identity, so a later exchange
+    /// against a provider that has since been replaced is reported as `NotFound` instead
+    /// of a generic I/O error.
+    ///
+    /// # Errors
+    /// - `EndpointError::NoLiveBinding` — nothing is registered for `M::SERVICE_ID`, or
+    ///   the provider is paused behind a hot-swap: absent bindings are refusals, not
+    ///   retries.
+    pub fn bind() -> Result<Self, EndpointError> {
+        let mut record = [0u8; SERVICE_BINDING_LEN];
+        match crate::syscall::sys_lookup_service_bound(M::SERVICE_ID, &mut record) {
+            Some(binding) => Ok(Self {
+                tid: binding.tid as usize,
+                binding: Some(binding),
+                marker: PhantomData,
+            }),
+            None => Err(EndpointError::NoLiveBinding),
+        }
     }
 
     /// Return the direct local service TID.
     pub const fn tid(&self) -> usize {
         self.tid
+    }
+
+    /// The provider binding this endpoint resolved, or `None` for a tid-only endpoint.
+    pub const fn binding(&self) -> Option<ServiceBinding> {
+        self.binding
     }
 
     /// Execute one typed request/reply exchange directly with the local TID.
@@ -77,7 +119,10 @@ impl<M: CellMethod> LocalEndpoint<M> {
     ///
     /// # Errors
     /// Returns `InvalidArgument` for an oversized request and `IO` for send,
-    /// receive, wrong-sender, or decode failures.
+    /// receive, wrong-sender, or decode failures. An endpoint bound with
+    /// [`bind`][Self::bind] additionally reports `NotFound` when the provider it resolved
+    /// is no longer the live one: the exchange was refused, not delivered under a stale
+    /// descriptor.
     pub fn call<'a>(
         &self,
         request: &M::Request,
@@ -87,12 +132,24 @@ impl<M: CellMethod> LocalEndpoint<M> {
         match ipc::service_call_typed(self.tid, request, &mut send_buffer, response_buffer) {
             Ok(response) => Ok(response),
             Err(ipc::IpcError::Encode) => Err(ViError::InvalidArgument),
-            Err(ipc::IpcError::Send)
-            | Err(ipc::IpcError::Recv)
-            | Err(ipc::IpcError::WrongSender)
-            | Err(ipc::IpcError::Decode)
+            Err(ipc::IpcError::Decode)
             | Err(ipc::IpcError::InvalidOperation)
             | Err(ipc::IpcError::BufferTooSmall) => Err(ViError::IO),
+            Err(ipc::IpcError::Send)
+            | Err(ipc::IpcError::Recv)
+            | Err(ipc::IpcError::WrongSender) => match self.binding {
+                // A tid-only endpoint knows no provider identity, so it cannot tell a
+                // replaced provider from a failed one and must not guess.
+                None => Err(ViError::IO),
+                Some(held) => {
+                    let mut record = [0u8; SERVICE_BINDING_LEN];
+                    let live = crate::syscall::sys_lookup_service_bound(M::SERVICE_ID, &mut record);
+                    match crate::service::classify_call_failure(held, live) {
+                        crate::service::CallFailure::StaleBinding => Err(ViError::NotFound),
+                        crate::service::CallFailure::ProviderError => Err(ViError::IO),
+                    }
+                }
+            },
         }
     }
 }

@@ -70,26 +70,43 @@ authorization. Plans not admitted below are parked/historical.
   the Intel domain lane now runs to its own end.
   `LocalEndpoint::call` is unchanged: Phase 03 owns moving the SDK onto the bounded primitive; Phase 02
   step 1 owns making the SDK *consume* the frozen binding.
-- **Phase-01 exit evidence complete 2026-10-09, awaiting the contract owner:** all four success criteria
-  carry evidence (contract table; the §2.4 state-transition matrix; Spec-20/Spec-17/ADR-0015/Spec-22/
-  ADR-0008/0009 consistency, including the Spec 17 §9 record of the changed syscall surface; and the
-  local oracle re-run — `docs/evidence/c2c-broker-oracle-qemu-local.{txt,log}`, soak 10000/10000,
-  `overflow status=PASS busy=1 queue_peak=16`, `restart status=PASS stale_send=INDETERMINATE`). No
-  criterion is ticked: they are contract-owner acceptances. See
+- **Phase 01 closed 2026-10-09 by contract-owner sign-off**, and with it **slice A of Phase 02
+  admitted — the only implementation slice in flight** (WIP: one):
+  **caller-side binding consumer** in `libs/ostd`: `ServiceRef` resolves and caches the frozen
+  `LookupServiceBound` binding (`{tid, cell_id, generation}`) instead of a bare tid, and a call made
+  under a binding whose provider incarnation is no longer live is refused with a typed error rather
+  than silently re-targeted; `LocalEndpoint` gains the bound resolution. **No new ABI** (the opcode is
+  frozen), **no new `/bin` path**, **no kernel IPC change**, and no `LookupService = 206` behaviour
+  change: the resolution helper keeps its meaning and only the caching handle becomes
+  generation-aware. Owner: current C2C implementation session; files:
+  `libs/ostd/src/service.rs`, `libs/ostd/src/cluster_endpoint.rs` (+ tests).
+  **Landed 2026-10-09, evidence complete:** `ServiceRef` caches and resolves the binding, classifies a
+  failed exchange against the registry (`NotFound` for a descriptor the kernel no longer reports,
+  `IO` for a failure against the same live endpoint) and gains `binding()`/`is_live()`;
+  `LocalEndpoint::bind()` refuses with `EndpointError::NoLiveBinding` while `new(tid)` stays
+  identity-free; the rule is pure and host-tested (`libs/ostd/tests/cluster-endpoint.rs`). Witnessed on
+  the x86_64 lifecycle lane — `SDK-BINDING matches_raw=true`, `SDK-VFS-CALL=OK`,
+  `SDK-BINDING-LIVE resolved=true unresolved=false`, `SDK-ABSENT-BINDING=REFUSED` — with the
+  AArch64/RV64 `test-hooks` suites and the local broker oracle re-run green:
+  `docs/evidence/c2c-sdk-binding-x86.{txt,log}`. **Not proven there:** the stale-after-death half has no
+  runtime witness yet — it needs a registered provider that dies, which is slice B's fixture — so the
+  rule itself is covered by host tests only. Slice B remains **not** admitted.
+- **Phase-01 exit evidence recorded 2026-10-09:** all four success criteria carry evidence (contract
+  table; the §2.4 state-transition matrix; Spec-20/Spec-17/ADR-0015/Spec-22/ADR-0008/0009 consistency,
+  including the Spec 17 §9 record of the changed syscall surface; and the local oracle re-run —
+  `docs/evidence/c2c-broker-oracle-qemu-local.{txt,log}`, soak 10000/10000,
+  `overflow status=PASS busy=1 queue_peak=16`, `restart status=PASS stale_send=INDETERMINATE`). See
   [phase-01-contract.md](260927-1100-c2c-anywhere-tier-aware/phase-01-contract.md) § *Exit-gate evidence
   review*.
-- **Next slice identified 2026-10-09, not yet admitted:**
+- **Next slice identified 2026-10-09:**
   [phase-02-local-boundary.md](260927-1100-c2c-anywhere-tier-aware/phase-02-local-boundary.md) § *Next
   acceptance scenario* names two, in this phase's own step order. **A (step 1) — caller-side binding
-  consumer:** `ServiceRef`/`LocalEndpoint` resolve through the frozen `LookupServiceBound` binding and
-  refuse a stale one, with no new ABI, no new `/bin` path and no kernel IPC change (host tests plus the
-  x86 c2c-lifecycle lane and the local oracle). **B (step 2) — the cross-tier exchange:** one
-  IPC-capable admitted Tier-2 fixture plus a Tier-1 driver on the x86 test-hooks domain lane, witnessing
-  both directions and wrong-buffer / stale-generation / unauthorized-method / oversize refusals *before*
-  delivery, with Tier-1↔Tier-1 unchanged and the production lane still asserting Tier-2 denial. Slice B
-  touches new cell fixtures, loader launch-profile/ceiling rows and lane assertions, so it needs its own
-  review. The phase's RV64 wording is superseded by ADR-0022; the Intel test-hooks lane is the qualified
-  target. **Activation is the owner's decision; nothing above is enabled by this note.**
+  consumer** (admitted, see above). **B (step 2) — the cross-tier exchange:** one IPC-capable admitted
+  Tier-2 fixture plus a Tier-1 driver on the x86 test-hooks domain lane, witnessing both directions and
+  wrong-buffer / stale-generation / unauthorized-method / oversize refusals *before* delivery, with
+  Tier-1↔Tier-1 unchanged and the production lane still asserting Tier-2 denial. Slice B touches new cell
+  fixtures, loader launch-profile/ceiling rows and lane assertions, so it needs its own review. The
+  phase's RV64 wording is superseded by ADR-0022; the Intel test-hooks lane is the qualified target.
 - `261004-1957-x86-pc-lane` — **Intel-only supporting hardware lane**,
   one exact headless configuration ([plan](261004-1957-x86-pc-lane/plan.md)).
   **Authorized scope: phases 01–06** — 01 `x86_64-pc` descriptor + HCL model

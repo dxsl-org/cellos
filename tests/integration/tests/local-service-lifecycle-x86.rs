@@ -41,6 +41,14 @@ const SYNC_CALLER_START: &str = "[local-lifecycle] sync-caller-start";
 const SYNC_RETURNED: &str = "[local-lifecycle] SYNC-RESULT=RETURNED";
 const SYNC_LEG_DONE: &str = "[local-lifecycle] SYNC-LEG=complete";
 const ASYNC_PEER_GONE: &str = "[local-lifecycle] ASYNC-TERMINAL=PEER-GONE";
+/// Leg S: the SDK's caching handle resolved the same binding the raw opcode reports.
+const SDK_BINDING: &str = "[local-lifecycle] SDK-BINDING";
+/// Leg S: the liveness query answers true for a resolved binding, false for an unbound one.
+const SDK_BINDING_LIVE: &str = "[local-lifecycle] SDK-BINDING-LIVE";
+/// Leg S: a typed call through that handle still works end to end.
+const SDK_VFS_CALL: &str = "[local-lifecycle] SDK-VFS-CALL=OK";
+/// Leg S: a service with no live provider is refused, not sent to.
+const SDK_ABSENT_BINDING: &str = "[local-lifecycle] SDK-ABSENT-BINDING=REFUSED";
 const PASS: &str = "[local-lifecycle] PASS";
 
 fn repo_root() -> PathBuf {
@@ -111,6 +119,10 @@ fn x86_dead_provider_strands_sync_caller_but_bounds_async_call() {
         START,
         VFS_BINDING_PREFIX,
         ABSENT_BINDING,
+        SDK_BINDING,
+        SDK_BINDING_LIVE,
+        SDK_VFS_CALL,
+        SDK_ABSENT_BINDING,
         PROVIDER_READY,
         SYNC_CALLER_START,
         SYNC_LEG_DONE,
@@ -120,6 +132,37 @@ fn x86_dead_provider_strands_sync_caller_but_bounds_async_call() {
             "missing lifecycle anchor {anchor:?}\n--- output ---\n{output}"
         );
     }
+
+    // Leg S: the shipped SDK — not just the raw opcode — resolves the provider through
+    // the binding, and a typed call through that handle still works. Without this the
+    // binding would be an ABI nothing in the SDK consumed.
+    let sdk_line = output
+        .lines()
+        .find(|line| line.contains(SDK_BINDING))
+        .expect("SDK-BINDING line");
+    assert!(
+        sdk_line.contains("matches_raw=true"),
+        "ServiceRef resolved a different binding than the raw lookup reports: {sdk_line}"
+    );
+    assert!(
+        !sdk_line.contains("tid=None"),
+        "ServiceRef did not resolve a live provider at all: {sdk_line}"
+    );
+    // Leg S: the binding the handle holds is verified against the registry, and an
+    // unbound handle is not live rather than guessed at.
+    let live_line = output
+        .lines()
+        .find(|line| line.contains(SDK_BINDING_LIVE))
+        .expect("SDK-BINDING-LIVE line");
+    assert!(
+        live_line.contains("resolved=true") && live_line.contains("unresolved=false"),
+        "the liveness query disagreed with the bindings it was asked about: {live_line}"
+    );
+    // Leg S negative: no live binding is a refusal, never a tid to send to.
+    assert!(
+        output.contains(SDK_ABSENT_BINDING),
+        "a service with no live provider was not refused\n--- output ---\n{output}"
+    );
 
     // Leg 0: the additive opcode resolved the real provider. The binding must name
     // the same task `LookupService` does, and must carry a live Cell identity — a

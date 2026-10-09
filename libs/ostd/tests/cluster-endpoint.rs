@@ -78,27 +78,40 @@ fn cell_endpoint_requires_an_explicit_locality_branch() {
 }
 
 #[test]
-fn local_endpoint_binds_only_raw_tid_without_generation() {
-    // Proof of the Phase-01 contract finding:
-    // LocalEndpoint stores only `tid: usize`. It has no provider generation,
-    // cell ID, or server epoch.
-    let endpoint_v1 = LocalEndpoint::<Ping>::new(42).unwrap();
-    let endpoint_v2 = LocalEndpoint::<Ping>::new(42).unwrap();
-
-    // Both descriptors are identical even if they were acquired across a provider
-    // crash and restart where generation incremented.
-    assert_eq!(endpoint_v1.tid(), endpoint_v2.tid());
+fn local_endpoint_tid_only_constructor_claims_no_provider_identity() {
+    // `new` trusts a caller-supplied tid: it resolves nothing, so the endpoint carries no
+    // provider identity and cannot classify a failure against the registry. That is a
+    // property of this constructor, not of the type — `LocalEndpoint::bind` resolves the
+    // live binding and refuses when there is none.
+    let endpoint = LocalEndpoint::<Ping>::new(42).unwrap();
+    assert_eq!(endpoint.tid(), 42);
+    assert_eq!(endpoint.binding(), None);
 }
 
 #[test]
-fn local_endpoint_stale_tid_drift_witness() {
-    // Demonstrates that if a provider dies and respawns on a different TID,
-    // a cached LocalEndpoint retains the stale TID and cannot detect the drift
-    // without attempting a send.
-    let original_provider_tid = 15;
-    let respawned_provider_tid = 18;
+fn a_failed_exchange_is_stale_when_the_descriptor_no_longer_matches() {
+    use api::service_binding::ServiceBinding;
+    use ostd::service::{classify_call_failure, CallFailure};
 
-    let cached_endpoint = LocalEndpoint::<Ping>::new(original_provider_tid).unwrap();
-    assert_ne!(cached_endpoint.tid(), respawned_provider_tid);
-    assert_eq!(cached_endpoint.tid(), original_provider_tid);
+    let held = ServiceBinding::new(15, 3, 7);
+
+    // The same live endpoint failed the exchange: send, receive or reply-identity.
+    assert_eq!(
+        classify_call_failure(held, Some(ServiceBinding::new(15, 3, 7))),
+        CallFailure::ProviderError
+    );
+
+    // The provider Cell re-registered under a new tid: the generation is unchanged, but a
+    // call addresses the tid, so the descriptor the caller holds is not the live one.
+    assert_eq!(
+        classify_call_failure(held, Some(ServiceBinding::new(18, 3, 7))),
+        CallFailure::StaleBinding
+    );
+
+    // The Cell was replaced by a new incarnation, and nothing is registered at all.
+    assert_eq!(
+        classify_call_failure(held, Some(ServiceBinding::new(15, 3, 8))),
+        CallFailure::StaleBinding
+    );
+    assert_eq!(classify_call_failure(held, None), CallFailure::StaleBinding);
 }

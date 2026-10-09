@@ -1,0 +1,102 @@
+C2C Phase-02 slice A — the SDK consumes the frozen binding (x86_64 QEMU, 2026-10-09)
+====================================================================================
+
+What this records
+-----------------
+`LookupServiceBound = 429` returned a provider binding, but nothing in the SDK consumed
+it: `ServiceRef` cached a bare tid from `LookupService = 206` and `LocalEndpoint` checked
+only that a caller-supplied tid was nonzero. This slice makes the caller side bind-aware,
+with **no** new ABI, **no** new `/bin` path, **no** kernel IPC change and no change to
+`LookupService = 206`.
+
+What changed
+------------
+  * `libs/ostd/src/service.rs` — `ServiceRef` caches the **binding**
+    (`{tid, cell_id, generation}`) and resolves it through `sys_lookup_service_bound`.
+    A send/receive/reply-identity failure is now classified against the registry: if the
+    provider the call named is no longer the live one, the call reports `NotFound` — the
+    exchange was refused, not delivered under a stale descriptor — and the descriptor is
+    dropped; if the same live endpoint failed, it stays `IO`. `resolve()` keeps its
+    `Option<usize>` contract and `invalidate()` keeps its meaning. Two new methods:
+    `binding()` (resolve the whole descriptor) and `is_live()` (is the held descriptor
+    still the live one; an unresolved handle is not live).
+  * `libs/ostd/src/cluster_endpoint.rs` — `LocalEndpoint::bind()` resolves the method's
+    service through the same opcode and refuses with `EndpointError::NoLiveBinding` when
+    there is none; `binding()` exposes what it resolved. `LocalEndpoint::new(tid)` is
+    unchanged and stays identity-free, so it keeps reporting `IO` rather than guessing.
+  * The classification rule is pure — `ostd::service::classify_call_failure` — so it is
+    testable without a kernel. The whole descriptor must match, not just the Cell
+    identity: a provider Cell can re-register under a new tid without its generation
+    changing, and the tid is what a call addresses.
+
+Resolution is stricter in two ways that the ABI already states. A provider that is paused
+behind a hot-swap, or whose recorded identity is not live, resolves to **no binding**
+where `LookupService` answered a tid the kernel would then refuse at IPC admission. And a
+call under a descriptor the kernel no longer reports resolves nothing rather than being
+retried onto whatever incarnation is live now.
+
+How to reproduce
+----------------
+  bash scripts/build-x86_64-c2c-lifecycle-ci.sh
+  cargo test --manifest-path tests/integration/Cargo.toml \
+      --target x86_64-unknown-linux-gnu --test local-service-lifecycle-x86
+
+That lane boots a production-feature x86_64 image and drives
+`cells/tests/bench/src/scenarios/local_service_lifecycle.rs`, whose leg S exercises the SDK
+itself. Raw serial log: `c2c-sdk-binding-x86.log`.
+
+Observed (raw log lines, this run)
+----------------------------------
+  [local-lifecycle] VFS-BINDING tid=4 cell=1 gen=109 matches_lookup=true
+  [local-lifecycle] ABSENT-BINDING lookup=None bound_is_none=true
+  [local-lifecycle] SDK-BINDING matches_raw=true tid=Some(4)
+  [local-lifecycle] SDK-VFS-CALL=OK
+  [local-lifecycle] SDK-BINDING-LIVE resolved=true unresolved=false
+  [local-lifecycle] SDK-ABSENT-BINDING=REFUSED
+  [local-lifecycle] SYNC-LEG=complete
+  [local-lifecycle] ASYNC-TERMINAL=PEER-GONE
+  [local-lifecycle] PASS
+
+  * `SDK-BINDING matches_raw=true` — the caching handle every client and cell holds
+    resolves the *same* binding the raw opcode reports; without this the frozen opcode
+    would have no caller in the SDK.
+  * `SDK-VFS-CALL=OK` — a typed `ServiceRef::<VFS>::call` still completes end to end
+    through the binding-carrying handle (resolution, masked reply, decode).
+  * `SDK-BINDING-LIVE resolved=true unresolved=false` — the liveness query answers true
+    for the resolved descriptor and false for an unbound handle.
+  * `SDK-ABSENT-BINDING=REFUSED` — `LocalEndpoint::bind()` on a service with no live
+    provider refuses instead of sending to whatever tid someone wrote down.
+  * The pre-existing legs are unchanged: the sync caller is still stranded (no
+    `SYNC-RESULT=RETURNED`) and the exact-operation call still terminates `PEER-GONE`,
+    which is what keeps this slice's claim narrow — it changed the caller side, not the
+    kernel's wake path.
+
+Host tests
+----------
+  * `cargo test -p ostd --target x86_64-unknown-linux-gnu` — 43 unit + 7 endpoint tests +
+    19 doc tests pass. The endpoint tests now cover the rule instead of the old
+    "a cached endpoint cannot detect drift" finding: same descriptor → `ProviderError`,
+    a new tid under the same generation → `StaleBinding`, a new generation → `StaleBinding`,
+    absent → `StaleBinding`, and a tid-only endpoint reports no binding at all.
+  * `cargo test -p api` unchanged (109 + 2), `cargo build -p ai-sdk` clean.
+
+Regressions re-run with the change
+----------------------------------
+  * RV64 local C2C broker oracle: `test result: ok. 1 passed` (soak 10000/10000,
+    `indeterminate=0 stale=0 silent_drop=0`).
+  * AArch64 `test-hooks`: builds under `-D warnings`, `PASS: AArch64 test-hooks self-tests
+    passed`, guest suite `[vfs-test] Results: 96 PASS, 0 FAIL`.
+  * x86_64 domain-test lane: `PASS: x86_64 Tier-2 domain-entry lane (x86-domain-test) —
+    every marker present`.
+
+Not proven here
+---------------
+  * The **stale-after-death** half of the rule has no runtime witness yet: it needs a
+    provider that is registered and then dies, and no fixture in this image does that. The
+    rule itself is host-tested, and Phase-02 slice B's cross-tier fixture is where it gets
+    a lane witness.
+  * `libs/ai-sdk/src/ostd_transport.rs` consumes the binding through `resolve()` but keeps
+    its own coarse `AiClientError::Transport` mapping; classifying there is a follow-up,
+    not part of this slice.
+  * No kernel, ABI, Spec-17 or production call-site change: `LocalEndpoint::call` still
+    uses the synchronous path, which Phase 03 owns.

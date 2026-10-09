@@ -1,0 +1,210 @@
+c[?7l[2J[0mSeaBIOS (version 1.16.3-debian-1.16.3-2)
+
+
+iPXE (https://ipxe.org) 00:02.0 CA00 PCI2.10 PnP PMM+0EFCACF0+0EF0ACF0 CA00
+Press Ctrl-B to configure iPXE (PCI 00:02.0)...                                                                               
+
+
+Booting from DVD/CD...
+c[?7l[2Jc[?7l[2Jvbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+limine: Loading executable `boot():/boot/kernel.elf`...
+limine: Physical base:   0xf288000
+limine: Virtual base:    0xffffffff80000000
+limine: Slide:           0x0
+limine: ELF entry point: 0xffffffff80000000
+limine: Base revision:   3
+limine: Requests count:  6
+limine: Top of HHDM:     0x40000000
+acpi: Found RSDP at 0xf52c0
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Mode was already set, perfect!
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+paging: 1GiB pages are supported!
+[x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64
+[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT
+[INFO] CET-IBT: unavailable
+[INFO] PKU: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[boot] kernel_phys_base=0x000000000f288000
+[INFO] Frame allocator initialized
+[INFO] Initializing x86_64 paging (kernel PML4)...
+[INFO] x86_64 paging initialized
+[INFO] Activating x86_64 paging (mov cr3)...
+
+[kernel] x86_64 paging: PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x59000 — domain roots use tag 0 with a full CR3 flush)
+QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
+[INFO] x86 virt: root operation active (SVM)
+[INFO] Heap initialized
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] RAM Disk: read-only, 4096 KB (8192 sectors)
+[ INFO] UART Input Buffer Initialized
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ WARN] [x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 2 base=0x3e8 irq=4 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 3 base=0x2e8 irq=3 absent (16550 probe failed)
+[INFO] x86_64: ramdisk + UART RX IRQ initialised
+[ INFO] [pcie] ECAM fallback scan bus 0 @ 0xb0000000 (1 MiB window)
+[ INFO] [pcie] 00:00.0 vendor=8086 device=29c0 class=06:00:00 bar0=0x0
+[ INFO] [pcie] 00:01.0 vendor=1234 device=1111 class=03:00:00 bar0=0xfd000000
+[ INFO] [pcie] 00:02.0 vendor=8086 device=10d3 class=02:00:00 bar0=0xfeb80000
+[ WARN] [e1000] unsupported Ethernet 8086:10d3; driver gate closed
+[ INFO] [pcie] 00:1f.0 vendor=8086 device=2918 class=06:01:00 bar0=0x0
+[ INFO] [pcie] 00:1f.2 vendor=8086 device=2922 class=01:06:01 bar0=0x0
+[ INFO] [pcie] 00:1f.3 vendor=8086 device=2930 class=0c:05:00 bar0=0x0
+[ INFO] [pcie] ECAM scan complete: 6 device(s) found
+[ WARN] [vtd] no ACPI DMAR unit; using the board-declared q35 register base 0xfed90000 (fallback)
+[ INFO] [vtd] Intel VT-d not present (GCAP=0x0)
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 64
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [policy] no /POLICY.BIN in VIFS1 — absent
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] Thread 'thread' (ID 1): KStack 0x543000-0x555000, UStackTop 0x569000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (no teardown for hypervisor authority)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x0000ff00 from task 9002
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000070 from task 9004
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0x55a000
+[ INFO] GRANT-RECLAIM-OWNED: PASS
+[ INFO] GRANT-RECLAIM-RECEIVED: PASS
+[ INFO] GRANT-RECLAIM-PINNED: PASS
+[INFO] grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)
+[ INFO] Thread 'thread' (ID 1): KStack 0x543000-0x555000, UStackTop 0x569000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ INFO] [selftest] COMPLETION-QUEUE: PASS (cap 32 slots, 624 bytes per cell)
+[INFO] completion-queue self-test PASS (reserve, land, bound, defer)
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[INFO] Tier 2 admission: DISABLED (development profile, phase-02 switch-ordering gate) — domain-class artifacts are denied
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[ INFO] [early] VIFS1-first /bin/platform <- ramdisk (38576 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x100003583 flags=R-X
+[ INFO] ELF LOAD: 0x100003588-0x100004658 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x100005250 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] ELF LOAD: 0x100106038-0x10010703C flags=R--
+[ INFO] [wx] 'platform': 6/264 cell pages lowered to read-only/execute-only
+[INFO] Platform Cell spawned (x86 PCIe ECAM scanner)
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x102000000-0x102009A3A flags=R-X
+[ INFO] ELF LOAD: 0x102009A40-0x10200A8E0 flags=R--
+[ INFO] ELF LOAD: 0x10200B000-0x10200B298 flags=RW-
+[ INFO] ELF LOAD: 0x10200C000-0x10210C031 flags=RW-
+[ INFO] ELF LOAD: 0x10210C038-0x10210D03C flags=R--
+[ INFO] [wx] 'init': 12/270 cell pages lowered to read-only/execute-only
+[ INFO] Successfully spawned init with complete root authority (tid=2)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+USER: Init: Starting Cellos Orchestrator...
+[ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/block error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ahci error=NotFound
+USER: [platform] ECAM scan buses 0-255 starting
+USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
+USER: [platform] registered bus 0 device 1 function 0 class 3:0:0
+USER: [platform] unsupported Ethernet identity — registration skipped
+USER: [platform] registered bus 0 device 31 function 0 class 6:1:0
+USER: [platform] registered bus 0 device 31 function 2 class 1:6:1
+USER: [platform] registered bus 0 device 31 function 3 class 12:5:0
+USER: [platform] ECAM scan complete
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+USER: [vfs] WARNING: FAT32 /mnt/sd mount failed
+USER: [vfs] WARNING: CellosFS mount/format failed — volume unavailable
+USER: [vfs] WARNING: FAT32 /bin mount failed
+USER: [vfs] WARNING: CellosFS mount/format failed — volume unavailable
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/virtio-net error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/igb error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/serial error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/xhci error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/net error=NotFound
+USER: Init: cell not found — skipping:
+USER: /bin/net
+USER: Init: services spawned.
+USER: Init: service registry verified.
+USER: Init: Tier 3 is not part of this image — no guest can be started
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ai-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/vfs-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: DEBUG: Shell Started (Async Mode)
+USER: Init: supervising services (auto-restart on crash)...
+USER: DEBUG: Shell focus acquired (or timed out)
+USER: [executor] dummy-waker=absent executor=parked source=TIMER PASS
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > bench local-service-lifecycle
+USER: [local-lifecycle] START
+USER: [local-lifecycle] VFS-BINDING tid=4 cell=1 gen=109 matches_lookup=true
+USER: [local-lifecycle] ABSENT-BINDING lookup=None bound_is_none=true
+USER: [local-lifecycle] SDK-BINDING matches_raw=true tid=Some(4)
+USER: [local-lifecycle] SDK-VFS-CALL=OK
+USER: [local-lifecycle] SDK-BINDING-LIVE resolved=true unresolved=false
+USER: [local-lifecycle] SDK-ABSENT-BINDING=REFUSED
+USER: [bench-probe] Started with role: 'c2c-provider'
+USER: [local-lifecycle] provider-ready
+USER: [bench-probe] Started with role: 'c2c-sync-caller:9'
+USER: [local-lifecycle] sync-caller-start provider=9
+USER: [local-lifecycle] provider-exiting-without-reply
+USER: [local-lifecycle] SYNC-LEG=complete
+USER: [bench-probe] Started with role: 'c2c-provider'
+USER: [local-lifecycle] provider-ready
+USER: [local-lifecycle] provider-exiting-without-reply
+USER: [local-lifecycle] ASYNC-TERMINAL=PEER-GONE
+USER: [local-lifecycle] PASS
+USER: Cellos > 

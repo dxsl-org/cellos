@@ -37,14 +37,25 @@ Replace the draft's local-SAS-versus-remote simplification with a two-axis contr
 
 ## Success criteria
 
-- [ ] One reviewed contract table covers local Tier-1/Tier-2, remote via relay/direct, and explicit guest isolation, with no caller-selectable tier or authenticated identity.
-- [ ] A state-transition matrix classifies before/after-dispatch timeout, cancellation, restart, replay, congestion and partition without automatic unsafe retry.
-- [ ] Spec 20 status and Spec 17 amendments are consistent with code, ADR-0015, Spec 22 and ADR-0008/0009; every changed ABI/wire ID has separate governance evidence before coding.
-- [ ] No remote route is opened and the existing local oracle still passes after documentation-only changes.
+**Signed off 2026-10-09 by the contract owner** (the accountable maintainer, in session): all four
+criteria are accepted against the evidence in § *Exit-gate evidence review* below. The sign-off closes
+this phase's contract/review gates and admits a Phase-02 slice; it ratifies nothing else — Spec 20 stays
+Draft v3, no remote route opens, and Phase 02's own entry conditions still apply.
 
-### Exit-gate evidence review (2026-10-09) — verified, awaiting contract-owner sign-off
+- [x] One reviewed contract table covers local Tier-1/Tier-2, remote via relay/direct, and explicit guest isolation, with no caller-selectable tier or authenticated identity.
+- [x] A state-transition matrix classifies before/after-dispatch timeout, cancellation, restart, replay, congestion and partition without automatic unsafe retry.
+- [x] Spec 20 status and Spec 17 amendments are consistent with code, ADR-0015, Spec 22 and ADR-0008/0009; every changed ABI/wire ID has separate governance evidence before coding.
+- [x] No remote route is opened and the existing local oracle still passes after documentation-only changes.
 
-None of the four criteria above is ticked here: they are contract-owner acceptances, not test
+### Exit-gate evidence review (2026-10-09) — signed off by the contract owner
+
+**Closed 2026-10-09:** the contract owner accepted all four criteria (the four boxes above are ticked)
+and activated **one** Phase-02 slice — [slice A](phase-02-local-boundary.md) (the SDK consumes the frozen
+`LookupServiceBound` binding), with slice B still to be admitted on its own. The sign-off ratifies nothing
+beyond this phase's exit: Spec 20 stays Draft v3, no remote route opens, and Phase 02's entry conditions
+and file-ownership rules still apply to its own work.
+
+None of the four criteria was ticked before that sign-off: they are contract-owner acceptances, not test
 results. This is the evidence each one rests on, checked against the tree at `19a10d6fa` plus the
 runs named below.
 
@@ -60,9 +71,8 @@ two read-only Phase-02 scouts whose file:line map is in
 [`phase-02-local-boundary.md`](phase-02-local-boundary.md) § *Next acceptance scenario*; the §2.3/§2.4
 local-capacity citations are the spec's own and were not all re-derived in this pass.
 
-**Still open before the phase can close:** the contract owner's sign-off on the four criteria (Spec 17
-§9 entry wording included), and activation of a Phase-02 slice — the scenario that would consume this
-contract is identified in `phase-02-local-boundary.md`.
+**Next:** [slice A](phase-02-local-boundary.md) is activated as this phase's successor (portfolio +
+TODO carry the admission and its scope); slice B waits for its own admission, as does Phase 03.
 
 ## Preparatory progress (2026-09-27; not ratification)
 

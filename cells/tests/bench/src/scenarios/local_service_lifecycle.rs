@@ -23,11 +23,15 @@
 //! probe roles `c2c-provider` and `c2c-sync-caller:<tid>` (in `bench-probe`).
 
 use alloc::format;
+use api::c2c::RetryClass;
 use api::ipc::IPC_BUF_SIZE;
+use api::services::ipc::{VfsRequest, VfsResponse};
 use api::task::TaskPriority;
 use ostd::{
+    cluster_endpoint::{CellMethod, EndpointError, LocalEndpoint},
     io::println,
     ipc::{submit, take, wait, IpcTakeResult, IpcTerminal},
+    service::ServiceRef,
     syscall::{
         sys_exit, sys_force_exit, sys_lookup_service, sys_lookup_service_bound, sys_recv,
         sys_set_spawn_args, sys_spawn_pinned, SyscallResult,
@@ -215,9 +219,97 @@ fn async_leg() {
     }
 }
 
+/// Leg S: the shipped SDK resolves through the frozen binding, and refuses when no live
+/// binding exists.
+///
+/// This is the caller-side half of ADR-0023: the kernel returned a binding, but nothing
+/// in the SDK consumed it. `ServiceRef` — the caching handle cells and clients hold — must
+/// resolve the *same* binding the raw opcode reports, a typed call through it must still
+/// work, and `LocalEndpoint::bind()` must refuse a service with no live provider rather
+/// than send to a tid someone once wrote down.
+///
+/// The stale-after-death half of the rule needs a provider that is registered and then
+/// dies; no fixture in this image does that, so it is covered by
+/// `ostd::service::classify_call_failure`'s host tests and becomes a lane witness when the
+/// Phase-02 cross-tier fixture registers a service and is killed.
+fn sdk_leg() {
+    let mut record = [0u8; api::service_binding::SERVICE_BINDING_LEN];
+    let raw = sys_lookup_service_bound(api::syscall::service::VFS, &mut record);
+
+    let mut vfs: ServiceRef<{ api::syscall::service::VFS }> = ServiceRef::new();
+    let sdk = vfs.binding();
+    println(&format!(
+        "[local-lifecycle] SDK-BINDING matches_raw={} tid={:?}",
+        sdk == raw,
+        sdk.map(|binding| binding.tid)
+    ));
+    if sdk != raw {
+        fail("sdk-leg: ServiceRef binding disagrees with the raw lookup");
+    }
+
+    // The handle resolves, sends, waits for the masked reply and decodes it — all keyed on
+    // the binding it resolved, not on a tid it was handed.
+    let mut response_buffer = [0u8; IPC_BUF_SIZE];
+    match vfs.call::<VfsRequest, VfsResponse>(&VfsRequest::Stat("/"), &mut response_buffer) {
+        Ok(VfsResponse::Stat { .. }) => println("[local-lifecycle] SDK-VFS-CALL=OK"),
+        Ok(other) => {
+            println(&format!(
+                "[local-lifecycle] SDK-VFS-CALL=UNEXPECTED {other:?}"
+            ));
+            fail("sdk-leg: VFS Stat answered with a different response");
+        }
+        Err(error) => {
+            println(&format!("[local-lifecycle] SDK-VFS-CALL=ERR {error:?}"));
+            fail("sdk-leg: ServiceRef call to a live VFS failed");
+        }
+    }
+
+    // The binding the handle holds is still the live one, and the unresolved case says so
+    // without querying: an unbound handle is not live.
+    let mut absent = ServiceRef::<{ api::syscall::service::AI }>::new();
+    let resolved_still_live = vfs.is_live();
+    let unresolved_live = absent.is_live();
+    println(&format!(
+        "[local-lifecycle] SDK-BINDING-LIVE resolved={} unresolved={}",
+        resolved_still_live, unresolved_live
+    ));
+    if !resolved_still_live {
+        fail("sdk-leg: a resolved live binding reported itself stale");
+    }
+    if unresolved_live {
+        fail("sdk-leg: an unresolved handle reported itself live");
+    }
+
+    // No live provider is a refusal, not a tid to reuse.
+    match LocalEndpoint::<AbsentService>::bind() {
+        Err(EndpointError::NoLiveBinding) => {
+            println("[local-lifecycle] SDK-ABSENT-BINDING=REFUSED")
+        }
+        Err(other) => {
+            println(&format!("[local-lifecycle] SDK-ABSENT-BINDING={other:?}"));
+            fail("sdk-leg: absent-service bind must report NoLiveBinding");
+        }
+        Ok(_) => fail("sdk-leg: absent-service bind must not succeed"),
+    }
+}
+
+/// Typed method for a service this image does not run. Only the id matters here: the
+/// refusal has to happen before any payload is built.
+struct AbsentService;
+
+impl CellMethod for AbsentService {
+    type Request = ();
+    type Response<'a> = ();
+
+    const SERVICE_ID: u16 = api::syscall::service::AI;
+    const EXPORT_ID: u16 = 0;
+    const RETRY_CLASS: RetryClass = RetryClass::Idempotent;
+}
+
 pub fn run() -> ! {
     println("[local-lifecycle] START");
     binding_leg();
+    sdk_leg();
     sync_leg();
     async_leg();
     println("[local-lifecycle] PASS");
