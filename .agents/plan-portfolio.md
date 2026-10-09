@@ -98,8 +98,11 @@ authorization. Plans not admitted below are parked/historical.
   unauthorized method) and the fourth — a wrong **user buffer** on the syscall copy path — is not
   re-created: a `#![forbid(unsafe_code)]` cell cannot fabricate a pointer, and the
   address-containment witness already runs as `/bin/tier2-exploit`.
-- **Phase 02's three success criteria now all carry evidence (2026-10-09).** Criterion 1 on the Intel
-  test-hooks lane (named binding, both directions, four refusals, production denial still asserted);
+- **Phase 02's success criteria are evidenced except one clause (2026-10-09).** Criterion 1 on the
+  Intel test-hooks lane (named binding, both directions, three of the four refusals, production denial
+  still asserted) — its **invalid-buffer clause is not** witnessed for the syscall copy path, which is
+  the phase's one remaining remainder, witnessed only for the address-containment class by
+  `/bin/tier2-exploit`;
   criterion 3 trivially from the fixtures' capability-free manifests and the copied-only path; and
   criterion 2 measured rather than assumed: the broker oracle re-run twice on the tree carrying
   slices A and B and the Phase-03 opt-in API, compared against the pre-slice run by its own calibrated
