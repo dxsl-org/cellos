@@ -54,17 +54,15 @@ Cost: a tier dispatch or binding lookup could regress Tier-1 hot calls. Preserve
 ## Success-criterion evidence (2026-10-09)
 
 - **Criterion 1** (QEMU Tier-1↔Tier-2 request/reply with authenticated owner, invalid-buffer
-  rejection and stale-reply exclusion; an ineligible profile refuses Tier-2 admission): met for every
-  clause **except the invalid-buffer one**, which is the phase's remaining witness. On the Intel
-  test-hooks lane: registry-**named** resolution carrying the provider's real `(cell_id, generation)`,
-  both directions with a verified payload and checksum, oversize refused before delivery,
-  unauthorized method refused, the stale descriptor refused after the provider exits, and the
-  production lane still const-asserting Tier-2 denial. The invalid-buffer clause is currently
-  witnessed only for the *address-containment* class by `/bin/tier2-exploit` (a private-root write to
-  peer/kernel/NULL memory faults and is contained) and by the kernel's guarded `copy_from_user`
-  ledger probe; a wrong-buffer **syscall argument** is not witnessed, because a
-  `#![forbid(unsafe_code)]` Cell cannot fabricate a pointer and a raw-pointer fixture needs its own
-  unsafe-allowlist entry. Evidence:
+  rejection and stale-reply exclusion; an ineligible profile refuses Tier-2 admission): **met**.
+  On the Intel test-hooks lane: registry-**named** resolution carrying the provider's real
+  `(cell_id, generation)`, both directions with a verified payload and checksum, oversize
+  refused before delivery, unauthorized method refused, the stale descriptor refused after
+  the provider exits, and the production lane still const-asserting Tier-2 denial.
+  The invalid-buffer clause is witnessed on the syscall copy path by `tier2-rpc-driver`
+  under a reviewed unsafe-allowlist exemption (`[tier2-rpc] INVALID-BUFFER=REFUSED`), and
+  for the address-containment class by `/bin/tier2-exploit` (NULL write page-faults and is
+  contained) and the kernel's guarded `copy_from_user` ledger probe. Evidence:
   `docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`,
   `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`.
 - **Criterion 2** (existing local oracle and typed VFS request/reply still pass — measured

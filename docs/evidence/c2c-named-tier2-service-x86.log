@@ -18,7 +18,7 @@ vbe: Found matching mode 0x17a, attempting to set...
 vbe: Framebuffer address: 0xfd000000
 edid: Success.
 limine: Loading executable `boot():/boot/kernel.elf`...
-limine: Physical base:   0xf20c000
+limine: Physical base:   0xf201000
 limine: Virtual base:    0xffffffff80000000
 limine: Slide:           0x0
 limine: ELF entry point: 0xffffffff80000000
@@ -45,7 +45,7 @@ paging: 1GiB pages are supported!
 [INFO] PKU: unavailable
 [Cellos] kernel boot v0.2.1
 Kernel started (Hart: 0, DTB: ...)
-[boot] kernel_phys_base=0x000000000f20c000
+[boot] kernel_phys_base=0x000000000f201000
 [INFO] Frame allocator initialized
 [INFO] Initializing x86_64 paging (kernel PML4)...
 [INFO] x86_64 paging initialized
@@ -142,30 +142,30 @@ QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
 [ERROR] [wx] refusing to spawn 'selftest': page 0x5000 is W+X after the boundary merge — two PT_LOADs with different permissions share it; align the segments to 4 KiB
 [ERROR] ELF: rejecting spawn — PT_LOAD #0 at 0x1000 declares W+X; writable code is refused (split the segment or drop PF_X in the linker script)
 [ INFO] [wx] self-tests PASSED
-[ INFO] ELF LOAD: 0x100000000-0x100009B4A flags=R-X
-[ INFO] ELF LOAD: 0x100009B50-0x10000AA80 flags=R--
-[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
-[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
-[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
-[ INFO] [wx] 'atomic-unaligned': 12/270 cell pages lowered to read-only/execute-only
-[ INFO] ELF LOAD: 0x100000000-0x100009B4A flags=R-X
-[ INFO] ELF LOAD: 0x100009B50-0x10000AA80 flags=R--
-[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
-[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
-[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
-[ INFO] [wx] 'atomic-unaligned': 12/270 cell pages lowered to read-only/execute-only
-[ INFO] ELF LOAD: 0x100000000-0x100009B4A flags=R-X
-[ INFO] ELF LOAD: 0x100009B50-0x10000AA80 flags=R--
-[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
-[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
-[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
-[ INFO] [wx] 'atomic-unaligned': 12/270 cell pages lowered to read-only/execute-only
-[ INFO] ELF LOAD: 0x100000000-0x100009B4A flags=R-X
-[ INFO] ELF LOAD: 0x100009B50-0x10000AA80 flags=R--
-[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
-[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
-[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
-[ INFO] [wx] 'atomic-unaligned': 12/270 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10000A122 flags=R-X
+[ INFO] ELF LOAD: 0x10000A128-0x10000BAE8 flags=R--
+[ INFO] ELF LOAD: 0x10000C000-0x10000C288 flags=RW-
+[ INFO] ELF LOAD: 0x10000D000-0x10010D031 flags=RW-
+[ INFO] ELF LOAD: 0x10010D038-0x10010E03C flags=R--
+[ INFO] [wx] 'atomic-unaligned': 13/271 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10000A122 flags=R-X
+[ INFO] ELF LOAD: 0x10000A128-0x10000BAE8 flags=R--
+[ INFO] ELF LOAD: 0x10000C000-0x10000C288 flags=RW-
+[ INFO] ELF LOAD: 0x10000D000-0x10010D031 flags=RW-
+[ INFO] ELF LOAD: 0x10010D038-0x10010E03C flags=R--
+[ INFO] [wx] 'atomic-unaligned': 13/271 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10000A122 flags=R-X
+[ INFO] ELF LOAD: 0x10000A128-0x10000BAE8 flags=R--
+[ INFO] ELF LOAD: 0x10000C000-0x10000C288 flags=RW-
+[ INFO] ELF LOAD: 0x10000D000-0x10010D031 flags=RW-
+[ INFO] ELF LOAD: 0x10010D038-0x10010E03C flags=R--
+[ INFO] [wx] 'atomic-unaligned': 13/271 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10000A122 flags=R-X
+[ INFO] ELF LOAD: 0x10000A128-0x10000BAE8 flags=R--
+[ INFO] ELF LOAD: 0x10000C000-0x10000C288 flags=RW-
+[ INFO] ELF LOAD: 0x10000D000-0x10010D031 flags=RW-
+[ INFO] ELF LOAD: 0x10010D038-0x10010E03C flags=R--
+[ INFO] [wx] 'atomic-unaligned': 13/271 cell pages lowered to read-only/execute-only
 [ INFO] ATOMIC_PUBLICATION_ALIGNMENT: PASS
 [ERROR] Stack alloc failed: cell quota table exhausted (max=64)
 [ INFO] ATOMIC_PUBLICATION_CELL_ID_REUSE: PASS
@@ -187,21 +187,21 @@ QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
 [ INFO] ATOMIC_PUBLICATION_AP-02: PASS
 [ WARN] [input] registered input service TID 50102
 [ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
-[ INFO] ELF LOAD: 0x100000000-0x100009B4A flags=R-X
-[ INFO] ELF LOAD: 0x100009B50-0x10000AA80 flags=R--
-[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
-[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
-[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
+[ INFO] ELF LOAD: 0x100000000-0x10000A122 flags=R-X
+[ INFO] ELF LOAD: 0x10000A128-0x10000BAE8 flags=R--
+[ INFO] ELF LOAD: 0x10000C000-0x10000C288 flags=RW-
+[ INFO] ELF LOAD: 0x10000D000-0x10010D031 flags=RW-
+[ INFO] ELF LOAD: 0x10010D038-0x10010E03C flags=R--
 [ INFO] [service-registry] cleared stale entries for dead tid 50103
 [ INFO] ATOMIC_PUBLICATION_AP-03: PASS
 [ WARN] [input] registered input service TID 50102
 [ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
-[ INFO] ELF LOAD: 0x100000000-0x100009B4A flags=R-X
-[ INFO] ELF LOAD: 0x100009B50-0x10000AA80 flags=R--
-[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
-[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
-[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
-[ INFO] [wx] 'atomic-denial': 12/270 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10000A122 flags=R-X
+[ INFO] ELF LOAD: 0x10000A128-0x10000BAE8 flags=R--
+[ INFO] ELF LOAD: 0x10000C000-0x10000C288 flags=RW-
+[ INFO] ELF LOAD: 0x10000D000-0x10010D031 flags=RW-
+[ INFO] ELF LOAD: 0x10010D038-0x10010E03C flags=R--
+[ INFO] [wx] 'atomic-denial': 13/271 cell pages lowered to read-only/execute-only
 [ INFO] [service-registry] cleared stale entries for dead tid 50103
 [ INFO] ATOMIC_PUBLICATION_AP-04: PASS
 [ WARN] [input] registered input service TID 50102
@@ -229,27 +229,27 @@ QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
 [ INFO] ATOMIC_PUBLICATION_AP-06: PASS
 [ WARN] [input] registered input service TID 50102
 [ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
-[ INFO] ELF LOAD: 0x100000000-0x100009B4A flags=R-X
-[ INFO] ELF LOAD: 0x100009B50-0x10000AA80 flags=R--
-[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
-[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
-[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
-[ INFO] [wx] 'init': 12/270 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10000A122 flags=R-X
+[ INFO] ELF LOAD: 0x10000A128-0x10000BAE8 flags=R--
+[ INFO] ELF LOAD: 0x10000C000-0x10000C288 flags=RW-
+[ INFO] ELF LOAD: 0x10000D000-0x10010D031 flags=RW-
+[ INFO] ELF LOAD: 0x10010D038-0x10010E03C flags=R--
+[ INFO] [wx] 'init': 13/271 cell pages lowered to read-only/execute-only
 [ INFO] [service-registry] cleared stale entries for dead tid 50103
 [ INFO] ATOMIC_PUBLICATION_AP-07: PASS
 [ WARN] [input] registered input service TID 50102
 [ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
-[ INFO] ELF LOAD: 0x100000000-0x100009B4A flags=R-X
-[ INFO] ELF LOAD: 0x100009B50-0x10000AA80 flags=R--
-[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
-[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
-[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
-[ INFO] [wx] 'init': 12/270 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10000A122 flags=R-X
+[ INFO] ELF LOAD: 0x10000A128-0x10000BAE8 flags=R--
+[ INFO] ELF LOAD: 0x10000C000-0x10000C288 flags=RW-
+[ INFO] ELF LOAD: 0x10000D000-0x10010D031 flags=RW-
+[ INFO] ELF LOAD: 0x10010D038-0x10010E03C flags=R--
+[ INFO] [wx] 'init': 13/271 cell pages lowered to read-only/execute-only
 [ INFO] [service-registry] cleared stale entries for dead tid 50103
 [ INFO] ATOMIC_PUBLICATION_AP-08: PASS
 [ WARN] [input] registered input service TID 50102
 [ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
-[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (408488 bytes)
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (408224 bytes)
 [ INFO] [service-registry] cleared stale entries for dead tid 50103
 [ INFO] ATOMIC_PUBLICATION_AP-09: PASS
 [ WARN] [input] registered input service TID 50102
@@ -268,12 +268,12 @@ QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
 [ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
 [ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
 [ERROR] [loader]   refused: spawn
-[ INFO] ELF LOAD: 0x100000000-0x100009B4A flags=R-X
-[ INFO] ELF LOAD: 0x100009B50-0x10000AA80 flags=R--
-[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
-[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
-[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
-[ INFO] [wx] 'platform': 12/270 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10000A122 flags=R-X
+[ INFO] ELF LOAD: 0x10000A128-0x10000BAE8 flags=R--
+[ INFO] ELF LOAD: 0x10000C000-0x10000C288 flags=RW-
+[ INFO] ELF LOAD: 0x10000D000-0x10010D031 flags=RW-
+[ INFO] ELF LOAD: 0x10010D038-0x10010E03C flags=R--
+[ INFO] [wx] 'platform': 13/271 cell pages lowered to read-only/execute-only
 [ INFO] [service-registry] cleared stale entries for dead tid 50103
 [ INFO] ATOMIC_PUBLICATION_AP-11: PASS
 [ INFO] ATOMIC_PUBLICATION_ARMING: PASS
@@ -286,7 +286,7 @@ QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
 [ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
 [ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
 [INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
-[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0xf1f000
+[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0xf28000
 [ INFO] GRANT-RECLAIM-OWNED: PASS
 [ INFO] GRANT-RECLAIM-RECEIVED: PASS
 [ INFO] GRANT-RECLAIM-PINNED: PASS
@@ -315,8 +315,8 @@ QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
 [INFO] cap-file self-test PASS (read-only enforcement)
 [ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
 [INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
-[ WARN] [grant] GrantFree 0xf21000 refused: region 0xf21000+4096 overlaps a pinned region 0xf21000+1 pages owned by task 9532 with 1 in-flight operation(s)
-[ WARN] [grant] GrantUnregister 0xf24000 refused: region 0xf24000+4096 overlaps a pinned region 0xf24000+1 pages owned by task 9532 with 1 in-flight operation(s)
+[ WARN] [grant] GrantFree 0xf2a000 refused: region 0xf2a000+4096 overlaps a pinned region 0xf2a000+1 pages owned by task 9532 with 1 in-flight operation(s)
+[ WARN] [grant] GrantUnregister 0xf2d000 refused: region 0xf2d000+4096 overlaps a pinned region 0xf2d000+1 pages owned by task 9532 with 1 in-flight operation(s)
 [ INFO] [selftest] VFS-LIFETIME: stage=smp-stale-context-denied-capacity-preserved
 [ INFO] [grant] owner 9532 pending-revoked VFS lease holder=9522 request=1
 [ INFO] [selftest] VFS-LIFETIME: stage=dead-owner-pending-revoke-exact-release
@@ -331,12 +331,12 @@ QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
 [ INFO] S22-X86-ADMISSION-ENABLED: PASS
 [ INFO] S22-X86-ADMISSION-DENY: PASS
 [ INFO] S22-X86-ADMISSION-DRAIN: PASS
-[ INFO] ELF LOAD: 0x100000000-0x100009B4A flags=R-X
-[ INFO] ELF LOAD: 0x100009B50-0x10000AA80 flags=R--
-[ INFO] ELF LOAD: 0x10000B000-0x10000B298 flags=RW-
-[ INFO] ELF LOAD: 0x10000C000-0x10010C031 flags=RW-
-[ INFO] ELF LOAD: 0x10010C038-0x10010D03C flags=R--
-[ INFO] [wx] 'admission-publication-probe': 12/270 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10000A122 flags=R-X
+[ INFO] ELF LOAD: 0x10000A128-0x10000BAE8 flags=R--
+[ INFO] ELF LOAD: 0x10000C000-0x10000C288 flags=RW-
+[ INFO] ELF LOAD: 0x10000D000-0x10010D031 flags=RW-
+[ INFO] ELF LOAD: 0x10010D038-0x10010E03C flags=R--
+[ INFO] [wx] 'admission-publication-probe': 13/271 cell pages lowered to read-only/execute-only
 [ INFO] S22-X86-ADMISSION-PUBLICATION-DENY: PASS
 [ INFO] S22-X86-ADMISSION-CEILING: PASS
 [ INFO] S22-X86-PIN-DYING: PASS harts=1
@@ -393,8 +393,8 @@ QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
 [SELFTEST] PKU-SELFTEST: SKIP: PKU not active
 [ERROR] X86-VMM-SMOKE: FAIL e1=Preempted e2=Preempted
 [ INFO] [early] VIFS1-first /bin/platform <- ramdisk (38576 bytes)
-[ INFO] ELF LOAD: 0x100000000-0x100003583 flags=R-X
-[ INFO] ELF LOAD: 0x100003588-0x100004658 flags=R--
+[ INFO] ELF LOAD: 0x100000000-0x1000037E2 flags=R-X
+[ INFO] ELF LOAD: 0x1000037E8-0x100004658 flags=R--
 [ INFO] ELF LOAD: 0x100005000-0x100005250 flags=RW-
 [ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
 [ INFO] ELF LOAD: 0x100106038-0x10010703C flags=R--
@@ -403,12 +403,12 @@ QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
 [INFO] ATOMIC_PUBLICATION_AP-15: arming trusted init
 [INFO] ATOMIC_PUBLICATION_AP-15: armed for trusted init
 [INFO] Publishing trusted init
-[ INFO] ELF LOAD: 0x102000000-0x102009B4A flags=R-X
-[ INFO] ELF LOAD: 0x102009B50-0x10200AA80 flags=R--
-[ INFO] ELF LOAD: 0x10200B000-0x10200B298 flags=RW-
-[ INFO] ELF LOAD: 0x10200C000-0x10210C031 flags=RW-
-[ INFO] ELF LOAD: 0x10210C038-0x10210D03C flags=R--
-[ INFO] [wx] 'init': 12/270 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x102000000-0x10200A122 flags=R-X
+[ INFO] ELF LOAD: 0x10200A128-0x10200BAE8 flags=R--
+[ INFO] ELF LOAD: 0x10200C000-0x10200C288 flags=RW-
+[ INFO] ELF LOAD: 0x10200D000-0x10210D031 flags=RW-
+[ INFO] ELF LOAD: 0x10210D038-0x10210E03C flags=R--
+[ INFO] [wx] 'init': 13/271 cell pages lowered to read-only/execute-only
 [ INFO] ATOMIC_PUBLICATION_AP-15: PASS
 [ INFO] Successfully spawned init with complete root authority (tid=2)
 [INFO] Kernel initialization complete. Entering idle loop.
@@ -417,13 +417,14 @@ QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
 USER: Init: Starting Cellos Orchestrator...
 [ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
 [ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/block error=NotFound
-[ INFO] ELF LOAD: 0x104000000-0x104003B7A flags=R-X
-[ INFO] ELF LOAD: 0x104003B80-0x104004A00 flags=R--
-[ INFO] ELF LOAD: 0x104005000-0x1040053C8 flags=RW-
-[ INFO] ELF LOAD: 0x104006000-0x104106031 flags=RW-
-[ INFO] ELF LOAD: 0x104107000-0x10410703C flags=R--
-[ INFO] [wx] 'nvme': 6/264 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x104000000-0x104003D52 flags=R-X
+[ INFO] ELF LOAD: 0x104003D58-0x104005A00 flags=R--
+[ INFO] ELF LOAD: 0x104006000-0x1040063B8 flags=RW-
+[ INFO] ELF LOAD: 0x104007000-0x104107031 flags=RW-
+[ INFO] ELF LOAD: 0x104108000-0x10410803C flags=R--
+[ INFO] [wx] 'nvme': 7/265 cell pages lowered to read-only/execute-only
 [ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=2 frames=3 quarantined=0
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ahci error=NotFound
 USER: [platform] ECAM scan buses 0-255 starting
 USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
 USER: [platform] registered bus 0 device 1 function 0 class 3:0:0
@@ -431,60 +432,59 @@ USER: [platform] unsupported Ethernet identity — registration skipped
 USER: [platform] registered bus 0 device 31 function 0 class 6:1:0
 USER: [platform] registered bus 0 device 31 function 2 class 1:6:1
 USER: [platform] registered bus 0 device 31 function 3 class 12:5:0
-[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ahci error=NotFound
 USER: [platform] ECAM scan complete
 [ INFO] Syscall::Exit: task 1 exited with code 0
 [ INFO] Syscall::Exit: task 3 exited with code 0
-[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (408488 bytes)
-[ INFO] ELF LOAD: 0x100000000-0x10004DB53 flags=R-X
-[ INFO] ELF LOAD: 0x10004DB58-0x100051ED8 flags=R--
-[ INFO] ELF LOAD: 0x100052000-0x100053328 flags=RW-
-[ INFO] ELF LOAD: 0x100054000-0x100554040 flags=RW-
-[ INFO] ELF LOAD: 0x100554040-0x10055503C flags=R--
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (408224 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x10004DA69 flags=R-X
+[ INFO] ELF LOAD: 0x10004DA70-0x100051ED8 flags=R--
+[ INFO] ELF LOAD: 0x100052000-0x100053350 flags=RW-
+[ INFO] ELF LOAD: 0x100054000-0x100554048 flags=RW-
+[ INFO] ELF LOAD: 0x100554048-0x10055503C flags=R--
 [ INFO] [wx] 'vfs': 83/1366 cell pages lowered to read-only/execute-only
 USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
 USER: [vfs] WARNING: FAT32 /mnt/sd mount failed
 USER: [vfs] WARNING: CellosFS mount/format failed — volume unavailable
 USER: [vfs] WARNING: FAT32 /bin mount failed
-USER: [vfs] WARNING: CellosFS mount/format failed — volume unavailable
 [ INFO] [service-registry] 1 -> tid 4 (cell 1 gen 137)
+USER: [vfs] WARNING: CellosFS mount/format failed — volume unavailable
 [ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/virtio-net error=NotFound
-[ INFO] [loader] SpawnFromElf: /bin/e1000 (29816 bytes from grant)
-[ INFO] ELF LOAD: 0x104000000-0x10400222A flags=R-X
-[ INFO] ELF LOAD: 0x104002230-0x104003508 flags=R--
-[ INFO] ELF LOAD: 0x104004000-0x104004290 flags=RW-
+[ INFO] [loader] SpawnFromElf: /bin/e1000 (29752 bytes from grant)
+[ INFO] ELF LOAD: 0x104000000-0x104002402 flags=R-X
+[ INFO] ELF LOAD: 0x104002408-0x104003508 flags=R--
+[ INFO] ELF LOAD: 0x104004000-0x104004280 flags=RW-
 [ INFO] ELF LOAD: 0x104005000-0x1041053A1 flags=RW-
 [ INFO] ELF LOAD: 0x104106000-0x10410603C flags=R--
 [ INFO] [wx] 'e1000': 5/263 cell pages lowered to read-only/execute-only
 [ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/igb error=NotFound
 [ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/serial error=NotFound
 [ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/xhci error=NotFound
-[ INFO] [loader] SpawnFromElf: /bin/nvme (36288 bytes from grant)
-[ INFO] ELF LOAD: 0x106000000-0x106003B7A flags=R-X
-[ INFO] ELF LOAD: 0x106003B80-0x106004A00 flags=R--
-[ INFO] ELF LOAD: 0x106005000-0x1060053C8 flags=RW-
-[ INFO] ELF LOAD: 0x106006000-0x106106031 flags=RW-
-[ INFO] ELF LOAD: 0x106107000-0x10610703C flags=R--
-[ INFO] [wx] 'nvme': 6/264 cell pages lowered to read-only/execute-only
+[ INFO] [loader] SpawnFromElf: /bin/nvme (40280 bytes from grant)
+[ INFO] ELF LOAD: 0x106000000-0x106003D52 flags=R-X
+[ INFO] ELF LOAD: 0x106003D58-0x106005A00 flags=R--
+[ INFO] ELF LOAD: 0x106006000-0x1060063B8 flags=RW-
+[ INFO] ELF LOAD: 0x106007000-0x106107031 flags=RW-
+[ INFO] ELF LOAD: 0x106108000-0x10610803C flags=R--
+[ INFO] [wx] 'nvme': 7/265 cell pages lowered to read-only/execute-only
 [ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/net error=NotFound
 USER: Init: cell not found — skipping:
 USER: /bin/net
 USER: Init: services spawned.
 USER: Init: service registry verified.
 [ INFO] [service-registry] 19 -> tid 2 (cell 2 gen 135)
-[ INFO] [loader] SpawnFromElf: /bin/tier2-smoke (34664 bytes from grant)
-[ INFO] ELF LOAD: 0x108000000-0x10800220A flags=R-X
-[ INFO] ELF LOAD: 0x108002210-0x1080035F8 flags=R--
-[ INFO] ELF LOAD: 0x108004000-0x108004368 flags=RW-
+[ INFO] [loader] SpawnFromElf: /bin/tier2-smoke (34472 bytes from grant)
+[ INFO] ELF LOAD: 0x108000000-0x108002082 flags=R-X
+[ INFO] ELF LOAD: 0x108002088-0x1080035F8 flags=R--
+[ INFO] ELF LOAD: 0x108004000-0x108004350 flags=RW-
 [ INFO] ELF LOAD: 0x108005000-0x108105031 flags=RW-
 [ INFO] ELF LOAD: 0x108105038-0x10810603C flags=R--
 [ INFO] [wx] 'tier2-smoke': 5/263 cell pages lowered to read-only/execute-only
 [ WARN] [domain] admitted cell 'tier2-smoke' to Tier 2 Paged Domain (CR3 isolation)
+USER: Init: tier2-smoke admitted.
 USER: [tier2-smoke] Starting Tier 2 Native Domain Cell execution under private SATP!
 USER: [tier2-smoke] Heap allocation verified (Vec len=20, sum=1050)
 USER: [tier2-smoke] String allocation and formatting verified
-USER: Init: tier2-smoke admitted.
-[ INFO] S22-X86-DOMAIN-LIVE: PASS cr3=0x1bdf000 root=0x1bdf000 pcid=0 pcid_usable=false kernel_cr3=0x59000 domain=5 generation=6
+[ INFO] S22-X86-DOMAIN-LIVE: PASS cr3=0x1bec000 root=0x1bec000 pcid=0 pcid_usable=false kernel_cr3=0x59000 domain=5 generation=6
 USER: [tier2-smoke] Scheduler yield completed in Tier 2 domain
 [ WARN] [grant] GrantRegister denied: task 7 is not a live private root (phase-01 denial)
 USER: [tier2-smoke] Grant registration denied fail-closed (phase-01 gate)
@@ -492,76 +492,97 @@ USER: [tier2-smoke] PASS: All Tier 2 runtime invariants verified successfully!
 [ INFO] Syscall::Exit: task 7 exited with code 0
 [ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=1 frames=5 quarantined=0
 [ INFO] S22-X86-DOMAIN-TEARDOWN: PASS releases=1 quarantined=0 ack_generation=6
-[ INFO] [loader] SpawnFromElf: /bin/tier2-exploit (29248 bytes from grant)
-[ INFO] ELF LOAD: 0x108000000-0x1080015BA flags=R-X
-[ INFO] ELF LOAD: 0x1080015C0-0x108002450 flags=R--
-[ INFO] ELF LOAD: 0x108003000-0x108003200 flags=RW-
+[ INFO] [loader] SpawnFromElf: /bin/tier2-exploit (29112 bytes from grant)
+[ INFO] ELF LOAD: 0x108000000-0x1080016C2 flags=R-X
+[ INFO] ELF LOAD: 0x1080016C8-0x108002450 flags=R--
+[ INFO] ELF LOAD: 0x108003000-0x1080031F0 flags=RW-
 [ INFO] ELF LOAD: 0x108004000-0x108104031 flags=RW-
 [ INFO] ELF LOAD: 0x108104038-0x10810503C flags=R--
 [ INFO] [wx] 'tier2-exploit': 4/262 cell pages lowered to read-only/execute-only
 [ WARN] [domain] admitted cell 'tier2-exploit' to Tier 2 Paged Domain (CR3 isolation)
+USER: Init: tier2-exploit admitted.
 USER: [tier2-exploit] running in Tier 2 domain under private SATP
 USER: [tier2-exploit] deliberately writing to NULL (0x0) — expect Page Fault termination
-[ WARN] [#PF-debug] va=0x0 err=0x6 rip=0x108000741 cs=0x23 rsp=0x79ed60
-[ERROR] [#PF user] va=0x0 error_code=0x6 rip=0x108000741 cs=0x23 — no VMA covers this address
-[ERROR] [fault] Cell 5 (task 8 generation 141) terminated: cause=0x6 pc=0x108000741 addr=0x0
-USER: Init: tier2-exploit admitted.
+[ WARN] [#PF-debug] va=0x0 err=0x6 rip=0x10800090a cs=0x23 rsp=0x79fd60
+[ERROR] [#PF user] va=0x0 error_code=0x6 rip=0x10800090a cs=0x23 — no VMA covers this address
+[ERROR] [fault] Cell 5 (task 8 generation 141) terminated: cause=0x6 pc=0x10800090a addr=0x0
 [ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=1 frames=5 quarantined=0
-[ INFO] [loader] SpawnFromElf: /bin/tier2-rpc-provider (28312 bytes from grant)
-[ INFO] ELF LOAD: 0x108000000-0x108000D74 flags=R--
-[ INFO] ELF LOAD: 0x108001D80-0x10800600A flags=R-X
-[ INFO] ELF LOAD: 0x108007010-0x108008000 flags=RW-
-[ INFO] ELF LOAD: 0x1080082A0-0x1081082D1 flags=RW-
+[ INFO] [loader] SpawnFromElf: /bin/cpp-smoke (59752 bytes from grant)
+[ INFO] ELF LOAD: 0x108000000-0x108006E7F flags=R-X
+[ INFO] ELF LOAD: 0x108006E80-0x10800880D flags=R--
+[ INFO] ELF LOAD: 0x108008810-0x1080092D0 flags=RW-
+[ INFO] ELF LOAD: 0x10800A000-0x10810A06C flags=RW-
+[ INFO] ELF LOAD: 0x10810A070-0x10810B194 flags=R--
+[ INFO] [wx] 'cpp-smoke': 9/268 cell pages lowered to read-only/execute-only
+[ WARN] [domain] admitted cell 'cpp-smoke' to Tier 2 Paged Domain (CR3 isolation)
+USER: [cpp-smoke] start (Tier 2 FFI cell, cpp-freestanding profile)
+USER: [cpp-smoke] static-ctor marker=0xC0FFEE11
+USER: [cpp-smoke] virtual-dispatch area=37
+USER: [cpp-smoke] virtual-delete area=36
+USER: [cpp-smoke] templates total=64
+USER: [cpp-smoke] heap churn checksum=3067 iterations=64
+USER: Init: cpp-smoke admitted.
+[ INFO] [loader] SpawnFromElf: /bin/tier2-rpc-provider (29016 bytes from grant)
+[ INFO] ELF LOAD: 0x10A000000-0x10A000D4C flags=R--
+[ INFO] ELF LOAD: 0x10A001D50-0x10A006302 flags=R-X
+[ INFO] ELF LOAD: 0x10A007308-0x10A008000 flags=RW-
+[ INFO] ELF LOAD: 0x10A008580-0x10A1085B1 flags=RW-
 [ INFO] [wx] 'tier2-rpc-provider': 7/265 cell pages lowered to read-only/execute-only
 [ WARN] [domain] admitted cell 'tier2-rpc-provider' to Tier 2 Paged Domain (CR3 isolation)
-USER: [tier2-rpc] provider-start tier2
 USER: Init: tier2-rpc-provider admitted.
-[ INFO] [service-registry] 31233 -> tid 9 (cell 5 gen 142)
+[ INFO] [service-registry] 31233 -> tid 10 (cell 6 gen 143)
 USER: Init: tier2-rpc-provider registered.
-[ INFO] [loader] SpawnFromElf: /bin/tier2-rpc-driver (37240 bytes from grant)
-[ INFO] ELF LOAD: 0x10A000000-0x10A001CBC flags=R--
-[ INFO] ELF LOAD: 0x10A002CC0-0x10A007B3A flags=R-X
-[ INFO] ELF LOAD: 0x10A008B40-0x10A009000 flags=RW-
-[ INFO] ELF LOAD: 0x10A009F30-0x10A109F61 flags=RW-
-[ INFO] [wx] 'tier2-rpc-driver': 8/266 cell pages lowered to read-only/execute-only
+USER: [tier2-rpc] provider-start tier2
+[ INFO] [loader] SpawnFromElf: /bin/tier2-rpc-driver (37384 bytes from grant)
+[ INFO] ELF LOAD: 0x10C000000-0x10C001CDC flags=R--
+[ INFO] ELF LOAD: 0x10C002CE0-0x10C007D22 flags=R-X
+[ INFO] ELF LOAD: 0x10C008D28-0x10C00A000 flags=RW-
+[ INFO] ELF LOAD: 0x10C00A100-0x10C10A131 flags=RW-
+[ INFO] [wx] 'tier2-rpc-driver': 8/267 cell pages lowered to read-only/execute-only
+USER: [tier2-rpc] PROVIDER-BINDING tid=10 cell=6 gen=143
+USER: [tier2-rpc] PROVIDER-NAME-MATCHES-RAW=true
 USER: Init: tier2-rpc-driver launched.
 USER: Init: Tier 3 is not part of this image — no guest can be started
-USER: [tier2-rpc] PROVIDER-BINDING tid=9 cell=5 gen=142
-USER: [tier2-rpc] PROVIDER-NAME-MATCHES-RAW=true
 [ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
-[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ai-test error=NotFound
 USER: [tier2-rpc] provider-vfs-stat ok is_dir=true
 USER: [tier2-rpc] provider-echo nonce=1511456770 len=512 vfs_ok=true
-[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/vfs-test error=NotFound
 USER: [tier2-rpc] TIER1-TO-TIER2=OK
 USER: [tier2-rpc] TIER2-TO-TIER1=OK root_is_dir=true
 USER: [tier2-rpc] OVERSIZE=REFUSED
+USER: [tier2-rpc] INVALID-BUFFER=REFUSED
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ai-test error=NotFound
 USER: [tier2-rpc] provider-refused-unauthorized-method
 USER: [tier2-rpc] provider-served 2
 USER: [tier2-rpc] provider-exiting
-[ INFO] Syscall::Exit: task 9 exited with code 0
-[ INFO] [service-registry] cleared stale entries for dead tid 9
-[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+[ INFO] Syscall::Exit: task 10 exited with code 0
+[ INFO] [service-registry] cleared stale entries for dead tid 10
 USER: [tier2-rpc] UNAUTHORIZED-METHOD=REFUSED
 USER: [tier2-rpc] PROVIDER-GONE=none
 USER: [tier2-rpc] STALE-BINDING=REFUSED
 USER: [tier2-rpc] STALE-BINDING-CLEARED=true
 USER: [tier2-rpc] DRIVER-DONE
-[ INFO] Syscall::Exit: task 10 exited with code 0
+[ INFO] Syscall::Exit: task 11 exited with code 0
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=2 frames=6 quarantined=0
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/vfs-test error=NotFound
+USER: [cpp-smoke] vfs client roundtrip bytes=53
+USER: [cpp-smoke] c-abi read magic=ELF
+USER: CPP-SMOKE: PASS
+[ INFO] Syscall::Exit: task 9 exited with code 0
 [ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=1 frames=5 quarantined=0
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
 [ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
-[ INFO] [loader] SpawnFromElf: /bin/shell (866944 bytes from grant)
-[ INFO] ELF LOAD: 0x108000000-0x1080A73D3 flags=R-X
-[ INFO] ELF LOAD: 0x1080A73D8-0x1080B32B8 flags=R--
-[ INFO] ELF LOAD: 0x1080B4000-0x1080B8618 flags=RW-
-[ INFO] ELF LOAD: 0x1080B9000-0x1081B9051 flags=RW-
-[ INFO] ELF LOAD: 0x1081B9058-0x1081BA03C flags=R--
-[ INFO] [wx] 'shell': 181/443 cell pages lowered to read-only/execute-only
+[ INFO] [loader] SpawnFromElf: /bin/shell (880496 bytes from grant)
+[ INFO] ELF LOAD: 0x108000000-0x1080A965D flags=R-X
+[ INFO] ELF LOAD: 0x1080A9660-0x1080B62D0 flags=R--
+[ INFO] ELF LOAD: 0x1080B7000-0x1080BB628 flags=RW-
+[ INFO] ELF LOAD: 0x1080BC000-0x1081BC052 flags=RW-
+[ INFO] ELF LOAD: 0x1081BC058-0x1081BD03C flags=R--
+[ INFO] [wx] 'shell': 184/446 cell pages lowered to read-only/execute-only
 USER: DEBUG: Shell Started (Async Mode)
 USER: Init: supervising services (auto-restart on crash)...
-USER: DEBUG: Shell focus acquired (or timed out)
 [ INFO] Syscall::Exit: task 5 exited with code 0
 [ INFO] Syscall::Exit: task 6 exited with code 0
+USER: DEBUG: Shell focus acquired (or timed out)
 USER: [executor] dummy-waker=absent executor=parked source=TIMER PASS
 USER: 
 USER: === Cellos shell ready — type 'help' for commands ===
@@ -570,12 +591,12 @@ USER:   PID  STATE      NAME
 USER:   ---  ---------  ----------------
 USER:   2    Waiting    init
 USER:   4    Waiting    vfs
-USER:   11   Running    shell
+USER:   12   Running    shell
 USER: Cellos > 
-[ WARN] [stack-baseline] name=init phase=boot kind=kernel used_bytes=19224 used_pages=5 alloc_bytes=73728 usable_bytes=65536 baseline=authoritative-input
+[ WARN] [stack-baseline] name=init phase=boot kind=kernel used_bytes=19432 used_pages=5 alloc_bytes=73728 usable_bytes=65536 baseline=authoritative-input
 [ WARN] [stack-baseline] name=init phase=boot kind=user used_bytes=15196 used_pages=4 alloc_bytes=73728 usable_bytes=65536 baseline=authoritative-input
 [ WARN] [stack-baseline] name=vfs phase=boot kind=kernel used_bytes=13872 used_pages=4 alloc_bytes=270336 usable_bytes=262144 baseline=authoritative-input
-[ WARN] [stack-baseline] name=vfs phase=boot kind=user used_bytes=47000 used_pages=12 alloc_bytes=270336 usable_bytes=262144 baseline=authoritative-input
-[ WARN] [stack-baseline] name=shell phase=boot kind=kernel used_bytes=13904 used_pages=4 alloc_bytes=73728 usable_bytes=65536 baseline=authoritative-input
-[ WARN] [stack-baseline] name=shell phase=boot kind=user used_bytes=18736 used_pages=5 alloc_bytes=73728 usable_bytes=65536 baseline=authoritative-input
-qemu-system-x86_64: terminating on signal 15 from pid 297833 (timeout)
+[ WARN] [stack-baseline] name=vfs phase=boot kind=user used_bytes=47016 used_pages=12 alloc_bytes=270336 usable_bytes=262144 baseline=authoritative-input
+[ WARN] [stack-baseline] name=shell phase=boot kind=kernel used_bytes=13872 used_pages=4 alloc_bytes=73728 usable_bytes=65536 baseline=authoritative-input
+[ WARN] [stack-baseline] name=shell phase=boot kind=user used_bytes=18656 used_pages=5 alloc_bytes=73728 usable_bytes=65536 baseline=authoritative-input
+qemu-system-x86_64: terminating on signal 15 from pid 380061 (timeout)

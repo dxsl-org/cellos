@@ -37,6 +37,7 @@ Observed (raw log lines, this run)
   [tier2-rpc] TIER1-TO-TIER2=OK
   [tier2-rpc] TIER2-TO-TIER1=OK root_is_dir=true
   [tier2-rpc] OVERSIZE=REFUSED
+  [tier2-rpc] INVALID-BUFFER=REFUSED
   [tier2-rpc] UNAUTHORIZED-METHOD=REFUSED
   [tier2-rpc] PROVIDER-GONE=none
   [tier2-rpc] STALE-BINDING=REFUSED
@@ -54,6 +55,11 @@ Reading it
     verified length and checksum, the Tier-2 cell calling the *named* Tier-1 VFS service
     from inside its private root, the oversize frame refused before delivery, the
     unauthorized method refused with no side effect.
+  * **Invalid user buffer refused.** Under a reviewed unsafe-allowlist exemption,
+    the driver passes an unmapped raw pointer to `sys_send`. The kernel's
+    `TaskCopyView` refuses it before delivery (`INVALID-BUFFER=REFUSED`), and the
+    provider never receives it. All four pre-delivery refusals (oversize, invalid
+    buffer, unauthorized method, stale descriptor) are now witnessed on this lane.
   * **The stale descriptor is refused.** After the provider serves its budget and exits,
     the driver polls the registry through the raw opcode (deliberately not through the SDK,
     whose cache this leg is about) until no live binding remains (`PROVIDER-GONE=none`).
@@ -65,9 +71,9 @@ Reading it
 
 What this does not claim
 ------------------------
-  * Still outstanding from the phase's four pre-delivery refusals: a wrong **user buffer**
-    on the syscall copy path (needs a raw-pointer fixture; `/bin/tier2-exploit` already
-    witnesses the address-containment class on this lane).
+  * All four pre-delivery refusals (oversize, invalid buffer, unauthorized method,
+    stale descriptor) are now witnessed on this lane. Address containment additionally
+    runs as `/bin/tier2-exploit`.
   * No ABI, authority, kernel or loader change: the fixture's service id is a literal in
     init's feature-gated block and in the fixture's own crate, cross-referenced; a drift
     fails the driver's first resolution loudly instead of silently.

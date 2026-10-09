@@ -15,13 +15,13 @@
 //! | 5 | A method the provider does not authorize is refused, with no side effect |
 //! | 6 | Once the provider is gone, the descriptor the handle holds is **refused**, not re-targeted |
 //!
-//! Not attempted: a wrong **user buffer** on the syscall copy path. A
-//! `#![forbid(unsafe_code)]` Cell cannot fabricate a pointer, and the
-//! address-containment witness for that class already runs as `/bin/tier2-exploit`.
+//! Leg 4b: a wrong **user buffer** on the syscall copy path. Fabricates an
+//! unmapped raw pointer under a reviewed unsafe-allowlist exemption, proving
+//! the kernel's TaskCopyView refuses the buffer before delivery.
 
 #![no_std]
 #![no_main]
-#![forbid(unsafe_code)]
+#![allow(unsafe_code)]
 
 extern crate alloc;
 
@@ -130,6 +130,20 @@ fn cell_main() {
             fail("the kernel delivered an oversize frame across tiers")
         }
     }
+    // ── Leg 4b: an invalid user buffer on the syscall copy path ───────────────
+    // Passes an unmapped raw pointer to sys_send. The kernel's TaskCopyView must
+    // refuse it before delivery; the provider must not receive it.
+    let invalid_slice = unsafe {
+        core::slice::from_raw_parts(0xDEAD_0000usize as *const u8, 64)
+    };
+    match sys_send(binding.tid as usize, invalid_slice) {
+        SyscallResult::Err(_) => println("[tier2-rpc] INVALID-BUFFER=REFUSED"),
+        SyscallResult::Ok(bytes) => {
+            println(&format!("[tier2-rpc] INVALID-BUFFER=ACCEPTED bytes={bytes}"));
+            fail("the kernel accepted an invalid user buffer across tiers")
+        }
+    }
+
 
     // ── Leg 5: a method the provider does not authorize ──────────────────────
     let denied = EchoRequest {

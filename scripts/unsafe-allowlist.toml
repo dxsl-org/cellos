@@ -52,6 +52,13 @@ approver = "dmin"
 date = "2026-09-28"
 
 [[file]]
+path = "cells/tests/tier2-rpc-driver/src/main.rs"
+class = "test-harness"
+reason = "Phase-02 cross-tier exchange: deliberate invalid user buffer passed to sys_send to prove kernel TaskCopyView copy_from_user validation refuses it before delivery."
+approver = "dmin"
+date = "2026-10-09"
+
+[[file]]
 path = "cells/demos/doom/src/main.rs"
 class = "c-ffi"
 reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
@@ -704,6 +711,13 @@ class = "test-violation"
 reason = "Phase-03 Tier-2 grant pair consumer: the crate root must store through the raw pointer GrantSlice returns, since that store is the fault witness; see its [[file]] entry."
 approver = "dmin"
 date = "2026-09-28"
+[[crate]]
+name = "tier2-rpc-driver"
+class = "test-violation"
+reason = "Phase-02 cross-tier exchange driver exercises raw-pointer syscall copy-path validation — see [[file]] entry."
+approver = "dmin"
+date = "2026-10-09"
+
 
 [[crate]]
 name = "service-compositor"
