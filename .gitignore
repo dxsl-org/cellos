@@ -18,6 +18,9 @@ Cargo.lock
 # Hook / scratch logs (per-directory .logs/)
 .logs/
 
+# Local virtualization measurements and disposable VMware machines
+/build/x86-backend-evidence/
+
 # Scratch QEMU capture dumps
 qemu_*.txt
 *.err
