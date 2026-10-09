@@ -59,6 +59,11 @@ approval and completed QEMU prerequisites do not authorize a purchase.
   hardware platforms are authorized by this phase.
 - No production-qualification, fleet, or security claim. The production root and
   secure/measured boot remain separate external gates.
+- **Pre-physical 3-environment test gate.** Trước khi nạp image lên board phần cứng thật,
+  image và kernel phải vượt qua kiểm thử thành công trên cả 3 môi trường ảo hoá:
+  1. QEMU TCG (`qemu64,+pdpe1gb`, software-only);
+  2. QEMU/KVM (`-accel kvm -cpu host`, hardware acceleration / timing);
+  3. VMware (VMware Workstation / ESXi, chuẩn hypervisor công nghiệp).
 
 ## Acceptance
 

@@ -30,6 +30,21 @@ the driver phases and DMAR/multi-port serial have completed at QEMU only.
 The physical profile requires DMA isolation; QEMU's optional-remapping profile
 is not an acceptable substitute.
 
+### Pre-physical test requirement (3 environments)
+
+Trước khi nạp và đo kiểm trên bất kỳ board phần cứng x86 thật nào (mức `S2` / `S3`),
+bản build kernel và image phải hoàn thành kiểm thử thành công trên cả 3 môi trường ảo hoá:
+
+1. **QEMU TCG** (`qemu64,+pdpe1gb`, software-only): kiểm tra tính đúng đắn kiến trúc,
+   không phụ thuộc vào phần cứng hay cờ CPU của máy chủ phát triển.
+2. **QEMU/KVM** (`-accel kvm -cpu host`): kiểm tra tương tác tăng tốc phần cứng,
+   CPUID thực tế, các cờ mở rộng và timing thực của CPU x86.
+3. **VMware** (VMware Workstation / ESXi): kiểm tra tính tương thích với hypervisor
+   công nghiệp chuẩn doanh nghiệp (ACPI, APIC routing, bộ điều khiển lưu trữ và mạng).
+
+Chỉ khi bản build vượt qua kiểm chứng trên cả 3 môi trường này thì mới được chuyển sang
+bước nạp trên board vật lý.
+
 | Evidence level | Meaning | May appear in the machine table? |
 |---|---|---|
 | `S1 — qemu` | Exercised against a device model; useful regression only | No |

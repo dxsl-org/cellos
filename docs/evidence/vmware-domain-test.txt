@@ -1,0 +1,41 @@
+x86_64 VMware Workstation domain and boot compatibility evidence (2026-10-09)
+
+Scope: Pre-physical 3-environment test gate qualification on VMware Workstation Pro.
+Image: build/vicell-x86-domain-test.iso (sha256 captured)
+VM configuration: 1 vCPU, 256 MiB RAM, firmware BIOS, ACPI HPET enabled, IDE CD-ROM, COM1 serial port mapped to serial.log.
+Host: Windows 11 / WSL2 host invoking VMware Workstation Pro 17 via native vmrun.exe.
+
+Observed runtime markers (docs/evidence/vmware-domain-test.log):
+1. Hardware & Paging:
+   - x86_64 timers initialized from ACPI (HPET + LAPIC).
+   - RAM disk VIFS1 mounted.
+   - PCID disabled (virtualized CPUID without PCID support; untagged CR3 flush).
+   - S22-X86-DOMAIN-LIVE: PASS cr3=0x1ba1000 root=0x1ba1000 pcid=0 pcid_usable=false kernel_cr3=0x59000 domain=5 generation=6.
+2. Tier 2 C++ freestanding runtime profile (`/bin/cpp-smoke`):
+   - [domain] admitted cell 'cpp-smoke' to Tier 2 Paged Domain (CR3 isolation)
+   - [cpp-smoke] static-ctor marker=0xC0FFEE11
+   - [cpp-smoke] virtual-dispatch area=37
+   - [cpp-smoke] virtual-delete area=36
+   - [cpp-smoke] templates total=64
+   - [cpp-smoke] heap churn checksum=3067 iterations=64 (operator new/delete with SSE)
+   - [cpp-smoke] vfs client roundtrip bytes=53 (typed VFS IPC)
+   - [cpp-smoke] c-abi read magic=ELF (C-ABI open/read of embedded ELF)
+   - CPP-SMOKE: PASS
+   - Clean task exit code 0; DOMAIN-FRAME-RELEASE: PASS frames=5 quarantined=0.
+3. Cross-tier RPC exchange (`/bin/tier2-rpc-provider` and `/bin/tier2-rpc-driver`):
+   - [tier2-rpc] TIER1-TO-TIER2=OK
+   - [tier2-rpc] TIER2-TO-TIER1=OK root_is_dir=true
+   - [tier2-rpc] OVERSIZE=REFUSED
+   - [tier2-rpc] INVALID-BUFFER=REFUSED
+   - [tier2-rpc] UNAUTHORIZED-METHOD=REFUSED
+   - [tier2-rpc] STALE-BINDING=REFUSED
+   - [tier2-rpc] STALE-BINDING-CLEARED=true
+   - [tier2-rpc] DRIVER-DONE
+4. Shell recovery:
+   - Interactive shell ready: `Cellos > ` prompt reached.
+
+Three-environment qualification status:
+- QEMU TCG (software-only): PASS (scripts/x86/qemu-domain-test.sh)
+- QEMU KVM (hardware-accelerated, PCID/INVPCID active): PASS (X86_ACCEL=kvm scripts/x86/qemu-domain-test.sh)
+- VMware Workstation Pro (enterprise hypervisor): PASS (docs/evidence/vmware-domain-test.log)
+All 3 virtualization environments verified prior to physical machine capture.

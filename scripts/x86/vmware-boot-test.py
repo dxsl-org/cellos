@@ -23,9 +23,16 @@ import time
 from datetime import datetime, timezone
 
 
+IS_WSL_WIN = False
+
 class BootFailure(Exception):
     pass
 
+
+def to_host_path(path):
+    if IS_WSL_WIN:
+        return subprocess.check_output(["wslpath", "-m", str(path)], text=True).strip()
+    return str(path)
 
 def positive_seconds(value):
     number = float(value)
@@ -44,14 +51,16 @@ def vmx_string(value):
 
 
 def find_vmrun(override):
+    global IS_WSL_WIN
     if override:
         candidate = Path(override).expanduser().resolve()
         if not candidate.is_file() or not os.access(candidate, os.X_OK):
             raise BootFailure("--vmrun must name an executable file: " + str(candidate))
         if os.name != "nt" and candidate.suffix.lower() == ".exe":
-            raise BootFailure("Windows vmrun.exe requires native Windows Python, not WSL")
+            if not shutil.which("wslpath"):
+                raise BootFailure("Windows vmrun.exe requires native Windows Python or WSL with wslpath")
+            IS_WSL_WIN = True
         return candidate
-
     candidates = []
     name = "vmrun.exe" if os.name == "nt" else "vmrun"
     located = shutil.which(name)
@@ -66,9 +75,16 @@ def find_vmrun(override):
     else:
         candidates.extend(Path(path) for path in
                           ("/usr/bin/vmrun", "/usr/local/bin/vmrun",
-                           "/usr/lib/vmware/bin/vmrun", "/usr/lib/vmware-vix/vmrun"))
+                           "/usr/lib/vmware/bin/vmrun", "/usr/lib/vmware-vix/vmrun",
+                           "/mnt/c/Program Files (x86)/VMware/VMware Workstation/vmrun.exe",
+                           "/mnt/c/Program Files/VMware/VMware Workstation/vmrun.exe"))
     for candidate in candidates:
         if candidate.is_file() and os.access(candidate, os.X_OK):
+            if os.name != "nt" and candidate.suffix.lower() == ".exe":
+                if shutil.which("wslpath"):
+                    IS_WSL_WIN = True
+                else:
+                    continue
             return candidate.resolve()
     searched = ", ".join(str(path) for path in candidates)
     raise BootFailure("VMware Workstation Pro vmrun is not installed/discoverable; "
@@ -128,7 +144,8 @@ def reject_serial(data):
 
 
 def stopped_vm(vmrun, vmx, workspace, timeout):
-    code = run_logged([str(vmrun), "-T", "ws", "stop", str(vmx), "hard"],
+    target = to_host_path(vmx)
+    code = run_logged([str(vmrun), "-T", "ws", "stop", target, "hard"],
                       workspace / "vmrun-stop.log", timeout)
     if code != 0:
         raise BootFailure("hard stop failed (exit " + str(code) + "); VM may still be running: " + str(vmx))
@@ -139,8 +156,9 @@ def stopped_vm(vmrun, vmx, workspace, timeout):
     lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
     if not lines or not re.fullmatch(r"Total running VMs: \d+", lines[0].strip()):
         raise BootFailure("cannot confirm own VM stopped; unrecognized vmrun list output")
-    own = os.path.normcase(os.path.realpath(vmx))
-    if any(os.path.normcase(os.path.realpath(line.strip())) == own for line in lines[1:]):
+    target = to_host_path(vmx)
+    own_norm = os.path.normcase(target)
+    if any(os.path.normcase(line.strip()) == own_norm or os.path.normcase(line.strip()).replace("\\", "/") == own_norm for line in lines[1:]):
         raise BootFailure("own VM remains running after hard stop: " + str(vmx))
 
 
@@ -173,7 +191,11 @@ def main():
     try:
         if os.name not in ("nt", "posix") or (os.name == "posix" and platform.system() != "Linux"):
             raise BootFailure("only native Linux and Windows Workstation hosts are supported")
-        root = Path(args.evidence_root).expanduser().resolve()
+        vmrun = find_vmrun(args.vmrun)
+        if IS_WSL_WIN and args.evidence_root == "build/x86-backend-evidence/vmware":
+            root = Path("/mnt/c/Temp/cellos-vmware")
+        else:
+            root = Path(args.evidence_root).expanduser().resolve()
         vmx_string(root)
         root.mkdir(parents=True, exist_ok=True)
         prefix = datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%SZ-")
@@ -199,19 +221,21 @@ def main():
     start_stream = None
     startup_attempted = False
     start_time = None
-    vmrun = None
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, interrupt)
     if hasattr(signal, "SIGBREAK"):
         signal.signal(signal.SIGBREAK, interrupt)
 
     try:
-        vmrun = find_vmrun(args.vmrun)
         result["vmrun"] = str(vmrun)
         iso = Path(args.iso).expanduser().resolve(strict=True)
         vmx_string(iso)
         if not iso.is_file():
             raise BootFailure("ISO must be a regular file: " + str(iso))
+        if IS_WSL_WIN and not str(iso).startswith("/mnt/c/"):
+            local_iso = workspace / "cellos.iso"
+            shutil.copy(iso, local_iso)
+            iso = local_iso
         digest = hashlib.sha256()
         with iso.open("rb") as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -219,7 +243,7 @@ def main():
         result["iso"] = str(iso)
         result["iso_sha256"] = digest.hexdigest()
         (workspace / "iso.sha256").write_text(digest.hexdigest() + "  " + str(iso) + "\n", encoding="utf-8")
-        text = make_vmx(iso, serial, args.cpus, args.memory_mib)
+        text = make_vmx(to_host_path(iso), to_host_path(serial), args.cpus, args.memory_mib)
         vmx.write_text(text, encoding="utf-8")
         # VMware may rewrite its VMX; retain the exact requested configuration.
         (workspace / "requested.vmx").write_text(text, encoding="utf-8")
@@ -231,7 +255,7 @@ def main():
             raise BootFailure("vmrun did not report its version; see vmrun-version.log")
         result["vmrun_version"] = match.group(0).strip()
 
-        command = [str(vmrun), "-T", "ws", "start", str(vmx), "nogui"]
+        command = [str(vmrun), "-T", "ws", "start", to_host_path(vmx), "nogui"]
         result["start_command"] = command
         start_stream = (workspace / "vmrun-start.log").open("wb")
         start_time = time.monotonic()
