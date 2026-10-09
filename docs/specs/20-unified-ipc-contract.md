@@ -114,6 +114,12 @@ Therefore:
     §6). The cross-tier fixture does exactly this and completes every operation
     (`docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`,
     `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`);
+  * that opt-in path **now ships** in the SDK, with the blocking API untouched:
+    `ostd::ipc::PendingCall` (submit / `try_take` / `wait_and_take` / `cancel`) and
+    `ostd::ipc::Completion` (`is_definite` / `is_uncertain`) on the caller side, and the existing
+    `ostd::ipc::{current, reply}` on the serving side. It is exercised end to end by
+    `cells/tests/bench/src/scenarios/async_lifecycle.rs`, whose markers the x86_64 lane asserts
+    (`docs/evidence/c2c-async-lifecycle-x86.{txt,log}`);
   * making the **blocking** `LocalEndpoint::call` / `ServiceRef::call` stop stranding a caller whose
     provider dies mid-call forces either a service-wide reply migration — a change to a *ratified*
     IPC path, i.e. a Spec 17 §9 entry plus two Law-1 confirmations — or a kernel change that lets a

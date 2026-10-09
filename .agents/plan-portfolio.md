@@ -98,6 +98,16 @@ authorization. Plans not admitted below are parked/historical.
   unauthorized method) and the fourth — a wrong **user buffer** on the syscall copy path — is not
   re-created: a `#![forbid(unsafe_code)]` cell cannot fabricate a pointer, and the
   address-containment witness already runs as `/bin/tier2-exploit`.
+- **Phase 03 step-3 opt-in API landed 2026-10-09** (same session): `ostd::ipc::PendingCall` +
+  `Completion` give Cells the nonblocking multi-outstanding call path the step-2 specification
+  describes, with `is_definite`/`is_uncertain` encoding the retry rule; the serving side uses the
+  existing `ostd::ipc::{current, reply}`. Strictly opt-in — the blocking API, every service's reply
+  discipline and every kernel path are unchanged. Witnessed by `bench async-lifecycle` driving the
+  API through the same measurements (8 outstanding, one correlated completion each, one `wait` round,
+  `unterminal=0 lost=0` on mid-flight death), asserted by the x86 integration test:
+  `docs/evidence/c2c-async-lifecycle-x86.{txt,log}`. **Still not admitted, each with its own cost
+  stated in the phase file:** the blocking-API migration (the stranding fix), multi-source waiting,
+  cancelling a dispatched operation, the two-hart wake proof and retained-reply lifetime.
 - **Phase 03 step 2 landed 2026-10-09** (same session, no new admission needed): the lifecycle
   specification is now in the contract — [Spec 20 §2.6](../docs/specs/20-unified-ipc-contract.md),
   draft v3.2 — covering the operation lifecycle, the mapping to §2.4's outcomes, submission-as-copy,

@@ -140,6 +140,119 @@ pub fn reply(op: IpcOpId, bytes: &[u8]) -> Result<(), IpcError> {
     }
 }
 
+// ─── Opt-in nonblocking calls ────────────────────────────────────────────────
+
+/// One submitted bounded call: the kernel owns the request bytes and the reply slot, so
+/// the caller may drop its request buffer as soon as [`submit`][PendingCall::submit]
+/// returns, and the operation stays accounted for until it is taken or cancelled.
+///
+/// This is the **opt-in** path. The serving Cell must answer with [`current`]/[`reply`],
+/// because only that route settles the operation — an ordinary masked `Send` reply never
+/// does, measured on the x86_64 lane and specified in
+/// [Spec 20 §2.6](../../../docs/specs/20-unified-ipc-contract.md). The blocking
+/// [`service_call_typed`] path is unchanged and unaffected by anything here.
+///
+/// Several calls may be outstanding at once from one Cell: submit each, then drain with
+/// [`wait`] plus [`try_take`][PendingCall::try_take]. The measured contract — eight
+/// outstanding against one peer, exactly one correlated completion each, one `wait`
+/// round for the whole drain — is `docs/evidence/c2c-async-lifecycle-x86.{txt,log}`.
+///
+/// Dropping the handle abandons *waiting*, not necessarily execution: a dispatched
+/// operation may still run. Take it, or [`cancel`][PendingCall::cancel] it and accept the
+/// indeterminate outcome the contract then implies.
+pub struct PendingCall {
+    operation: IpcOpId,
+}
+
+/// A settled operation: what happened, and how many reply bytes the kernel wrote into
+/// the caller's buffer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Completion {
+    /// The terminal kind, mapped to caller-visible outcomes by Spec 20 §2.4/§2.6.
+    pub terminal: IpcTerminal,
+    /// Reply bytes written into the caller's buffer; `0` for anything that is not
+    /// [`IpcTerminal::Reply`].
+    pub len: usize,
+}
+
+impl Completion {
+    /// A definite outcome: nothing of this operation can execute later. `Cancelled` is
+    /// definite because cancellation only yields it before dispatch — a dispatched
+    /// operation cancelled afterwards is reported [`IpcTerminal::Indeterminate`].
+    pub fn is_definite(&self) -> bool {
+        matches!(
+            self.terminal,
+            IpcTerminal::Reply
+                | IpcTerminal::PeerGone
+                | IpcTerminal::PreDispatchTimeout
+                | IpcTerminal::Cancelled
+        )
+    }
+
+    /// The operation may still have executed. Never retry one of these blindly:
+    /// reconcile by request identity and application policy (Spec 20 §2.4).
+    pub fn is_uncertain(&self) -> bool {
+        matches!(self.terminal, IpcTerminal::Indeterminate)
+    }
+}
+
+impl PendingCall {
+    /// Submit `request` without waiting for the peer to receive it.
+    ///
+    /// # Errors
+    /// [`IpcSubmitError::Busy`] when nothing was accepted (no work queued — do not wait
+    /// on it), [`IpcSubmitError::PeerGone`] when the peer is already gone, and
+    /// [`IpcSubmitError::InvalidRequest`] for a malformed or oversized request.
+    pub fn submit(peer_tid: usize, request: &[u8]) -> Result<Self, IpcSubmitError> {
+        submit(peer_tid, request).map(|operation| Self { operation })
+    }
+
+    /// The exact operation id, for correlating a terminal with the request it belongs to.
+    pub const fn operation(&self) -> IpcOpId {
+        self.operation
+    }
+
+    /// Take the terminal result if it has arrived; `Ok(None)` while it is still
+    /// outstanding. An undersized `reply` never consumes the result.
+    pub fn try_take(&self, reply: &mut [u8]) -> Result<Option<Completion>, IpcError> {
+        match take(self.operation, reply)? {
+            IpcTakeResult::Pending => Ok(None),
+            IpcTakeResult::Terminal { status, len } => Ok(Some(Completion {
+                terminal: status,
+                len,
+            })),
+        }
+    }
+
+    /// Wait, timer-bounded, for this call's terminal.
+    ///
+    /// `Ok(None)` means the budget ran out with the operation still outstanding — it is
+    /// neither lost nor failed, so do not read it as an outcome; keep waiting, or decide
+    /// per the contract that the caller's own deadline has passed.
+    pub fn wait_and_take(
+        &self,
+        reply: &mut [u8],
+        ticks_per_round: u64,
+        rounds: usize,
+    ) -> Result<Option<Completion>, IpcError> {
+        for _ in 0..rounds.max(1) {
+            if let Some(completion) = self.try_take(reply)? {
+                return Ok(Some(completion));
+            }
+            let _ = wait(ticks_per_round);
+        }
+        self.try_take(reply)
+    }
+
+    /// Abandon this operation. Pre-dispatch it becomes
+    /// [`IpcTerminal::Cancelled`]; afterwards [`IpcTerminal::Indeterminate`], because a
+    /// dispatched request is never rolled back. `take` the terminal afterwards to
+    /// release the slot.
+    pub fn cancel(&self) -> Result<(), IpcError> {
+        cancel(self.operation)
+    }
+}
+
 /// A masked receive may still return an unrelated NotifyOnExit record.
 #[inline]
 fn reply_sender(peer_tid: usize, result: SyscallResult) -> Result<(), IpcError> {

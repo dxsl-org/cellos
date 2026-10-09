@@ -27,7 +27,12 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
   so an ordinary masked `Send` reply never completes an operation; the opt-in async API therefore
   needs both sides to opt in, and **step 3's goal of moving the blocking API onto the primitive needs
   a decision**: a service-wide reply migration (Spec 17 §9 + two Law-1 confirmations) or a kernel
-  change to terminalise on a plain reply. Still unadmitted: the opt-in API, multi-source waiting
+  change to terminalise on a plain reply.
+  Phase-03 **step-3 opt-in API landed** as well: `ostd::ipc::PendingCall` + `Completion` (caller side)
+  over the existing `ostd::ipc::{current, reply}` (server side), strictly opt-in — blocking API,
+  every service reply discipline and every kernel path unchanged — and witnessed by `bench
+  async-lifecycle` driving the API (`docs/evidence/c2c-async-lifecycle-x86.{txt,log}`).
+  Still unadmitted: the blocking-API migration (the stranding fix), multi-source waiting
   (`WaitCompletion` v1 is `NET_RX`/`TIMER` only), cancelling a dispatched operation, the two-hart wake
   proof, retained-reply lifetime, queue/fairness reservation — all needing the kernel file-owner
   handoff where they touch syscall/completion/scheduler paths.

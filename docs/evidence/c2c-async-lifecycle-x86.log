@@ -151,6 +151,9 @@ QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
 [INFO] Kernel initialization complete. Entering idle loop.
 [INFO] Starting scheduler...
 USER: Init: Starting Cellos Orchestrator...
+[ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/block error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ahci error=NotFound
 USER: [platform] ECAM scan buses 0-255 starting
 USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
 USER: [platform] registered bus 0 device 1 function 0 class 3:0:0
@@ -159,10 +162,6 @@ USER: [platform] registered bus 0 device 31 function 0 class 6:1:0
 USER: [platform] registered bus 0 device 31 function 2 class 1:6:1
 USER: [platform] registered bus 0 device 31 function 3 class 12:5:0
 USER: [platform] ECAM scan complete
-USER: 
-[ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
-[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/block error=NotFound
-[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ahci error=NotFound
 USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
 USER: [vfs] WARNING: FAT32 /mnt/sd mount failed
 USER: [vfs] WARNING: CellosFS mount/format failed — volume unavailable
@@ -194,7 +193,7 @@ USER: [async-lifecycle] START
 USER: [bench-probe] Started with role: 'c2c-echo-reverse:8'
 USER: [async-lifecycle] echo-provider-ready count=8
 USER: [async-lifecycle] echo-provider-replied count=8 reversed
-USER: [async-lifecycle] BOUNDED completed=8 lost=0 wrong_seq=0 p50_ticks=1559180 p99_ticks=1586260 freq_hz=1000000000 wait_rounds=1
+USER: [async-lifecycle] BOUNDED completed=8 lost=0 wrong_seq=0 p50_ticks=1508720 p99_ticks=1534800 freq_hz=1000000000 wait_rounds=1
 USER: [async-lifecycle] BOUNDED-RELEASED ok=true
 USER: [async-lifecycle] echo-provider-done
 USER: [bench-probe] Started with role: 'c2c-slow-parked'
@@ -206,6 +205,6 @@ USER: [async-lifecycle] TRY-SEND parked_refused=false busy_refused=true parked_r
 USER: [bench-probe] Started with role: 'c2c-provider'
 USER: [local-lifecycle] provider-ready
 USER: [local-lifecycle] provider-exiting-without-reply
-USER: [async-lifecycle] DEATH outstanding=1 submit_refused=3 terminal=1 peer_gone=1 unterminal=0 lost=0
+USER: [async-lifecycle] DEATH outstanding=4 submit_refused=0 terminal=4 peer_gone=4 unterminal=0 lost=0
 USER: [async-lifecycle] PASS
 USER: Cellos > 

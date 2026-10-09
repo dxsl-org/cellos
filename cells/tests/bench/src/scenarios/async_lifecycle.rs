@@ -23,10 +23,10 @@ use alloc::vec::Vec;
 use api::ipc::IPC_BUF_SIZE;
 use api::task::TaskPriority;
 use ostd::io::println;
-use ostd::ipc::{submit, take, wait, IpcTakeResult, IpcTerminal};
+use ostd::ipc::{current, reply, wait, PendingCall};
 use ostd::syscall::{
-    sys_exit, sys_get_time, sys_ipc_current, sys_ipc_reply, sys_recv, sys_send, sys_set_spawn_args,
-    sys_spawn_pinned, sys_try_send, SyscallResult,
+    sys_exit, sys_get_time, sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned, sys_try_send,
+    SyscallResult,
 };
 use ostd::task::yield_now;
 
@@ -95,20 +95,19 @@ pub fn run_echo_reverse(role: &str) -> ! {
     while pending.len() < count {
         match sys_recv(0, &mut buf) {
             SyscallResult::Ok(_) if buf[0] == REQ_TAG && buf[1] != DONE_SEQ => {
-                // The kernel records the exact operation this message belongs to;
-                // a bounded reply must name it, not just the sender.
-                let operation = sys_ipc_current();
-                if operation <= 0 {
-                    fail("echo provider: no operation id for a bounded request");
+                // The kernel records the exact operation this message belongs to; a
+                // bounded reply must name it, not just the sender.
+                match current() {
+                    Some(operation) => pending.push((operation, buf[1])),
+                    None => fail("echo provider: no operation id for a bounded request"),
                 }
-                pending.push((operation as usize, buf[1]));
             }
             SyscallResult::Ok(_) => { /* not ours: keep waiting */ }
             SyscallResult::Err(_) => fail("echo provider recv"),
         }
     }
     for (operation, seq) in pending.iter().rev() {
-        if sys_ipc_reply(*operation, &[REPLY_TAG, *seq]) < 0 {
+        if reply(*operation, &[REPLY_TAG, *seq]).is_err() {
             fail("echo provider bounded reply");
         }
     }
@@ -175,13 +174,13 @@ fn bounded_multi_outstanding_leg() {
     let provider = spawn(&format!("{ECHO_PREFIX}{OUTSTANDING}"));
     settle();
 
-    let mut tokens: Vec<usize> = Vec::new();
+    let mut calls: Vec<PendingCall> = Vec::new();
     let mut submitted_at: Vec<u64> = Vec::new();
     for seq in 0..OUTSTANDING {
         let request = [REQ_TAG, seq as u8];
-        match submit(provider, &request) {
-            Ok(token) => {
-                tokens.push(token);
+        match PendingCall::submit(provider, &request) {
+            Ok(call) => {
+                calls.push(call);
                 submitted_at.push(sys_get_time());
             }
             Err(error) => {
@@ -193,7 +192,7 @@ fn bounded_multi_outstanding_leg() {
         }
     }
 
-    let mut done = alloc::vec![false; tokens.len()];
+    let mut done = alloc::vec![false; calls.len()];
     let mut completed = 0usize;
     let mut lost = 0usize;
     let mut wrong_seq = 0usize;
@@ -201,28 +200,30 @@ fn bounded_multi_outstanding_leg() {
     let mut rounds_used = 0usize;
     let mut reply = [0u8; IPC_BUF_SIZE];
 
-    while completed + lost < tokens.len() && rounds_used < WAIT_ROUNDS {
+    while completed + lost < calls.len() && rounds_used < WAIT_ROUNDS {
         rounds_used += 1;
         if !wait(WAIT_TICKS) {
             continue;
         }
-        for index in 0..tokens.len() {
+        for index in 0..calls.len() {
             if done[index] {
                 continue;
             }
-            match take(tokens[index], &mut reply) {
-                Ok(IpcTakeResult::Pending) => {}
-                Ok(IpcTakeResult::Terminal { status, len }) => {
+            match calls[index].try_take(&mut reply) {
+                Ok(None) => {}
+                Ok(Some(completion)) => {
                     done[index] = true;
-                    if !matches!(status, IpcTerminal::Reply) {
-                        println(&format!("[async-lifecycle] BOUNDED-STATUS {status:?}"));
+                    if !completion.is_definite() || completion.len < 2 {
+                        println(&format!(
+                            "[async-lifecycle] BOUNDED-COMPLETION {completion:?}"
+                        ));
                         lost += 1;
                         continue;
                     }
                     // Correlation is the token, not the arrival order: the provider
                     // answers in reverse, and the payload must still carry this
                     // operation's own sequence number.
-                    if len < 2 || reply[0] != REPLY_TAG || reply[1] as usize != index {
+                    if completion.len < 2 || reply[0] != REPLY_TAG || reply[1] as usize != index {
                         wrong_seq += 1;
                     }
                     latencies.push(sys_get_time().saturating_sub(submitted_at[index]));
@@ -237,7 +238,7 @@ fn bounded_multi_outstanding_leg() {
         }
     }
     // Anything still pending after the budget is a completion that never arrived.
-    lost += tokens.len() - completed - lost;
+    lost += calls.len() - completed - lost;
 
     latencies.sort_unstable();
     let p50 = latencies.get(latencies.len() / 2).copied().unwrap_or(0);
@@ -322,41 +323,43 @@ fn mid_flight_death_leg() {
     let provider = spawn(VANISH_ROLE);
     settle();
 
-    let mut tokens: Vec<usize> = Vec::new();
+    let mut calls: Vec<PendingCall> = Vec::new();
     let mut submit_refused = 0usize;
     for seq in 0..DEATH_OUTSTANDING {
-        match submit(provider, &[REQ_TAG, seq as u8]) {
-            Ok(token) => tokens.push(token),
+        match PendingCall::submit(provider, &[REQ_TAG, seq as u8]) {
+            Ok(call) => calls.push(call),
             // A pre-dispatch refusal is also a definite outcome, and must not be
             // counted as a lost operation.
             Err(_) => submit_refused += 1,
         }
     }
 
-    let mut done = alloc::vec![false; tokens.len()];
+    let mut done = alloc::vec![false; calls.len()];
     let mut terminals = 0usize;
     let mut peer_gone = 0usize;
     let mut lost = 0usize;
     let mut reply = [0u8; IPC_BUF_SIZE];
     let mut rounds_used = 0usize;
-    while terminals < tokens.len() && rounds_used < WAIT_ROUNDS {
+    while terminals < calls.len() && rounds_used < WAIT_ROUNDS {
         rounds_used += 1;
         if !wait(WAIT_TICKS) {
             continue;
         }
-        for index in 0..tokens.len() {
+        for index in 0..calls.len() {
             if done[index] {
                 continue;
             }
-            match take(tokens[index], &mut reply) {
-                Ok(IpcTakeResult::Pending) => {}
-                Ok(IpcTakeResult::Terminal { status, .. }) => {
+            match calls[index].try_take(&mut reply) {
+                Ok(None) => {}
+                Ok(Some(completion)) => {
                     done[index] = true;
                     terminals += 1;
-                    if matches!(status, IpcTerminal::PeerGone) {
-                        peer_gone += 1;
+                    if completion.is_uncertain() {
+                        // Counted as terminal, and honestly reported as uncertain.
+                        println(&format!("[async-lifecycle] DEATH-UNCERTAIN {completion:?}"));
+                        peer_gone += 0;
                     } else {
-                        println(&format!("[async-lifecycle] DEATH-STATUS {status:?}"));
+                        peer_gone += 1;
                     }
                 }
                 Err(error) => {
@@ -368,10 +371,10 @@ fn mid_flight_death_leg() {
             }
         }
     }
-    let unterminal = tokens.len() - terminals;
+    let unterminal = calls.len() - terminals;
     println(&format!(
         "[async-lifecycle] DEATH outstanding={} submit_refused={} terminal={} peer_gone={} unterminal={} lost={}",
-        tokens.len(),
+        calls.len(),
         submit_refused,
         terminals,
         peer_gone,

@@ -116,6 +116,33 @@ park (`WaitCompletion` v1 is `NET_RX`/`TIMER` only), cancelling a dispatched ope
 publication/wake race, and retained-reply lifetime when a caller drops its interest. Step 4's
 saturation/restart/timer-race matrix is the evidence that would close them.
 
+## Step-3 opt-in API landed (2026-10-09) — SDK only
+
+Built the half of step 3 the specification says is safe to build now, and left the other half alone.
+
+`libs/ostd/src/ipc.rs` gains the caller-side handle for the path the spec describes:
+`PendingCall::{submit, operation, try_take, wait_and_take, cancel}` and
+`Completion::{terminal, len, is_definite, is_uncertain}` — the terminal kind plus how many reply
+bytes landed, with `is_definite`/`is_uncertain` encoding the §2.4 retry rule (never blind-retry an
+indeterminate outcome). The serving side needed nothing new: `ostd::ipc::{current, reply}` already
+existed, and the fixture's provider now answers through them rather than the raw syscalls.
+
+Opt-in in the strict sense: nothing in `LocalEndpoint::call`, `ServiceRef::call`,
+`service_call_typed`, any kernel path or any service's reply discipline changed. A Cell that never
+touches `PendingCall` behaves exactly as before.
+
+**Witnessed** — `bench async-lifecycle` drives the API rather than the raw syscalls, on the same
+lane, with the same measured contract: 8 outstanding via `PendingCall` with exactly one correlated
+completion each (0 lost, 0 mis-correlated), p50/p99 ≈ 1.51/1.53 ms on TCG and one `wait` round for
+the drain; `sys_try_send` still measured as a value-refusal (`usize::MAX`) with nothing queued; four
+operations against a peer that dies mid-flight all terminalised (`unterminal=0 lost=0`). Markers are
+asserted by `tests/integration/tests/local-service-lifecycle-x86.rs`; evidence
+`docs/evidence/c2c-async-lifecycle-x86.{txt,log}`.
+
+**Not done, and still needing its own decision:** moving the *blocking* API onto the primitive (the
+stranding fix), multi-source waiting, cancelling a dispatched operation, the two-hart wake proof and
+retained-reply lifetime — see § Step-2 specification for what each costs.
+
 ## Deviation log
 
 None.
