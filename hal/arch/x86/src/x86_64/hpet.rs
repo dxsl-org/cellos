@@ -65,15 +65,26 @@ pub unsafe fn init(virt_base: usize) {
 }
 
 /// Returns the current time in nanoseconds since HPET was enabled.
+/// Returns 0 without accessing MMIO when HPET has not been initialised.
 pub fn now_ns() -> u64 {
-    let count = read64(MAIN_COUNTER);
     let period_fs = HPET_PERIOD_FS.load(Ordering::Relaxed);
     if period_fs == 0 {
         return 0;
     }
+    let count = read64(MAIN_COUNTER);
     // count * period_fs / 1_000_000 converts fs ticks → ns.
     // Use u128 to avoid overflow on long uptimes.
     ((count as u128 * period_fs as u128) / 1_000_000) as u64
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn unavailable_hpet_returns_zero_without_mmio() {
+        // Host tests never initialise HPET: reading its null MMIO base would
+        // fault instead of returning the documented unavailable-clock value.
+        assert_eq!(super::now_ns(), 0);
+    }
 }
 
 /// Spin-wait for `ns` nanoseconds using the HPET main counter.
