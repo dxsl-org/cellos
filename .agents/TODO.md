@@ -44,11 +44,15 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
 - [ ] Reconcile one exact Intel machine against the HCL; physical bring-up and
   acquisition remain separately gated. Bắt buộc kiểm thử đạt trên cả 3 môi trường
   (QEMU TCG, QEMU/KVM, VMware) trước khi nạp lên board thật. No AMD/new ARM/RISC-V program.
-- [ ] Close remaining Intel VMX/EPT prerequisites and x86 production Tier-2
-  switch-ordering gate. The x86 C++ freestanding runtime gap is closed:
-  `cpp-smoke` runs in an x86 Tier 2 paged domain (static constructors, virtual
-  dispatch/delete, templates, allocator with SSE, VFS IPC and C-ABI file I/O).
-  Evidence: `docs/evidence/c2c-x86-cpp-freestanding-runtime.txt`.
+- [ ] Close remaining Intel VMX/EPT prerequisites. The x86 production Tier-2
+  switch-ordering gate is closed: `switch_with_root` composes CR3 with `domain::cr3_for`
+  between outgoing context save and incoming stack adopt; `switch_ordering_qualified()`
+  is promoted to true on x86_64 across both production and test builds, verified on
+  QEMU TCG, QEMU KVM, and VMware Workstation Pro. The x86 C++ freestanding runtime
+  gap is closed: `cpp-smoke` runs in an x86 Tier 2 paged domain (static constructors,
+  virtual dispatch/delete, templates, allocator with SSE, VFS IPC and C-ABI file I/O).
+  Evidence: `docs/evidence/c2c-x86-cpp-freestanding-runtime.txt` and
+  `docs/evidence/vmware-domain-test.txt`.
 - [ ] Qualify two independently verified Intel nodes for LAN C2C after first-node bring-up,
   including restart, authority denial, disconnect/reconnect and uncertain outcomes.
 - [ ] Close explicit all-tier adapters and relay identity/time/persistence gates;

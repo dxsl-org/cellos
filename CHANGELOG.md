@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- Close x86 production Tier-2 switch-ordering gate: promoted `switch_ordering_qualified()`
+  to true on `x86_64` for both production and test builds, enabling Tier 2 Paged Domain
+  admission on shipping kernels after end-to-end qualification across QEMU TCG, QEMU KVM,
+  and VMware Workstation Pro. Retained strict compile-time assertion for AArch64 production.
 - C2C Phase 03 deterministic two-hart publication and wake race proof: verified four
   deterministic cross-hart race conditions in kernel scheduler regressions: pre-park
   early reply (no lost wakeup), cross-hart parked wake (Ready transition + ready queue

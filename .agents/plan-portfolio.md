@@ -272,10 +272,11 @@ authorization. Plans not admitted below are parked/historical.
   SVM/TCG is not Intel evidence. x86 AVX2/other optimization is parked unless a
   measured C2C workload needs it. Secure Boot retains its security-track gates.
   No new ABI, hardware qualification or evidence promotion is authorized here.
-- x86 Tier 2 runtime/admission and C/C++ support — required consumer dependency,
-  not delivered by the prior RV64 portability closure. Scope through existing
-  [kernel evolution](260906-dual-mode-kernel-evolution/plan.md) and portability
-  contracts; admission is test-image-only and x86 C++ runtime support is missing.
+- x86 Tier 2 runtime/admission and C/C++ support — **completed 2026-10-09**:
+  x86 freestanding C++ runtime profile qualified in CR3-isolated paged domain
+  (`docs/evidence/c2c-x86-cpp-freestanding-runtime.txt`); production switch-ordering
+  gate closed and verified across QEMU TCG, QEMU KVM, and VMware Workstation Pro
+  (`docs/evidence/vmware-domain-test.txt`).
 - `260711-1917-tier3b-x86-vtx` P09 — required Intel VMX/EPT dependency. Plan and
   qualify Intel guest lifecycle/storage/network before claiming the Tier 3 target.
   Existing SVM evidence is retained; AMD physical work is parked.

@@ -146,25 +146,25 @@ impl DomainAdmissionRequest {
 /// kernel context (`S22-X86-DOMAIN-LIVE`) and tearing the root down with every
 /// frame returned and nothing quarantined.
 ///
-/// Every reopen is **test-images only**. A production AArch64 or x86_64 build
-/// (no `test-hooks`) keeps refusing, which is the phase-01 posture the fleet
-/// profile depends on, and the compile-time pin below makes that structural
-/// rather than a matter of reading the cfg.
+/// x86_64 switch ordering is production-qualified: `switch_with_root` composes
+/// CR3 with `domain::cr3_for` and programs it between the outgoing save and the
+/// incoming stack adopt, verified across QEMU TCG, QEMU KVM, and VMware
+/// Workstation Pro (`docs/evidence/vmware-domain-test.txt`).
+/// AArch64 remains test-images only.
 pub(crate) const fn switch_ordering_qualified() -> bool {
     cfg!(target_arch = "riscv64")
+        || cfg!(target_arch = "x86_64")
         || cfg!(all(target_arch = "aarch64", feature = "test-hooks"))
-        || cfg!(all(target_arch = "x86_64", feature = "test-hooks"))
 }
 
-/// Phase-02 reopen is confined to test images.
+/// AArch64 reopen is confined to test images.
 ///
 /// `enable_for_boot` returns `false` (and the boot stays `PolicyDisabled`) on
-/// every build this const-asserts about, so a production AArch64 or x86_64 image
-/// cannot admit a domain-class cell by accident. Const-evaluated, so it fails the
-/// build rather than a boot.
+/// production AArch64 builds, so an unhardened image cannot admit a domain-class
+/// cell by accident. Const-evaluated, so it fails the build rather than a boot.
 #[cfg(all(
     feature = "native-domains",
-    any(target_arch = "aarch64", target_arch = "x86_64"),
+    target_arch = "aarch64",
     not(feature = "test-hooks")
 ))]
 const _: () = assert!(!switch_ordering_qualified());
