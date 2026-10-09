@@ -14,51 +14,45 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
 [current focus](../docs/roadmap/current-focus.md) before selecting any task.
 
-- [ ] **Phase 03 steps 2–4, plus the two Phase-02 remainders, await admission.** Slices A and B and
-  Phase-03 step 1 all landed 2026-10-09 (history in `CHANGELOG.md`; records in
-  [`phase-02-local-boundary.md`](260927-1100-c2c-anywhere-tier-aware/phase-02-local-boundary.md) §§
-  *Slice A/Slice B progress*; evidence `docs/evidence/c2c-sdk-binding-x86.{txt,log}` and
-  `docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`).
-  Phase-03 **step 1** (measured prototype, `docs/evidence/c2c-async-lifecycle-x86.{txt,log}`) shows
-  the shipped primitive carries the local multi-outstanding shape — bounded, exactly-once, one `wait`
-  round — so steps 2–4 are *not* justified as a new public submission syscall by measurement.
-  Phase-03 **step 2 landed** as well: the lifecycle specification is [Spec 20 §2.6](../docs/specs/20-unified-ipc-contract.md)
-  (draft v3.2), and it says what steps 3–4 cost — a bounded caller's terminal comes from `IpcReply`,
-  so an ordinary masked `Send` reply never completes an operation; the opt-in async API therefore
-  needs both sides to opt in, and **step 3's goal of moving the blocking API onto the primitive needs
-  a decision**: a service-wide reply migration (Spec 17 §9 + two Law-1 confirmations) or a kernel
-  change to terminalise on a plain reply.
-  Phase-03 **step-3 opt-in API landed** as well: `ostd::ipc::PendingCall` + `Completion` (caller side)
-  over the existing `ostd::ipc::{current, reply}` (server side), strictly opt-in — blocking API,
-  every service reply discipline and every kernel path unchanged — and witnessed by `bench
-  async-lifecycle` driving the API (`docs/evidence/c2c-async-lifecycle-x86.{txt,log}`).
-  Still unadmitted: the blocking-API migration (the stranding fix), multi-source waiting
-  (`WaitCompletion` v1 is `NET_RX`/`TIMER` only), cancelling a dispatched operation, the two-hart wake
-  proof, retained-reply lifetime, queue/fairness reservation — all needing the kernel file-owner
-  handoff where they touch syscall/completion/scheduler paths.
-  Phase 02's three success criteria all carry evidence as of 2026-10-09 (criterion 2 in particular
-  as a *measurement*: the broker oracle re-run twice over the new tree against its own calibrated
-  reference — no regression, no watchdog misses; `docs/evidence/c2c-broker-oracle-qemu-local.txt`).
-  One Phase-02 remainder is still unclaimed and needs its own review: a wrong-**user-buffer** witness
-  on the syscall copy path (needs a raw-pointer fixture plus its own unsafe-allowlist entry). The
-  *named* Tier-2 service turned out **not** to need an authority decision — the spawner registers it,
-  as `init` already does for the hypervisor — and landed 2026-10-09
-  (`docs/evidence/c2c-named-tier2-service-x86.{txt,log}`).
-  Law-1 is complete — checkpoint 2 recorded 2026-10-08, surface **FROZEN**, drift caught by
-  `scripts/check-lookupservicebound-law1-digests.sh`.
-  Resolved 2026-10-08: the x86_64 `test-hooks` alignment ledger check now warms to the
-  ledger's fixed point (the frame allocator builds the low RAM identity map on demand
-  on x86_64) and fails only if it never settles, so `scripts/x86/qemu-domain-test.sh`
-  runs to its own end. AArch64 and RV64 `test-hooks` re-run green. Evidence
-  `docs/evidence/atomic-publication-ledger-x86-settling.{txt,log}`.
+- [ ] **Phase 03 remaining proof obligations:** multi-source waiting, deterministic
+  two-hart publication/wake, full restart/multi-caller fairness/concurrent-input
+  matrix and abandoned caller grant-lifetime proof. The single-caller saturation,
+  real deadline and queued caller-death witnesses now run on x86 QEMU:
+  `docs/evidence/c2c-saturation-deadline-caller-death-x86.{txt,log}`.
+  Provider task replacement and third-Cell raw-event coexistence are exercised
+  in `docs/evidence/c2c-restart-event-coexistence-x86.{txt,log}`; named rebind,
+  hotswap and hardware input remain outside those witnesses.
+  Controlled two-caller quota isolation/progress is exercised in
+  `docs/evidence/c2c-multi-caller-progress-x86.{txt,log}`; sustained admission
+  competition and full-peer-queue fairness remain open.
+  Peer-mailbox saturation Busy backpressure and finite competing producers
+  (192 calls across A/B) are exercised in
+  `docs/evidence/c2c-peer-pressure-x86.{txt,log}`; unbounded queue monopolization
+  fairness remains open.
+  No new completion source or remote route.
+  Contract: [Spec 20 §2.6](../docs/specs/20-unified-ipc-contract.md); implementation
+  and exercised evidence are recorded in
+  [phase-03](260927-1100-c2c-anywhere-tier-aware/phase-03-async-ipc.md).
 - [ ] Reconcile one exact Intel machine against the HCL; physical bring-up and
-  acquisition remain separately gated. No AMD/new ARM/RISC-V hardware program.
-- [ ] Close x86 Tier 2 admission/C/C++ gaps and Intel VMX/EPT prerequisites for
-  the corresponding C2C consumers; preserve existing ABI/security review gates.
+  acquisition remain separately gated. Bắt buộc kiểm thử đạt trên cả 3 môi trường
+  (QEMU TCG, QEMU/KVM, VMware) trước khi nạp lên board thật. No AMD/new ARM/RISC-V program.
+- [ ] Close remaining Intel VMX/EPT prerequisites and x86 production Tier-2
+  switch-ordering gate. The x86 C++ freestanding runtime gap is closed:
+  `cpp-smoke` runs in an x86 Tier 2 paged domain (static constructors, virtual
+  dispatch/delete, templates, allocator with SSE, VFS IPC and C-ABI file I/O).
+  Evidence: `docs/evidence/c2c-x86-cpp-freestanding-runtime.txt`.
 - [ ] Qualify two independently verified Intel nodes for LAN C2C after first-node bring-up,
   including restart, authority denial, disconnect/reconnect and uncertain outcomes.
 - [ ] Close explicit all-tier adapters and relay identity/time/persistence gates;
   measure a bounded workload against Linux on identical hardware/semantics.
+- [ ] **Chuyển đổi từng bước sang Zig CC (`zig cc` / `zig c++`) làm C/C++ cross-compiler backend:**
+  Thống nhất hạ tầng cross-compilation C/C++ (thay thế bộ ba `gcc-riscv64-unknown-elf`, `gcc-aarch64-linux-gnu`, `g++`/`clang` phân tán) bằng 1 binary `zig cc`/`zig c++` đóng gói Clang/LLD cho cả 3 kiến trúc đích (`riscv64`, `aarch64`, `x86_64` freestanding).
+  - *Nguyên tắc:* Không thay thế Cargo, rustc hay rust-lld; giữ nguyên linker script `libs/cell-build`, crt0 `libs/ostd`, và POSIX shim / mlibc runtime của Cellos.
+  - *Pha 1 (Tooling wrapper & flag adapter):* Tạo `tools/cellos-zig-cc` và `tools/cellos-zig-cxx` bọc `zig cc`, tự động chuyển `-march=rv64gc` thành `-mcpu=generic_rv64+m+a+f+d+c` và ép `-target <arch>-freestanding-none`.
+  - *Pha 2 (Thí điểm cell C độc lập):* Áp dụng thử nghiệm trên các cell kiểm thử nhỏ (`cells/tests/c-pthread`, `cells/demos/tetris-c`).
+  - *Pha 3 (C++ freestanding):* Cập nhật `cells/tests/cpp-smoke/build.rs` tôn trọng biến `CXX_<target>` wrapper thay vì hardcode tên compiler `g++`/`clang++`.
+  - *Pha 4 (Crate phức tạp):* Đánh giá và di chuyển có kiểm soát cho `cells/runtimes/lua`, `cells/services/ocel-quickjs`, `cells/demos/doom`, và `cells/services/ocel-pdf`. `littlefs2-sys` vẫn giữ `libclang-dev` cho bindgen.
+  - *Báo cáo nghiên cứu cơ sở:* `.agents/reports/research-261009-1530-zig-compiler-cross-compile-c-cpp-evaluation.md`.
 
 Every task must name a direct dependency or measured defect of this direction,
 its acceptance scenario and evidence ceiling. Other work is **parked**.

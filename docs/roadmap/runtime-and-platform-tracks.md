@@ -30,6 +30,15 @@ language/port breadth and general virtualization expansion are parked.
 - Trusted C/C++/Zig interop is the Tier 1 `ffi-posix` profile. Historical
   `Tier 1b` text refers to that profile, not a distinct execution tier.
 
+
+## C/C++ Cross-Toolchain Unification Track (Zig CC)
+
+- **Direction**: Phased adoption of `zig cc` / `zig c++` as a single cross-compiler binary for freestanding C/C++ objects across RV64, AArch64, and x86_64, replacing fragmented per-architecture host GCC/Clang packages (`gcc-riscv64-unknown-elf`, `gcc-aarch64-linux-gnu`, host `g++`/`clang`).
+- **Boundaries**:
+  - Compiler only, not linker: Cargo, `rustc`, `rust-lld`, and `libs/cell-build` continue to own cell ELF layout, PIE linking, and crt0.
+  - Runtime unchanged: Cellos POSIX shim (`libs/api`) and mlibc continue to supply libc and freestanding C++ ABI; Zig does not provide runtime/stdlib for freestanding targets.
+  - Phased pilot starting with independent test cells (`c-pthread`, `tetris-c`, `cpp-smoke`) via CLI flag wrapper before touching complex runtime crates (`lua`, `quickjs`, `ocel-pdf`, `littlefs2-sys`).
+  - Baseline research report: `.agents/reports/research-261009-1530-zig-compiler-cross-compile-c-cpp-evaluation.md`.
 ## Platform Overlays and Capability Gates
 
 - Intel Tier 2/C/C++ support and Intel VMX are direct prerequisites for the C2C
