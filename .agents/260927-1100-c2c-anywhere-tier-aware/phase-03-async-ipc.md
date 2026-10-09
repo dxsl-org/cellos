@@ -53,6 +53,36 @@ Do not make a client-supplied completion record, raw pointer or `server_tid` pro
 
 Async introduces buffer UAF, completion-loss and exactly-once illusions. Ship behind explicit opt-in while keeping existing blocking API; disable async submission and drain accepted operations before reverting kernel/userspace pair. Submitted side effects and already issued public ABI values cannot be undone: a failing ABI migration requires reviewed additive evolution, not reassigning IDs.
 
+## Step-1 progress (2026-10-09) — prototype and measurement landed
+
+Admitted as one slice: **step 1 only** (reproduce + prototype + measure), because steps 2–4
+specify kernel-owned queue/completion state, may need a public ABI, and — per the plan — an
+explicit file-owner handoff for overlapping syscall/completion/scheduler work. This slice touched
+none of that: no ABI, no kernel path, no scheduler, no production callsite.
+
+Delivered: `cells/tests/bench/src/scenarios/async_lifecycle.rs` (`bench async-lifecycle`) on the
+Phase-02 lifecycle image, pinned by `tests/integration/tests/local-service-lifecycle-x86.rs`, with
+`docs/evidence/c2c-async-lifecycle-x86.{txt,log}`.
+
+| Leg | Measured |
+|---|---|
+| 1 — 8 outstanding bounded calls to one peer | 8 completions, 0 lost, 0 mis-correlated (the provider answers in **reverse**), p50/p99 ≈ 1.56/1.59 ms on TCG, **one** `wait` round for the whole drain |
+| 2 — `sys_try_send` as submission | parked receiver → delivered; busy receiver → refused **in the return value** (`usize::MAX`), and the provider's next receive confirms nothing was queued. Through `ostd::syscall::sys_try_send` that refusal arrives as `Ok(usize::MAX)`, so a caller checking only the `Result` reads a dropped frame as delivered |
+| 3 — peer dies mid-flight | every outstanding operation reached a terminal (`PeerGone`), 0 unterminal, 0 lost; submits refused *before* dispatch are definite outcomes, not losses |
+
+**What step 2 starts from:** the primitive that already ships carries the local, single-peer,
+multi-outstanding shape — bounded, exactly-once and promptly woken — so a new public submission
+syscall is not yet justified by measurement, and the "two Law-1 confirmations before touching
+exported syscall IDs, flags or completion vocabulary" gate is not triggered.
+
+**What step 2 still owns:** waiting on several sources at once (`WaitCompletion` v1 is
+`NET_RX`/`TIMER` only), cancellation of an already-dispatched operation, the two-hart
+publication/wake race proof, retained-reply lifetime when a caller drops its interest, and the
+queue/bytes/fairness reservation those need. Observable follow-ups this slice surfaced but did not
+change: the `Ok(usize::MAX)` refusal shape, and `cells/services/input/src/main.rs:156` /
+`cells/drivers/xhci/src/input.rs:20` describing the sentinel as `isize::MAX` while the SDK wrapper
+hands back `usize::MAX`.
+
 ## Deviation log
 
 None.

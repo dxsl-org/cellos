@@ -1,0 +1,91 @@
+C2C Phase-03 step 1 — bounded multi-outstanding prototype, measured (x86_64 QEMU, 2026-10-09)
+=============================================================================================
+
+What this records
+-----------------
+Phase 03 must choose between a userland scheduler over the exact-operation IPC that
+already ships and a new kernel submission/completion source — and a new public source
+needs two Law-1 confirmations. This is the measurement that decision rests on. It
+changes nothing: no ABI, no kernel path, no production callsite.
+
+The scenario is `cells/tests/bench/src/scenarios/async_lifecycle.rs`
+(`bench async-lifecycle`), on the Phase-02 lifecycle image; the lane pins it in
+`tests/integration/tests/local-service-lifecycle-x86.rs`. Raw log:
+`c2c-async-lifecycle-x86.log`. The stranding baseline this work exists to fix is
+measured separately in `c2c-sdk-binding-x86` / `local-service-lifecycle-x86-qemu`
+(the synchronous caller whose provider dies is never woken).
+
+How to reproduce
+----------------
+  bash scripts/build-x86_64-c2c-lifecycle-ci.sh
+  cargo test --manifest-path tests/integration/Cargo.toml \
+      --target x86_64-unknown-linux-gnu --test local-service-lifecycle-x86
+
+Observed (raw log lines, this run)
+----------------------------------
+  [async-lifecycle] BOUNDED completed=8 lost=0 wrong_seq=0 p50_ticks=1559180 p99_ticks=1586260 freq_hz=1000000000 wait_rounds=1
+  [async-lifecycle] BOUNDED-RELEASED ok=true
+  [async-lifecycle] TRY-SEND parked_refused=false busy_refused=true parked_ret=0 busy_ret=18446744073709551615
+  [async-lifecycle] slow-provider-second queued=false
+  [async-lifecycle] DEATH outstanding=1 submit_refused=3 terminal=1 peer_gone=1 unterminal=0 lost=0
+  [async-lifecycle] PASS
+
+Leg 1 — N outstanding bounded calls, exactly one correlated completion each
+---------------------------------------------------------------------------
+Eight `submit`s from one Tier-1 Cell to one parked peer, drained with
+`wait`/`take`: **8 completions, 0 lost, 0 mis-correlated**. The provider answers in
+**reverse order**, so a caller that let arrival order stand in for operation identity
+would fail `wrong_seq`; it did not. Round trip p50/p99 ≈ 1.56/1.59 ms on TCG
+(1 GHz tick), and the whole drain needed **one** `wait` round — the first
+`wait(200 ticks)` returned as soon as completions existed, so a userland scheduler over
+this primitive is not forced to busy-poll.
+
+The provider must outlive the drain: exiting right after replying terminalises the
+operations the caller has not taken yet (`PeerGone`), which is leg 3's shape. The first
+run of this prototype did exactly that and was informative — 1 `Reply` + 7 `PeerGone`
+on a peer that had already answered all eight.
+
+Leg 2 — `sys_try_send` is not a submission mechanism, and its refusal is a *value*
+-------------------------------------------------------------------------------------
+  * to a receiver parked in `Recv`: accepted (`parked_ret=0`);
+  * to a receiver that had consumed a frame and left `Recv`: refused
+    (`busy_ret=18446744073709551615`, i.e. `usize::MAX`), and the provider's own next
+    receive confirms nothing was queued (`queued=false`).
+
+So the kernel behaves as documented ("deliver if the target is receiving, else drop").
+The trap is the **shape** of the refusal: it is a sentinel in the return value, and
+through `ostd::syscall::sys_try_send` that arrives as `Ok(usize::MAX)`. A caller that
+checks only the `Result` reads a dropped frame as a delivered one. Worth a follow-up
+look, not changed here: `cells/services/input/src/main.rs:156` and
+`cells/drivers/xhci/src/input.rs:20` describe the sentinel as `isize::MAX`, while the
+value observed through the SDK wrapper on this lane is `usize::MAX`.
+
+Leg 3 — a peer that dies mid-flight terminalises **every** outstanding operation
+--------------------------------------------------------------------------------
+Four submissions, then the peer exits without replying. Every operation reached a
+terminal, none was left unterminated and none was lost:
+`terminal=1 peer_gone=1 unterminal=0 lost=0`, with `submit_refused=3` — those three were
+refused *before* dispatch (a definite `PeerGone` on submit), which is a correct contract
+outcome and deliberately not counted as loss. An earlier run of the same leg reached the
+other shape (`outstanding=4 submit_refused=0 … peer_gone=4`), so both are covered: what
+the peer's death timing decides is *where* the definite outcome appears, never whether
+one appears.
+
+What this settles, and what it does not
+---------------------------------------
+**Settled by measurement:** for the local, single-peer, multi-outstanding shape, the
+primitive that already ships is sufficient — bounded, exactly-once, promptly woken, no
+new ABI, ~1.6 ms round trip on this host. Step 2 therefore does **not** start from a
+demonstrated need for a new public submission syscall, and its "two Law-1 confirmations
+before touching exported syscall IDs, flags or completion vocabulary" gate is not
+triggered by this work.
+
+**Not settled, and what step 2 still has to answer:** waiting on several *sources* at
+once (`WaitCompletion` v1 has only `NET_RX`/`TIMER`), cancellation semantics for an
+already-dispatched operation, the two-hart publication/wake race proof, and what a caller
+that drops its interest should have happen to the retained reply. None of those is
+proven by this prototype's happy path and none should be inferred from it.
+
+**Not claimed:** no ABI, kernel, scheduler or production callsite changed;
+`LocalEndpoint::call`/`ServiceRef::call` are still synchronous (step 3 owns that); this
+is a fixture scenario, not a shipped scheduler.

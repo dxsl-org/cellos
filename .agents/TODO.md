@@ -14,13 +14,19 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
 [current focus](../docs/roadmap/current-focus.md) before selecting any task.
 
-- [ ] **Phase 03 (async lifecycle) and the two Phase-02 remainders await admission.** Slices A and B
-  both landed 2026-10-09 (history in `CHANGELOG.md`; records in
+- [ ] **Phase 03 steps 2–4, plus the two Phase-02 remainders, await admission.** Slices A and B and
+  Phase-03 step 1 all landed 2026-10-09 (history in `CHANGELOG.md`; records in
   [`phase-02-local-boundary.md`](260927-1100-c2c-anywhere-tier-aware/phase-02-local-boundary.md) §§
   *Slice A/Slice B progress*; evidence `docs/evidence/c2c-sdk-binding-x86.{txt,log}` and
   `docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`).
-  Phase 03 owns moving `LocalEndpoint::call` onto the bounded exact-operation primitive.
-  Two Phase-02 remainders are **not** claimed by either slice and need their own decisions:
+  Phase-03 **step 1** (measured prototype, `docs/evidence/c2c-async-lifecycle-x86.{txt,log}`) shows
+  the shipped primitive carries the local multi-outstanding shape — bounded, exactly-once, one `wait`
+  round — so steps 2–4 are *not* justified as a new public submission syscall by measurement and are
+  unadmitted; they still own multi-source waiting (`WaitCompletion` v1 is `NET_RX`/`TIMER` only),
+  cancellation of a dispatched operation, the two-hart wake proof, retained-reply lifetime and
+  queue/fairness reservation, and need the kernel file-owner handoff if they touch those paths.
+  Phase 03 step 3 also owns moving `LocalEndpoint::call` onto the bounded primitive.
+  Two Phase-02 remainders are **not** claimed by any slice and need their own decisions:
   a registry-**named** Tier-2 service (a private-root Cell cannot `RegisterService`; that authority is
   a decision, not a bug fix) and a wrong-**user-buffer** witness on the syscall copy path (needs a
   raw-pointer fixture plus its own unsafe-allowlist entry).

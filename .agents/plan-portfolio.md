@@ -95,6 +95,19 @@ authorization. Plans not admitted below are parked/historical.
   dead/stale peer, unauthorized method) and the fourth — a wrong **user buffer** on the syscall copy
   path — is not re-created: a `#![forbid(unsafe_code)]` cell cannot fabricate a pointer, and the
   address-containment witness already runs as `/bin/tier2-exploit`.
+- **Phase 03 step 1 admitted and landed 2026-10-09** (owner: same C2C session): the measured
+  prototype that step 2's decision needs, and nothing else — no ABI, no kernel, no scheduler, no
+  production callsite. `bench async-lifecycle` on the Phase-02 image, pinned by the x86 integration
+  test: 8 outstanding bounded calls to one peer with exactly one correlated completion each (the
+  peer answers in reverse, so identity is the operation, not arrival order), p50/p99 ≈ 1.56/1.59 ms
+  on TCG and **one** `wait` round for the drain; `sys_try_send` measured as "delivered if the
+  receiver is in `Recv`, else refused **in the return value**" with nothing queued on refusal; and a
+  peer dying mid-flight terminalising every outstanding operation. Evidence
+  `docs/evidence/c2c-async-lifecycle-x86.{txt,log}`. **Consequence:** a new public submission
+  syscall is not justified by measurement, and step 2's two-Law-1-confirmation gate is not
+  triggered; steps 2–4 (multi-source completion waiting, cancellation, two-hart wake proof,
+  retained-reply lifetime, queue/bytes/fairness reservation) remain unadmitted and still need the
+  file-owner handoff if they touch kernel syscall/completion/scheduler paths.
 - **Phase 01 closed 2026-10-09 by contract-owner sign-off**, and with it **slice A of Phase 02
   admitted — the only implementation slice in flight** (WIP: one):
   **caller-side binding consumer** in `libs/ostd`: `ServiceRef` resolves and caches the frozen

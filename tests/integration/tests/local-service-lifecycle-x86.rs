@@ -210,3 +210,93 @@ fn x86_dead_provider_strands_sync_caller_but_bounds_async_call() {
          --- output ---\n{output}"
     );
 }
+
+/// Phase-03 step 1: the bounded path carries several outstanding calls to one peer,
+/// each with exactly one correlated completion, and terminalises every outstanding
+/// operation when that peer dies mid-flight. The measurements (latency, wait rounds)
+/// are printed by the scenario and recorded in
+/// `docs/evidence/c2c-async-lifecycle-x86.{txt,log}`; this test pins the contract.
+#[test]
+fn x86_bounded_calls_complete_exactly_once_and_terminalise_on_peer_death() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_x86_bios(&lifecycle_iso_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 shell prompt not reached: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("bench async-lifecycle");
+    qemu.wait_for("[async-lifecycle] PASS", SCENARIO_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "async lifecycle scenario did not complete: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+    let output = qemu.dump();
+
+    // The scenario's own failure marker must be absent: every leg asserts itself, so
+    // reaching PASS is not enough evidence on its own.
+    assert!(
+        !output.contains("[async-lifecycle] FAIL"),
+        "the async lifecycle scenario reported a failure\n--- output ---\n{output}"
+    );
+
+    // Leg 1: eight outstanding calls, eight completions, none lost, none mis-correlated
+    // (the provider answers in reverse, so arrival order cannot stand in for identity).
+    let bounded_line = output
+        .lines()
+        .find(|line| line.contains("[async-lifecycle] BOUNDED "))
+        .expect("BOUNDED summary line");
+    for expected in [
+        "completed=8",
+        "lost=0",
+        "wrong_seq=0",
+        "freq_hz=",
+        "wait_rounds=",
+    ] {
+        assert!(
+            bounded_line.contains(expected),
+            "bounded leg summary is missing {expected}: {bounded_line}"
+        );
+    }
+    assert!(
+        output.contains("[async-lifecycle] BOUNDED-RELEASED ok=true"),
+        "the provider was not released after the completions were taken\n--- output ---\n{output}"
+    );
+
+    // Leg 2: `TrySend` refuses a non-blocking delivery in its *value*, not as an error.
+    let try_line = output
+        .lines()
+        .find(|line| line.contains("[async-lifecycle] TRY-SEND"))
+        .expect("TRY-SEND line");
+    assert!(
+        try_line.contains("parked_refused=false"),
+        "try_send refused a frame to a parked receiver: {try_line}"
+    );
+    assert!(
+        try_line.contains("busy_refused=true"),
+        "try_send accepted a frame for a receiver that was not in Recv: {try_line}"
+    );
+    assert!(
+        output.contains("[async-lifecycle] slow-provider-second queued=false"),
+        "a frame the kernel refused was nevertheless queued\n--- output ---\n{output}"
+    );
+
+    // Leg 3: every outstanding operation reaches a terminal when the peer dies, and a
+    // pre-dispatch refusal is counted as the definite outcome it is, not as a loss.
+    let death_line = output
+        .lines()
+        .find(|line| line.contains("[async-lifecycle] DEATH "))
+        .expect("DEATH summary line");
+    for expected in ["unterminal=0", "lost=0", "terminal="] {
+        assert!(
+            death_line.contains(expected),
+            "mid-flight-death leg is missing {expected}: {death_line}"
+        );
+    }
+}

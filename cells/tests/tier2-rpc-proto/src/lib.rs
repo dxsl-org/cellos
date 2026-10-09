@@ -11,6 +11,7 @@
 //! Not a public ABI: nothing outside the fixture's two cells links this crate.
 
 #![no_std]
+#![forbid(unsafe_code)]
 
 use serde::{Deserialize, Serialize};
 
