@@ -4,6 +4,45 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-09 — x86 virtualization baseline and cross-backend tooling.**
+  Added `scripts/x86/measure-boot-backends.py`, reusing the unchanged production
+  QEMU gate with isolated per-run logs, explicit TCG/KVM selection, artifact
+  hashes, backend/host metadata and monotonic boot-to-prompt measurements.
+  Three alternating boots per backend with the same ISO and a 15-second
+  observation window passed: median TCG `3.258 s`, KVM `2.761 s` on this host
+  (`qemu64,+pdpe1gb` versus `host`). These measure operational boot configurations,
+  not isolated accelerator cost, workload performance or physical qualification.
+  Local evidence: `build/x86-backend-evidence/boot-rdjqc3k8/results.json`.
+  Added `scripts/x86/vmware-boot-test.py` for native Windows/Linux Workstation:
+  isolated BIOS VM, IDE ISO, file-backed COM1, full-window production boot
+  assertions, retained artifact/config/version evidence and confirmed own-VM
+  hard-stop. Missing runtime fails explicitly. Initial verification exercised
+  help and missing-runtime failure; installed-runtime verification is recorded
+  below. Two-vCPU exposure does not claim SMP qualification.
+  The hardware guide distinguishes regression, accelerated boot, cross-VMM
+  compatibility and physical acceptance; ARM64/RV64 runners, admission gates
+  and acceptance ledgers are unchanged. Proxmox is explicitly out of scope.
+
+- **2026-10-09 — real VMware boot gate and absent-HPET fault repair.**
+  Workstation 25.0.0 build 24995812 exposed a kernel page fault at `0xF0`:
+  `hpet::now_ns()` read the main counter before checking its zero clock period.
+  Moved the existing unavailable-clock guard before MMIO, retaining the zero
+  result contract without inventing a clock; added an absent-HPET host regression.
+  HAL host tests pass 13/13 and the release kernel builds. The fixed ISO also
+  passes unchanged QEMU TCG/KVM production gates (15-second observation each).
+  The minimal VMware guest additionally requires `hpet0.present = "TRUE"`:
+  without it, shell startup's sleep cannot complete because the ACPI timer
+  gate remains closed. With HPET enabled, BIOS/256 MiB/1 vCPU reaches
+  `Cellos >` in 4.856 seconds including startup, passes the full 90-second
+  observation and confirms own-VM cleanup. The runner now records the backend
+  version even on panic, without duplicating the same error.
+  Retained evidence: `build/x86-backend-evidence/vmware-before-hpet/`,
+  `vmware-without-hpet/`, `vmware-hpet-pass/` and `boot-bqwvd5uo/`.
+  The exact tested ISO is now `build/vicell-x86.iso`, SHA-256
+  `cd5fc9380e35dd8a55b2668ee7ae37ead7eafb6fdc8d16c6105c967d90915446`.
+  Hyper-V remains enabled; PCID remains disabled without guest INVPCID.
+  No SMP, PCIe/IOMMU, storage/NIC, physical, admission or production promotion.
+
 - **2026-10-08 — Intel x86-64 C2C-only direction (ADR-0022).** The maintainer
   selected Cell-to-Cell Anywhere as Cellos's sole program on one fixed headless
   Intel configuration, then two same-model physical nodes. Every task must name

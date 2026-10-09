@@ -27,6 +27,85 @@ board thật chỉ dùng để **validate** những gì QEMU không thể emulat
 hardware-specific behavior. Nếu phát hiện lỗi trên board → quay lại QEMU reproduce nếu
 có thể, sửa, rồi mới deploy lại.
 
+### x86_64: TCG regression, KVM baseline, VMware compatibility
+
+Không thay QEMU bằng Proxmox. Giữ nguyên runner ARM64/RV64 và các regression
+gate hiện có; bổ sung backend x86_64 để phân biệt lỗi chức năng với giả định chỉ
+đúng trên một VMM. KVM cần guest cùng kiến trúc và quyền đọc/ghi `/dev/kvm`;
+không được fallback sang TCG rồi ghi nhận là bằng chứng KVM.
+
+Chạy production boot gate hiện có bằng CPU host:
+
+```bash
+X86_ACCEL=kvm X86_CPU_MODEL=host bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso
+```
+
+Đo cùng ISO trên TCG/KVM, ba lần mỗi backend, xen kẽ thứ tự:
+
+```bash
+python3 scripts/x86/measure-boot-backends.py build/vicell-x86.iso --runs 3 --window 90
+```
+
+Runner tạo thư mục riêng dưới `build/x86-backend-evidence/`, lưu SHA-256 ISO,
+SHA-256 boot gate, QEMU version, host, CPU model, serial log, gate output và
+`results.json`. Metric dùng host monotonic clock từ lúc chạy runner đến lần đầu
+thấy `Cellos >` (poll 10 ms), bao gồm startup/firmware; đây **không phải**
+throughput, IPC latency hoặc real-time benchmark. TCG mặc định dùng
+`qemu64,+pdpe1gb`, KVM dùng `host`: so sánh hai cấu hình vận hành, không phải
+thí nghiệm cô lập riêng chi phí accelerator. `--tcg-cpu` / `--kvm-cpu` cho phép
+chọn model khi cần; `--backend tcg|kvm` chạy riêng một backend.
+
+Giữ đủ observation window sau prompt để boot gate vẫn bắt panic/fault xuất hiện
+muộn. `--window 15` chỉ là smoke ngắn, không tương đương cửa sổ mặc định 90 giây.
+Prompt chỉ được tính là pass khi production gate cũng pass; không nới Tier 2
+admission, PCID expectation hoặc driver gate để cải thiện số đo.
+
+VMware Workstation Pro cần cài trên **native Linux hoặc Windows**, kèm Python
+3.8+. Không gọi Windows `vmrun.exe` bằng Python trong WSL; chạy runner bằng
+Windows Python với ISO có đường dẫn Windows truy cập được:
+
+```powershell
+py -3 scripts/x86/vmware-boot-test.py build/vicell-x86.iso --window 90
+```
+
+Trên Linux dùng `python3` thay `py -3`. Runner tìm `vmrun` qua PATH và đường dẫn
+cài đặt vendor; `--vmrun PATH` chọn executable khác. Thiếu runtime là **FAIL**,
+không phải skip/pass. Mỗi lần tạo VM BIOS riêng, 256 MiB/1 vCPU, ISO IDE, COM1
+ghi file và `hpet0.present = "TRUE"`, không NIC/disk dữ liệu/USB/sound; không cần
+VMware Tools. Thiết bị HPET ảo được khám phá qua ACPI, không thay bằng
+địa chỉ cố định: Cellos cần timer gate để sleep trước prompt có thể hoàn tất.
+
+Runner giữ `requested.vmx`, serial/VMware/vmrun logs, ISO SHA-256, backend version
+và `result.json` dưới `build/x86-backend-evidence/vmware/`. Quan sát đủ window,
+đòi shell và production admission-disabled, từ chối panic/cell fault hoặc
+admission-enabled; hard-stop đúng VM vừa tạo và kiểm tra nó không còn chạy.
+Cleanup lỗi không được báo pass. Timing gồm startup, poll 100 ms; không trực
+tiếp so với poll 10 ms của runner QEMU như benchmark chính xác.
+`--cpus 2 --memory-mib 512` chỉ phơi bày cấu hình đó cho guest, **không** xác nhận
+AP startup, IPI hay SMP scheduler.
+
+**Đã chạy thực tế 2026-10-09:** Workstation 25.0.0 build 24995812 trên Windows,
+BIOS/256 MiB/1 vCPU/HPET, production gate PASS đủ 90 giây, prompt sau 4.856 giây
+(gồm startup), cleanup confirmed. Bằng chứng được lưu tại
+`build/x86-backend-evidence/vmware-hpet-pass/result.json`; ISO SHA-256
+`cd5fc9380e35dd8a55b2668ee7ae37ead7eafb6fdc8d16c6105c967d90915446`.
+PCID vẫn disabled vì guest không có INVPCID; không ép bật PCID để lấy pass.
+
+Lần đầu cùng ISO baseline đã bắt lỗi `hpet::now_ns()` đọc MMIO `0xF0` trước khi
+kiểm tra HPET chưa khởi tạo. Sau sửa thứ tự guard, không còn panic nhưng cấu hình
+không HPET vẫn timeout ở sleep trước shell; bật thiết bị HPET mở gate ACPI
+HPET/LAPIC và shell chạy. Giữ các evidence fail tại
+`build/x86-backend-evidence/vmware-before-hpet/` và `vmware-without-hpet/`.
+Ảnh vẫn dùng profile qemu-q35 với ECAM/VT-d fallback; kết quả không qualify
+PCIe, IOMMU, storage hay NIC trên VMware hoặc máy thật.
+
+KVM pass chứng minh production boot trên CPU/host đã ghi nhận. VMware pass là
+compatibility trên cấu hình thiết bị ảo đã chọn. Không backend nào tự chứng minh
+SMP, interrupt routing, I/O, cache/TLB, DMA hay timing trên phần cứng mục tiêu;
+các acceptance gate đó cần scenario riêng và, khi phụ thuộc silicon, log từ
+máy thật. Không thay đổi acceptance ledger hoặc nâng bằng chứng VM thành
+physical/production qualification.
+
 ---
 
 ## 2. Target boards
