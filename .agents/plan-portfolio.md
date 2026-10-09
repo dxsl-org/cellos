@@ -98,6 +98,16 @@ authorization. Plans not admitted below are parked/historical.
   unauthorized method) and the fourth — a wrong **user buffer** on the syscall copy path — is not
   re-created: a `#![forbid(unsafe_code)]` cell cannot fabricate a pointer, and the
   address-containment witness already runs as `/bin/tier2-exploit`.
+- **Phase 02's three success criteria now all carry evidence (2026-10-09).** Criterion 1 on the Intel
+  test-hooks lane (named binding, both directions, four refusals, production denial still asserted);
+  criterion 3 trivially from the fixtures' capability-free manifests and the copied-only path; and
+  criterion 2 measured rather than assumed: the broker oracle re-run twice on the tree carrying
+  slices A and B and the Phase-03 opt-in API, compared against the pre-slice run by its own calibrated
+  direct-IPC reference (identical `147000` ns, `calibration=MEASURED` in all three), every sweep
+  `success` with `busy/indeterminate/duplicate/stale=0`, soak 10000/10000 `silent_drop=0`, and
+  `watchdog_expired_delta=0`/`heartbeat_miss_delta=0` throughout. Normalized p99 is at or below the
+  before run at every n≥2 within the two after runs' own ~7% spread → recorded as **no regression**,
+  not an improvement. `docs/evidence/c2c-broker-oracle-qemu-local.txt` + the two after logs.
 - **Phase 03 step-3 opt-in API landed 2026-10-09** (same session): `ostd::ipc::PendingCall` +
   `Completion` give Cells the nonblocking multi-outstanding call path the step-2 specification
   describes, with `is_definite`/`is_uncertain` encoding the retry rule; the serving side uses the

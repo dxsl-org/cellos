@@ -1,0 +1,95 @@
+[c2c-oracle-runner] building isolated RV64 oracle cells
+warning: constant `LOOP_TRACE_INTERVAL_TICKS` is never used
+  --> cells/services/net/src/service-runtime.rs:50:7
+   |
+50 | const LOOP_TRACE_INTERVAL_TICKS: u64 = 2_000 * MTIME_TICKS_PER_MS;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `remove_owner` is never used
+   --> cells/services/net/src/socket_table.rs:204:12
+    |
+ 48 | impl SocketTable {
+    | ---------------- method in this implementation
+...
+204 |     pub fn remove_owner(&mut self, owner: SocketOwner, sockets: &mut smoltcp::iface::SocketSet<'_>) {
+    |            ^^^^^^^^^^^^
+
+warning: method `is_empty` is never used
+  --> cells/services/net/src/tls/dispatch.rs:97:12
+   |
+96 | impl TlsPending {
+   | --------------- method in this implementation
+97 |     pub fn is_empty(&self) -> bool {
+   |            ^^^^^^^^
+
+warning: field `handle` is never read
+  --> cells/services/net/src/tls/socket.rs:53:9
+   |
+48 | pub struct TlsSocketEntry {
+   |            -------------- field in this struct
+...
+53 |     pub handle: SocketHandle,
+   |         ^^^^^^
+
+warning: constant `LOOP_TRACE_INTERVAL_TICKS` is never used
+  --> cells/services/net/src/service-runtime.rs:50:7
+   |
+50 | const LOOP_TRACE_INTERVAL_TICKS: u64 = 2_000 * MTIME_TICKS_PER_MS;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `remove_owner` is never used
+   --> cells/services/net/src/socket_table.rs:204:12
+    |
+ 48 | impl SocketTable {
+    | ---------------- method in this implementation
+...
+204 |     pub fn remove_owner(&mut self, owner: SocketOwner, sockets: &mut smoltcp::iface::SocketSet<'_>) {
+    |            ^^^^^^^^^^^^
+
+warning: method `is_empty` is never used
+  --> cells/services/net/src/tls/dispatch.rs:97:12
+   |
+96 | impl TlsPending {
+   | --------------- method in this implementation
+97 |     pub fn is_empty(&self) -> bool {
+   |            ^^^^^^^^
+
+warning: field `handle` is never read
+  --> cells/services/net/src/tls/socket.rs:53:9
+   |
+48 | pub struct TlsSocketEntry {
+   |            -------------- field in this struct
+...
+53 |     pub handle: SocketHandle,
+   |         ^^^^^^
+
+[c2c-oracle-runner] signing cells (dev key, F1/F5 checked)
+OK:   signed 11 cell(s) with the dev key after a passing F1/F5 check
+wrote 1342 bytes to /tmp/cellos-c2c-oracle.akhbIb1H/POLICY.BIN
+Created FAT16 image at /tmp/cellos-c2c-oracle.akhbIb1H/embedded/kernel_fs.img: 14 file(s), 2 director(ies), 16159 clusters.
+[c2c-oracle-runner] building isolated RV64 kernel
+[c2c-oracle-runner] booting real QEMU oracle
+
+running 1 test
+[c2c-broker-oracle] idle_ipc_wake verdict=sub-ceiling-wake armed=22 closed=2 passes=1 inconclusive=1 min_return_ticks=355900 max_drain_gap_ticks=8066 proof_ceiling_ticks=900000
+[c2c-broker-oracle] START
+[c2c-broker-oracle] baseline warmup=100 samples=1000 success=1000 busy=0 indeterminate=0 correlation=0 warmup_failures=0 timing_invalid=0 p50_ns=369000 p99_ns=677500 send_p99_ns=24900 reply_wait_p99_ns=670000 worker_p99_ns=449800 reply_pump_p99_ns=80000 client_wake_p99_ns=254300 calibration=MEASURED direct_ipc_ref_ns=147000 accepted_delta=1100 completed_delta=1100 network_progress_delta=662 heartbeat_miss_delta=0 watchdog_expired_delta=0
+[c2c-broker-oracle] sweep n=1 attempted=1 success=1 busy=0 indeterminate=0 duplicate=0 stale=0 correlation=0 p50_ns=512400 p99_ns=512400 send_p99_ns=22500 reply_wait_p99_ns=489900 worker_p99_ns=207000 reply_pump_p99_ns=151100 client_wake_p99_ns=131800 calibration=REQUIRED direct_ipc_ref_ns=147000 network_progress_delta=2 heartbeat_miss_delta=0 watchdog_expired_delta=0
+[c2c-broker-oracle] role_gate=PASS broker_tid=7
+[c2c-broker-oracle] sweep n=2 attempted=2 success=2 busy=0 indeterminate=0 duplicate=0 stale=0 correlation=0 p50_ns=963400 p99_ns=1647100 send_p99_ns=561000 reply_wait_p99_ns=1086100 worker_p99_ns=516800 reply_pump_p99_ns=135800 client_wake_p99_ns=1009800 calibration=REQUIRED direct_ipc_ref_ns=147000 network_progress_delta=3 heartbeat_miss_delta=0 watchdog_expired_delta=0
+[c2c-broker-oracle] sweep n=4 attempted=4 success=4 busy=0 indeterminate=0 duplicate=0 stale=0 correlation=0 p50_ns=1827500 p99_ns=4098000 send_p99_ns=768000 reply_wait_p99_ns=3407000 worker_p99_ns=613400 reply_pump_p99_ns=274600 client_wake_p99_ns=3291300 calibration=REQUIRED direct_ipc_ref_ns=147000 network_progress_delta=5 heartbeat_miss_delta=0 watchdog_expired_delta=0
+[c2c-broker-oracle] sweep n=8 attempted=8 success=8 busy=0 indeterminate=0 duplicate=0 stale=0 correlation=0 p50_ns=4736600 p99_ns=6503100 send_p99_ns=1392200 reply_wait_p99_ns=5341700 worker_p99_ns=852100 reply_pump_p99_ns=714200 client_wake_p99_ns=5150200 calibration=REQUIRED direct_ipc_ref_ns=147000 network_progress_delta=8 heartbeat_miss_delta=0 watchdog_expired_delta=0
+[c2c-broker-oracle] sweep n=16 attempted=16 success=16 busy=0 indeterminate=0 duplicate=0 stale=0 correlation=0 p50_ns=8787900 p99_ns=12264500 send_p99_ns=3811000 reply_wait_p99_ns=8988100 worker_p99_ns=1895900 reply_pump_p99_ns=6408300 client_wake_p99_ns=4934900 calibration=REQUIRED direct_ipc_ref_ns=147000 network_progress_delta=14 heartbeat_miss_delta=0 watchdog_expired_delta=0
+[c2c-broker-oracle] soak attempted=10000 success=10000 busy=0 indeterminate=0 duplicate=0 stale=0 correlation=0 accepted_delta=10000 completed_delta=10000 terminal_delta=0 silent_drop=0 peak_bytes=65216 static_footprint_bytes=143930 network_progress_delta=386 heartbeat_miss_delta=0 watchdog_expired_delta=0
+[c2c-broker-oracle] overflow status=PASS attempted=18 success=17 busy=1 indeterminate=0 correlation=0 queue_peak=16 network_progress_delta=106 heartbeat_miss_delta=0 watchdog_expired_delta=0 busy_frame=0x7f01
+[c2c-broker-oracle] idle_ipc_wake status=ARMED cycle=21 raw_ret=0 start_ticks=91402627 return_ticks=1036517 budget_ticks=1000000 proof_ceiling_ticks=900000
+[c2c-broker-oracle] idle_ipc_wake status=ARMED cycle=22 raw_ret=0 start_ticks=92647519 return_ticks=999686 budget_ticks=1000000 proof_ceiling_ticks=900000
+[c2c-broker-oracle] idle_ipc_wake status=INCONCLUSIVE wake=recordless raw_ret=0 reason=late-wait cycle=22 return_ticks=999686 elapsed_ticks=1003596 sender=67 budget_ticks=1000000 proof_ceiling_ticks=900000
+[c2c-broker-oracle] restart status=PASS old_tid=7 registry_gap=OBSERVED stale_send=INDETERMINATE new_tid=67 state_reset=PASS retry=PASS accepted=1 completed=0 stale=0 duplicate=0 heartbeat_miss=0 watchdog_expired=0
+.
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 9.53s
+

@@ -36,6 +36,9 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
   (`WaitCompletion` v1 is `NET_RX`/`TIMER` only), cancelling a dispatched operation, the two-hart wake
   proof, retained-reply lifetime, queue/fairness reservation — all needing the kernel file-owner
   handoff where they touch syscall/completion/scheduler paths.
+  Phase 02's three success criteria all carry evidence as of 2026-10-09 (criterion 2 in particular
+  as a *measurement*: the broker oracle re-run twice over the new tree against its own calibrated
+  reference — no regression, no watchdog misses; `docs/evidence/c2c-broker-oracle-qemu-local.txt`).
   One Phase-02 remainder is still unclaimed and needs its own review: a wrong-**user-buffer** witness
   on the syscall copy path (needs a raw-pointer fixture plus its own unsafe-allowlist entry). The
   *named* Tier-2 service turned out **not** to need an authority decision — the spawner registers it,

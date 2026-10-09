@@ -58,3 +58,37 @@ Why it is here
 --------------
 Phase 01 exit evidence (criterion 4) and Phase 02's precondition, recorded with the
 run's own markers so the claim does not rest on a passing exit code alone.
+
+Before/after for Phase-02's second success criterion (2026-10-09)
+----------------------------------------------------------------
+That criterion asks for "measured source-bound before/after p99 and no watchdog misses; no
+unmeasured improvement claim", so this lane was re-run twice on the tree that now carries Phase-02
+slices A and B and the Phase-03 opt-in API, and compared with the run above (made before slices A
+and B landed). Two "after" runs are recorded to bound this lane's own run-to-run spread rather than
+to pick a flattering one.
+
+  before  : c2c-broker-oracle-qemu-local.log
+  after 1 : c2c-broker-oracle-qemu-local-after-1.log
+  after 2 : c2c-broker-oracle-qemu-local-after-2.log
+
+Source-bound, not raw-wall-clock: the calibrated direct-IPC reference the lane measures for itself
+is `direct_ipc_ref_ns=147000` in **all three** runs with `calibration=MEASURED`, so the comparison is
+against the same host, clock and build provenance. p99 is expressed as a multiple of that reference:
+
+  sweep n | before | after 1 | after 2
+  --------|--------|---------|--------
+  1       |  2.86  |  3.49   |  2.66
+  2       | 11.62  | 11.20   | 10.97
+  4       | 31.02  | 27.88   | 28.51
+  8       | 52.44  | 44.24   | 47.20
+  16      | 88.23  | 83.43   | 83.88
+
+Reading it: at every concurrency above one, both after runs are at or below the before run, and the
+two after runs' own spread at n=8 is ~7% — the difference is inside the lane's spread, which is why
+this is reported as **no regression**, not as an improvement. n=1 shows the largest relative spread
+(2.66–3.49) and is the single-sample case, i.e. the noisiest reading in the table.
+
+Counters, in all three runs: `test result: ok. 1 passed`, every sweep `success` with
+`busy=0 indeterminate=0 duplicate=0 stale=0 correlation=0`, soak 10000/10000 with `silent_drop=0`,
+`overflow status=PASS … queue_peak=16`, `role_gate=PASS`, and **`watchdog_expired_delta=0` plus
+`heartbeat_miss_delta=0` throughout** — the "no watchdog misses" half of the criterion.

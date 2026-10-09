@@ -51,6 +51,32 @@ Caller cannot submit tier or `TrustedShared` directly. Copy validation spans ent
 
 Cost: a tier dispatch or binding lookup could regress Tier-1 hot calls. Preserve old direct local copied path and disable only the new tier-aware resolver on regression; no on-disk state changes. A delivered request's side effects cannot be rolled back by changing the resolver—use request IDs and explicit unknown-outcome reporting. Do not relax Tier-2 fail-closed gate to force a green oracle.
 
+## Success-criterion evidence (2026-10-09)
+
+- **Criterion 1** (QEMU Tier-1↔Tier-2 request/reply with authenticated owner, invalid-buffer
+  rejection and stale-reply exclusion; an ineligible profile refuses Tier-2 admission): met on the
+  Intel test-hooks lane — registry-**named** resolution carrying the provider's real
+  `(cell_id, generation)`, both directions with a verified payload and checksum, oversize refused
+  before delivery, unauthorized method refused, the stale descriptor refused after the provider
+  exits, and the production lane still const-asserting Tier-2 denial. Evidence:
+  `docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`,
+  `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`.
+- **Criterion 2** (existing local oracle and typed VFS request/reply still pass — measured
+  source-bound before/after p99, no watchdog misses, no unmeasured improvement claim): met. The
+  broker oracle was re-run twice on the tree carrying slices A and B and the Phase-03 opt-in API and
+  compared with the pre-slice run: the lane's own calibrated `direct_ipc_ref_ns=147000` is identical
+  in all three (`calibration=MEASURED`), all sweeps `success` with `busy/indeterminate/duplicate/stale`
+  at zero, soak 10000/10000 `silent_drop=0`, and `watchdog_expired_delta=0` with
+  `heartbeat_miss_delta=0` throughout. Normalized p99 (× the reference) is at or below the before run
+  at every n≥2 and the two after runs' spread (~7% at n=8) brackets the difference, so the result is
+  reported as **no regression**, not as an improvement. Table and logs:
+  `docs/evidence/c2c-broker-oracle-qemu-local.txt` (`…-after-1.log`, `…-after-2.log`). Typed guest
+  VFS request/reply suites green on the AArch64/RV64/x86_64 lanes.
+- **Criterion 3** (no private-root grant, raw shared pointer or remote broker fallback in cross-tier
+  IPC): met — the fixture's syscall manifests hold `Log/Exit/Send/Recv/Yield/LookupService` and
+  `Log/Exit/Send/Recv/LookupService` only, no capability bits, and both directions go through the
+  sender-view/receiver-view copied path; the lane's markers show no grant or ring involvement.
+
 ## Deviation log
 
 None.
