@@ -78,6 +78,122 @@ Cellos>
 
 Type `help` to see available commands. Type `exit` to quit QEMU.
 
+## System, Services, and Autoload Configuration
+
+Cellos uses three **TOML** files, not a private `.cfg` grammar. Linux does not
+require a single configuration-file extension; `.toml` makes the syntax explicit
+to users and editors. All three files use `version = 1`; unknown fields, invalid
+values and oversized files are rejected rather than silently ignored.
+
+| Path | Source and boot stage | Purpose |
+|---|---|---|
+| `/etc/cellos/system.toml` | Embedded VIFS1, after kernel `fs::init()` and before cell startup | Kernel logging and the default cell heap charge limit |
+| `/etc/cellos/services.toml` | VFS, after fixed storage/VFS bootstrap | Background services needed before OS readiness |
+| `/etc/cellos/autoload.toml` | VFS configuration, launched after required services are ready | Additional applications and tools |
+
+The fixed bootstrap still starts init, storage and VFS. A file read through VFS
+cannot configure the creation of VFS itself. Kernel settings already consumed
+before VIFS1 initialization are likewise outside `system.toml`.
+
+Example `system.toml`:
+
+```toml
+version = 1
+
+[logging]
+level = "info"
+
+[memory]
+default_cell_heap_mib = 16
+```
+
+Logging levels are `off`, `error`, `warn`, `info`, `debug`, and `trace`.
+The heap charge limit is 1–16 MiB; it does not preallocate memory or enlarge
+the kernel's memory/authority ceilings.
+
+Example `services.toml`:
+
+```toml
+version = 1
+
+[[cells]]
+name = "net"
+path = "/bin/net"
+required = true
+restart = "always"
+service_id = 2
+```
+
+Example `autoload.toml`:
+
+```toml
+version = 1
+
+[[cells]]
+name = "shell"
+path = "/bin/shell"
+restart = "on-failure"
+```
+
+Both cell files use the same schema: `name`, `path`, `args`, `enabled`,
+`required`, `restart`, `service_id`, `registration`, `after`, and
+`ready_timeout_ticks`. Restart values are `always`, `on-failure`, and `never`.
+`registration = "init"` publishes the configured service ID after spawning;
+it is not proof that the application's initialization has completed.
+`registration = "self-ready"` instead waits for the exact spawned instance to
+register its service ID. Applications using this mode must actually register
+themselves. `after = ["net"]` orders a cell after a successful dependency; names,
+paths and service IDs must be unique across both files. Services cannot depend
+on autoload cells. Disabled, missing and cyclic dependencies are rejected.
+Each file is limited to 16 KiB, with at most 32 configured cells across both
+cell files. Structured arguments must fit the existing 512-byte launch channel.
+
+Init reads and validates both cell files before launching configured cells.
+Required service failure prevents OS readiness and autoload. A missing
+`services.toml` is a boot configuration error; an absent `autoload.toml` means
+no additional cells. A present but malformed or empty file is an error.
+There is no live reload: configuration applies during cold boot, not an existing
+warm snapshot restore. A missing `system.toml` retains legacy kernel defaults;
+a present invalid system file stops boot before init.
+
+VFS serves embedded defaults at these paths. Runtime copies of **services** and
+**autoload** at `/mnt/sd/etc/cellos/` take precedence when present, so changing
+them does not require rebuilding init. Empty or invalid overrides are not
+replaced with embedded defaults. `/etc/cellos/system.toml` always reflects the
+boot-image source: a same-named file on the runtime disk does not change kernel
+boot settings. The `/etc/cellos/*.toml` views are read-only. Edit runtime overrides
+on the disk image **offline**, or when packaging the image. VFS also protects
+`/mnt/sd/etc/cellos/` and its ancestors from ordinary-cell mutation, including
+case-insensitive FAT aliases: a writable data disk must not become a way to
+rewrite privileged next-boot services. No live administrator identity is added.
+
+TOML never grants capabilities. Every launch still passes the existing ELF
+manifest, signature, launch-profile, admission and operator-policy checks.
+Secrets, trust roots and `/POLICY.BIN` are not moved into these files.
+
+### Packaging Operator Configuration
+
+Editable templates live in `config/system.toml`, `config/services.toml`, and
+`config/autoload.toml`. Image builders generate default plans from these
+templates, packaging features and the binaries actually carried by the image.
+Runtime init does not select optional services from Cargo features.
+
+To supply your own complete plan, place all three files in a separate directory:
+
+```bash
+CELLOS_CONFIG_DIR=/absolute/path/to/my-config ./scripts/gen-disk-ci.sh
+```
+
+`CELLOS_CONFIG_DIR` bypasses default profile filtering and copies the files
+verbatim; listed binaries must still be packaged and admitted by existing
+policy. Disk rebuilders preserve existing persistent services/autoload files,
+including invalid ones, rather than silently replacing operator choices.
+Remove or repair stale overrides offline to select new image defaults.
+
+Changing `system.toml` requires rebuilding the boot image and the kernel that
+embeds it. Builders that only package a prebuilt kernel use its existing
+embedded configuration, not newly edited source templates.
+
 ---
 
 ## Understanding Cellos
