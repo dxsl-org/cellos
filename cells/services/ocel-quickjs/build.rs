@@ -16,8 +16,25 @@
 //!   `<math.h>`, … which no bare-elf toolchain provides; `vendor/include/`
 //!   declares exactly the subset the engine uses.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+fn repo_wrapper(name: &str) -> Option<PathBuf> {
+    let manifest = std::env::var("CARGO_MANIFEST_DIR").ok()?;
+    let path = Path::new(&manifest).join("../../../tools").join(name);
+    if path.exists() && have(path.to_str().unwrap_or_default()) {
+        path.canonicalize().ok()
+    } else {
+        None
+    }
+}
+
+fn have(cmd: &str) -> bool {
+    std::process::Command::new(cmd)
+        .arg("--version")
+        .output()
+        .map(|out| out.status.success())
+        .unwrap_or(false)
+}
 /// Upstream file set of `libquickjs` (`Makefile`: `QJS_LIB_OBJS`).
 const ENGINE_SOURCES: &[&str] = &[
     "quickjs.c",
@@ -49,12 +66,14 @@ fn main() {
     // other target — and on a host with no ELF-capable C compiler — the cell
     // builds as a stub that says so instead of failing the workspace build at
     // link time. Same shape as the Lua cell's `lua_c_unavailable`.
-    let tier_a_abi = target.starts_with("riscv64") || target.starts_with("aarch64");
+    let tier_a_abi = target.starts_with("riscv64")
+        || target.starts_with("aarch64")
+        || target.starts_with("x86_64");
     if !tier_a_abi || !has_elf_compiler(&target) {
         println!("cargo:rustc-cfg=qjs_c_unavailable");
         println!("cargo:warning=ocel-quickjs: no engine for {target};");
         if !tier_a_abi {
-            println!("cargo:warning=  the Tier-A C ABI exists only on riscv64/aarch64.");
+            println!("cargo:warning=  the Tier-A C ABI exists only on riscv64/aarch64/x86_64.");
         } else {
             println!("cargo:warning=  no ELF-capable C compiler for {target}.");
         }
@@ -81,6 +100,33 @@ fn compile_engine(target: &str) {
     std::env::remove_var(&cflags_key);
 
     let mut build = cc::Build::new();
+    let env_key = target.replace('-', "_");
+    let use_zig = std::env::var("CELLOS_USE_ZIG").map(|v| v == "1" || v == "true").unwrap_or(false);
+    let custom_cc = std::env::var(format!("CC_{env_key}"))
+        .or_else(|_| std::env::var("CC"))
+        .ok();
+    let custom_ar = std::env::var(format!("AR_{env_key}"))
+        .or_else(|_| std::env::var("AR"))
+        .ok();
+
+    if use_zig {
+        if let Some(wrapper) = repo_wrapper("cellos-zig-cc") {
+            build.compiler(wrapper);
+            if let Some(ar) = repo_wrapper("cellos-zig-ar") {
+                build.archiver(ar);
+            }
+        }
+    } else if let Some(cc) = custom_cc {
+        build.compiler(cc);
+    } else if let Some(wrapper) = repo_wrapper("cellos-zig-cc") {
+        build.compiler(wrapper);
+        if let Some(ar) = repo_wrapper("cellos-zig-ar") {
+            build.archiver(ar);
+        }
+    }
+    if let Some(ar) = custom_ar {
+        build.archiver(ar);
+    }
     build.include(vendor);
     build.include(include);
     build.include("vendor");
@@ -131,6 +177,7 @@ fn compile_engine(target: &str) {
     }
     if target.contains("x86_64") {
         build.flag("-mno-red-zone");
+        build.flag("-mcmodel=small");
         // The engine is floating point throughout; SSE2 is the x86_64 baseline
         // and the Rust side of this target compiles with it enabled.
         build.flag("-msse2");
@@ -152,6 +199,9 @@ fn compile_engine(target: &str) {
 /// decided, a non-MSVC host always produces ELF, and on MSVC a cross compiler
 /// must be found by name.
 fn has_elf_compiler(target: &str) -> bool {
+    if repo_wrapper("cellos-zig-cc").is_some() {
+        return true;
+    }
     let env_key = target.replace('-', "_");
     if std::env::var(format!("CC_{env_key}")).is_ok() {
         return true;

@@ -32,6 +32,10 @@ def to_win_path(p):
     # If p looks like a flag without a path (e.g. -fPIC, -O2), leave as-is
     if p.startswith("-") and not p.startswith(("-I", "-L", "-o", "-include")):
         return p
+    # If p is a bare name without path separators and does not exist in cwd,
+    # it is an include search target (e.g. -include header.h) - keep as-is
+    if "/" not in p and "\\" not in p and not os.path.exists(p):
+        return p
     # Convert path to absolute POSIX path first, then to Windows UNC path
     try:
         abs_p = os.path.abspath(p)
@@ -96,12 +100,17 @@ def main():
                 out_args.append("-I" + to_win_path(inc))
                 i += 1
                 continue
+            elif arg.startswith("-isystem") and len(arg) > 8:
+                inc = arg[8:]
+                out_args.append("-isystem" + to_win_path(inc))
+                i += 1
+                continue
             elif arg.startswith("-L") and len(arg) > 2:
                 lib = arg[2:]
                 out_args.append("-L" + to_win_path(lib))
                 i += 1
                 continue
-            elif arg in ("-I", "-L", "-o", "-include") and i + 1 < len(raw_args):
+            elif arg in ("-I", "-isystem", "-L", "-o", "-include") and i + 1 < len(raw_args):
                 next_arg = raw_args[i + 1]
                 out_args.append(arg)
                 out_args.append(to_win_path(next_arg))

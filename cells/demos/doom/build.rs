@@ -11,8 +11,25 @@
 // as #[no_mangle] extern "C" functions in src/main.rs — no doomgeneric_*.c needed.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+fn repo_wrapper(name: &str) -> Option<PathBuf> {
+    let manifest = std::env::var("CARGO_MANIFEST_DIR").ok()?;
+    let path = Path::new(&manifest).join("../../../tools").join(name);
+    if path.exists() && have(path.to_str().unwrap_or_default()) {
+        path.canonicalize().ok()
+    } else {
+        None
+    }
+}
+
+fn have(cmd: &str) -> bool {
+    std::process::Command::new(cmd)
+        .arg("--version")
+        .output()
+        .map(|out| out.status.success())
+        .unwrap_or(false)
+}
 // The ozkl/doomgeneric repo nests the C sources one level deeper:
 // cells/games/doom/src/c/doomgeneric/  ← git repo root (has README, .sln)
 //                                doomgeneric/  ← actual C source
@@ -66,26 +83,54 @@ fn main() {
         })
         .collect();
 
+    let cflags_key = format!("CFLAGS_{}", target.replace('-', "_"));
+    std::env::remove_var(&cflags_key);
+
     let mut build = cc::Build::new();
+
+    let env_key = target.replace('-', "_");
+    let use_zig = std::env::var("CELLOS_USE_ZIG").map(|v| v == "1" || v == "true").unwrap_or(false);
+    let custom_cc = std::env::var(format!("CC_{env_key}"))
+        .or_else(|_| std::env::var("CC"))
+        .ok();
+    let custom_ar = std::env::var(format!("AR_{env_key}"))
+        .or_else(|_| std::env::var("AR"))
+        .ok();
+
+    if use_zig {
+        if let Some(wrapper) = repo_wrapper("cellos-zig-cc") {
+            build.compiler(wrapper);
+            if let Some(ar) = repo_wrapper("cellos-zig-ar") {
+                build.archiver(ar);
+            }
+        }
+    } else if let Some(cc) = &custom_cc {
+        build.compiler(cc);
+    } else if let Some(wrapper) = repo_wrapper("cellos-zig-cc") {
+        build.compiler(wrapper);
+        if let Some(ar) = repo_wrapper("cellos-zig-ar") {
+            build.archiver(ar);
+        }
+    }
+
+    if let Some(ar) = &custom_ar {
+        build.archiver(ar);
+    }
 
     // RISC-V bare-metal toolchain
     if target.contains("riscv") {
-        if std::env::var("CC_riscv64gc_unknown_none_elf").is_err() {
+        if !use_zig && custom_cc.is_none() && std::env::var("CC_riscv64gc_unknown_none_elf").is_err() {
             build.compiler("riscv-none-elf-gcc");
         }
         build.flag("-mabi=lp64d");
-        // cc-rs auto-detects `ar` from PATH but on Windows it may find the
-        // MinGW archiver which cannot process RISC-V ELF objects. Force the
-        // cross-archiver explicitly, matching the compiler.
-        if std::env::var("AR_riscv64gc_unknown_none_elf").is_err()
+        if !use_zig && custom_ar.is_none()
+            && std::env::var("AR_riscv64gc_unknown_none_elf").is_err()
             && std::env::var("AR_riscv64gc-unknown-none-elf").is_err()
             && std::env::var("TARGET_AR").is_err()
             && std::env::var("AR").is_err()
         {
             build.archiver("riscv-none-elf-ar");
         }
-        // DOOM uses strdup, snprintf, etc. — point the compiler at picolibc
-        // headers so the full POSIX subset is visible (not just freestanding).
         let sysroot = run_gcc(&["--print-sysroot"]);
         if !sysroot.is_empty() && sysroot != "." {
             build.flag(format!("-I{}/include", sysroot));
@@ -103,25 +148,34 @@ fn main() {
     }
 
     // Override code-model for cells (well below 2GB)
-    if target.contains("x86_64") || target.contains("aarch64") {
+    if target.contains("x86_64") {
+        build.flag("-mno-red-zone");
+        build.flag("-mcmodel=small");
+    } else if target.contains("aarch64") {
+        build.flag("-mgeneral-regs-only");
         build.flag("-mcmodel=small");
     }
 
     build.warnings(false);
-    // gnu99 instead of c99 so __STRICT_ANSI__ is off → picolibc exposes
-    // strdup, snprintf, and other POSIX-visible functions in its headers.
     build.flag_if_supported("-std=gnu99");
-
+    build.flag_if_supported("-Wno-implicit-function-declaration");
+    build.flag_if_supported("-Wno-int-conversion");
     // doomgeneric exposes doomgeneric_Create + doomgeneric_Tick; we call
     // them from Rust main() directly, so no main()-rename trick needed.
 
     // Standard DOOM defines for doomgeneric
+    build.define("_GNU_SOURCE", None);
     build.define("DOOMGENERIC_RESX", Some("320"));
     build.define("DOOMGENERIC_RESY", Some("200"));
     // No sound by default (no audio backend yet)
     build.define("NOSOUND", None);
 
     build.include(DOOMGENERIC_DIR);
+
+    let qjs_include = Path::new("../../services/ocel-quickjs/vendor/include");
+    if qjs_include.exists() {
+        build.include(qjs_include);
+    }
 
     for path in &c_files {
         build.file(path);

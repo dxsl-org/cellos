@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- Unified Zig C/C++ cross-compiler migration (Phase 4 — QuickJS & DOOM):
+  migrated `ocel-quickjs` and `doom` to the unified Zig CC toolchain across all 3
+  targets (`riscv64gc-unknown-none-elf`, `x86_64-unknown-none`, and
+  `aarch64-unknown-none-softfloat`). Added complete freestanding POSIX headers
+  (`strings.h`, `sys/types.h`, `fcntl.h`, `unistd.h`, `sys/stat.h`, `errno.h`, `stdio.h`)
+  and resolved `-isystem` and bare-header path translation in `tools/cellos-zig-cc`.
 - Close x86 production Tier-2 switch-ordering gate: promoted `switch_ordering_qualified()`
   to true on `x86_64` for both production and test builds, enabling Tier 2 Paged Domain
   admission on shipping kernels after end-to-end qualification across QEMU TCG, QEMU KVM,

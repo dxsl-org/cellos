@@ -63,7 +63,7 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
   - *Pha 1 (Tooling wrapper & flag adapter) [done]:* Tạo `tools/cellos-zig-cc` và `tools/cellos-zig-cxx` bọc `zig cc`, tự động chuyển `-march=rv64gc` thành `-mcpu=generic_rv64+m+a+f+d+c` và ép `-target <arch>-freestanding-none`.
   - *Pha 2 (Thí điểm cell C độc lập) [done]:* Áp dụng thành công trên `cells/tests/c-pthread` và `cells/demos/tetris-c`, tích hợp tự động qua `repo_wrapper` và cờ `CELLOS_USE_ZIG`.
   - *Pha 3 (C++ freestanding) [done]:* Cập nhật `cells/tests/cpp-smoke/build.rs` tôn trọng wrapper `tools/cellos-zig-cxx` và cờ C++ freestanding trên cả 3 kiến trúc (`riscv64`, `x86_64`, `aarch64`).
-  - *Pha 4 (Crate phức tạp):* Đánh giá và di chuyển có kiểm soát cho `cells/runtimes/lua`, `cells/services/ocel-quickjs`, `cells/demos/doom`, và `cells/services/ocel-pdf`. `littlefs2-sys` vẫn giữ `libclang-dev` cho bindgen.
+  - *Pha 4 (Crate phức tạp) [done for QuickJS & DOOM]:* Di chuyển thành công `cells/services/ocel-quickjs` và `cells/demos/doom` sang Zig CC cross-compilation trên cả 3 kiến trúc (`riscv64`, `x86_64`, `aarch64`); bổ sung tập header POSIX freestanding (`strings.h`, `sys/types.h`, `fcntl.h`, `unistd.h`, `sys/stat.h`); sửa lỗi `-isystem` và bare header translation trong `tools/cellos-zig-cc`.
   - *Báo cáo nghiên cứu cơ sở:* `.agents/reports/research-261009-1530-zig-compiler-cross-compile-c-cpp-evaluation.md`.
 
 Every task must name a direct dependency or measured defect of this direction,
