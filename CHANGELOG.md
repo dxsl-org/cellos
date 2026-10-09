@@ -20,6 +20,62 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   preserve existing persistent service/autoload overrides. Runtime boot-config
   paths are read-only to ordinary cells; kernel launch/admission policy remains
   authoritative. See `docs/getting-started.md` for schema and packaging usage.
+- x86_64 C++ freestanding runtime profile (`cpp-freestanding`): enabled POSIX shim
+  C++ ABI layer on x86_64, implemented `raw_syscall` for x86_64 Syscall ABI, and
+  initialized hardware FPU/SSE in kernel startup (CR0.EM=0, CR0.MP=1, CR4.OSFXSR=1,
+  CR4.OSXMMEXCPT=1, LDMXCSR 0x1F80). Reference cell `/bin/cpp-smoke` now runs
+  end-to-end in an x86_64 Tier 2 Paged Domain under CR3 isolation, passing all
+  checks: static constructors, virtual dispatch, virtual destructor, templates,
+  heap churn (operator new/delete), typed VFS IPC, and C-ABI file I/O.
+  Evidence: `docs/evidence/c2c-x86-cpp-freestanding-runtime.txt`.
+- C2C Phase 02 invalid-user-buffer witness: `tier2-rpc-driver` exercises
+  deliberate unmapped raw-pointer submission under a reviewed unsafe-allowlist
+  exemption, proving kernel `TaskCopyView` copy-path validation refuses the
+  buffer before delivery (`[tier2-rpc] INVALID-BUFFER=REFUSED`). All four
+  pre-delivery refusals (oversize, invalid buffer, unauthorized method, stale
+  descriptor) are now witnessed on the x86 domain lane; Criterion 1 is fully met.
+  Evidence: `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`.
+- C2C peer-mailbox pressure and finite competing producers witness: saturating
+  the 64-slot provider mailbox returns Busy to an independent caller; subsequent
+  concurrent pumping across two producers (A: 128, B: 64) achieves 192 exact
+  correlated completions with zero duplicates or leaked frames. Fixture and
+  integration only; production kernel/SDK and ABI unchanged. Unbounded queue
+  fairness remains open. Evidence: `docs/evidence/c2c-peer-pressure-x86.{txt,log}`.
+- C2C controlled multi-caller progress witness: caller A retains64 dispatched
+  operations while caller B receives its own reply from the shared provider.
+  Two A overflow refusals deliver nothing, all64 A completions drain once,
+  and B's second call succeeds. Fixture and integration regression only;
+  production kernel/SDK and ABI unchanged. Full queue/scheduler fairness
+  remains open. Evidence: `docs/evidence/c2c-multi-caller-progress-x86.{txt,log}`.
+- Fix `PendingCall::wait_and_take` exhausting timed rounds immediately when an
+  unrelated operation's terminal is deliberately retained. Rounds now use
+  scheduler-tick budgets; unrelated terminals yield CPU and remain untouched.
+  Failing-before/passing-after x86 QEMU witness retains old PeerGone through
+  provider replacement, verifies old-token refusal and fresh Reply, and receives
+  a third-Cell raw event while RPC stays pending without leaking its reply.
+  No ABI/kernel change. Evidence:
+  `docs/evidence/c2c-restart-event-coexistence-x86.{txt,log}`.
+- C2C Phase 03 bounded lifecycle proof: x86 QEMU now exercises 64 outstanding
+  operations, overflow Busy with zero delivery, terminal quota retention, exact
+  drain and reuse; unchanged 3000-tick queued/dispatched expiry; and four queued
+  calls removed after actual caller exit, followed by fresh caller success.
+  Kernel boundary regressions cover exact deadline and caller-identity cleanup.
+  Production kernel/SDK and ABI unchanged; multi-source/two-hart/fairness/grant
+  obligations remain open. Evidence:
+  `docs/evidence/c2c-saturation-deadline-caller-death-x86.{txt,log}`.
+- C2C RPC stranding cutover: synchronous and bounded SDK calls now submit/wait/take
+  exact kernel-owned operations instead of waiting for a sender-masked mailbox reply.
+  Provider death returns `PeerGone`; accepted calls are never automatically resent.
+  Immediate Send replies use the checked current-operation bridge; nested/deferred
+  VFS, KMS, NIC, network and broker paths preserve explicit reply tokens, including
+  same-cell/generation worker replies, which clear the original receiver's matching
+  context so later one-way events remain deliverable. Terminal Reply survives provider death;
+  late/duplicate/cancelled replies cannot settle a successor. SDK errors drain their
+  reservations, and responses expose the exact byte length. Removed obsolete
+  queued-call aliases, rendezvous deadline helper and source-text wiring test.
+  No syscall IDs, API/types layouts or wire enums changed. Spec 17 §9 and Spec 20
+  §2.6 record the contract; `docs/evidence/c2c-stranding-cutover-x86.log` records the
+  independent QEMU witness. Raw event/mailbox protocols remain distinct.
 - C2C **Phase 02's success criteria carry evidence, except one clause** (2026-10-09): criterion 1 is evidenced for the named exchange, both directions, three of the four pre-delivery refusals and the still-asserted production denial, but **not** for its invalid-buffer clause on the syscall copy path — that remains the phase's one open witness, covered today only by `/bin/tier2-exploit`'s address-containment case. The criterion that asked for a measurement rather than an assertion now has one: the local broker oracle was re-run **twice** on the tree carrying slices A/B and the Phase-03 opt-in API, against the pre-slice run, anchored on the lane's own calibrated direct-IPC reference (identical `147000` ns with `calibration=MEASURED` in all three runs, so the comparison is source-bound rather than raw wall clock). Every sweep completed with `busy/indeterminate/duplicate/stale=0`, soak 10000/10000 with `silent_drop=0`, and **`watchdog_expired_delta=0` plus `heartbeat_miss_delta=0` throughout** — the "no watchdog misses" half of the criterion. Normalized p99 is at or below the before run at every concurrency ≥ 2 and the two after runs' own spread (~7% at n=8) brackets the difference, so it is recorded as **no regression**, not as an improvement claim. Criteria 1 and 3 are covered by the named cross-tier exchange and the capability-free, copied-only fixture path. Evidence `docs/evidence/c2c-broker-oracle-qemu-local.txt` + `…-after-1.log` / `…-after-2.log`, `docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`, `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`.
 - C2C Phase-03 **step-3 opt-in API landed** — `libs/ostd/src/ipc.rs` gains the caller-side handle for the nonblocking path the step-2 specification describes: `PendingCall::{submit, operation, try_take, wait_and_take, cancel}` and `Completion::{terminal, len, is_definite, is_uncertain}`, the last two encoding the §2.4 retry rule (never blind-retry an indeterminate outcome). The serving side needed nothing new — `ostd::ipc::{current, reply}` already existed and the fixture's provider now answers through them instead of the raw syscalls. Strictly **opt-in**: `LocalEndpoint::call`, `ServiceRef::call`, `service_call_typed`, every service's reply discipline and every kernel path are unchanged, so a Cell that never touches `PendingCall` behaves exactly as before. Witnessed by `bench async-lifecycle` **driving the API** rather than the raw syscalls, with the same measured contract (8 outstanding, exactly one correlated completion each, p50/p99 ≈ 1.51/1.53 ms on TCG, one `wait` round for the drain, `unterminal=0 lost=0` when the peer dies mid-flight) and asserted by the x86 integration test — `docs/evidence/c2c-async-lifecycle-x86.{txt,log}`. Not done, each with its cost stated in the phase file: moving the *blocking* API onto the primitive (the stranding fix), multi-source waiting, cancelling a dispatched operation, the two-hart wake proof, retained-reply lifetime.
 - C2C Phase-03 **step 2 landed** — the nonblocking local call lifecycle is specified in [Spec 20 §2.6](docs/specs/20-unified-ipc-contract.md) (draft v3.2, no status change) directly from the code the primitive runs and from step 1's measurements: the operation lifecycle `Queued → Dispatched → Terminal{Reply|PeerGone|PreDispatchTimeout|Indeterminate|Cancelled}` and its mapping to §2.4's caller-visible outcomes, submission-as-copy (no pinned caller buffer), the token binding owner/peer/peer-cell/**peer-generation**, reply retention until `take` with no partial consumption, bounded capacity returning `Busy`, and waiting as a timer-bounded park. **The finding that sizes the rest of Phase 03:** a bounded caller's terminal is produced by `IpcReply` — only that handler reaches `async_ipc::terminal`, which requires `Phase::Dispatched` — while an ordinary masked `Send` reply never touches the operation slot; measured, a peer answering eight bounded requests with `sys_send` left one operation `Reply` and terminalised seven `PeerGone`. So an opt-in async API needs **both** sides to opt in, and moving the blocking `LocalEndpoint::call`/`ServiceRef::call` onto the primitive (so a dying provider stops stranding the caller) costs either a service-wide reply migration — a ratified-path change needing a Spec 17 §9 entry and two Law-1 confirmations — or a kernel change letting a plain reply terminalise an operation. Recommendation recorded: keep the blocking API as it is, ship the opt-in path first, and take the stranding fix as its own decision with that cost stated. Nothing was implemented or admitted beyond the specification; v3.2 also corrects the v3.1 clause that read as though the move were a plain SDK change.

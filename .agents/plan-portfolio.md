@@ -94,23 +94,74 @@ authorization. Plans not admitted below are parked/historical.
   2026-10-09 and the driver resolves it through the SDK (`PROVIDER-BINDING tid=9 cell=5 gen=142`),
   which also gave slice A's stale rule its first runtime witness (`STALE-BINDING=REFUSED`,
   `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`). No new authority, ABI or kernel change.
-  Of the phase's four pre-delivery refusals, three are witnessed (oversize frame, dead/stale peer,
-  unauthorized method) and the fourth — a wrong **user buffer** on the syscall copy path — is not
-  re-created: a `#![forbid(unsafe_code)]` cell cannot fabricate a pointer, and the
-  address-containment witness already runs as `/bin/tier2-exploit`.
-- **Phase 02's success criteria are evidenced except one clause (2026-10-09).** Criterion 1 on the
-  Intel test-hooks lane (named binding, both directions, three of the four refusals, production denial
-  still asserted) — its **invalid-buffer clause is not** witnessed for the syscall copy path, which is
-  the phase's one remaining remainder, witnessed only for the address-containment class by
-  `/bin/tier2-exploit`;
-  criterion 3 trivially from the fixtures' capability-free manifests and the copied-only path; and
-  criterion 2 measured rather than assumed: the broker oracle re-run twice on the tree carrying
-  slices A and B and the Phase-03 opt-in API, compared against the pre-slice run by its own calibrated
-  direct-IPC reference (identical `147000` ns, `calibration=MEASURED` in all three), every sweep
-  `success` with `busy/indeterminate/duplicate/stale=0`, soak 10000/10000 `silent_drop=0`, and
-  `watchdog_expired_delta=0`/`heartbeat_miss_delta=0` throughout. Normalized p99 is at or below the
-  before run at every n≥2 within the two after runs' own ~7% spread → recorded as **no regression**,
-  not an improvement. `docs/evidence/c2c-broker-oracle-qemu-local.txt` + the two after logs.
+- All four of the phase's pre-delivery refusals are witnessed: oversize frame,
+  unauthorized method, stale descriptor, and wrong **user buffer** on the syscall
+  copy path (exercised under a reviewed unsafe-allowlist exemption by
+  `tier2-rpc-driver`: `[tier2-rpc] INVALID-BUFFER=REFUSED`). Address containment
+  additionally runs as `/bin/tier2-exploit`.
+- **Phase 02's success criteria are fully evidenced (2026-10-09).** Criterion 1
+  on the Intel test-hooks lane (named binding, both directions, all four refusals,
+  production denial still asserted); criterion 3 trivially from the fixtures'
+  capability-free manifests and the copied-only path; and criterion 2 measured
+  rather than assumed: the broker oracle re-run twice on the tree carrying
+  slices A and B and the Phase-03 opt-in API, compared against the pre-slice run
+  by its own calibrated direct-IPC reference (identical `147000` ns,
+  `calibration=MEASURED` in all three), every sweep `success` with
+  `busy/indeterminate/duplicate/stale=0`, soak 10000/10000 `silent_drop=0`, and
+  `watchdog_expired_delta=0`/`heartbeat_miss_delta=0` throughout. Normalized p99 is
+  at or below the before run at every n≥2 within the two after runs' own ~7% spread
+  -> recorded as **no regression**, not an improvement.
+  `docs/evidence/c2c-broker-oracle-qemu-local.txt` + the two after logs.
+- **Owner-approved stranding cutover implemented:** SDK synchronous and bounded RPC
+  use one kernel-owned operation lifecycle; immediate replies use the exact-context
+  Send bridge, while nested/deferred VFS/KMS/NIC/net/broker providers retain tokens.
+  Same-incarnation workers may reply; foreign generations and late/duplicate tokens
+  may not. This supersedes the historical opt-in-only and exclusive-IpcReply
+  statements below. No new ABI, completion source or remote activation.
+  Evidence: `docs/evidence/c2c-stranding-cutover-x86.log`; the lifecycle regression
+  now requires synchronous PeerGone, nested VFS/retained Reply, duplicate quarantine,
+  oversized-error slot cleanup and post-dispatch cancellation correlation.
+  Remaining gates: multi-source waiting, deterministic two-hart proof and full
+  fairness/restart/abandoned-grant matrix.
+- **Phase 03 bounded lifecycle proof slice exercised:** single-hart x86 QEMU
+  dispatched 64 calls, refused overflow with no delivery, retained all terminal
+  reservations until take and reused capacity. Real 3000-tick expiry produced
+  queued PreDispatchTimeout/dispatched Indeterminate; four queued calls from a
+  dead caller were removed before provider release and a fresh caller succeeded.
+  Evidence: `docs/evidence/c2c-saturation-deadline-caller-death-x86.{txt,log}`;
+  kernel 9 and lifecycle integration 2 tests PASS, independent serial smoke PASS.
+  Production kernel/SDK and ABI unchanged. This closes those single-caller
+  witnesses, not the full fairness/restart or abandoned-grant matrix.
+- **Phase 03 provider replacement/raw-event witness and SDK fix:** old PeerGone
+  retained across replacement, old token refused, fresh Reply and dead-submit
+  refusal; third-Cell raw event received while RPC stayed pending, with no raw
+  reply leak. The witness failed before fixing `PendingCall::wait_and_take`:
+  unrelated retained terminals exhausted rounds immediately. It now measures
+  scheduler-tick budgets and yields without consuming another result.
+  Evidence: `docs/evidence/c2c-restart-event-coexistence-x86.{txt,log}`;
+  ostd 67 PASS, lifecycle integration 2 PASS and independent serial smoke PASS.
+  No ABI/kernel change; not registry rebind, hotswap or hardware input.
+- **Phase 03 controlled multi-caller progress:** A retains64 pending operation
+  reservations while B receives a correlated reply from the same provider,
+  before A's drain gate opens. Two A overflow refusals deliver nothing, all64
+  A replies drain once, and a second B reply succeeds. Evidence:
+  `docs/evidence/c2c-multi-caller-progress-x86.{txt,log}`; lifecycle integration2,
+  independent serial smoke and review passed. No production/ABI changes.
+  Quota isolation only; full fairness under sustained peer-queue pressure remains open.
+- **Phase 03 peer-mailbox pressure and finite competing producers:** provider
+  mailbox (depth 64) saturated by A causes B to observe Busy before provider
+  wakes; concurrent rolling calls (A 128, B 64, total 192) complete with exact
+  correlation, retrying Busy only, with zero duplicates or leaked messages.
+  Evidence: `docs/evidence/c2c-peer-pressure-x86.{txt,log}`; lifecycle
+  integration 2 PASS, independent serial smoke PASS. Fixture-only; unbounded
+  starvation freedom and SMP two-hart wake proof remain open.
+- **x86_64 C++ freestanding runtime qualified (2026-10-09):** POSIX shim C++ ABI
+  enabled on x86_64, `raw_syscall` implemented for x86_64 Syscall ABI, and kernel
+  initializes FPU/SSE (CR0.EM=0, CR0.MP=1, CR4.OSFXSR=1, CR4.OSXMMEXCPT=1, LDMXCSR 0x1F80).
+  `/bin/cpp-smoke` runs end-to-end in Tier 2 Paged Domain under CR3 isolation,
+  verifying static constructors, virtual dispatch, virtual delete, templates,
+  operator new/delete, typed VFS IPC, and C-ABI file I/O.
+  Evidence: `docs/evidence/c2c-x86-cpp-freestanding-runtime.txt`.
 - **Phase 03 step-3 opt-in API landed 2026-10-09** (same session): `ostd::ipc::PendingCall` +
   `Completion` give Cells the nonblocking multi-outstanding call path the step-2 specification
   describes, with `is_definite`/`is_uncertain` encoding the retry rule; the serving side uses the

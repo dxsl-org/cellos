@@ -94,22 +94,13 @@ mapping to the §2.4 caller-visible outcomes, submission-as-copy (no pinned call
 binding (token → owner, peer, peer cell **and** peer generation), reply retention until `take` with
 no partial consumption, bounded capacity returning `Busy`, and waiting as a timer-bounded park.
 
-**The finding that sizes steps 3–4:** a bounded caller's terminal is produced by `IpcReply` — only
-that handler reaches `async_ipc::terminal`, which requires `Phase::Dispatched` — and an ordinary
-`Send`-to-sender reply never touches the operation slot. Measured, not inferred: a peer that
-answered eight bounded requests with `sys_send` left one operation `Reply` and terminalised the other
-seven `PeerGone` (step-1 evidence, first run). So:
-
-  * an **opt-in** nonblocking API needs both sides to opt in, with the serving side answering
-    `IpcCurrent` + `IpcReply` — proven end-to-end by the Phase-02 fixture
-    (`docs/evidence/c2c-named-tier2-service-x86.{txt,log}`) and bounded by measurement;
-  * **step 3's stated goal** — moving `LocalEndpoint::call` / `ServiceRef::call` onto the primitive so
-    a dying provider stops stranding the caller — is therefore *not* a local SDK change. It forces
-    either a service-wide reply migration (a change to a ratified IPC path: Spec 17 §9 entry + two
-    Law-1 confirmations) or a kernel change letting a plain masked reply terminalise a bounded
-    operation (the same class of contract question). **Recommendation: do not attempt it as steps 2–3
-    stand.** Keep the blocking API exactly as it is, ship the opt-in path first, and take the
-    stranding fix as its own decision with the migration cost stated up front.
+**Historical finding, superseded by the cutover below:** the first reverse-reply
+fixture produced one Reply and seven PeerGone outcomes after plain Send responses.
+That observation did not establish that Send can never settle an operation.
+Current source already had the exact-current-operation Send bridge; deferred
+reverse-order replies need captured tokens rather than implicit current context.
+The owner subsequently admitted the stranding cutover, keeping raw message
+semantics separate and migrating nested/deferred reply providers.
 
 Open, with their proof obligations, and each needing its own admission: multi-source waiting in one
 park (`WaitCompletion` v1 is `NET_RX`/`TIMER` only), cancelling a dispatched operation, the two-hart
@@ -139,10 +130,179 @@ operations against a peer that dies mid-flight all terminalised (`unterminal=0 l
 asserted by `tests/integration/tests/local-service-lifecycle-x86.rs`; evidence
 `docs/evidence/c2c-async-lifecycle-x86.{txt,log}`.
 
-**Not done, and still needing its own decision:** moving the *blocking* API onto the primitive (the
-stranding fix), multi-source waiting, cancelling a dispatched operation, the two-hart wake proof and
-retained-reply lifetime — see § Step-2 specification for what each costs.
+**Historical boundary at opt-in landing:** blocking RPC had not yet migrated.
+The owner-approved cutover below supersedes that boundary; independent multi-source
+waiting, two-hart and full fairness/restart proofs remain open.
+
+## Stranding cutover — owner-approved and exercised
+
+The owner explicitly selected implementation after reviewing kernel bridge versus
+service-wide migration and stated that no production compatibility is required.
+Decision: RPC uses one kernel-owned bounded operation lifecycle; synchronous SDK
+calls wait on that same lifecycle. No new syscall, API wire enum or completion-source
+vocabulary is introduced. Raw one-way Send/Recv is not RPC and remains available.
+
+Implementation and verification sequence:
+
+1. Move all SDK service-call variants to submit/wait/take, preserve caller deadlines,
+   never resend accepted work, and cancel/drain slots on every error path. Remove
+   the obsolete rendezvous deadline helper and queued-call aliases.
+2. Harden the existing immediate Send reply bridge against wrong generations,
+   duplicate/late replies and nested context replacement; preserve VFS grant leases.
+   Deferred services capture explicit tokens, including same-incarnation workers.
+3. Exercise real SDK provider death, nested VFS RPC, retained reply after provider
+   exit, duplicate quarantine, undersized take/retry and slot reuse beyond capacity;
+   run lifecycle and cross-tier QEMU lanes plus affected host suites.
+4. Amend Spec 17/20 and the current work records with exercised evidence.
+
+This supersedes the historical step-2 claim that plain Send can never settle an
+operation: current source already contains `async_ipc::reply_current` in Send.
+`PeerGone` does not prove the request had no side effects before death, or that
+delegated sibling work stopped. No automatic retry is authorized.
+Multi-source completion waiting and the independent two-hart proof remain separate.
+
+Exercised runtime evidence: `docs/evidence/c2c-stranding-cutover-x86.log`.
+The independent serial boot wrote/read `CUTOVER_VFS_REAL_SERIAL_OK`, then observed:
+
+- synchronous SDK call returned `PeerGone` after provider consumed the request;
+- nested VFS RPC preserved inbound token, duplicate reply stayed out of the mailbox,
+  terminal Reply survived provider exit, and a short take retained its result;
+- 70 oversized SDK replies were drained (more than the 64 operation slots), followed
+  by successful reuse and exact two-byte reply;
+- post-dispatch cancellation returned Indeterminate; late old reply was refused,
+  while a new operation returned its own sequence;
+- eight reverse-order outstanding calls completed with `lost=0 wrong_seq=0`, and
+  four calls against a dying peer all reached PeerGone with `unterminal=0 lost=0`.
+
+
+Verification: SDK 41 unit + 7 integration + 19 doctests (2 ignored); kernel
+async_ipc 8 host tests including all six new lifecycle regressions; broker queue
+11 tests; DWC2 11 tests; x86 lifecycle integration 2 tests. The independent
+serial boot above is separate from those tests. x86 cross-tier mandatory marker
+runner passed; RV64 broker QEMU baseline 1000/1000 and soak 10000/10000 passed.
+ARM/RV64 general test-hooks and affected bare-metal provider checks compiled.
+Frozen LookupServiceBound invariant check passed.
+
+The x86 domain boot still reports pre-existing `MMIO-REVOKE-USERBIT: FAIL`
+and `X86-VMM-SMOKE: FAIL e1=Preempted e2=Preempted`, also present in the
+pre-cutover named/cross-tier logs. Mandatory cross-tier markers passing is not a
+claim that all domain selftests are green.
+
+
+## Saturation, deadline and caller-death proof slice
+
+Admitted by the owner's continuation after the stranding cutover. Scope is
+behavioral witnesses for the existing operation lifecycle, not a new ABI or
+completion source. Keep the full Phase 03 status open.
+
+Implementation sequence:
+
+1. Extend deterministic kernel boundary regressions for charged terminal slots,
+   deadline ordering and exact-identity removal on caller death.
+2. Exercise 64 dispatched outstanding operations against a live provider, verify
+   Busy delivers nothing, retain terminal reservations until take, drain and reuse.
+3. Exercise the real 3000-tick operation deadline before/after dispatch and
+   queued caller death with live-provider recovery. No shortened test-only timeout.
+4. Build the isolated x86 image, run lifecycle integration and an independent
+   serial session, then publish only observed results.
+
+Not covered: abandoned caller grant lifetime, multi-caller fairness, restart
+matrix, concurrent input, multi-source waits or deterministic two-hart wake proof.
+
+Completed evidence: `docs/evidence/c2c-saturation-deadline-caller-death-x86.{txt,log}`.
+Independent socket serial session wrote/read `PHASE03_PROOF_SERIAL_OK`, ran the
+local lifecycle in 32.209 seconds and returned to the shell, then ran async lifecycle.
+Observed: 64 accepted/dispatched calls, Busy deliveries zero before and after all
+64 terminal replies, 64 exact completions drained once, successful slot reuse;
+real queued PreDispatchTimeout/dispatched Indeterminate at >=3000 ticks with no
+queued delivery or accepted late reply; four queued calls removed after actual
+caller Exit, followed by a fresh caller Reply.
+
+Kernel boundary regressions: 9 PASS; x86 lifecycle integration: 2 PASS; build and
+F1/F5 signing PASS; frozen LookupServiceBound check PASS. Read-only review found
+no blocker. Only kernel test code changed; production lifecycle and ABI unchanged.
+The added host tests check deadline-1 vs exact deadline, immutable terminals,
+charged capacity and exact-identity cleanup while preserving dispatched context.
+The benchmark probe explicitly declares TryRecv for the mailbox-exclusion check.
+
+
+## Provider replacement and raw-event coexistence slice
+
+Continuation scope: test the existing local lifecycle with one dispatched call
+to a provider that exits, then a new provider task; retain the old token through
+replacement and verify the new provider cannot answer it. Separately gate a
+pending RPC while a third Cell delivers a raw message to the caller; prove the
+message does not settle RPC, then release the provider and take its exact reply.
+No registry rebind, hotswap, hardware input, multi-source wait or fairness claim.
+Build and run the existing x86 lifecycle integration, capture independent serial
+evidence, and review the witness before updating the completion record.
+
+Completed: `docs/evidence/c2c-restart-event-coexistence-x86.{txt,log}`.
+The replacement refused the old retained token, returned its fresh exact Reply,
+and the old call remained PeerGone; submit to the dead endpoint was refused.
+Third-Cell raw event received while RPC remained pending; provider's gated
+explicit reply was correlated and absent from the raw mailbox.
+
+The new regression failed before the fix: `wait_and_take` spent all rounds on
+the unrelated retained terminal before the replacement could run. Fixed the
+SDK helper to use per-round scheduler-tick budgets and yield on unrelated
+terminals, consistent with blocking RPC's existing fallback. No ABI/kernel
+change. The regression now passes without draining or reordering old state.
+
+Verification: ostd 67 PASS (2 ignored), lifecycle QEMU integration 2 PASS,
+build/F1/F5/frozen LookupServiceBound checks PASS. Independent serial session
+wrote/read RESTART_EVENT_SERIAL_OK, lifecycle PASS in 32.228 seconds, async PASS,
+fresh shell prompts. Review found no blocker. Full phase remains open.
+
+## Multi-caller bounded progress slice
+
+Exercise one caller A with 64 dispatched outstanding operations and Busy overflow
+against a live provider. While A retains all reservations, caller B submits to
+the same provider and receives its own exact reply before A is allowed to drain.
+Then complete A's 64 calls, prove untaken terminals still charge its quota, drain
+each once, and make another B call. Check sender/token/sequence correlation and
+bounded handshakes throughout. No forced scheduler ordering is represented as
+general fairness: this proves progress and quota isolation in one controlled
+two-caller window, not hostile queue monopolization, scheduling weights or SMP.
+Keep the full fairness matrix open. Verify via existing QEMU integration,
+independent serial evidence and read-only review before publishing results.
+
+Completed evidence: `docs/evidence/c2c-multi-caller-progress-x86.{txt,log}`.
+Observed A held64 dispatched/pending calls, two Busy overflow refusals with
+zero delivery, A drained64 exact replies once, and B took two correlated replies
+including one before A's drain gate opened. No production or ABI changes.
+Lifecycle QEMU integration2 PASS; build/F1/F5/frozen ABI checks PASS. Independent
+serial smoke wrote/read MULTI_CALLER_SERIAL_OK, local lifecycle PASS in32.618s,
+async lifecycle PASS, shell returned. Review found no blocking defect. Full
+fairness remains open: A's peer wires are deliberately received before B's
+admission, so this does not prove progress under a monopolized peer mailbox.
+
+## Finite competing producers under peer-mailbox pressure
+
+The live queue bound is 64 (not the historical 16-wire description). Fill it
+with A requests while provider sleeps; B must observe peer-queue Busy before
+provider wakes. Then run finite rolling producers (A128, B64) against that
+provider, retry only refused admissions, correlate every accepted completion,
+and record Busy/progress timing. No provider gating by caller during drain.
+Keep a scheduler-tick watchdog and fail on missing/duplicate/wrong responses.
+This is finite contention evidence, not an unbounded starvation guarantee or
+a fairness policy change. Verify integration, independent serial and review.
+
+Completed evidence: `docs/evidence/c2c-peer-pressure-x86.{txt,log}`.
+Observed initial peer-mailbox Busy refusal on independent caller B while
+provider held in timer sleep with 64 queued requests from A; concurrent
+pumping completed all 128 calls from A and 64 from B (192 total), with zero
+duplicate or wrong-sender deliveries, exact 3-byte payload correlation,
+and verified empty provider mailbox at termination.
+No production kernel/SDK or ABI changes. Integration tests (2 PASS in 37.01s),
+F1/F5 signing and frozen LookupServiceBound check passed. Independent QEMU
+socket serial smoke: local lifecycle PASS in 33.37s, async lifecycle PASS in
+0.10s, shell prompts settled and returned cleanly.
+Evidence ceiling: finite contention only; unbounded anti-starvation remains open.
 
 ## Deviation log
 
-None.
+The replacement witness exposed premature round exhaustion in the SDK helper.
+This proof slice therefore includes the narrowly reproduced `wait_and_take`
+fix; the new witness failed before and passed after it. No kernel or ABI work
+was added, and no unrelated terminal is drained to make the scenario pass.
