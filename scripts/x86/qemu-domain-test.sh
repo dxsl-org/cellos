@@ -229,13 +229,17 @@ REQUIRED_MARKERS=(
     "tier2-smoke launch:::Init: tier2-smoke admitted."
     "tier2-exploit launch:::Init: tier2-exploit admitted."
     "cross-tier provider launch:::Init: tier2-rpc-provider admitted."
+    "cross-tier provider registration:::Init: tier2-rpc-provider registered."
     "cross-tier driver launch:::Init: tier2-rpc-driver launched."
+    "cross-tier named binding:::[tier2-rpc] PROVIDER-BINDING tid="
+    "cross-tier binding agreement:::[tier2-rpc] PROVIDER-NAME-MATCHES-RAW=true"
     "cross-tier Tier-1 to Tier-2:::[tier2-rpc] TIER1-TO-TIER2=OK"
     "cross-tier Tier-2 to Tier-1:::[tier2-rpc] TIER2-TO-TIER1=OK root_is_dir="
     "cross-tier oversize refusal:::[tier2-rpc] OVERSIZE=REFUSED"
     "cross-tier unauthorized method:::[tier2-rpc] UNAUTHORIZED-METHOD=REFUSED"
-    "cross-tier provider unregistered:::[tier2-rpc] PROVIDER-REGISTRY=NONE"
-    "cross-tier stale descriptor:::[tier2-rpc] STALE-PEER=REFUSED"
+    "cross-tier provider gone:::[tier2-rpc] PROVIDER-GONE=none"
+    "cross-tier stale descriptor:::[tier2-rpc] STALE-BINDING=REFUSED"
+    "cross-tier stale cleared:::[tier2-rpc] STALE-BINDING-CLEARED=true"
     "cross-tier driver done:::[tier2-rpc] DRIVER-DONE"
     "domain admission:::Tier 2 Paged Domain (CR3 isolation)"
     "domain cell ran:::S22-X86-DOMAIN-LIVE: PASS"
@@ -258,7 +262,7 @@ if grep -Fqa "[tier2-rpc] FAIL" "$LOG"; then
     grep -a "\[tier2-rpc\]" "$LOG" >&2
     exit 1
 fi
-for rejected in "OVERSIZE=ACCEPTED" "UNAUTHORIZED-METHOD=ACCEPTED" "PROVIDER-REGISTRY={"; do
+for rejected in "OVERSIZE=ACCEPTED" "UNAUTHORIZED-METHOD=ACCEPTED" "STALE-BINDING=SERVED" "STALE-BINDING=ERROR"; do
     if grep -Fqa "$rejected" "$LOG"; then
         echo "FAIL: the cross-tier exchange reported $rejected" >&2
         grep -a "\[tier2-rpc\]" "$LOG" >&2

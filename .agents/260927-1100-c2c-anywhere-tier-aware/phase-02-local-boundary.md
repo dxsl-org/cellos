@@ -152,10 +152,11 @@ Evidence: `docs/evidence/c2c-sdk-binding-x86.{txt,log}`; the lane is the x86_64
 `local-service-lifecycle` witness, whose leg S exercises the SDK itself, and the AArch64/RV64 `test-hooks`
 suites plus the local broker oracle were re-run with the change.
 
-**Not in this slice:** the stale-after-death half still has no runtime witness — it needs a *registered*
-provider that dies, and slice B's provider is tid-addressed because a private-root Cell cannot register
-(see § *Slice B progress*); `libs/ai-sdk` keeps its own coarse transport error mapping; and
-`LocalEndpoint::call` still uses the synchronous path, which Phase 03 owns.
+**Not in this slice:** the stale-after-death half had no runtime witness at the time — it needed a
+*registered* provider that dies, which arrived with the named Tier-2 service below
+(`STALE-BINDING=REFUSED`, `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`); `libs/ai-sdk` keeps
+its own coarse transport error mapping; and `LocalEndpoint::call` still uses the synchronous path,
+which Phase 03 owns.
 
 ## Slice B progress (2026-10-09) — implemented and verified
 
@@ -177,16 +178,24 @@ Witnessed: **Tier-1 → Tier-2** (typed 512-byte payload, length *and* checksum 
 through the frozen binding, and reports `is_dir=true` in its reply); **oversize frame** refused by the
 kernel before delivery while the provider was still waiting (it never accounted for it);
 **unauthorized method** refused by the receiver with no side effect; **stale descriptor** refused once
-the provider exited, with no retry onto another incarnation. Full evidence:
-`docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`; AArch64/RV64 `test-hooks` re-run with the shared
+the provider exited, with no retry onto another incarnation. The Tier-2 side later became
+registry-**named** (see limitation 1): its provider is registered by `init`, the driver resolves it
+through the SDK, and the stale rule is witnessed on a *bound* descriptor. Full evidence:
+`docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}` and
+`docs/evidence/c2c-named-tier2-service-x86.{txt,log}`; AArch64/RV64 `test-hooks` re-run with the shared
 kernel rows.
 
 **Not claimed here, and why:**
 
-1. **A named Tier-2 service.** `RegisterService` stays `SpawnCap`-gated, so a private-root Cell cannot
-   register; the exchange is tid-addressed through the argv handoff and the driver witnesses the
-   consequence (`PROVIDER-REGISTRY=NONE`). A registry-named Tier-2 service needs its own authority
-   decision — the next thing this phase wants and does not have.
+1. ~~**A named Tier-2 service.**~~ **Closed 2026-10-09.** `RegisterService` is `SpawnCap`-gated, so a
+   private-root Cell cannot register *itself* — but its **spawner** can, which is the pattern init
+   already uses for the hypervisor. `init` now registers the fixture's provider under its service id
+   and the driver resolves it through the SDK, so the exchange is registry-named and the descriptor
+   carries the provider's real `(cell_id, generation)` (`PROVIDER-BINDING tid=9 cell=5 gen=142`,
+   `PROVIDER-NAME-MATCHES-RAW=true`). That needed no new authority, no ABI and no kernel change. It
+   also gave slice A's stale rule its first runtime witness: after the provider exits, the cached
+   descriptor is refused rather than re-targeted (`PROVIDER-GONE=none`, `STALE-BINDING=REFUSED`,
+   `STALE-BINDING-CLEARED=true`). Evidence: `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`.
 2. **A wrong user buffer on the syscall copy path.** Of the four pre-delivery refusals, this is the one
    not re-created: a `#![forbid(unsafe_code)]` Cell cannot fabricate a pointer, and the
    address-containment witness for that class already runs as `/bin/tier2-exploit` on the same lane.

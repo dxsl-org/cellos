@@ -1,0 +1,75 @@
+C2C Tier-2 fixture resolved by name, and a stale descriptor refused (x86_64 QEMU, 2026-10-09)
+=============================================================================================
+
+What this records
+-----------------
+Two things, on the same boot:
+
+1. The Phase-02 cross-tier exchange is now **registry-named**. The Tier-2 provider is
+   registered under the fixture's service id by **its spawner** (`init`), and the Tier-1
+   driver resolves it through the shipped SDK — no tid handed over, no argv handoff.
+2. Slice A's stale-descriptor rule gets its **first runtime witness**: once the provider
+   is gone, the descriptor the driver's handle holds is refused rather than re-targeted.
+
+Why the earlier reading ("a private-root service needs an authority decision") was wrong
+-------------------------------------------------------------------------------------
+`RegisterService` is `SpawnCap`-gated, so a private-root Cell cannot register **itself** —
+which is what the fixture's first version did not do, and the driver therefore addressed a
+tid `init` passed it. But the *spawner* holds `SpawnCap`, and registering on behalf of a
+cell it spawned is a pattern this tree already uses: `spawn_hypervisor()` registers the
+hypervisor service for the tid it just spawned (`cells/tools/init/src/boot.rs`). The kernel
+takes the liveness check and the identity capture in one scheduler lock hold, so the entry
+carries the provider's real `(cell_id, generation)` — no caller-supplied identity, no new
+authority, no ABI, no kernel change.
+
+How to reproduce
+----------------
+  bash scripts/build-x86_64-domain-test-ci.sh
+  BOOT_WINDOW=90 bash scripts/x86/qemu-domain-test.sh
+
+Raw log: `c2c-named-tier2-service-x86.log`.
+
+Observed (raw log lines, this run)
+----------------------------------
+  Init: tier2-rpc-provider registered.
+  [tier2-rpc] PROVIDER-BINDING tid=9 cell=5 gen=142
+  [tier2-rpc] PROVIDER-NAME-MATCHES-RAW=true
+  [tier2-rpc] TIER1-TO-TIER2=OK
+  [tier2-rpc] TIER2-TO-TIER1=OK root_is_dir=true
+  [tier2-rpc] OVERSIZE=REFUSED
+  [tier2-rpc] UNAUTHORIZED-METHOD=REFUSED
+  [tier2-rpc] PROVIDER-GONE=none
+  [tier2-rpc] STALE-BINDING=REFUSED
+  [tier2-rpc] STALE-BINDING-CLEARED=true
+  [tier2-rpc] DRIVER-DONE
+
+Reading it
+----------
+  * **Named, with the provider's own identity.** `PROVIDER-BINDING tid=9 cell=5 gen=142` is
+    a private-root Cell's binding as the registry states it: `cell=5` is that Cell and
+    `gen=142` its epoch, captured by the kernel — not a value the provider or the driver
+    asserted. `PROVIDER-NAME-MATCHES-RAW=true` is the SDK's `ServiceRef` resolution
+    agreeing exactly with a raw `LookupServiceBound` read, so both paths see one binding.
+  * **The exchange is unchanged in substance** — typed 512-byte request answered with a
+    verified length and checksum, the Tier-2 cell calling the *named* Tier-1 VFS service
+    from inside its private root, the oversize frame refused before delivery, the
+    unauthorized method refused with no side effect.
+  * **The stale descriptor is refused.** After the provider serves its budget and exits,
+    the driver polls the registry through the raw opcode (deliberately not through the SDK,
+    whose cache this leg is about) until no live binding remains (`PROVIDER-GONE=none`).
+    The next call then goes through the cached descriptor: the send is refused, the SDK
+    classifies it against the registry and reports `NotFound` — `STALE-BINDING=REFUSED` —
+    and drops the descriptor (`STALE-BINDING-CLEARED=true`). Nothing is delivered to the
+    retired tid and nothing is silently re-targeted onto another incarnation; had either
+    happened, the leg prints `STALE-BINDING=SERVED` and the lane fails on it.
+
+What this does not claim
+------------------------
+  * Still outstanding from the phase's four pre-delivery refusals: a wrong **user buffer**
+    on the syscall copy path (needs a raw-pointer fixture; `/bin/tier2-exploit` already
+    witnesses the address-containment class on this lane).
+  * No ABI, authority, kernel or loader change: the fixture's service id is a literal in
+    init's feature-gated block and in the fixture's own crate, cross-referenced; a drift
+    fails the driver's first resolution loudly instead of silently.
+  * The bounded/async lifecycle is untouched — this exchange is still the synchronous
+    copied typed call, and Phase-03 step 3 owns moving it.

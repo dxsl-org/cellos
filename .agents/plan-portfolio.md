@@ -88,12 +88,15 @@ authorization. Plans not admitted below are parked/historical.
   their *absence* forms: `OVERSIZE=REFUSED`, `UNAUTHORIZED-METHOD=REFUSED`, `PROVIDER-REGISTRY=NONE`,
   `STALE-PEER=REFUSED`. AArch64/RV64 `test-hooks` re-run green with the shared loader rows.
   Evidence `docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`.
-  **Limitations recorded with the admission:** a private-root cell **cannot** register a service
-  (`RegisterService` stays `SpawnCap`-gated), so the Tier-2 side is tid-addressed rather than
-  registry-named — a genuinely *named* Tier-2 service needs its own authority decision and is not
-  claimed here. Of the phase's four pre-delivery refusals, three are witnessed (oversize frame,
-  dead/stale peer, unauthorized method) and the fourth — a wrong **user buffer** on the syscall copy
-  path — is not re-created: a `#![forbid(unsafe_code)]` cell cannot fabricate a pointer, and the
+  **Limitations recorded with the admission** (one since closed): a private-root cell cannot register
+  *itself* (`RegisterService` stays `SpawnCap`-gated), but its **spawner** can — and `init` does, the
+  same way it registers the hypervisor — so the Tier-2 provider became **registry-named** on
+  2026-10-09 and the driver resolves it through the SDK (`PROVIDER-BINDING tid=9 cell=5 gen=142`),
+  which also gave slice A's stale rule its first runtime witness (`STALE-BINDING=REFUSED`,
+  `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`). No new authority, ABI or kernel change.
+  Of the phase's four pre-delivery refusals, three are witnessed (oversize frame, dead/stale peer,
+  unauthorized method) and the fourth — a wrong **user buffer** on the syscall copy path — is not
+  re-created: a `#![forbid(unsafe_code)]` cell cannot fabricate a pointer, and the
   address-containment witness already runs as `/bin/tier2-exploit`.
 - **Phase 03 step 1 admitted and landed 2026-10-09** (owner: same C2C session): the measured
   prototype that step 2's decision needs, and nothing else — no ABI, no kernel, no scheduler, no
@@ -127,8 +130,10 @@ authorization. Plans not admitted below are parked/historical.
   `SDK-BINDING-LIVE resolved=true unresolved=false`, `SDK-ABSENT-BINDING=REFUSED` — with the
   AArch64/RV64 `test-hooks` suites and the local broker oracle re-run green:
   `docs/evidence/c2c-sdk-binding-x86.{txt,log}`. **Not proven there:** the stale-after-death half has no
-  runtime witness yet — it needs a *registered* provider that dies, and slice B's provider is
-  tid-addressed (a private-root Cell cannot register) — so the rule is covered by host tests only.
+  runtime witness far longer than it should have: it needs a *registered* provider that dies, and the
+  fixture was tid-addressed at first because a private-root Cell cannot register itself. The spawner
+  can (`init` does), so the named fixture supplied it on 2026-10-09 —
+  `STALE-BINDING=REFUSED`, `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`.
 - **Phase-01 exit evidence recorded 2026-10-09:** all four success criteria carry evidence (contract
   table; the §2.4 state-transition matrix; Spec-20/Spec-17/ADR-0015/Spec-22/ADR-0008/0009 consistency,
   including the Spec 17 §9 record of the changed syscall surface; and the local oracle re-run —

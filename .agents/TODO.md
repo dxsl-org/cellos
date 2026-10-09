@@ -26,10 +26,11 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
   cancellation of a dispatched operation, the two-hart wake proof, retained-reply lifetime and
   queue/fairness reservation, and need the kernel file-owner handoff if they touch those paths.
   Phase 03 step 3 also owns moving `LocalEndpoint::call` onto the bounded primitive.
-  Two Phase-02 remainders are **not** claimed by any slice and need their own decisions:
-  a registry-**named** Tier-2 service (a private-root Cell cannot `RegisterService`; that authority is
-  a decision, not a bug fix) and a wrong-**user-buffer** witness on the syscall copy path (needs a
-  raw-pointer fixture plus its own unsafe-allowlist entry).
+  One Phase-02 remainder is still unclaimed and needs its own review: a wrong-**user-buffer** witness
+  on the syscall copy path (needs a raw-pointer fixture plus its own unsafe-allowlist entry). The
+  *named* Tier-2 service turned out **not** to need an authority decision — the spawner registers it,
+  as `init` already does for the hypervisor — and landed 2026-10-09
+  (`docs/evidence/c2c-named-tier2-service-x86.{txt,log}`).
   Law-1 is complete — checkpoint 2 recorded 2026-10-08, surface **FROZEN**, drift caught by
   `scripts/check-lookupservicebound-law1-digests.sh`.
   Resolved 2026-10-08: the x86_64 `test-hooks` alignment ledger check now warms to the

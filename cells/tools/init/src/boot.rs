@@ -215,6 +215,14 @@ pub(crate) fn spawn_hypervisor() -> Option<usize> {
     }
 }
 
+/// The Phase-02 cross-tier fixture's service id (`tier2-rpc-proto::SERVICE_ID`).
+///
+/// Kept as a literal here rather than a dependency on a test fixture, which would pull
+/// that crate into every image's boot code. A drift is caught by the driver's first
+/// resolution (which fails loudly) rather than silently.
+#[cfg(feature = "tier2-rpc-entry")]
+const TIER2_RPC_FIXTURE_SERVICE: u16 = 0x7A01;
+
 pub(crate) fn spawn_optional_services() -> Option<usize> {
     // Tier-2 entry fixtures (phase 02). Only the AArch64 test-hooks image can
     // admit a domain-class cell, and it is also the one image whose boot ends
@@ -236,25 +244,29 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
         }
     }
 
-    // Phase-02 slice B: the cross-tier exchange. The Tier-2 provider goes first so
-    // the driver can be handed its tid; a private-root Cell cannot register a
-    // service (`RegisterService` is `SpawnCap`-gated), so the tid travels through
-    // the reviewed argv stash rather than the registry.
+    // Phase-02 slice B cross-tier exchange. The provider cannot register itself —
+    // `RegisterService` is `SpawnCap`-gated and a private-root Cell holds no
+    // capabilities — so its **spawner** registers it, exactly as `spawn_hypervisor`
+    // does above. The kernel captures the provider's `(cell_id, generation)` in the
+    // same lock hold as the liveness check, so the registry entry carries the real
+    // identity and a caller resolves the *named* service instead of being handed a tid.
     #[cfg(feature = "tier2-rpc-entry")]
     {
         match sys_spawn_from_path("/bin/tier2-rpc-provider") {
             SyscallResult::Ok(provider) => {
                 ostd::io::println("Init: tier2-rpc-provider admitted.");
-                if !ostd::syscall::sys_set_spawn_args(&alloc::format!("{provider}")) {
-                    ostd::io::println("Init: tier2-rpc-driver argv stash failed.");
-                } else {
-                    match sys_spawn_from_path("/bin/tier2-rpc-driver") {
-                        SyscallResult::Ok(_) => {
-                            ostd::io::println("Init: tier2-rpc-driver launched.")
-                        }
-                        SyscallResult::Err(_) => {
-                            ostd::io::println("Init: tier2-rpc-driver spawn failed.")
-                        }
+                match ostd::syscall::sys_register_service(TIER2_RPC_FIXTURE_SERVICE, provider) {
+                    SyscallResult::Ok(_) => {
+                        ostd::io::println("Init: tier2-rpc-provider registered.")
+                    }
+                    SyscallResult::Err(_) => {
+                        ostd::io::println("Init: tier2-rpc-provider registration failed.")
+                    }
+                }
+                match sys_spawn_from_path("/bin/tier2-rpc-driver") {
+                    SyscallResult::Ok(_) => ostd::io::println("Init: tier2-rpc-driver launched."),
+                    SyscallResult::Err(_) => {
+                        ostd::io::println("Init: tier2-rpc-driver spawn failed.")
                     }
                 }
             }
