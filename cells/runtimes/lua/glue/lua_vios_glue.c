@@ -28,7 +28,7 @@ void vios_write(const char *s, size_t n) {
 
 extern void _exit(int status);
 
-void abort(void) {
+__attribute__((weak)) void abort(void) {
     _exit(1);
     /* unreachable */
     for (;;) {}
