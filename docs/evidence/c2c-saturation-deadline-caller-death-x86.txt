@@ -1,0 +1,31 @@
+C2C Phase 03: saturation, real deadline and queued caller death (2026-10-09)
+
+Scope: existing bounded local operation lifecycle; no production kernel/SDK changes, new syscall, wire enum, completion source, or timeout override. Kernel changes are host regression tests only. Bench-probe explicitly declares TryRecv for exclusion checks.
+
+Independent runtime: QEMU x86_64 q35, qemu64,+pdpe1gb, 256 MiB, nographic, CD-ROM boot d, no reboot, monitor none, ephemeral localhost socket serial. Prompt + 0.5-second settling before input; returned prompt required after every command. QEMU stopped in finally.
+ISO: build/vicell-x86-c2c-lifecycle.iso
+ISO sha256: 46c37b3b89a8eb42a49bcf8d6330e49de4e596a3e5cd9cd6eea0ac1cfe468640
+Kernel: build/x86-c2c-lifecycle-iso-root/boot/kernel.elf
+Kernel sha256: 91587ac9b6a39e4d943a4857d05f95bbecf6fc6ca4ce277a3813fda637bc8ec8
+Raw serial: c2c-saturation-deadline-caller-death-x86.log (13942 bytes)
+
+Commands exercised:
+- vwrite /tmp/c2c-proof.txt PHASE03_PROOF_SERIAL_OK
+- vcat /tmp/c2c-proof.txt: actual data PHASE03_PROOF_SERIAL_OK returned.
+- bench local-service-lifecycle: PASS after 32.209 seconds; shell returned.
+- bench async-lifecycle: PASS; shell returned.
+
+Observed lifecycle boundaries:
+- 64 requests dispatched using raw control handshakes so peer queue depth does not confound owner capacity. Submit beyond owner quota returned Busy before replies and again after all 64 replies were terminal but untaken. Neither refused request arrived at provider. All 64 exact two-byte replies taken once; retired tokens rejected on second take; new operation replied correctly. Provider received exactly 65 accepted requests including reuse.
+- One dispatched and one queued operation ran concurrently through unchanged 3000-tick kernel expiry. Dispatched result Indeterminate; queued result PreDispatchTimeout. Both observed only after >=3000 scheduler ticks from pre-submit timestamp. Provider stayed outside Recv for 3200 ticks; no expired queued wire was delivered. Captured old reply rejected; fresh operation returned its own Reply. Host tests separately prove deadline-1 vs exact-deadline ordering.
+- Child caller accepted four queued requests while provider waited with a different sender mask. Parent installed exit watch before allowing child exit and received its Exit notification before releasing provider gate. No dead-caller request remained; fresh caller operation returned Reply.
+- Earlier lifecycle regressions remained observed: typed VFS, synchronous PeerGone, nested retained Reply and duplicate quarantine, 70 oversized SDK errors then slot reuse, cancellation late-reply refusal, async PeerGone.
+- Async eight-outstanding scenario completed=8 lost=0 wrong_seq=0. Four outstanding requests against dying peer reached terminal=4 peer_gone=4 unterminal=0 lost=0.
+
+Verification commands and observed results:
+- cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu async_ipc: 9 passed, 200 filtered. Real Scheduler/Task boundary fixtures, including exact identity caller-death removal and preserved dispatched context. Internal remove/quota test is not represented as public take proof; runtime scenario supplies public take.
+- bash scripts/build-x86_64-c2c-lifecycle-ci.sh: PASS; F1/F5 signing check passed.
+- CI=1 cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test local-service-lifecycle-x86: 2 passed, 35.94 seconds.
+- bash scripts/check-lookupservicebound-law1-digests.sh: PASS.
+
+Evidence ceiling: software-only single-hart x86 QEMU. This does not close the full fairness/restart matrix, concurrent input, abandoned-caller grant lifetime, deterministic two-hart publication/wake, multi-source waiting, physical Intel qualification, or remote RPC readiness. Queued caller death is not proof that dispatched side effects or grant leases are cancelled. No automatic retries.

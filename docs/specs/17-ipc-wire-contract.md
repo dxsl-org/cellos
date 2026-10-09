@@ -31,6 +31,10 @@ primitives (`libs/api/src/abi/syscall.rs`, kernel `task.rs`):
 - `sys_recv_timeout(mask, &mut [u8], ticks)` — as `sys_recv`, returns `Ok(0)` on
   timeout (10 ms/tick).
 - `sys_reply` / `current_caller` — the request/reply short-circuit.
+- SDK RPC (`service_call` and its typed/bounded variants) uses
+  `IpcSubmit` → `IpcWait` → `IpcTake`: request bytes and reply storage are kernel-owned,
+  and completion names one operation rather than an arbitrary sender message.
+  Ordinary Send/Recv remains the raw mailbox/event interface.
 
 There is exactly **one recv buffer per cell**. Everything below exists because
 that buffer is untyped and shared across every sender and every protocol.
@@ -39,9 +43,9 @@ that buffer is untyped and shared across every sender and every protocol.
 
 ## 2. The recv-mask rule (most important)
 
-> **A request/reply exchange MUST recv masked to the service's tid.**
-> `sys_recv(0)` (wildcard) is ONLY for an event loop that legitimately wants
-> messages from *any* sender (the `run_app!` loop, the shell's `read_line`).
+> **A raw mailbox request/reply exchange MUST recv masked to the service's tid.**
+> SDK RPC instead takes its exact operation completion; it does not receive from
+> the ordinary mailbox. `sys_recv(0)` is only for a genuine event loop or server.
 
 Rationale: a cell holding **input focus** has key events queued into its
 `pending_msgs` by the input path (§6). If such a cell does
@@ -54,6 +58,25 @@ Kernel guarantee (`kernel/src/task/syscall.rs`, Recv & RecvTimeout): the
 `pending_msgs` drain **honours the mask** — a masked recv skips non-matching
 queued messages and leaves them for the wildcard loop that wants them. Client
 code must still pass the right mask.
+
+RPC reply rules:
+- An immediate `sys_send(sender, reply)` in the currently served bounded request
+  is intercepted by the kernel using its exact operation, caller incarnation and
+  provider TID/cell/generation. Duplicate or cancelled late replies are quarantined,
+  not delivered into the client's ordinary mailbox.
+- A provider that performs nested IPC, defers work, serves multiple outstanding
+  requests or emits same-destination events must capture `ostd::ipc::current()`
+  and answer with `ostd::ipc::reply(token, bytes)`. A genuine dispatched token may
+  be answered by a worker in the same provider cell **and generation**; a different
+  incarnation is not authorized. Explicit reply ends only its matching current
+  context. Subsequent Send is a one-way message, not an implicit duplicate reply.
+- Timeout/cancellation after dispatch is `Indeterminate`; provider death is
+  `PeerGone` but does not prove absence of side effects or termination of delegated
+  sibling work. Never automatically resend accepted work.
+- Terminal Reply is immutable across cancellation, expiry and peer death. A short
+  `take` buffer retains the result; SDK errors cancel/drain their owned reservation.
+- Raw mixed event/ack protocols (including display ConfigureAck) retain their
+  explicit mailbox ordering and are not interchangeable with SDK RPC.
 
 **Do:**
 ```rust
@@ -151,11 +174,10 @@ recoverable from the buffer.
 
 ## 6. Blocking discipline & the input queue
 
-- **Service → client replies from a Driver Cell use `sys_try_send`**, not
-  blocking `sys_send`. The client waits with `sys_recv_timeout` (≈200 ms). A
-  blocking reply to a client that already timed out parks the driver in
-  `Sending{client}` forever and desyncs every later request/reply pair (§8.1).
-  A dropped reply is safe: the client treats it as a timeout and retries.
+- **Driver replies to bounded operations use `IpcReply` with the captured token**;
+  cancelled or gone clients cannot park the driver in a blocking Send. Raw mailbox
+  driver replies use `sys_try_send` with client `sys_recv_timeout`. A dropped raw
+  reply does not prove non-execution: retry only under the method's idempotency policy.
 - **Keyboard input uses blocking backpressure.** The input service sends keyboard
   events with `sys_send`, so it stops consuming upstream input until the focused
   cell re-enters `Recv`. The kernel wakes a blocked sender with an error if the
@@ -223,14 +245,14 @@ focused cell's `pending_msgs` overflowing the shared 64-slot bound mid-line
 
 A new or modified IPC path is compliant when:
 
-- [ ] Request/reply recvs are **masked to the peer tid** (§2); only genuine
-      event loops use `sys_recv(0)`.
+- [ ] RPC completion is operation-correlated; raw request/reply receives are masked
+      to the peer tid (§2); only genuine event loops use `sys_recv(0)`.
 - [ ] Payloads are **postcard-typed**, or a raw protocol claims a byte-0 value
       registered in §3 and carries an **explicit length** (§4).
 - [ ] The recv buffer is `IPC_BUF_SIZE`; replies fit the frame after the
       envelope; chunks leave headroom (§5).
-- [ ] Driver replies use `sys_try_send` + client `recv_timeout`; no
-      blocking-reply-to-maybe-gone (§6).
+- [ ] Driver replies use captured operation tokens, or raw `sys_try_send` with
+      client `recv_timeout`; no blocking-reply-to-maybe-gone (§6).
 - [ ] No silent-empty / silent-drop / silent-fallback path (§7).
 - [ ] Prefer `ostd::ipc::service_call` (encapsulates §2/§4/§7) over hand-rolled
       send+recv.
@@ -242,6 +264,13 @@ A new or modified IPC path is compliant when:
 the reason the value is safe against existing owners.
 
 **Amendment log:**
+- 2026-10-09 — **Owner-approved stranding cutover:** SDK synchronous and bounded RPC
+  use the existing operation lifecycle. Immediate Send replies are exact-context
+  completions; deferred/nested providers capture tokens, with same-provider-cell
+  generation worker authorization. No syscall IDs, wire enums, flags or API/types
+  layouts changed. Raw mailbox/event and display mixed event/ack ordering remain.
+  Runtime evidence: `docs/evidence/c2c-stranding-cutover-x86.log`; regression lane
+  `tests/integration/tests/local-service-lifecycle-x86.rs`.
 - 2026-08-01 — **D8 ruling:** §10 returns to Draft/reserved-but-unbuilt because
   its mechanisms are absent and Spec 21 forbids unbuilt work in a Ratified section.
   `0x11`/`0x12` remain reserved. The 2026-07-23 Law-1 confirmation #1 is historical;

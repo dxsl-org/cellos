@@ -74,10 +74,10 @@ The proposed operation state is `NotSubmitted → Submitted → {AuthenticatedCo
 
 `RemoteCallError` currently declares `NoService | Unreachable | Timeout | Busy | Indeterminate | AuthFailed | ProtocolError | NotSupported` but runtime returns only `NotSupported`. This table does not change that enum or claim that all outcomes are implemented. Generic async submit/await in Phase 03 is independent of first deadline-bounded synchronous remote call; `WaitCompletion` v1 accepts only `NET_RX` and `TIMER`. A `Future` that wraps blocking `sys_send` is not nonblocking IPC. Dropping an awaiter abandons waiting, not necessarily the underlying remote effect.
 
-### 2.6 Nonblocking local call lifecycle — the shipped primitive, its contract, and what a migration would cost
+### 2.6 Local RPC lifecycle — synchronous and nonblocking callers share one operation
 
-Draft, 2026-10-09. Nothing here amends Spec 17 or its ratified masked reply discipline, and
-nothing here is implemented beyond what the text cites.
+Local implementation contract, 2026-10-09; owner-approved stranding cutover recorded
+in Spec 17 §9. Remote proposals elsewhere in this document remain draft/unimplemented.
 
 The kernel already ships a bounded exact-operation call primitive. Measured on the x86_64
 `test-hooks` lane (`docs/evidence/c2c-async-lifecycle-x86.{txt,log}`): **eight outstanding calls
@@ -95,42 +95,82 @@ Reply | PeerGone | PreDispatchTimeout | Indeterminate | Cancelled }`.
 |---|---|---|
 | Submission | `submit` copies the request into kernel-owned storage and reserves the reply slot under one scheduler lock hold; the caller may drop its stack buffer immediately | No pinned caller buffer, no bare stack pointer |
 | Identity | The token binds owner tid, peer tid, peer cell **and** peer generation; the receiver reads it from the delivered message (`IpcCurrent`) | A completion cannot cross incarnations, and a stale generation cannot settle someone else's operation |
-| Terminal kinds | `Reply`, `PeerGone`, `PreDispatchTimeout`, `Indeterminate`, `Cancelled` — see the §2.4 matrix for which caller-visible outcome each maps to | A dead or vanished peer is a definite outcome, not a hang |
+| Terminal kinds | `Reply`, `PeerGone`, `PreDispatchTimeout`, `Indeterminate`, `Cancelled` | Peer death terminates waiting, but does not prove no prior side effect or no delegated sibling work; never blind-retry accepted work |
 | Reply retention | The kernel owns the reply until `take`; an undersized `take` buffer does **not** consume the result; taking a terminal releases the slot | No silent truncation, no double execution through re-taking |
 | Capacity | Bounded operations per owner and a bounded receiver queue; a full owner set or queue returns `Busy` with nothing delivered | Congestion is a refusal, never a silent drop |
 | Waiting | `wait(ticks)` is a timer-bounded park; `WaitCompletion` v1 has only `NET_RX`/`TIMER` sources | A caller polls on a timer granularity; the measured drain needed one round, not a busy loop |
 
-**The reply is per-operation, not per-sender — and that is the whole cost of migrating existing
-callers.** A bounded caller's terminal is produced by `IpcReply`: only that handler reaches
-`async_ipc::terminal`, which requires the operation to be `Dispatched`. An ordinary
-`Send`-to-sender reply never touches the operation slot. Measured directly rather than inferred: a
-peer that answered eight bounded requests with `sys_send` left one operation `Reply` (taken while it
-was still alive) and terminalised the other seven `PeerGone`.
+**Reply identity is per-operation, not per-sender.** SDK `service_call` and its
+typed/bounded variants now submit, wait and take the same kernel-owned operation
+that `PendingCall` exposes. The obsolete rendezvous deadline helper and
+`*_bounded_queued` aliases are removed. Replies carry their actual length; input
+events and unrelated death notifications remain in the ordinary mailbox.
 
-Therefore:
+Immediate legacy Send replies use the existing `async_ipc::reply_current` bridge:
+the kernel checks the currently served token, destination/caller incarnation and
+exact provider TID/cell/generation. Nested/deferred providers capture the token
+and answer through `IpcReply`; a worker in the same provider cell and generation
+may answer a genuine dispatched token. Foreign generations, duplicates and late
+cancelled replies cannot settle a successor operation.
 
-  * an **opt-in** async API requires both sides to opt in — the serving side must answer with
-    `IpcCurrent` + `IpcReply` instead of the ratified masked `sys_send(sender_tid, …)` (Spec 17 §2,
-    §6). The cross-tier fixture does exactly this and completes every operation
-    (`docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`,
-    `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`);
-  * that opt-in path **now ships** in the SDK, with the blocking API untouched:
-    `ostd::ipc::PendingCall` (submit / `try_take` / `wait_and_take` / `cancel`) and
-    `ostd::ipc::Completion` (`is_definite` / `is_uncertain`) on the caller side, and the existing
-    `ostd::ipc::{current, reply}` on the serving side. It is exercised end to end by
-    `cells/tests/bench/src/scenarios/async_lifecycle.rs`, whose markers the x86_64 lane asserts
-    (`docs/evidence/c2c-async-lifecycle-x86.{txt,log}`);
-  * making the **blocking** `LocalEndpoint::call` / `ServiceRef::call` stop stranding a caller whose
-    provider dies mid-call forces either a service-wide reply migration — a change to a *ratified*
-    IPC path, i.e. a Spec 17 §9 entry plus two Law-1 confirmations — or a kernel change that lets a
-    plain masked reply terminalise a bounded operation, which is the same class of ABI/contract
-    question. Neither is proposed or approved by this text.
+Synchronous calls retain the kernel operation expiry. Bounded calls additionally
+apply an end-to-end scheduler-tick budget, retry `Busy` only before acceptance,
+and never resend accepted work. Pre-dispatch caller expiry is `PreDispatchTimeout`;
+post-dispatch cancellation is `Indeterminate`. Every SDK error cancels/drains its
+reservation, including a reply too large for the caller's buffer.
 
-**Open proof obligations, not settled by the measurements above:** waiting on several sources in one
-park (the local drain used a timer-bounded `wait`), cancelling an already-dispatched operation, the
-two-hart publication/wake race (a completion published on one hart must be seen by a waiter parked on
-another, with no lost wakeup), and what happens to a retained reply when the caller drops its
-interest.
+`Completion::is_definite` covers Reply/pre-dispatch timeout/cancellation;
+`is_uncertain` covers PeerGone/Indeterminate. Neither helper authorizes automatic
+retry of non-idempotent work. A committed Reply survives provider death; a short
+take buffer does not consume it. Explicit VFS replies release only the exact
+matching holder lease; timeout/cancellation does not prematurely free a grant.
+
+Runtime evidence: `docs/evidence/c2c-stranding-cutover-x86.log`. The lifecycle
+fixture requires the synchronous SDK caller to return PeerGone instead of being
+reclaimed while stranded, and exercises nested VFS, duplicate quarantine,
+retained reply, short-buffer retry, slot cleanup and cancellation correlation.
+
+Additional single-hart x86 QEMU evidence:
+`docs/evidence/c2c-saturation-deadline-caller-death-x86.{txt,log}`.
+The fixture dispatches 64 accepted operations, proves quota Busy delivers nothing
+both before and after terminal replies, takes each completion once, and reuses
+the released capacity. Unmodified 3000-tick expiry returns PreDispatchTimeout for
+queued work and Indeterminate for dispatched work; expired queued bytes never
+reach the provider, and late replies cannot settle a fresh operation. A queued
+caller's actual Exit notification gates provider release: four dead-caller wires
+are absent and a fresh caller succeeds. This does not establish dispatched
+caller-death grant safety, cancellation of side effects or cross-caller fairness.
+
+Provider task replacement and raw-event coexistence are exercised in
+`docs/evidence/c2c-restart-event-coexistence-x86.{txt,log}`. The replacement
+refuses the old retained token, replies to its own new operation, and leaves
+the old PeerGone result intact. A third Cell's raw message is received while
+RPC stays pending; the eventual correlated reply does not enter the mailbox.
+`PendingCall::wait_and_take` measures timed rounds in scheduler ticks and
+yields on an unrelated retained terminal, rather than exhausting rounds on
+immediate `IpcWait` returns. It never consumes another call's result.
+This is not registry rebind, hotswap, hardware input or a multi-source wait.
+
+Controlled two-caller progress is exercised in
+`docs/evidence/c2c-multi-caller-progress-x86.{txt,log}`. A holds 64 dispatched
+pending operations and cannot admit another; B receives its own exact Reply
+from the same provider before A can drain. A's terminal results remain charged
+until take, all 64 are correlated/drained once, and B's second call succeeds.
+This proves quota isolation and bounded progress under the fixture's gates,
+not sustained competing-producer or full-peer-queue fairness.
+
+Finite competing producers under peer-mailbox pressure are exercised in
+`docs/evidence/c2c-peer-pressure-x86.{txt,log}`. Saturating the provider's
+64-slot mailbox causes an independent caller's submit to return Busy before
+the provider wakes. Once draining begins, producers A (128 calls) and B (64
+calls) pump calls concurrently without gating; all 192 completions correlate
+with exact sender and sequence, and the mailbox is empty at exit. This proves
+bounded progress and refusal backpressure in a finite workload, not
+starvation freedom under unbounded competing monopolization.
+
+**Separate proof obligations:** multi-source completion waiting, deterministic
+two-hart publication/wake proof and the full fairness/restart matrix remain open.
+This cutover does not expand `WaitCompletion` sources or claim remote RPC readiness.
 
 ### 2.5 Liveness and safety boundaries
 
@@ -185,6 +225,12 @@ Local death may be confirmed against kernel-owned live generation. A remote beac
 
 ## 7. Revision record
 
+- **v3.3 (2026-10-09, local implementation amendment; remote draft unchanged):**
+  §2.6 records the owner-approved stranding cutover and Spec 17 §9 amendment.
+  Synchronous SDK RPC now uses bounded operation state. The immediate Send bridge
+  already present in current source supersedes v3.2's exclusive-IpcReply claim;
+  deferred/nested services retain explicit tokens. No exported syscall or wire
+  layout changed. PeerGone is not a no-side-effects or automatic-retry guarantee.
 - **v3.2 (2026-10-09, draft amendment; no status change):** adds §2.6, the nonblocking local call
   lifecycle as the shipped primitive actually implements it, and **corrects a v3.1 clause that read as
   though moving local calls onto that primitive were a plain SDK change**. It is not: a bounded

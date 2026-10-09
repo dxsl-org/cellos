@@ -55,27 +55,29 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
         // envelope), so requests arrive as RawMessage. Accept Message too for
         // envelope-wrapped senders — the dispatch payload layout is identical.
         AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
-            // Replies use NON-blocking try_send: the net service waits with a
-            // 200 ms recv timeout — if it already gave up, a blocking send would
-            // park this cell in Sending{net} forever, desyncing every later
-            // request/reply pair (net then blocks sending to us → watchdog kills
-            // net → restart loop). Dropping a missed reply is safe: net treats
-            // it as a timeout and retries (DHCP/TCP are loss-tolerant).
+            let operation = ostd::ipc::current();
+            let reply = |bytes: &[u8]| {
+                if let Some(operation) = operation {
+                    let _ = ostd::ipc::reply(operation, bytes);
+                } else {
+                    let _ = sys_try_send(sender_tid, bytes);
+                }
+            };
             let mut out_buf = [0u8; REPLY_BUF];
             if let Some(dev) = STATE.lock().as_mut() {
                 match handle(dev, data.as_ref(), &mut out_buf) {
                     NicReply::Status(code) => {
-                        let _ = sys_try_send(sender_tid, &[code]);
+                        reply(&[code]);
                     }
                     NicReply::Frame { len, buf } => {
-                        let _ = sys_try_send(sender_tid, &buf[..2 + len]);
+                        reply(&buf[..2 + len]);
                     }
                     NicReply::Mac(mac) => {
-                        let _ = sys_try_send(sender_tid, &mac);
+                        reply(&mac);
                     }
                 }
             } else {
-                let _ = sys_try_send(sender_tid, &[1u8]);
+                reply(&[1u8]);
             }
         }
 

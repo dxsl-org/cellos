@@ -110,12 +110,8 @@ pub fn transmit(connection: &mut Connection, frame: &[u8]) -> bool {
     let request = NetRequest::L2Send { data: frame };
     let mut send_buffer = [0u8; IPC_BUF_SIZE];
     let mut response_buffer = [0u8; IPC_BUF_SIZE];
-    // Queued admission: the Net Cell idles in a `NET_RX` completion wait and
-    // runs its own loop between turns, so the rendezvous offer that
-    // `service_call_typed_bounded` retries is refused for the whole deadline
-    // (`IpcError::Send`, "send deadline" on the board) even though the service
-    // is healthy and drains its mailbox every turn.
-    let result = ostd::ipc::service_call_typed_bounded_queued(
+    // One accepted kernel operation owns both admission and the exact reply.
+    let result = ostd::ipc::service_call_typed_bounded(
         active_tid,
         &request,
         &mut send_buffer,
@@ -171,7 +167,7 @@ pub fn transmit(connection: &mut Connection, frame: &[u8]) -> bool {
         }
         connection.mark_unavailable(
             active_tid,
-            matches!(&result, Err(ostd::ipc::IpcError::Recv)),
+            matches!(&result, Err(ostd::ipc::IpcError::Recv | ostd::ipc::IpcError::PeerGone | ostd::ipc::IpcError::Indeterminate)),
         );
     }
     ok
@@ -199,6 +195,11 @@ fn l2_status(result: &Result<NetResponse<'_>, ostd::ipc::IpcError>) -> alloc::st
         Err(IpcError::Decode) => "decode error".into(),
         Err(IpcError::InvalidOperation) => "invalid operation".into(),
         Err(IpcError::BufferTooSmall) => "reply buffer too small".into(),
+        Err(IpcError::Busy) => "operation capacity busy".into(),
+        Err(IpcError::PeerGone) => "peer exited; effects may have occurred".into(),
+        Err(IpcError::PreDispatchTimeout) => "deadline before dispatch".into(),
+        Err(IpcError::Indeterminate) => "deadline after dispatch; effects unknown".into(),
+        Err(IpcError::Cancelled) => "cancelled before dispatch".into(),
     }
 }
 
@@ -259,9 +260,7 @@ pub fn try_receive(connection: &mut Connection) -> Option<Box<[u8]>> {
     };
     let mut send_buffer = [0u8; IPC_BUF_SIZE];
     let mut response_buffer = [0u8; IPC_BUF_SIZE];
-    // Queued admission — see `transmit`: the rendezvous offer is refused while
-    // the Net Cell is not parked in a matching `Recv`, which is its normal state.
-    let result = ostd::ipc::service_call_typed_bounded_queued(
+    let result = ostd::ipc::service_call_typed_bounded(
         active_tid,
         &request,
         &mut send_buffer,
@@ -301,7 +300,7 @@ pub fn try_receive(connection: &mut Connection) -> Option<Box<[u8]>> {
         Ok(NetResponse::Data(_)) | Ok(NetResponse::Ok) => None,
         error => {
             connection
-                .mark_unavailable(active_tid, matches!(error, Err(ostd::ipc::IpcError::Recv)));
+                .mark_unavailable(active_tid, matches!(error, Err(ostd::ipc::IpcError::Recv | ostd::ipc::IpcError::PeerGone | ostd::ipc::IpcError::Indeterminate)));
             None
         }
     }

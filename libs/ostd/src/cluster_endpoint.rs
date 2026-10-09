@@ -135,9 +135,14 @@ impl<M: CellMethod> LocalEndpoint<M> {
             Err(ipc::IpcError::Decode)
             | Err(ipc::IpcError::InvalidOperation)
             | Err(ipc::IpcError::BufferTooSmall) => Err(ViError::IO),
+            Err(ipc::IpcError::Busy)
+            | Err(ipc::IpcError::PreDispatchTimeout)
+            | Err(ipc::IpcError::Indeterminate)
+            | Err(ipc::IpcError::Cancelled) => Err(ViError::IO),
             Err(ipc::IpcError::Send)
             | Err(ipc::IpcError::Recv)
-            | Err(ipc::IpcError::WrongSender) => match self.binding {
+            | Err(ipc::IpcError::WrongSender)
+            | Err(ipc::IpcError::PeerGone) => match self.binding {
                 // A tid-only endpoint knows no provider identity, so it cannot tell a
                 // replaced provider from a failed one and must not guess.
                 None => Err(ViError::IO),

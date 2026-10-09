@@ -26,7 +26,7 @@ fn close_partial(vfs_tid: usize, root: api::dir_handles::ViDirHandle, poisoned: 
         &mut response_buffer,
         VFS_CALL_TIMEOUT_TICKS,
     );
-    *poisoned |= matches!(result, Err(ostd::ipc::IpcError::Recv));
+    *poisoned |= matches!(result, Err(ostd::ipc::IpcError::Recv | ostd::ipc::IpcError::PeerGone | ostd::ipc::IpcError::Indeterminate));
 }
 
 /// Open the policy-owned guest disk through one resolved VFS generation.
@@ -55,7 +55,7 @@ pub fn open_for(vfs_tid: usize, poisoned: &mut bool) -> Option<PersistentDisk> {
                         $step,
                         error
                     ));
-                    let uncertain = matches!(error, ostd::ipc::IpcError::Recv);
+                    let uncertain = matches!(error, ostd::ipc::IpcError::Recv | ostd::ipc::IpcError::PeerGone | ostd::ipc::IpcError::Indeterminate);
                     *poisoned |= uncertain;
                     if !uncertain {
                         if let Some(root) = cleanup_root {

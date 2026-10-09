@@ -18,8 +18,8 @@ fn poll_pending(start: Option<u64>, attempts: usize) -> bool {
     }
 }
 
-// NetRef resolves the live provider and uses service_call_typed -> recv_from,
-// which rejects a death notification or input event from another sender.
+// NetRef resolves the live provider and uses an operation-correlated RPC;
+// queued input and unrelated death notifications are not reply completions.
 fn call<'a>(req: &NetRequest<'_>, reply: &'a mut [u8; IPC_BUF_SIZE]) -> Option<NetResponse<'a>> {
     NetRef::new().call(req, reply).ok()
 }

@@ -137,6 +137,7 @@ pub fn main() {
         // and charged its quota to a ledger row nothing owned.
         match ostd::syscall::sys_recv_attested(0, &mut buf) {
             ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => {
+                let operation = ostd::ipc::current();
                 let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buf)
                 else {
                     let cancellations = GLOBAL_VFS
@@ -163,7 +164,11 @@ pub fn main() {
                     let len = api::ipc::encode(&api::ipc::VfsResponse::Err(3), &mut encoded)
                         .map(|bytes| bytes.len())
                         .unwrap_or(0);
-                    ostd::syscall::sys_send(sender, &encoded[..len]);
+                    if let Some(operation) = operation {
+                        let _ = ostd::ipc::reply(operation, &encoded[..len]);
+                    } else {
+                        ostd::syscall::sys_send(sender, &encoded[..len]);
+                    }
                     buf = [0u8; api::ipc::IPC_BUF_SIZE];
                     continue;
                 };
@@ -185,7 +190,11 @@ pub fn main() {
                     ostd::syscall::sys_cancel_cell_owner_watch(cancelled);
                 }
                 // `GLOBAL_VFS` is unlocked for every kernel call and send.
-                ostd::syscall::sys_send(sender, &encoded[..encoded_len]);
+                if let Some(operation) = operation {
+                    let _ = ostd::ipc::reply(operation, &encoded[..encoded_len]);
+                } else {
+                    ostd::syscall::sys_send(sender, &encoded[..encoded_len]);
+                }
                 buf = [0u8; api::ipc::IPC_BUF_SIZE];
             }
             _ => ostd::task::yield_now(),

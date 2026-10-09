@@ -22,6 +22,7 @@ pub struct RequestKey {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorkerRequest {
     pub key: RequestKey,
+    pub operation: Option<usize>,
     pub client_sequence: u64,
     pub payload_len: usize,
     pub payload: [u8; MAX_REQUEST_BODY],
@@ -31,6 +32,7 @@ pub struct WorkerRequest {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueuedReply {
     caller_tid: usize,
+    pub operation: Option<usize>,
     pub request_id: u64,
     pub client_sequence: u64,
     pub status: ReplyStatus,
@@ -93,6 +95,7 @@ impl WorkerRequest {
                 cell_id,
                 generation,
             },
+            operation: None,
             client_sequence,
             payload_len: len,
             payload: body,
@@ -115,6 +118,7 @@ impl QueuedReply {
         body[..len].copy_from_slice(&payload[..len]);
         Self {
             caller_tid,
+            operation: None,
             request_id,
             client_sequence,
             status,

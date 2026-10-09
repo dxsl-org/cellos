@@ -17,6 +17,7 @@ pub fn run(mut guest: GuestSession) -> ! {
             SyscallResult::Ok(sender) if sender > 0 => sender,
             _ => continue,
         };
+        let operation = ostd::ipc::current();
         let peer = CallerIdentity::from_recv_buf(&buffer).map(|identity| PeerIdentity {
             sender_tid: identity.sender_tid as usize,
             cell_id: identity.cell_id,
@@ -30,7 +31,11 @@ pub fn run(mut guest: GuestSession) -> ! {
             &buffer[..DEVELOPMENT_SILO_FRAME_LEN],
         );
         if let Some(response) = response {
-            let _ = sys_try_send(sender, &response.encode());
+            if let Some(operation) = operation {
+                let _ = ostd::ipc::reply(operation, &response.encode());
+            } else {
+                let _ = sys_try_send(sender, &response.encode());
+            }
         }
     }
 }

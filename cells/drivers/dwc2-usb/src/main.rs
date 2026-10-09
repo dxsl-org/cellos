@@ -515,7 +515,7 @@ fn cell_main() {
         match sys_recv_timeout(0, &mut in_buf, NIC_RECV_TICKS) {
             SyscallResult::Ok(sender_tid) if sender_tid > 0 => {
                 if sender_tid == lan_worker_tid {
-                    if let Some((client_tid, request)) = lan_ipc::decode_request(&in_buf) {
+                    if let Some((client_tid, operation, request)) = lan_ipc::decode_request(&in_buf) {
                         // Reply straight to the client. The request still only
                         // reaches `handle` after the front-end has decoded it,
                         // so the envelope check is intact, and a reply routed
@@ -530,7 +530,7 @@ fn cell_main() {
                                     let counter = if code == 0 { &NIC_TX_OK } else { &NIC_TX_FAIL };
                                     counter.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
                                 }
-                                let _ = sys_send(client_tid, &[code]);
+                                reply_nic(client_tid, operation, &[code]);
                             }
                             NicReply::Frame { len, buf } => {
                                 // A frame read out of the chip, or an empty read
@@ -540,10 +540,10 @@ fn cell_main() {
                                     let counter = if len > 0 { &NIC_RX_FRAMES } else { &NIC_RX_EMPTY };
                                     counter.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
                                 }
-                                let _ = sys_send(client_tid, &buf[..2 + len]);
+                                reply_nic(client_tid, operation, &buf[..2 + len]);
                             }
                             NicReply::Mac(mac) => {
-                                let _ = sys_send(client_tid, &mac);
+                                reply_nic(client_tid, operation, &mac);
                             }
                         }
                     } else if in_buf.iter().all(|&byte| byte == 0) {
@@ -553,9 +553,9 @@ fn cell_main() {
                         let _ = sys_force_exit(lan_worker_tid);
                         lan_worker_tid = spawn_lan_worker();
                         lan_attach_pending = lan_worker_tid != 0;
-                        // A replacement front-end only understands the attach
-                        // frame first, so a deferred request cannot be handed to
-                        // it: the client's retry is what gets served.
+                        // A replacement front-end first requires attach. Refuse
+                        // any retained exact operation rather than forwarding
+                        // a request that the replacement would discard.
                         lan_deferred.clear();
                     }
                     // A NIC reply must not skip HID polling on this iteration.
@@ -594,6 +594,7 @@ fn cell_main() {
                         let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
                         if let Some(len) = lan_ipc::encode_request(
                             sender_tid,
+                            ostd::ipc::current(),
                             &in_buf[..request_len],
                             &mut request,
                         ) {
@@ -741,12 +742,10 @@ fn spawn_lan_worker() -> usize {
 /// window used to be dropped: the board printed
 /// `[dwc2-usb] NIC request not forwarded to the front-end` and, immediately
 /// after it, the net service's `NIC driver reply timeout; frame not
-/// acknowledged`, so the frame the guest's ARP needed never left this cell. The
-/// NIC protocol keeps one request outstanding per client, so one slot is enough;
-/// the driver re-offers it every turn, exactly like the attach handshake above,
-/// and a newer request replaces a deferred older one — that client has already
-/// given up, and the net service keeps its frame at the head of its TX queue for
-/// the retry anyway.
+/// acknowledged`, so the frame the guest's ARP needed never left this cell.
+/// One deferred slot remains bounded. Replacing a bounded request explicitly
+/// refuses its exact operation before dispatch; it never redirects a later
+/// response to another operation from the same client.
 struct DeferredLan {
     bytes: [u8; lan_ipc::MAX_REQUEST],
     len: usize,
@@ -766,6 +765,7 @@ impl DeferredLan {
         if request.len() > self.bytes.len() {
             return false;
         }
+        self.clear();
         self.bytes[..request.len()].copy_from_slice(request);
         self.len = request.len();
         true
@@ -785,7 +785,20 @@ impl DeferredLan {
     }
 
     fn clear(&mut self) {
+        if let Some((_, Some(operation), _)) =
+            lan_ipc::decode_request(&self.bytes[..self.len])
+        {
+            let _ = ostd::ipc::reply(operation, &[STATUS_NOT_READY]);
+        }
         self.len = 0;
+    }
+}
+
+fn reply_nic(client: usize, operation: Option<usize>, bytes: &[u8]) {
+    if let Some(operation) = operation {
+        let _ = ostd::ipc::reply(operation, bytes);
+    } else {
+        let _ = sys_send(client, bytes);
     }
 }
 

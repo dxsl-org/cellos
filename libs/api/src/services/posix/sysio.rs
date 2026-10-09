@@ -59,8 +59,33 @@ pub(super) unsafe fn raw_syscall(
     );
     ret
 }
+// x86_64 ABI: RAX=syscall_nr, RDI=a0, RSI=a1, RDX=a2, R10=a3; ret in RAX.
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+pub(super) unsafe fn raw_syscall(
+    id: ViSyscall,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+) -> isize {
+    let mut ret: isize;
+    core::arch::asm!(
+        "syscall",
+        inlateout("rax") id as usize => ret,
+        in("rdi") a0,
+        in("rsi") a1,
+        in("rdx") a2,
+        in("r10") a3,
+        lateout("rcx") _,
+        lateout("r11") _,
+        options(nostack, preserves_flags)
+    );
+    ret
+}
 
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
+
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
 pub(super) unsafe fn raw_syscall(
     _id: ViSyscall,
     _a0: usize,

@@ -24,11 +24,11 @@ fn enforces_per_caller_window_and_first_overflow_busy() {
     let mut state = BrokerState::new();
     for seq in 0..PER_CALLER_WINDOW as u64 {
         assert_eq!(
-            state.handle_ingress(9, Some(identity(1, 2, 9)), Ok(parsed(seq, b"x"))),
+            state.handle_ingress(9, Some(identity(1, 2, 9)), Ok(parsed(seq, b"x")), None),
             IngressDecision::Accepted
         );
     }
-    let overflow = state.handle_ingress(9, Some(identity(1, 2, 9)), Ok(parsed(99, b"x")));
+    let overflow = state.handle_ingress(9, Some(identity(1, 2, 9)), Ok(parsed(99, b"x")), None);
     match overflow {
         IngressDecision::Immediate(reply) => assert_eq!(reply.status, ReplyStatus::Busy),
         _ => panic!("expected busy"),
@@ -45,11 +45,12 @@ fn full_request_queue_returns_busy_before_rejecting_otherwise_valid_calls() {
                 tid,
                 Some(identity(tid as u64, 1, tid as u64)),
                 Ok(parsed(tid as u64, b"x")),
+                None,
             ),
             IngressDecision::Accepted
         );
     }
-    let overflow = state.handle_ingress(999, Some(identity(999, 1, 999)), Ok(parsed(999, b"x")));
+    let overflow = state.handle_ingress(999, Some(identity(999, 1, 999)), Ok(parsed(999, b"x")), None);
     match overflow {
         IngressDecision::Immediate(reply) => assert_eq!(reply.status, ReplyStatus::Busy),
         _ => panic!("expected busy"),
@@ -60,11 +61,11 @@ fn full_request_queue_returns_busy_before_rejecting_otherwise_valid_calls() {
 #[test]
 fn rejects_sender_tid_mismatch_and_generation_zero() {
     let mut state = BrokerState::new();
-    match state.handle_ingress(5, Some(identity(1, 1, 99)), Ok(parsed(1, b"x"))) {
+    match state.handle_ingress(5, Some(identity(1, 1, 99)), Ok(parsed(1, b"x")), None) {
         IngressDecision::Immediate(reply) => assert_eq!(reply.status, ReplyStatus::Indeterminate),
         _ => panic!("expected indeterminate"),
     }
-    match state.handle_ingress(5, Some(identity(1, 0, 5)), Ok(parsed(2, b"x"))) {
+    match state.handle_ingress(5, Some(identity(1, 0, 5)), Ok(parsed(2, b"x")), None) {
         IngressDecision::Immediate(reply) => assert_eq!(reply.status, ReplyStatus::Indeterminate),
         _ => panic!("expected indeterminate"),
     }
@@ -79,6 +80,7 @@ fn fairness_prefers_other_caller_before_same_caller_tail() {
             tid,
             Some(identity(cell, 1, tid as u64)),
             Ok(parsed(seq, b"a")),
+            None,
         );
     }
     let first = state.take_next_request().unwrap();
@@ -89,7 +91,7 @@ fn fairness_prefers_other_caller_before_same_caller_tail() {
 #[test]
 fn completion_rejects_stale_duplicate_and_tracks_counters() {
     let mut state = BrokerState::new();
-    let _ = state.handle_ingress(3, Some(identity(7, 8, 3)), Ok(parsed(4, b"zz")));
+    let _ = state.handle_ingress(3, Some(identity(7, 8, 3)), Ok(parsed(4, b"zz")), None);
     let request = state.take_next_request().unwrap();
     let reply = QueuedReply::success(&request);
     state
@@ -106,7 +108,7 @@ fn completion_rejects_stale_duplicate_and_tracks_counters() {
 #[test]
 fn monotonic_ids_reject_wrap_into_stale_history() {
     let mut state = BrokerState::new();
-    state.handle_ingress(4, Some(identity(9, 1, 4)), Ok(parsed(1, b"a")));
+    state.handle_ingress(4, Some(identity(9, 1, 4)), Ok(parsed(1, b"a")), None);
     let req = state.take_next_request().unwrap();
     state
         .complete_request(&req, QueuedReply::success(&req))
@@ -124,6 +126,7 @@ fn busy_requeue_stays_behind_replies_present_at_turn_start() {
                 tid,
                 Some(identity(tid as u64, 1, tid as u64)),
                 Ok(parsed(seq, b"x")),
+                None,
             ),
             IngressDecision::Accepted
         );
@@ -151,4 +154,26 @@ fn reply_retry_state_counts_busy_and_requeues() {
     assert_eq!(state.reply_len(), 1);
     state.note_try_send_busy();
     assert_eq!(state.counters.try_send_busy, 1);
+}
+
+#[test]
+fn deferred_same_sender_replies_retain_distinct_operation_tokens() {
+    let mut state = BrokerState::new();
+    for (sequence, operation) in [(1, 101), (2, 102)] {
+        assert_eq!(
+            state.handle_ingress(
+                9,
+                Some(identity(1, 2, 9)),
+                Ok(parsed(sequence, b"x")),
+                Some(operation),
+            ),
+            IngressDecision::Accepted
+        );
+    }
+    let first = state.take_next_request().unwrap();
+    let second = state.take_next_request().unwrap();
+    state.complete_request(&second, QueuedReply::success(&second)).unwrap();
+    state.complete_request(&first, QueuedReply::success(&first)).unwrap();
+    assert_eq!(state.take_next_reply().unwrap().operation, Some(102));
+    assert_eq!(state.take_next_reply().unwrap().operation, Some(101));
 }

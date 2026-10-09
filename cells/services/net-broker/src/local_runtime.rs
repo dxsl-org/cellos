@@ -161,6 +161,7 @@ pub fn receive_once() {
     let mut buf = [0u8; IPC_BUF_SIZE];
     match sys_recv_attested(0, &mut buf) {
         SyscallResult::Ok(sender) if sender > 0 => {
+            let operation = ostd::ipc::current();
             let identity = api::caller_identity::CallerIdentity::from_recv_buf(&buf);
             let parsed = parse_request(&buf);
             #[cfg(feature = "restart-oracle")]
@@ -169,9 +170,10 @@ pub fn receive_once() {
             }
             let immediate = {
                 let mut state = lock_runtime_state(false);
-                state.broker.handle_ingress(sender, identity, parsed)
+                state.broker.handle_ingress(sender, identity, parsed, operation)
             };
-            if let IngressDecision::Immediate(reply) = immediate {
+            if let IngressDecision::Immediate(mut reply) = immediate {
+                reply.operation = operation;
                 send_or_queue(reply, false);
             }
         }
@@ -257,6 +259,11 @@ fn try_send_reply(reply: &QueuedReply) -> TrySendResult {
     let mut buf = [0u8; IPC_BUF_SIZE];
     let len = reply.encode(&mut buf);
     let _ = bench_oracle::stamp_timed_echo_reply_frame(&mut buf[..len], sys_get_time());
+    if let Some(operation) = reply.operation {
+        // A terminal/cancelled operation is retired, never retried by sender.
+        let _ = ostd::ipc::reply(operation, &buf[..len]);
+        return TrySendResult::Delivered;
+    }
     match sys_try_send(reply.caller_tid(), &buf[..len]) {
         SyscallResult::Ok(value) if value == usize::MAX => TrySendResult::Busy,
         SyscallResult::Ok(_) => TrySendResult::Delivered,

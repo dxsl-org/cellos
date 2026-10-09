@@ -45,15 +45,18 @@ impl AiTransport for OstdTransport {
         let tid = self.svc.resolve().ok_or(AiClientError::NoService)?;
         let mut send = [0u8; AI_IPC_BUF_SIZE];
         match service_call(tid, request, &mut send, reply) {
-            // The receive buffer arrives without a length (the syscall reports the sender), so the
-            // reply is decoded tolerantly — the same convention every other typed client uses.
             Ok(raw) => ai_proto::decode(raw).map_err(|_| AiClientError::Protocol),
             Err(IpcError::Encode) | Err(IpcError::Decode) => Err(AiClientError::Protocol),
             Err(IpcError::Send)
             | Err(IpcError::Recv)
             | Err(IpcError::WrongSender)
             | Err(IpcError::InvalidOperation)
-            | Err(IpcError::BufferTooSmall) => {
+            | Err(IpcError::BufferTooSmall)
+            | Err(IpcError::Busy)
+            | Err(IpcError::PeerGone)
+            | Err(IpcError::PreDispatchTimeout)
+            | Err(IpcError::Indeterminate)
+            | Err(IpcError::Cancelled) => {
                 // The provider may have died or restarted under a new tid.
                 self.svc.invalidate();
                 Err(AiClientError::Transport)

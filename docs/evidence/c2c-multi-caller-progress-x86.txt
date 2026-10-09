@@ -1,0 +1,35 @@
+C2C Phase03 controlled two-caller bounded progress (2026-10-09)
+
+Scope: new fixture-only witness, no production kernel/SDK/ABI changes. This proves owner quota isolation and exact completion correlation in one controlled two-caller window. It is NOT a general queue/scheduler fairness proof, sustained competing-producer benchmark, hostile monopolization test or SMP result.
+
+Scenario:
+- Coordinator B starts provider and child caller A using bounded raw control handshakes.
+- A submits64 operations. Provider receives each and captures its explicit token before acknowledging. A reaches owner quota, overflow submit returns Busy, and all64 exact call handles still report Pending.
+- A signals coordinator and blocks behind its raw release gate. Provider has not replied to A. B submits to same provider and takes its own exact Reply sequence64 while A retains all64 reservations.
+- Only after B's successful take and provider acknowledgement does B release A and allow provider to reply to its captured64 tokens.
+- A's second overflow is Busy even with64 terminal replies untaken. A takes each exact two-byte Reply sequence0..63 once; second take rejected for every retired token.
+- B gets another fresh exact Reply sequence65 after A drain. Provider checks distinct B tokens and sender identity, and checks mailbox exclusion for both refused A requests. All raw control gates have500-tick watchdogs; reply waits use existing bounded helper.
+
+Observed exact marker:
+[local-lifecycle] MULTI-CALLER=OK a_held=64 a_busy=2 a_drained=64 b_replies=2 wrong_correlation=0 busy_delivered=0
+
+Verification:
+- bash scripts/build-x86_64-c2c-lifecycle-ci.sh: PASS; F1/F5 signing PASS.
+- CI=1 cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test local-service-lifecycle-x86: 2 passed, 36.01 seconds.
+- bash scripts/check-lookupservicebound-law1-digests.sh: PASS.
+
+Independent serial smoke: QEMU q35, qemu64,+pdpe1gb, 256MiB, nographic, CD-ROM boot d, no-reboot, monitor none, ephemeral localhost TCP serial. Exact shell prompt plus0.5s settling before every command; fresh prompt after every command. QEMU stopped in finally, exit0.
+ISO: build/vicell-x86-c2c-lifecycle.iso
+ISO sha256: 812c0e5e0d8219369ef206c77f463754ea8a9079dc8a75dc0554b99ea5160977
+Kernel: build/x86-c2c-lifecycle-iso-root/boot/kernel.elf
+Kernel sha256: 7593a6a19a59e370ab694873e84e698adbe982472c1bcef2a99060e479359d3b
+Raw serial: c2c-multi-caller-progress-x86.log (14635 bytes)
+
+Actual commands:
+- vwrite /tmp/c2c-multi.txt MULTI_CALLER_SERIAL_OK
+- vcat /tmp/c2c-multi.txt returned MULTI_CALLER_SERIAL_OK.
+- bench local-service-lifecycle PASS after32.618 seconds; includes exact multi-caller marker, earlier replacement/raw-event/saturation/deadline/caller-death and stranding regressions.
+- bench async-lifecycle PASS: completed8 lost0 wrong_seq0; dying-peer terminal4 PeerGone4 unterminal0 lost0.
+No scenario FAIL. Session37.829 seconds.
+
+Still open: full multi-caller fairness with sustained admission and queue pressure, registry rebind/hotswap matrix, hardware concurrent input, abandoned-caller grant lifetime, deterministic two-hart wake, multi-source waiting, physical Intel qualification and remote RPC. A's queued wires are intentionally drained by handshakes before B admission: no hostile full-peer-mailbox fairness inference is authorized.

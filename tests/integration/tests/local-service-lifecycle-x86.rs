@@ -2,24 +2,11 @@
 //!
 //! Boots the isolated witness image built by
 //! `scripts/build-x86_64-c2c-lifecycle-ci.sh` and runs
-//! `bench local-service-lifecycle`, which drives two legs against a provider task
-//! that dies without replying:
-//!
-//! * **synchronous** — `ostd::ipc::service_call_typed` (the path
-//!   `LocalEndpoint::call` / `ServiceRef::call` use): the caller sends (a
-//!   handoff), then parks in a sender-masked `Recv`. `exit_task` deliberately does
-//!   not wake a plain reply waiter that has already left `Sending`
-//!   (`kernel/src/task/scheduler.rs:1279-1284`), so `SYNC-RESULT=RETURNED` must
-//!   **not** appear;
-//! * **asynchronous** — the bounded exact-operation path
-//!   (`ostd::ipc::submit`/`wait`/`take`), whose peer binding is
-//!   `(cell_id, cell_generation)` and whose `peer_died` transition is terminal, so
-//!   `ASYNC-TERMINAL=PEER-GONE` must appear.
-//!
-//! The two legs in one run are the point: the same kernel, the same dead peer,
-//! two different observables. This is behaviour evidence for
-//! `docs/decisions/0023-local-service-generation-binding.md`; it asserts current
-//! behaviour and fixes nothing.
+//! `bench local-service-lifecycle`. Both the synchronous SDK and asynchronous
+//! operation path must terminate with PeerGone when a provider consumes a request
+//! and exits without replying. The same boot also exercises named VFS resolution
+//! and a typed request/reply through the SDK, full64 saturation, real deadline
+//! expiry and removal of requests belonging to an exited caller.
 //!
 //! Skips gracefully when the ISO or QEMU is absent (hard-fails under `CI=`).
 
@@ -27,8 +14,10 @@ use std::path::PathBuf;
 use vicell_integration_tests::{qemu_binary_x86, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 45;
-/// The async leg's own budget is 10 × 2 s, plus settling yields for two spawns.
+/// Existing async-lifecycle budget is unchanged.
 const SCENARIO_TIMEOUT: u64 = 90;
+/// Only the local witness adds the real 3000-tick (~30 s) expiry window.
+const LOCAL_SCENARIO_TIMEOUT: u64 = SCENARIO_TIMEOUT + 45;
 
 const START: &str = "[local-lifecycle] START";
 /// Leg 0: the additive `LookupServiceBound = 429` resolved a real service.
@@ -37,8 +26,8 @@ const VFS_BINDING_PREFIX: &str = "[local-lifecycle] VFS-BINDING";
 const ABSENT_BINDING: &str = "[local-lifecycle] ABSENT-BINDING";
 const PROVIDER_READY: &str = "[local-lifecycle] provider-ready";
 const SYNC_CALLER_START: &str = "[local-lifecycle] sync-caller-start";
-/// Emitted only if the kernel ever wakes the synchronous caller. Absence is the finding.
-const SYNC_RETURNED: &str = "[local-lifecycle] SYNC-RESULT=RETURNED";
+/// The SDK must return a typed failure, not remain stranded or decode a reply.
+const SYNC_RETURNED: &str = "[local-lifecycle] SYNC-RESULT=RETURNED error=PeerGone";
 const SYNC_LEG_DONE: &str = "[local-lifecycle] SYNC-LEG=complete";
 const ASYNC_PEER_GONE: &str = "[local-lifecycle] ASYNC-TERMINAL=PEER-GONE";
 /// Leg S: the SDK's caching handle resolved the same binding the raw opcode reports.
@@ -90,7 +79,7 @@ fn prerequisites_ok() -> bool {
 }
 
 #[test]
-fn x86_dead_provider_strands_sync_caller_but_bounds_async_call() {
+fn x86_dead_provider_terminates_sync_and_async_calls() {
     if !prerequisites_ok() {
         return;
     }
@@ -104,17 +93,19 @@ fn x86_dead_provider_strands_sync_caller_but_bounds_async_call() {
 
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("bench local-service-lifecycle");
-    qemu.wait_for(PASS, SCENARIO_TIMEOUT).unwrap_or_else(|e| {
+    qemu.wait_for(PASS, LOCAL_SCENARIO_TIMEOUT).unwrap_or_else(|e| {
         panic!(
             "lifecycle witness did not complete: {e}\n--- output ---\n{}",
             qemu.dump()
         )
     });
 
+    qemu.wait_for(SYNC_RETURNED, LOCAL_SCENARIO_TIMEOUT).unwrap_or_else(|e| {
+        panic!("synchronous RPC stranded: {e}\n--- output ---\n{}", qemu.dump())
+    });
     let output = qemu.dump();
 
-    // The scenario must have actually run both legs: a missing provider anchor
-    // would let the negative assertion below pass for the wrong reason.
+    // Every behavior is witnessed in the guest; no source-shape assertions.
     for anchor in [
         START,
         VFS_BINDING_PREFIX,
@@ -126,6 +117,21 @@ fn x86_dead_provider_strands_sync_caller_but_bounds_async_call() {
         PROVIDER_READY,
         SYNC_CALLER_START,
         SYNC_LEG_DONE,
+        "[local-lifecycle] NESTED-REPLY=OK retained=true duplicate_quarantined=true",
+        "[local-lifecycle] SDK-SLOT-CLEANUP=OK errors=70 reply_len=2",
+        "[local-lifecycle] CANCEL-LATE-REPLY=OK outcome=Indeterminate next_seq=2",
+        "[local-lifecycle] SATURATION-PROVIDER=OK received=65 busy_delivered=0",
+        "[local-lifecycle] SATURATION=OK accepted=64 busy_delivered=0 terminal_charged=64 drained=64 reuse=Reply",
+        "[local-lifecycle] DEADLINE-PROVIDER=OK queued_delivered=0 late_reply=refused",
+        "[local-lifecycle] DEADLINE=OK queued=PreDispatchTimeout dispatched=Indeterminate elapsed_ticks>=3000 queued_delivered=0 reuse=Reply",
+        "[local-lifecycle] CALLER-DEATH-CHILD=EXITING queued=4",
+        "[local-lifecycle] CALLER-DEATH-PROVIDER=OK dead_delivered=0 fresh=Reply",
+        "[local-lifecycle] CALLER-DEATH=OK queued=4 exit_observed=true dead_delivered=0 fresh=Reply",
+        "[local-lifecycle] RESTART=OK old=PeerGone replacement=Reply old_token=refused dead_submit=PeerGone",
+        "[local-lifecycle] EVENT-COEXISTENCE=OK raw_event=received rpc_pending=true reply=correlated raw_reply_absent=true",
+        "[local-lifecycle] MULTI-CALLER=OK a_held=64 a_busy=2 a_drained=64 b_replies=2 wrong_correlation=0 busy_delivered=0",
+        "[local-lifecycle] PRESSURE-PROVIDER=OK a=128 b=64 duplicate=0 extra_delivery=0",
+        "[local-lifecycle] PEER-PRESSURE=OK a=128 b=64 completions=192 initial_peer_busy=true duplicate=0 wrong_correlation=0",
     ] {
         assert!(
             output.contains(anchor),
@@ -199,15 +205,9 @@ fn x86_dead_provider_strands_sync_caller_but_bounds_async_call() {
         "the exact-operation path did not report a PEER-GONE terminal\n--- output ---\n{output}"
     );
 
-    // Synchronous masked reply wait: the caller must not have been woken by the
-    // provider's death. If this fires, the kernel gained a bounded terminal for
-    // this shape and ADR-0023's premise must be re-reviewed rather than silently
-    // accepted.
     assert!(
-        !output.contains(SYNC_RETURNED),
-        "synchronous caller was woken after its provider died — the witness premise \
-         in docs/decisions/0023-local-service-generation-binding.md needs review\n\
-         --- output ---\n{output}"
+        output.contains(SYNC_RETURNED) && !output.contains("[local-lifecycle] FAIL"),
+        "SDK RPC must terminate with PeerGone, without a scenario failure\n{output}"
     );
 }
 

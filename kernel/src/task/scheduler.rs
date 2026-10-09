@@ -1294,10 +1294,9 @@ impl Scheduler {
         // Remove from every hart's ready queue if present.
         super::hart_local::ready::remove_from_all(tid);
 
-        // Best-effort IPC cleanup: unblock tasks stuck sending to the dead task,
-        // and clear stale current_caller references. A plain reply waiter that has
-        // already left `Sending` is still not woken here (known pre-existing gap,
-        // 2026-07-31 Recv buffer-pinning audit); fixing it needs a state-machine audit.
+        // Keep raw one-way Send's existing sender wake semantics. Bounded RPC
+        // waiters are completed separately below, without broad masked-Recv
+        // wakes or an implication that dispatched work had no side effects.
         let mut to_wake = Vec::new();
         for (id, task) in self.tasks.iter_mut() {
             if let TaskState::Sending { target, .. } = task.state {
@@ -1310,7 +1309,8 @@ impl Scheduler {
                     to_wake.push(*id);
                 }
             }
-            if task.current_caller == Some(tid) {
+            if task.current_caller == Some(tid)
+                && (task.current_caller_cell_id, task.current_caller_cell_generation) == dead_caller {
                 // A live VFS holder may still be using the raw GrantSlice
                 // pointer. Mark precisely its holder+owner+generation lease
                 // pending revoke, but retain the task context and pin until it
@@ -1330,9 +1330,10 @@ impl Scheduler {
                         release.holder_tid,
                         release.request_generation
                     );
-                } else {
-                    // A context without a GrantSlice is ordinary IPC state and
-                    // has no raw pointer whose lifetime must be extended.
+                } else if task.current_async_op == 0 {
+                    // Retain bounded caller/token context as a tombstone until
+                    // the next receive, so a late plain Send cannot fall through
+                    // to a reused caller's raw mailbox. Legacy state has no pin.
                     task.clear_current_caller_context();
                 }
             }

@@ -10,7 +10,8 @@
 //! [`ServiceRef`] resolves the provider's **binding** (`{tid, cell_id, generation}`) from
 //! the kernel's registry rather than a bare tid, and reports a failed exchange against a
 //! provider that has since been replaced as [`CallFailure::StaleBinding`] instead of
-//! quietly re-targeting the call.
+//! quietly re-targeting the call. Staleness does not establish non-execution:
+//! an accepted operation may have had side effects before the provider died.
 
 use crate::{syscall, ViError, ViResult};
 use api::ipc::IPC_BUF_SIZE;
@@ -152,17 +153,17 @@ impl<const ID: u16> ServiceRef<ID> {
     /// The decoded `Resp` may borrow bytes from `resp_buf` (e.g. `VfsResponse::Data(&[u8])`).
     /// Keep `resp_buf` alive as long as you use the returned value.
     ///
-    /// A send, receive or reply-identity failure is classified against the registry: if the
-    /// provider this call named is no longer the live one, the call is reported as
-    /// `NotFound` — refused, not delivered under a stale descriptor — and the descriptor is
-    /// dropped; otherwise it is reported as `IO` against the provider that did answer.
+    /// Lifecycle failures are classified against the registry: if the provider this
+    /// call named is no longer live, return `NotFound` and drop the cached descriptor;
+    /// otherwise return `IO`. Neither verdict proves that an accepted request had no
+    /// side effects, and this method never retries a request after acceptance.
     ///
     /// # Errors
     /// - `ViError::NotFound` — service not registered after 8 retries, or the provider
     ///   incarnation this call named is no longer the live one.
     /// - `ViError::InvalidArgument` — `req` could not be encoded (message too large).
-    /// - `ViError::IO` — send or receive syscall failed, or response decoding failed,
-    ///   against a provider that is still the live one.
+    /// - `ViError::IO` — admission was busy, the operation failed or expired, or the
+    ///   response was malformed, against a provider that is still the live one.
     pub fn call<'b, Req, Resp>(
         &mut self,
         req: &Req,
@@ -184,10 +185,15 @@ impl<const ID: u16> ServiceRef<ID> {
             Err(crate::ipc::IpcError::Encode) => Err(ViError::InvalidArgument),
             Err(crate::ipc::IpcError::Decode)
             | Err(crate::ipc::IpcError::InvalidOperation)
-            | Err(crate::ipc::IpcError::BufferTooSmall) => Err(ViError::IO),
+            | Err(crate::ipc::IpcError::BufferTooSmall)
+            | Err(crate::ipc::IpcError::Busy) => Err(ViError::IO),
             Err(crate::ipc::IpcError::Send)
             | Err(crate::ipc::IpcError::Recv)
-            | Err(crate::ipc::IpcError::WrongSender) => {
+            | Err(crate::ipc::IpcError::WrongSender)
+            | Err(crate::ipc::IpcError::PeerGone)
+            | Err(crate::ipc::IpcError::PreDispatchTimeout)
+            | Err(crate::ipc::IpcError::Indeterminate)
+            | Err(crate::ipc::IpcError::Cancelled) => {
                 let mut record = [0u8; SERVICE_BINDING_LEN];
                 let live = syscall::sys_lookup_service_bound(ID, &mut record);
                 let verdict = classify_call_failure(held, live);
@@ -205,11 +211,10 @@ impl<const ID: u16> ServiceRef<ID> {
 /// kernel reports for that service now.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CallFailure {
-    /// The provider the failed call named is no longer the live endpoint of the service:
-    /// the call was refused and nothing was delivered under the stale descriptor.
+    /// The named provider is no longer the live endpoint. This is a binding verdict,
+    /// not a claim that the failed operation was refused or had no side effects.
     StaleBinding,
-    /// The same live endpoint failed the exchange — a send, receive or reply-identity
-    /// error against the provider the caller named.
+    /// The same live endpoint failed the exchange or the operation expired.
     ProviderError,
 }
 

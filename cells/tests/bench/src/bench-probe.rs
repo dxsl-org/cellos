@@ -13,6 +13,7 @@ api::declare_syscalls![
     Send,
     Recv,
     RecvTimeout,
+    TryRecv,
     Log,
     GetTime,
     Heartbeat,
@@ -43,6 +44,15 @@ fn cell_main() {
     if role.starts_with("c2c-sync-caller:") {
         scenarios::local_service_lifecycle::run_sync_caller(role);
     }
+    if role.starts_with("c2c-doomed-caller:") {
+        scenarios::local_service_lifecycle::run_doomed_caller(role);
+    }
+    if role.starts_with("c2c-full-caller:") {
+        scenarios::local_service_lifecycle::run_full_caller(role);
+    }
+    if role.starts_with("c2c-pressure-caller:") {
+        scenarios::local_service_lifecycle::run_pressure_caller(role);
+    }
     if role.starts_with("c2c-echo-reverse:") {
         scenarios::async_lifecycle::run_echo_reverse(role);
     }
@@ -50,6 +60,18 @@ fn cell_main() {
         "c2c-client" => scenarios::c2c_broker_oracle::run_client(),
         "c2c-provider" => scenarios::local_service_lifecycle::run_provider(),
         "c2c-slow-parked" => scenarios::async_lifecycle::run_slow_parked(),
+        "c2c-nested-reply" => scenarios::local_service_lifecycle::run_nested_provider(),
+        "c2c-reply-loop" => scenarios::local_service_lifecycle::run_reply_loop(),
+        "c2c-cancel-reply" => scenarios::local_service_lifecycle::run_cancel_provider(),
+        "c2c-saturation" => scenarios::local_service_lifecycle::run_saturation_provider(),
+        "c2c-deadline" => scenarios::local_service_lifecycle::run_deadline_provider(),
+        "c2c-caller-death" => scenarios::local_service_lifecycle::run_caller_death_provider(),
+        "c2c-restart-old" => scenarios::local_service_lifecycle::run_restart_old(),
+        "c2c-restart-new" => scenarios::local_service_lifecycle::run_restart_new(),
+        "c2c-event-provider" => scenarios::local_service_lifecycle::run_event_provider(),
+        "c2c-raw-event" => scenarios::local_service_lifecycle::run_raw_event_source(),
+        "c2c-multi-provider" => scenarios::local_service_lifecycle::run_multi_caller_provider(),
+        "c2c-pressure-provider" => scenarios::local_service_lifecycle::run_pressure_provider(),
         "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),
         "ctl-loop" => scenarios::control_loop::run_control_loop(),

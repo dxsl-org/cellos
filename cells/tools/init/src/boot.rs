@@ -182,6 +182,10 @@ pub(crate) fn spawn_test_fixtures() {
             SyscallResult::Ok(_) => ostd::io::println("Init: tier2-exploit admitted."),
             SyscallResult::Err(_) => ostd::io::println("Init: tier2-exploit spawn failed."),
         }
+        match sys_spawn_from_path("/bin/cpp-smoke") {
+            SyscallResult::Ok(_) => ostd::io::println("Init: cpp-smoke admitted."),
+            SyscallResult::Err(_) => ostd::io::println("Init: cpp-smoke spawn failed."),
+        }
     }
 
     // Phase-02 slice B cross-tier exchange. The provider cannot register itself —

@@ -2402,12 +2402,12 @@ pub fn ipc_recv(
         if let Some(index) = pos {
             receiver_task.pending_msgs.remove(index);
         }
-        receiver_task.set_received_caller_context(
+        receiver_task.set_received_request_context(
             sender_id,
             header.sender_cell_id,
             header.sender_generation,
+            header.async_op,
         );
-        receiver_task.set_received_async_op(sender_id, header.async_op);
     }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(sender_id)
@@ -2459,17 +2459,15 @@ pub fn ipc_recv_kernel(
         let sender_id = record.sender_tid;
         let header = wire.header;
         receiver.pending_msgs.remove(index);
-        receiver.set_received_caller_context(
+        receiver.set_received_request_context(
             sender_id,
             header.sender_cell_id,
             header.sender_generation,
+            header.async_op,
         );
         (sender_id, header, len)
     };
     async_ipc::dispatch(sched, caller_id, header);
-    if let Some(receiver) = sched.tasks.get_mut(&caller_id) {
-        receiver.set_received_async_op(sender_id, header.async_op);
-    }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(Some((sender_id, len)))
 }
@@ -2526,12 +2524,12 @@ pub fn ipc_try_recv(
         if let Some(index) = pos {
             receiver_task.pending_msgs.remove(index);
         }
-        receiver_task.set_received_caller_context(
+        receiver_task.set_received_request_context(
             sender_id,
             header.sender_cell_id,
             header.sender_generation,
+            header.async_op,
         );
-        receiver_task.set_received_async_op(sender_id, header.async_op);
     }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(sender_id)

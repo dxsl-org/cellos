@@ -7,8 +7,11 @@
 > ABI process again, including two fresh confirmations, and
 > `scripts/check-lookupservicebound-law1-digests.sh` fails on drift. The kernel-repair file-owner
 > handoff was granted for the full slice the same day; §2.2's registry record and §2.5's guards are
-> landed. Nothing in §2.4 (moving the SDK's local calls onto the bounded primitive) is implemented:
-> that is C2C Phase 03 work under its own gates.
+> landed. §2.4 is now implemented by the separately owner-approved C2C Phase 03
+> stranding cutover: SDK RPC waits on bounded operation state, immediate replies use
+> the exact-context Send bridge, and nested/deferred providers capture explicit tokens.
+> See Spec 17 §9 / Spec 20 §2.6 and `docs/evidence/c2c-stranding-cutover-x86.log`.
+> This implementation-status update does not change the frozen §2.3 ABI surface.
 > **Extends**: [ADR-0015](0015-dual-mode-hybrid-architecture.md) (tier model).
 > **Relates to**: [Spec 17](../specs/17-ipc-wire-contract.md) (ratified wire),
 > [Spec 20 draft v3](../specs/20-unified-ipc-contract.md) §2.2/§4,
@@ -295,10 +298,10 @@ remote epoch reuse; conflating them is explicitly refused.
   `scripts/check-lookupservicebound-law1-digests.sh` fails on drift. A future change requires the
   ABI process again (`CONTRIBUTING.md:70-71`, `docs/code-standards.md:40-45`, ADR-0013 decision
   #8).
-- No change to §2.4. `LocalEndpoint::call` and `ServiceRef::call` still use the synchronous
-  masked send/reply path; moving them onto the bounded primitive is C2C Phase 03 work, with its
-  own dependencies and evidence ceiling. Freezing the opcode says nothing about what is
-  *reachable*: the witness is the only caller.
+- §2.4's SDK migration was not authorized by freezing the opcode. It was subsequently
+  admitted separately by the owner and implemented under C2C Phase 03; see Spec 17
+  §9 and the phase's stranding-cutover record. The historical stranded-caller
+  witness is now a regression requiring a typed PeerGone result.
 - Landed and in scope: the non-activating witness
   (`cells/tests/bench/src/scenarios/local_service_lifecycle.rs`,
   `scripts/build-x86_64-c2c-lifecycle-ci.sh`,

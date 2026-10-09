@@ -10,11 +10,15 @@
 #![allow(unsafe_code)]
 #![allow(unused_variables)]
 #![allow(non_upper_case_globals)]
-#![cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "wasm32",
-    doc
+#![cfg(all(
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        target_arch = "wasm32",
+        doc
+    ),
+    any(target_os = "none", target_arch = "wasm32", doc)
 ))]
 
 // When the `mlibc` feature is active, all C symbols are provided by mlibc's

@@ -548,9 +548,11 @@ fn handle_typed_request(
         Ok(InputRequest::GetFocus) => {
             let focused = dispatcher.focus() as u32;
             if let Ok(encoded) = api::ipc::encode(&InputResponse::Focus(focused), &mut resp_buf) {
-                // GetFocus is only called by compositor (never during startup race).
-                // Use sys_try_send to be safe — compositor is in recv waiting for this.
-                let _ = sys_try_send(sender, encoded);
+                if let Some(operation) = ostd::ipc::current() {
+                    let _ = ostd::ipc::reply(operation, encoded);
+                } else {
+                    let _ = sys_try_send(sender, encoded);
+                }
             }
         }
         Ok(InputRequest::ClearFocus { cell_tid: _ }) => {

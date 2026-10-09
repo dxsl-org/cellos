@@ -314,7 +314,7 @@ fn blk_flush(backend: &mut Backend) -> u8 {
                 &mut resp_buf,
                 chunk_timeout_ticks(api::ipc::VFS_GRANT_CHUNK),
             );
-            let poison = matches!(&result, Err(ostd::ipc::IpcError::Recv));
+            let poison = matches!(&result, Err(ostd::ipc::IpcError::Recv | ostd::ipc::IpcError::PeerGone | ostd::ipc::IpcError::Indeterminate));
             if matches!(&result, Ok(api::ipc::VfsResponse::Ok)) {
                 0
             } else {
@@ -404,7 +404,7 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                         &mut resp_buf,
                         chunk_timeout_ticks(chunk),
                     );
-                    let poison = matches!(&result, Err(ostd::ipc::IpcError::Recv));
+                    let poison = matches!(&result, Err(ostd::ipc::IpcError::Recv | ostd::ipc::IpcError::PeerGone | ostd::ipc::IpcError::Indeterminate));
                     let ok = match result {
                         Ok(api::ipc::VfsResponse::GrantDone { bytes }) if bytes == chunk => {
                             // The safe accessor carries the exclusivity proof: the
@@ -552,7 +552,7 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                         &mut resp_buf,
                         chunk_timeout_ticks(chunk),
                     );
-                    let poison = matches!(&result, Err(ostd::ipc::IpcError::Recv));
+                    let poison = matches!(&result, Err(ostd::ipc::IpcError::Recv | ostd::ipc::IpcError::PeerGone | ostd::ipc::IpcError::Indeterminate));
                     let ok = match result {
                         Ok(api::ipc::VfsResponse::GrantDone { bytes }) => bytes == chunk,
                         Ok(response) => {

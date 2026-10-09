@@ -1,0 +1,36 @@
+C2C Phase 03: finite competing producers under peer-mailbox pressure (2026-10-09)
+
+Scope: new fixture-only witness in cells/tests/bench/src/scenarios/local_service_lifecycle.rs and bench-probe role dispatch. No production kernel/SDK or ABI changes. Live kernel peer mailbox depth is 64 (kernel/src/task/tcb.rs: HOTSWAP_MSG_QUEUE_DEPTH = 64).
+
+Scenario and observed behavior:
+- Coordinator A fills the provider's 64-slot mailbox while provider holds for 100 ticks in sys_set_timer(100).
+- Independent caller B (spawned without prior operations) attempts submit; provider's mailbox is full, so submit returns IpcSubmitError::Busy before provider timer expires (within 50 ticks setup margin).
+- When provider wakes, both caller A (128 total calls) and caller B (64 total calls) pump calls and take completions concurrently.
+- pump_pressure retries only on Busy refusals before admission; never resends accepted work. Each taken completion validates 3-byte payload, exact producer and sequence, and checks that retired token try_take returns InvalidOperation.
+- Provider processes 192 total calls (128 from A, 64 from B), validates sender identity, rejects duplicates, sends exact 3-byte replies, and verifies mailbox_empty() at the end.
+- Observed markers:
+  [local-lifecycle] PRESSURE-PROVIDER=OK a=128 b=64 duplicate=0 extra_delivery=0
+  [local-lifecycle] PRESSURE-CALLER b_completed=64 busy=28719 max_gap_ticks=99
+  [local-lifecycle] PRESSURE-CALLER a_completed=128 busy=0 max_gap_ticks=99
+  [local-lifecycle] PEER-PRESSURE=OK a=128 b=64 completions=192 initial_peer_busy=true duplicate=0 wrong_correlation=0
+  [local-lifecycle] PASS
+  [async-lifecycle] PASS
+
+Verification:
+- bash scripts/build-x86_64-c2c-lifecycle-ci.sh: PASS; F1/F5 signing PASS.
+- CI=1 cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test local-service-lifecycle-x86: 2 passed in 37.01s.
+- bash scripts/check-lookupservicebound-law1-digests.sh: PASS.
+
+Independent serial smoke runtime:
+- QEMU q35, cpu qemu64,+pdpe1gb, 256 MiB, nographic, CD-ROM boot d, no reboot, monitor none, localhost TCP socket serial.
+- Settle 0.5s before commands, fresh prompt after each command.
+- ISO: build/vicell-x86-c2c-lifecycle.iso (sha256: 083841933fb825a0109a825e63ff7a8c797312ce7bb28fa6491535a6a05b535e)
+- Kernel: build/x86-c2c-lifecycle-iso-root/boot/kernel.elf (sha256: c9898f165a9653e9e157ecf1017288da090825f624dbdeb5ab227f85f0a0fed3)
+- Raw serial log: docs/evidence/c2c-peer-pressure-x86.log (15148 bytes)
+- vwrite /tmp/c2c-pressure.txt PEER_PRESSURE_SERIAL_OK then vcat returned exact string.
+- local lifecycle: 33.37s wallclock (PASS, no FAIL).
+- async lifecycle: 0.10s wallclock (PASS, no FAIL).
+- Total QEMU session: 38.80s.
+
+Evidence ceiling:
+This demonstrates finite contention progress and Busy backpressure under peer mailbox saturation in software-only x86 QEMU. It does NOT prove starvation freedom or bounded completion latency under hostile, infinite, or weighted queue monopolization. Multi-source completion waiting, deterministic two-hart publication/wake, abandoned-caller grant lifetime, physical Intel qualification and remote RPC remain separate open obligations.

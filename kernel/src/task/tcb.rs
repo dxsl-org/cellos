@@ -790,6 +790,19 @@ impl Task {
         sender_cell_id: u64,
         sender_generation: u64,
     ) {
+        self.set_received_request_context(sender_tid, sender_cell_id, sender_generation, 0);
+    }
+
+    /// Commit caller identity and bounded-operation token together. Preserving
+    /// VFS's outer grant authority must also preserve its operation token, even
+    /// when a nested dependency reply happens to have the same sender TID.
+    pub fn set_received_request_context(
+        &mut self,
+        sender_tid: usize,
+        sender_cell_id: u64,
+        sender_generation: u64,
+        token: usize,
+    ) {
         // VFS may perform nested IPC while serving a request. Its outer caller
         // remains the authority for grants and owner-death watches until VFS
         // sends that caller's response; a storage reply must not replace it.
@@ -799,12 +812,7 @@ impl Task {
             return;
         }
         self.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
-    }
-
-    pub fn set_received_async_op(&mut self, sender_tid: usize, token: usize) {
-        if self.current_caller == Some(sender_tid) {
-            self.current_async_op = token;
-        }
+        self.current_async_op = token;
     }
 
     /// Drop VFS's public request context and return the exact lease identity

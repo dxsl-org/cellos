@@ -296,8 +296,8 @@ fn vfs_call<'r>(
 /// it after use. Backs `sys_spawn_from_path`'s VFS routing — reads a cell ELF for
 /// `sys_spawn_from_elf` so the kernel loader needs no disk access post-boot.
 ///
-/// Uses masked `service_call_typed` (recv pinned to `vfs_tid`, spec 17 §2) so a
-/// spawning cell that holds input focus can't decode a queued keystroke as the reply.
+/// Uses operation-correlated `service_call_typed`, so input events cannot be
+/// decoded as replies and provider death terminates the spawning cell's RPC.
 pub fn read_full_via_grant(path: &str, vfs_tid: usize) -> ViResult<(usize, usize)> {
     // 1. Stat for the file size (bounds the grant).
     let mut sb = [0u8; 512];

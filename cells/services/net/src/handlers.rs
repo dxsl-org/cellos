@@ -210,6 +210,7 @@ pub(crate) fn handle_typed(
         }
         NetRequest::L2Recv { guest_mac } => {
             L2_RECV_REQUESTS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            let operation = ostd::ipc::current();
             static FIRST_GUEST_POLL: core::sync::atomic::AtomicBool =
                 core::sync::atomic::AtomicBool::new(false);
             if !FIRST_GUEST_POLL.swap(true, core::sync::atomic::Ordering::Relaxed) {
@@ -231,10 +232,21 @@ pub(crate) fn handle_typed(
                 }
                 let mut rb = [0u8; IPC_BUF_SIZE];
                 if let Ok(s) = ipc::encode(&R::Data(&frame), &mut rb) {
-                    sys_send(sender, s);
+                    if let Some(operation) = operation {
+                        let _ = ostd::ipc::reply(operation, s);
+                    } else {
+                        sys_send(sender, s);
+                    }
                 }
             } else {
-                send_typed(sender, R::Ok);
+                if let Some(operation) = operation {
+                    let mut rb = [0u8; IPC_BUF_SIZE];
+                    if let Ok(s) = ipc::encode(&R::Ok, &mut rb) {
+                        let _ = ostd::ipc::reply(operation, s);
+                    }
+                } else {
+                    send_typed(sender, R::Ok);
+                }
             }
         }
         _ => {}

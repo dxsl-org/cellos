@@ -2,32 +2,26 @@
 //! service cell (Spec 17 — Cell IPC Wire Contract).
 //!
 //! Prefer [`service_call`] / [`service_call_typed`] over a hand-rolled
-//! `sys_send` + `sys_recv(0)`: they recv **masked to the service tid** (Spec 17
-//! §2), so a queued input key event can never be mistaken for the reply, and
-//! they surface every failure as a typed [`IpcError`] instead of a silent empty
-//! result (Spec 17 §7).
+//! `sys_send` + `sys_recv`: RPC uses a kernel-owned bounded operation and takes
+//! only that operation's reply, including its actual byte length. Raw one-way
+//! messages and [`recv_from`] retain the mailbox interface.
 
 #![allow(unsafe_code)]
 
-use crate::syscall::{
-    sys_get_scheduler_ticks, sys_recv, sys_recv_timeout, sys_send, sys_try_recv, sys_try_send,
-    sys_yield, SyscallResult,
-};
+use crate::syscall::{sys_get_scheduler_ticks, sys_recv, sys_try_recv, sys_yield, SyscallResult};
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use serde::{Deserialize, Serialize};
-
-mod deadline;
 
 /// Why a [`service_call`] did not complete. Never silently swallowed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IpcError {
     /// The request did not fit `send_buf` (postcard encode failed).
     Encode,
-    /// `sys_send` to the service failed (service gone / bad tid).
+    /// Request submission was rejected, or a fastpath transport failed.
     Send,
-    /// `sys_recv` returned an error.
+    /// A raw receive or operation wait syscall returned an error.
     Recv,
     /// A message arrived, but from a cell other than the service — never
     /// treated as the reply (Spec 17 §7 silent-wrong-sender guard).
@@ -36,8 +30,21 @@ pub enum IpcError {
     Decode,
     /// Operation token is stale, foreign, cancelled, or otherwise invalid.
     InvalidOperation,
-    /// Reply output buffer is too short; the terminal result was not consumed.
+    /// Reply output buffer is too short. Low-level `take` retains the terminal;
+    /// synchronous service calls drain their owned slot before returning this error.
     BufferTooSmall,
+    /// Admission was busy; no request was accepted.
+    Busy,
+    /// The provider is gone. An accepted request may already have had side effects.
+    /// This is not permission to retry automatically.
+    PeerGone,
+    /// The deadline elapsed before dispatch; this operation cannot execute later.
+    PreDispatchTimeout,
+    /// The request was dispatched but no reply settled it before expiry/cancellation.
+    /// It may still execute; reconcile application state rather than retrying.
+    Indeterminate,
+    /// The operation was cancelled before dispatch.
+    Cancelled,
 }
 
 /// Exact operation identity scoped to the caller's live task generation.
@@ -106,8 +113,10 @@ pub fn take(op: IpcOpId, reply: &mut [u8]) -> Result<IpcTakeResult, IpcError> {
     }
 }
 
-/// Sleep until any result is terminal, or a finite timeout expires. Zero
-/// waits indefinitely; the kernel rechecks results atomically with parking.
+/// Sleep until any result is terminal, or a finite scheduler-tick timeout
+/// expires (one tick is 10 ms). Zero waits without a caller deadline; accepted
+/// operations still have their separate kernel-enforced expiry. The kernel
+/// rechecks results atomically with parking.
 pub fn wait(timeout_ticks: u64) -> bool {
     crate::syscall::sys_ipc_wait(timeout_ticks) == 1
 }
@@ -140,26 +149,22 @@ pub fn reply(op: IpcOpId, bytes: &[u8]) -> Result<(), IpcError> {
     }
 }
 
-// ─── Opt-in nonblocking calls ────────────────────────────────────────────────
+// ─── Nonblocking operation handles ───────────────────────────────────────────
 
-/// One submitted bounded call: the kernel owns the request bytes and the reply slot, so
-/// the caller may drop its request buffer as soon as [`submit`][PendingCall::submit]
-/// returns, and the operation stays accounted for until it is taken or cancelled.
+/// One submitted bounded call: the kernel owns the request bytes and the reply slot,
+/// so the caller may reuse its request buffer immediately after submission.
+/// A terminal result retains its slot until taken.
 ///
-/// This is the **opt-in** path. The serving Cell must answer with [`current`]/[`reply`],
-/// because only that route settles the operation — an ordinary masked `Send` reply never
-/// does, measured on the x86_64 lane and specified in
-/// [Spec 20 §2.6](../../../docs/specs/20-unified-ipc-contract.md). The blocking
-/// [`service_call_typed`] path is unchanged and unaffected by anything here.
+/// Immediate servers may reply with plain `Send` to the currently served caller.
+/// Deferred or multiple-outstanding servers must capture [`current`] before their
+/// next receive and answer with [`reply`] using that exact token.
 ///
-/// Several calls may be outstanding at once from one Cell: submit each, then drain with
-/// [`wait`] plus [`try_take`][PendingCall::try_take]. The measured contract — eight
-/// outstanding against one peer, exactly one correlated completion each, one `wait`
-/// round for the whole drain — is `docs/evidence/c2c-async-lifecycle-x86.{txt,log}`.
+/// Several calls may be outstanding: submit each, then drain with [`wait`] and
+/// [`try_take`][PendingCall::try_take]. Synchronous [`service_call`] uses this same
+/// lifecycle. No accepted request is retried automatically.
 ///
-/// Dropping the handle abandons *waiting*, not necessarily execution: a dispatched
-/// operation may still run. Take it, or [`cancel`][PendingCall::cancel] it and accept the
-/// indeterminate outcome the contract then implies.
+/// Dropping the handle does not release its slot or roll back execution. Take the
+/// result, or cancel and then take it. Post-dispatch cancellation is indeterminate.
 pub struct PendingCall {
     operation: IpcOpId,
 }
@@ -176,23 +181,22 @@ pub struct Completion {
 }
 
 impl Completion {
-    /// A definite outcome: nothing of this operation can execute later. `Cancelled` is
-    /// definite because cancellation only yields it before dispatch — a dispatched
-    /// operation cancelled afterwards is reported [`IpcTerminal::Indeterminate`].
+    /// The response is known, or dispatch was prevented. A known reply can still
+    /// contain application failure; this is not a blanket permission to retry.
     pub fn is_definite(&self) -> bool {
         matches!(
             self.terminal,
             IpcTerminal::Reply
-                | IpcTerminal::PeerGone
                 | IpcTerminal::PreDispatchTimeout
                 | IpcTerminal::Cancelled
         )
     }
 
-    /// The operation may still have executed. Never retry one of these blindly:
-    /// reconcile by request identity and application policy (Spec 20 §2.4).
+    /// Execution effects are unresolved. PeerGone may follow dispatch, including
+    /// work delegated to a sibling service task. Never retry blindly; reconcile
+    /// by request identity and application policy.
     pub fn is_uncertain(&self) -> bool {
-        matches!(self.terminal, IpcTerminal::Indeterminate)
+        matches!(self.terminal, IpcTerminal::Indeterminate | IpcTerminal::PeerGone)
     }
 }
 
@@ -229,6 +233,8 @@ impl PendingCall {
     /// `Ok(None)` means the budget ran out with the operation still outstanding — it is
     /// neither lost nor failed, so do not read it as an outcome; keep waiting, or decide
     /// per the contract that the caller's own deadline has passed.
+    /// Each timed round is measured in scheduler ticks. A retained terminal for
+    /// another call is left untouched and yields CPU rather than consuming a round.
     pub fn wait_and_take(
         &self,
         reply: &mut [u8],
@@ -236,10 +242,32 @@ impl PendingCall {
         rounds: usize,
     ) -> Result<Option<Completion>, IpcError> {
         for _ in 0..rounds.max(1) {
-            if let Some(completion) = self.try_take(reply)? {
-                return Ok(Some(completion));
+            let started = sys_get_scheduler_ticks().ok_or(IpcError::InvalidOperation)?;
+            loop {
+                if let Some(completion) = self.try_take(reply)? {
+                    return Ok(Some(completion));
+                }
+                let ticks = if ticks_per_round == 0 {
+                    0
+                } else {
+                    let ticks = remaining(started, ticks_per_round)?;
+                    if ticks == 0 { break; }
+                    ticks
+                };
+                match crate::syscall::sys_ipc_wait(ticks) {
+                    0 => break,
+                    // IpcWait sees every owned terminal, including results the
+                    // caller deliberately retains. Do not spend a timed round
+                    // on an unrelated terminal or starve this call's provider.
+                    1 => {
+                        if let Some(completion) = self.try_take(reply)? {
+                            return Ok(Some(completion));
+                        }
+                        sys_yield();
+                    }
+                    _ => return Err(IpcError::Recv),
+                }
             }
-            let _ = wait(ticks_per_round);
         }
         self.try_take(reply)
     }
@@ -253,6 +281,116 @@ impl PendingCall {
     }
 }
 
+/// Remaining caller budget in scheduler ticks, not the kernel operation's expiry.
+fn remaining(started: u64, budget: u64) -> Result<u64, IpcError> {
+    let now = sys_get_scheduler_ticks().ok_or(IpcError::InvalidOperation)?;
+    Ok(budget.saturating_sub(now.wrapping_sub(started)))
+}
+
+fn completion_len(completion: Completion) -> Result<usize, IpcError> {
+    match completion.terminal {
+        IpcTerminal::Reply => Ok(completion.len),
+        IpcTerminal::PeerGone => Err(IpcError::PeerGone),
+        IpcTerminal::PreDispatchTimeout => Err(IpcError::PreDispatchTimeout),
+        IpcTerminal::Indeterminate => Err(IpcError::Indeterminate),
+        IpcTerminal::Cancelled => Err(IpcError::Cancelled),
+    }
+}
+
+/// Cancel pending execution and drain even a retained oversized reply. This scratch
+/// is needed only on an error path: cancellation does not overwrite terminal Reply.
+fn discard_call(call: &PendingCall) {
+    let _ = call.cancel();
+    let mut scratch = [0u8; api::ipc::IPC_BUF_SIZE];
+    let _ = call.try_take(&mut scratch);
+}
+
+fn take_call(call: &PendingCall, reply: &mut [u8]) -> Result<Option<Completion>, IpcError> {
+    match call.try_take(reply) {
+        Ok(completion) => Ok(completion),
+        Err(error) => {
+            discard_call(call);
+            Err(error)
+        }
+    }
+}
+
+fn exchange(
+    service_tid: usize,
+    request: &[u8],
+    reply: &mut [u8],
+    timeout_ticks: Option<u64>,
+) -> Result<usize, IpcError> {
+    let started = match timeout_ticks {
+        Some(_) => sys_get_scheduler_ticks().ok_or(IpcError::InvalidOperation)?,
+        None => 0,
+    };
+    let call = loop {
+        if let Some(budget) = timeout_ticks {
+            if remaining(started, budget)? == 0 {
+                return Err(IpcError::PreDispatchTimeout);
+            }
+        }
+        match PendingCall::submit(service_tid, request) {
+            Ok(call) => break call,
+            Err(IpcSubmitError::Busy) if timeout_ticks.is_some() => sys_yield(),
+            Err(IpcSubmitError::Busy) => return Err(IpcError::Busy),
+            Err(IpcSubmitError::PeerGone) => return Err(IpcError::PeerGone),
+            Err(IpcSubmitError::InvalidRequest) => return Err(IpcError::Send),
+        }
+    };
+    let mut other_terminal = false;
+    loop {
+        if let Some(completion) = take_call(&call, reply)? {
+            return completion_len(completion);
+        }
+        let ticks = match timeout_ticks {
+            Some(budget) => match remaining(started, budget) {
+                Ok(0) => {
+                    if let Err(error) = call.cancel() {
+                        discard_call(&call);
+                        return Err(error);
+                    }
+                    // A concurrent reply wins over cancellation and is still taken.
+                    let completion = take_call(&call, reply)?
+                        .ok_or(IpcError::InvalidOperation);
+                    return match completion {
+                        Ok(Completion { terminal: IpcTerminal::Cancelled, .. }) => {
+                            Err(IpcError::PreDispatchTimeout)
+                        }
+                        Ok(completion) => completion_len(completion),
+                        Err(error) => {
+                            discard_call(&call);
+                            Err(error)
+                        }
+                    };
+                }
+                Ok(ticks) => ticks,
+                Err(error) => {
+                    discard_call(&call);
+                    return Err(error);
+                }
+            },
+            None => 0,
+        };
+        if other_terminal {
+            // IpcWait observes any terminal. Do not spin on a different owned slot
+            // while starving the provider of this exact operation.
+            sys_yield();
+            other_terminal = false;
+            continue;
+        }
+        match crate::syscall::sys_ipc_wait(ticks) {
+            0 => {}
+            1 => other_terminal = true,
+            _ => {
+                discard_call(&call);
+                return Err(IpcError::Recv);
+            }
+        }
+    }
+}
+
 /// A masked receive may still return an unrelated NotifyOnExit record.
 #[inline]
 fn reply_sender(peer_tid: usize, result: SyscallResult) -> Result<(), IpcError> {
@@ -263,21 +401,20 @@ fn reply_sender(peer_tid: usize, result: SyscallResult) -> Result<(), IpcError> 
     }
 }
 
-/// Receive a reply from one peer. A masked `Recv` can still deliver a queued
-/// NotifyOnExit record for another task, returning that task's id and writing
-/// its exit reason into the reply buffer. Never decode it as the peer's reply.
+/// Receive a raw mailbox message from one peer. A masked `Recv` can still deliver
+/// a queued NotifyOnExit record for another task; never decode it as the peer's
+/// message. This interface cannot report the payload length; RPC uses exact operations.
 pub fn recv_from<'r>(peer_tid: usize, recv_buf: &'r mut [u8]) -> Result<&'r [u8], IpcError> {
     reply_sender(peer_tid, sys_recv(peer_tid, recv_buf))?;
     Ok(recv_buf)
 }
 
-/// One request/reply exchange with `service_tid`, recv **masked** to it.
+/// One kernel-bounded request/reply exchange with `service_tid`.
 ///
-/// `send_buf` encodes the request; `recv_buf` receives the reply and backs the
-/// returned slice (caller-owned so the borrow outlives the call). The reply is
-/// accepted only if it came from `service_tid` — a message from any other
-/// sender (e.g. a queued input event, Spec 17 §2) is an [`IpcError::WrongSender`],
-/// not a decode of the wrong bytes.
+/// Submission never blocks in `Send`; Busy means no work was accepted. Once
+/// accepted, wait for and take only this operation's terminal result. Provider death
+/// and kernel expiry return errors even if the provider never replies. No accepted
+/// request is retried. The returned slice covers exactly the reply bytes.
 pub fn service_call<'r, Req: Serialize>(
     service_tid: usize,
     req: &Req,
@@ -285,17 +422,13 @@ pub fn service_call<'r, Req: Serialize>(
     recv_buf: &'r mut [u8],
 ) -> Result<&'r [u8], IpcError> {
     let encoded = api::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
-    if let SyscallResult::Err(_) = sys_send(service_tid, encoded) {
-        return Err(IpcError::Send);
-    }
-    // MASKED recv — Spec 17 §2. A queued death for another task can still
-    // bypass the mask; recv_from checks the returned sender before decoding.
-    recv_from(service_tid, recv_buf)
+    let len = exchange(service_tid, encoded, recv_buf, None)?;
+    Ok(&recv_buf[..len])
 }
 
 #[cfg(test)]
-mod recv_tests {
-    use super::{reply_sender, IpcError};
+mod tests {
+    use super::{completion_len, reply_sender, Completion, IpcError, IpcTerminal};
     use crate::syscall::{SyscallError, SyscallResult};
 
     #[test]
@@ -306,6 +439,28 @@ mod recv_tests {
             Err(IpcError::Recv)
         );
         assert_eq!(reply_sender(17, SyscallResult::Ok(17)), Ok(()));
+    }
+
+    #[test]
+    fn exact_completion_preserves_reply_length_and_terminal_outcomes() {
+        assert_eq!(
+            completion_len(Completion { terminal: IpcTerminal::Reply, len: 3 }),
+            Ok(3)
+        );
+        for (terminal, error) in [
+            (IpcTerminal::PeerGone, IpcError::PeerGone),
+            (IpcTerminal::PreDispatchTimeout, IpcError::PreDispatchTimeout),
+            (IpcTerminal::Indeterminate, IpcError::Indeterminate),
+            (IpcTerminal::Cancelled, IpcError::Cancelled),
+        ] {
+            assert_eq!(completion_len(Completion { terminal, len: 0 }), Err(error));
+        }
+        let gone = Completion { terminal: IpcTerminal::PeerGone, len: 0 };
+        assert!(gone.is_uncertain(), "provider death does not prove no side effects");
+        assert!(!gone.is_definite());
+        let cancelled = Completion { terminal: IpcTerminal::Cancelled, len: 0 };
+        assert!(cancelled.is_definite(), "pre-dispatch cancellation prevents execution");
+        assert!(!cancelled.is_uncertain());
     }
 }
 
@@ -334,13 +489,11 @@ where
 /// slice. `timeout_ticks` is the end-to-end scheduler-tick budget shared by
 /// request admission and the reply wait.
 ///
-/// The encoded request is offered with nonblocking [`sys_try_send`] until the
-/// deadline. A rejected admission yields before retrying, so a service waiting
-/// on a nested dependency can return to wildcard `Recv`. Once accepted, the
-/// request is never resent and only the remaining deadline is available to the
-/// sender-masked receive. Admission expiry returns [`IpcError::Send`]; receive
-/// expiry or syscall failure returns [`IpcError::Recv`]. After a receive error,
-/// callers must poison that service generation because a late reply may arrive.
+/// Busy admission is retried only before acceptance. Once accepted, only this exact
+/// operation is awaited; expiry cancels and takes its slot. Pre-dispatch expiry
+/// returns [`IpcError::PreDispatchTimeout`]; after dispatch it returns
+/// [`IpcError::Indeterminate`]. Late replies cannot be consumed by a subsequent call.
+/// The caller's scheduler-tick budget is independent of the kernel's operation expiry.
 pub fn service_call_bounded<'r, Req: Serialize>(
     service_tid: usize,
     req: &Req,
@@ -349,35 +502,15 @@ pub fn service_call_bounded<'r, Req: Serialize>(
     timeout_ticks: u64,
 ) -> Result<&'r [u8], IpcError> {
     let encoded = api::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
-    let result = deadline::exchange_until_deadline(
-        service_tid,
-        timeout_ticks,
-        || matches!(sys_try_send(service_tid, encoded), SyscallResult::Ok(0)),
-        sys_get_scheduler_ticks,
-        sys_yield,
-        |remaining| match sys_recv_timeout(service_tid, recv_buf, remaining) {
-            SyscallResult::Ok(sender) => Ok(sender),
-            SyscallResult::Err(_) => Err(()),
-        },
-    );
-    match result {
-        Ok(()) => {
-            let len = recv_buf.len();
-            Ok(&recv_buf[..len])
-        }
-        Err(deadline::ExchangeError::Send) => Err(IpcError::Send),
-        Err(deadline::ExchangeError::Recv) => Err(IpcError::Recv),
-        Err(deadline::ExchangeError::WrongSender) => Err(IpcError::WrongSender),
-    }
+    let len = exchange(service_tid, encoded, recv_buf, Some(timeout_ticks))?;
+    Ok(&recv_buf[..len])
 }
 
 /// [`service_call_bounded`] that decodes the reply into `Resp`.
 ///
-/// Send admission yields until the shared deadline, but the request is never
-/// resent after delivery. Admission expiry returns [`IpcError::Send`]. The
-/// sender-masked receive gets only the remaining budget; timeout and receive
-/// errors return [`IpcError::Recv`], while malformed bytes return
-/// [`IpcError::Decode`].
+/// Uses the same end-to-end scheduler-tick budget and exact-operation cleanup as
+/// [`service_call_bounded`]. A malformed reply returns [`IpcError::Decode`] after
+/// its terminal slot has already been released.
 ///
 /// `send_buf` holds the encoded `req`. `recv_buf` receives the reply and is
 /// borrowed by `Resp` when it contains `&str` or `&[u8]` fields, so consume the
@@ -394,106 +527,6 @@ where
     Resp: Deserialize<'r>,
 {
     let raw = service_call_bounded(service_tid, req, send_buf, recv_buf, timeout_ticks)?;
-    api::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
-}
-
-/// [`service_call_bounded`] whose request admission **queues** instead of
-/// rendezvousing.
-///
-/// [`service_call_bounded`] offers the request with nonblocking [`sys_try_send`],
-/// which the kernel admits only while the target sits in `Recv` with a mask that
-/// matches the caller. A service that idles in a completion wait — the Net Cell
-/// sleeps on the `NET_RX` completion source — or that is simply running its own
-/// loop is never in that state, so the offer is refused for the whole deadline
-/// and the caller sees [`IpcError::Send`] against a perfectly healthy service.
-///
-/// This variant sends with [`sys_send`], which queues into the receiver's
-/// mailbox and wakes a `Recv` or a `NET_RX` completion waiter, then waits for
-/// the reply with the same bounded, sender-masked receive. Admission is
-/// therefore unbounded: a service that never receives leaves the caller blocked
-/// in the kernel's `Sending` state. Use it for a service that is known to drain
-/// its mailbox on every turn (the Net Cell does, before it parks).
-///
-/// `timeout_ticks` bounds only the reply wait. Errors are as in
-/// [`service_call_bounded`].
-pub fn service_call_bounded_queued<'r, Req: Serialize>(
-    service_tid: usize,
-    req: &Req,
-    send_buf: &mut [u8],
-    recv_buf: &'r mut [u8],
-    timeout_ticks: u64,
-) -> Result<&'r [u8], IpcError> {
-    /// Most foreign messages tolerated before the call gives up. The time base
-    /// below bounds the wait; this bounds the loop for a kernel that does not
-    /// provide one, so "keep waiting" can never become an unbounded spin.
-    const MAX_FOREIGN_MESSAGES: u32 = 4;
-
-    let encoded = api::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
-    if let SyscallResult::Err(_) = sys_send(service_tid, encoded) {
-        return Err(IpcError::Send);
-    }
-    // A sender-masked receive can still return a *death notification*: the kernel
-    // serves those regardless of the mask and documents that the caller must tell
-    // them apart by the returned sender. Failing the whole call on the first one
-    // is what cost the board's guest its traffic — the hypervisor's `L2Send` came
-    // back `wrong sender`, so `transmit` returned false, the guest's TX descriptor
-    // was never completed (`[hv-virtio-host] net-tx-complete` never printed) and
-    // everything the guest sent died in its own TX queue. The foreign message is
-    // consumed either way, so the wait names it once and continues under the
-    // *same* deadline; `sys_get_scheduler_ticks` is the time base
-    // `sys_recv_timeout` itself uses, and a kernel without it keeps the old
-    // single-wait behaviour.
-    let deadline = sys_get_scheduler_ticks().map(|now| now.saturating_add(timeout_ticks));
-    let mut foreign = 0u32;
-    loop {
-        let remaining = match deadline {
-            Some(deadline) => {
-                let now = sys_get_scheduler_ticks().unwrap_or(0);
-                if now >= deadline {
-                    return Err(IpcError::Recv);
-                }
-                deadline - now
-            }
-            None => timeout_ticks,
-        };
-        match sys_recv_timeout(service_tid, recv_buf, remaining) {
-            SyscallResult::Ok(sender) if sender == service_tid => {
-                let len = recv_buf.len();
-                return Ok(&recv_buf[..len]);
-            }
-            SyscallResult::Ok(sender) => {
-                use core::sync::atomic::{AtomicBool, Ordering};
-                static FIRST_FOREIGN: AtomicBool = AtomicBool::new(false);
-                if !FIRST_FOREIGN.swap(true, Ordering::Relaxed) {
-                    crate::io::print("[ipc] message from tid ");
-                    crate::io::print_usize(sender);
-                    crate::io::print(", expected ");
-                    crate::io::print_usize(service_tid);
-                    crate::io::println(" — consumed, still waiting for the reply");
-                }
-                foreign += 1;
-                if deadline.is_none() || foreign > MAX_FOREIGN_MESSAGES {
-                    return Err(IpcError::WrongSender);
-                }
-            }
-            SyscallResult::Err(_) => return Err(IpcError::Recv),
-        }
-    }
-}
-
-/// [`service_call_bounded_queued`] that decodes the reply into `Resp`.
-pub fn service_call_typed_bounded_queued<'r, Req, Resp>(
-    service_tid: usize,
-    req: &Req,
-    send_buf: &mut [u8],
-    recv_buf: &'r mut [u8],
-    timeout_ticks: u64,
-) -> Result<Resp, IpcError>
-where
-    Req: Serialize,
-    Resp: Deserialize<'r>,
-{
-    let raw = service_call_bounded_queued(service_tid, req, send_buf, recv_buf, timeout_ticks)?;
     api::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
 }
 
@@ -551,8 +584,8 @@ impl<'a> Future for AsyncRecv<'a> {
     }
 }
 
-/// Await a message on `mask` (0 = wildcard). Prefer a service tid for
-/// request/reply — see Spec 17 §2.
+/// Await a raw mailbox message on `mask` (0 = wildcard). For request/reply use
+/// [`service_call`] instead, so provider death and late replies have exact outcomes.
 pub fn recv_async(mask: usize, buf: &mut [u8]) -> AsyncRecv<'_> {
     AsyncRecv { mask, buf }
 }

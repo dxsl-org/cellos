@@ -66,6 +66,7 @@ impl BrokerState {
         sender_tid: usize,
         identity: Option<CallerIdentity>,
         parsed: Result<ParsedLocalRequest, ParseError>,
+        operation: Option<usize>,
     ) -> IngressDecision {
         let client_sequence = parsed.as_ref().map(|req| req.client_sequence).unwrap_or(0);
         let Some(identity) = identity else {
@@ -98,6 +99,7 @@ impl BrokerState {
                 cell_id: identity.cell_id,
                 generation: identity.generation,
             },
+            operation,
             client_sequence: parsed.client_sequence,
             payload_len: parsed.payload_len,
             payload: parsed.payload,
@@ -157,6 +159,7 @@ impl BrokerState {
         self.inflight[slot] = None;
         self.stale[self.stale_cursor % STALE_REPLY_RING_CAP] = Some(request.key);
         self.stale_cursor = (self.stale_cursor + 1) % STALE_REPLY_RING_CAP;
+        reply.operation = request.operation;
         reply.order = self.bump_reply_order();
         self.push_reply(reply);
         self.counters.completed += 1;

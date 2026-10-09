@@ -165,24 +165,29 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
         // envelope), so requests arrive as RawMessage. Accept Message too for
         // envelope-wrapped senders — the dispatch payload layout is identical.
         AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
-            // Replies use NON-blocking try_send — see virtio-net/src/main.rs: a
-            // blocking reply to a net service that already timed out parks this
-            // cell in Sending{net} and desyncs every later request/reply.
+            let operation = ostd::ipc::current();
+            let reply = |bytes: &[u8]| {
+                if let Some(operation) = operation {
+                    let _ = ostd::ipc::reply(operation, bytes);
+                } else {
+                    let _ = sys_try_send(sender_tid, bytes);
+                }
+            };
             let mut out_buf = [0u8; REPLY_BUF];
             if let Some(state) = STATE.lock().as_mut() {
                 match handle(&mut state.ctrl, data.as_ref(), &mut out_buf) {
                     NicReply::Status(code) => {
-                        let _ = sys_try_send(sender_tid, &[code]);
+                        reply(&[code]);
                     }
                     NicReply::Frame { len, buf } => {
-                        let _ = sys_try_send(sender_tid, &buf[..2 + len]);
+                        reply(&buf[..2 + len]);
                     }
                     NicReply::Raw(mac) => {
-                        let _ = sys_try_send(sender_tid, &mac);
+                        reply(&mac);
                     }
                 }
             } else {
-                let _ = sys_try_send(sender_tid, &[1u8]);
+                reply(&[1u8]);
             }
         }
 

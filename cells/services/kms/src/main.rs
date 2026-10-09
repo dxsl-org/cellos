@@ -28,6 +28,7 @@ fn cell_main() {
         let mut buffer = [0u8; api::ipc::IPC_BUF_SIZE];
         match ostd::syscall::sys_recv_attested(0, &mut buffer) {
             ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => {
+                let operation = ostd::ipc::current();
                 let caller = CallerIdentity::from_recv_buf(&buffer);
                 let registry = ServiceRegistrySnapshot {
                     net_broker_tid: ostd::syscall::sys_lookup_service(service::NET_BROKER),
@@ -37,7 +38,11 @@ fn cell_main() {
                 if let Some(response) =
                     service_state.handle(&buffer[..KMS_MESSAGE_LEN], sender, caller, registry)
                 {
-                    let _ = ostd::syscall::sys_send(sender, &response.to_bytes());
+                    if let Some(operation) = operation {
+                        let _ = ostd::ipc::reply(operation, &response.to_bytes());
+                    } else {
+                        let _ = ostd::syscall::sys_send(sender, &response.to_bytes());
+                    }
                 }
             }
             _ => ostd::task::yield_now(),

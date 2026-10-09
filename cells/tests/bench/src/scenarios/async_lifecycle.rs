@@ -354,12 +354,10 @@ fn mid_flight_death_leg() {
                 Ok(Some(completion)) => {
                     done[index] = true;
                     terminals += 1;
-                    if completion.is_uncertain() {
-                        // Counted as terminal, and honestly reported as uncertain.
-                        println(&format!("[async-lifecycle] DEATH-UNCERTAIN {completion:?}"));
-                        peer_gone += 0;
-                    } else {
+                    if completion.terminal == ostd::ipc::IpcTerminal::PeerGone {
                         peer_gone += 1;
+                    } else {
+                        fail("dead peer produced a terminal other than PeerGone");
                     }
                 }
                 Err(error) => {

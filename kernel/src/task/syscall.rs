@@ -4151,6 +4151,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
     }
 
+    // Every public receive form ends the prior VFS request. Masked dependency
+    // receives preserve the outer grant authority and bounded reply token.
+    if let Syscall::Recv { mask, .. } | Syscall::RecvTimeout { mask, .. }
+        | Syscall::TryRecv { mask, .. } | Syscall::RecvScatter { mask, .. } = &syscall {
+        let dropped = {
+            let mut guard = super::SCHEDULER.lock();
+            guard.as_mut().and_then(|sched| sched.tasks.get_mut(&caller_id))
+                .and_then(|task| task.begin_receive_context(*mask))
+        };
+        finish_vfs_context_drop(caller_id, dropped);
+    }
+
     match syscall {
         // --- Hubris ABI Implementation ---
         Syscall::IpcSubmit { target, ptr, len } =>
@@ -4164,8 +4176,25 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::IpcCancel { token } =>
             super::async_ipc::cancel(caller_id, token).map(|()| 0).map_err(ipc_error),
         Syscall::IpcCurrent => Ok(super::async_ipc::current(caller_id)),
-        Syscall::IpcReply { token, ptr, len } =>
-            super::async_ipc::reply(caller_id, token, ptr, len).map(|()| 0).map_err(ipc_error),
+        Syscall::IpcReply { token, ptr, len } => {
+            // An explicit reply is the same holder-quiescence boundary as Send.
+            // A stale/cancelled token may already be gone from the client, but
+            // must still release only this exact current VFS request's lease.
+            let vfs_release = if token != 0 && super::async_ipc::current(caller_id) == token {
+                match current_vfs_grant_lookup(caller_id) {
+                    VfsGrantLookup::Active(context) => Some(context),
+                    VfsGrantLookup::NotVfs | VfsGrantLookup::MissingContext => None,
+                }
+            } else {
+                None
+            };
+            let out = super::async_ipc::reply(caller_id, token, ptr, len)
+                .map(|()| 0).map_err(ipc_error);
+            if let Some(context) = vfs_release {
+                finish_vfs_send_release(caller_id, context.grant_owner, Some(context));
+            }
+            out
+        }
         Syscall::Send {
             target,
             msg_ptr,
@@ -4233,12 +4262,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
             };
 
-            let mut vfs_context_drop = None;
             let death_info = {
                 let mut guard = super::SCHEDULER.lock();
                 guard.as_mut().and_then(|sched| {
                     let t = sched.tasks.get_mut(&caller_id)?;
-                    vfs_context_drop = t.begin_receive_context(mask);
                     let owner_death = super::Task::owner_death_matches_receive_mask(mask)
                         .then(|| t.pending_owner_deaths.first().copied())
                         .flatten()
@@ -4255,7 +4282,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     })
                 })
             };
-            finish_vfs_context_drop(caller_id, vfs_context_drop);
 
             if let Some((is_owner, dead_tid, reason, caller_view)) = death_info {
                 if buf_len >= core::mem::size_of::<u64>() {
@@ -4395,13 +4421,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                                         ..
                                     } = &snap
                                     {
-                                        task.set_received_caller_context(
+                                        task.set_received_request_context(
                                             *sender_tid,
                                             *sender_cell_id,
                                             *sender_generation,
-                                        );
-                                        task.set_received_async_op(
-                                            *sender_tid,
                                             wire_header.map_or(0, |header| header.async_op),
                                         );
                                     }
@@ -4441,9 +4464,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     {
                         t.pending_msgs.remove(pos);
                     }
-                    t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
-                    t.set_received_async_op(
-                        sender_tid, wire_header.map_or(0, |header| header.async_op));
+                    t.set_received_request_context(
+                        sender_tid, sender_cell_id, sender_generation,
+                        wire_header.map_or(0, |header| header.async_op));
                 }
                 if let Some(header) = wire_header {
                     super::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -4595,12 +4618,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         // Commit caller context together with removal so a
                         // reply after scatter carries the delivered sender's
                         // identity and request generation.
-                        t.set_received_caller_context(
+                        t.set_received_request_context(
                             sender_tid,
                             header.sender_cell_id,
                             header.sender_generation,
+                            header.async_op,
                         );
-                        t.set_received_async_op(sender_tid, header.async_op);
                     }
                 }
                 if let Some(header) = wire_header {
@@ -4748,13 +4771,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                                         ..
                                     } = &snap
                                     {
-                                        task.set_received_caller_context(
+                                        task.set_received_request_context(
                                             *sender_tid,
                                             *sender_cell_id,
                                             *sender_generation,
-                                        );
-                                        task.set_received_async_op(
-                                            *sender_tid,
                                             wire_header.map_or(0, |header| header.async_op),
                                         );
                                     }
@@ -4790,9 +4810,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     {
                         t.pending_msgs.remove(pos);
                     }
-                    t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
-                    t.set_received_async_op(
-                        sender_tid, wire_header.map_or(0, |header| header.async_op));
+                    t.set_received_request_context(
+                        sender_tid, sender_cell_id, sender_generation,
+                        wire_header.map_or(0, |header| header.async_op));
                 }
                 if let Some(header) = wire_header {
                     super::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -4891,13 +4911,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         {
                             t.pending_msgs.remove(pos);
                         }
-                        t.set_received_caller_context(
+                        t.set_received_request_context(
                             sender_tid,
                             sender_cell_id,
                             sender_generation,
+                            wire_header.map_or(0, |header| header.async_op),
                         );
-                        t.set_received_async_op(
-                            sender_tid, wire_header.map_or(0, |header| header.async_op));
                     }
                     if let Some(header) = wire_header {
                         super::wake_sender_token(sched, sender_tid, caller_id, header);
