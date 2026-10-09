@@ -14,8 +14,8 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
 [current focus](../docs/roadmap/current-focus.md) before selecting any task.
 
-- [ ] **Phase 03 remaining proof obligations:** multi-source waiting, deterministic
-  two-hart publication/wake, and full restart/multi-caller fairness matrix.
+- [ ] **Phase 03 remaining proof obligations:** multi-source waiting, and full
+  restart/multi-caller fairness matrix.
   The single-caller saturation,
   real deadline and queued caller-death witnesses now run on x86 QEMU:
   `docs/evidence/c2c-saturation-deadline-caller-death-x86.{txt,log}`.
@@ -35,6 +35,8 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
   Abandoned caller grant lifetime, exact lease release and quarantine retention
   are asserted on the x86 domain lane (`scripts/x86/qemu-domain-test.sh`
   `vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)`).
+  Deterministic two-hart publication and wake races (pre-park, cross-hart wake,
+  remote peer death, deadline vs reply) are verified in kernel boundary regressions.
   No new completion source or remote route.
   Contract: [Spec 20 §2.6](../docs/specs/20-unified-ipc-contract.md); implementation
   and exercised evidence are recorded in

@@ -787,4 +787,63 @@ mod tests {
             assert_eq!(remaining, expected, "unrelated generations, cells, TIDs and raw IPC survive in order");
         }
     }
+    #[test]
+    fn deterministic_two_hart_publication_and_wake_races() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut sched = fixture();
+
+        // 1. Race 1: Pre-park publication race
+        // Provider publishes reply before caller on another hart arms WaitIpc.
+        add_operation(&mut sched, OWNER, PROVIDER, 101, Phase::Dispatched);
+        serve(&mut sched, PROVIDER, OWNER, 101);
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Ready;
+        assert_eq!(reply_current_in_sched(&mut sched, PROVIDER, OWNER, 0, 0), Some(Ok(())));
+        // When caller subsequently executes wait, has_terminal is true immediately,
+        // so caller does not block or lose the wakeup.
+        assert!(sched.tasks[&OWNER].async_operations.has_terminal());
+        assert!(matches!(sched.tasks[&OWNER].async_operations.find(101).unwrap().phase,
+            Phase::Terminal { kind: api::syscall::ipc_status::REPLY, .. }));
+
+        // 2. Race 2: Cross-hart parked wake race
+        // Caller is parked in WaitIpc when Provider settles the call.
+        add_operation(&mut sched, OWNER, PROVIDER, 102, Phase::Dispatched);
+        serve(&mut sched, PROVIDER, OWNER, 102);
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::WaitIpc { deadline: None };
+        assert_eq!(reply_current_in_sched(&mut sched, PROVIDER, OWNER, 0, 0), Some(Ok(())));
+        // Caller must be transitioned to Ready and pushed to the ready queue.
+        assert!(matches!(sched.tasks[&OWNER].state, TaskState::Ready));
+        assert!(sched.tasks[&OWNER].async_operations.has_terminal());
+        super::super::hart_local::ready::remove_from_all(OWNER);
+
+        // 3. Race 3: Remote peer-death vs parked caller race
+        // Caller is parked in WaitIpc when Provider crashes on another hart.
+        add_operation(&mut sched, OWNER, PROVIDER, 103, Phase::Dispatched);
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::WaitIpc { deadline: None };
+        peer_died(&mut sched, PROVIDER, 1_003, 7);
+        // Caller must be transitioned to Ready with PeerGone terminal.
+        assert!(matches!(sched.tasks[&OWNER].state, TaskState::Ready));
+        assert!(matches!(sched.tasks[&OWNER].async_operations.find(103).unwrap().phase,
+            Phase::Terminal { kind: api::syscall::ipc_status::PEER_GONE, .. }));
+        super::super::hart_local::ready::remove_from_all(OWNER);
+
+        // 4. Race 4: Remote deadline expiration vs reply race
+        // Case A: Reply wins lock first, deadline cannot overwrite it.
+        add_operation(&mut sched, OWNER, WORKER, 104, Phase::Dispatched);
+        serve(&mut sched, WORKER, OWNER, 104);
+        assert_eq!(reply_current_in_sched(&mut sched, WORKER, OWNER, 0, 0), Some(Ok(())));
+        expire(&mut sched, u64::MAX);
+        assert!(matches!(sched.tasks[&OWNER].async_operations.find(104).unwrap().phase,
+            Phase::Terminal { kind: api::syscall::ipc_status::REPLY, .. }));
+
+        // Case B: Expire wins lock first, subsequent reply is rejected.
+        add_operation(&mut sched, OWNER, WORKER, 105, Phase::Dispatched);
+        serve(&mut sched, WORKER, OWNER, 105);
+        expire(&mut sched, 100);
+        assert!(matches!(sched.tasks[&OWNER].async_operations.find(105).unwrap().phase,
+            Phase::Terminal { kind: api::syscall::ipc_status::INDETERMINATE, .. }));
+        assert_eq!(reply_current_in_sched(&mut sched, WORKER, OWNER, 0, 0), Some(Ok(())));
+        // Terminal remains Indeterminate, not overwritten by late reply.
+        assert!(matches!(sched.tasks[&OWNER].async_operations.find(105).unwrap().phase,
+            Phase::Terminal { kind: api::syscall::ipc_status::INDETERMINATE, .. }));
+    }
 }

@@ -329,6 +329,15 @@ allocator until the service completes or drops the exact request generation. Thi
 is asserted as a required gate on the x86 domain lane (`scripts/x86/qemu-domain-test.sh`:
 `vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)`).
 
+## Deterministic two-hart publication and wake race proof
+
+Four deterministic cross-hart race conditions are verified in-kernel under `SCHEDULER.lock()`
+(`kernel/src/task/async_ipc.rs::tests::deterministic_two_hart_publication_and_wake_races`):
+1. **Pre-park publication race:** Provider on Hart 1 publishes reply before Caller on Hart 0 arms `WaitIpc`. Caller subsequently observes `has_terminal() == true` immediately without blocking or lost wakeup.
+2. **Cross-hart parked wake race:** Caller on Hart 0 parked in `WaitIpc` is woken to `TaskState::Ready` by Provider on Hart 1 publishing `Reply`, enqueued onto Hart 0's ready queue with preemption raised if needed.
+3. **Remote peer-death vs parked caller race:** Provider on Hart 1 crashes; Caller on Hart 0 is woken to `Ready` with exact terminal `PEER_GONE`.
+4. **Remote deadline expiration vs reply race:** Strict mutual exclusion between `expire()` and `reply()`. If `reply()` commits first, `expire()` cannot overwrite it with timeout; if `expire()` commits first, subsequent late reply is refused (`Failure::Invalid`).
+
 ## Deviation log
 
 The replacement witness exposed premature round exhaustion in the SDK helper.

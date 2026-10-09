@@ -8,6 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- C2C Phase 03 deterministic two-hart publication and wake race proof: verified four
+  deterministic cross-hart race conditions in kernel scheduler regressions: pre-park
+  early reply (no lost wakeup), cross-hart parked wake (Ready transition + ready queue
+  push), remote peer death during WaitIpc (infallible PeerGone terminal), and deadline vs
+  reply mutual exclusion under lock arbitration.
 - C2C Phase 03 abandoned caller grant-lifetime proof: asserted kernel VFS lease
   quarantine and atomic release invariants as a required gate on the x86 domain lane
   (`scripts/x86/qemu-domain-test.sh`). Proves that owner death leaves in-flight grant

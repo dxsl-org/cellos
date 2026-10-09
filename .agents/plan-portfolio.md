@@ -163,7 +163,8 @@ authorization. Plans not admitted below are parked/historical.
   `docs/evidence/c2c-concurrent-input-x86.{txt,log}`; lifecycle integration 2 PASS,
   independent serial smoke PASS. Abandoned caller grant lifetime and quarantine
   are asserted on the x86 domain lane (`scripts/x86/qemu-domain-test.sh`).
-  Multi-source waiting and SMP two-hart wake proofs remain open.
+  Deterministic two-hart publication and wake races are verified in kernel boundary
+  regressions. Multi-source waiting remains open.
 - **x86_64 C++ freestanding runtime qualified (2026-10-09):** POSIX shim C++ ABI
   enabled on x86_64, `raw_syscall` implemented for x86_64 Syscall ABI, and kernel
   initializes FPU/SSE (CR0.EM=0, CR0.MP=1, CR4.OSFXSR=1, CR4.OSXMMEXCPT=1, LDMXCSR 0x1F80).
