@@ -74,6 +74,58 @@ The proposed operation state is `NotSubmitted → Submitted → {AuthenticatedCo
 
 `RemoteCallError` currently declares `NoService | Unreachable | Timeout | Busy | Indeterminate | AuthFailed | ProtocolError | NotSupported` but runtime returns only `NotSupported`. This table does not change that enum or claim that all outcomes are implemented. Generic async submit/await in Phase 03 is independent of first deadline-bounded synchronous remote call; `WaitCompletion` v1 accepts only `NET_RX` and `TIMER`. A `Future` that wraps blocking `sys_send` is not nonblocking IPC. Dropping an awaiter abandons waiting, not necessarily the underlying remote effect.
 
+### 2.6 Nonblocking local call lifecycle — the shipped primitive, its contract, and what a migration would cost
+
+Draft, 2026-10-09. Nothing here amends Spec 17 or its ratified masked reply discipline, and
+nothing here is implemented beyond what the text cites.
+
+The kernel already ships a bounded exact-operation call primitive. Measured on the x86_64
+`test-hooks` lane (`docs/evidence/c2c-async-lifecycle-x86.{txt,log}`): **eight outstanding calls
+from one Tier-1 Cell to one peer, exactly one correlated completion each, 0 lost, 0
+mis-correlated** (the peer answered in reverse order, so operation identity cannot be replaced by
+arrival order), p50/p99 ≈ 1.56/1.59 ms on TCG, and **one** `wait` round for the whole drain. The
+same lane measures `sys_try_send` as *not* a submission mechanism: it is delivered only when the
+receiver is parked in `Recv` and otherwise refused **in its return value** (`usize::MAX`), with
+nothing queued.
+
+**Operation lifecycle** (`kernel/src/task/async_ipc.rs`): `Queued → Dispatched → Terminal {
+Reply | PeerGone | PreDispatchTimeout | Indeterminate | Cancelled }`.
+
+| Property | Shipped behaviour | Consequence for a caller |
+|---|---|---|
+| Submission | `submit` copies the request into kernel-owned storage and reserves the reply slot under one scheduler lock hold; the caller may drop its stack buffer immediately | No pinned caller buffer, no bare stack pointer |
+| Identity | The token binds owner tid, peer tid, peer cell **and** peer generation; the receiver reads it from the delivered message (`IpcCurrent`) | A completion cannot cross incarnations, and a stale generation cannot settle someone else's operation |
+| Terminal kinds | `Reply`, `PeerGone`, `PreDispatchTimeout`, `Indeterminate`, `Cancelled` — see the §2.4 matrix for which caller-visible outcome each maps to | A dead or vanished peer is a definite outcome, not a hang |
+| Reply retention | The kernel owns the reply until `take`; an undersized `take` buffer does **not** consume the result; taking a terminal releases the slot | No silent truncation, no double execution through re-taking |
+| Capacity | Bounded operations per owner and a bounded receiver queue; a full owner set or queue returns `Busy` with nothing delivered | Congestion is a refusal, never a silent drop |
+| Waiting | `wait(ticks)` is a timer-bounded park; `WaitCompletion` v1 has only `NET_RX`/`TIMER` sources | A caller polls on a timer granularity; the measured drain needed one round, not a busy loop |
+
+**The reply is per-operation, not per-sender — and that is the whole cost of migrating existing
+callers.** A bounded caller's terminal is produced by `IpcReply`: only that handler reaches
+`async_ipc::terminal`, which requires the operation to be `Dispatched`. An ordinary
+`Send`-to-sender reply never touches the operation slot. Measured directly rather than inferred: a
+peer that answered eight bounded requests with `sys_send` left one operation `Reply` (taken while it
+was still alive) and terminalised the other seven `PeerGone`.
+
+Therefore:
+
+  * an **opt-in** async API requires both sides to opt in — the serving side must answer with
+    `IpcCurrent` + `IpcReply` instead of the ratified masked `sys_send(sender_tid, …)` (Spec 17 §2,
+    §6). The cross-tier fixture does exactly this and completes every operation
+    (`docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`,
+    `docs/evidence/c2c-named-tier2-service-x86.{txt,log}`);
+  * making the **blocking** `LocalEndpoint::call` / `ServiceRef::call` stop stranding a caller whose
+    provider dies mid-call forces either a service-wide reply migration — a change to a *ratified*
+    IPC path, i.e. a Spec 17 §9 entry plus two Law-1 confirmations — or a kernel change that lets a
+    plain masked reply terminalise a bounded operation, which is the same class of ABI/contract
+    question. Neither is proposed or approved by this text.
+
+**Open proof obligations, not settled by the measurements above:** waiting on several sources in one
+park (the local drain used a timer-bounded `wait`), cancelling an already-dispatched operation, the
+two-hart publication/wake race (a completion published on one hart must be seen by a waiter parked on
+another, with no lost wakeup), and what happens to a retained reply when the caller drops its
+interest.
+
 ### 2.5 Liveness and safety boundaries
 
 Local death may be confirmed against kernel-owned live generation. A remote beacon, lease, TLS or Noise disconnect indicates **suspected loss/partition**, not confirmed remote Cell death, and cannot authorize physical actuation or automatic failover; [Spec 14](14-distributed.md) retains the local interlock rule. `watch(remote)` and a broker-scoped death-notification syscall from v2 are **deferred** beyond unary RPC; no SpawnCap `NotifyOnExit` grant to broker. Session capacity pressure is `Busy`, not a death event. Public/fleet-scale exports, distributed leases, hole punching, promise pipelining and Tier-3 host service access each require a separate gate.
@@ -127,6 +179,18 @@ Local death may be confirmed against kernel-owned live generation. A remote beac
 
 ## 7. Revision record
 
+- **v3.2 (2026-10-09, draft amendment; no status change):** adds §2.6, the nonblocking local call
+  lifecycle as the shipped primitive actually implements it, and **corrects a v3.1 clause that read as
+  though moving local calls onto that primitive were a plain SDK change**. It is not: a bounded
+  caller's terminal is produced by `IpcReply` — only that handler reaches `async_ipc::terminal`, which
+  requires `Phase::Dispatched` — while an ordinary masked `Send` reply never touches the operation
+  slot. Measured on the x86_64 lane: a peer answering eight bounded requests with `sys_send` left one
+  operation `Reply` and terminalised seven `PeerGone`
+  (`docs/evidence/c2c-async-lifecycle-x86.{txt,log}`). An opt-in async API therefore needs both sides
+  to opt in, and the stranding fix for the blocking API costs either a service-wide reply migration
+  (Spec 17 §9 + two Law-1 confirmations) or a kernel change to terminalise on a plain reply. §2.6 also
+  records the operation lifecycle, submission-as-copy, identity binding, reply retention, bounded
+  capacity and timer-bounded waiting, with what remains unproven. Measured numbers, not ratification.
 - **v3.1 (2026-10-08, draft amendment; no status change):** §2.1 binding-lifetime text and the §5 existing-symbol row now point at [ADR-0023](../decisions/0023-local-service-generation-binding.md), which resolves the "design/ABI review" this draft deferred: the local binding axis is the existing per-Cell `(cell_id, generation)`, exactly one additive opcode (`LookupServiceBound = 429`) is proposed, `LookupService = 206` stays byte-compatible, no send opcode is added, and local service calls move onto the existing bounded exact-operation primitive. Source review also corrected a premise: TIDs are never re-issued within one boot, so a stale cached TID fails closed (`TargetGone`) rather than misdelivering; the reuse that exists is on `CellId` slots. Still a draft: not ratified, no ABI confirmed, no implementation.
 - **v3 (2026-09-27, draft):** Rebased on ADR-0015's tiers, local-only broker/typed endpoint, ADR-0008 protected TLS and ADR-0009 correlated failures. Replaced the obsolete `CellAddr`/remote-watch-as-prerequisite and UDP-size assumptions with locality, identity, submission and evidence matrices. Source audit found an unrestricted legacy first-byte sequence; proposed mutually exclusive broker image profiles on the existing service ID rather than two colliding parsers. The beacon uptime epoch is not a protected cross-reboot C2C replay source; the static export registry has no peer allowlist or live binding; the V1 duration cannot establish a cross-node deadline. No ratification, new ABI, image profile or remote implementation is claimed.
 - **v2 (2026-07-30, historical draft):** Node-level remote principal and partition-aware safety review; previous sketches were never ratified.

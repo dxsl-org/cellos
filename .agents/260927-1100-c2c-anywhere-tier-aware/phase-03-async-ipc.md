@@ -83,6 +83,39 @@ change: the `Ok(usize::MAX)` refusal shape, and `cells/services/input/src/main.r
 `cells/drivers/xhci/src/input.rs:20` describing the sentinel as `isize::MAX` while the SDK wrapper
 hands back `usize::MAX`.
 
+## Step-2 specification (2026-10-09) — landable now, and what it says about steps 3–4
+
+Written from the code the primitive already runs and from step 1's measurements; **no ABI, kernel or
+scheduler change**, and nothing admitted beyond it.
+
+Specified in [Spec 20 §2.6](../../docs/specs/20-unified-ipc-contract.md): the operation lifecycle
+(`Queued → Dispatched → Terminal{Reply|PeerGone|PreDispatchTimeout|Indeterminate|Cancelled}`), the
+mapping to the §2.4 caller-visible outcomes, submission-as-copy (no pinned caller buffer), identity
+binding (token → owner, peer, peer cell **and** peer generation), reply retention until `take` with
+no partial consumption, bounded capacity returning `Busy`, and waiting as a timer-bounded park.
+
+**The finding that sizes steps 3–4:** a bounded caller's terminal is produced by `IpcReply` — only
+that handler reaches `async_ipc::terminal`, which requires `Phase::Dispatched` — and an ordinary
+`Send`-to-sender reply never touches the operation slot. Measured, not inferred: a peer that
+answered eight bounded requests with `sys_send` left one operation `Reply` and terminalised the other
+seven `PeerGone` (step-1 evidence, first run). So:
+
+  * an **opt-in** nonblocking API needs both sides to opt in, with the serving side answering
+    `IpcCurrent` + `IpcReply` — proven end-to-end by the Phase-02 fixture
+    (`docs/evidence/c2c-named-tier2-service-x86.{txt,log}`) and bounded by measurement;
+  * **step 3's stated goal** — moving `LocalEndpoint::call` / `ServiceRef::call` onto the primitive so
+    a dying provider stops stranding the caller — is therefore *not* a local SDK change. It forces
+    either a service-wide reply migration (a change to a ratified IPC path: Spec 17 §9 entry + two
+    Law-1 confirmations) or a kernel change letting a plain masked reply terminalise a bounded
+    operation (the same class of contract question). **Recommendation: do not attempt it as steps 2–3
+    stand.** Keep the blocking API exactly as it is, ship the opt-in path first, and take the
+    stranding fix as its own decision with the migration cost stated up front.
+
+Open, with their proof obligations, and each needing its own admission: multi-source waiting in one
+park (`WaitCompletion` v1 is `NET_RX`/`TIMER` only), cancelling a dispatched operation, the two-hart
+publication/wake race, and retained-reply lifetime when a caller drops its interest. Step 4's
+saturation/restart/timer-race matrix is the evidence that would close them.
+
 ## Deviation log
 
 None.

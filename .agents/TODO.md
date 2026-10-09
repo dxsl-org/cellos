@@ -21,11 +21,16 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
   `docs/evidence/c2c-cross-tier-exchange-x86.{txt,log}`).
   Phase-03 **step 1** (measured prototype, `docs/evidence/c2c-async-lifecycle-x86.{txt,log}`) shows
   the shipped primitive carries the local multi-outstanding shape — bounded, exactly-once, one `wait`
-  round — so steps 2–4 are *not* justified as a new public submission syscall by measurement and are
-  unadmitted; they still own multi-source waiting (`WaitCompletion` v1 is `NET_RX`/`TIMER` only),
-  cancellation of a dispatched operation, the two-hart wake proof, retained-reply lifetime and
-  queue/fairness reservation, and need the kernel file-owner handoff if they touch those paths.
-  Phase 03 step 3 also owns moving `LocalEndpoint::call` onto the bounded primitive.
+  round — so steps 2–4 are *not* justified as a new public submission syscall by measurement.
+  Phase-03 **step 2 landed** as well: the lifecycle specification is [Spec 20 §2.6](../docs/specs/20-unified-ipc-contract.md)
+  (draft v3.2), and it says what steps 3–4 cost — a bounded caller's terminal comes from `IpcReply`,
+  so an ordinary masked `Send` reply never completes an operation; the opt-in async API therefore
+  needs both sides to opt in, and **step 3's goal of moving the blocking API onto the primitive needs
+  a decision**: a service-wide reply migration (Spec 17 §9 + two Law-1 confirmations) or a kernel
+  change to terminalise on a plain reply. Still unadmitted: the opt-in API, multi-source waiting
+  (`WaitCompletion` v1 is `NET_RX`/`TIMER` only), cancelling a dispatched operation, the two-hart wake
+  proof, retained-reply lifetime, queue/fairness reservation — all needing the kernel file-owner
+  handoff where they touch syscall/completion/scheduler paths.
   One Phase-02 remainder is still unclaimed and needs its own review: a wrong-**user-buffer** witness
   on the syscall copy path (needs a raw-pointer fixture plus its own unsafe-allowlist entry). The
   *named* Tier-2 service turned out **not** to need an authority decision — the spawner registers it,

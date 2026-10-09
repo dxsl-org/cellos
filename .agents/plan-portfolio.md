@@ -98,6 +98,19 @@ authorization. Plans not admitted below are parked/historical.
   unauthorized method) and the fourth — a wrong **user buffer** on the syscall copy path — is not
   re-created: a `#![forbid(unsafe_code)]` cell cannot fabricate a pointer, and the
   address-containment witness already runs as `/bin/tier2-exploit`.
+- **Phase 03 step 2 landed 2026-10-09** (same session, no new admission needed): the lifecycle
+  specification is now in the contract — [Spec 20 §2.6](../docs/specs/20-unified-ipc-contract.md),
+  draft v3.2 — covering the operation lifecycle, the mapping to §2.4's outcomes, submission-as-copy,
+  identity binding, reply retention, bounded capacity and timer-bounded waiting, each with what
+  remains unproven. **Its main finding sizes the rest of Phase 03:** a bounded caller's terminal comes
+  from `IpcReply` (only that handler reaches `async_ipc::terminal`), so an ordinary masked
+  `Send` reply never completes an operation — measured, not inferred — which means the opt-in async
+  API needs both sides to opt in, and step 3's stated goal (moving `LocalEndpoint::call` /
+  `ServiceRef::call` onto the primitive so a dying provider stops stranding the caller) costs either a
+  service-wide reply migration (Spec 17 §9 + two Law-1 confirmations) or a kernel change letting a
+  plain reply terminalise an operation. Recommendation recorded: keep the blocking API as it is, ship
+  the opt-in path first, and take the stranding fix as its own decision with that cost stated. No ABI,
+  kernel or scheduler change was made.
 - **Phase 03 step 1 admitted and landed 2026-10-09** (owner: same C2C session): the measured
   prototype that step 2's decision needs, and nothing else — no ABI, no kernel, no scheduler, no
   production callsite. `bench async-lifecycle` on the Phase-02 image, pinned by the x86 integration
