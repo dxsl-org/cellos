@@ -51,6 +51,9 @@ pub struct CetCaps {
 /// Returns `CetCaps { ibt: false, shstk: false }` on CPUs that do not
 /// support CPUID leaf 7 (very old hardware).
 pub fn detect() -> CetCaps {
+    if core::arch::x86_64::__cpuid(0).eax < 7 {
+        return CetCaps { ibt: false, shstk: false };
+    }
     // __cpuid_count is safe: CPUID is a read-only instruction with no side effects.
     let result = core::arch::x86_64::__cpuid_count(7, 0);
     CetCaps {

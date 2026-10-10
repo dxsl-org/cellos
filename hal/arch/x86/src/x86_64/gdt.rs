@@ -25,14 +25,14 @@ pub const SEL_TSS: u16 = 0x28;
 pub struct Tss {
     _r0: u32,
     pub rsp0: u64,
-    _rest: [u8; 84],
+    _rest: [u8; 92],
 }
 impl Tss {
     pub const fn new() -> Self {
         Self {
             _r0: 0,
             rsp0: 0,
-            _rest: [0; 84],
+            _rest: [0; 92],
         }
     }
 }
@@ -76,27 +76,40 @@ struct GdtPtr {
     base: u64,
 }
 
-static mut GDT: Gdt = Gdt {
-    entries: [GdtEntry::NULL; 8],
+#[repr(C, align(64))]
+struct CpuTables {
+    gdt: Gdt,
+    tss: Tss,
+}
+static mut TABLES: [CpuTables; super::syscall::MAX_CPUS] = [
+    const { CpuTables { gdt: Gdt { entries: [GdtEntry::NULL; 8] }, tss: Tss::new() } };
+    super::syscall::MAX_CPUS
+];
+const _: () = {
+    assert!(core::mem::size_of::<Tss>() == 104);
+    assert!(core::mem::offset_of!(Tss, rsp0) == 4);
 };
-pub static mut TSS: Tss = Tss::new();
 
-/// Build and install the GDT + TSS.
+/// Build this CPU's private GDT and TSS after installing kernel GS.
 pub fn init() {
-    // SAFETY: single-threaded boot; GDT and TSS are static globals.
     unsafe {
-        GDT.entries[1] = GdtEntry::code(0);
-        GDT.entries[2] = GdtEntry::data(0);
-        GDT.entries[3] = GdtEntry::data(3);
-        GDT.entries[4] = GdtEntry::code(3);
-        // SAFETY: addr_of_mut!/addr_of! avoids creating a Rust reference to a mutable static.
-        let b = core::ptr::addr_of!(TSS) as u64;
+        let tables = core::ptr::addr_of_mut!(TABLES).cast::<CpuTables>()
+            .add(super::syscall::current_cpu_id());
+        let gdt = core::ptr::addr_of_mut!((*tables).gdt);
+        let tss = core::ptr::addr_of_mut!((*tables).tss);
+        // I/O bitmap starts beyond the TSS limit, denying Ring-3 port access.
+        core::ptr::write_unaligned(tss.cast::<u8>().add(102).cast::<u16>(), 104);
+        (*gdt).entries[1] = GdtEntry::code(0);
+        (*gdt).entries[2] = GdtEntry::data(0);
+        (*gdt).entries[3] = GdtEntry::data(3);
+        (*gdt).entries[4] = GdtEntry::code(3);
+        let b = tss as u64;
         let l = (core::mem::size_of::<Tss>() - 1) as u32;
-        GDT.entries[5] = GdtEntry::tss_low(b, l);
-        GDT.entries[6] = GdtEntry::tss_high(b);
+        (*gdt).entries[5] = GdtEntry::tss_low(b, l);
+        (*gdt).entries[6] = GdtEntry::tss_high(b);
         let ptr = GdtPtr {
             limit: (core::mem::size_of::<Gdt>() - 1) as u16,
-            base: core::ptr::addr_of!(GDT) as u64,
+            base: gdt as u64,
         };
         asm!(
             // SAFETY: GDT pointer is valid; lgdt + far jmp reload CS; ltr loads TSS.
@@ -115,8 +128,9 @@ pub fn init() {
 }
 /// Set RSP0 (kernel stack for Ring3->Ring0 transition).
 pub fn set_kernel_stack(sp: u64) {
-    // SAFETY: TSS is static; single-threaded spawn path.
     unsafe {
-        TSS.rsp0 = sp;
+        let tables = core::ptr::addr_of_mut!(TABLES).cast::<CpuTables>()
+            .add(super::syscall::current_cpu_id());
+        core::ptr::write_unaligned(core::ptr::addr_of_mut!((*tables).tss.rsp0), sp);
     }
 }

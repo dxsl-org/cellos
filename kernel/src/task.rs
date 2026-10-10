@@ -577,7 +577,7 @@ static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     sscratch: 0,
 };
 #[cfg(target_arch = "x86_64")]
-static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
+static mut BOOT_CONTEXTS: [crate::hal::arch::Context; smp::MAX_HARTS] = [crate::hal::arch::Context {
     r15: 0,
     r14: 0,
     r13: 0,
@@ -587,7 +587,9 @@ static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     sp: 0,
     rip: 0,
     kernel_trap_sp: 0,
-};
+    user_cr3: 0,
+    fp_control: hal::context::FpuControl::new(),
+}; smp::MAX_HARTS];
 #[cfg(target_arch = "arm")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     r4: 0,
@@ -896,17 +898,19 @@ const _: crate::hal::CurrentCellId = vi_current_cell_id;
 /// retirement is published when this hart holds no task, because "no task" is the
 /// same proof a switch gives (nothing of the retiring generation is executing
 /// here) and it is the only proof a parked hart can offer.
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 #[no_mangle]
 pub extern "Rust" fn vi_ipi_service() {
     let hart = hart_local::current_hart_id();
-    if smp::tlb_flush_pending(hart) {
-        crate::memory::paging::tlb_flush_all();
-        smp::complete_tlb_flush(hart);
-    }
+    smp::service_tlb_flush(hart);
     #[cfg(feature = "native-domains")]
     if smp::retirement_switch_pending(hart) && hart_local::ready::current_task_id_for(hart) == 0 {
         smp::complete_retirement_switch(hart);
+    }
+    #[cfg(target_arch = "x86_64")]
+    if smp::x86_scheduler_ready()
+        && (smp::take_preemption(hart) || smp::retirement_switch_pending(hart)) {
+        yield_cpu();
     }
 }
 
@@ -925,13 +929,10 @@ pub extern "Rust" fn vi_timer_tick() {
     // an idle hart parked in WFI takes the IPI's trap and returns to its loop
     // without ever switching, so a switch-boundary hook would never run and the
     // requester would wait for an acknowledgement that could not arrive.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
     {
         let hart = hart_local::current_hart_id();
-        if smp::tlb_flush_pending(hart) {
-            crate::memory::paging::tlb_flush_all();
-            smp::complete_tlb_flush(hart);
-        }
+        smp::service_tlb_flush(hart);
 
         // Same observation point, same reason, for the capture preflight's park
         // request: a hart can only stop where it is already taking the trap that
@@ -972,12 +973,15 @@ pub extern "Rust" fn vi_timer_tick() {
     // way up.
     #[cfg(all(
         feature = "native-domains",
-        any(target_arch = "riscv64", target_arch = "aarch64")
+        any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
     ))]
     if hart_local::current_hart_id() == 0 {
         crate::memory::deferred_release::reap_deferred_releases();
     }
 
+    #[cfg(target_arch = "x86_64")]
+    if hart_local::current_hart_id() == 0 { tick(); }
+    #[cfg(not(target_arch = "x86_64"))]
     tick();
 
     #[cfg(feature = "test-hooks")]
@@ -998,6 +1002,11 @@ pub extern "Rust" fn vi_timer_tick() {
     // Makes UART delivery reader-independent: events arrive even when no cell
     // is currently blocked in sys_read(0).  VirtIO events were already drained
     // above, so the VirtIO section of poll() is a no-op here.
+    #[cfg(target_arch = "x86_64")]
+    if hart_local::current_hart_id() == 0 {
+        crate::task::drivers::console_drv::CONSOLE.lock().poll();
+    }
+    #[cfg(not(target_arch = "x86_64"))]
     crate::task::drivers::console_drv::CONSOLE.lock().poll();
 
     // Run the scheduler.  If a higher-priority (or simply next round-robin)
@@ -1006,11 +1015,13 @@ pub extern "Rust" fn vi_timer_tick() {
     //   (a) interrupts are disabled by hardware on trap entry (sstatus.SIE=0)
     //   (b) yield_cpu() releases SCHEDULER lock before calling Context::switch
     //   (c) trap.S restores the correct ViTrapFrame from the new task's stack
+    #[cfg(target_arch = "x86_64")]
+    if !smp::x86_scheduler_ready() { return; }
     yield_cpu();
 }
 
-/// Incoming side of a raw switch on the architectures without the RV64
-/// `vi_context_switch_complete` callback: it runs after the switch has changed
+/// Incoming side of an AArch64 raw switch without the assembly completion
+/// callback: it runs after the switch has changed
 /// stacks, i.e. in the incoming context.
 ///
 /// The plan's own flag decides the safe-root acknowledgement. Inferring it from
@@ -1020,7 +1031,7 @@ pub extern "Rust" fn vi_timer_tick() {
 /// root's release and the user-copy guard reset never happen.
 #[cfg(all(
     feature = "native-domains",
-    any(target_arch = "aarch64", target_arch = "x86_64")
+    target_arch = "aarch64"
 ))]
 pub(crate) fn complete_incoming_switch(hart: usize) {
     if hart_local::take_safe_root_pending() {
@@ -1084,7 +1095,7 @@ pub extern "C" fn vi_context_switch_complete() {
         #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
         retirement_selftest::observe_heartbeat_boot_completion(hart);
     }
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", target_arch = "x86_64")))]
     {
         let safe_root = hart_local::take_safe_root_pending();
         if switched_to_boot || safe_root {
@@ -1099,6 +1110,11 @@ pub extern "C" fn vi_context_switch_complete() {
         }
         user_copy::clear_guard_for_context_switch();
     }
+    #[cfg(all(feature = "native-domains", feature = "test-hooks", target_arch = "x86_64"))]
+    {
+        domain_switch_tests::observe_incoming_live_root();
+        domain_switch_tests::observe_domain_teardown(hart);
+    }
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     context_handoff_selftest::observe_origin_ownership_release(hart);
 
@@ -1112,7 +1128,10 @@ pub extern "C" fn vi_context_switch_complete() {
 
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     retirement_selftest::hold_before_switch_completion(hart);
+    #[cfg(not(target_arch = "x86_64"))]
     smp::complete_retirement_switch(hart);
+    #[cfg(target_arch = "x86_64")]
+    smp::complete_captured_retirement_boundary(hart);
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     retirement_selftest::observe_switch_completion(hart);
 }
@@ -1200,16 +1219,15 @@ pub(crate) fn terminate_current_cell_on_user_trap_fault(
 
 /// The boot/idle context slot a switch from `hart_id` saves into.
 ///
-/// AArch64 has one per hart; the other non-RV64 targets still have a single
-/// idle context (they do not start secondaries).
-#[cfg(target_arch = "aarch64")]
+/// AArch64 and x86_64 own one idle context per logical CPU.
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 #[inline]
 unsafe fn boot_context_for(hart_id: usize) -> *mut crate::hal::arch::Context {
     // SAFETY: `hart_id < MAX_HARTS` — it comes from `current_hart_id()`.
     unsafe { &raw mut BOOT_CONTEXTS[hart_id] }
 }
 
-#[cfg(all(not(target_arch = "riscv64"), not(target_arch = "aarch64")))]
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
 #[inline]
 unsafe fn boot_context_for(_hart_id: usize) -> *mut crate::hal::arch::Context {
     &raw mut BOOT_CONTEXT
@@ -1220,7 +1238,7 @@ unsafe fn boot_context_for(_hart_id: usize) -> *mut crate::hal::arch::Context {
 /// A secondary that only takes interrupts and never runs a task is
 /// indistinguishable from one that schedules; this is the line that tells them
 /// apart, and it is bounded so a long boot cannot flood the console.
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 fn note_task_dispatch(hart_id: usize) {
     use core::sync::atomic::{AtomicU8, Ordering};
     static REPORTED: [AtomicU8; smp::MAX_HARTS] = [const { AtomicU8::new(0) }; smp::MAX_HARTS];
@@ -1233,6 +1251,8 @@ fn note_task_dispatch(hart_id: usize) {
 
 /// Core scheduling logic: picks next task and performs switch OUTSIDE of the lock.
 pub fn yield_cpu() {
+    #[cfg(target_arch = "x86_64")]
+    if !smp::x86_scheduler_ready() { return; }
     // RV64 cooperative yields can enter with SIE set (not only from trap
     // context). Capture and clear it before any scheduler lock or publication;
     // masking only at `__switch` leaves current/selected scheduler state interruptible.
@@ -1248,9 +1268,13 @@ pub fn yield_cpu() {
     // RISC-V/AArch64 automatically clear the interrupt-enable bit on trap entry,
     // so they don't have this problem when called from vi_timer_tick.
     #[cfg(target_arch = "x86_64")]
-    unsafe {
-        core::arch::asm!("cli", options(nomem, nostack));
-    }
+    let outgoing_rflags: usize = unsafe {
+        let flags;
+        core::arch::asm!("pushfq", "pop {}", "cli", out(reg) flags);
+        flags
+    };
+    #[cfg(target_arch = "x86_64")]
+    smp::capture_retirement_boundary(hart_local::current_hart_id());
 
     // Reap zombies already switched away from. Take them under the lock (cheap
     // pointer moves), then drop OUTSIDE it so Stack::drop's frame-free + unmap
@@ -1499,13 +1523,6 @@ pub fn yield_cpu() {
         }
     }
 
-    #[cfg(target_arch = "x86_64")]
-    if switch_info.is_none() {
-        unsafe {
-            // No switch: re-enable interrupts before returning to the idle loop.
-            core::arch::asm!("sti", options(nomem, nostack));
-        }
-    }
     #[cfg(all(
         feature = "native-domains",
         any(
@@ -1541,7 +1558,7 @@ pub fn yield_cpu() {
                 plan.incoming
             };
             if !plan.incoming.is_null() {
-                #[cfg(target_arch = "aarch64")]
+                #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
                 note_task_dispatch(hart_id);
                 #[cfg(target_arch = "riscv64")]
                 crate::hal::arch::set_kernel_stack((&*plan.incoming).sp);
@@ -1576,18 +1593,11 @@ pub fn yield_cpu() {
                 crate::hal::arch::Context::switch_with_root(
                     final_curr, final_next, root_addr, asid,
                 );
-                complete_incoming_switch(hart_id);
-                // The incoming side of a completed switch is the proof a
-                // retirement asks for: the generation it is waiting on cannot be
-                // executing here any more, because this hart's outgoing context
-                // was saved before the switch. RV64 publishes this from its
-                // assembly switch boundary (`vi_context_switch_complete`); off
-                // RV64 this call is that publication, and without it a switching
-                // hart never answers the request — measured on a two-hart
-                // AArch64 boot: 598 `retirement pending` ticks with the hart
-                // switching between tasks (14 -> 4 -> 16) the whole time, and the
-                // retired generation's CellId blocking the grant pair.
-                smp::complete_retirement_switch(hart_id);
+                #[cfg(target_arch = "aarch64")]
+                {
+                    complete_incoming_switch(hart_id);
+                    smp::complete_retirement_switch(hart_id);
+                }
             }
         }
     }
@@ -1664,12 +1674,6 @@ pub fn yield_cpu() {
             #[cfg(not(target_arch = "riscv64"))]
             crate::hal::arch::Context::switch(final_curr, final_next);
 
-            // Execution resumes here when this context is switched BACK to.
-            // Re-enable interrupts: the cli above masked IRQs for the lock section;
-            // iretq (ring-3 entry) will have re-enabled them on the other CPU path,
-            // but on the resume path here we must restore IF explicitly.
-            #[cfg(target_arch = "x86_64")]
-            core::arch::asm!("sti", options(nomem, nostack));
         }
     }
 
@@ -1677,6 +1681,13 @@ pub fn yield_cpu() {
     // (aarch64/x86_64; riscv64 carries it in the trap frame) from the hart-local
     // value the scheduler published, so this stays lock-free.
     tls::apply_on_resume();
+    // This activation may resume on another CPU. Its captured flags belong to
+    // the suspended context, not the selecting CPU; never enable IF inside an
+    // IRQ activation that originally entered masked.
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        core::arch::asm!("push {}", "popfq", in(reg) outgoing_rflags);
+    }
 }
 
 /// Wake a parked task with a syscall result, if it is still parked.

@@ -47,7 +47,7 @@ pub fn init_bare() {}
 ///
 /// RISC-V:   sfence.vma — full TLB shootdown from S-mode.
 /// AArch64:  tlbi vmalle1is + dsb sy + isb — broadcast flush, all ASIDs, EL1.
-/// x86_64:   write CR3 to itself (reloads PML4 and flushes all non-global TLB entries).
+/// x86_64:   all PCIDs and globals (INVPCID type 2 or untagged PGE toggle).
 /// Bare physical (riscv32/x86/arm): no-op.
 #[inline(always)]
 pub fn tlb_flush_all() {
@@ -67,12 +67,7 @@ pub fn tlb_flush_all() {
 
     #[cfg(target_arch = "x86_64")]
     {
-        // SAFETY: writing CR3 with its own value flushes all non-global TLB entries.
-        // This is a standard x86_64 full-TLB flush idiom; safe from Ring 0.
-        unsafe {
-            let cr3 = hal::paging::read_cr3();
-            hal::paging::write_cr3(cr3);
-        }
+        hal::domain::flush_all_global();
     }
 }
 
@@ -684,7 +679,7 @@ pub fn map_page_x86(
     flags: u64,
 ) -> PagingResult<()> {
     use crate::memory::frame::phys_to_virt;
-    use hal::paging::{invlpg, walk_create};
+    use hal::paging::walk_create;
 
     let root_lock = KERNEL_ROOT.lock();
     let root_phys = (*root_lock).ok_or(PageTableError::NotSupported)?;
@@ -698,17 +693,29 @@ pub fn map_page_x86(
     let Some(pte_ptr) = pte_ptr else {
         // SAFETY: `hal::PageTable` is the architecture's 4096-byte PML4 layout.
         let table = unsafe { &mut *(pml4_virt as *mut hal::PageTable) };
-        table.prune_empty(vaddr, &mut |frame| allocator.deallocate_frame(frame));
+        // A failed walk may have published intermediate tables. Detach them
+        // first, invalidate every CPU's page-walk caches, and only then recycle
+        // their frames. Four-level x86 has at most three non-root tables here.
+        let mut retired = [0usize; 3];
+        let mut count = 0;
+        table.prune_empty(vaddr, &mut |frame| {
+            assert!(count < retired.len(), "unexpected x86 pruning depth");
+            retired[count] = frame;
+            count += 1;
+        });
+        if count != 0 {
+            crate::memory::tlb_shootdown::flush_page(vaddr);
+            for frame in &retired[..count] {
+                allocator.deallocate_frame(*frame);
+            }
+        }
         return Err(PageTableError::OutOfMemory);
     };
     // SAFETY: pte_ptr is the leaf PTE address; writing it installs the mapping.
     unsafe {
         core::ptr::write_volatile(pte_ptr, paddr as u64 | flags);
     }
-    // SAFETY: invlpg flushes only the single TLB entry for vaddr.
-    unsafe {
-        invlpg(vaddr);
-    }
+    crate::memory::tlb_shootdown::flush_page(vaddr);
     Ok(())
 }
 
@@ -763,7 +770,7 @@ fn map_mmio_x86_flags(phys: usize, size: usize, flags: u64) {
 #[cfg(target_arch = "x86_64")]
 pub fn unmap_page_x86(vaddr: VAddr) -> PagingResult<()> {
     use crate::memory::frame::phys_to_virt;
-    use hal::paging::{invlpg, walk_create, walk_read, PTE_PRESENT};
+    use hal::paging::{walk_create, walk_read, PTE_PRESENT};
 
     let root_lock = KERNEL_ROOT.lock();
     let root_phys = match *root_lock {
@@ -785,10 +792,7 @@ pub fn unmap_page_x86(vaddr: VAddr) -> PagingResult<()> {
                 unsafe {
                     core::ptr::write_volatile(pte_ptr, 0u64);
                 }
-                // SAFETY: invlpg flushes the TLB entry for this virtual address.
-                unsafe {
-                    invlpg(vaddr);
-                }
+                crate::memory::tlb_shootdown::flush_page(vaddr);
             }
         }
     }
@@ -807,36 +811,6 @@ pub fn unmap_page_x86(vaddr: VAddr) -> PagingResult<()> {
 /// x86 maps a claimed window on demand (`map_mmio_user_x86`), so revoking it
 /// clears the user leaf PTE; the boot identity map still serves the kernel.
 /// Pages that were never user-mapped are skipped — `unmap_page_x86` is
-/// idempotent. Returns the number of pages that lost user access.
-#[cfg(target_arch = "x86_64")]
-pub fn unmap_mmio_user_x86(base: usize, len: usize) -> PagingResult<usize> {
-    use crate::memory::frame::phys_to_virt;
-    use hal::paging::{walk_read, PTE_PRESENT, PTE_USER};
-
-    let Some(end) = checked_page_end(base, len) else {
-        return Ok(0);
-    };
-    let root_phys = match *KERNEL_ROOT.lock() {
-        Some(p) => p,
-        None => return Ok(0), // paging inactive: nothing is user-reachable
-    };
-    let pml4 = phys_to_virt(root_phys) as *const u64;
-
-    let mut cleared = 0;
-    let mut va = base & !(PAGE_SIZE - 1);
-    while va < end {
-        // SAFETY: pml4 is the kernel's active root table, identity-mapped, and
-        // the walk only reads it.
-        let user_mapped = unsafe { walk_read(pml4, va) }
-            .is_some_and(|pte| pte & (PTE_PRESENT | PTE_USER) == (PTE_PRESENT | PTE_USER));
-        if user_mapped {
-            unmap_page_x86(va)?;
-            cleared += 1;
-        }
-        va += PAGE_SIZE;
-    }
-    Ok(cleared)
-}
 
 /// Remove *user* accessibility from `[base, base+len)` (riscv64 / aarch64).
 ///
@@ -845,7 +819,7 @@ pub fn unmap_mmio_user_x86(base: usize, len: usize) -> PagingResult<usize> {
 /// page's permissions are lowered instead, and the Cell's next access faults.
 /// Pages that are not mapped are skipped; a mapped page that cannot be
 /// re-protected is an error, because that page would stay user-reachable.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
 pub fn clear_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
     let Some(end) = checked_page_end(base, len) else {
         return Ok(0);
@@ -918,13 +892,15 @@ fn mmio_user_flags() -> Flags {
 
 /// Boot MMIO mapping flags with `USER` removed — what the kernel keeps after a
 /// Cell's access to the window is revoked.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
 fn mmio_kernel_flags() -> Flags {
     #[cfg(target_arch = "riscv64")]
     let bits = Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY;
     #[cfg(target_arch = "aarch64")]
     let bits =
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::DEVICE | Flags::ACCESSED | Flags::DIRTY;
+    #[cfg(target_arch = "x86_64")]
+    let bits = Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY;
     Flags::from_bits(bits)
 }
 
@@ -1001,11 +977,7 @@ pub fn mapping_state(vaddr: VAddr) -> (bool, bool) {
 /// mapping of the frame is unchanged. `Err` means at least one mapped page is
 /// still user-reachable and the caller must not report the revoke as complete.
 pub fn revoke_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
-    #[cfg(target_arch = "x86_64")]
-    {
-        unmap_mmio_user_x86(base, len)
-    }
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
     {
         clear_mmio_user(base, len)
     }

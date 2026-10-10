@@ -49,10 +49,8 @@ static DUMMY_VTABLE: RawWakerVTable =
 /// Publish boot ownership at the task→boot boundary on targets without an
 /// incoming-side completion hook.
 ///
-/// RV64 leaves the outgoing task and Cell visible until
-/// `vi_context_switch_complete` runs on the boot stack after the raw Context
-/// save. RV32, AArch64, and x86_64 cannot make that post-switch publication, so
-/// they must enter boot with the scheduler identity already cleared.
+/// Hook-backed targets leave outgoing identity visible until their incoming
+/// callback; other targets retain pre-switch publication.
 #[inline(always)]
 fn prepare_task_to_boot_switch(hart_id: usize) {
     use super::hart_local::ready as rl;
@@ -551,7 +549,7 @@ impl Scheduler {
     ///
     /// The interrupt fires when the trap handler returns via `sret` and
     /// `sstatus.SIE` is restored by hardware.
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     pub fn pend_preempt_if_needed(&self, new_priority: u8) {
         let hart_id = super::hart_local::current_hart_id();
         // RT tasks land on HART_RT when online; fall back to current hart on single-hart systems.
@@ -573,6 +571,9 @@ impl Scheduler {
         }
         #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
         crate::task::smp::note_preempt_pend(target_hart);
+        #[cfg(target_arch = "x86_64")]
+        crate::task::smp::request_preemption(target_hart);
+        #[cfg(target_arch = "riscv64")]
         if target_hart == hart_id {
             // SAFETY: csrsi on sip.SSIP is permitted from S-mode (RISC-V priv spec §4.1.3).
             // The interrupt fires after sret restores sstatus.SIE.
@@ -585,9 +586,9 @@ impl Scheduler {
         }
     }
 
-    #[cfg(not(target_arch = "riscv64"))]
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
     pub fn pend_preempt_if_needed(&self, _new_priority: u8) {
-        // No-op on non-riscv64 targets.
+        // These targets keep timer-driven selection.
     }
 
     /// Allocate a stack pair and register a task around it.
@@ -1511,9 +1512,11 @@ impl Scheduler {
                 let selected = super::hart_local::ready::selected_task_id_for(hart);
                 let current = super::hart_local::ready::current_task_id_for(hart);
                 let executing = super::hart_local::ready::executing_task_id_for(hart);
+                let outgoing = super::hart_local::ready::outgoing_context_save_task_id_for(hart);
                 if retirement.member_tids.contains(&selected)
                     || retirement.member_tids.contains(&current)
                     || retirement.member_tids.contains(&executing)
+                    || retirement.member_tids.contains(&outgoing)
                 {
                     members_live = true;
                     if hart != current_hart
@@ -2041,7 +2044,8 @@ impl Scheduler {
                 // x86_64 PKU: update CPU_LOCAL.pku_value for the incoming task so
                 // the asm ring-3 exit path restores the correct PKRU. Must run while
                 // we still hold a reference to the task (before releasing the lock).
-                #[cfg(target_arch = "x86_64")]
+                // Hosted ownership fixtures have no privileged kernel GS base.
+                #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
                 crate::hal::syscall::set_task_pku(next_task.pku_value);
 
                 // Publish the incoming task's user thread pointer for the resume
@@ -2191,6 +2195,8 @@ mod retirement_tests {
         let old_tid = super::super::hart_local::ready::current_task_id_for(hart);
         let old_cell = super::super::hart_local::current_cell_id();
         let old_generation = super::super::hart_local::current_cell_generation();
+        let old_executing = super::super::hart_local::ready::executing_task_id_for(hart);
+        let old_selected = super::super::hart_local::ready::selected_task_id_for(hart);
         let mut scheduler = Scheduler::new();
         let mut blocked = Box::new(Task::new(
             TID,
@@ -2207,10 +2213,15 @@ mod retirement_tests {
             .pick_next_local(hart, 0)
             .expect("blocked task must switch to boot");
         assert!(boot.is_null());
+        if super::super::hart_local::ready::HAS_INCOMING_SWITCH_COMPLETION_HOOK {
+            assert_eq!(super::super::hart_local::ready::current_task_id_for(hart), TID);
+            assert!(super::super::hart_local::ready::owned_by_another_hart(1 - hart, TID));
+            crate::task::vi_context_switch_complete();
+        }
         assert_eq!(
             super::super::hart_local::ready::current_task_id_for(hart),
             0,
-            "non-hook task→boot must not retain the blocked task identity"
+            "completed task→boot must release the blocked task identity"
         );
         assert_eq!(super::super::hart_local::current_cell_id(), 0);
 
@@ -2224,6 +2235,9 @@ mod retirement_tests {
 
         super::super::hart_local::ready::remove_from_all(TID);
         super::super::hart_local::ready::set_current_task_id(hart, old_tid);
+        super::super::hart_local::ready::set_executing_task_id(hart, old_executing);
+        super::super::hart_local::ready::set_selected_task_id(hart, old_selected);
+        super::super::hart_local::ready::complete_outgoing_context_save(hart);
         super::super::hart_local::set_current_cell_context(old_cell, old_generation);
     }
 
@@ -2238,6 +2252,8 @@ mod retirement_tests {
         let old_tid = super::super::hart_local::ready::current_task_id_for(hart);
         let old_cell = super::super::hart_local::current_cell_id();
         let old_generation = super::super::hart_local::current_cell_generation();
+        let old_executing = super::super::hart_local::ready::executing_task_id_for(hart);
+        let old_selected = super::super::hart_local::ready::selected_task_id_for(hart);
         let mut scheduler = Scheduler::new();
         let mut faulted = Box::new(Task::new(
             FAULTED_TID,
@@ -2263,10 +2279,15 @@ mod retirement_tests {
             .pick_next_local(hart, 0)
             .expect("faulted task must switch to boot");
         assert!(boot.is_null());
+        if super::super::hart_local::ready::HAS_INCOMING_SWITCH_COMPLETION_HOOK {
+            assert_eq!(super::super::hart_local::ready::current_task_id_for(hart), FAULTED_TID);
+            assert!(super::super::hart_local::ready::owned_by_another_hart(1 - hart, FAULTED_TID));
+            crate::task::vi_context_switch_complete();
+        }
         assert_eq!(
             super::super::hart_local::ready::current_task_id_for(hart),
             0,
-            "non-hook task→boot must not retain the faulted task identity"
+            "completed task→boot must release the faulted task identity"
         );
         assert_eq!(super::super::hart_local::current_cell_id(), 0);
 
@@ -2283,6 +2304,9 @@ mod retirement_tests {
 
         super::super::hart_local::ready::remove_from_all(SUCCESSOR_TID);
         super::super::hart_local::ready::set_current_task_id(hart, old_tid);
+        super::super::hart_local::ready::set_executing_task_id(hart, old_executing);
+        super::super::hart_local::ready::set_selected_task_id(hart, old_selected);
+        super::super::hart_local::ready::complete_outgoing_context_save(hart);
         super::super::hart_local::set_current_cell_context(old_cell, old_generation);
     }
 

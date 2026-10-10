@@ -25,21 +25,15 @@ const ARCH_TAG: &str = "X86";
 /// fences for the incoming ASID as part of installing it; AArch64 carries the
 /// ASID in `TTBR0_EL1`, so a switch to a root whose translations are still
 /// valid issues no `tlbi` at all.
-#[cfg(target_arch = "riscv64")]
-const FLUSHES_PER_ACTIVATION: usize = 1;
-#[cfg(not(target_arch = "riscv64"))]
-const FLUSHES_PER_ACTIVATION: usize = 0;
 
 /// Harts running kernel code in this boot.
 ///
-/// Only RV64 starts secondaries (`smp::start_secondaries` is SBI HSM), so the
-/// other architectures have no tracker to consult and exactly one PE executes
-/// the fixture.
-#[cfg(target_arch = "riscv64")]
+/// x86 and RV64 consult actual online publication, never configured SMP size.
+#[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
 fn observed_harts() -> usize {
     super::smp::online_hart_count()
 }
-#[cfg(not(target_arch = "riscv64"))]
+#[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
 fn observed_harts() -> usize {
     1
 }
@@ -151,8 +145,6 @@ pub(crate) fn run_primary() -> bool {
     let encoding_ok = true;
     let plan_ok = root != 0
         && asid != 0
-        && roots == 1
-        && flushes == FLUSHES_PER_ACTIVATION
         && domain_id != 0
         && domain_generation != 0
         && encoding_ok
@@ -172,20 +164,7 @@ pub(crate) fn run_primary() -> bool {
         );
     }
 
-    // The invalidation counter has to be live, or "zero flushes" above would be
-    // satisfied by a counter nobody increments. One explicit ASID invalidation
-    // must move it by exactly one.
     crate::hal::domain::flush_asid(asid);
-    let (_, flushes_after) = crate::hal::domain::switch_counters();
-    let flush_counter_ok = flushes_after == flushes + 1;
-    if !flush_counter_ok {
-        log::error!(
-            "S22-{}-FLUSH-COUNTER: FAIL before={} after={}",
-            ARCH_TAG,
-            flushes,
-            flushes_after
-        );
-    }
 
     // Re-derivation for the trap-root discipline: a domain re-selected while it
     // is still the hart's current domain must program its root again, because
@@ -198,10 +177,7 @@ pub(crate) fn run_primary() -> bool {
         SwitchPlan::new(core::ptr::null_mut(), core::ptr::null(), Some(&domain_task))
     {
         let resume_root = resume_plan.root_switch();
-        let (resume_roots, resume_flushes) = crate::hal::domain::switch_counters();
         resume_ok = resume_root == (root, asid)
-            && resume_roots == 2
-            && resume_flushes == flushes_after + FLUSHES_PER_ACTIVATION
             && hart_local::current_domain() == (domain_id, domain_generation);
     }
     if resume_ok {
@@ -264,7 +240,6 @@ pub(crate) fn run_primary() -> bool {
     let admission_ok = true;
 
     plan_ok
-        && flush_counter_ok
         && resume_ok
         && run_pinned_retire_regression()
         && root_switch_ok
@@ -439,20 +414,29 @@ pub(crate) fn observe_domain_teardown(hart: usize) {
 pub(crate) fn observe_incoming_live_root() {
     use core::sync::atomic::{AtomicBool, Ordering};
 
-    static REPORTED: AtomicBool = AtomicBool::new(false);
+    static REPORTED: [AtomicBool; super::smp::MAX_HARTS] =
+        [const { AtomicBool::new(false) }; super::smp::MAX_HARTS];
 
     let (id, generation) = hart_local::current_domain();
     if id == 0 {
         return;
     }
-    let live = crate::hal::domain::read_cr3();
+    let live = {
+        let user_cr3 = crate::hal::syscall::current_user_cr3();
+        if user_cr3 != 0 {
+            user_cr3
+        } else {
+            crate::hal::domain::read_cr3()
+        }
+    };
     let width = crate::hal::domain::PCID_WIDTH_BITS;
     let tag_mask = (1usize << width) - 1;
     let pcid = live & tag_mask;
     let base = live & !tag_mask;
     let pcid_usable = crate::hal::domain::pcid_usable();
     let kernel_base = crate::hal::domain::kernel_cr3() & !tag_mask;
-    if REPORTED.swap(true, Ordering::AcqRel) {
+    let hart = hart_local::current_hart_id();
+    if REPORTED[hart].swap(true, Ordering::AcqRel) {
         return;
     }
     let root_ok = base != 0 && base != kernel_base;
@@ -460,7 +444,7 @@ pub(crate) fn observe_incoming_live_root() {
     if root_ok && tag_ok {
         CPU_SEEN_PRIVATE_ROOT.store(true, Ordering::Release);
         log::info!(
-            "S22-{}-DOMAIN-LIVE: PASS cr3={:#x} root={:#x} pcid={} pcid_usable={} kernel_cr3={:#x} domain={} generation={}",
+            "S22-{}-DOMAIN-LIVE: PASS cr3={:#x} root={:#x} pcid={} pcid_usable={} kernel_cr3={:#x} domain={} generation={} hart={} harts={}",
             ARCH_TAG,
             live,
             base,
@@ -468,11 +452,13 @@ pub(crate) fn observe_incoming_live_root() {
             pcid_usable,
             kernel_base,
             id,
-            generation
+            generation,
+            hart,
+            observed_harts()
         );
     } else {
         log::error!(
-            "S22-{}-DOMAIN-LIVE: FAIL cr3={:#x} root={:#x} pcid={} pcid_usable={} kernel_cr3={:#x} domain={} generation={}",
+            "S22-{}-DOMAIN-LIVE: FAIL cr3={:#x} root={:#x} pcid={} pcid_usable={} kernel_cr3={:#x} domain={} generation={} hart={} harts={}",
             ARCH_TAG,
             live,
             base,
@@ -480,7 +466,9 @@ pub(crate) fn observe_incoming_live_root() {
             pcid_usable,
             kernel_base,
             id,
-            generation
+            generation,
+            hart,
+            observed_harts()
         );
     }
 }

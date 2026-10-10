@@ -95,6 +95,60 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(target_arch = "x86_64")]
 static HPET_MMIO_BASE: AtomicUsize = AtomicUsize::new(0);
 
+// Nonzero policy snapshot is published by the BSP before AP startup.
+#[cfg(target_arch = "x86_64")]
+static CPU_FEATURE_POLICY: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(target_arch = "x86_64")]
+fn cpu_feature_policy() -> usize {
+    let leaf1 = core::arch::x86_64::__cpuid(1);
+    let cet = cet::detect();
+    let pku = pku::detect();
+    1 | ((leaf1.edx & ((1 << 24) | (1 << 25) | (1 << 26)) == ((1 << 24) | (1 << 25) | (1 << 26))) as usize) << 1
+        | (cet.ibt as usize) << 2 | (cet.shstk as usize) << 3
+        | (pku.pku as usize) << 4 | (pku.pks as usize) << 5
+        | (domain::pcid_supported() as usize) << 6
+        | (domain::invpcid_supported() as usize) << 7
+}
+
+/// Publish the BSP feature policy after its local initialization completes.
+#[cfg(target_arch = "x86_64")]
+pub fn publish_boot_cpu_policy() {
+    let bsp_id = (core::arch::x86_64::__cpuid(1).ebx >> 24) as u32;
+    apic::register_cpu(0, bsp_id);
+    let policy = cpu_feature_policy();
+    assert!(policy & 2 != 0, "x86 requires FXSAVE, SSE and SSE2");
+    CPU_FEATURE_POLICY.store(policy, Ordering::Release);
+}
+
+/// Initialize an AP under the shared kernel root, leaving interrupts masked.
+///
+/// # Safety
+/// The logical slot is dedicated to this CPU, its permanent stack and root are
+/// mapped, and the BSP has finished feature policy, IDT and timer initialization.
+#[cfg(target_arch = "x86_64")]
+pub unsafe fn init_secondary_cpu(logical: usize, lapic_id: u32, kernel_cr3: usize) -> bool {
+    core::arch::asm!("cli", options(nomem, nostack));
+    if logical == 0 || logical >= syscall::MAX_CPUS || kernel_cr3 == 0
+        || kernel_cr3 & 0xfff != 0 || domain::kernel_cr3() != kernel_cr3
+        || apic::check_x2apic() {
+        return false;
+    }
+    // No per-task SSP migration substrate exists: never share the BSP SSP.
+    if cfg!(feature = "cet-shadow-stack") { return false; }
+    let policy = CPU_FEATURE_POLICY.load(Ordering::Acquire);
+    if policy == 0 || policy & 2 == 0 || policy != cpu_feature_policy() { return false; }
+    core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack));
+    syscall::install_cpu(logical);
+    init_sse();
+    gdt::init();
+    if !idt::load_current_cpu() { return false; }
+    cet::init_kernel_cet();
+    if !pku::init_secondary() || !domain::init_secondary_pcid() { return false; }
+    syscall::init();
+    apic::register_cpu(logical, lapic_id) && apic::init_secondary(lapic_id)
+}
+
 /// Store the HPET MMIO base address from ACPI for use by `init_timers`.
 ///
 /// Must be called with a validated non-zero base before `init_timers()`.
@@ -218,13 +272,14 @@ impl Arch for X86_64Arch {
 
     /// Initialise x86_64 hardware: GDT, IDT, APIC, syscall MSRs.
     fn init(&self) {
+        init_sse();
         gdt::init();
         idt::init();
         cet::init_kernel_cet(); // LAYER2-CET-INIT — must follow idt (registers #CP vector 21)
         pku::init(); // LAYER2-PKU-INIT — requires IBT (checked inside)
         syscall::init();
         apic::init_lapic();
-        init_sse();
+        publish_boot_cpu_policy();
     }
 
     /// # Safety
@@ -286,7 +341,7 @@ pub fn init_sse() {
     unsafe {
         let mut cr0: u64;
         core::arch::asm!("mov {}, cr0", out(reg) cr0, options(nomem, nostack));
-        cr0 &= !(1 << 2);
+        cr0 &= !((1 << 2) | (1 << 3)); // EM=0, TS=0: eager FPU ownership
         cr0 |= 1 << 1;
         core::arch::asm!("mov cr0, {}", in(reg) cr0, options(nomem, nostack));
 
@@ -294,6 +349,7 @@ pub fn init_sse() {
         core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack));
         cr4 |= (1 << 9) | (1 << 10);
         core::arch::asm!("mov cr4, {}", in(reg) cr4, options(nomem, nostack));
+        core::arch::asm!("fninit", options(nostack));
 
         let mxcsr: u32 = 0x1F80;
         core::arch::asm!("ldmxcsr [{}]", in(reg) &mxcsr, options(nostack));

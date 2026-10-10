@@ -43,6 +43,8 @@ pub extern "C" fn kmain_x86() -> ! {
     extern "C" {
         fn kmain(hartid: usize, dtb: usize) -> !;
     }
+    // All kernel CPU-current users (including early diagnostics) require GS.
+    unsafe { super::syscall::install_cpu(0) };
     // SAFETY: kmain guards all RISC-V-specific accesses behind
     // #[cfg(target_arch = "riscv64")]; hartid/dtb are unused on x86_64.
     unsafe { kmain(0, 0) }
@@ -87,6 +89,23 @@ global_asm!(
     // CET-IBT landing pad: every indirect-branch target must begin with ENDBR64.
     // Encoding: F3 0F 1E FA (acts as a NOP on CPUs that do not support CET).
     ".byte 0xF3, 0x0F, 0x1E, 0xFA",
+    // This is the fresh-user-only path. FNINIT alone leaves physical x87/MMX
+    // data behind: fill all eight registers with zero, then mark them empty.
+    "fninit",
+    "fldz", "fldz", "fldz", "fldz",
+    "fldz", "fldz", "fldz", "fldz",
+    "fninit",
+    // regs[0] is unused and will not be restored, so use it for fresh MXCSR.
+    "mov dword ptr [rsp], 0x1f80",
+    "ldmxcsr [rsp]",
+    "pxor xmm0, xmm0", "pxor xmm1, xmm1",
+    "pxor xmm2, xmm2", "pxor xmm3, xmm3",
+    "pxor xmm4, xmm4", "pxor xmm5, xmm5",
+    "pxor xmm6, xmm6", "pxor xmm7, xmm7",
+    "pxor xmm8, xmm8", "pxor xmm9, xmm9",
+    "pxor xmm10, xmm10", "pxor xmm11, xmm11",
+    "pxor xmm12, xmm12", "pxor xmm13, xmm13",
+    "pxor xmm14, xmm14", "pxor xmm15, xmm15",
     // ── Build the 5-word iretq frame in regs[27..31] ────────────────────────
     // user RIP ← sepc (+264)
     "mov rax, [rsp + 264]",
@@ -114,6 +133,15 @@ global_asm!(
     "xor edx, edx",
     "wrpkru",
     "1:",
+    // Restore user CR3 if different from kernel CR3 (Tier 2 domain isolation).
+    "mov rax, qword ptr gs:[24]",
+    "test rax, rax",
+    "jz 2f",
+    "mov rcx, cr3",
+    "cmp rax, rcx",
+    "je 2f",
+    "mov cr3, rax",
+    "2:",
     // ── Restore GP registers from ViTrapFrame ───────────────────────────────
     // rsp itself is restored by iretq from the five-word frame.
     "mov rbx, [rsp + 24]",  // regs[3]

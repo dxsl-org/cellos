@@ -146,10 +146,10 @@ impl DomainAdmissionRequest {
 /// kernel context (`S22-X86-DOMAIN-LIVE`) and tearing the root down with every
 /// frame returned and nothing quarantined.
 ///
-/// x86_64 switch ordering is production-qualified: `switch_with_root` composes
-/// CR3 with `domain::cr3_for` and programs it between the outgoing save and the
-/// incoming stack adopt, verified across QEMU TCG, QEMU KVM, and VMware
-/// Workstation Pro (`docs/evidence/vmware-domain-test.txt`).
+/// x86_64 single-CPU switch ordering is production-qualified across QEMU TCG,
+/// KVM and VMware (`docs/evidence/vmware-domain-test.txt`). Actual SMP admission
+/// separately requires this boot's bidirectional IPI/local-invalidation proof;
+/// configuration capacity alone is never that proof.
 /// AArch64 remains test-images only.
 pub(crate) const fn switch_ordering_qualified() -> bool {
     cfg!(target_arch = "riscv64")
@@ -332,7 +332,8 @@ pub(crate) fn enable_for_boot() -> bool {
     // would be a claim about a mechanism this boot does not have — the same
     // refusal, for the same reason, as the EL2 branch above.
     #[cfg(target_arch = "x86_64")]
-    if crate::hal::domain::kernel_cr3() == 0 {
+    if crate::hal::domain::kernel_cr3() == 0
+        || !crate::task::smp::x86_substrate_qualified() {
         return false;
     }
     POLICY

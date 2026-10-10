@@ -135,19 +135,28 @@ x86_64_idt_common:
     cld
     movq %rsp,%r12
     andq $-16,%rsp
+    subq $528,%rsp
+    fxsave64 (%rsp)
+    fninit
+    movl $0x1f80,512(%rsp)
+    ldmxcsr 512(%rsp)
+    movq %rsp,%r13
     movq %r12,%rdi
     callq {dispatch}
+    cli
+    fxrstor64 (%r13)
     movq %r12,%rsp
     # yield_cpu resumes with IF set. Keep the complete user descent atomic.
     cli
     testb $3,144(%rsp)
     jz .Lidt_restore_gprs
     cmpb $0,ViCell_pku_active(%rip)
-    je .Lidt_restore_gprs
+    je .Lidt_restore_user_cr3
     movl %gs:16,%eax
     xorl %ecx,%ecx
     xorl %edx,%edx
     wrpkru
+.Lidt_restore_user_cr3:
     # Restore user CR3 from per-cpu slot 24. %rax/%rcx still saved on stack.
     movq %gs:24, %rax
     testq %rax, %rax

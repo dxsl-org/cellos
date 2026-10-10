@@ -16,7 +16,8 @@
 //!     then invalidated synchronously on online remote harts through SBI RFENCE.
 //!     Firmware without RFENCE keeps the kernel single-hart; two-hart runtime
 //!     evidence remains a separate gate.
-//!   - x86_64: `invlpg` is local only; there is no SMP IPI shootdown path yet.
+//!   - x86_64: all-PCID/global local invalidation followed by every online CPU's
+//!     acknowledged local invalidation; missing acknowledgement is fail-closed.
 //!   - AArch64: `flush_tlb_page` broadcasts a stage-1 TLBI
 //!     (`tlbi vaae1is`, plus `vae2is` when EL2 is active) inside the required
 //!     barrier pair, but this repo still treats two-PE runtime proof as gated

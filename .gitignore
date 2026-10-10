@@ -147,6 +147,7 @@ cells/apps/vove/
 /build/tier3-segmax-*/
 /build/tier3-stability-current-1790644936314/
 /build/x86-c2c-lifecycle-iso-root/
+/build/x86-c2c-render-iso-root/
 /build/x86-domain-test-iso-root/
 /build/x86-nginx-gate/
 /build/x86-nginx-initramfs.cpio.gz

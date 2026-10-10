@@ -16,7 +16,12 @@ static LIMINE_BASE_REVISION: [u64; 3] = [0xf9562b2d5c95a6c8, 0x6a7b384944536bdc,
 /// Limine request-section delimiter: start marker (required by rev 2+).
 #[used]
 #[link_section = ".requests_start_marker"]
-static REQUESTS_START_MARKER: [u64; 2] = [0xf6b8f4b39de7716f, 0xfaa4f786d5a15bc4];
+static REQUESTS_START_MARKER: [u64; 4] = [
+    0xf6b8f4b39de7d1ae,
+    0xfab91a6940fcb9cf,
+    0x785c6ed015d3e316,
+    0x181e920a7852b9d9,
+];
 
 /// Limine request-section delimiter: end marker (required by rev 2+).
 #[used]
@@ -173,6 +178,91 @@ static mut KERNEL_ADDRESS_REQUEST: LimineKernelAddressRequest = LimineKernelAddr
     revision: 0,
     response: core::ptr::null(),
 };
+
+// x86 MP revision 0 ABI adapted from Limine v8.x-binary/limine.h.
+// Copyright (C) 2022-2025 mintsuki and contributors, BSD-0-Clause:
+// https://raw.githubusercontent.com/limine-bootloader/limine/v8.x-binary/limine.h
+// Protocol: https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md
+// Bootloader-reclaimable memory is never admitted to our frame allocator; these
+// records and Limine's page tables therefore remain live through AP handoff.
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct LimineMpInfo {
+    pub processor_id: u32,
+    pub lapic_id: u32,
+    pub reserved: u64,
+    pub goto_address: core::sync::atomic::AtomicUsize,
+    pub extra_argument: u64,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct LimineMpResponse {
+    pub revision: u64,
+    pub flags: u32,
+    pub bsp_lapic_id: u32,
+    pub cpu_count: u64,
+    pub cpus: *const *mut LimineMpInfo,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+struct LimineMpRequest {
+    id: [u64; 4],
+    revision: u64,
+    response: *const LimineMpResponse,
+    flags: u64,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[used]
+#[link_section = ".requests"]
+static mut MP_REQUEST: LimineMpRequest = LimineMpRequest {
+    id: [
+        LIMINE_COMMON_MAGIC[0],
+        LIMINE_COMMON_MAGIC[1],
+        0x95a67b819a1b857e,
+        0xa0b61b723b6a73e0,
+    ],
+    revision: 0,
+    response: core::ptr::null(),
+    flags: 0, // legacy physical xAPIC, never request x2APIC
+};
+
+#[cfg(target_arch = "x86_64")]
+const _: [(); 32] = [(); core::mem::size_of::<LimineMpInfo>()];
+#[cfg(target_arch = "x86_64")]
+const _: [(); 32] = [(); core::mem::size_of::<LimineMpResponse>()];
+
+/// A response pointer must name a complete, aligned bootloader-owned object.
+#[cfg(target_arch = "x86_64")]
+pub fn mp_record_valid<T>(pointer: *const T, count: usize) -> bool {
+    let start = pointer as usize;
+    if start == 0 || start % core::mem::align_of::<T>() != 0 {
+        return false;
+    }
+    let Some(size) = core::mem::size_of::<T>().checked_mul(count) else { return false };
+    let Some(end) = start.checked_add(size) else { return false };
+    let Some(offset) = get_hhdm_offset() else { return false };
+    let Some(physical) = (start as u64).checked_sub(offset) else { return false };
+    let Some(physical_end) = (end as u64).checked_sub(offset) else { return false };
+    let Some(map) = get_memory_map() else { return false };
+    // Limine's memory-map response is already a mandatory trusted boot input.
+    unsafe {
+        (0..map.entry_count as usize).any(|index| {
+            let entry = &**map.entries.add(index);
+            entry.entry_type == 5
+                && physical >= entry.base
+                && entry.base.checked_add(entry.length).is_some_and(|limit| physical_end <= limit)
+        })
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+pub fn get_mp_response() -> Option<&'static LimineMpResponse> {
+    let response = unsafe { core::ptr::read_volatile(&raw const MP_REQUEST.response) };
+    mp_record_valid(response, 1).then(|| unsafe { &*response })
+}
 
 /// Get memory map from Limine
 pub fn get_memory_map() -> Option<&'static LimineMemoryMapResponse> {

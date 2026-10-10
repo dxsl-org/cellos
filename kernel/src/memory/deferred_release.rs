@@ -138,7 +138,6 @@ fn defer(
     // epochs it is waiting for from the moment it exists: an entry with no
     // request behind it would read as confirmed vacuously.
     let placement = place(asid, domain, reason, frames, release_tag_slot);
-    request_tag_epochs(asid);
     match placement {
         Placement::Merged(total) => log::warn!(
             "[aspace] deferred release extended: tag={} total_frames={} reason={}",
@@ -185,6 +184,10 @@ fn place(
         let entry = &mut queue[index];
         entry.frames.extend(frames);
         entry.release_tag_slot |= release_tag_slot;
+        let epochs = issue_tag_epochs();
+        for (hart, epoch) in epochs.iter().enumerate() {
+            entry.epochs[hart] = entry.epochs[hart].max(*epoch);
+        }
         Placement::Merged(entry.frames.len())
     } else if queue.len() >= MAX_DEFERRED_ENTRIES {
         Placement::Full(frames)
@@ -192,7 +195,7 @@ fn place(
         queue.push(DeferredRelease {
             asid,
             domain,
-            epochs: [0; crate::task::smp::MAX_HARTS],
+            epochs: issue_tag_epochs(),
             reason,
             frames,
             attempts: 0,
@@ -236,27 +239,25 @@ fn tag_epochs_confirmed(entry: &DeferredRelease) -> bool {
         .all(|hart| crate::task::smp::tlb_flush_completed(hart, entry.epochs[hart]))
 }
 
-/// Ask every online remote hart to invalidate `asid` and remember the epochs.
-///
-/// The IPI is sent before the queue lock is taken: the answering hart does its
-/// flush in its own trap path, and nothing in that path may be waiting on this
-/// queue.
-fn request_tag_epochs(asid: usize) {
+/// Record requests while holding the queue lock, without waiting for replies.
+/// Remote service is lock-free. Keeping publication atomic with the retained
+/// frames prevents a reaper from observing a vacuous zero-epoch entry or freeing
+/// a concurrently merged batch against an older acknowledgement.
+fn issue_tag_epochs() -> [usize; crate::task::smp::MAX_HARTS] {
     let me = crate::task::hart_local::current_hart_id();
     let mut requested = [0usize; crate::task::smp::MAX_HARTS];
     for hart in crate::task::smp::online_harts().filter(|hart| *hart != me) {
         requested[hart] = crate::task::smp::request_tlb_flush(hart);
     }
-    if requested.iter().all(|epoch| *epoch == 0) {
-        return;
-    }
+    requested
+}
+
+fn request_tag_epochs(asid: usize) {
     let mut queue = DEFERRED.lock();
     if let Some(entry) = queue.iter_mut().find(|entry| entry.asid == asid) {
+        let requested = issue_tag_epochs();
         for (hart, epoch) in requested.iter().enumerate() {
-            if *epoch != 0 {
-                // Monotonic per hart, so the newest request subsumes older ones.
-                entry.epochs[hart] = *epoch;
-            }
+            entry.epochs[hart] = entry.epochs[hart].max(*epoch);
         }
     }
 }
@@ -322,7 +323,7 @@ fn complete(asid: usize) {
         let mut queue = DEFERRED.lock();
         queue
             .iter()
-            .position(|entry| entry.asid == asid)
+            .position(|entry| entry.asid == asid && tag_epochs_confirmed(entry))
             .map(|index| queue.remove(index))
     };
     let Some(entry) = entry else {

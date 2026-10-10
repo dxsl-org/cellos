@@ -41,6 +41,7 @@ LOG_DIR="${LOG_DIR:-$REPO_ROOT}"
 X86_CPU_MODEL="${X86_CPU_MODEL:-qemu64,+pdpe1gb}"
 X86_ACCEL="${X86_ACCEL:-}"
 X86_EXPECT_PCID="${X86_EXPECT_PCID:-}"
+X86_CPUS="${X86_CPUS:-1}"
 
 # KVM runs the host CPU model by default, which is the only way PCID is real.
 if [[ "$X86_ACCEL" == "kvm" && -z "${X86_CPU_MODEL_OVERRIDDEN:-}" ]]; then
@@ -58,6 +59,10 @@ case "$X86_EXPECT_PCID" in
     0|1) ;;
     *) echo "FAIL: X86_EXPECT_PCID must be 0 or 1" >&2; exit 1 ;;
 esac
+case "$X86_CPUS" in
+    1|2) ;;
+    *) echo "FAIL: X86_CPUS must be 1 or 2" >&2; exit 1 ;;
+esac
 
 if [[ ! -f "$KERNEL" ]]; then
     echo "FAIL: domain-test kernel not found: $KERNEL" >&2
@@ -68,7 +73,7 @@ if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
     echo "FAIL: qemu-system-x86_64 not found" >&2; exit 1
 fi
 
-LABEL="x86-domain-test${X86_ACCEL:+-$X86_ACCEL}"
+LABEL="x86-domain-test${X86_ACCEL:+-$X86_ACCEL}-cpu$X86_CPUS"
 RAW_LOG="$LOG_DIR/qemu-$LABEL.raw.log"
 LOG="$LOG_DIR/qemu-$LABEL.log"
 FIFO="$(mktemp -u "${TMPDIR:-/tmp}/cellos-x86-domain-XXXXXX.fifo")"
@@ -94,6 +99,7 @@ timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -machine q35 \
     "${ACCEL_ARGS[@]}" \
     -cpu "$X86_CPU_MODEL" \
+    -smp "$X86_CPUS" \
     -m 256M \
     -nographic \
     -cdrom "$ISO" \
@@ -226,6 +232,7 @@ REQUIRED_MARKERS=(
     "private-root plan:::S22-X86-PLAN: PASS"
     "same-domain resume:::S22-X86-RESUME-ROOT: PASS"
     "pin-dying window:::S22-X86-PIN-DYING: PASS"
+    "MMIO revoke preserves supervisor binding:::MMIO-REVOKE-USERBIT: PASS"
     "vfs-lifetime and grant quarantine:::vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)"
     "tier2-smoke launch:::Init: tier2-smoke admitted."
     "tier2-exploit launch:::Init: tier2-exploit admitted."
@@ -260,6 +267,13 @@ REQUIRED_MARKERS=(
     "domain teardown:::S22-X86-DOMAIN-TEARDOWN: PASS releases="
     "interactive shell:::Cellos > "
 )
+if [[ "$X86_CPUS" == "2" ]]; then
+    REQUIRED_MARKERS+=(
+        "qualified two-CPU topology:::[x86-smp] topology online=2 processor_ids="
+        "raw-context ownership and retirement:::S22-X86-CONTEXT-HANDOFF: PASS"
+        "actual remote translation invalidation:::S22-X86-REMOTE-SHOOTDOWN: PASS"
+    )
+fi
 
 bash scripts/assert-boot-markers.sh "$LOG" "$LABEL" "${REQUIRED_MARKERS[@]}"
 

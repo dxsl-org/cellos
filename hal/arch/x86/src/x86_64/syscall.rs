@@ -49,27 +49,72 @@ const IA32_KERNEL_GSBASE: u32 = 0xC000_0102; // Swapped into GS_BASE by swapgs
 ///   gs:16 = PKU value for the selected task (loaded on every Ring-3 return)
 ///   gs:24 = user CR3 saved on IDT entry from user mode (Tier 2 domain isolation)
 ///
-/// Kernel state is GS_BASE=`&CPU_LOCAL`, KERNEL_GS_BASE=user GS (currently 0).
-/// User state is the swapped pair. Context switches preserve the physical pair;
-/// `set_kernel_stack` updates slot [0] and `set_task_pku` updates slot [16].
-#[repr(C, align(16))]
+/// Kernel GS selects the current CPU's stable record; SWAPGS selects user GS=0.
+pub const MAX_CPUS: usize = 2;
+#[repr(C, align(64))]
 struct CpuLocal {
     kernel_rsp: u64, // offset 0  — gs:0
     user_rsp: u64,   // offset 8  — gs:8
     pku_value: u32,  // offset 16 — gs:16 (restored to PKRU on ring-3 re-entry)
     _pad: u32,       // offset 20 — alignment padding
     user_cr3: u64,   // offset 24 — gs:24 (user CR3 saved on IDT user entry; 0 if SAS)
+    logical_id: usize, // offset 32 — gs:32
 }
-static mut CPU_LOCAL: CpuLocal = CpuLocal {
-    kernel_rsp: 0,
-    user_rsp: 0,
-    pku_value: 0,
-    _pad: 0,
-    user_cr3: 0,
+impl CpuLocal {
+    const EMPTY: Self = Self {
+        kernel_rsp: 0, user_rsp: 0, pku_value: 0, _pad: 0, user_cr3: 0,
+        logical_id: 0,
+    };
+}
+static mut CPU_LOCALS: [CpuLocal; MAX_CPUS] = [CpuLocal::EMPTY; MAX_CPUS];
+
+const _: () = {
+    use core::mem::{offset_of, size_of};
+    assert!(offset_of!(CpuLocal, kernel_rsp) == 0);
+    assert!(offset_of!(CpuLocal, user_rsp) == 8);
+    assert!(offset_of!(CpuLocal, pku_value) == 16);
+    assert!(offset_of!(CpuLocal, user_cr3) == 24);
+    assert!(offset_of!(CpuLocal, logical_id) == 32);
+    assert!(size_of::<CpuLocal>() == 64);
 };
+
+/// Install the kernel/user GS pair before any CPU-current access.
+///
+/// # Safety
+/// Called once on this logical CPU with interrupts disabled, in kernel mode.
+/// No other CPU may use this record.
+pub unsafe fn install_cpu(logical: usize) {
+    assert!(logical < MAX_CPUS);
+    let local = core::ptr::addr_of_mut!(CPU_LOCALS).cast::<CpuLocal>().add(logical);
+    core::ptr::write(local, CpuLocal { logical_id: logical, ..CpuLocal::EMPTY });
+    wrmsr(IA32_GSBASE, local as u64);
+    wrmsr(IA32_KERNEL_GSBASE, 0);
+}
+
+/// Kernel-only logical CPU identity; requires installed kernel GS state.
+#[inline(always)]
+pub fn current_cpu_id() -> usize {
+    let logical: usize;
+    unsafe { asm!("mov {}, gs:[32]", out(reg) logical, options(nostack, readonly, preserves_flags)) };
+    logical
+}
+/// Read the current CPU's user-CR3 scratch from gs:24.
+#[inline(always)]
+pub fn current_user_cr3() -> usize {
+    let cr3: usize;
+    unsafe { asm!("mov {}, gs:[24]", out(reg) cr3, options(nostack, readonly, preserves_flags)) };
+    cr3
+}
+
+/// Set the current CPU's user-CR3 scratch in gs:24.
+#[inline(always)]
+pub fn set_user_cr3(cr3: u64) {
+    unsafe { asm!("mov gs:[24], {}", in(reg) cr3, options(nostack, preserves_flags)) };
+}
+
 #[cfg(feature = "x86-idt-cpl3-test")]
 pub(crate) fn cpu_local_addr_for_test() -> u64 {
-    core::ptr::addr_of!(CPU_LOCAL) as u64
+    core::ptr::addr_of!(CPU_LOCALS).cast::<CpuLocal>() as u64
 }
 
 const _: hal_arch_trait::SyscallDispatch = ViCell_syscall_dispatch;
@@ -92,12 +137,7 @@ fn wrmsr(msr: u32, val: u64) {
     }
 }
 
-/// Initialise SYSCALL/SYSRET path and per-CPU GS area.
-///
-/// Must be called from Ring 0 before any Ring-3 entry. Sets up:
-/// - EFER.SCE so the CPU honours the SYSCALL instruction
-/// - STAR/LSTAR/FMASK for the entry point and segment selectors
-/// - the kernel GS invariant: GS_BASE=`&CPU_LOCAL`, KERNEL_GS_BASE=0
+/// Initialise this CPU's SYSCALL/SYSRET MSRs after `install_cpu`.
 pub fn init() {
     wrmsr(IA32_EFER, rdmsr(IA32_EFER) | 1); // SCE=1
                                             // STAR[47:32] = kernel CS (syscall: CS=0x08, SS=0x10).
@@ -112,22 +152,11 @@ pub fn init() {
     wrmsr(IA32_LSTAR, syscall_entry as *const () as u64);
     wrmsr(IA32_FMASK, 0x0300); // clear IF + DF on syscall entry
 
-    // Establish kernel state directly. A later kernel→user SWAPGS produces
-    // user GS_BASE=0 and KERNEL_GS_BASE=&CPU_LOCAL.
-    let cpu_local_addr = core::ptr::addr_of!(CPU_LOCAL) as u64;
-    wrmsr(IA32_GSBASE, cpu_local_addr);
-    wrmsr(IA32_KERNEL_GSBASE, 0);
 }
 
-/// Update only the kernel-stack slot in the per-CPU area.
-///
-/// The scheduler calls this while already in kernel GS state. Context switches
-/// must preserve GS_BASE/KERNEL_GS_BASE rather than rewriting either MSR.
+/// Update the current CPU's syscall-entry stack while kernel GS is active.
 pub fn set_kernel_stack(sp: u64) {
-    // SAFETY: CPU_LOCAL is a static with no aliased Rust references here.
-    unsafe {
-        CPU_LOCAL.kernel_rsp = sp;
-    }
+    unsafe { asm!("mov gs:[0], {}", in(reg) sp, options(nostack, preserves_flags)) };
 }
 
 /// Update the PKU value for the current task.
@@ -136,16 +165,9 @@ pub fn set_kernel_stack(sp: u64) {
 /// The value is loaded from `gs:16` into PKRU by the asm exit paths in `syscall_entry`
 /// (sysretq path) and `__trap_exit` (iretq path).
 ///
-/// # Safety contract
-/// CPU_LOCAL is a per-CPU static; this is the only writer (scheduler, single-core SAS).
-/// No concurrent Rust reference to `pku_value` exists.
+/// Writes only the current CPU's record in kernel GS state.
 pub fn set_task_pku(val: u32) {
-    // SAFETY: CPU_LOCAL is a static; access is single-threaded (single-core SAS).
-    // The asm paths read gs:16 — this write is sequenced before the ring-3 entry
-    // by the scheduler lock that also surrounds set_kernel_stack.
-    unsafe {
-        CPU_LOCAL.pku_value = val;
-    }
+    unsafe { asm!("mov gs:[16], {val:e}", val = in(reg) val, options(nostack, preserves_flags)) };
 }
 
 // The syscall_entry stub is written in AT&T syntax. Rust's global_asm!
@@ -288,6 +310,7 @@ syscall_entry:
     # %rax and %rcx are scratch here (already committed to frame above).
     movq %cr3, %rax
     movq %rax, 280(%rsp)
+    movq %rax, %gs:24
     movq VI_KERNEL_CR3(%rip), %rcx
     testq %rcx, %rcx
     jz .Lkernel_cr3_entry_skip
@@ -296,11 +319,20 @@ syscall_entry:
     movq %rcx, %cr3
 .Lkernel_cr3_entry_skip:
 
-    # Call ViCell_syscall_dispatch(&mut frame).
-    # RSP is 16-byte aligned here (288 % 16 == 0); the CALL pushes 8 bytes
-    # making RSP 8-byte aligned at the callee entry — correct per SysV ABI.
-    movq %rsp, %rdi          # arg0 = *mut ViTrapFrame
+    # Save all floating-point control/data state before any Rust activation.
+    # R12/R13 user values have already been saved in the trap frame.
+    movq %rsp, %r12
+    subq $528, %rsp
+    fxsave64 (%rsp)
+    fninit
+    movl $0x1f80,512(%rsp)
+    ldmxcsr 512(%rsp)
+    movq %rsp, %r13
+    movq %r12, %rdi
     call ViCell_syscall_dispatch
+    cli
+    fxrstor64 (%r13)
+    movq %r12, %rsp
 
     # Validate the SYSRET destination while kernel PKRU=0. RDI is scratch until
     # the frame restores it below.
@@ -320,7 +352,7 @@ syscall_entry:
     wrpkru
 .Lpku_exit_skip:
     # Restore user CR3 if different from kernel CR3
-    movq 280(%rsp), %rax
+    movq %gs:24, %rax
     testq %rax, %rax
     jz .Luser_cr3_exit_skip
     movq %cr3, %rcx

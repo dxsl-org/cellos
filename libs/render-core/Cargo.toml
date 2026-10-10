@@ -1,0 +1,9 @@
+[package]
+name = "render-core"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+libm = "0.2"

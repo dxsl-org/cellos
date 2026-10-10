@@ -86,49 +86,36 @@ const RT_PRIO: u8 = api::TaskPriority::RealTime as u8;
 /// Whether this target invokes `vi_context_switch_complete` from the incoming
 /// stack of every raw context switch.
 ///
-/// RV64 has that assembly hook. RV32, AArch64, and x86_64 must publish an
-/// outgoing Ready task before switching so it cannot be stranded waiting for a
-/// callback those architectures do not provide.
-pub const HAS_INCOMING_SWITCH_COMPLETION_HOOK: bool = cfg!(target_arch = "riscv64");
+/// RV64 and x86_64 have this assembly hook. Other targets retain their
+/// established immediate Ready publication.
+pub const HAS_INCOMING_SWITCH_COMPLETION_HOOK: bool =
+    cfg!(any(target_arch = "riscv64", target_arch = "x86_64"));
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
 const _: [(); 1] = [(); HAS_INCOMING_SWITCH_COMPLETION_HOOK as usize];
-#[cfg(any(
-    target_arch = "riscv32",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(any(target_arch = "riscv32", target_arch = "aarch64"))]
 const _: [(); 0] = [(); HAS_INCOMING_SWITCH_COMPLETION_HOOK as usize];
 /// Whether task→boot must clear scheduler identity before the raw switch.
 ///
-/// RV64 defers this publication to `vi_context_switch_complete`, after the
-/// outgoing Context has been saved. The other targets have no such callback,
-/// so retaining the old task through a boot switch would strand a subsequently
-/// requeued task behind stale ownership.
+/// Hook-backed targets defer this publication until the outgoing save has
+/// completed on the incoming stack. Other targets retain their existing path.
 pub const CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH: bool = !HAS_INCOMING_SWITCH_COMPLETION_HOOK;
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
 const _: [(); 0] = [(); CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH as usize];
-#[cfg(any(
-    target_arch = "riscv32",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(any(target_arch = "riscv32", target_arch = "aarch64"))]
 const _: [(); 1] = [(); CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH as usize];
 
 /// Whether this target can prove the outgoing Context save from the incoming
 /// side of the same raw switch.  Keep Ready publication architecture-neutral:
 /// targets without that boundary retain their established queue semantics
 /// rather than acquiring a permanent RV64-only deferred-requeue state.
-pub const HAS_OUTGOING_CONTEXT_SAVE_HOOK: bool = cfg!(target_arch = "riscv64");
+pub const HAS_OUTGOING_CONTEXT_SAVE_HOOK: bool =
+    cfg!(any(target_arch = "riscv64", target_arch = "x86_64"));
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
 const _: [(); 1] = [(); HAS_OUTGOING_CONTEXT_SAVE_HOOK as usize];
-#[cfg(any(
-    target_arch = "riscv32",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(any(target_arch = "riscv32", target_arch = "aarch64"))]
 const _: [(); 0] = [(); HAS_OUTGOING_CONTEXT_SAVE_HOOK as usize];
 
 /// Push task `id` with `priority` onto `hart_id`'s local ready queue.
@@ -238,9 +225,7 @@ pub fn set_current_task_id(hart_id: usize, id: usize) {
 }
 /// Incoming task pinned for an in-flight raw context switch.
 ///
-/// Only RV64 currently has a proven incoming-side completion hook. Other
-/// architectures retain their established `current_task_id` publication and
-/// do not use this transient slot.
+/// Hook-backed targets retain this pin until the incoming raw-switch callback.
 #[inline(always)]
 pub fn selected_task_id_for(hart_id: usize) -> usize {
     if hart_id < MAX_HARTS {
@@ -295,13 +280,13 @@ pub fn executing_task_id_for(hart_id: usize) -> usize {
     if hart_id >= MAX_HARTS {
         return 0;
     }
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     {
         HART_LOCALS[hart_id]
             .executing_task_id
             .load(core::sync::atomic::Ordering::Acquire)
     }
-    #[cfg(not(target_arch = "riscv64"))]
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
     {
         current_task_id_for(hart_id)
     }
@@ -318,18 +303,17 @@ pub fn set_executing_task_id(hart_id: usize, id: usize) {
 }
 
 /// Publish that `task_id` is Ready but its outgoing Context has not yet been
-/// saved by the raw switch.  Only RV64 has the matching completion hook; on
-/// the other targets this deliberately remains a no-op so their ready queues
-/// keep their existing, immediately-stealable semantics.
+/// saved by the raw switch. Hook-backed targets release this from the incoming
+/// callback; other targets keep their established queue semantics.
 #[inline(always)]
 pub fn begin_outgoing_context_save(hart_id: usize, task_id: usize) {
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     if hart_id < MAX_HARTS {
         HART_LOCALS[hart_id]
             .outgoing_context_save_task_id
             .store(task_id, core::sync::atomic::Ordering::Release);
     }
-    #[cfg(not(target_arch = "riscv64"))]
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
     {
         let _ = (hart_id, task_id);
     }
@@ -339,13 +323,13 @@ pub fn begin_outgoing_context_save(hart_id: usize, task_id: usize) {
 /// the old Context and execution is on the incoming stack.
 #[inline(always)]
 pub fn complete_outgoing_context_save(hart_id: usize) {
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     if hart_id < MAX_HARTS {
         HART_LOCALS[hart_id]
             .outgoing_context_save_task_id
             .store(0, core::sync::atomic::Ordering::Release);
     }
-    #[cfg(not(target_arch = "riscv64"))]
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
     {
         let _ = hart_id;
     }
@@ -354,7 +338,7 @@ pub fn complete_outgoing_context_save(hart_id: usize) {
 /// Return the locally requeued task whose Context save has not completed.
 #[inline(always)]
 pub fn outgoing_context_save_task_id_for(hart_id: usize) -> usize {
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     {
         if hart_id < MAX_HARTS {
             return HART_LOCALS[hart_id]
@@ -362,7 +346,7 @@ pub fn outgoing_context_save_task_id_for(hart_id: usize) -> usize {
                 .load(core::sync::atomic::Ordering::Acquire);
         }
     }
-    #[cfg(not(target_arch = "riscv64"))]
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
     {
         let _ = hart_id;
     }

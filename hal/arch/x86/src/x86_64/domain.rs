@@ -141,6 +141,26 @@ pub fn init_pcid() -> bool {
     enabled
 }
 
+/// Apply the BSP's tag policy on an AP without racing its shared publication.
+pub fn init_secondary_pcid() -> bool {
+    let enabled = pcid_usable();
+    let cr4 = read_cr4();
+    if enabled {
+        if !pcid_supported() || !invpcid_supported()
+            || !pcid_enable_allowed(cr4, read_cr3()) {
+            return false;
+        }
+        unsafe { write_cr4(cr4 | CR4_PCIDE) };
+    } else if cr4 & CR4_PCIDE != 0 {
+        let untagged = read_cr3() & !PCID_MASK;
+        unsafe {
+            core::arch::asm!("mov cr3, {}", in(reg) untagged, options(nostack));
+            write_cr4(cr4 & !CR4_PCIDE);
+        }
+    }
+    pcide_set() == enabled
+}
+
 pub fn record_kernel_cr3(cr3: usize) {
     VI_KERNEL_CR3.store(cr3, Ordering::Release);
 }
@@ -197,10 +217,12 @@ pub fn flush_asid(pcid: usize) {
     ASID_FLUSHES.fetch_add(1, Ordering::Relaxed);
 }
 
-/// x86_64 remote invalidation: this backend is single-CPU (see the phase-02
-/// blocker on non-RV64 SMP), so "remote" is this hart. Multicore x86 admission
-/// stays refused until per-CPU hart identity and IPI exist.
-pub fn flush_asid_remote(_hart_mask: usize, asid: usize) -> Result<(), DomainPagingError> {
+/// HAL has no ownership of kernel request/ack mailboxes. Reject any remote
+/// mask; the kernel must perform the real online-CPU shootdown protocol.
+pub fn flush_asid_remote(hart_mask: usize, asid: usize) -> Result<(), DomainPagingError> {
+    if hart_mask & !(1usize << super::syscall::current_cpu_id()) != 0 {
+        return Err(DomainPagingError::Unsupported);
+    }
     flush_asid(asid);
     Ok(())
 }
@@ -222,6 +244,31 @@ pub fn flush_all() {
             );
         }
     } else {
+        reload_cr3();
+    }
+    #[cfg(feature = "test-hooks")]
+    ASID_FLUSHES.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Invalidate every tag and global translation on the current CPU.
+pub fn flush_all_global() {
+    if pcid_usable() {
+        let descriptor = [0u64; 2];
+        unsafe {
+            core::arch::asm!(
+                "invpcid {kind}, [{descriptor}]",
+                kind = in(reg) 2u64,
+                descriptor = in(reg) descriptor.as_ptr(),
+                options(nostack),
+            );
+        }
+    } else {
+        // CR4.PGE transitions flush globals even when PGE was already clear.
+        let cr4 = read_cr4();
+        unsafe {
+            write_cr4(cr4 ^ (1 << 7));
+            write_cr4(cr4);
+        }
         reload_cr3();
     }
     #[cfg(feature = "test-hooks")]

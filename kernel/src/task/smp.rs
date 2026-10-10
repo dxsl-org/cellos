@@ -62,10 +62,16 @@ fn send_ipi(hart_id: usize) {
             hal::aarch64::gic::send_sgi(cpu as u32, hal::aarch64::gic::SGI_IPI);
         }
     }
-    // x86_64, and the Pi monitor board whose local controller has no SGI path:
-    // a request stays a recorded epoch, exactly as before.
+    #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
+    if hart_id < MAX_HARTS {
+        // No completion is forged on delivery failure. Keep this path free of
+        // locks/logging because a deferred-release requester may own a lock.
+        let _ = hal::x86_64::apic::send_ipi(hart_id);
+    }
+    // Boards with no software-interrupt transport retain the request epoch.
     #[cfg(not(any(
         target_arch = "riscv64",
+        all(target_arch = "x86_64", not(all(test, not(target_os = "none")))),
         all(target_arch = "aarch64", not(feature = "board-rpi3"))
     )))]
     let _ = hart_id;
@@ -89,19 +95,17 @@ pub fn tlb_flush_completed(hart_id: usize, epoch: usize) -> bool {
             .is_some_and(|complete| complete.load(Ordering::Acquire) >= epoch)
 }
 
-/// Complete the outstanding invalidation for this hart, if any.
-///
-/// Returns the epoch that was completed, so the caller can log or assert it.
-/// Called from the trap path (the requester sends an IPI, so a trap is
-/// guaranteed) *after* the local flush has been issued.
-pub fn complete_tlb_flush(hart_id: usize) -> usize {
+/// Service one captured request. A newer request arriving during the local
+/// invalidate must NOT be acknowledged by that invalidate.
+pub fn service_tlb_flush(hart_id: usize) -> usize {
     if hart_id >= MAX_HARTS {
         return 0;
     }
     let epoch = TLB_FLUSH_REQUEST[hart_id].load(Ordering::Acquire);
     if TLB_FLUSH_COMPLETE[hart_id].load(Ordering::Acquire) < epoch {
+        crate::memory::paging::tlb_flush_all();
         TLB_FLUSH_COMPLETE[hart_id].store(epoch, Ordering::Release);
-        #[cfg(feature = "test-hooks")]
+        #[cfg(all(feature = "test-hooks", not(target_arch = "x86_64")))]
         log::info!(
             "[selftest] TLB-ACK: stage=remote-flush-completed hart={} epoch={}",
             hart_id,
@@ -110,6 +114,7 @@ pub fn complete_tlb_flush(hart_id: usize) -> usize {
     }
     epoch
 }
+
 
 /// Test view of the last invalidation epoch `hart_id` confirmed.
 #[cfg(feature = "test-hooks")]
@@ -134,6 +139,25 @@ pub fn online_harts() -> impl Iterator<Item = usize> {
 static RETIRE_SWITCH_REQUEST: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
 static RETIRE_SWITCH_COMPLETE: [AtomicUsize; MAX_HARTS] =
     [AtomicUsize::new(0), AtomicUsize::new(0)];
+
+#[cfg(target_arch = "x86_64")]
+static RETIRE_SWITCH_INFLIGHT: [AtomicUsize; MAX_HARTS] =
+    [const { AtomicUsize::new(0) }; MAX_HARTS];
+
+/// Capture before scheduler selection: a later request may concern the incoming
+/// task and must wait for that task's next switch-away.
+#[cfg(target_arch = "x86_64")]
+pub fn capture_retirement_boundary(hart: usize) {
+    RETIRE_SWITCH_INFLIGHT[hart].store(
+        RETIRE_SWITCH_REQUEST[hart].load(Ordering::Acquire), Ordering::Release,
+    );
+}
+
+#[cfg(target_arch = "x86_64")]
+pub fn complete_captured_retirement_boundary(hart: usize) {
+    let epoch = RETIRE_SWITCH_INFLIGHT[hart].swap(0, Ordering::AcqRel);
+    RETIRE_SWITCH_COMPLETE[hart].fetch_max(epoch, Ordering::Release);
+}
 
 /// Test-hooks: how many preemption requests were pended for each logical hart.
 ///
@@ -285,7 +309,7 @@ pub fn remote_online_sbi_target() -> Option<(usize, usize)> {
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    target_arch = "riscv64"
+    any(target_arch = "riscv64", target_arch = "x86_64")
 ))]
 pub(crate) fn online_hart_count() -> usize {
     1 + HART_ONLINE
@@ -670,8 +694,348 @@ pub fn start_secondaries() {
 }
 
 /// No-op on targets with one CPU.
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
 pub fn start_secondaries() {}
+
+#[cfg(target_arch = "x86_64")]
+static X86_READY: AtomicBool = AtomicBool::new(false);
+#[cfg(target_arch = "x86_64")]
+static X86_QUALIFIED: AtomicBool = AtomicBool::new(false);
+#[cfg(target_arch = "x86_64")]
+static X86_BOOT_COMPLETE: AtomicBool = AtomicBool::new(false);
+#[cfg(target_arch = "x86_64")]
+static X86_PREEMPT: [AtomicBool; MAX_HARTS] = [const { AtomicBool::new(false) }; MAX_HARTS];
+
+#[cfg(target_arch = "x86_64")]
+pub fn x86_substrate_qualified() -> bool {
+    X86_BOOT_COMPLETE.load(Ordering::Acquire)
+        && (online_harts().count() == 1 || X86_QUALIFIED.load(Ordering::Acquire))
+}
+
+#[cfg(target_arch = "x86_64")]
+pub fn x86_scheduler_ready() -> bool {
+    X86_BOOT_COMPLETE.load(Ordering::Acquire)
+}
+
+#[cfg(target_arch = "x86_64")]
+pub fn request_preemption(hart: usize) {
+    if hart < MAX_HARTS {
+        X86_PREEMPT[hart].store(true, Ordering::Release);
+        send_ipi(hart);
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+pub fn take_preemption(hart: usize) -> bool {
+    hart < MAX_HARTS && X86_PREEMPT[hart].swap(false, Ordering::AcqRel)
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+struct X86SecondaryContext {
+    stack_top: usize,
+    kernel_cr3: usize,
+    logical: usize,
+    lapic_id: usize,
+}
+
+#[cfg(target_arch = "x86_64")]
+static mut X86_SECONDARY: X86SecondaryContext = X86SecondaryContext {
+    stack_top: 0, kernel_cr3: 0, logical: 1, lapic_id: 0,
+};
+
+// Limine enters with IF clear on its own permanent bootloader stack. Read all
+// handoff fields before the root change, adopt our dedicated stack before Rust
+// touches any stack, and never return to bootloader state. Both roots retain
+// the loaded kernel mapping and HHDM.
+#[cfg(target_arch = "x86_64")]
+core::arch::global_asm!(
+    ".global vi_x86_secondary_entry",
+    ".type vi_x86_secondary_entry,@function",
+    "vi_x86_secondary_entry:",
+    "endbr64",
+    "cli",
+    "mov rax, [rdi + 24]",
+    "mov rdx, [rax]",
+    "mov rcx, [rax + 8]",
+    "mov rdi, [rax + 16]",
+    "mov rsi, [rax + 24]",
+    "mov cr3, rcx",
+    "mov rsp, rdx",
+    "and rsp, -16",
+    "xor rbp, rbp",
+    "mov rdx, rcx",
+    "call {entry}",
+    "ud2",
+    entry = sym x86_secondary_main,
+);
+
+#[cfg(target_arch = "x86_64")]
+fn x86_bounded_wait(mut done: impl FnMut() -> bool) {
+    // A bounded instruction budget does not depend on timer interrupts being
+    // delivered to the waiting CPU. Fail closed once a callback was released.
+    for _ in 0..100_000_000usize {
+        if done() { return; }
+        core::hint::spin_loop();
+    }
+    panic!("[x86-smp] active AP safety handshake timed out");
+}
+
+#[cfg(target_arch = "x86_64")]
+pub fn start_secondaries() {
+    use crate::boot::limine;
+    let bsp_id = core::arch::x86_64::__cpuid(1).ebx >> 24;
+    HART_ONLINE[0].store(true, Ordering::Release);
+    #[cfg(feature = "test-hooks")]
+    x86_handoff_fixture();
+    let finish_up = || {
+        X86_BOOT_COMPLETE.store(true, Ordering::Release);
+        log::info!("[x86-smp] topology online=1 processor_ids={} qualified=yes", bsp_id);
+    };
+    if !hal::x86_64::apic::register_cpu(0, bsp_id) {
+        // UP does not use APIC-directed remote invalidations.
+        finish_up();
+        return;
+    }
+    let Some(response) = limine::get_mp_response() else { finish_up(); return };
+    let count = response.cpu_count as usize;
+    if response.flags != 0 || response.bsp_lapic_id != bsp_id
+        || count == 0 || count > 256 || !limine::mp_record_valid(response.cpus, count) {
+        log::warn!("[x86-smp] unsupported MP topology; no AP activated");
+        finish_up();
+        return;
+    }
+    let mut ids = [false; 256];
+    let mut processors = [0u32; 256];
+    let mut bsp_seen = false;
+    let mut secondary: *mut limine::LimineMpInfo = core::ptr::null_mut();
+    for index in 0..count {
+        let info = unsafe { *response.cpus.add(index) };
+        if !limine::mp_record_valid(info, 1) { finish_up(); return; }
+        let cpu = unsafe { &*info };
+        let id = cpu.lapic_id as usize;
+        if id > 255 || ids[id]
+            || processors[..index].contains(&cpu.processor_id)
+            || (cpu.lapic_id != bsp_id && cpu.goto_address.load(Ordering::Acquire) != 0) {
+            log::warn!("[x86-smp] invalid MP CPU record; no AP activated");
+            finish_up(); return;
+        }
+        ids[id] = true;
+        processors[index] = cpu.processor_id;
+        if cpu.lapic_id == bsp_id { bsp_seen = true; }
+        else if secondary.is_null() { secondary = info; }
+    }
+    if !bsp_seen || secondary.is_null() { finish_up(); return; }
+    let ap_id = unsafe { (*secondary).lapic_id };
+    if !hal::x86_64::apic::register_cpu(1, ap_id) { finish_up(); return; }
+    let stack = match crate::task::stack::Stack::new_kernel(crate::task::STACK_PAGES) {
+        Ok(stack) => stack,
+        Err(_) => { finish_up(); return; }
+    };
+    let kernel_cr3 = hal::domain::kernel_cr3();
+    assert!(kernel_cr3 != 0, "AP requires permanent shared kernel root");
+    let stack_top = stack.top;
+    core::mem::forget(stack);
+    extern "C" { fn vi_x86_secondary_entry(); }
+    unsafe {
+        X86_SECONDARY = X86SecondaryContext { stack_top, kernel_cr3, logical: 1, lapic_id: ap_id as usize };
+        (*secondary).extra_argument = (&raw const X86_SECONDARY) as u64;
+        (*secondary).goto_address.store(vi_x86_secondary_entry as *const () as usize, Ordering::Release);
+    }
+    // The BSP must receive the AP's reciprocal proof even if boot entered this
+    // routine with interrupts masked. Restore its original state afterwards.
+    let flags: usize;
+    unsafe { core::arch::asm!("pushfq", "pop {}", "sti", out(reg) flags); }
+    x86_bounded_wait(|| X86_READY.load(Ordering::Acquire));
+    let epoch = request_tlb_flush(1);
+    x86_bounded_wait(|| tlb_flush_completed(1, epoch));
+    X86_QUALIFIED.store(true, Ordering::Release);
+    x86_bounded_wait(|| HART_ONLINE[1].load(Ordering::Acquire));
+    #[cfg(feature = "test-hooks")]
+    x86_shootdown_fixture_primary();
+    X86_BOOT_COMPLETE.store(true, Ordering::Release);
+    log::info!("[x86-smp] transport IPI-invalidate bidirectional=pass");
+    log::info!("[x86-smp] topology online=2 processor_ids={};{} qualified=yes", bsp_id, ap_id);
+    if flags & (1 << 9) == 0 { unsafe { core::arch::asm!("cli", options(nomem, nostack)); } }
+}
+
+#[cfg(target_arch = "x86_64")]
+extern "C" fn x86_secondary_main(logical: usize, lapic_id: usize, kernel_cr3: usize) -> ! {
+    assert!(logical == 1);
+    if !unsafe { hal::x86_64::init_secondary_cpu(logical, lapic_id as u32, kernel_cr3) } {
+        panic!("[x86-smp] active AP feature/isolation initialization failed");
+    }
+    crate::task::hart_local::install(logical);
+    // Establish this CPU's own idle activation before enabling delivery.
+    unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
+    let epoch = request_tlb_flush(0);
+    x86_bounded_wait(|| tlb_flush_completed(0, epoch));
+    X86_READY.store(true, Ordering::Release);
+    x86_bounded_wait(|| X86_QUALIFIED.load(Ordering::Acquire));
+    HART_ONLINE[logical].store(true, Ordering::Release);
+    x86_bounded_wait(|| {
+        #[cfg(feature = "test-hooks")]
+        x86_shootdown_fixture_secondary();
+        X86_BOOT_COMPLETE.load(Ordering::Acquire)
+    });
+    loop {
+        crate::task::yield_cpu();
+        unsafe { core::arch::asm!("sti", "hlt", options(nomem, nostack)); }
+    }
+}
+
+// This behavioral fixture caches a genuinely GLOBAL shared translation on the
+// AP, changes its binding on the BSP, then forces the AP to contend on the same
+// page-table lock with IF clear. Success requires lock-spin local invalidation;
+// an ISR-only acknowledgement deadlocks or retains the old binding.
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+const X86_PROBE_VA: usize = 0x0600_0000;
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+static X86_PROBE_STAGE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+static X86_PROBE_BEFORE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+static X86_PROBE_AFTER: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+fn x86_shootdown_fixture_secondary() {
+    if X86_PROBE_STAGE.load(Ordering::Acquire) != 1 { return; }
+    X86_PROBE_BEFORE.store(
+        unsafe { core::ptr::read_volatile(X86_PROBE_VA as *const usize) }, Ordering::Release,
+    );
+    X86_PROBE_STAGE.store(2, Ordering::Release);
+    x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 3);
+    unsafe { core::arch::asm!("cli", options(nomem, nostack)); }
+    X86_PROBE_STAGE.store(4, Ordering::Release);
+    let root = crate::memory::paging::KERNEL_ROOT.lock();
+    X86_PROBE_AFTER.store(
+        unsafe { core::ptr::read_volatile(X86_PROBE_VA as *const usize) }, Ordering::Release,
+    );
+    drop(root);
+    X86_PROBE_STAGE.store(5, Ordering::Release);
+    unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
+}
+
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+fn x86_shootdown_fixture_primary() {
+    use crate::memory::frame::{phys_to_virt, FRAME_ALLOCATOR};
+    use crate::memory::paging::{KERNEL_ROOT, PAGE_SIZE};
+    use hal::paging::{PTE_PRESENT, PTE_WRITABLE, PTE_NX, walk_read, walk_create};
+    let flags = PTE_PRESENT | PTE_WRITABLE | PTE_NX | (1 << 8);
+    let (old, new) = {
+        let mut allocator = FRAME_ALLOCATOR.lock();
+        let allocator = allocator.as_mut().expect("fixture frame allocator");
+        let old = allocator.allocate_frame().expect("fixture old frame");
+        let new = allocator.allocate_frame().expect("fixture replacement frame");
+        unsafe {
+            core::ptr::write_volatile(phys_to_virt(old) as *mut usize, 0x1357);
+            core::ptr::write_volatile(phys_to_virt(new) as *mut usize, 0x2468);
+        }
+        let root = KERNEL_ROOT.lock();
+        let root_pointer = phys_to_virt(root.expect("fixture root")) as *const u64;
+        assert!(unsafe { walk_read(root_pointer, X86_PROBE_VA) }.is_none_or(|pte| pte & PTE_PRESENT == 0),
+            "shootdown fixture VA already mapped");
+        drop(root);
+        crate::memory::paging::map_page_x86(allocator, X86_PROBE_VA, old, flags).expect("fixture map");
+        (old, new)
+    };
+    X86_PROBE_STAGE.store(1, Ordering::Release);
+    x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 2);
+    {
+        let root = KERNEL_ROOT.lock();
+        let root_pointer = phys_to_virt(root.expect("fixture root")) as *mut u64;
+        let mut no_allocate = || None;
+        let leaf = unsafe { walk_create(root_pointer, X86_PROBE_VA, &mut no_allocate) }.expect("fixture leaf");
+        unsafe { core::ptr::write_volatile(leaf, new as u64 | flags); }
+        X86_PROBE_STAGE.store(3, Ordering::Release);
+        x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 4);
+        crate::memory::tlb_shootdown::flush_range(X86_PROBE_VA, PAGE_SIZE);
+    }
+    x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 5);
+    assert_eq!(X86_PROBE_BEFORE.load(Ordering::Acquire), 0x1357);
+    assert_eq!(X86_PROBE_AFTER.load(Ordering::Acquire), 0x2468);
+    crate::memory::paging::unmap_page_x86(X86_PROBE_VA).expect("fixture unmap");
+    let mut allocator = FRAME_ALLOCATOR.lock();
+    let allocator = allocator.as_mut().expect("fixture frame allocator");
+    allocator.deallocate_frame(old);
+    allocator.deallocate_frame(new);
+    log::info!("S22-X86-REMOTE-SHOOTDOWN: PASS harts=2 global=true irq_masked_lock=true before=4951 after=9320");
+}
+
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+static mut X86_HANDOFF_CONTEXTS: [core::mem::MaybeUninit<hal::arch::Context>; 2] =
+    [core::mem::MaybeUninit::uninit(); 2];
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+static X86_HANDOFF_FIRST_EPOCH: AtomicUsize = AtomicUsize::new(0);
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+static X86_HANDOFF_LATE_EPOCH: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+core::arch::global_asm!(
+    ".global vi_x86_handoff_fixture_entry",
+    "vi_x86_handoff_fixture_entry:",
+    "endbr64",
+    "jmp {entry}",
+    entry = sym x86_handoff_fixture_incoming,
+);
+
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+extern "C" fn x86_handoff_fixture_incoming() -> ! {
+    use crate::task::hart_local::ready;
+    assert_eq!(ready::selected_task_id_for(0), 0);
+    assert_eq!(ready::executing_task_id_for(0), 90_002);
+    assert_eq!(ready::outgoing_context_save_task_id_for(0), 0);
+    assert!(!ready::owned_by_another_hart(1, 90_001));
+    assert!(retirement_switch_completed(0, X86_HANDOFF_FIRST_EPOCH.load(Ordering::Acquire)));
+    assert!(!retirement_switch_completed(0, X86_HANDOFF_LATE_EPOCH.load(Ordering::Acquire)));
+    ready::steal_from_busiest(1);
+    assert_eq!(ready::pick_local_eligible(1), Some(90_001));
+    ready::begin_outgoing_context_save(0, 90_002);
+    capture_retirement_boundary(0);
+    let contexts = (&raw mut X86_HANDOFF_CONTEXTS).cast::<hal::arch::Context>();
+    unsafe { hal::arch::Context::switch(contexts.add(1), contexts); }
+    panic!("handoff fixture unexpectedly re-entered");
+}
+
+/// A real raw switch proves the outgoing Ready Context cannot be stolen before
+/// save, becomes stealable on the incoming stack, and cannot acknowledge a
+/// retirement requested after selection. Synthetic TIDs never enter SCHEDULER.
+#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+fn x86_handoff_fixture() {
+    use crate::task::hart_local::ready;
+    let stack = crate::task::stack::Stack::new_kernel(2).expect("handoff fixture stack");
+    let flags = hal::arch::save_and_disable_interrupts();
+    assert_eq!(ready::total_ready_count(), 0);
+    let contexts = (&raw mut X86_HANDOFF_CONTEXTS).cast::<hal::arch::Context>();
+    extern "C" { fn vi_x86_handoff_fixture_entry(); }
+    unsafe {
+        contexts.write(hal::arch::Context::default());
+        contexts.add(1).write(hal::arch::Context::default());
+        (*contexts.add(1)).sp = (stack.top - 8) as u64;
+        (*contexts.add(1)).rip = vi_x86_handoff_fixture_entry as *const () as u64;
+        core::ptr::write_volatile((stack.top - 8) as *mut usize, 0);
+    }
+    ready::set_current_task_id(0, 90_001);
+    ready::set_executing_task_id(0, 90_001);
+    ready::begin_outgoing_context_save(0, 90_001);
+    ready::push_on_hart(0, 90_001, api::TaskPriority::Normal as u8);
+    X86_HANDOFF_FIRST_EPOCH.store(request_retirement_switch(0), Ordering::Release);
+    capture_retirement_boundary(0);
+    ready::set_current_task_id(0, 90_002);
+    ready::set_selected_task_id(0, 90_002);
+    X86_HANDOFF_LATE_EPOCH.store(request_retirement_switch(0), Ordering::Release);
+    ready::steal_from_busiest(1);
+    assert_eq!(ready::pick_local_eligible(1), None);
+    assert!(ready::owned_by_another_hart(1, 90_001));
+    unsafe { hal::arch::Context::switch(contexts, contexts.add(1)); }
+    assert_eq!(ready::current_task_id_for(0), 0);
+    assert_eq!(ready::executing_task_id_for(0), 0);
+    assert!(retirement_switch_completed(0, X86_HANDOFF_LATE_EPOCH.load(Ordering::Acquire)));
+    assert_eq!(ready::total_ready_count(), 0);
+    unsafe { hal::arch::restore_sstatus(flags); }
+    drop(stack);
+    log::info!("S22-X86-CONTEXT-HANDOFF: PASS raw_switch=true save_guard=true steal_after_save=true late_retirement_deferred=true");
+}
 
 /// Rust entry point of a secondary core started by `PSCI_CPU_ON`.
 ///

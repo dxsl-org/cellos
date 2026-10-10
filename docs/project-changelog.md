@@ -4,6 +4,133 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-10 — qualified x86 two-CPU SMP execution for C2C renderer and Tier-2 private roots.**
+  Completed real x86 two-logical-CPU (`MAX_HARTS=2`) substrate with hardware AP startup,
+  per-CPU GS `CpuLocal`, per-CPU GDT/TSS, directed legacy LAPIC IPI delivery (vector 0xf0),
+  and remote all-PCID/global TLB invalidation acknowledgements with captured request epochs.
+  Limine v8 MP protocol brings up secondary CPU on a dedicated kernel stack; reciprocal
+  IPI and local-invalidation handshakes are verified before SMP and domain admission qualify.
+  Kernel execution and continuations remain strictly under `VI_KERNEL_CR3` with all MMIO
+  accessible; private user roots are installed strictly at the Ring-3 boundary (`__trap_exit`,
+  `sysretq`, `iretq`), eliminating unmapped LAPIC MMIO faults during root teardown.
+  Renderer app and worker runtime observe hardware execution endpoints via unprivileged
+  CPUID leaf 0xb/1 (`ostd::system_info::processor_id()`); Response wire format and CSV report
+  endpoint physical APIC IDs (`processor_ids=0;1`) for overall modes and per worker.
+  Standalone smoke runner (`scripts/x86/run-c2c-render-smoke.py`) supports `--cpus 1|2` and
+  `--accel tcg|kvm`; requires verified kernel topology qualification and render endpoints
+  on both admitted CPUs for multicore modes.
+  Verified: 242 host unit tests pass (10 suites); 1-CPU regression smoke passes; 2-CPU
+  KVM trusted compare + tail/clamp + 4-worker ForceExit expiry/recovery passes; 2-CPU KVM
+  Tier-2 private-root compare + tail/clamp + 4-worker ForceExit expiry/recovery passes;
+  2-CPU TCG compare passes; 128×96 8-sample 8-depth 192-tile Tier-2 workload on 2 CPUs
+  under KVM achieves ~1.8x speedup (2.62s vs 4.70s baseline) with 100% pixel hash equality;
+  `scripts/x86/qemu-domain-test.sh` passes all boot markers on 2 CPUs KVM and 1 CPU TCG
+  (`S22-X86-PLAN`, `S22-X86-PIN-DYING`, `MMIO-REVOKE-USERBIT`, `S22-X86-CONTEXT-HANDOFF`,
+  `S22-X86-REMOTE-SHOOTDOWN`, `S22-X86-DOMAIN-LIVE`, `S22-X86-DOMAIN-TEARDOWN`, fault containment,
+  and shell recovery). LAN/Internet protected-authority and Tier-3 gates remain unmodified.
+- **2026-10-10 — bounded multi-Cell renderer pool with correlated outstanding work.**
+  Added `--workers 1..4` (default 1), clamped to the tile count; baseline starts
+  no workers. Copied, shared and Tier-2 modes spawn separate Cells and keep at
+  most one accepted tile operation per worker. Completion-aware scanning and
+  refill avoid waiting for a slow first worker. Every shared slot owns a distinct
+  grant; copied RGB replies borrow validated bytes from reusable IPC buffers,
+  eliminating a per-tile coordinator pixel-vector allocation. The canonical
+  render protocol, scene, public ABI, manifests and admission gates are unchanged.
+  Pool ownership covers partial startup, submission, validation and shutdown
+  failure: all accepted tokens are cancelled/taken and every worker is quiesced
+  before any shared grant is released. Incomplete cleanup retains ownership
+  rather than reporting success. No accepted tile is retried.
+  CSV adds requested/started worker counts and `peak_outstanding` (submitted,
+  not-yet-consumed operations, including retained terminal replies). Actual
+  per-worker TIDs and completed tile counts are recorded. Tile latency starts
+  immediately before submission, excluding request serialization. Summed worker
+  render durations include preemption and are not CPU time or wall time.
+  Post-review verification: 16 targeted host tests pass (7 app, 9 unchanged
+  core/example); signed native release builds without warnings. Final one-worker
+  regression, four-worker baseline/copy/shared, four-worker baseline/Tier-2,
+  and a 128×96, 8-sample, depth-8, 192-tile Tier-2 workload pass. The larger
+  pool has four real workers completing 56/42/45/49 tiles, peak outstanding 4,
+  98,304 samples, 564,225 ray queries and exact baseline RGB hash
+  `8790649425ec4617`; copied pixel payload is 36,864 bytes.
+  Standalone multi-worker smoke now also checks a cropped 33×7 five-tile tail
+  wave and a one-tile render requested with four workers (one actually started).
+  Both shared and private-root expiry exercises ForceExit all four holders,
+  then a fresh four-worker pool succeeds without reboot. Every Tier-2 worker
+  has a real CR3 admission marker and refuses Shared output during comparison.
+  Final evidence: `target/c2c-render-pool-{single,shared,tier2,larger}.log`.
+  Current x86 is single-CPU: these runs prove multi-Cell ownership, scheduling,
+  exact output and failure recovery, not multicore computation or speedup.
+  LAN/Internet protected-authority gates and Tier-3 runtime/bridge prerequisites
+  remain blocked; no HTTP/TCP transport substitution was added.
+
+- **2026-10-09 — renderer runs across Tier 1 → Tier 2 on signed x86 QEMU.**
+  Added the distinct `c2c-render-domain-worker` artifact with an `UNTRUSTED`
+  manifest, empty capability ceiling and no grant syscall. Both worker entries
+  share one const-generic runtime; the domain instantiation eliminates grant
+  access and rejects Shared output before rendering. New `tier2` and
+  `compare-tier2` modes use copied kernel-owned IPC to this private-root worker;
+  admission failure never substitutes a trusted worker. Compare requires exact
+  RGB bytes and ray/sample counts against the same direct baseline, plus a
+  Shared-output refusal probe during setup, excluded from render-message counts.
+  Exact launch edges and signed DEV_POLICY include only the additional
+  capability-free worker. The isolated image signs/packages all three renderer
+  Cells and uses the existing qualified x86 development admission without
+  `test-hooks`; no admission policy, public ABI or remote transport was changed.
+  Verification: 14 targeted host tests pass, the signed native release builds,
+  and baseline/copy/shared regression passes. Real Tier-2 admission logs confirm
+  `Tier 2 Paged Domain (CR3 isolation)`. A 32×24 comparison and a 128×96,
+  8-sample, depth-8, 192-tile run match baseline exactly; the larger run has
+  98,304 samples, 564,225 ray queries, RGB hash `8790649425ec4617` and 36,864
+  copied pixel payload bytes. Deliberate domain-task expiry is indeterminate,
+  ForceExit quiesces the worker, and a fresh admitted domain worker completes
+  an 8×8 copied render without reboot. The serial CSV parser now handles the
+  actual `USER: ` logging prefix while retaining geometry/count/hash checks.
+  Evidence: `target/c2c-render-local-smoke.log`,
+  `target/c2c-render-tier2-smoke.log`, `target/c2c-render-tier2-larger.log`.
+  This is local development-profile correctness evidence, not fleet admission,
+  physical performance, parallel multi-worker scaling or remote qualification.
+  LAN/Internet remains blocked by protected-relay entry/hostile-evidence gates;
+  x86 guest operations and the unratified C2C guest bridge still block Tier 3.
+
+- **2026-10-09 — native C2C CPU 3D renderer (`host` + local x86 QEMU).**
+  Added `libs/render-core` with deterministic triangle/BVH path tracing, area
+  lighting, diffuse/metal/dielectric materials, multiple bounces and independent
+  pixel/sample random streams. Added `cells/apps/c2c-render`: CLI coordinator
+  and privately spawned worker, direct baseline, copied tile replies and
+  Tier-1 shared-grant RGB output. No `httpd`, GPU, custom network transport or
+  new public syscall. Shared mode copies metadata but no RGB pixels through
+  IPC; local tile assembly still copies rows. Complete image bytes and actual
+  ray/sample totals must match in compare mode.
+  Exact launch edges restrict the coordinator to its capability-free worker;
+  the coordinator alone declares lifecycle and VFS mutation authority.
+  Shared output is not released on indeterminate RPC completion until worker
+  teardown reaches the kernel's quiescence barrier. Clean Stop also accepts
+  a known child already reaped after its exact acknowledgement.
+  `scripts/build-x86_64-c2c-render-ci.sh` reuses the isolated lifecycle image
+  builder, signs both Cells, packages signed `/POLICY.BIN`, and leaves the
+  production embedded image and default lifecycle workload unchanged.
+  Native boot confirms the policy loaded and verified (53 entries).
+  Verification: 14 targeted host tests pass, including tile partition/order,
+  geometric boundaries, response validation, percentile calculations and
+  non-truncating rejection of aliased PPM/CSV output files. The host executable
+  rendered and visually verified 640×480 at 64 samples/pixel and depth 12:
+  19,660,800 samples and 113,668,661 primary/continuation/shadow ray queries;
+  full-frame and partitioned output and counts match exactly.
+  Real signed x86 QEMU runs compare baseline/copy/shared at 32×24 and at
+  128×96, 8 samples/pixel, depth 8, 192 tiles. The larger run produces identical
+  RGB hash `8790649425ec4617`, 98,304 samples and 564,225 ray queries; copied
+  pixel payload is 36,864 bytes versus zero in shared mode. CSV separates
+  setup/compute/wall/save timing, serialized render IPC bytes, actual counts
+  and tile latency p50/p95/p99; clocks use reported timer frequency.
+  Deliberate shared-task expiry reaches `Indeterminate`, ForceExit tears down
+  its worker, and a subsequent shared render succeeds without reboot.
+  Evidence: `target/c2c-render-smoke.log`, `target/c2c-render-larger.log`,
+  `/tmp/c2c-render-host.{ppm,csv}`. Usage and measurement ceilings are in the
+  app-development guide. These are host/local-QEMU correctness and timing
+  results, not physical speedup, production admission, generic zero-copy
+  fastpath, cross-tier or remote RPC qualification. Remote endpoints still
+  return `NotSupported`; LAN/Internet and Tier-2/Tier-3 execution remain gated.
+
 - **2026-10-09 — x86 virtualization baseline and cross-backend tooling.**
   Added `scripts/x86/measure-boot-backends.py`, reusing the unchanged production
   QEMU gate with isolated per-run logs, explicit TCG/KVM selection, artifact

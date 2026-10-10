@@ -378,3 +378,31 @@ fn init_autoload_keeps_reviewed_application_ceiling_and_authority_gate() {
         assert!(authorize(caller("init", true, false), route, "/bin/echo").is_none());
     }
 }
+
+#[test]
+fn renderer_cannot_launch_privileged_or_unreviewed_children() {
+    let renderer = caller("c2c-render", true, false);
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        for target in ["/bin/c2c-render-worker", "/bin/c2c-render-domain-worker"] {
+            let worker = authorize(renderer, route, target).unwrap();
+            assert_eq!(worker.child_ceiling, CapSet::EMPTY);
+            assert!(worker.requires_lifecycle_authority);
+            assert!(authorize(caller("c2c-render", false, false), route, target).is_none());
+        }
+        for target in ["/bin/vfs", "/bin/net", "/bin/c2c-render", "/bin/unreviewed"] {
+            assert!(authorize(renderer, route, target).is_none());
+        }
+        for worker in ["c2c-render-worker", "c2c-render-domain-worker"] {
+            for target in ["/bin/c2c-render-worker", "/bin/c2c-render-domain-worker"] {
+                assert!(authorize(caller(worker, true, false), route, target).is_none());
+            }
+        }
+    }
+    for route in [LaunchRoute::Mem, LaunchRoute::Pinned] {
+        for target in ["/bin/c2c-render-worker", "/bin/c2c-render-domain-worker"] {
+            assert!(authorize(renderer, route, target).is_none());
+        }
+    }
+    assert!(shell_edge(LaunchRoute::Path, "/bin/c2c-render").child_ceiling.spawn);
+    assert!(authorize(caller("shell", false, false), LaunchRoute::Elf, "/bin/c2c-render").is_none());
+}

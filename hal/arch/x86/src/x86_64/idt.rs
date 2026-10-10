@@ -1,6 +1,7 @@
 //! x86_64 Interrupt Descriptor Table with one generated entry per vector.
 
 use core::arch::asm;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(feature = "x86-idt-cpl3-test")]
 mod cpl3_entry;
@@ -72,6 +73,7 @@ struct IdtPointer {
 }
 
 static mut IDT: Idt = Idt([IdtEntry::MISSING; X86_IDT_STUB_COUNT]);
+static IDT_READY: AtomicBool = AtomicBool::new(false);
 
 pub fn init() {
     unsafe {
@@ -83,15 +85,23 @@ pub fn init() {
             let dpl = if vector == 0x80 { 3 } else { 0 };
             (*idt).0[vector] = IdtEntry::interrupt_gate(handler, dpl);
         }
-        let pointer = IdtPointer {
-            limit: (core::mem::size_of::<Idt>() - 1) as u16,
-            base: core::ptr::addr_of!((*idt).0) as u64,
-        };
-        asm!("lidt [{pointer}]", pointer = in(reg) &pointer, options(nostack));
+        IDT_READY.store(true, Ordering::Release);
+        assert!(load_current_cpu());
     }
 
     #[cfg(feature = "x86-idt-cpl3-test")]
     probe::run_exception_probes();
+}
+
+/// APs load the immutable BSP-built IDT, never rebuild or run BSP probes.
+pub fn load_current_cpu() -> bool {
+    if !IDT_READY.load(Ordering::Acquire) { return false; }
+    let pointer = IdtPointer {
+        limit: (core::mem::size_of::<Idt>() - 1) as u16,
+        base: core::ptr::addr_of!(IDT) as u64,
+    };
+    unsafe { asm!("lidt [{}]", in(reg) &pointer, options(nostack)) };
+    true
 }
 
 #[cfg(feature = "x86-idt-cpl3-test")]

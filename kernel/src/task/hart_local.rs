@@ -86,7 +86,14 @@ fn owned_slot_index() -> usize {
             None => 0,
         }
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
+    {
+        hal::syscall::current_cpu_id()
+    }
+    // Hosted unit fixtures do not install a privileged kernel GS base.
+    #[cfg(all(target_arch = "x86_64", test, not(target_os = "none")))]
+    { 0 }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         0
     }
@@ -365,8 +372,8 @@ pub fn install(hart_id: usize) {
 
 /// Return a reference to the calling hart's `ViHartLocal`.
 ///
-/// On RISC-V reads the `tp` CSR. On other architectures (x86_64 single-hart
-/// bring-up) returns HART_LOCALS[0] directly.
+/// On RISC-V reads `tp`; x86 uses the logical CPU installed in GS; AArch64
+/// consults its published physical-to-logical mapping.
 ///
 /// # Safety
 /// On RISC-V: `tp` must point to a valid `ViHartLocal` (guaranteed after `install()`).
@@ -408,7 +415,7 @@ pub fn current_hart_id() -> usize {
 
 /// Cell ID currently running on this hart (0 = kernel, no quota).
 ///
-/// On RISC-V reads `tp` CSR. On other architectures returns HART_LOCALS[0].current_cell_id.
+/// Uses the calling CPU's owned HartLocal slot.
 #[inline(always)]
 pub fn current_cell_id() -> usize {
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
@@ -916,7 +923,7 @@ pub fn set_current_cell_id(id: usize) {
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
     {
-        HART_LOCALS[0].current_cell_id.store(id, Ordering::Relaxed);
+        HART_LOCALS[owned_slot_index()].current_cell_id.store(id, Ordering::Relaxed);
     }
 }
 

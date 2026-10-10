@@ -166,6 +166,21 @@ pub(super) fn backend_supervisor_profile(
     ))
 }
 
+/// The renderer may launch only its capability-free trusted or domain worker.
+/// Lifecycle authority permits synchronous teardown of either worker class.
+pub(super) fn render_worker_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf)
+        || !matches!(target, "/bin/c2c-render-worker" | "/bin/c2c-render-domain-worker")
+    {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        CapSet::EMPTY,
+        "c2c-render-worker-edge",
+        true,
+    ))
+}
+
 pub(super) fn supervisor_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
     if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || !target.starts_with("/bin/") {
         return None;

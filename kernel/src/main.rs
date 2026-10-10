@@ -217,6 +217,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         crate::hal::pku::init(); // LAYER2-PKU-INIT (requires IBT, checked inside)
         crate::hal::syscall::init();
         crate::hal::init_sse();
+        crate::hal::x86_64::publish_boot_cpu_policy();
         // apic::init_lapic() deferred — needs MMIO mapped via custom PML4
     }
     #[cfg(not(target_arch = "x86_64"))]
@@ -1002,10 +1003,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         }
     }
 
-    // 7b. Bring secondary harts online (RISC-V via SBI HSM, AArch64 via firmware
-    // PSCI; a no-op elsewhere). Must run AFTER task::init() so the heap and
-    // scheduler are live before any secondary starts running kernel code.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    // Bring actual secondaries online only after task::init. x86 uses the
+    // Limine MP callback and qualifies bidirectional invalidation before tasks.
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
     task::smp::start_secondaries();
     // AArch64 has no equivalent of the RV64 shootdown fixture at boot, so the
     // SGI delivery path is exercised here: a hart that is online but deaf to the

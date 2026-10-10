@@ -68,6 +68,7 @@ pub fn authorize(
         "backend-supervisor" if caller.has_spawn => {
             profiles::backend_supervisor_profile(route, target)
         }
+        "c2c-render" if caller.has_spawn => profiles::render_worker_profile(route, target),
         "supervisor" if caller.has_spawn && caller.has_supervisor => {
             profiles::supervisor_profile(route, target)
         }

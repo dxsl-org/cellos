@@ -1,7 +1,26 @@
-//! x86_64 CPU context (callee-saved registers + RSP for cooperative switch).
+//! x86_64 cooperative registers, migration scratch, and FP control context.
 use core::arch::asm;
 
+/// SysV callee-preserved floating-point controls. XMM/x87 data are caller-saved;
+/// asynchronous user state lives in the ISR/syscall stack's FXSAVE image.
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct FpuControl {
+    pub mxcsr: u32,
+    pub x87_control: u16,
+    _reserved: u16,
+}
+
+impl FpuControl {
+    pub const fn new() -> Self {
+        Self { mxcsr: 0x1f80, x87_control: 0x037f, _reserved: 0 }
+    }
+}
+impl Default for FpuControl {
+    fn default() -> Self { Self::new() }
+}
+
+#[repr(C, align(16))]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CpuContext {
     pub r15: u64,
@@ -20,6 +39,27 @@ pub struct CpuContext {
     /// the top of a fresh syscall frame, not the deep cooperative-switch RSP
     /// that shrinks every blocking cycle.
     pub kernel_trap_sp: u64,
+    /// Suspended user-entry CR3 scratch; moves with the task, not the CPU.
+    pub user_cr3: u64,
+    pub fp_control: FpuControl,
+}
+
+const _: () = {
+    use core::mem::{offset_of, size_of};
+    assert!(offset_of!(CpuContext, sp) == 48);
+    assert!(offset_of!(CpuContext, rip) == 56);
+    assert!(offset_of!(CpuContext, kernel_trap_sp) == 64);
+    assert!(offset_of!(CpuContext, user_cr3) == 72);
+    assert!(offset_of!(CpuContext, fp_control) == 80);
+    assert!(size_of::<CpuContext>() == 96);
+    assert!(size_of::<FpuControl>() == 8);
+    assert!(offset_of!(FpuControl, mxcsr) == 0);
+    assert!(offset_of!(FpuControl, x87_control) == 4);
+    assert!(core::mem::align_of::<CpuContext>() == 16);
+};
+
+unsafe extern "C" {
+    fn vi_context_switch_complete();
 }
 
 /// Atomically capture RFLAGS and disable interrupts (CLI).
@@ -32,7 +72,7 @@ pub fn save_and_disable_interrupts() -> usize {
             "pop {saved}",
             "cli",
             saved = out(reg) rflags,
-            options(nomem, nostack),
+            options(nomem),
         );
     }
     rflags
@@ -48,7 +88,7 @@ pub unsafe fn restore_sstatus(rflags: usize) {
         "push {saved}",
         "popfq",
         saved = in(reg) rflags,
-        options(nomem, nostack),
+        options(nomem),
     );
 }
 
@@ -115,14 +155,8 @@ pub unsafe fn switch_with_root(
     } else {
         super::domain::cr3_for(root_pml4, pcid, super::domain::pcid_usable())
     };
-    // SAFETY: caller guarantees valid, aligned CpuContext pointers.
-    //
-    // Register discipline: pin `old` → rdi and `new` → rsi (SysV argument
-    // registers).  Neither is ever written by the asm body — only their
-    // *pointed-to* memory is touched — so both survive intact through the
-    // jmp.  Without explicit pins, LLVM may assign `new` to r15/r14/r13/r12/
-    // rbx/rbp, which the body overwrites, corrupting the pointer before the
-    // final `jmp [rsi+7*8]` and causing a triple-fault (#PF at ~address 0).
+    // The kernel masks interrupts across selection and this transition. The
+    // completion callback may release the outgoing save only on the new stack.
     unsafe {
         asm!(
             "mov [rdi+0*8], r15",  "mov [rdi+1*8], r14",
@@ -130,20 +164,40 @@ pub unsafe fn switch_with_root(
             "mov [rdi+4*8], rbx",  "mov [rdi+5*8], rbp",
             "mov [rdi+6*8], rsp",
             "lea rax, [rip+99f]",   "mov [rdi+7*8], rax",
-            // Root transition (rdx = CR3, zero = no write). Registers only:
-            // after this point the outgoing stack is unreachable.
+            "mov rax, gs:[24]", "mov [rdi+72], rax",
+            "stmxcsr [rdi+80]",
+            "fnstcw [rdi+84]",
+            // Adopt the incoming stack before any call or stack memory access.
+            "mov rsp, [rsi+6*8]",
+            // Update user CR3 scratch for incoming task: if rdx (explicit root) != 0 use rdx,
+            // else use incoming task's saved user_cr3 from [rsi+72].
+            // Hardware CR3 remains kernel CR3 for all kernel code and callbacks.
             "test rdx, rdx",
-            "jz 98f",
-            "mov cr3, rdx",
-            "98:",
+            "cmovz rdx, [rsi+72]",
+            "mov gs:[24], rdx",
+            // A fresh trap stack and a suspended Rust stack have different
+            // alignments. Preserve the exact incoming RSP across the C call.
+            "mov rax, rsp",
+            "and rsp, -16",
+            "sub rsp, 16",
+            "mov [rsp], rsi",
+            "mov [rsp+8], rax",
+            "call {complete}",
+            "mov rsi, [rsp]",
+            "mov rsp, [rsp+8]",
+            // SysV permits data-register clobbers, but controls move with the
+            // suspended activation and are restored after the kernel callback.
+            "ldmxcsr [rsi+80]",
+            "fldcw [rsi+84]",
             "mov r15, [rsi+0*8]",  "mov r14, [rsi+1*8]",
             "mov r13, [rsi+2*8]",  "mov r12, [rsi+3*8]",
             "mov rbx, [rsi+4*8]",  "mov rbp, [rsi+5*8]",
-            "mov rsp, [rsi+6*8]",
             "jmp [rsi+7*8]",
             "99:",
+            ".byte 0xf3, 0x0f, 0x1e, 0xfa",
             in("rdi") old, in("rsi") new, in("rdx") cr3,
-            out("rax") _,
+            complete = sym vi_context_switch_complete,
+            clobber_abi("C"),
         );
     }
 }

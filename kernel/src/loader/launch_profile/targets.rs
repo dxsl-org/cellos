@@ -10,6 +10,8 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/ai-test"
         | "/bin/audio-demo"
         | "/bin/bench-probe"
+        | "/bin/c2c-render-worker"
+        | "/bin/c2c-render-domain-worker"
         | "/bin/can-demo"
         | "/bin/cat"
         | "/bin/cfi-test"
@@ -75,6 +77,7 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         "/bin/sensor-demo" => sensor_mmio_capset(),
         "/bin/spi-demo" => spi_demo_mmio_capset(),
         "/bin/bench"
+        | "/bin/c2c-render"
         | "/bin/capacity-probe"
         | "/bin/hypha"
         | "/bin/tool-spawn"

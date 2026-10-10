@@ -20,6 +20,7 @@ pub enum Route {
     TerminateUser,
     FatalException,
     Timer,
+    Ipi,
     Uart,
     LegacyInt80,
     LapicSpurious,
@@ -50,6 +51,7 @@ pub fn classify(vector: u8, origin: Origin) -> Policy {
         0..=31 if matches!(origin, Origin::User) => policy(Route::TerminateUser, Eoi::None),
         0..=31 => policy(Route::FatalException, Eoi::None),
         0x20 => policy(Route::Timer, Eoi::Before),
+        0xf0 => policy(Route::Ipi, Eoi::Before),
         0x24 => policy(Route::Uart, Eoi::After),
         0x80 => policy(Route::LegacyInt80, Eoi::None),
         0xff => policy(Route::LapicSpurious, Eoi::None),
@@ -89,6 +91,8 @@ mod tests {
     fn assigns_explicit_irq_and_software_routes() {
         expect(0x20, Origin::Kernel, Route::Timer, Eoi::Before);
         expect(0x24, Origin::Kernel, Route::Uart, Eoi::After);
+        expect(0xf0, Origin::Kernel, Route::Ipi, Eoi::Before);
+        expect(0xf0, Origin::User, Route::Ipi, Eoi::Before);
         expect(0x80, Origin::User, Route::LegacyInt80, Eoi::None);
         expect(0xff, Origin::Kernel, Route::LapicSpurious, Eoi::None);
         expect(0x21, Origin::Kernel, Route::FatalUnknown, Eoi::None);

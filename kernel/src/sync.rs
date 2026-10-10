@@ -37,7 +37,11 @@ impl<T> Spinlock<T> {
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
-            // Spin
+            // A peer may hold this lock while awaiting our invalidation. IF is
+            // masked, so service only the lock-free local mailbox here: never
+            // schedule, allocate, or log from this ownership window.
+            #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
+            crate::task::smp::service_tlb_flush(crate::task::hart_local::current_hart_id());
             core::hint::spin_loop();
         }
         SpinlockGuard {

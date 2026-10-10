@@ -45,22 +45,10 @@ pub struct PkuCaps {
 
 /// Detect PKU/PKS capabilities via CPUID leaf 7, subleaf 0.
 pub fn detect() -> PkuCaps {
-    // CPUID leaf 7, subleaf 0: ECX[3]=PKU, ECX[31]=PKS.
-    // LLVM reserves rbx as a frame-pointer on x86_64, so we must push/pop it
-    // manually around CPUID rather than using an `out("ebx")` constraint.
-    let ecx: u32;
-    // SAFETY: CPUID is always safe from Ring-0; no side effects on memory.
-    unsafe {
-        core::arch::asm!(
-            "push rbx",
-            "cpuid",
-            "pop rbx",
-            inout("eax") 7u32 => _,
-            inout("ecx") 0u32 => ecx,
-            out("edx") _,
-            options(nostack)
-        );
+    if core::arch::x86_64::__cpuid(0).eax < 7 {
+        return PkuCaps { pku: false, pks: false };
     }
+    let ecx = core::arch::x86_64::__cpuid_count(7, 0).ecx;
     PkuCaps {
         pku: (ecx >> 3) & 1 != 0,
         pks: (ecx >> 31) & 1 != 0,
@@ -155,6 +143,28 @@ pub fn init() {
             log_str("[INFO] PKS: unavailable\n");
         }
     }
+}
+
+/// Apply the BSP's immutable PKU policy to the current AP without publishing it.
+pub fn init_secondary() -> bool {
+    let active = unsafe { PKU_ACTIVE != 0 };
+    let caps = detect();
+    if active && (!caps.pku || !super::cet::detect().ibt) { return false; }
+    unsafe {
+        let mut cr4: u64;
+        core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack));
+        if active { cr4 |= 1 << 22; } else { cr4 &= !(1 << 22); }
+        core::arch::asm!("mov cr4, {}", in(reg) cr4, options(nomem, nostack));
+        if active {
+            core::arch::asm!(
+                "wrpkru", in("eax") 0u32, in("ecx") 0u32, in("edx") 0u32,
+                options(nostack),
+            );
+            #[cfg(feature = "pks")]
+            if caps.pks { init_pks(); }
+        }
+    }
+    true
 }
 
 /// Enable PKS (supervisor protection keys) via MSR IA32_PKRS.

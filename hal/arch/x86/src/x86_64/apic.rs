@@ -10,6 +10,86 @@ use core::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 static HHDM_BASE: AtomicU64 = AtomicU64::new(0);
 static LAPIC_PHYS: AtomicUsize = AtomicUsize::new(0);
 static IOAPIC_PHYS: AtomicUsize = AtomicUsize::new(0);
+pub const IPI_VECTOR: u8 = 0xf0;
+const UNREGISTERED: u32 = u32::MAX;
+// One atomic publication prevents duplicate physical IDs even if startup races.
+static CPU_APIC_IDS: AtomicU64 = AtomicU64::new(u64::MAX);
+const _: () = assert!(super::syscall::MAX_CPUS == 2);
+static TIMER_COUNT: AtomicU32 = AtomicU32::new(0);
+
+/// Publish a unique legacy physical LAPIC destination before CPU admission.
+pub fn register_cpu(logical: usize, lapic_id: u32) -> bool {
+    if logical >= super::syscall::MAX_CPUS || lapic_id > 255 || check_x2apic() {
+        return false;
+    }
+    let shift = logical * 32;
+    let other_shift = (1 - logical) * 32;
+    let mut ids = CPU_APIC_IDS.load(Ordering::Acquire);
+    for _ in 0..64 {
+        if (ids >> other_shift) as u32 == lapic_id { return false; }
+        let previous = (ids >> shift) as u32;
+        if previous != UNREGISTERED { return previous == lapic_id; }
+        let updated = (ids & !((u32::MAX as u64) << shift)) | ((lapic_id as u64) << shift);
+        match CPU_APIC_IDS.compare_exchange(ids, updated, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => return true,
+            Err(current) => ids = current,
+        }
+    }
+    false
+}
+
+pub fn cpu_apic_id(logical: usize) -> Option<u32> {
+    if logical >= super::syscall::MAX_CPUS { return None; }
+    let id = (CPU_APIC_IDS.load(Ordering::Acquire) >> (logical * 32)) as u32;
+    (id != UNREGISTERED).then_some(id)
+}
+
+fn lr(reg: usize) -> u32 {
+    unsafe { core::ptr::read_volatile((lapic_base() + reg) as *const u32) }
+}
+
+fn wait_icr_idle() -> bool {
+    for _ in 0..100_000 {
+        if lr(0x300) & (1 << 12) == 0 { return true; }
+        core::hint::spin_loop();
+    }
+    false
+}
+
+/// Send a directed fixed IPI. Delivery status is not an invalidate acknowledgement.
+pub fn send_ipi(logical: usize) -> bool {
+    let Some(id) = cpu_apic_id(logical) else { return false; };
+    if check_x2apic() || LAPIC_PHYS.load(Ordering::Acquire) == 0 { return false; }
+    let flags = super::context::save_and_disable_interrupts();
+    let sent = if wait_icr_idle() {
+        lw(0x280, 0);
+        let _ = lr(0x280);
+        lw(0x310, id << 24);
+        lw(0x300, IPI_VECTOR as u32);
+        let idle = wait_icr_idle();
+        lw(0x280, 0);
+        idle && lr(0x280) == 0
+    } else {
+        false
+    };
+    unsafe { super::context::restore_sstatus(flags) };
+    sent
+}
+
+/// Configure only this AP's LAPIC using the BSP's calibrated periodic count.
+pub fn init_secondary(lapic_id: u32) -> bool {
+    if check_x2apic() || LAPIC_PHYS.load(Ordering::Acquire) == 0
+        || lr(0x20) >> 24 != lapic_id {
+        return false;
+    }
+    let count = TIMER_COUNT.load(Ordering::Acquire);
+    if count == 0 { return false; }
+    lw(0x0f0, 0x1ff);
+    lw(0x3e0, 0x3);
+    lw(0x320, 0x20 | (1 << 17));
+    lw(0x380, count);
+    true
+}
 
 /// ISA IRQ → GSI override table from ACPI MADT type-2 entries.
 /// Index = ISA IRQ (0–15); value = GSI. Identity-mapped by default.
@@ -176,6 +256,7 @@ pub fn init_lapic_calibrated(ticks_per_ms: u64) {
     lw(0x3E0, 0x3); // Timer divide-by-16
     lw(0x320, 0x20 | (1 << 17)); // LVT_TIMER: periodic, vector 0x20
     lw(0x380, safe_count);
+    TIMER_COUNT.store(safe_count, Ordering::Release);
 }
 
 /// Redirect an ISA IRQ to an IDT vector on CPU 0 (edge-triggered, active-high).
@@ -190,6 +271,7 @@ pub fn ioapic_redirect(isa_irq: u8, vec: u8) {
         .unwrap_or(isa_irq as u32);
     let gsi_base = IOAPIC_GSI_BASE.load(Ordering::Relaxed);
     let pin = gsi.saturating_sub(gsi_base) as u8;
-    iow(0x10 + pin * 2 + 1, 0); // destination: CPU 0
+    let destination = cpu_apic_id(0).expect("BSP APIC ID must be registered before IOAPIC redirection");
+    iow(0x10 + pin * 2 + 1, destination << 24);
     iow(0x10 + pin * 2, vec as u32); // vector, unmasked
 }
