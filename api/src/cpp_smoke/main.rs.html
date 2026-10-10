@@ -51,10 +51,10 @@
 <a href=#51 id=51 data-nosnippet>51</a><span class="macro">ostd::cell_main!</span>(cell_main);
 <a href=#52 id=52 data-nosnippet>52</a>
 <a href=#53 id=53 data-nosnippet>53</a><span class="kw">const </span>STATIC_CTOR_SENTINEL: u32 = <span class="number">0xC0FFEE11</span>;
-<a href=#54 id=54 data-nosnippet>54</a><span class="kw">const </span>VFS_PATH: <span class="kw-2">&amp;</span>str = <span class="string">"/srv/cpp-smoke.txt"</span>;
-<a href=#55 id=55 data-nosnippet>55</a><span class="doccomment">/// `/BIN/INIT` is the embedded init ELF: the kernel file table resolves it, and
-<a href=#56 id=56 data-nosnippet>56</a>/// the shim's C `open`/`read` ABI goes through that table (not the VFS service).
-<a href=#57 id=57 data-nosnippet>57</a></span><span class="kw">const </span>BIN_INIT_NUL: <span class="kw-2">&amp;</span>[u8] = <span class="string">b"/BIN/INIT\0"</span>;
+<a href=#54 id=54 data-nosnippet>54</a><span class="kw">const </span>VFS_PATH: <span class="kw-2">&amp;</span>str = <span class="string">"/tmp/cpp-smoke.txt"</span>;
+<a href=#55 id=55 data-nosnippet>55</a><span class="doccomment">/// Candidates for the C-ABI file read: an embedded ELF file in the kernel file table.
+<a href=#56 id=56 data-nosnippet>56</a>/// RV64 embeds `/BIN/INIT`; x86_64 embeds `/bin/shell`. Both start with `\x7fELF`.
+<a href=#57 id=57 data-nosnippet>57</a></span><span class="kw">const </span>CANDIDATES: [<span class="kw-2">&amp;</span>[u8]; <span class="number">2</span>] = [<span class="string">b"/BIN/INIT\0"</span>, <span class="string">b"/bin/shell\0"</span>];
 <a href=#58 id=58 data-nosnippet>58</a><span class="kw">const </span>ELF_MAGIC: [u8; <span class="number">4</span>] = [<span class="number">0x7F</span>, <span class="string">b'E'</span>, <span class="string">b'L'</span>, <span class="string">b'F'</span>];
 <a href=#59 id=59 data-nosnippet>59</a><span class="kw">const </span>PAYLOAD: <span class="kw-2">&amp;</span>[u8] = <span class="string">b"cpp-freestanding payload read through the VFS service"</span>;
 <a href=#60 id=60 data-nosnippet>60</a><span class="kw">const </span>HEAP_ITERATIONS: i32 = <span class="number">64</span>;
@@ -148,14 +148,20 @@
 <a href=#148 id=148 data-nosnippet>148</a>    ));
 <a href=#149 id=149 data-nosnippet>149</a>
 <a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">let </span><span class="kw-2">mut </span>magic = [<span class="number">0u8</span>; <span class="number">4</span>];
-<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">let </span>read = cpp::read_file(BIN_INIT_NUL, <span class="kw-2">&amp;mut </span>magic);
-<a href=#152 id=152 data-nosnippet>152</a>    expect_eq(<span class="string">"c-abi-read"</span>, read <span class="kw">as </span>i64, <span class="number">4</span>);
-<a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">if </span>magic != ELF_MAGIC {
-<a href=#154 id=154 data-nosnippet>154</a>        fail(<span class="string">"c-abi-content"</span>);
-<a href=#155 id=155 data-nosnippet>155</a>    }
-<a href=#156 id=156 data-nosnippet>156</a>    println(<span class="string">"[cpp-smoke] c-abi read magic=ELF"</span>);
-<a href=#157 id=157 data-nosnippet>157</a>
-<a href=#158 id=158 data-nosnippet>158</a>    println(<span class="string">"CPP-SMOKE: PASS"</span>);
-<a href=#159 id=159 data-nosnippet>159</a>    sys_exit(<span class="number">0</span>);
-<a href=#160 id=160 data-nosnippet>160</a>}
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">let </span><span class="kw-2">mut </span>read = -<span class="number">1</span>;
+<a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">for </span>candidate <span class="kw">in </span>CANDIDATES {
+<a href=#153 id=153 data-nosnippet>153</a>        read = cpp::read_file(candidate, <span class="kw-2">&amp;mut </span>magic);
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">if </span>read == <span class="number">4 </span>{
+<a href=#155 id=155 data-nosnippet>155</a>            <span class="kw">break</span>;
+<a href=#156 id=156 data-nosnippet>156</a>        }
+<a href=#157 id=157 data-nosnippet>157</a>    }
+<a href=#158 id=158 data-nosnippet>158</a>    expect_eq(<span class="string">"c-abi-read"</span>, read <span class="kw">as </span>i64, <span class="number">4</span>);
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">if </span>magic != ELF_MAGIC {
+<a href=#160 id=160 data-nosnippet>160</a>        fail(<span class="string">"c-abi-content"</span>);
+<a href=#161 id=161 data-nosnippet>161</a>    }
+<a href=#162 id=162 data-nosnippet>162</a>    println(<span class="string">"[cpp-smoke] c-abi read magic=ELF"</span>);
+<a href=#163 id=163 data-nosnippet>163</a>
+<a href=#164 id=164 data-nosnippet>164</a>    println(<span class="string">"CPP-SMOKE: PASS"</span>);
+<a href=#165 id=165 data-nosnippet>165</a>    sys_exit(<span class="number">0</span>);
+<a href=#166 id=166 data-nosnippet>166</a>}
 </code></pre></div></section></main></body></html>

@@ -165,77 +165,82 @@
 <a href=#165 id=165 data-nosnippet>165</a>        // envelope), so requests arrive as RawMessage. Accept Message too for
 <a href=#166 id=166 data-nosnippet>166</a>        // envelope-wrapped senders — the dispatch payload layout is identical.
 <a href=#167 id=167 data-nosnippet>167</a>        </span>AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } =&gt; {
-<a href=#168 id=168 data-nosnippet>168</a>            <span class="comment">// Replies use NON-blocking try_send — see virtio-net/src/main.rs: a
-<a href=#169 id=169 data-nosnippet>169</a>            // blocking reply to a net service that already timed out parks this
-<a href=#170 id=170 data-nosnippet>170</a>            // cell in Sending{net} and desyncs every later request/reply.
-<a href=#171 id=171 data-nosnippet>171</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>out_buf = [<span class="number">0u8</span>; REPLY_BUF];
-<a href=#172 id=172 data-nosnippet>172</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(state) = STATE.lock().as_mut() {
-<a href=#173 id=173 data-nosnippet>173</a>                <span class="kw">match </span>handle(<span class="kw-2">&amp;mut </span>state.ctrl, data.as_ref(), <span class="kw-2">&amp;mut </span>out_buf) {
-<a href=#174 id=174 data-nosnippet>174</a>                    NicReply::Status(code) =&gt; {
-<a href=#175 id=175 data-nosnippet>175</a>                        <span class="kw">let _ </span>= sys_try_send(sender_tid, <span class="kw-2">&amp;</span>[code]);
-<a href=#176 id=176 data-nosnippet>176</a>                    }
-<a href=#177 id=177 data-nosnippet>177</a>                    NicReply::Frame { len, buf } =&gt; {
-<a href=#178 id=178 data-nosnippet>178</a>                        <span class="kw">let _ </span>= sys_try_send(sender_tid, <span class="kw-2">&amp;</span>buf[..<span class="number">2 </span>+ len]);
-<a href=#179 id=179 data-nosnippet>179</a>                    }
-<a href=#180 id=180 data-nosnippet>180</a>                    NicReply::Raw(mac) =&gt; {
-<a href=#181 id=181 data-nosnippet>181</a>                        <span class="kw">let _ </span>= sys_try_send(sender_tid, <span class="kw-2">&amp;</span>mac);
-<a href=#182 id=182 data-nosnippet>182</a>                    }
-<a href=#183 id=183 data-nosnippet>183</a>                }
-<a href=#184 id=184 data-nosnippet>184</a>            } <span class="kw">else </span>{
-<a href=#185 id=185 data-nosnippet>185</a>                <span class="kw">let _ </span>= sys_try_send(sender_tid, <span class="kw-2">&amp;</span>[<span class="number">1u8</span>]);
-<a href=#186 id=186 data-nosnippet>186</a>            }
-<a href=#187 id=187 data-nosnippet>187</a>        }
-<a href=#188 id=188 data-nosnippet>188</a>
-<a href=#189 id=189 data-nosnippet>189</a>        AppEvent::Shutdown | AppEvent::ShutdownWith { .. } =&gt; {
-<a href=#190 id=190 data-nosnippet>190</a>            ostd::syscall::sys_exit(<span class="number">0</span>);
-<a href=#191 id=191 data-nosnippet>191</a>        }
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">_ </span>=&gt; {}
-<a href=#193 id=193 data-nosnippet>193</a>    }
-<a href=#194 id=194 data-nosnippet>194</a>}
-<a href=#195 id=195 data-nosnippet>195</a>
-<a href=#196 id=196 data-nosnippet>196</a><span class="macro">ostd::run_app!</span>(handler);
-<a href=#197 id=197 data-nosnippet>197</a>
-<a href=#198 id=198 data-nosnippet>198</a><span class="comment">// ── Capability manifest ───────────────────────────────────────────────────────
-<a href=#199 id=199 data-nosnippet>199</a>// PcieDriverCap is granted by init via the reviewed `/bin/igb` launch edge (not
-<a href=#200 id=200 data-nosnippet>200</a>// a manifest flag). This manifest declares NO privileged flags.
-<a href=#201 id=201 data-nosnippet>201</a></span><span class="macro">api::declare_manifest!</span>(
-<a href=#202 id=202 data-nosnippet>202</a>    block_io = <span class="bool-val">false</span>,
-<a href=#203 id=203 data-nosnippet>203</a>    network = <span class="bool-val">false</span>,
-<a href=#204 id=204 data-nosnippet>204</a>    spawn = <span class="bool-val">false</span>,
-<a href=#205 id=205 data-nosnippet>205</a>    gpio = <span class="bool-val">false</span>,
-<a href=#206 id=206 data-nosnippet>206</a>    uart = <span class="bool-val">false</span>,
-<a href=#207 id=207 data-nosnippet>207</a>    hypervisor = <span class="bool-val">false
-<a href=#208 id=208 data-nosnippet>208</a></span>);
-<a href=#209 id=209 data-nosnippet>209</a>
-<a href=#210 id=210 data-nosnippet>210</a><span class="comment">// ── Syscall allowlist ─────────────────────────────────────────────────────────
-<a href=#211 id=211 data-nosnippet>211</a>// `run_app!` emits a manifest but NOT a `VICELL_SYSCALLS` section, so without
-<a href=#212 id=212 data-nosnippet>212</a>// this the kernel leaves the cell at its TCB's `u64::MAX` allowlist. List
-<a href=#213 id=213 data-nosnippet>213</a>// exactly what the cell calls: the AppContext base set, the PCIe device path,
-<a href=#214 id=214 data-nosnippet>214</a>// NIC registration, the try_send reply path, the exit path, and the DMA calls
-<a href=#215 id=215 data-nosnippet>215</a>// behind `DmaBuf::alloc`/`authorize`. `Exit`/`Yield` carry no allowlist bit and
-<a href=#216 id=216 data-nosnippet>216</a>// are always permitted; naming them documents the intent.
-<a href=#217 id=217 data-nosnippet>217</a></span><span class="macro">api::declare_syscalls!</span>[
-<a href=#218 id=218 data-nosnippet>218</a>    <span class="comment">// AppContext event-loop base set.
-<a href=#219 id=219 data-nosnippet>219</a>    </span>Send,
-<a href=#220 id=220 data-nosnippet>220</a>    TrySend,
-<a href=#221 id=221 data-nosnippet>221</a>    Recv,
-<a href=#222 id=222 data-nosnippet>222</a>    TryRecv,
-<a href=#223 id=223 data-nosnippet>223</a>    Reply,
-<a href=#224 id=224 data-nosnippet>224</a>    Log,
-<a href=#225 id=225 data-nosnippet>225</a>    Heartbeat,
-<a href=#226 id=226 data-nosnippet>226</a>    LookupService,
-<a href=#227 id=227 data-nosnippet>227</a>    GetTime,
-<a href=#228 id=228 data-nosnippet>228</a>    RecvTimeout,
-<a href=#229 id=229 data-nosnippet>229</a>    <span class="comment">// PCIe device path: the exact-identity query (shares allowlist bit 50 with
-<a href=#230 id=230 data-nosnippet>230</a>    // the legacy class query, so the signed mask is unchanged).
-<a href=#231 id=231 data-nosnippet>231</a>    </span>FindPcieDeviceByVendor,
-<a href=#232 id=232 data-nosnippet>232</a>    RequestMmio,
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="comment">// System NIC-driver role.
-<a href=#234 id=234 data-nosnippet>234</a>    </span>RegisterNicDriver,
-<a href=#235 id=235 data-nosnippet>235</a>    <span class="comment">// Clean shutdown returns through the exit path.
-<a href=#236 id=236 data-nosnippet>236</a>    </span>Exit,
-<a href=#237 id=237 data-nosnippet>237</a>    <span class="comment">// DMA: `DmaBuf::alloc` -&gt; GrantAlloc, `DmaBuf::authorize` -&gt; GrantDma.
-<a href=#238 id=238 data-nosnippet>238</a>    </span>GrantAlloc,
-<a href=#239 id=239 data-nosnippet>239</a>    GrantDma
-<a href=#240 id=240 data-nosnippet>240</a>];
+<a href=#168 id=168 data-nosnippet>168</a>            <span class="kw">let </span>operation = ostd::ipc::current();
+<a href=#169 id=169 data-nosnippet>169</a>            <span class="kw">let </span>reply = |bytes: <span class="kw-2">&amp;</span>[u8]| {
+<a href=#170 id=170 data-nosnippet>170</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(operation) = operation {
+<a href=#171 id=171 data-nosnippet>171</a>                    <span class="kw">let _ </span>= ostd::ipc::reply(operation, bytes);
+<a href=#172 id=172 data-nosnippet>172</a>                } <span class="kw">else </span>{
+<a href=#173 id=173 data-nosnippet>173</a>                    <span class="kw">let _ </span>= sys_try_send(sender_tid, bytes);
+<a href=#174 id=174 data-nosnippet>174</a>                }
+<a href=#175 id=175 data-nosnippet>175</a>            };
+<a href=#176 id=176 data-nosnippet>176</a>            <span class="kw">let </span><span class="kw-2">mut </span>out_buf = [<span class="number">0u8</span>; REPLY_BUF];
+<a href=#177 id=177 data-nosnippet>177</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(state) = STATE.lock().as_mut() {
+<a href=#178 id=178 data-nosnippet>178</a>                <span class="kw">match </span>handle(<span class="kw-2">&amp;mut </span>state.ctrl, data.as_ref(), <span class="kw-2">&amp;mut </span>out_buf) {
+<a href=#179 id=179 data-nosnippet>179</a>                    NicReply::Status(code) =&gt; {
+<a href=#180 id=180 data-nosnippet>180</a>                        reply(<span class="kw-2">&amp;</span>[code]);
+<a href=#181 id=181 data-nosnippet>181</a>                    }
+<a href=#182 id=182 data-nosnippet>182</a>                    NicReply::Frame { len, buf } =&gt; {
+<a href=#183 id=183 data-nosnippet>183</a>                        reply(<span class="kw-2">&amp;</span>buf[..<span class="number">2 </span>+ len]);
+<a href=#184 id=184 data-nosnippet>184</a>                    }
+<a href=#185 id=185 data-nosnippet>185</a>                    NicReply::Raw(mac) =&gt; {
+<a href=#186 id=186 data-nosnippet>186</a>                        reply(<span class="kw-2">&amp;</span>mac);
+<a href=#187 id=187 data-nosnippet>187</a>                    }
+<a href=#188 id=188 data-nosnippet>188</a>                }
+<a href=#189 id=189 data-nosnippet>189</a>            } <span class="kw">else </span>{
+<a href=#190 id=190 data-nosnippet>190</a>                reply(<span class="kw-2">&amp;</span>[<span class="number">1u8</span>]);
+<a href=#191 id=191 data-nosnippet>191</a>            }
+<a href=#192 id=192 data-nosnippet>192</a>        }
+<a href=#193 id=193 data-nosnippet>193</a>
+<a href=#194 id=194 data-nosnippet>194</a>        AppEvent::Shutdown | AppEvent::ShutdownWith { .. } =&gt; {
+<a href=#195 id=195 data-nosnippet>195</a>            ostd::syscall::sys_exit(<span class="number">0</span>);
+<a href=#196 id=196 data-nosnippet>196</a>        }
+<a href=#197 id=197 data-nosnippet>197</a>        <span class="kw">_ </span>=&gt; {}
+<a href=#198 id=198 data-nosnippet>198</a>    }
+<a href=#199 id=199 data-nosnippet>199</a>}
+<a href=#200 id=200 data-nosnippet>200</a>
+<a href=#201 id=201 data-nosnippet>201</a><span class="macro">ostd::run_app!</span>(handler);
+<a href=#202 id=202 data-nosnippet>202</a>
+<a href=#203 id=203 data-nosnippet>203</a><span class="comment">// ── Capability manifest ───────────────────────────────────────────────────────
+<a href=#204 id=204 data-nosnippet>204</a>// PcieDriverCap is granted by init via the reviewed `/bin/igb` launch edge (not
+<a href=#205 id=205 data-nosnippet>205</a>// a manifest flag). This manifest declares NO privileged flags.
+<a href=#206 id=206 data-nosnippet>206</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#207 id=207 data-nosnippet>207</a>    block_io = <span class="bool-val">false</span>,
+<a href=#208 id=208 data-nosnippet>208</a>    network = <span class="bool-val">false</span>,
+<a href=#209 id=209 data-nosnippet>209</a>    spawn = <span class="bool-val">false</span>,
+<a href=#210 id=210 data-nosnippet>210</a>    gpio = <span class="bool-val">false</span>,
+<a href=#211 id=211 data-nosnippet>211</a>    uart = <span class="bool-val">false</span>,
+<a href=#212 id=212 data-nosnippet>212</a>    hypervisor = <span class="bool-val">false
+<a href=#213 id=213 data-nosnippet>213</a></span>);
+<a href=#214 id=214 data-nosnippet>214</a>
+<a href=#215 id=215 data-nosnippet>215</a><span class="comment">// ── Syscall allowlist ─────────────────────────────────────────────────────────
+<a href=#216 id=216 data-nosnippet>216</a>// `run_app!` emits a manifest but NOT a `VICELL_SYSCALLS` section, so without
+<a href=#217 id=217 data-nosnippet>217</a>// this the kernel leaves the cell at its TCB's `u64::MAX` allowlist. List
+<a href=#218 id=218 data-nosnippet>218</a>// exactly what the cell calls: the AppContext base set, the PCIe device path,
+<a href=#219 id=219 data-nosnippet>219</a>// NIC registration, the try_send reply path, the exit path, and the DMA calls
+<a href=#220 id=220 data-nosnippet>220</a>// behind `DmaBuf::alloc`/`authorize`. `Exit`/`Yield` carry no allowlist bit and
+<a href=#221 id=221 data-nosnippet>221</a>// are always permitted; naming them documents the intent.
+<a href=#222 id=222 data-nosnippet>222</a></span><span class="macro">api::declare_syscalls!</span>[
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="comment">// AppContext event-loop base set.
+<a href=#224 id=224 data-nosnippet>224</a>    </span>Send,
+<a href=#225 id=225 data-nosnippet>225</a>    TrySend,
+<a href=#226 id=226 data-nosnippet>226</a>    Recv,
+<a href=#227 id=227 data-nosnippet>227</a>    TryRecv,
+<a href=#228 id=228 data-nosnippet>228</a>    Reply,
+<a href=#229 id=229 data-nosnippet>229</a>    Log,
+<a href=#230 id=230 data-nosnippet>230</a>    Heartbeat,
+<a href=#231 id=231 data-nosnippet>231</a>    LookupService,
+<a href=#232 id=232 data-nosnippet>232</a>    GetTime,
+<a href=#233 id=233 data-nosnippet>233</a>    RecvTimeout,
+<a href=#234 id=234 data-nosnippet>234</a>    <span class="comment">// PCIe device path: the exact-identity query (shares allowlist bit 50 with
+<a href=#235 id=235 data-nosnippet>235</a>    // the legacy class query, so the signed mask is unchanged).
+<a href=#236 id=236 data-nosnippet>236</a>    </span>FindPcieDeviceByVendor,
+<a href=#237 id=237 data-nosnippet>237</a>    RequestMmio,
+<a href=#238 id=238 data-nosnippet>238</a>    <span class="comment">// System NIC-driver role.
+<a href=#239 id=239 data-nosnippet>239</a>    </span>RegisterNicDriver,
+<a href=#240 id=240 data-nosnippet>240</a>    <span class="comment">// Clean shutdown returns through the exit path.
+<a href=#241 id=241 data-nosnippet>241</a>    </span>Exit,
+<a href=#242 id=242 data-nosnippet>242</a>    <span class="comment">// DMA: `DmaBuf::alloc` -&gt; GrantAlloc, `DmaBuf::authorize` -&gt; GrantDma.
+<a href=#243 id=243 data-nosnippet>243</a>    </span>GrantAlloc,
+<a href=#244 id=244 data-nosnippet>244</a>    GrantDma
+<a href=#245 id=245 data-nosnippet>245</a>];
 </code></pre></div></section></main></body></html>

@@ -5,12 +5,12 @@
         &amp;mut self,
         peer: usize,
         request: &amp;[u8],
-    ) -&gt; Result&lt;usize, IpcSubmitError&gt;;
+    ) -&gt; Result&lt;usize, <a class="enum" href="../../ostd/ipc/enum.IpcSubmitError.html" title="enum ostd::ipc::IpcSubmitError">IpcSubmitError</a>&gt;;
 <span class="item-spacer"></span>    fn <a href="#tymethod.take" class="fn">take</a>(
         &amp;mut self,
         op: usize,
         reply: &amp;mut [u8],
-    ) -&gt; Result&lt;IpcTakeResult, IpcError&gt;;
+    ) -&gt; Result&lt;<a class="enum" href="../../ostd/ipc/enum.IpcTakeResult.html" title="enum ostd::ipc::IpcTakeResult">IpcTakeResult</a>, <a class="enum" href="../../ostd/ipc/enum.IpcError.html" title="enum ostd::ipc::IpcError">IpcError</a>&gt;;
 <span class="item-spacer"></span>    fn <a href="#tymethod.wait" class="fn">wait</a>(&amp;mut self, ticks: u64);
 <span class="item-spacer"></span>    fn <a href="#tymethod.yield_once" class="fn">yield_once</a>(&amp;mut self);
 <span class="item-spacer"></span>    fn <a href="#tymethod.cancel" class="fn">cancel</a>(&amp;mut self, op: usize);
@@ -18,8 +18,8 @@
     &amp;mut self,
     peer: usize,
     request: &amp;[u8],
-) -&gt; Result&lt;usize, IpcSubmitError&gt;</h4></section><section id="tymethod.take" class="method"><a class="src rightside" href="../../src/ocel/lease.rs.html#30">Source</a><h4 class="code-header">fn <a href="#tymethod.take" class="fn">take</a>(
+) -&gt; Result&lt;usize, <a class="enum" href="../../ostd/ipc/enum.IpcSubmitError.html" title="enum ostd::ipc::IpcSubmitError">IpcSubmitError</a>&gt;</h4></section><section id="tymethod.take" class="method"><a class="src rightside" href="../../src/ocel/lease.rs.html#30">Source</a><h4 class="code-header">fn <a href="#tymethod.take" class="fn">take</a>(
     &amp;mut self,
     op: usize,
     reply: &amp;mut [u8],
-) -&gt; Result&lt;IpcTakeResult, IpcError&gt;</h4></section><section id="tymethod.wait" class="method"><a class="src rightside" href="../../src/ocel/lease.rs.html#31">Source</a><h4 class="code-header">fn <a href="#tymethod.wait" class="fn">wait</a>(&amp;mut self, ticks: u64)</h4></section><section id="tymethod.yield_once" class="method"><a class="src rightside" href="../../src/ocel/lease.rs.html#32">Source</a><h4 class="code-header">fn <a href="#tymethod.yield_once" class="fn">yield_once</a>(&amp;mut self)</h4></section><section id="tymethod.cancel" class="method"><a class="src rightside" href="../../src/ocel/lease.rs.html#33">Source</a><h4 class="code-header">fn <a href="#tymethod.cancel" class="fn">cancel</a>(&amp;mut self, op: usize)</h4></section></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><div class="negative-marker"></div><section id="impl-Operations-for-KernelOperations" class="impl"><a class="src rightside" href="../../src/ocel/lease.rs.html#36-43">Source</a><a href="#impl-Operations-for-KernelOperations" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.Operations.html" title="trait ocel::lease::Operations">Operations</a> for <a class="struct" href="struct.KernelOperations.html" title="struct ocel::lease::KernelOperations">KernelOperations</a></h3></section></div><script src="../../trait.impl/ocel/lease/trait.Operations.js" async></script></section></div></main></body></html>
+) -&gt; Result&lt;<a class="enum" href="../../ostd/ipc/enum.IpcTakeResult.html" title="enum ostd::ipc::IpcTakeResult">IpcTakeResult</a>, <a class="enum" href="../../ostd/ipc/enum.IpcError.html" title="enum ostd::ipc::IpcError">IpcError</a>&gt;</h4></section><section id="tymethod.wait" class="method"><a class="src rightside" href="../../src/ocel/lease.rs.html#31">Source</a><h4 class="code-header">fn <a href="#tymethod.wait" class="fn">wait</a>(&amp;mut self, ticks: u64)</h4></section><section id="tymethod.yield_once" class="method"><a class="src rightside" href="../../src/ocel/lease.rs.html#32">Source</a><h4 class="code-header">fn <a href="#tymethod.yield_once" class="fn">yield_once</a>(&amp;mut self)</h4></section><section id="tymethod.cancel" class="method"><a class="src rightside" href="../../src/ocel/lease.rs.html#33">Source</a><h4 class="code-header">fn <a href="#tymethod.cancel" class="fn">cancel</a>(&amp;mut self, op: usize)</h4></section></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><div class="negative-marker"></div><section id="impl-Operations-for-KernelOperations" class="impl"><a class="src rightside" href="../../src/ocel/lease.rs.html#36-43">Source</a><a href="#impl-Operations-for-KernelOperations" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.Operations.html" title="trait ocel::lease::Operations">Operations</a> for <a class="struct" href="struct.KernelOperations.html" title="struct ocel::lease::KernelOperations">KernelOperations</a></h3></section></div><script src="../../trait.impl/ocel/lease/trait.Operations.js" async></script></section></div></main></body></html>

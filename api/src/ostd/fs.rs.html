@@ -296,8 +296,8 @@
 <a href=#296 id=296 data-nosnippet>296</a>/// it after use. Backs `sys_spawn_from_path`'s VFS routing — reads a cell ELF for
 <a href=#297 id=297 data-nosnippet>297</a>/// `sys_spawn_from_elf` so the kernel loader needs no disk access post-boot.
 <a href=#298 id=298 data-nosnippet>298</a>///
-<a href=#299 id=299 data-nosnippet>299</a>/// Uses masked `service_call_typed` (recv pinned to `vfs_tid`, spec 17 §2) so a
-<a href=#300 id=300 data-nosnippet>300</a>/// spawning cell that holds input focus can't decode a queued keystroke as the reply.
+<a href=#299 id=299 data-nosnippet>299</a>/// Uses operation-correlated `service_call_typed`, so input events cannot be
+<a href=#300 id=300 data-nosnippet>300</a>/// decoded as replies and provider death terminates the spawning cell's RPC.
 <a href=#301 id=301 data-nosnippet>301</a></span><span class="kw">pub fn </span>read_full_via_grant(path: <span class="kw-2">&amp;</span>str, vfs_tid: usize) -&gt; ViResult&lt;(usize, usize)&gt; {
 <a href=#302 id=302 data-nosnippet>302</a>    <span class="comment">// 1. Stat for the file size (bounds the grant).
 <a href=#303 id=303 data-nosnippet>303</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>sb = [<span class="number">0u8</span>; <span class="number">512</span>];

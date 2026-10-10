@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["AUTOLOAD_PATH","SERVICES_PATH"],"fn":["load","read_required","wait_for_vfs"]};

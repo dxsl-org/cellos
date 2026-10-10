@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BASE_SERVICES","SERVICE_COUNT"],"enum":["Registration","RestartPolicy"],"fn":["configured","now_ticks","spawn"],"struct":["Service"]};
+window.SIDEBAR_ITEMS = {"fn":["dependencies_available","now_ticks","spawn","spawn_path","wait_for_exact_registration"],"struct":["Service"]};

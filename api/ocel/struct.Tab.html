@@ -11,14 +11,14 @@
     viewport_w: u32,
     viewport_h: u32,
     js_runtime: &amp;mut <a class="struct" href="js/bridge/struct.Tier2JsBridge.html" title="struct ocel::js::bridge::Tier2JsBridge">Tier2JsBridge</a>,
-    fonts: &amp;mut TextFonts,
+    fonts: &amp;mut <a class="struct" href="../ostd/typography/struct.TextFonts.html" title="struct ostd::typography::TextFonts">TextFonts</a>,
 ) -&gt; Self</h4></section><details class="toggle method-toggle" open><summary><section id="method.load" class="method"><a class="src rightside" href="../src/ocel/main.rs.html#119-224">Source</a><h4 class="code-header">pub(crate) fn <a href="#method.load" class="fn">load</a>(
     &amp;mut self,
     url: &amp;str,
     viewport_w: u32,
     viewport_h: u32,
     js_runtime: &amp;mut <a class="struct" href="js/bridge/struct.Tier2JsBridge.html" title="struct ocel::js::bridge::Tier2JsBridge">Tier2JsBridge</a>,
-    fonts: &amp;mut TextFonts,
+    fonts: &amp;mut <a class="struct" href="../ostd/typography/struct.TextFonts.html" title="struct ostd::typography::TextFonts">TextFonts</a>,
 ) -&gt; (String, &amp;'static str)</h4></section></summary><div class="docblock"><p>Parse <code>url</code> into this tab, run any script it carries, and lay it out.</p>
 <p>The first tab (<code>Tab::new</code>) and every later navigation both come through
 here, so the load-time lines (<code>loaded</code>, <code>dom title</code>, <code>js backend</code>) are

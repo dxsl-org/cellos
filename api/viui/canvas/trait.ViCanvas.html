@@ -9,7 +9,7 @@
         text: &amp;str,
         px: f32,
         color: <a class="struct" href="struct.Color.html" title="struct viui::canvas::Color">Color</a>,
-        atlas: &amp;mut GlyphAtlas,
+        atlas: &amp;mut <a class="struct" href="../../ostd/font_atlas/struct.GlyphAtlas.html" title="struct ostd::font_atlas::GlyphAtlas">GlyphAtlas</a>,
     );
 <span class="item-spacer"></span>    fn <a href="#tymethod.draw_image" class="fn">draw_image</a>(&amp;mut self, dest: <a class="struct" href="../layout/struct.Rect.html" title="struct viui::layout::Rect">Rect</a>, pixels: &amp;[u8], src_stride: u32);
 <span class="item-spacer"></span>    fn <a href="#tymethod.clip_push" class="fn">clip_push</a>(&amp;mut self, rect: <a class="struct" href="../layout/struct.Rect.html" title="struct viui::layout::Rect">Rect</a>);
@@ -34,7 +34,7 @@ Clip stack: operations outside the current clip rect are silently discarded.</p>
     text: &amp;str,
     px: f32,
     color: <a class="struct" href="struct.Color.html" title="struct viui::canvas::Color">Color</a>,
-    atlas: &amp;mut GlyphAtlas,
+    atlas: &amp;mut <a class="struct" href="../../ostd/font_atlas/struct.GlyphAtlas.html" title="struct ostd::font_atlas::GlyphAtlas">GlyphAtlas</a>,
 )</h4></section></summary><div class="docblock"><p>Draw scalable text at <code>pos</code> (top-left) using a GlyphAtlas.</p>
 <p>Backends must implement scalable text explicitly; command-only GPU
 canvases record text but do not promise glyph rendering.</p>

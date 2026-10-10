@@ -548,50 +548,52 @@
 <a href=#548 id=548 data-nosnippet>548</a>        <span class="prelude-val">Ok</span>(InputRequest::GetFocus) =&gt; {
 <a href=#549 id=549 data-nosnippet>549</a>            <span class="kw">let </span>focused = dispatcher.focus() <span class="kw">as </span>u32;
 <a href=#550 id=550 data-nosnippet>550</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(encoded) = api::ipc::encode(<span class="kw-2">&amp;</span>InputResponse::Focus(focused), <span class="kw-2">&amp;mut </span>resp_buf) {
-<a href=#551 id=551 data-nosnippet>551</a>                <span class="comment">// GetFocus is only called by compositor (never during startup race).
-<a href=#552 id=552 data-nosnippet>552</a>                // Use sys_try_send to be safe — compositor is in recv waiting for this.
-<a href=#553 id=553 data-nosnippet>553</a>                </span><span class="kw">let _ </span>= sys_try_send(sender, encoded);
-<a href=#554 id=554 data-nosnippet>554</a>            }
-<a href=#555 id=555 data-nosnippet>555</a>        }
-<a href=#556 id=556 data-nosnippet>556</a>        <span class="prelude-val">Ok</span>(InputRequest::ClearFocus { cell_tid: <span class="kw">_ </span>}) =&gt; {
-<a href=#557 id=557 data-nosnippet>557</a>            <span class="comment">// Use kernel-verified sender TID (same as SetFocus) — prevents a cell
-<a href=#558 id=558 data-nosnippet>558</a>            // from clearing another cell's focus. When sender == focused, drop focus.
-<a href=#559 id=559 data-nosnippet>559</a>            </span><span class="kw">if </span>dispatcher.focus() == sender {
-<a href=#560 id=560 data-nosnippet>560</a>                dispatcher.set_focus(<span class="number">0</span>);
-<a href=#561 id=561 data-nosnippet>561</a>            }
-<a href=#562 id=562 data-nosnippet>562</a>            <span class="comment">// Fire-and-forget: no reply. Same rationale as SetFocus.
-<a href=#563 id=563 data-nosnippet>563</a>        </span>}
-<a href=#564 id=564 data-nosnippet>564</a>        <span class="prelude-val">Ok</span>(InputRequest::RegisterEventSource { kind }) =&gt; {
-<a href=#565 id=565 data-nosnippet>565</a>            <span class="kw">if </span>sources.register(sender, kind) {
-<a href=#566 id=566 data-nosnippet>566</a>                print(<span class="string">"[input] registered raw event source kind="</span>);
-<a href=#567 id=567 data-nosnippet>567</a>                print_usize(kind <span class="kw">as </span>usize);
-<a href=#568 id=568 data-nosnippet>568</a>                println(<span class="string">""</span>);
-<a href=#569 id=569 data-nosnippet>569</a>                <span class="comment">// A producer that just came up does not know what the locks are
-<a href=#570 id=570 data-nosnippet>570</a>                // set to, and its keyboard would otherwise show stale state.
-<a href=#571 id=571 data-nosnippet>571</a>                </span>sources.send_leds(sender, modifiers.led_bitmap());
-<a href=#572 id=572 data-nosnippet>572</a>            } <span class="kw">else </span>{
-<a href=#573 id=573 data-nosnippet>573</a>                println(<span class="string">"[input] WARN: event-source registration refused"</span>);
-<a href=#574 id=574 data-nosnippet>574</a>            }
-<a href=#575 id=575 data-nosnippet>575</a>        }
-<a href=#576 id=576 data-nosnippet>576</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {} <span class="comment">// unknown message — drop silently
-<a href=#577 id=577 data-nosnippet>577</a>    </span>}
-<a href=#578 id=578 data-nosnippet>578</a>}
-<a href=#579 id=579 data-nosnippet>579</a>
-<a href=#580 id=580 data-nosnippet>580</a><span class="attr">#[cfg(test)]
-<a href=#581 id=581 data-nosnippet>581</a></span><span class="kw">mod </span>hid_device_tests {
-<a href=#582 id=582 data-nosnippet>582</a>    <span class="kw">use </span><span class="kw">super</span>::HidDeviceStates;
-<a href=#583 id=583 data-nosnippet>583</a>    <span class="kw">use </span>api::input::KeyState;
-<a href=#584 id=584 data-nosnippet>584</a>
-<a href=#585 id=585 data-nosnippet>585</a>    <span class="attr">#[test]
-<a href=#586 id=586 data-nosnippet>586</a>    </span><span class="kw">fn </span>disconnect_releases_only_its_own_pressed_keys() {
-<a href=#587 id=587 data-nosnippet>587</a>        <span class="kw">let </span><span class="kw-2">mut </span>devices = HidDeviceStates::new();
-<a href=#588 id=588 data-nosnippet>588</a>        devices.record_key(<span class="number">1</span>, <span class="number">0x1E</span>, KeyState::Pressed);
-<a href=#589 id=589 data-nosnippet>589</a>        devices.record_key(<span class="number">2</span>, <span class="number">0x30</span>, KeyState::Pressed);
-<a href=#590 id=590 data-nosnippet>590</a>        devices.record_key(<span class="number">1</span>, <span class="number">0x1E</span>, KeyState::Released);
-<a href=#591 id=591 data-nosnippet>591</a>        devices.record_key(<span class="number">1</span>, <span class="number">0x2E</span>, KeyState::Pressed);
-<a href=#592 id=592 data-nosnippet>592</a>
-<a href=#593 id=593 data-nosnippet>593</a>        <span class="macro">assert_eq!</span>(devices.take_pressed(<span class="number">1</span>), [<span class="number">0x2E</span>]);
-<a href=#594 id=594 data-nosnippet>594</a>        <span class="macro">assert_eq!</span>(devices.take_pressed(<span class="number">2</span>), [<span class="number">0x30</span>]);
-<a href=#595 id=595 data-nosnippet>595</a>    }
-<a href=#596 id=596 data-nosnippet>596</a>}
+<a href=#551 id=551 data-nosnippet>551</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(operation) = ostd::ipc::current() {
+<a href=#552 id=552 data-nosnippet>552</a>                    <span class="kw">let _ </span>= ostd::ipc::reply(operation, encoded);
+<a href=#553 id=553 data-nosnippet>553</a>                } <span class="kw">else </span>{
+<a href=#554 id=554 data-nosnippet>554</a>                    <span class="kw">let _ </span>= sys_try_send(sender, encoded);
+<a href=#555 id=555 data-nosnippet>555</a>                }
+<a href=#556 id=556 data-nosnippet>556</a>            }
+<a href=#557 id=557 data-nosnippet>557</a>        }
+<a href=#558 id=558 data-nosnippet>558</a>        <span class="prelude-val">Ok</span>(InputRequest::ClearFocus { cell_tid: <span class="kw">_ </span>}) =&gt; {
+<a href=#559 id=559 data-nosnippet>559</a>            <span class="comment">// Use kernel-verified sender TID (same as SetFocus) — prevents a cell
+<a href=#560 id=560 data-nosnippet>560</a>            // from clearing another cell's focus. When sender == focused, drop focus.
+<a href=#561 id=561 data-nosnippet>561</a>            </span><span class="kw">if </span>dispatcher.focus() == sender {
+<a href=#562 id=562 data-nosnippet>562</a>                dispatcher.set_focus(<span class="number">0</span>);
+<a href=#563 id=563 data-nosnippet>563</a>            }
+<a href=#564 id=564 data-nosnippet>564</a>            <span class="comment">// Fire-and-forget: no reply. Same rationale as SetFocus.
+<a href=#565 id=565 data-nosnippet>565</a>        </span>}
+<a href=#566 id=566 data-nosnippet>566</a>        <span class="prelude-val">Ok</span>(InputRequest::RegisterEventSource { kind }) =&gt; {
+<a href=#567 id=567 data-nosnippet>567</a>            <span class="kw">if </span>sources.register(sender, kind) {
+<a href=#568 id=568 data-nosnippet>568</a>                print(<span class="string">"[input] registered raw event source kind="</span>);
+<a href=#569 id=569 data-nosnippet>569</a>                print_usize(kind <span class="kw">as </span>usize);
+<a href=#570 id=570 data-nosnippet>570</a>                println(<span class="string">""</span>);
+<a href=#571 id=571 data-nosnippet>571</a>                <span class="comment">// A producer that just came up does not know what the locks are
+<a href=#572 id=572 data-nosnippet>572</a>                // set to, and its keyboard would otherwise show stale state.
+<a href=#573 id=573 data-nosnippet>573</a>                </span>sources.send_leds(sender, modifiers.led_bitmap());
+<a href=#574 id=574 data-nosnippet>574</a>            } <span class="kw">else </span>{
+<a href=#575 id=575 data-nosnippet>575</a>                println(<span class="string">"[input] WARN: event-source registration refused"</span>);
+<a href=#576 id=576 data-nosnippet>576</a>            }
+<a href=#577 id=577 data-nosnippet>577</a>        }
+<a href=#578 id=578 data-nosnippet>578</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {} <span class="comment">// unknown message — drop silently
+<a href=#579 id=579 data-nosnippet>579</a>    </span>}
+<a href=#580 id=580 data-nosnippet>580</a>}
+<a href=#581 id=581 data-nosnippet>581</a>
+<a href=#582 id=582 data-nosnippet>582</a><span class="attr">#[cfg(test)]
+<a href=#583 id=583 data-nosnippet>583</a></span><span class="kw">mod </span>hid_device_tests {
+<a href=#584 id=584 data-nosnippet>584</a>    <span class="kw">use </span><span class="kw">super</span>::HidDeviceStates;
+<a href=#585 id=585 data-nosnippet>585</a>    <span class="kw">use </span>api::input::KeyState;
+<a href=#586 id=586 data-nosnippet>586</a>
+<a href=#587 id=587 data-nosnippet>587</a>    <span class="attr">#[test]
+<a href=#588 id=588 data-nosnippet>588</a>    </span><span class="kw">fn </span>disconnect_releases_only_its_own_pressed_keys() {
+<a href=#589 id=589 data-nosnippet>589</a>        <span class="kw">let </span><span class="kw-2">mut </span>devices = HidDeviceStates::new();
+<a href=#590 id=590 data-nosnippet>590</a>        devices.record_key(<span class="number">1</span>, <span class="number">0x1E</span>, KeyState::Pressed);
+<a href=#591 id=591 data-nosnippet>591</a>        devices.record_key(<span class="number">2</span>, <span class="number">0x30</span>, KeyState::Pressed);
+<a href=#592 id=592 data-nosnippet>592</a>        devices.record_key(<span class="number">1</span>, <span class="number">0x1E</span>, KeyState::Released);
+<a href=#593 id=593 data-nosnippet>593</a>        devices.record_key(<span class="number">1</span>, <span class="number">0x2E</span>, KeyState::Pressed);
+<a href=#594 id=594 data-nosnippet>594</a>
+<a href=#595 id=595 data-nosnippet>595</a>        <span class="macro">assert_eq!</span>(devices.take_pressed(<span class="number">1</span>), [<span class="number">0x2E</span>]);
+<a href=#596 id=596 data-nosnippet>596</a>        <span class="macro">assert_eq!</span>(devices.take_pressed(<span class="number">2</span>), [<span class="number">0x30</span>]);
+<a href=#597 id=597 data-nosnippet>597</a>    }
+<a href=#598 id=598 data-nosnippet>598</a>}
 </code></pre></div></section></main></body></html>

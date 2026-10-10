@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEATH_OUTSTANDING","DONE_SEQ","ECHO_PREFIX","OUTSTANDING","PROBE_PATH","REPLY_TAG","REQ_TAG","SETTLE_YIELDS","SLOW_ROLE","SLOW_SLEEP_YIELDS","VANISH_ROLE","WAIT_ROUNDS","WAIT_TICKS"],"fn":["bounded_multi_outstanding_leg","fail","mid_flight_death_leg","run","run_echo_reverse","run_slow_parked","settle","spawn","try_send_leg","value_of"]};

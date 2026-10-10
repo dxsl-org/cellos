@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cell_main","init_custom_heap","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

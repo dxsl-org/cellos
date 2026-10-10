@@ -3,30 +3,33 @@
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="attr">#[allow(dead_code)]
 <a href=#4 id=4 data-nosnippet>4</a></span><span class="kw">pub mod </span>base_tray_handoff;
 <a href=#5 id=5 data-nosnippet>5</a><span class="attr">#[allow(dead_code)]
-<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">pub mod </span>c2c_broker_oracle;
+<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">pub mod </span>async_lifecycle;
 <a href=#7 id=7 data-nosnippet>7</a><span class="attr">#[allow(dead_code)]
-<a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">pub mod </span>c2c_broker_oracle_client;
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">pub mod </span>c2c_broker_oracle_orchestrator;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">pub mod </span>c2c_broker_oracle_report;
-<a href=#11 id=11 data-nosnippet>11</a><span class="attr">#[allow(dead_code)]
-<a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">pub mod </span>c2c_broker_oracle_wire;
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">pub mod </span>context_switch;
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">pub mod </span>control_loop;
-<a href=#15 id=15 data-nosnippet>15</a><span class="kw">pub mod </span>hotswap_cli_probe;
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">pub mod </span>hotswap_supervisor;
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">pub mod </span>init_giveup;
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">pub mod </span>ipc_fastpath;
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">pub mod </span>ipc_send_recv;
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">pub mod </span>lab_carrier_transfer;
-<a href=#21 id=21 data-nosnippet>21</a><span class="attr">#[allow(dead_code)]
-<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">pub mod </span>lab_transfer_contract;
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">pub mod </span>memory_footprint;
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">pub mod </span>native_stateful;
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">pub mod </span>preempt_latency;
-<a href=#26 id=26 data-nosnippet>26</a><span class="kw">pub mod </span>rt_load;
-<a href=#27 id=27 data-nosnippet>27</a><span class="kw">pub mod </span>smp;
-<a href=#28 id=28 data-nosnippet>28</a><span class="kw">pub mod </span>snapshot_authority;
-<a href=#29 id=29 data-nosnippet>29</a><span class="kw">pub mod </span>stationary_assembly;
-<a href=#30 id=30 data-nosnippet>30</a><span class="kw">pub mod </span>syscall_yield;
-<a href=#31 id=31 data-nosnippet>31</a><span class="kw">pub mod </span>vfs_getfile_breakdown;
+<a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">pub mod </span>c2c_broker_oracle;
+<a href=#9 id=9 data-nosnippet>9</a><span class="attr">#[allow(dead_code)]
+<a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">pub mod </span>c2c_broker_oracle_client;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">pub mod </span>c2c_broker_oracle_orchestrator;
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">pub mod </span>c2c_broker_oracle_report;
+<a href=#13 id=13 data-nosnippet>13</a><span class="attr">#[allow(dead_code)]
+<a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">pub mod </span>c2c_broker_oracle_wire;
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">pub mod </span>context_switch;
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">pub mod </span>control_loop;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">pub mod </span>hotswap_cli_probe;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">pub mod </span>hotswap_supervisor;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">pub mod </span>init_giveup;
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">pub mod </span>ipc_fastpath;
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">pub mod </span>ipc_send_recv;
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">pub mod </span>lab_carrier_transfer;
+<a href=#23 id=23 data-nosnippet>23</a><span class="attr">#[allow(dead_code)]
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub mod </span>lab_transfer_contract;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">pub mod </span>local_service_lifecycle;
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">pub mod </span>memory_footprint;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">pub mod </span>native_stateful;
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">pub mod </span>preempt_latency;
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">pub mod </span>rt_load;
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">pub mod </span>smp;
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">pub mod </span>snapshot_authority;
+<a href=#32 id=32 data-nosnippet>32</a><span class="kw">pub mod </span>stationary_assembly;
+<a href=#33 id=33 data-nosnippet>33</a><span class="kw">pub mod </span>syscall_yield;
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">pub mod </span>vfs_getfile_breakdown;
 </code></pre></div></section></main></body></html>

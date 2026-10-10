@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["lookup","register"],"mod":["service"],"struct":["ServiceRef"],"type":["CompositorRef","ConfigRef","InputRef","NetRef","VfsRef"]};
+window.SIDEBAR_ITEMS = {"enum":["CallFailure"],"fn":["classify_call_failure","lookup","register"],"mod":["service"],"struct":["ServiceRef"],"type":["CompositorRef","ConfigRef","InputRef","NetRef","VfsRef"]};

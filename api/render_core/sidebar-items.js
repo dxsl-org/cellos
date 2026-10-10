@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["COPIED_TILE_MAX_BYTES","MAX_BOUNCES","MAX_DIMENSION","MAX_SAMPLES"],"enum":["Output","RenderError","Request","Response"],"fn":["render_tile"],"struct":["RenderConfig","RenderStats","Scene","Tile"]};

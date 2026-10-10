@@ -21,427 +21,830 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="attr">#[derive(Debug)]
 <a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">pub struct </span>Operation {
 <a href=#23 id=23 data-nosnippet>23</a>    id: usize,
-<a href=#24 id=24 data-nosnippet>24</a>    peer_tid: usize,
-<a href=#25 id=25 data-nosnippet>25</a>    peer_cell: u64,
-<a href=#26 id=26 data-nosnippet>26</a>    peer_generation: u64,
-<a href=#27 id=27 data-nosnippet>27</a>    deadline: u64,
-<a href=#28 id=28 data-nosnippet>28</a>    phase: Phase,
-<a href=#29 id=29 data-nosnippet>29</a>    reply: ipc_wire::IpcWireMessage,
-<a href=#30 id=30 data-nosnippet>30</a>}
-<a href=#31 id=31 data-nosnippet>31</a>
-<a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// Task-local, kernel-charged storage. Tokens are global monotonic identifiers,
-<a href=#33 id=33 data-nosnippet>33</a>/// never slot indexes; reuse after take cannot alias a late service reply.
-<a href=#34 id=34 data-nosnippet>34</a></span><span class="attr">#[derive(Default)]
-<a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">pub struct </span>Operations(Vec&lt;Operation&gt;);
-<a href=#36 id=36 data-nosnippet>36</a>
-<a href=#37 id=37 data-nosnippet>37</a><span class="kw">impl </span>Operations {
-<a href=#38 id=38 data-nosnippet>38</a>    <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{ <span class="self">Self</span>(Vec::new()) }
-<a href=#39 id=39 data-nosnippet>39</a>    <span class="kw">pub fn </span>len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize { <span class="self">self</span>.<span class="number">0</span>.len() }
-<a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">pub fn </span>find(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Operation&gt; { <span class="self">self</span>.<span class="number">0</span>.iter().find(|op| op.id == id) }
-<a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">fn </span>find_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span>Operation&gt; { <span class="self">self</span>.<span class="number">0</span>.iter_mut().find(|op| op.id == id) }
-<a href=#42 id=42 data-nosnippet>42</a>    <span class="kw">fn </span>remove(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;Operation&gt; {
-<a href=#43 id=43 data-nosnippet>43</a>        <span class="kw">let </span>pos = <span class="self">self</span>.<span class="number">0</span>.iter().position(|op| op.id == id)<span class="question-mark">?</span>;
-<a href=#44 id=44 data-nosnippet>44</a>        <span class="prelude-val">Some</span>(<span class="self">self</span>.<span class="number">0</span>.remove(pos))
-<a href=#45 id=45 data-nosnippet>45</a>    }
-<a href=#46 id=46 data-nosnippet>46</a>    <span class="kw">fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, op: Operation) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
-<a href=#47 id=47 data-nosnippet>47</a>        <span class="kw">if </span><span class="self">self</span>.<span class="number">0</span>.len() == MAX_OPERATIONS { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Busy); }
-<a href=#48 id=48 data-nosnippet>48</a>        <span class="kw">if </span><span class="self">self</span>.<span class="number">0</span>.len() == <span class="self">self</span>.<span class="number">0</span>.capacity() {
-<a href=#49 id=49 data-nosnippet>49</a>            <span class="kw">let </span>previous = <span class="kw">super</span>::hart_local::current_cell_id();
-<a href=#50 id=50 data-nosnippet>50</a>            <span class="kw">super</span>::hart_local::set_current_cell_id(<span class="number">0</span>);
-<a href=#51 id=51 data-nosnippet>51</a>            <span class="kw">let </span>reserved = <span class="self">self</span>.<span class="number">0</span>.try_reserve(<span class="number">1</span>);
-<a href=#52 id=52 data-nosnippet>52</a>            <span class="kw">super</span>::hart_local::set_current_cell_id(previous);
-<a href=#53 id=53 data-nosnippet>53</a>            reserved.map_err(|<span class="kw">_</span>| Failure::Busy)<span class="question-mark">?</span>;
-<a href=#54 id=54 data-nosnippet>54</a>        }
-<a href=#55 id=55 data-nosnippet>55</a>        <span class="self">self</span>.<span class="number">0</span>.push(op);
-<a href=#56 id=56 data-nosnippet>56</a>        <span class="prelude-val">Ok</span>(())
-<a href=#57 id=57 data-nosnippet>57</a>    }
-<a href=#58 id=58 data-nosnippet>58</a>    <span class="kw">pub fn </span>peer_died(<span class="kw-2">&amp;mut </span><span class="self">self</span>, tid: usize, cell: u64, generation: u64) -&gt; bool {
-<a href=#59 id=59 data-nosnippet>59</a>        <span class="kw">let </span><span class="kw-2">mut </span>changed = <span class="bool-val">false</span>;
-<a href=#60 id=60 data-nosnippet>60</a>        <span class="kw">for </span>op <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#61 id=61 data-nosnippet>61</a>            <span class="kw">if </span>op.peer_tid == tid &amp;&amp; op.peer_cell == cell &amp;&amp; op.peer_generation == generation
-<a href=#62 id=62 data-nosnippet>62</a>                &amp;&amp; !<span class="macro">matches!</span>(op.phase, Phase::Terminal { .. }) {
-<a href=#63 id=63 data-nosnippet>63</a>                op.phase = Phase::Terminal { kind: api::syscall::ipc_status::PEER_GONE, len: <span class="number">0 </span>};
-<a href=#64 id=64 data-nosnippet>64</a>                changed = <span class="bool-val">true</span>;
-<a href=#65 id=65 data-nosnippet>65</a>            }
-<a href=#66 id=66 data-nosnippet>66</a>        }
-<a href=#67 id=67 data-nosnippet>67</a>        changed
-<a href=#68 id=68 data-nosnippet>68</a>    }
-<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">fn </span>has_terminal(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool { <span class="self">self</span>.<span class="number">0</span>.iter().any(|op| <span class="macro">matches!</span>(op.phase, Phase::Terminal { .. })) }
-<a href=#70 id=70 data-nosnippet>70</a>}
-<a href=#71 id=71 data-nosnippet>71</a>
-<a href=#72 id=72 data-nosnippet>72</a><span class="kw">impl </span>Drop <span class="kw">for </span>Operations {
-<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">let </span>rows = core::mem::take(<span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0</span>);
-<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">let </span>previous = <span class="kw">super</span>::hart_local::current_cell_id();
-<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">super</span>::hart_local::set_current_cell_id(<span class="number">0</span>);
-<a href=#77 id=77 data-nosnippet>77</a>        drop(rows);
-<a href=#78 id=78 data-nosnippet>78</a>        <span class="kw">super</span>::hart_local::set_current_cell_id(previous);
-<a href=#79 id=79 data-nosnippet>79</a>    }
-<a href=#80 id=80 data-nosnippet>80</a>}
-<a href=#81 id=81 data-nosnippet>81</a>
-<a href=#82 id=82 data-nosnippet>82</a><span class="kw">fn </span>live(task: <span class="kw-2">&amp;</span>Task) -&gt; bool { !<span class="macro">matches!</span>(task.state, TaskState::Retiring | TaskState::Terminated) }
-<a href=#83 id=83 data-nosnippet>83</a>
-<a href=#84 id=84 data-nosnippet>84</a><span class="kw">fn </span>wake(sched: <span class="kw-2">&amp;mut </span>Scheduler, owner: usize) {
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner) {
-<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">if </span><span class="macro">matches!</span>(task.state, TaskState::WaitIpc { .. }) {
-<a href=#87 id=87 data-nosnippet>87</a>            task.state = TaskState::Ready;
-<a href=#88 id=88 data-nosnippet>88</a>            <span class="kw">let </span>priority = sched.push_ready(owner);
-<a href=#89 id=89 data-nosnippet>89</a>            sched.pend_preempt_if_needed(priority);
-<a href=#90 id=90 data-nosnippet>90</a>        }
-<a href=#91 id=91 data-nosnippet>91</a>    }
-<a href=#92 id=92 data-nosnippet>92</a>}
-<a href=#93 id=93 data-nosnippet>93</a>
-<a href=#94 id=94 data-nosnippet>94</a><span class="kw">fn </span>new_token() -&gt; <span class="prelude-ty">Result</span>&lt;usize, Failure&gt; {
-<a href=#95 id=95 data-nosnippet>95</a>    NEXT_OPERATION.fetch_update(Ordering::Relaxed, Ordering::Relaxed,
-<a href=#96 id=96 data-nosnippet>96</a>        |next| (next &lt;= isize::MAX <span class="kw">as </span>usize).then_some(next + <span class="number">1</span>))
-<a href=#97 id=97 data-nosnippet>97</a>        .map_err(|<span class="kw">_</span>| Failure::Busy)
-<a href=#98 id=98 data-nosnippet>98</a>}
-<a href=#99 id=99 data-nosnippet>99</a>
-<a href=#100 id=100 data-nosnippet>100</a><span class="kw">pub fn </span>submit(owner: usize, peer: usize, ptr: usize, len: usize) -&gt; <span class="prelude-ty">Result</span>&lt;usize, Failure&gt; {
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">if </span>len &gt; ipc_wire::MAX_IPC_WIRE_PAYLOAD { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid); }
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">let </span>(view, binding, peer_binding) = {
-<a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">let </span>guard = SCHEDULER.lock();
-<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">let </span>sched = guard.as_ref().ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
-<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">let </span>task = sched.tasks.get(<span class="kw-2">&amp;</span>owner).filter(|task| live(task)).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">let </span>target = sched.tasks.get(<span class="kw-2">&amp;</span>peer).filter(|task| live(task)).ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
-<a href=#107 id=107 data-nosnippet>107</a>        (TaskCopyView::of(task), (task.cell_id.<span class="number">0</span>, task.cell_generation),
-<a href=#108 id=108 data-nosnippet>108</a>         (target.cell_id.<span class="number">0</span>, target.cell_generation))
-<a href=#109 id=109 data-nosnippet>109</a>    };
-<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span>token = new_token()<span class="question-mark">?</span>;
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>header = ipc_wire::IpcWireHeader {
-<a href=#112 id=112 data-nosnippet>112</a>        sender_tid: owner, sender_cell_id: binding.<span class="number">0</span>,
-<a href=#113 id=113 data-nosnippet>113</a>        sender_generation: binding.<span class="number">1</span>,
-<a href=#114 id=114 data-nosnippet>114</a>        delivery_id: <span class="kw">super</span>::next_delivery_id(), async_op: token,
-<a href=#115 id=115 data-nosnippet>115</a>    };
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="comment">// Copy outside SCHEDULER; no peer or user pointer persists in a task slot.
-<a href=#117 id=117 data-nosnippet>117</a>    </span><span class="kw">let </span>wire = ipc_wire::IpcWireMessage::try_from_user(header, <span class="kw-2">&amp;</span>view, ptr, len)
-<a href=#118 id=118 data-nosnippet>118</a>        .map_err(|<span class="kw">_</span>| Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">let </span>reply_header = ipc_wire::IpcWireHeader {
-<a href=#120 id=120 data-nosnippet>120</a>        sender_tid: peer, sender_cell_id: peer_binding.<span class="number">0</span>,
-<a href=#121 id=121 data-nosnippet>121</a>        sender_generation: peer_binding.<span class="number">1</span>, delivery_id: <span class="number">0</span>, async_op: token,
-<a href=#122 id=122 data-nosnippet>122</a>    };
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">let </span>reply = ipc_wire::IpcWireMessage::try_new(
-<a href=#124 id=124 data-nosnippet>124</a>        reply_header, <span class="kw-2">&amp;</span>[<span class="number">0u8</span>; ipc_wire::MAX_IPC_WIRE_PAYLOAD]).map_err(|<span class="kw">_</span>| Failure::Busy)<span class="question-mark">?</span>;
-<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
-<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">let </span>sched = guard.as_mut().ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
-<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">let </span>caller = sched.tasks.get(<span class="kw-2">&amp;</span>owner).filter(|task| live(task)
-<a href=#128 id=128 data-nosnippet>128</a>        &amp;&amp; (task.cell_id.<span class="number">0</span>, task.cell_generation) == binding).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">if </span>caller.async_operations.len() &gt;= MAX_OPERATIONS { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Busy); }
-<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">let </span>receiver = sched.tasks.get(<span class="kw-2">&amp;</span>peer).filter(|task| live(task)
-<a href=#131 id=131 data-nosnippet>131</a>        &amp;&amp; (task.cell_id.<span class="number">0</span>, task.cell_generation) == peer_binding).ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
-<a href=#132 id=132 data-nosnippet>132</a>    <span class="kw">if </span><span class="kw">super</span>::paused_target_rejects(sched, owner, peer) { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Busy); }
-<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">if </span>receiver.pending_msgs.len() &gt;= <span class="kw">super</span>::tcb::HOTSWAP_MSG_QUEUE_DEPTH { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Busy); }
-<a href=#134 id=134 data-nosnippet>134</a>    sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).ok_or(Failure::Invalid)<span class="question-mark">?</span>.async_operations.push(Operation {
-<a href=#135 id=135 data-nosnippet>135</a>        id: token, peer_tid: peer, peer_cell: peer_binding.<span class="number">0</span>, peer_generation: peer_binding.<span class="number">1</span>,
-<a href=#136 id=136 data-nosnippet>136</a>        deadline: (<span class="kw">super</span>::system_ticks() <span class="kw">as </span>u64).saturating_add(OPERATION_TIMEOUT_TICKS),
-<a href=#137 id=137 data-nosnippet>137</a>        phase: Phase::Queued, reply,
-<a href=#138 id=138 data-nosnippet>138</a>    })<span class="question-mark">?</span>;
-<a href=#139 id=139 data-nosnippet>139</a>    <span class="kw">let </span>target = sched.tasks.get_mut(<span class="kw-2">&amp;</span>peer).ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
-<a href=#140 id=140 data-nosnippet>140</a>    <span class="kw">let </span>recv_eligible = <span class="macro">matches!</span>(target.state, TaskState::Recv { mask, .. } <span class="kw">if </span>mask == <span class="number">0 </span>|| mask == owner);
-<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">if </span><span class="kw">super</span>::queue_wire_msg(target, wire, <span class="kw">super</span>::tcb::HOTSWAP_MSG_QUEUE_DEPTH).is_err() {
-<a href=#142 id=142 data-nosnippet>142</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).unwrap().async_operations.remove(token);
-<a href=#143 id=143 data-nosnippet>143</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Busy);
-<a href=#144 id=144 data-nosnippet>144</a>    }
-<a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">let </span>wake_cause = <span class="kw">super</span>::wake_after_ipc_publish(target, recv_eligible);
-<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">if </span>wake_cause.made_runnable() {
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">let </span>priority = sched.push_ready(peer);
-<a href=#148 id=148 data-nosnippet>148</a>        sched.pend_preempt_if_needed(priority);
-<a href=#149 id=149 data-nosnippet>149</a>    }
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="prelude-val">Ok</span>(token)
-<a href=#151 id=151 data-nosnippet>151</a>}
-<a href=#152 id=152 data-nosnippet>152</a>
-<a href=#153 id=153 data-nosnippet>153</a><span class="doccomment">/// Snapshotting the request is the dispatch boundary. If a copy-out later
-<a href=#154 id=154 data-nosnippet>154</a>/// faults, cancellation stays conservatively indeterminate, not falsely safe.
-<a href=#155 id=155 data-nosnippet>155</a></span><span class="kw">pub fn </span>dispatch(sched: <span class="kw-2">&amp;mut </span>Scheduler, peer: usize, header: ipc_wire::IpcWireHeader) {
-<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">if </span>header.async_op == <span class="number">0 </span>{ <span class="kw">return</span>; }
-<a href=#157 id=157 data-nosnippet>157</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(owner) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>header.sender_tid) <span class="kw">else </span>{ <span class="kw">return</span>; };
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">if </span>owner.cell_id.<span class="number">0 </span>!= header.sender_cell_id || owner.cell_generation != header.sender_generation { <span class="kw">return</span>; }
-<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(op) = owner.async_operations.find_mut(header.async_op) <span class="kw">else </span>{ <span class="kw">return</span>; };
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">if </span>op.peer_tid == peer &amp;&amp; <span class="macro">matches!</span>(op.phase, Phase::Queued) {
-<a href=#161 id=161 data-nosnippet>161</a>        op.phase = Phase::Dispatched;
-<a href=#162 id=162 data-nosnippet>162</a>    }
-<a href=#163 id=163 data-nosnippet>163</a>}
-<a href=#164 id=164 data-nosnippet>164</a>
-<a href=#165 id=165 data-nosnippet>165</a><span class="kw">fn </span>terminal(sched: <span class="kw-2">&amp;mut </span>Scheduler, owner_tid: usize, token: usize, peer: usize,
-<a href=#166 id=166 data-nosnippet>166</a>            peer_cell: u64, peer_generation: u64, ptr: usize, len: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(owner) = sched.tasks.get(<span class="kw-2">&amp;</span>owner_tid) <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::PeerGone); };
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">if </span>!live(owner) { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::PeerGone); }
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(op) = owner.async_operations.find(token) <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid); };
-<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">if </span>op.peer_tid != peer || op.peer_cell != peer_cell || op.peer_generation != peer_generation
-<a href=#171 id=171 data-nosnippet>171</a>        || !<span class="macro">matches!</span>(op.phase, Phase::Dispatched) { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid); }
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">let </span>view = sched.tasks.get(<span class="kw-2">&amp;</span>peer).map(|task| TaskCopyView::of(task)).ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span>op = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner_tid).unwrap().async_operations.find_mut(token).unwrap();
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">if </span>len &gt; ipc_wire::MAX_IPC_WIRE_PAYLOAD {
-<a href=#175 id=175 data-nosnippet>175</a>        op.phase = Phase::Terminal { kind: api::syscall::ipc_status::INDETERMINATE, len: <span class="number">0 </span>};
-<a href=#176 id=176 data-nosnippet>176</a>        wake(sched, owner_tid);
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid);
-<a href=#178 id=178 data-nosnippet>178</a>    }
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">let </span>copied = view.read_into(ptr, <span class="kw-2">&amp;mut </span>op.reply.as_mut_slice()[..len]);
-<a href=#180 id=180 data-nosnippet>180</a>    op.phase = Phase::Terminal {
-<a href=#181 id=181 data-nosnippet>181</a>        kind: <span class="kw">if </span>copied.is_ok() { api::syscall::ipc_status::REPLY }
-<a href=#182 id=182 data-nosnippet>182</a>            <span class="kw">else </span>{ api::syscall::ipc_status::INDETERMINATE },
-<a href=#183 id=183 data-nosnippet>183</a>        len: <span class="kw">if </span>copied.is_ok() { len } <span class="kw">else </span>{ <span class="number">0 </span>},
-<a href=#184 id=184 data-nosnippet>184</a>    };
-<a href=#185 id=185 data-nosnippet>185</a>    wake(sched, owner_tid);
-<a href=#186 id=186 data-nosnippet>186</a>    copied.map_err(|<span class="kw">_</span>| Failure::Invalid)
-<a href=#187 id=187 data-nosnippet>187</a>}
-<a href=#188 id=188 data-nosnippet>188</a>
-<a href=#189 id=189 data-nosnippet>189</a><span class="doccomment">/// Even a late legacy service reply is intercepted rather than misdelivered
-<a href=#190 id=190 data-nosnippet>190</a>/// through the synchronous client mailbox.
-<a href=#191 id=191 data-nosnippet>191</a></span><span class="kw">pub fn </span>reply_current(peer: usize, destination: usize, ptr: usize, len: usize)
-<a href=#192 id=192 data-nosnippet>192</a>    -&gt; <span class="prelude-ty">Option</span>&lt;<span class="prelude-ty">Result</span>&lt;(), Failure&gt;&gt; {
-<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">let </span>sched = guard.as_mut()<span class="question-mark">?</span>;
-<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">let </span>provider = sched.tasks.get(<span class="kw-2">&amp;</span>peer)<span class="question-mark">?</span>;
-<a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">let </span>token = provider.current_async_op;
-<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">if </span>token == <span class="number">0 </span>|| provider.current_caller != <span class="prelude-val">Some</span>(destination) { <span class="kw">return </span><span class="prelude-val">None</span>; }
-<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">let </span>binding = (provider.cell_id.<span class="number">0</span>, provider.cell_generation);
-<a href=#199 id=199 data-nosnippet>199</a>    <span class="prelude-val">Some</span>(<span class="kw">match </span>terminal(sched, destination, token, peer, binding.<span class="number">0</span>, binding.<span class="number">1</span>, ptr, len) {
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="comment">// Cancellation/reuse is terminal; quarantine the late response.
-<a href=#201 id=201 data-nosnippet>201</a>        </span><span class="prelude-val">Err</span>(Failure::Invalid) <span class="kw">if </span>!sched.tasks.get(<span class="kw-2">&amp;</span>destination)
-<a href=#202 id=202 data-nosnippet>202</a>            .and_then(|task| task.async_operations.find(token))
-<a href=#203 id=203 data-nosnippet>203</a>            .is_some_and(|op| <span class="macro">matches!</span>(op.phase, Phase::Dispatched)) =&gt; <span class="prelude-val">Ok</span>(()),
-<a href=#204 id=204 data-nosnippet>204</a>        other =&gt; other,
-<a href=#205 id=205 data-nosnippet>205</a>    })
-<a href=#206 id=206 data-nosnippet>206</a>}
-<a href=#207 id=207 data-nosnippet>207</a>
-<a href=#208 id=208 data-nosnippet>208</a><span class="kw">pub fn </span>current(peer: usize) -&gt; usize {
-<a href=#209 id=209 data-nosnippet>209</a>    SCHEDULER.lock().as_ref().and_then(|sched| sched.tasks.get(<span class="kw-2">&amp;</span>peer))
-<a href=#210 id=210 data-nosnippet>210</a>        .filter(|task| live(task)).map_or(<span class="number">0</span>, |task| task.current_async_op)
-<a href=#211 id=211 data-nosnippet>211</a>}
-<a href=#212 id=212 data-nosnippet>212</a>
-<a href=#213 id=213 data-nosnippet>213</a><span class="kw">pub fn </span>reply(peer: usize, token: usize, ptr: usize, len: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
-<a href=#214 id=214 data-nosnippet>214</a>    <span class="kw">if </span>token == <span class="number">0 </span>{ <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid); }
-<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
-<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">let </span>sched = guard.as_mut().ok_or(Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#217 id=217 data-nosnippet>217</a>    <span class="kw">let </span>provider = sched.tasks.get(<span class="kw-2">&amp;</span>peer).filter(|task| live(task)).ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
-<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">let </span>(cell, generation) = (provider.cell_id.<span class="number">0</span>, provider.cell_generation);
-<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">let </span>owner = sched.tasks.iter().find_map(|(<span class="kw-2">&amp;</span>id, task)| task.async_operations.find(token)
-<a href=#220 id=220 data-nosnippet>220</a>        .map(|<span class="kw">_</span>| id)).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">let </span>result = terminal(sched, owner, token, peer, cell, generation, ptr, len);
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">if </span>result.is_ok() {
-<a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>peer) {
-<a href=#224 id=224 data-nosnippet>224</a>            <span class="kw">if </span>task.current_async_op == token
-<a href=#225 id=225 data-nosnippet>225</a>                &amp;&amp; !<span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(task.cell_id.<span class="number">0 </span><span class="kw">as </span>usize) {
-<a href=#226 id=226 data-nosnippet>226</a>                task.clear_current_caller_context();
-<a href=#227 id=227 data-nosnippet>227</a>            }
-<a href=#228 id=228 data-nosnippet>228</a>        }
-<a href=#229 id=229 data-nosnippet>229</a>    }
-<a href=#230 id=230 data-nosnippet>230</a>    result
-<a href=#231 id=231 data-nosnippet>231</a>}
-<a href=#232 id=232 data-nosnippet>232</a>
-<a href=#233 id=233 data-nosnippet>233</a><span class="kw">pub fn </span>cancel(owner: usize, token: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
-<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
-<a href=#235 id=235 data-nosnippet>235</a>    <span class="kw">let </span>sched = guard.as_mut().ok_or(Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#236 id=236 data-nosnippet>236</a>    <span class="kw">let </span>op = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).ok_or(Failure::Invalid)<span class="question-mark">?
-<a href=#237 id=237 data-nosnippet>237</a>        </span>.async_operations.find_mut(token).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">let </span>queued = <span class="macro">matches!</span>(op.phase, Phase::Queued);
-<a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">let </span>peer = op.peer_tid;
-<a href=#240 id=240 data-nosnippet>240</a>    <span class="kw">if </span>queued {
-<a href=#241 id=241 data-nosnippet>241</a>        <span class="comment">// No receiver snapshot has begun; remove only the matching token.
-<a href=#242 id=242 data-nosnippet>242</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(receiver) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>peer) {
-<a href=#243 id=243 data-nosnippet>243</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(pos) = receiver.pending_msgs.iter().position(|msg|
-<a href=#244 id=244 data-nosnippet>244</a>                msg.wire_header().is_some_and(|header| header.async_op == token)) {
-<a href=#245 id=245 data-nosnippet>245</a>                receiver.pending_msgs.remove(pos);
-<a href=#246 id=246 data-nosnippet>246</a>            }
-<a href=#247 id=247 data-nosnippet>247</a>        }
-<a href=#248 id=248 data-nosnippet>248</a>    }
-<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">let </span>op = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).unwrap().async_operations.find_mut(token).unwrap();
-<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(op.phase, Phase::Terminal { .. }) {
-<a href=#251 id=251 data-nosnippet>251</a>        op.phase = Phase::Terminal { kind: <span class="kw">if </span>queued { api::syscall::ipc_status::CANCELLED }
-<a href=#252 id=252 data-nosnippet>252</a>            <span class="kw">else </span>{ api::syscall::ipc_status::INDETERMINATE }, len: <span class="number">0 </span>};
-<a href=#253 id=253 data-nosnippet>253</a>        wake(sched, owner);
-<a href=#254 id=254 data-nosnippet>254</a>    }
-<a href=#255 id=255 data-nosnippet>255</a>    <span class="prelude-val">Ok</span>(())
-<a href=#256 id=256 data-nosnippet>256</a>}
-<a href=#257 id=257 data-nosnippet>257</a>
-<a href=#258 id=258 data-nosnippet>258</a><span class="kw">pub fn </span>take(owner: usize, token: usize, reply_ptr: usize, reply_len: usize,
-<a href=#259 id=259 data-nosnippet>259</a>            status_ptr: usize) -&gt; <span class="prelude-ty">Result</span>&lt;bool, Failure&gt; {
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
-<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">let </span>sched = guard.as_mut().ok_or(Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">let </span>task = sched.tasks.get(<span class="kw-2">&amp;</span>owner).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">let </span>op = task.async_operations.find(token).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">let </span>Phase::Terminal { kind, len } = <span class="kw-2">&amp;</span>op.phase <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>); };
-<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">let </span>data = <span class="kw-2">&amp;</span>op.reply.as_slice()[..<span class="kw-2">*</span>len];
-<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">if </span>data.len() &gt; reply_len { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::TooSmall); }
-<a href=#267 id=267 data-nosnippet>267</a>    <span class="kw">let </span>view = TaskCopyView::of(task);
-<a href=#268 id=268 data-nosnippet>268</a>    view.validate_writable(status_ptr, api::syscall::IPC_STATUS_LEN).map_err(|<span class="kw">_</span>| Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#269 id=269 data-nosnippet>269</a>    <span class="kw">if </span>!data.is_empty() {
-<a href=#270 id=270 data-nosnippet>270</a>        view.validate_writable(reply_ptr, data.len()).map_err(|<span class="kw">_</span>| Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#271 id=271 data-nosnippet>271</a>        view.write_bytes(reply_ptr, data).map_err(|<span class="kw">_</span>| Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#272 id=272 data-nosnippet>272</a>    }
-<a href=#273 id=273 data-nosnippet>273</a>    <span class="kw">let </span><span class="kw-2">mut </span>status = [<span class="number">0u8</span>; api::syscall::IPC_STATUS_LEN];
-<a href=#274 id=274 data-nosnippet>274</a>    status[..<span class="number">4</span>].copy_from_slice(<span class="kw-2">&amp;</span>api::syscall::IPC_STATUS_VERSION.to_le_bytes());
-<a href=#275 id=275 data-nosnippet>275</a>    status[<span class="number">4</span>..<span class="number">8</span>].copy_from_slice(<span class="kw-2">&amp;</span>kind.to_le_bytes());
-<a href=#276 id=276 data-nosnippet>276</a>    status[<span class="number">8</span>..<span class="number">12</span>].copy_from_slice(<span class="kw-2">&amp;</span>(data.len() <span class="kw">as </span>u32).to_le_bytes());
-<a href=#277 id=277 data-nosnippet>277</a>    view.write_bytes(status_ptr, <span class="kw-2">&amp;</span>status).map_err(|<span class="kw">_</span>| Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#278 id=278 data-nosnippet>278</a>    sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).unwrap().async_operations.remove(token);
-<a href=#279 id=279 data-nosnippet>279</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
-<a href=#280 id=280 data-nosnippet>280</a>}
-<a href=#281 id=281 data-nosnippet>281</a>
-<a href=#282 id=282 data-nosnippet>282</a><span class="kw">pub fn </span>wait(owner: usize, ticks: u64) -&gt; <span class="prelude-ty">Result</span>&lt;bool, Failure&gt; {
-<a href=#283 id=283 data-nosnippet>283</a>    <span class="kw">let </span>deadline = (ticks != <span class="number">0</span>).then(|| (<span class="kw">super</span>::system_ticks() <span class="kw">as </span>u64).saturating_add(ticks));
-<a href=#284 id=284 data-nosnippet>284</a>    {
-<a href=#285 id=285 data-nosnippet>285</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
-<a href=#286 id=286 data-nosnippet>286</a>        <span class="kw">let </span>sched = guard.as_mut().ok_or(Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#287 id=287 data-nosnippet>287</a>        <span class="kw">let </span>task = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
-<a href=#288 id=288 data-nosnippet>288</a>        <span class="kw">if </span>task.async_operations.has_terminal() { <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>); }
-<a href=#289 id=289 data-nosnippet>289</a>        <span class="kw">super</span>::arm_ipc_block_handoff(owner);
-<a href=#290 id=290 data-nosnippet>290</a>        task.state = TaskState::WaitIpc { deadline };
-<a href=#291 id=291 data-nosnippet>291</a>    }
-<a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">super</span>::yield_cpu();
-<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">let </span>guard = SCHEDULER.lock();
-<a href=#294 id=294 data-nosnippet>294</a>    <span class="prelude-val">Ok</span>(guard.as_ref().and_then(|s| s.tasks.get(<span class="kw-2">&amp;</span>owner))
-<a href=#295 id=295 data-nosnippet>295</a>        .is_some_and(|task| task.async_operations.has_terminal()))
-<a href=#296 id=296 data-nosnippet>296</a>}
-<a href=#297 id=297 data-nosnippet>297</a>
-<a href=#298 id=298 data-nosnippet>298</a><span class="doccomment">/// Peer death is an infallible terminal transition; storage was reserved on submit.
-<a href=#299 id=299 data-nosnippet>299</a></span><span class="kw">pub fn </span>peer_died(sched: <span class="kw-2">&amp;mut </span>Scheduler, peer: usize, cell: u64, generation: u64) {
-<a href=#300 id=300 data-nosnippet>300</a>    <span class="kw">let </span><span class="kw-2">mut </span>after = <span class="number">0usize</span>;
-<a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>((<span class="kw-2">&amp;</span>owner, <span class="kw">_</span>)) = sched.tasks.range(after..).next() {
-<a href=#302 id=302 data-nosnippet>302</a>        after = <span class="kw">match </span>owner.checked_add(<span class="number">1</span>) { <span class="prelude-val">Some</span>(next) =&gt; next, <span class="prelude-val">None </span>=&gt; <span class="kw">break </span>};
-<a href=#303 id=303 data-nosnippet>303</a>        <span class="kw">if </span>sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).is_some_and(|task|
-<a href=#304 id=304 data-nosnippet>304</a>            task.async_operations.peer_died(peer, cell, generation)) {
-<a href=#305 id=305 data-nosnippet>305</a>            wake(sched, owner);
-<a href=#306 id=306 data-nosnippet>306</a>        }
-<a href=#307 id=307 data-nosnippet>307</a>    }
-<a href=#308 id=308 data-nosnippet>308</a>}
-<a href=#309 id=309 data-nosnippet>309</a>
-<a href=#310 id=310 data-nosnippet>310</a><span class="doccomment">/// Drop queued requests from an owner whose task generation has exited.
-<a href=#311 id=311 data-nosnippet>311</a>/// Dispatched requests retain their service-side grant lease until the
-<a href=#312 id=312 data-nosnippet>312</a>/// service's existing reply/next-public-receive cleanup boundary.
-<a href=#313 id=313 data-nosnippet>313</a></span><span class="kw">pub fn </span>owner_died(sched: <span class="kw-2">&amp;mut </span>Scheduler, owner: usize, cell: u64, generation: u64) {
-<a href=#314 id=314 data-nosnippet>314</a>    <span class="kw">for </span>task <span class="kw">in </span>sched.tasks.values_mut() {
-<a href=#315 id=315 data-nosnippet>315</a>        <span class="kw">let </span><span class="kw-2">mut </span>index = <span class="number">0</span>;
-<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">while </span>index &lt; task.pending_msgs.len() {
-<a href=#317 id=317 data-nosnippet>317</a>            <span class="kw">let </span>queued = task.pending_msgs.as_slice()[index].wire_header()
-<a href=#318 id=318 data-nosnippet>318</a>                .is_some_and(|header| header.async_op != <span class="number">0
-<a href=#319 id=319 data-nosnippet>319</a>                    </span>&amp;&amp; header.sender_tid == owner
-<a href=#320 id=320 data-nosnippet>320</a>                    &amp;&amp; header.sender_cell_id == cell
-<a href=#321 id=321 data-nosnippet>321</a>                    &amp;&amp; header.sender_generation == generation);
-<a href=#322 id=322 data-nosnippet>322</a>            <span class="kw">if </span>queued { task.pending_msgs.remove(index); } <span class="kw">else </span>{ index += <span class="number">1</span>; }
-<a href=#323 id=323 data-nosnippet>323</a>        }
-<a href=#324 id=324 data-nosnippet>324</a>    }
+<a href=#24 id=24 data-nosnippet>24</a>    owner_cell: u64,
+<a href=#25 id=25 data-nosnippet>25</a>    owner_generation: u64,
+<a href=#26 id=26 data-nosnippet>26</a>    peer_tid: usize,
+<a href=#27 id=27 data-nosnippet>27</a>    peer_cell: u64,
+<a href=#28 id=28 data-nosnippet>28</a>    peer_generation: u64,
+<a href=#29 id=29 data-nosnippet>29</a>    deadline: u64,
+<a href=#30 id=30 data-nosnippet>30</a>    phase: Phase,
+<a href=#31 id=31 data-nosnippet>31</a>    reply: ipc_wire::IpcWireMessage,
+<a href=#32 id=32 data-nosnippet>32</a>}
+<a href=#33 id=33 data-nosnippet>33</a>
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">impl </span>Operation {
+<a href=#35 id=35 data-nosnippet>35</a>    <span class="kw">fn </span>owned_by(<span class="kw-2">&amp;</span><span class="self">self</span>, task: <span class="kw-2">&amp;</span>Task) -&gt; bool {
+<a href=#36 id=36 data-nosnippet>36</a>        <span class="self">self</span>.owner_cell == task.cell_id.<span class="number">0 </span>&amp;&amp; <span class="self">self</span>.owner_generation == task.cell_generation
+<a href=#37 id=37 data-nosnippet>37</a>    }
+<a href=#38 id=38 data-nosnippet>38</a>}
+<a href=#39 id=39 data-nosnippet>39</a>
+<a href=#40 id=40 data-nosnippet>40</a><span class="doccomment">/// Task-local, kernel-charged storage. Tokens are global monotonic identifiers,
+<a href=#41 id=41 data-nosnippet>41</a>/// never slot indexes; reuse after take cannot alias a late service reply.
+<a href=#42 id=42 data-nosnippet>42</a></span><span class="attr">#[derive(Default)]
+<a href=#43 id=43 data-nosnippet>43</a></span><span class="kw">pub struct </span>Operations(Vec&lt;Operation&gt;);
+<a href=#44 id=44 data-nosnippet>44</a>
+<a href=#45 id=45 data-nosnippet>45</a><span class="kw">impl </span>Operations {
+<a href=#46 id=46 data-nosnippet>46</a>    <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{ <span class="self">Self</span>(Vec::new()) }
+<a href=#47 id=47 data-nosnippet>47</a>    <span class="kw">pub fn </span>len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize { <span class="self">self</span>.<span class="number">0</span>.len() }
+<a href=#48 id=48 data-nosnippet>48</a>    <span class="kw">pub fn </span>find(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Operation&gt; { <span class="self">self</span>.<span class="number">0</span>.iter().find(|op| op.id == id) }
+<a href=#49 id=49 data-nosnippet>49</a>    <span class="kw">fn </span>find_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span>Operation&gt; { <span class="self">self</span>.<span class="number">0</span>.iter_mut().find(|op| op.id == id) }
+<a href=#50 id=50 data-nosnippet>50</a>    <span class="kw">fn </span>remove(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;Operation&gt; {
+<a href=#51 id=51 data-nosnippet>51</a>        <span class="kw">let </span>pos = <span class="self">self</span>.<span class="number">0</span>.iter().position(|op| op.id == id)<span class="question-mark">?</span>;
+<a href=#52 id=52 data-nosnippet>52</a>        <span class="prelude-val">Some</span>(<span class="self">self</span>.<span class="number">0</span>.remove(pos))
+<a href=#53 id=53 data-nosnippet>53</a>    }
+<a href=#54 id=54 data-nosnippet>54</a>    <span class="kw">fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, op: Operation) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
+<a href=#55 id=55 data-nosnippet>55</a>        <span class="kw">if </span><span class="self">self</span>.<span class="number">0</span>.len() == MAX_OPERATIONS { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Busy); }
+<a href=#56 id=56 data-nosnippet>56</a>        <span class="kw">if </span><span class="self">self</span>.<span class="number">0</span>.len() == <span class="self">self</span>.<span class="number">0</span>.capacity() {
+<a href=#57 id=57 data-nosnippet>57</a>            <span class="kw">let </span>previous = <span class="kw">super</span>::hart_local::current_cell_id();
+<a href=#58 id=58 data-nosnippet>58</a>            <span class="kw">super</span>::hart_local::set_current_cell_id(<span class="number">0</span>);
+<a href=#59 id=59 data-nosnippet>59</a>            <span class="kw">let </span>reserved = <span class="self">self</span>.<span class="number">0</span>.try_reserve(<span class="number">1</span>);
+<a href=#60 id=60 data-nosnippet>60</a>            <span class="kw">super</span>::hart_local::set_current_cell_id(previous);
+<a href=#61 id=61 data-nosnippet>61</a>            reserved.map_err(|<span class="kw">_</span>| Failure::Busy)<span class="question-mark">?</span>;
+<a href=#62 id=62 data-nosnippet>62</a>        }
+<a href=#63 id=63 data-nosnippet>63</a>        <span class="self">self</span>.<span class="number">0</span>.push(op);
+<a href=#64 id=64 data-nosnippet>64</a>        <span class="prelude-val">Ok</span>(())
+<a href=#65 id=65 data-nosnippet>65</a>    }
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">pub fn </span>peer_died(<span class="kw-2">&amp;mut </span><span class="self">self</span>, tid: usize, cell: u64, generation: u64) -&gt; bool {
+<a href=#67 id=67 data-nosnippet>67</a>        <span class="kw">let </span><span class="kw-2">mut </span>changed = <span class="bool-val">false</span>;
+<a href=#68 id=68 data-nosnippet>68</a>        <span class="kw">for </span>op <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#69 id=69 data-nosnippet>69</a>            <span class="kw">if </span>op.peer_tid == tid &amp;&amp; op.peer_cell == cell &amp;&amp; op.peer_generation == generation
+<a href=#70 id=70 data-nosnippet>70</a>                &amp;&amp; !<span class="macro">matches!</span>(op.phase, Phase::Terminal { .. }) {
+<a href=#71 id=71 data-nosnippet>71</a>                op.phase = Phase::Terminal { kind: api::syscall::ipc_status::PEER_GONE, len: <span class="number">0 </span>};
+<a href=#72 id=72 data-nosnippet>72</a>                changed = <span class="bool-val">true</span>;
+<a href=#73 id=73 data-nosnippet>73</a>            }
+<a href=#74 id=74 data-nosnippet>74</a>        }
+<a href=#75 id=75 data-nosnippet>75</a>        changed
+<a href=#76 id=76 data-nosnippet>76</a>    }
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">fn </span>has_terminal(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool { <span class="self">self</span>.<span class="number">0</span>.iter().any(|op| <span class="macro">matches!</span>(op.phase, Phase::Terminal { .. })) }
+<a href=#78 id=78 data-nosnippet>78</a>}
+<a href=#79 id=79 data-nosnippet>79</a>
+<a href=#80 id=80 data-nosnippet>80</a><span class="kw">impl </span>Drop <span class="kw">for </span>Operations {
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#82 id=82 data-nosnippet>82</a>        <span class="kw">let </span>rows = core::mem::take(<span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0</span>);
+<a href=#83 id=83 data-nosnippet>83</a>        <span class="kw">let </span>previous = <span class="kw">super</span>::hart_local::current_cell_id();
+<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">super</span>::hart_local::set_current_cell_id(<span class="number">0</span>);
+<a href=#85 id=85 data-nosnippet>85</a>        drop(rows);
+<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">super</span>::hart_local::set_current_cell_id(previous);
+<a href=#87 id=87 data-nosnippet>87</a>    }
+<a href=#88 id=88 data-nosnippet>88</a>}
+<a href=#89 id=89 data-nosnippet>89</a>
+<a href=#90 id=90 data-nosnippet>90</a><span class="kw">fn </span>live(task: <span class="kw-2">&amp;</span>Task) -&gt; bool { !<span class="macro">matches!</span>(task.state, TaskState::Retiring | TaskState::Terminated) }
+<a href=#91 id=91 data-nosnippet>91</a>
+<a href=#92 id=92 data-nosnippet>92</a><span class="kw">fn </span>wake(sched: <span class="kw-2">&amp;mut </span>Scheduler, owner: usize) {
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner) {
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">if </span><span class="macro">matches!</span>(task.state, TaskState::WaitIpc { .. }) {
+<a href=#95 id=95 data-nosnippet>95</a>            task.state = TaskState::Ready;
+<a href=#96 id=96 data-nosnippet>96</a>            <span class="kw">let </span>priority = sched.push_ready(owner);
+<a href=#97 id=97 data-nosnippet>97</a>            sched.pend_preempt_if_needed(priority);
+<a href=#98 id=98 data-nosnippet>98</a>        }
+<a href=#99 id=99 data-nosnippet>99</a>    }
+<a href=#100 id=100 data-nosnippet>100</a>}
+<a href=#101 id=101 data-nosnippet>101</a>
+<a href=#102 id=102 data-nosnippet>102</a><span class="kw">fn </span>new_token() -&gt; <span class="prelude-ty">Result</span>&lt;usize, Failure&gt; {
+<a href=#103 id=103 data-nosnippet>103</a>    NEXT_OPERATION.fetch_update(Ordering::Relaxed, Ordering::Relaxed,
+<a href=#104 id=104 data-nosnippet>104</a>        |next| (next &lt;= isize::MAX <span class="kw">as </span>usize).then_some(next + <span class="number">1</span>))
+<a href=#105 id=105 data-nosnippet>105</a>        .map_err(|<span class="kw">_</span>| Failure::Busy)
+<a href=#106 id=106 data-nosnippet>106</a>}
+<a href=#107 id=107 data-nosnippet>107</a>
+<a href=#108 id=108 data-nosnippet>108</a><span class="kw">pub fn </span>submit(owner: usize, peer: usize, ptr: usize, len: usize) -&gt; <span class="prelude-ty">Result</span>&lt;usize, Failure&gt; {
+<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw">if </span>len &gt; ipc_wire::MAX_IPC_WIRE_PAYLOAD { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid); }
+<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span>(view, binding, peer_binding) = {
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="kw">let </span>guard = SCHEDULER.lock();
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span>sched = guard.as_ref().ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">let </span>task = sched.tasks.get(<span class="kw-2">&amp;</span>owner).filter(|task| live(task)).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">let </span>target = sched.tasks.get(<span class="kw-2">&amp;</span>peer).filter(|task| live(task)).ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
+<a href=#115 id=115 data-nosnippet>115</a>        (TaskCopyView::of(task), (task.cell_id.<span class="number">0</span>, task.cell_generation),
+<a href=#116 id=116 data-nosnippet>116</a>         (target.cell_id.<span class="number">0</span>, target.cell_generation))
+<a href=#117 id=117 data-nosnippet>117</a>    };
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">let </span>token = new_token()<span class="question-mark">?</span>;
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">let </span>header = ipc_wire::IpcWireHeader {
+<a href=#120 id=120 data-nosnippet>120</a>        sender_tid: owner, sender_cell_id: binding.<span class="number">0</span>,
+<a href=#121 id=121 data-nosnippet>121</a>        sender_generation: binding.<span class="number">1</span>,
+<a href=#122 id=122 data-nosnippet>122</a>        delivery_id: <span class="kw">super</span>::next_delivery_id(), async_op: token,
+<a href=#123 id=123 data-nosnippet>123</a>    };
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="comment">// Copy outside SCHEDULER; no peer or user pointer persists in a task slot.
+<a href=#125 id=125 data-nosnippet>125</a>    </span><span class="kw">let </span>wire = ipc_wire::IpcWireMessage::try_from_user(header, <span class="kw-2">&amp;</span>view, ptr, len)
+<a href=#126 id=126 data-nosnippet>126</a>        .map_err(|<span class="kw">_</span>| Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">let </span>reply_header = ipc_wire::IpcWireHeader {
+<a href=#128 id=128 data-nosnippet>128</a>        sender_tid: peer, sender_cell_id: peer_binding.<span class="number">0</span>,
+<a href=#129 id=129 data-nosnippet>129</a>        sender_generation: peer_binding.<span class="number">1</span>, delivery_id: <span class="number">0</span>, async_op: token,
+<a href=#130 id=130 data-nosnippet>130</a>    };
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">let </span>reply = ipc_wire::IpcWireMessage::try_new(
+<a href=#132 id=132 data-nosnippet>132</a>        reply_header, <span class="kw-2">&amp;</span>[<span class="number">0u8</span>; ipc_wire::MAX_IPC_WIRE_PAYLOAD]).map_err(|<span class="kw">_</span>| Failure::Busy)<span class="question-mark">?</span>;
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">let </span>sched = guard.as_mut().ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">let </span>caller = sched.tasks.get(<span class="kw-2">&amp;</span>owner).filter(|task| live(task)
+<a href=#136 id=136 data-nosnippet>136</a>        &amp;&amp; (task.cell_id.<span class="number">0</span>, task.cell_generation) == binding).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="kw">if </span>caller.async_operations.len() &gt;= MAX_OPERATIONS { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Busy); }
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">let </span>receiver = sched.tasks.get(<span class="kw-2">&amp;</span>peer).filter(|task| live(task)
+<a href=#139 id=139 data-nosnippet>139</a>        &amp;&amp; (task.cell_id.<span class="number">0</span>, task.cell_generation) == peer_binding).ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="kw">if </span><span class="kw">super</span>::paused_target_rejects(sched, owner, peer) { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Busy); }
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">if </span>receiver.pending_msgs.len() &gt;= <span class="kw">super</span>::tcb::HOTSWAP_MSG_QUEUE_DEPTH { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Busy); }
+<a href=#142 id=142 data-nosnippet>142</a>    sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).ok_or(Failure::Invalid)<span class="question-mark">?</span>.async_operations.push(Operation {
+<a href=#143 id=143 data-nosnippet>143</a>        id: token, owner_cell: binding.<span class="number">0</span>, owner_generation: binding.<span class="number">1</span>,
+<a href=#144 id=144 data-nosnippet>144</a>        peer_tid: peer, peer_cell: peer_binding.<span class="number">0</span>, peer_generation: peer_binding.<span class="number">1</span>,
+<a href=#145 id=145 data-nosnippet>145</a>        deadline: (<span class="kw">super</span>::system_ticks() <span class="kw">as </span>u64).saturating_add(OPERATION_TIMEOUT_TICKS),
+<a href=#146 id=146 data-nosnippet>146</a>        phase: Phase::Queued, reply,
+<a href=#147 id=147 data-nosnippet>147</a>    })<span class="question-mark">?</span>;
+<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">let </span>target = sched.tasks.get_mut(<span class="kw-2">&amp;</span>peer).ok_or(Failure::PeerGone)<span class="question-mark">?</span>;
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">let </span>recv_eligible = <span class="macro">matches!</span>(target.state, TaskState::Recv { mask, .. } <span class="kw">if </span>mask == <span class="number">0 </span>|| mask == owner);
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">if </span><span class="kw">super</span>::queue_wire_msg(target, wire, <span class="kw">super</span>::tcb::HOTSWAP_MSG_QUEUE_DEPTH).is_err() {
+<a href=#151 id=151 data-nosnippet>151</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).unwrap().async_operations.remove(token);
+<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Busy);
+<a href=#153 id=153 data-nosnippet>153</a>    }
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">let </span>wake_cause = <span class="kw">super</span>::wake_after_ipc_publish(target, recv_eligible);
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">if </span>wake_cause.made_runnable() {
+<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">let </span>priority = sched.push_ready(peer);
+<a href=#157 id=157 data-nosnippet>157</a>        sched.pend_preempt_if_needed(priority);
+<a href=#158 id=158 data-nosnippet>158</a>    }
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="prelude-val">Ok</span>(token)
+<a href=#160 id=160 data-nosnippet>160</a>}
+<a href=#161 id=161 data-nosnippet>161</a>
+<a href=#162 id=162 data-nosnippet>162</a><span class="doccomment">/// Snapshotting the request is the dispatch boundary. If a copy-out later
+<a href=#163 id=163 data-nosnippet>163</a>/// faults, cancellation stays conservatively indeterminate, not falsely safe.
+<a href=#164 id=164 data-nosnippet>164</a></span><span class="kw">pub fn </span>dispatch(sched: <span class="kw-2">&amp;mut </span>Scheduler, peer: usize, header: ipc_wire::IpcWireHeader) {
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">if </span>header.async_op == <span class="number">0 </span>{ <span class="kw">return</span>; }
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(provider) = sched.tasks.get(<span class="kw-2">&amp;</span>peer).filter(|task| live(task)) <span class="kw">else </span>{ <span class="kw">return</span>; };
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>peer_binding = (provider.cell_id.<span class="number">0</span>, provider.cell_generation);
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(owner) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>header.sender_tid).filter(|task| live(task)) <span class="kw">else </span>{ <span class="kw">return</span>; };
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">if </span>owner.cell_id.<span class="number">0 </span>!= header.sender_cell_id || owner.cell_generation != header.sender_generation { <span class="kw">return</span>; }
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">let </span>owner_binding = (owner.cell_id.<span class="number">0</span>, owner.cell_generation);
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(op) = owner.async_operations.find_mut(header.async_op) <span class="kw">else </span>{ <span class="kw">return</span>; };
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">if </span>(op.owner_cell, op.owner_generation) == owner_binding
+<a href=#173 id=173 data-nosnippet>173</a>        &amp;&amp; (op.peer_tid, op.peer_cell, op.peer_generation) == (peer, peer_binding.<span class="number">0</span>, peer_binding.<span class="number">1</span>)
+<a href=#174 id=174 data-nosnippet>174</a>        &amp;&amp; <span class="macro">matches!</span>(op.phase, Phase::Queued) {
+<a href=#175 id=175 data-nosnippet>175</a>        op.phase = Phase::Dispatched;
+<a href=#176 id=176 data-nosnippet>176</a>    }
+<a href=#177 id=177 data-nosnippet>177</a>}
+<a href=#178 id=178 data-nosnippet>178</a>
+<a href=#179 id=179 data-nosnippet>179</a><span class="kw">fn </span>terminal(sched: <span class="kw-2">&amp;mut </span>Scheduler, owner_tid: usize, token: usize, provider: usize,
+<a href=#180 id=180 data-nosnippet>180</a>            exact_peer: bool, ptr: usize, len: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(owner) = sched.tasks.get(<span class="kw-2">&amp;</span>owner_tid).filter(|task| live(task)) <span class="kw">else </span>{
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::PeerGone);
+<a href=#183 id=183 data-nosnippet>183</a>    };
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(op) = owner.async_operations.find(token) <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid); };
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(peer) = sched.tasks.get(<span class="kw-2">&amp;</span>provider).filter(|task| live(task)) <span class="kw">else </span>{
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::PeerGone);
+<a href=#187 id=187 data-nosnippet>187</a>    };
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="comment">// Explicit replies may be delegated to a worker of the accepted provider's
+<a href=#189 id=189 data-nosnippet>189</a>    // cell incarnation. Only the implicit bridge requires the served TID too.
+<a href=#190 id=190 data-nosnippet>190</a>    // Authority always comes from scheduler identity, never caller input.
+<a href=#191 id=191 data-nosnippet>191</a>    </span><span class="kw">if </span>!op.owned_by(owner) || (exact_peer &amp;&amp; op.peer_tid != provider)
+<a href=#192 id=192 data-nosnippet>192</a>        || op.peer_cell != peer.cell_id.<span class="number">0 </span>|| op.peer_generation != peer.cell_generation
+<a href=#193 id=193 data-nosnippet>193</a>        || !<span class="macro">matches!</span>(op.phase, Phase::Dispatched) { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid); }
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">let </span>view = TaskCopyView::of(peer);
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">let </span>op = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner_tid).unwrap().async_operations.find_mut(token).unwrap();
+<a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">if </span>len &gt; ipc_wire::MAX_IPC_WIRE_PAYLOAD {
+<a href=#197 id=197 data-nosnippet>197</a>        op.phase = Phase::Terminal { kind: api::syscall::ipc_status::INDETERMINATE, len: <span class="number">0 </span>};
+<a href=#198 id=198 data-nosnippet>198</a>        wake(sched, owner_tid);
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid);
+<a href=#200 id=200 data-nosnippet>200</a>    }
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">let </span>copied = view.read_into(ptr, <span class="kw-2">&amp;mut </span>op.reply.as_mut_slice()[..len]);
+<a href=#202 id=202 data-nosnippet>202</a>    op.phase = Phase::Terminal {
+<a href=#203 id=203 data-nosnippet>203</a>        kind: <span class="kw">if </span>copied.is_ok() { api::syscall::ipc_status::REPLY }
+<a href=#204 id=204 data-nosnippet>204</a>            <span class="kw">else </span>{ api::syscall::ipc_status::INDETERMINATE },
+<a href=#205 id=205 data-nosnippet>205</a>        len: <span class="kw">if </span>copied.is_ok() { len } <span class="kw">else </span>{ <span class="number">0 </span>},
+<a href=#206 id=206 data-nosnippet>206</a>    };
+<a href=#207 id=207 data-nosnippet>207</a>    wake(sched, owner_tid);
+<a href=#208 id=208 data-nosnippet>208</a>    copied.map_err(|<span class="kw">_</span>| Failure::Invalid)
+<a href=#209 id=209 data-nosnippet>209</a>}
+<a href=#210 id=210 data-nosnippet>210</a>
+<a href=#211 id=211 data-nosnippet>211</a><span class="doccomment">/// Only a Send to the exact currently served caller can be a legacy reply.
+<a href=#212 id=212 data-nosnippet>212</a>/// Its token remains as a tombstone until another receive replaces the context:
+<a href=#213 id=213 data-nosnippet>213</a>/// duplicate/cancelled/late replies must not fall through to the raw mailbox.
+<a href=#214 id=214 data-nosnippet>214</a>/// Services sending same-destination events or deferring across receives must
+<a href=#215 id=215 data-nosnippet>215</a>/// capture the token and use explicit replies instead of this bridge.
+<a href=#216 id=216 data-nosnippet>216</a></span><span class="kw">pub fn </span>reply_current(peer: usize, destination: usize, ptr: usize, len: usize)
+<a href=#217 id=217 data-nosnippet>217</a>    -&gt; <span class="prelude-ty">Option</span>&lt;<span class="prelude-ty">Result</span>&lt;(), Failure&gt;&gt; {
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
+<a href=#219 id=219 data-nosnippet>219</a>    reply_current_in_sched(guard.as_mut()<span class="question-mark">?</span>, peer, destination, ptr, len)
+<a href=#220 id=220 data-nosnippet>220</a>}
+<a href=#221 id=221 data-nosnippet>221</a>
+<a href=#222 id=222 data-nosnippet>222</a><span class="kw">fn </span>reply_current_in_sched(sched: <span class="kw-2">&amp;mut </span>Scheduler, peer: usize, destination: usize,
+<a href=#223 id=223 data-nosnippet>223</a>                          ptr: usize, len: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="prelude-ty">Result</span>&lt;(), Failure&gt;&gt; {
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">let </span>provider = sched.tasks.get(<span class="kw-2">&amp;</span>peer).filter(|task| live(task))<span class="question-mark">?</span>;
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">let </span>token = provider.current_async_op;
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">if </span>token == <span class="number">0 </span>|| provider.current_caller != <span class="prelude-val">Some</span>(destination) { <span class="kw">return </span><span class="prelude-val">None</span>; }
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">let </span>owner_binding = (provider.current_caller_cell_id, provider.current_caller_cell_generation);
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">let </span>owner_matches = sched.tasks.get(<span class="kw-2">&amp;</span>destination)
+<a href=#229 id=229 data-nosnippet>229</a>        .is_some_and(|task| (task.cell_id.<span class="number">0</span>, task.cell_generation) == owner_binding);
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">if </span>!owner_matches { <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())); }
+<a href=#231 id=231 data-nosnippet>231</a>    <span class="prelude-val">Some</span>(<span class="kw">match </span>terminal(sched, destination, token, peer, <span class="bool-val">true</span>, ptr, len) {
+<a href=#232 id=232 data-nosnippet>232</a>        <span class="comment">// Invalid tokens and terminal results are quarantined, never raw Send.
+<a href=#233 id=233 data-nosnippet>233</a>        </span><span class="prelude-val">Err</span>(Failure::Invalid) =&gt; <span class="prelude-val">Ok</span>(()),
+<a href=#234 id=234 data-nosnippet>234</a>        other =&gt; other,
+<a href=#235 id=235 data-nosnippet>235</a>    })
+<a href=#236 id=236 data-nosnippet>236</a>}
+<a href=#237 id=237 data-nosnippet>237</a>
+<a href=#238 id=238 data-nosnippet>238</a><span class="kw">pub fn </span>current(peer: usize) -&gt; usize {
+<a href=#239 id=239 data-nosnippet>239</a>    SCHEDULER.lock().as_ref().and_then(|sched| sched.tasks.get(<span class="kw-2">&amp;</span>peer))
+<a href=#240 id=240 data-nosnippet>240</a>        .filter(|task| live(task)).map_or(<span class="number">0</span>, |task| task.current_async_op)
+<a href=#241 id=241 data-nosnippet>241</a>}
+<a href=#242 id=242 data-nosnippet>242</a>
+<a href=#243 id=243 data-nosnippet>243</a><span class="kw">pub fn </span>reply(peer: usize, token: usize, ptr: usize, len: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
+<a href=#245 id=245 data-nosnippet>245</a>    <span class="kw">let </span>sched = guard.as_mut().ok_or(Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#246 id=246 data-nosnippet>246</a>    reply_in_sched(sched, peer, token, ptr, len)
+<a href=#247 id=247 data-nosnippet>247</a>}
+<a href=#248 id=248 data-nosnippet>248</a>
+<a href=#249 id=249 data-nosnippet>249</a><span class="kw">fn </span>reply_in_sched(sched: <span class="kw-2">&amp;mut </span>Scheduler, peer: usize, token: usize,
+<a href=#250 id=250 data-nosnippet>250</a>                  ptr: usize, len: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
+<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">if </span>token == <span class="number">0 </span>{ <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid); }
+<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">let </span>owner = sched.tasks.iter().find_map(|(<span class="kw-2">&amp;</span>id, task)| task.async_operations.find(token)
+<a href=#253 id=253 data-nosnippet>253</a>        .map(|<span class="kw">_</span>| id));
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">let </span>result = owner.ok_or(Failure::Invalid)
+<a href=#255 id=255 data-nosnippet>255</a>        .and_then(|owner| terminal(sched, owner, token, peer, <span class="bool-val">false</span>, ptr, len));
+<a href=#256 id=256 data-nosnippet>256</a>    <span class="comment">// An explicit response ends this request even if cancellation/take already
+<a href=#257 id=257 data-nosnippet>257</a>    // retired its token. Otherwise later one-way events would be mistaken for
+<a href=#258 id=258 data-nosnippet>258</a>    // stale implicit replies. VFS's exact lease cleanup is handled by syscall.
+<a href=#259 id=259 data-nosnippet>259</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(binding) = sched.tasks.get(<span class="kw-2">&amp;</span>peer).filter(|task| live(task))
+<a href=#260 id=260 data-nosnippet>260</a>        .map(|task| (task.cell_id, task.cell_generation)) {
+<a href=#261 id=261 data-nosnippet>261</a>        <span class="kw">for </span>task <span class="kw">in </span>sched.tasks.values_mut() {
+<a href=#262 id=262 data-nosnippet>262</a>            <span class="kw">if </span>(task.cell_id, task.cell_generation) == binding
+<a href=#263 id=263 data-nosnippet>263</a>                &amp;&amp; task.current_async_op == token
+<a href=#264 id=264 data-nosnippet>264</a>                &amp;&amp; !<span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(task.cell_id.<span class="number">0 </span><span class="kw">as </span>usize) {
+<a href=#265 id=265 data-nosnippet>265</a>                task.clear_current_caller_context();
+<a href=#266 id=266 data-nosnippet>266</a>            }
+<a href=#267 id=267 data-nosnippet>267</a>        }
+<a href=#268 id=268 data-nosnippet>268</a>    }
+<a href=#269 id=269 data-nosnippet>269</a>    result
+<a href=#270 id=270 data-nosnippet>270</a>}
+<a href=#271 id=271 data-nosnippet>271</a>
+<a href=#272 id=272 data-nosnippet>272</a><span class="kw">pub fn </span>cancel(owner: usize, token: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
+<a href=#273 id=273 data-nosnippet>273</a>    <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="kw">let </span>sched = guard.as_mut().ok_or(Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#275 id=275 data-nosnippet>275</a>    cancel_in_sched(sched, owner, token)
+<a href=#276 id=276 data-nosnippet>276</a>}
+<a href=#277 id=277 data-nosnippet>277</a>
+<a href=#278 id=278 data-nosnippet>278</a><span class="kw">fn </span>cancel_in_sched(sched: <span class="kw-2">&amp;mut </span>Scheduler, owner: usize, token: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
+<a href=#279 id=279 data-nosnippet>279</a>    <span class="kw">let </span>task = sched.tasks.get(<span class="kw-2">&amp;</span>owner).filter(|task| live(task)).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#280 id=280 data-nosnippet>280</a>    <span class="kw">let </span>op = task.async_operations.find(token).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#281 id=281 data-nosnippet>281</a>    <span class="kw">if </span>!op.owned_by(task) { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid); }
+<a href=#282 id=282 data-nosnippet>282</a>    <span class="kw">let </span>queued = <span class="macro">matches!</span>(op.phase, Phase::Queued);
+<a href=#283 id=283 data-nosnippet>283</a>    <span class="kw">let </span>peer = op.peer_tid;
+<a href=#284 id=284 data-nosnippet>284</a>    <span class="kw">if </span>queued {
+<a href=#285 id=285 data-nosnippet>285</a>        <span class="comment">// No receiver snapshot has begun; remove only the matching token.
+<a href=#286 id=286 data-nosnippet>286</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(receiver) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>peer) {
+<a href=#287 id=287 data-nosnippet>287</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(pos) = receiver.pending_msgs.iter().position(|msg|
+<a href=#288 id=288 data-nosnippet>288</a>                msg.wire_header().is_some_and(|header| header.async_op == token)) {
+<a href=#289 id=289 data-nosnippet>289</a>                receiver.pending_msgs.remove(pos);
+<a href=#290 id=290 data-nosnippet>290</a>            }
+<a href=#291 id=291 data-nosnippet>291</a>        }
+<a href=#292 id=292 data-nosnippet>292</a>    }
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">let </span>op = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).unwrap().async_operations.find_mut(token).unwrap();
+<a href=#294 id=294 data-nosnippet>294</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(op.phase, Phase::Terminal { .. }) {
+<a href=#295 id=295 data-nosnippet>295</a>        op.phase = Phase::Terminal { kind: <span class="kw">if </span>queued { api::syscall::ipc_status::CANCELLED }
+<a href=#296 id=296 data-nosnippet>296</a>            <span class="kw">else </span>{ api::syscall::ipc_status::INDETERMINATE }, len: <span class="number">0 </span>};
+<a href=#297 id=297 data-nosnippet>297</a>        wake(sched, owner);
+<a href=#298 id=298 data-nosnippet>298</a>    }
+<a href=#299 id=299 data-nosnippet>299</a>    <span class="prelude-val">Ok</span>(())
+<a href=#300 id=300 data-nosnippet>300</a>}
+<a href=#301 id=301 data-nosnippet>301</a>
+<a href=#302 id=302 data-nosnippet>302</a><span class="kw">pub fn </span>take(owner: usize, token: usize, reply_ptr: usize, reply_len: usize,
+<a href=#303 id=303 data-nosnippet>303</a>            status_ptr: usize) -&gt; <span class="prelude-ty">Result</span>&lt;bool, Failure&gt; {
+<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
+<a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">let </span>sched = guard.as_mut().ok_or(Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#306 id=306 data-nosnippet>306</a>    <span class="kw">let </span>task = sched.tasks.get(<span class="kw-2">&amp;</span>owner).filter(|task| live(task)).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#307 id=307 data-nosnippet>307</a>    <span class="kw">let </span>op = task.async_operations.find(token).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#308 id=308 data-nosnippet>308</a>    <span class="kw">if </span>!op.owned_by(task) { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Invalid); }
+<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">let </span>Phase::Terminal { kind, len } = <span class="kw-2">&amp;</span>op.phase <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>); };
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">let </span>data = <span class="kw-2">&amp;</span>op.reply.as_slice()[..<span class="kw-2">*</span>len];
+<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">if </span>data.len() &gt; reply_len { <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::TooSmall); }
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">let </span>view = TaskCopyView::of(task);
+<a href=#313 id=313 data-nosnippet>313</a>    view.validate_writable(status_ptr, api::syscall::IPC_STATUS_LEN).map_err(|<span class="kw">_</span>| Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#314 id=314 data-nosnippet>314</a>    <span class="kw">if </span>!data.is_empty() {
+<a href=#315 id=315 data-nosnippet>315</a>        view.validate_writable(reply_ptr, data.len()).map_err(|<span class="kw">_</span>| Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#316 id=316 data-nosnippet>316</a>        view.write_bytes(reply_ptr, data).map_err(|<span class="kw">_</span>| Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#317 id=317 data-nosnippet>317</a>    }
+<a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">let </span><span class="kw-2">mut </span>status = [<span class="number">0u8</span>; api::syscall::IPC_STATUS_LEN];
+<a href=#319 id=319 data-nosnippet>319</a>    status[..<span class="number">4</span>].copy_from_slice(<span class="kw-2">&amp;</span>api::syscall::IPC_STATUS_VERSION.to_le_bytes());
+<a href=#320 id=320 data-nosnippet>320</a>    status[<span class="number">4</span>..<span class="number">8</span>].copy_from_slice(<span class="kw-2">&amp;</span>kind.to_le_bytes());
+<a href=#321 id=321 data-nosnippet>321</a>    status[<span class="number">8</span>..<span class="number">12</span>].copy_from_slice(<span class="kw-2">&amp;</span>(data.len() <span class="kw">as </span>u32).to_le_bytes());
+<a href=#322 id=322 data-nosnippet>322</a>    view.write_bytes(status_ptr, <span class="kw-2">&amp;</span>status).map_err(|<span class="kw">_</span>| Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#323 id=323 data-nosnippet>323</a>    sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).unwrap().async_operations.remove(token);
+<a href=#324 id=324 data-nosnippet>324</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
 <a href=#325 id=325 data-nosnippet>325</a>}
 <a href=#326 id=326 data-nosnippet>326</a>
-<a href=#327 id=327 data-nosnippet>327</a><span class="doccomment">/// Complete queued requests tied to a provider being replaced. Called only
-<a href=#328 id=328 data-nosnippet>328</a>/// after the successful hot-swap commit, under SCHEDULER. The replacement
-<a href=#329 id=329 data-nosnippet>329</a>/// must not receive these wires because it is a different generation.
-<a href=#330 id=330 data-nosnippet>330</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>cutover_peer(sched: <span class="kw-2">&amp;mut </span>Scheduler, peer: usize, cell: u64, generation: u64) {
-<a href=#331 id=331 data-nosnippet>331</a>    <span class="kw">let </span><span class="kw-2">mut </span>after = <span class="number">0usize</span>;
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>((<span class="kw-2">&amp;</span>owner, <span class="kw">_</span>)) = sched.tasks.range(after..).next() {
-<a href=#333 id=333 data-nosnippet>333</a>        after = <span class="kw">match </span>owner.checked_add(<span class="number">1</span>) { <span class="prelude-val">Some</span>(next) =&gt; next, <span class="prelude-val">None </span>=&gt; <span class="kw">break </span>};
-<a href=#334 id=334 data-nosnippet>334</a>        <span class="kw">let </span>changed = <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner) {
-<a href=#335 id=335 data-nosnippet>335</a>            <span class="kw">let </span><span class="kw-2">mut </span>changed = <span class="bool-val">false</span>;
-<a href=#336 id=336 data-nosnippet>336</a>            <span class="kw">for </span>op <span class="kw">in </span><span class="kw-2">&amp;mut </span>task.async_operations.<span class="number">0 </span>{
-<a href=#337 id=337 data-nosnippet>337</a>                <span class="kw">if </span>op.peer_tid == peer &amp;&amp; op.peer_cell == cell &amp;&amp; op.peer_generation == generation
-<a href=#338 id=338 data-nosnippet>338</a>                    &amp;&amp; <span class="macro">matches!</span>(op.phase, Phase::Queued) {
-<a href=#339 id=339 data-nosnippet>339</a>                    op.phase = Phase::Terminal {
-<a href=#340 id=340 data-nosnippet>340</a>                        kind: api::syscall::ipc_status::PEER_GONE, len: <span class="number">0</span>,
-<a href=#341 id=341 data-nosnippet>341</a>                    };
-<a href=#342 id=342 data-nosnippet>342</a>                    changed = <span class="bool-val">true</span>;
-<a href=#343 id=343 data-nosnippet>343</a>                }
-<a href=#344 id=344 data-nosnippet>344</a>            }
-<a href=#345 id=345 data-nosnippet>345</a>            changed
-<a href=#346 id=346 data-nosnippet>346</a>        } <span class="kw">else </span>{ <span class="bool-val">false </span>};
-<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">if </span>changed { wake(sched, owner); }
-<a href=#348 id=348 data-nosnippet>348</a>    }
-<a href=#349 id=349 data-nosnippet>349</a>}
-<a href=#350 id=350 data-nosnippet>350</a>
-<a href=#351 id=351 data-nosnippet>351</a><span class="doccomment">/// Expire accepted work without allocating in the scheduler's timer sweep.
-<a href=#352 id=352 data-nosnippet>352</a>/// An undispatched request is removed from its peer mailbox before reporting
-<a href=#353 id=353 data-nosnippet>353</a>/// PreDispatchTimeout. A dispatched request is conservatively indeterminate.
-<a href=#354 id=354 data-nosnippet>354</a></span><span class="kw">pub fn </span>expire(sched: <span class="kw-2">&amp;mut </span>Scheduler, now: u64) {
-<a href=#355 id=355 data-nosnippet>355</a>    <span class="kw">let </span><span class="kw-2">mut </span>after = <span class="number">0usize</span>;
-<a href=#356 id=356 data-nosnippet>356</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>((<span class="kw-2">&amp;</span>owner, <span class="kw">_</span>)) = sched.tasks.range(after..).next() {
-<a href=#357 id=357 data-nosnippet>357</a>        after = <span class="kw">match </span>owner.checked_add(<span class="number">1</span>) { <span class="prelude-val">Some</span>(next) =&gt; next, <span class="prelude-val">None </span>=&gt; <span class="kw">break </span>};
-<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">for </span>index <span class="kw">in </span><span class="number">0</span>..MAX_OPERATIONS {
-<a href=#359 id=359 data-nosnippet>359</a>            <span class="kw">let </span>expired = {
-<a href=#360 id=360 data-nosnippet>360</a>                <span class="kw">let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner) <span class="kw">else </span>{ <span class="kw">break </span>};
-<a href=#361 id=361 data-nosnippet>361</a>                <span class="kw">let </span><span class="prelude-val">Some</span>(op) = task.async_operations.<span class="number">0</span>.get_mut(index) <span class="kw">else </span>{ <span class="kw">break </span>};
-<a href=#362 id=362 data-nosnippet>362</a>                <span class="kw">if </span>now &lt; op.deadline || <span class="macro">matches!</span>(op.phase, Phase::Terminal { .. }) {
-<a href=#363 id=363 data-nosnippet>363</a>                    <span class="prelude-val">None
-<a href=#364 id=364 data-nosnippet>364</a>                </span>} <span class="kw">else </span>{
-<a href=#365 id=365 data-nosnippet>365</a>                    <span class="kw">let </span>queued = <span class="macro">matches!</span>(op.phase, Phase::Queued);
-<a href=#366 id=366 data-nosnippet>366</a>                    op.phase = Phase::Terminal {
-<a href=#367 id=367 data-nosnippet>367</a>                        kind: <span class="kw">if </span>queued { api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT }
-<a href=#368 id=368 data-nosnippet>368</a>                            <span class="kw">else </span>{ api::syscall::ipc_status::INDETERMINATE },
-<a href=#369 id=369 data-nosnippet>369</a>                        len: <span class="number">0</span>,
-<a href=#370 id=370 data-nosnippet>370</a>                    };
-<a href=#371 id=371 data-nosnippet>371</a>                    <span class="prelude-val">Some</span>((op.id, op.peer_tid, queued))
-<a href=#372 id=372 data-nosnippet>372</a>                }
-<a href=#373 id=373 data-nosnippet>373</a>            };
-<a href=#374 id=374 data-nosnippet>374</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>((token, peer, queued)) = expired {
-<a href=#375 id=375 data-nosnippet>375</a>                <span class="kw">if </span>queued {
-<a href=#376 id=376 data-nosnippet>376</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>peer) {
-<a href=#377 id=377 data-nosnippet>377</a>                        <span class="kw">if let </span><span class="prelude-val">Some</span>(pos) = target.pending_msgs.iter().position(|msg|
-<a href=#378 id=378 data-nosnippet>378</a>                            msg.wire_header().is_some_and(|header| header.async_op == token)) {
-<a href=#379 id=379 data-nosnippet>379</a>                            target.pending_msgs.remove(pos);
-<a href=#380 id=380 data-nosnippet>380</a>                        }
-<a href=#381 id=381 data-nosnippet>381</a>                    }
-<a href=#382 id=382 data-nosnippet>382</a>                }
-<a href=#383 id=383 data-nosnippet>383</a>                wake(sched, owner);
-<a href=#384 id=384 data-nosnippet>384</a>            }
-<a href=#385 id=385 data-nosnippet>385</a>        }
-<a href=#386 id=386 data-nosnippet>386</a>    }
-<a href=#387 id=387 data-nosnippet>387</a>}
-<a href=#388 id=388 data-nosnippet>388</a><span class="attr">#[cfg(test)]
-<a href=#389 id=389 data-nosnippet>389</a></span><span class="kw">mod </span>tests {
-<a href=#390 id=390 data-nosnippet>390</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#391 id=391 data-nosnippet>391</a>    <span class="kw">fn </span>test_reply() -&gt; ipc_wire::IpcWireMessage {
-<a href=#392 id=392 data-nosnippet>392</a>        ipc_wire::IpcWireMessage::try_new(ipc_wire::IpcWireHeader {
-<a href=#393 id=393 data-nosnippet>393</a>            sender_tid: <span class="number">5</span>, sender_cell_id: <span class="number">2</span>, sender_generation: <span class="number">7</span>,
-<a href=#394 id=394 data-nosnippet>394</a>            delivery_id: <span class="number">0</span>, async_op: <span class="number">1</span>,
-<a href=#395 id=395 data-nosnippet>395</a>        }, <span class="kw-2">&amp;</span>[]).unwrap()
-<a href=#396 id=396 data-nosnippet>396</a>    }
-<a href=#397 id=397 data-nosnippet>397</a>    <span class="attr">#[test]
-<a href=#398 id=398 data-nosnippet>398</a>    </span><span class="kw">fn </span>bounded_tokens_and_terminal_retention() {
-<a href=#399 id=399 data-nosnippet>399</a>        <span class="kw">let </span><span class="kw-2">mut </span>ops = Operations::new();
-<a href=#400 id=400 data-nosnippet>400</a>        <span class="kw">for </span>id <span class="kw">in </span><span class="number">1</span>..=MAX_OPERATIONS {
-<a href=#401 id=401 data-nosnippet>401</a>            ops.push(Operation { id, peer_tid: <span class="number">5</span>, peer_cell: <span class="number">2</span>, peer_generation: <span class="number">7</span>,
-<a href=#402 id=402 data-nosnippet>402</a>                deadline: <span class="number">10</span>, phase: Phase::Dispatched, reply: test_reply() }).unwrap();
-<a href=#403 id=403 data-nosnippet>403</a>        }
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(ops.push(Operation { id: <span class="number">65</span>, peer_tid: <span class="number">5</span>, peer_cell: <span class="number">2</span>,
-<a href=#405 id=405 data-nosnippet>405</a>            peer_generation: <span class="number">7</span>, deadline: <span class="number">10</span>, phase: Phase::Queued, reply: test_reply() }), <span class="prelude-val">Err</span>(Failure::Busy)));
-<a href=#406 id=406 data-nosnippet>406</a>        <span class="macro">assert!</span>(!ops.peer_died(<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>), <span class="string">"new peer generation cannot close old operations"</span>);
-<a href=#407 id=407 data-nosnippet>407</a>        <span class="macro">assert!</span>(!ops.peer_died(<span class="number">6</span>, <span class="number">2</span>, <span class="number">7</span>), <span class="string">"unrelated peer cannot close operations"</span>);
-<a href=#408 id=408 data-nosnippet>408</a>        <span class="macro">assert!</span>(ops.peer_died(<span class="number">5</span>, <span class="number">2</span>, <span class="number">7</span>));
-<a href=#409 id=409 data-nosnippet>409</a>        <span class="macro">assert!</span>(ops.has_terminal());
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="macro">assert!</span>(!ops.peer_died(<span class="number">5</span>, <span class="number">2</span>, <span class="number">7</span>));
-<a href=#411 id=411 data-nosnippet>411</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(ops.remove(<span class="number">1</span>).unwrap().phase,
-<a href=#412 id=412 data-nosnippet>412</a>            Phase::Terminal { kind: api::syscall::ipc_status::PEER_GONE, .. }));
-<a href=#413 id=413 data-nosnippet>413</a>    }
-<a href=#414 id=414 data-nosnippet>414</a>    <span class="attr">#[test]
-<a href=#415 id=415 data-nosnippet>415</a>    </span><span class="kw">fn </span>deadline_retains_terminal_results_and_removes_only_queued_work() {
-<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">use </span>alloc::boxed::Box;
-<a href=#417 id=417 data-nosnippet>417</a>        <span class="kw">use </span>types::CellId;
-<a href=#418 id=418 data-nosnippet>418</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = Scheduler::new();
-<a href=#419 id=419 data-nosnippet>419</a>        <span class="kw">let </span><span class="kw-2">mut </span>owner = Box::new(Task::new(<span class="number">901</span>, CellId(<span class="number">2</span>), <span class="string">"async-owner"</span>, Vec::new()));
-<a href=#420 id=420 data-nosnippet>420</a>        <span class="kw">let </span><span class="kw-2">mut </span>peer = Box::new(Task::new(<span class="number">902</span>, CellId(<span class="number">3</span>), <span class="string">"async-peer"</span>, Vec::new()));
-<a href=#421 id=421 data-nosnippet>421</a>        owner.async_operations.push(Operation { id: <span class="number">11</span>, peer_tid: <span class="number">902</span>,
-<a href=#422 id=422 data-nosnippet>422</a>            peer_cell: <span class="number">3</span>, peer_generation: peer.cell_generation, deadline: <span class="number">10</span>,
-<a href=#423 id=423 data-nosnippet>423</a>            phase: Phase::Queued, reply: test_reply() }).unwrap();
-<a href=#424 id=424 data-nosnippet>424</a>        owner.async_operations.push(Operation { id: <span class="number">12</span>, peer_tid: <span class="number">902</span>,
-<a href=#425 id=425 data-nosnippet>425</a>            peer_cell: <span class="number">3</span>, peer_generation: peer.cell_generation, deadline: <span class="number">10</span>,
-<a href=#426 id=426 data-nosnippet>426</a>            phase: Phase::Dispatched, reply: test_reply() }).unwrap();
-<a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">let </span>header = ipc_wire::IpcWireHeader { sender_tid: <span class="number">901</span>, sender_cell_id: <span class="number">2</span>,
-<a href=#428 id=428 data-nosnippet>428</a>            sender_generation: owner.cell_generation, delivery_id: <span class="number">44</span>, async_op: <span class="number">11 </span>};
-<a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">super</span>::<span class="kw">super</span>::queue_wire_msg(<span class="kw-2">&amp;mut </span>peer,
-<a href=#430 id=430 data-nosnippet>430</a>            ipc_wire::IpcWireMessage::try_new(header, <span class="string">b"queued"</span>).unwrap(), <span class="number">64</span>).unwrap();
-<a href=#431 id=431 data-nosnippet>431</a>        sched.tasks.insert(<span class="number">901</span>, owner);
-<a href=#432 id=432 data-nosnippet>432</a>        sched.tasks.insert(<span class="number">902</span>, peer);
-<a href=#433 id=433 data-nosnippet>433</a>        expire(<span class="kw-2">&amp;mut </span>sched, <span class="number">9</span>);
-<a href=#434 id=434 data-nosnippet>434</a>        <span class="macro">assert_eq!</span>(sched.tasks.get(<span class="kw-2">&amp;</span><span class="number">902</span>).unwrap().pending_msgs.len(), <span class="number">1</span>);
-<a href=#435 id=435 data-nosnippet>435</a>        expire(<span class="kw-2">&amp;mut </span>sched, <span class="number">10</span>);
-<a href=#436 id=436 data-nosnippet>436</a>        <span class="macro">assert!</span>(sched.tasks.get(<span class="kw-2">&amp;</span><span class="number">902</span>).unwrap().pending_msgs.is_empty());
-<a href=#437 id=437 data-nosnippet>437</a>        <span class="kw">let </span>operations = <span class="kw-2">&amp;</span>sched.tasks.get(<span class="kw-2">&amp;</span><span class="number">901</span>).unwrap().async_operations;
-<a href=#438 id=438 data-nosnippet>438</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(operations.find(<span class="number">11</span>).unwrap().phase,
-<a href=#439 id=439 data-nosnippet>439</a>            Phase::Terminal { kind: api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT, .. }));
-<a href=#440 id=440 data-nosnippet>440</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(operations.find(<span class="number">12</span>).unwrap().phase,
-<a href=#441 id=441 data-nosnippet>441</a>            Phase::Terminal { kind: api::syscall::ipc_status::INDETERMINATE, .. }));
-<a href=#442 id=442 data-nosnippet>442</a>        <span class="macro">assert_eq!</span>(operations.len(), <span class="number">2</span>, <span class="string">"terminal results remain until take"</span>);
-<a href=#443 id=443 data-nosnippet>443</a>        expire(<span class="kw-2">&amp;mut </span>sched, <span class="number">11</span>);
-<a href=#444 id=444 data-nosnippet>444</a>        <span class="macro">assert_eq!</span>(sched.tasks.get(<span class="kw-2">&amp;</span><span class="number">901</span>).unwrap().async_operations.len(), <span class="number">2</span>);
-<a href=#445 id=445 data-nosnippet>445</a>    }
-<a href=#446 id=446 data-nosnippet>446</a>}
+<a href=#327 id=327 data-nosnippet>327</a><span class="kw">pub fn </span>wait(owner: usize, ticks: u64) -&gt; <span class="prelude-ty">Result</span>&lt;bool, Failure&gt; {
+<a href=#328 id=328 data-nosnippet>328</a>    <span class="kw">let </span>deadline = (ticks != <span class="number">0</span>).then(|| (<span class="kw">super</span>::system_ticks() <span class="kw">as </span>u64).saturating_add(ticks));
+<a href=#329 id=329 data-nosnippet>329</a>    {
+<a href=#330 id=330 data-nosnippet>330</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = SCHEDULER.lock();
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">let </span>sched = guard.as_mut().ok_or(Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="kw">let </span>task = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).filter(|task| live(task)).ok_or(Failure::Invalid)<span class="question-mark">?</span>;
+<a href=#333 id=333 data-nosnippet>333</a>        <span class="kw">if </span>task.async_operations.has_terminal() { <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>); }
+<a href=#334 id=334 data-nosnippet>334</a>        <span class="kw">super</span>::arm_ipc_block_handoff(owner);
+<a href=#335 id=335 data-nosnippet>335</a>        task.state = TaskState::WaitIpc { deadline };
+<a href=#336 id=336 data-nosnippet>336</a>    }
+<a href=#337 id=337 data-nosnippet>337</a>    <span class="kw">super</span>::yield_cpu();
+<a href=#338 id=338 data-nosnippet>338</a>    <span class="kw">let </span>guard = SCHEDULER.lock();
+<a href=#339 id=339 data-nosnippet>339</a>    <span class="prelude-val">Ok</span>(guard.as_ref().and_then(|s| s.tasks.get(<span class="kw-2">&amp;</span>owner))
+<a href=#340 id=340 data-nosnippet>340</a>        .is_some_and(|task| task.async_operations.has_terminal()))
+<a href=#341 id=341 data-nosnippet>341</a>}
+<a href=#342 id=342 data-nosnippet>342</a>
+<a href=#343 id=343 data-nosnippet>343</a><span class="doccomment">/// Peer death is an infallible terminal transition; storage was reserved on submit.
+<a href=#344 id=344 data-nosnippet>344</a></span><span class="kw">pub fn </span>peer_died(sched: <span class="kw-2">&amp;mut </span>Scheduler, peer: usize, cell: u64, generation: u64) {
+<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">let </span><span class="kw-2">mut </span>after = <span class="number">0usize</span>;
+<a href=#346 id=346 data-nosnippet>346</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>((<span class="kw-2">&amp;</span>owner, <span class="kw">_</span>)) = sched.tasks.range(after..).next() {
+<a href=#347 id=347 data-nosnippet>347</a>        after = <span class="kw">match </span>owner.checked_add(<span class="number">1</span>) { <span class="prelude-val">Some</span>(next) =&gt; next, <span class="prelude-val">None </span>=&gt; <span class="kw">break </span>};
+<a href=#348 id=348 data-nosnippet>348</a>        <span class="kw">if </span>sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).is_some_and(|task|
+<a href=#349 id=349 data-nosnippet>349</a>            task.async_operations.peer_died(peer, cell, generation)) {
+<a href=#350 id=350 data-nosnippet>350</a>            wake(sched, owner);
+<a href=#351 id=351 data-nosnippet>351</a>        }
+<a href=#352 id=352 data-nosnippet>352</a>    }
+<a href=#353 id=353 data-nosnippet>353</a>}
+<a href=#354 id=354 data-nosnippet>354</a>
+<a href=#355 id=355 data-nosnippet>355</a><span class="doccomment">/// Drop queued requests from an owner whose task generation has exited.
+<a href=#356 id=356 data-nosnippet>356</a>/// Dispatched requests retain their service-side grant lease until the
+<a href=#357 id=357 data-nosnippet>357</a>/// service's existing reply/next-public-receive cleanup boundary.
+<a href=#358 id=358 data-nosnippet>358</a></span><span class="kw">pub fn </span>owner_died(sched: <span class="kw-2">&amp;mut </span>Scheduler, owner: usize, cell: u64, generation: u64) {
+<a href=#359 id=359 data-nosnippet>359</a>    <span class="kw">for </span>task <span class="kw">in </span>sched.tasks.values_mut() {
+<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span><span class="kw-2">mut </span>index = <span class="number">0</span>;
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">while </span>index &lt; task.pending_msgs.len() {
+<a href=#362 id=362 data-nosnippet>362</a>            <span class="kw">let </span>queued = task.pending_msgs.as_slice()[index].wire_header()
+<a href=#363 id=363 data-nosnippet>363</a>                .is_some_and(|header| header.async_op != <span class="number">0
+<a href=#364 id=364 data-nosnippet>364</a>                    </span>&amp;&amp; header.sender_tid == owner
+<a href=#365 id=365 data-nosnippet>365</a>                    &amp;&amp; header.sender_cell_id == cell
+<a href=#366 id=366 data-nosnippet>366</a>                    &amp;&amp; header.sender_generation == generation);
+<a href=#367 id=367 data-nosnippet>367</a>            <span class="kw">if </span>queued { task.pending_msgs.remove(index); } <span class="kw">else </span>{ index += <span class="number">1</span>; }
+<a href=#368 id=368 data-nosnippet>368</a>        }
+<a href=#369 id=369 data-nosnippet>369</a>    }
+<a href=#370 id=370 data-nosnippet>370</a>}
+<a href=#371 id=371 data-nosnippet>371</a>
+<a href=#372 id=372 data-nosnippet>372</a><span class="doccomment">/// Complete queued requests tied to a provider being replaced. Called only
+<a href=#373 id=373 data-nosnippet>373</a>/// after the successful hot-swap commit, under SCHEDULER. The replacement
+<a href=#374 id=374 data-nosnippet>374</a>/// must not receive these wires because it is a different generation.
+<a href=#375 id=375 data-nosnippet>375</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>cutover_peer(sched: <span class="kw-2">&amp;mut </span>Scheduler, peer: usize, cell: u64, generation: u64) {
+<a href=#376 id=376 data-nosnippet>376</a>    <span class="kw">let </span><span class="kw-2">mut </span>after = <span class="number">0usize</span>;
+<a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>((<span class="kw-2">&amp;</span>owner, <span class="kw">_</span>)) = sched.tasks.range(after..).next() {
+<a href=#378 id=378 data-nosnippet>378</a>        after = <span class="kw">match </span>owner.checked_add(<span class="number">1</span>) { <span class="prelude-val">Some</span>(next) =&gt; next, <span class="prelude-val">None </span>=&gt; <span class="kw">break </span>};
+<a href=#379 id=379 data-nosnippet>379</a>        <span class="kw">let </span>changed = <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner) {
+<a href=#380 id=380 data-nosnippet>380</a>            <span class="kw">let </span><span class="kw-2">mut </span>changed = <span class="bool-val">false</span>;
+<a href=#381 id=381 data-nosnippet>381</a>            <span class="kw">for </span>op <span class="kw">in </span><span class="kw-2">&amp;mut </span>task.async_operations.<span class="number">0 </span>{
+<a href=#382 id=382 data-nosnippet>382</a>                <span class="kw">if </span>op.peer_tid == peer &amp;&amp; op.peer_cell == cell &amp;&amp; op.peer_generation == generation
+<a href=#383 id=383 data-nosnippet>383</a>                    &amp;&amp; <span class="macro">matches!</span>(op.phase, Phase::Queued) {
+<a href=#384 id=384 data-nosnippet>384</a>                    op.phase = Phase::Terminal {
+<a href=#385 id=385 data-nosnippet>385</a>                        kind: api::syscall::ipc_status::PEER_GONE, len: <span class="number">0</span>,
+<a href=#386 id=386 data-nosnippet>386</a>                    };
+<a href=#387 id=387 data-nosnippet>387</a>                    changed = <span class="bool-val">true</span>;
+<a href=#388 id=388 data-nosnippet>388</a>                }
+<a href=#389 id=389 data-nosnippet>389</a>            }
+<a href=#390 id=390 data-nosnippet>390</a>            changed
+<a href=#391 id=391 data-nosnippet>391</a>        } <span class="kw">else </span>{ <span class="bool-val">false </span>};
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">if </span>changed { wake(sched, owner); }
+<a href=#393 id=393 data-nosnippet>393</a>    }
+<a href=#394 id=394 data-nosnippet>394</a>}
+<a href=#395 id=395 data-nosnippet>395</a>
+<a href=#396 id=396 data-nosnippet>396</a><span class="doccomment">/// Expire accepted work without allocating in the scheduler's timer sweep.
+<a href=#397 id=397 data-nosnippet>397</a>/// An undispatched request is removed from its peer mailbox before reporting
+<a href=#398 id=398 data-nosnippet>398</a>/// PreDispatchTimeout. A dispatched request is conservatively indeterminate.
+<a href=#399 id=399 data-nosnippet>399</a></span><span class="kw">pub fn </span>expire(sched: <span class="kw-2">&amp;mut </span>Scheduler, now: u64) {
+<a href=#400 id=400 data-nosnippet>400</a>    <span class="kw">let </span><span class="kw-2">mut </span>after = <span class="number">0usize</span>;
+<a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>((<span class="kw-2">&amp;</span>owner, <span class="kw">_</span>)) = sched.tasks.range(after..).next() {
+<a href=#402 id=402 data-nosnippet>402</a>        after = <span class="kw">match </span>owner.checked_add(<span class="number">1</span>) { <span class="prelude-val">Some</span>(next) =&gt; next, <span class="prelude-val">None </span>=&gt; <span class="kw">break </span>};
+<a href=#403 id=403 data-nosnippet>403</a>        <span class="kw">for </span>index <span class="kw">in </span><span class="number">0</span>..MAX_OPERATIONS {
+<a href=#404 id=404 data-nosnippet>404</a>            <span class="kw">let </span>expired = {
+<a href=#405 id=405 data-nosnippet>405</a>                <span class="kw">let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner) <span class="kw">else </span>{ <span class="kw">break </span>};
+<a href=#406 id=406 data-nosnippet>406</a>                <span class="kw">let </span><span class="prelude-val">Some</span>(op) = task.async_operations.<span class="number">0</span>.get_mut(index) <span class="kw">else </span>{ <span class="kw">break </span>};
+<a href=#407 id=407 data-nosnippet>407</a>                <span class="kw">if </span>now &lt; op.deadline || <span class="macro">matches!</span>(op.phase, Phase::Terminal { .. }) {
+<a href=#408 id=408 data-nosnippet>408</a>                    <span class="prelude-val">None
+<a href=#409 id=409 data-nosnippet>409</a>                </span>} <span class="kw">else </span>{
+<a href=#410 id=410 data-nosnippet>410</a>                    <span class="kw">let </span>queued = <span class="macro">matches!</span>(op.phase, Phase::Queued);
+<a href=#411 id=411 data-nosnippet>411</a>                    op.phase = Phase::Terminal {
+<a href=#412 id=412 data-nosnippet>412</a>                        kind: <span class="kw">if </span>queued { api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT }
+<a href=#413 id=413 data-nosnippet>413</a>                            <span class="kw">else </span>{ api::syscall::ipc_status::INDETERMINATE },
+<a href=#414 id=414 data-nosnippet>414</a>                        len: <span class="number">0</span>,
+<a href=#415 id=415 data-nosnippet>415</a>                    };
+<a href=#416 id=416 data-nosnippet>416</a>                    <span class="prelude-val">Some</span>((op.id, op.peer_tid, queued))
+<a href=#417 id=417 data-nosnippet>417</a>                }
+<a href=#418 id=418 data-nosnippet>418</a>            };
+<a href=#419 id=419 data-nosnippet>419</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>((token, peer, queued)) = expired {
+<a href=#420 id=420 data-nosnippet>420</a>                <span class="kw">if </span>queued {
+<a href=#421 id=421 data-nosnippet>421</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>peer) {
+<a href=#422 id=422 data-nosnippet>422</a>                        <span class="kw">if let </span><span class="prelude-val">Some</span>(pos) = target.pending_msgs.iter().position(|msg|
+<a href=#423 id=423 data-nosnippet>423</a>                            msg.wire_header().is_some_and(|header| header.async_op == token)) {
+<a href=#424 id=424 data-nosnippet>424</a>                            target.pending_msgs.remove(pos);
+<a href=#425 id=425 data-nosnippet>425</a>                        }
+<a href=#426 id=426 data-nosnippet>426</a>                    }
+<a href=#427 id=427 data-nosnippet>427</a>                }
+<a href=#428 id=428 data-nosnippet>428</a>                wake(sched, owner);
+<a href=#429 id=429 data-nosnippet>429</a>            }
+<a href=#430 id=430 data-nosnippet>430</a>        }
+<a href=#431 id=431 data-nosnippet>431</a>    }
+<a href=#432 id=432 data-nosnippet>432</a>}
+<a href=#433 id=433 data-nosnippet>433</a><span class="attr">#[cfg(test)]
+<a href=#434 id=434 data-nosnippet>434</a></span><span class="kw">mod </span>tests {
+<a href=#435 id=435 data-nosnippet>435</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#436 id=436 data-nosnippet>436</a>    <span class="kw">fn </span>test_reply() -&gt; ipc_wire::IpcWireMessage {
+<a href=#437 id=437 data-nosnippet>437</a>        ipc_wire::IpcWireMessage::try_new(ipc_wire::IpcWireHeader {
+<a href=#438 id=438 data-nosnippet>438</a>            sender_tid: <span class="number">5</span>, sender_cell_id: <span class="number">2</span>, sender_generation: <span class="number">7</span>,
+<a href=#439 id=439 data-nosnippet>439</a>            delivery_id: <span class="number">0</span>, async_op: <span class="number">1</span>,
+<a href=#440 id=440 data-nosnippet>440</a>        }, <span class="kw-2">&amp;</span>[]).unwrap()
+<a href=#441 id=441 data-nosnippet>441</a>    }
+<a href=#442 id=442 data-nosnippet>442</a>    <span class="attr">#[test]
+<a href=#443 id=443 data-nosnippet>443</a>    </span><span class="kw">fn </span>bounded_tokens_and_terminal_retention() {
+<a href=#444 id=444 data-nosnippet>444</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = fixture();
+<a href=#445 id=445 data-nosnippet>445</a>        <span class="kw">for </span>id <span class="kw">in </span><span class="number">1</span>..=MAX_OPERATIONS {
+<a href=#446 id=446 data-nosnippet>446</a>            add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, id, Phase::Dispatched);
+<a href=#447 id=447 data-nosnippet>447</a>        }
+<a href=#448 id=448 data-nosnippet>448</a>        <span class="kw">let </span>overflow = || Operation {
+<a href=#449 id=449 data-nosnippet>449</a>            id: MAX_OPERATIONS + <span class="number">1</span>, owner_cell: <span class="number">1_002</span>, owner_generation: <span class="number">3</span>,
+<a href=#450 id=450 data-nosnippet>450</a>            peer_tid: PROVIDER, peer_cell: <span class="number">1_003</span>, peer_generation: <span class="number">7</span>,
+<a href=#451 id=451 data-nosnippet>451</a>            deadline: <span class="number">10</span>, phase: Phase::Queued, reply: test_reply(),
+<a href=#452 id=452 data-nosnippet>452</a>        };
+<a href=#453 id=453 data-nosnippet>453</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.len(), MAX_OPERATIONS);
+<a href=#454 id=454 data-nosnippet>454</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().async_operations.push(overflow()),
+<a href=#455 id=455 data-nosnippet>455</a>            <span class="prelude-val">Err</span>(Failure::Busy)));
+<a href=#456 id=456 data-nosnippet>456</a>        peer_died(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">1_003</span>, <span class="number">8</span>);
+<a href=#457 id=457 data-nosnippet>457</a>        peer_died(<span class="kw-2">&amp;mut </span>sched, WORKER, <span class="number">1_003</span>, <span class="number">7</span>);
+<a href=#458 id=458 data-nosnippet>458</a>        <span class="macro">assert!</span>(!sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.has_terminal(),
+<a href=#459 id=459 data-nosnippet>459</a>            <span class="string">"only the accepted provider incarnation can terminate these operations"</span>);
+<a href=#460 id=460 data-nosnippet>460</a>        peer_died(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">1_003</span>, <span class="number">7</span>);
+<a href=#461 id=461 data-nosnippet>461</a>        <span class="macro">assert!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.<span class="number">0</span>.iter().all(|op|
+<a href=#462 id=462 data-nosnippet>462</a>            <span class="macro">matches!</span>(op.phase, Phase::Terminal { kind: api::syscall::ipc_status::PEER_GONE, len: <span class="number">0 </span>})));
+<a href=#463 id=463 data-nosnippet>463</a>        expire(<span class="kw-2">&amp;mut </span>sched, u64::MAX);
+<a href=#464 id=464 data-nosnippet>464</a>        cancel_in_sched(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="number">1</span>).unwrap();
+<a href=#465 id=465 data-nosnippet>465</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().async_operations.push(overflow()),
+<a href=#466 id=466 data-nosnippet>466</a>            <span class="prelude-val">Err</span>(Failure::Busy)), <span class="string">"terminal results still charge the full quota"</span>);
+<a href=#467 id=467 data-nosnippet>467</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.len(), MAX_OPERATIONS);
+<a href=#468 id=468 data-nosnippet>468</a>        <span class="macro">assert!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].pending_msgs.is_empty());
+<a href=#469 id=469 data-nosnippet>469</a>        <span class="comment">// Exercise the storage release performed only after a successful take.
+<a href=#470 id=470 data-nosnippet>470</a>        </span><span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().async_operations.remove(<span class="number">1</span>).unwrap().phase,
+<a href=#471 id=471 data-nosnippet>471</a>            Phase::Terminal { kind: api::syscall::ipc_status::PEER_GONE, len: <span class="number">0 </span>}));
+<a href=#472 id=472 data-nosnippet>472</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, MAX_OPERATIONS + <span class="number">1</span>, Phase::Dispatched);
+<a href=#473 id=473 data-nosnippet>473</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.len(), MAX_OPERATIONS);
+<a href=#474 id=474 data-nosnippet>474</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Err</span>(Failure::Invalid));
+<a href=#475 id=475 data-nosnippet>475</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(MAX_OPERATIONS + <span class="number">1</span>).unwrap().phase,
+<a href=#476 id=476 data-nosnippet>476</a>            Phase::Dispatched), <span class="string">"a retired token cannot alias the reused reservation"</span>);
+<a href=#477 id=477 data-nosnippet>477</a>    }
+<a href=#478 id=478 data-nosnippet>478</a>    <span class="attr">#[test]
+<a href=#479 id=479 data-nosnippet>479</a>    </span><span class="kw">fn </span>deadline_retains_terminal_results_and_removes_only_queued_work() {
+<a href=#480 id=480 data-nosnippet>480</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = fixture();
+<a href=#481 id=481 data-nosnippet>481</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">11</span>, Phase::Queued);
+<a href=#482 id=482 data-nosnippet>482</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">12</span>, Phase::Queued);
+<a href=#483 id=483 data-nosnippet>483</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">13</span>, Phase::Queued);
+<a href=#484 id=484 data-nosnippet>484</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().async_operations.find_mut(<span class="number">13</span>).unwrap().deadline = <span class="number">11</span>;
+<a href=#485 id=485 data-nosnippet>485</a>        <span class="kw">let </span>header = ipc_wire::IpcWireHeader {
+<a href=#486 id=486 data-nosnippet>486</a>            sender_tid: OWNER, sender_cell_id: <span class="number">1_002</span>, sender_generation: <span class="number">3</span>,
+<a href=#487 id=487 data-nosnippet>487</a>            delivery_id: <span class="number">44</span>, async_op: <span class="number">11</span>,
+<a href=#488 id=488 data-nosnippet>488</a>        };
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw">for </span>(token, payload) <span class="kw">in </span>[(<span class="number">11</span>, <span class="string">b"due"</span>.as_slice()), (<span class="number">0</span>, <span class="string">b"raw"</span>.as_slice()),
+<a href=#490 id=490 data-nosnippet>490</a>            (<span class="number">13</span>, <span class="string">b"later"</span>.as_slice())] {
+<a href=#491 id=491 data-nosnippet>491</a>            <span class="kw">super</span>::<span class="kw">super</span>::queue_wire_msg(sched.tasks.get_mut(<span class="kw-2">&amp;</span>PROVIDER).unwrap(),
+<a href=#492 id=492 data-nosnippet>492</a>                ipc_wire::IpcWireMessage::try_new(
+<a href=#493 id=493 data-nosnippet>493</a>                    ipc_wire::IpcWireHeader { async_op: token, ..header }, payload).unwrap(), <span class="number">64</span>).unwrap();
+<a href=#494 id=494 data-nosnippet>494</a>        }
+<a href=#495 id=495 data-nosnippet>495</a>        dispatch(<span class="kw-2">&amp;mut </span>sched, PROVIDER, ipc_wire::IpcWireHeader { async_op: <span class="number">12</span>, ..header });
+<a href=#496 id=496 data-nosnippet>496</a>        serve(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">12</span>);
+<a href=#497 id=497 data-nosnippet>497</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().state = TaskState::WaitIpc { deadline: <span class="prelude-val">None </span>};
+<a href=#498 id=498 data-nosnippet>498</a>        expire(<span class="kw-2">&amp;mut </span>sched, <span class="number">9</span>);
+<a href=#499 id=499 data-nosnippet>499</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].state, TaskState::WaitIpc { .. }));
+<a href=#500 id=500 data-nosnippet>500</a>        <span class="macro">assert!</span>(!sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.has_terminal());
+<a href=#501 id=501 data-nosnippet>501</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase, Phase::Queued));
+<a href=#502 id=502 data-nosnippet>502</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">12</span>).unwrap().phase, Phase::Dispatched));
+<a href=#503 id=503 data-nosnippet>503</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].pending_msgs.len(), <span class="number">3</span>);
+<a href=#504 id=504 data-nosnippet>504</a>        expire(<span class="kw-2">&amp;mut </span>sched, <span class="number">10</span>);
+<a href=#505 id=505 data-nosnippet>505</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].state, TaskState::Ready));
+<a href=#506 id=506 data-nosnippet>506</a>        <span class="kw">super</span>::<span class="kw">super</span>::hart_local::ready::remove_from_all(OWNER);
+<a href=#507 id=507 data-nosnippet>507</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase,
+<a href=#508 id=508 data-nosnippet>508</a>            Phase::Terminal { kind: api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT, len: <span class="number">0 </span>}));
+<a href=#509 id=509 data-nosnippet>509</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">12</span>).unwrap().phase,
+<a href=#510 id=510 data-nosnippet>510</a>            Phase::Terminal { kind: api::syscall::ipc_status::INDETERMINATE, len: <span class="number">0 </span>}));
+<a href=#511 id=511 data-nosnippet>511</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">13</span>).unwrap().phase, Phase::Queued));
+<a href=#512 id=512 data-nosnippet>512</a>        <span class="kw">let </span>remaining = sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].pending_msgs.as_slice();
+<a href=#513 id=513 data-nosnippet>513</a>        <span class="macro">assert_eq!</span>(remaining.len(), <span class="number">2</span>);
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="macro">assert_eq!</span>(remaining[<span class="number">0</span>].wire_header().unwrap().async_op, <span class="number">0</span>);
+<a href=#515 id=515 data-nosnippet>515</a>        <span class="macro">assert_eq!</span>(remaining[<span class="number">1</span>].wire_header().unwrap().async_op, <span class="number">13</span>);
+<a href=#516 id=516 data-nosnippet>516</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].current_caller, <span class="prelude-val">Some</span>(OWNER));
+<a href=#517 id=517 data-nosnippet>517</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].current_async_op, <span class="number">12</span>,
+<a href=#518 id=518 data-nosnippet>518</a>            <span class="string">"expiry cannot release a dispatched service context"</span>);
+<a href=#519 id=519 data-nosnippet>519</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#520 id=520 data-nosnippet>520</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">11</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Err</span>(Failure::Invalid));
+<a href=#521 id=521 data-nosnippet>521</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">12</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Err</span>(Failure::Invalid));
+<a href=#522 id=522 data-nosnippet>522</a>        cancel_in_sched(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="number">11</span>).unwrap();
+<a href=#523 id=523 data-nosnippet>523</a>        cancel_in_sched(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="number">12</span>).unwrap();
+<a href=#524 id=524 data-nosnippet>524</a>        expire(<span class="kw-2">&amp;mut </span>sched, <span class="number">11</span>);
+<a href=#525 id=525 data-nosnippet>525</a>        peer_died(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">1_003</span>, <span class="number">7</span>);
+<a href=#526 id=526 data-nosnippet>526</a>        expire(<span class="kw-2">&amp;mut </span>sched, u64::MAX);
+<a href=#527 id=527 data-nosnippet>527</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase,
+<a href=#528 id=528 data-nosnippet>528</a>            Phase::Terminal { kind: api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT, len: <span class="number">0 </span>}));
+<a href=#529 id=529 data-nosnippet>529</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">12</span>).unwrap().phase,
+<a href=#530 id=530 data-nosnippet>530</a>            Phase::Terminal { kind: api::syscall::ipc_status::INDETERMINATE, len: <span class="number">0 </span>}));
+<a href=#531 id=531 data-nosnippet>531</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">13</span>).unwrap().phase,
+<a href=#532 id=532 data-nosnippet>532</a>            Phase::Terminal { kind: api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT, len: <span class="number">0 </span>}));
+<a href=#533 id=533 data-nosnippet>533</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.len(), <span class="number">3</span>, <span class="string">"expiry never consumes a result"</span>);
+<a href=#534 id=534 data-nosnippet>534</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].pending_msgs.len(), <span class="number">1</span>);
+<a href=#535 id=535 data-nosnippet>535</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].pending_msgs.as_slice()[<span class="number">0</span>].wire_header().unwrap().async_op, <span class="number">0</span>);
+<a href=#536 id=536 data-nosnippet>536</a>        <span class="macro">assert!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].pending_msgs.is_empty(), <span class="string">"late replies cannot become raw events"</span>);
+<a href=#537 id=537 data-nosnippet>537</a>    }
+<a href=#538 id=538 data-nosnippet>538</a>
+<a href=#539 id=539 data-nosnippet>539</a>    <span class="kw">const </span>OWNER: usize = <span class="number">71_101</span>;
+<a href=#540 id=540 data-nosnippet>540</a>    <span class="kw">const </span>PROVIDER: usize = <span class="number">71_102</span>;
+<a href=#541 id=541 data-nosnippet>541</a>    <span class="kw">const </span>WORKER: usize = <span class="number">71_103</span>;
+<a href=#542 id=542 data-nosnippet>542</a>    <span class="kw">const </span>FOREIGN_GENERATION: usize = <span class="number">71_104</span>;
+<a href=#543 id=543 data-nosnippet>543</a>    <span class="kw">const </span>FOREIGN_CELL: usize = <span class="number">71_105</span>;
+<a href=#544 id=544 data-nosnippet>544</a>
+<a href=#545 id=545 data-nosnippet>545</a>    <span class="kw">fn </span>fixture() -&gt; Scheduler {
+<a href=#546 id=546 data-nosnippet>546</a>        <span class="kw">use </span>alloc::boxed::Box;
+<a href=#547 id=547 data-nosnippet>547</a>        <span class="kw">use </span>types::CellId;
+<a href=#548 id=548 data-nosnippet>548</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = Scheduler::new();
+<a href=#549 id=549 data-nosnippet>549</a>        <span class="kw">for </span>(tid, cell, generation) <span class="kw">in </span>[
+<a href=#550 id=550 data-nosnippet>550</a>            (OWNER, <span class="number">1_002</span>, <span class="number">3</span>), (PROVIDER, <span class="number">1_003</span>, <span class="number">7</span>), (WORKER, <span class="number">1_003</span>, <span class="number">7</span>),
+<a href=#551 id=551 data-nosnippet>551</a>            (FOREIGN_GENERATION, <span class="number">1_003</span>, <span class="number">8</span>), (FOREIGN_CELL, <span class="number">1_004</span>, <span class="number">7</span>),
+<a href=#552 id=552 data-nosnippet>552</a>        ] {
+<a href=#553 id=553 data-nosnippet>553</a>            <span class="kw">let </span><span class="kw-2">mut </span>task = Box::new(Task::new(tid, CellId(cell), <span class="string">"async-fixture"</span>, Vec::new()));
+<a href=#554 id=554 data-nosnippet>554</a>            task.cell_generation = generation;
+<a href=#555 id=555 data-nosnippet>555</a>            sched.tasks.insert(tid, task);
+<a href=#556 id=556 data-nosnippet>556</a>        }
+<a href=#557 id=557 data-nosnippet>557</a>        sched
+<a href=#558 id=558 data-nosnippet>558</a>    }
+<a href=#559 id=559 data-nosnippet>559</a>
+<a href=#560 id=560 data-nosnippet>560</a>    <span class="kw">fn </span>add_operation(sched: <span class="kw-2">&amp;mut </span>Scheduler, owner: usize, peer: usize, id: usize, phase: Phase) {
+<a href=#561 id=561 data-nosnippet>561</a>        <span class="kw">let </span>provider = sched.tasks.get(<span class="kw-2">&amp;</span>peer).unwrap();
+<a href=#562 id=562 data-nosnippet>562</a>        <span class="kw">let </span>(peer_cell, peer_generation) = (provider.cell_id.<span class="number">0</span>, provider.cell_generation);
+<a href=#563 id=563 data-nosnippet>563</a>        <span class="kw">let </span>task = sched.tasks.get_mut(<span class="kw-2">&amp;</span>owner).unwrap();
+<a href=#564 id=564 data-nosnippet>564</a>        task.async_operations.push(Operation {
+<a href=#565 id=565 data-nosnippet>565</a>            id, owner_cell: task.cell_id.<span class="number">0</span>, owner_generation: task.cell_generation,
+<a href=#566 id=566 data-nosnippet>566</a>            peer_tid: peer, peer_cell, peer_generation, deadline: <span class="number">10</span>,
+<a href=#567 id=567 data-nosnippet>567</a>            phase, reply: test_reply(),
+<a href=#568 id=568 data-nosnippet>568</a>        }).unwrap();
+<a href=#569 id=569 data-nosnippet>569</a>    }
+<a href=#570 id=570 data-nosnippet>570</a>
+<a href=#571 id=571 data-nosnippet>571</a>    <span class="kw">fn </span>serve(sched: <span class="kw-2">&amp;mut </span>Scheduler, peer: usize, owner: usize, token: usize) {
+<a href=#572 id=572 data-nosnippet>572</a>        <span class="kw">let </span>task = sched.tasks.get(<span class="kw-2">&amp;</span>owner).unwrap();
+<a href=#573 id=573 data-nosnippet>573</a>        <span class="kw">let </span>(cell, generation) = (task.cell_id.<span class="number">0</span>, task.cell_generation);
+<a href=#574 id=574 data-nosnippet>574</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>peer).unwrap()
+<a href=#575 id=575 data-nosnippet>575</a>            .set_received_request_context(owner, cell, generation, token);
+<a href=#576 id=576 data-nosnippet>576</a>    }
+<a href=#577 id=577 data-nosnippet>577</a>
+<a href=#578 id=578 data-nosnippet>578</a>    <span class="attr">#[test]
+<a href=#579 id=579 data-nosnippet>579</a>    </span><span class="kw">fn </span>immediate_bridge_settles_only_served_token_and_preserves_reply() {
+<a href=#580 id=580 data-nosnippet>580</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = fixture();
+<a href=#581 id=581 data-nosnippet>581</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">11</span>, Phase::Dispatched);
+<a href=#582 id=582 data-nosnippet>582</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">12</span>, Phase::Dispatched);
+<a href=#583 id=583 data-nosnippet>583</a>        serve(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">11</span>);
+<a href=#584 id=584 data-nosnippet>584</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, WORKER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">None</span>);
+<a href=#585 id=585 data-nosnippet>585</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#586 id=586 data-nosnippet>586</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase,
+<a href=#587 id=587 data-nosnippet>587</a>            Phase::Terminal { kind: api::syscall::ipc_status::REPLY, .. }));
+<a href=#588 id=588 data-nosnippet>588</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">12</span>).unwrap().phase,
+<a href=#589 id=589 data-nosnippet>589</a>            Phase::Dispatched));
+<a href=#590 id=590 data-nosnippet>590</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#591 id=591 data-nosnippet>591</a>        cancel_in_sched(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="number">11</span>).unwrap();
+<a href=#592 id=592 data-nosnippet>592</a>        peer_died(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">1_003</span>, <span class="number">7</span>);
+<a href=#593 id=593 data-nosnippet>593</a>        expire(<span class="kw-2">&amp;mut </span>sched, <span class="number">100</span>);
+<a href=#594 id=594 data-nosnippet>594</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase,
+<a href=#595 id=595 data-nosnippet>595</a>            Phase::Terminal { kind: api::syscall::ipc_status::REPLY, .. }));
+<a href=#596 id=596 data-nosnippet>596</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">12</span>).unwrap().phase,
+<a href=#597 id=597 data-nosnippet>597</a>            Phase::Terminal { kind: api::syscall::ipc_status::PEER_GONE, .. }));
+<a href=#598 id=598 data-nosnippet>598</a>        <span class="macro">assert!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].pending_msgs.is_empty());
+<a href=#599 id=599 data-nosnippet>599</a>    }
+<a href=#600 id=600 data-nosnippet>600</a>
+<a href=#601 id=601 data-nosnippet>601</a>    <span class="attr">#[test]
+<a href=#602 id=602 data-nosnippet>602</a>    </span><span class="kw">fn </span>cancelled_and_consumed_late_reply_cannot_complete_successor() {
+<a href=#603 id=603 data-nosnippet>603</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = fixture();
+<a href=#604 id=604 data-nosnippet>604</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">11</span>, Phase::Dispatched);
+<a href=#605 id=605 data-nosnippet>605</a>        serve(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">11</span>);
+<a href=#606 id=606 data-nosnippet>606</a>        cancel_in_sched(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="number">11</span>).unwrap();
+<a href=#607 id=607 data-nosnippet>607</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#608 id=608 data-nosnippet>608</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase,
+<a href=#609 id=609 data-nosnippet>609</a>            Phase::Terminal { kind: api::syscall::ipc_status::INDETERMINATE, .. }));
+<a href=#610 id=610 data-nosnippet>610</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().async_operations.remove(<span class="number">11</span>).unwrap();
+<a href=#611 id=611 data-nosnippet>611</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">12</span>, Phase::Dispatched);
+<a href=#612 id=612 data-nosnippet>612</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#613 id=613 data-nosnippet>613</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">11</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Err</span>(Failure::Invalid));
+<a href=#614 id=614 data-nosnippet>614</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">None</span>,
+<a href=#615 id=615 data-nosnippet>615</a>            <span class="string">"an explicit retired-token reply ends the implicit context"</span>);
+<a href=#616 id=616 data-nosnippet>616</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">12</span>).unwrap().phase,
+<a href=#617 id=617 data-nosnippet>617</a>            Phase::Dispatched));
+<a href=#618 id=618 data-nosnippet>618</a>        <span class="macro">assert!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].pending_msgs.is_empty());
+<a href=#619 id=619 data-nosnippet>619</a>        serve(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">12</span>);
+<a href=#620 id=620 data-nosnippet>620</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#621 id=621 data-nosnippet>621</a>    }
+<a href=#622 id=622 data-nosnippet>622</a>
+<a href=#623 id=623 data-nosnippet>623</a>    <span class="attr">#[test]
+<a href=#624 id=624 data-nosnippet>624</a>    </span><span class="kw">fn </span>dispatch_and_explicit_worker_reply_check_both_incarnations() {
+<a href=#625 id=625 data-nosnippet>625</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = fixture();
+<a href=#626 id=626 data-nosnippet>626</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">11</span>, Phase::Queued);
+<a href=#627 id=627 data-nosnippet>627</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">99</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Err</span>(Failure::Invalid),
+<a href=#628 id=628 data-nosnippet>628</a>            <span class="string">"a guessed token never authorizes a provider reply"</span>);
+<a href=#629 id=629 data-nosnippet>629</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, WORKER, <span class="number">11</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Err</span>(Failure::Invalid),
+<a href=#630 id=630 data-nosnippet>630</a>            <span class="string">"a genuine queued token cannot reply before dispatch"</span>);
+<a href=#631 id=631 data-nosnippet>631</a>        <span class="kw">let </span>header = ipc_wire::IpcWireHeader {
+<a href=#632 id=632 data-nosnippet>632</a>            sender_tid: OWNER, sender_cell_id: <span class="number">1_002</span>, sender_generation: <span class="number">3</span>,
+<a href=#633 id=633 data-nosnippet>633</a>            delivery_id: <span class="number">1</span>, async_op: <span class="number">11</span>,
+<a href=#634 id=634 data-nosnippet>634</a>        };
+<a href=#635 id=635 data-nosnippet>635</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>PROVIDER).unwrap().cell_generation = <span class="number">8</span>;
+<a href=#636 id=636 data-nosnippet>636</a>        dispatch(<span class="kw-2">&amp;mut </span>sched, PROVIDER, header);
+<a href=#637 id=637 data-nosnippet>637</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase, Phase::Queued));
+<a href=#638 id=638 data-nosnippet>638</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>PROVIDER).unwrap().cell_generation = <span class="number">7</span>;
+<a href=#639 id=639 data-nosnippet>639</a>        dispatch(<span class="kw-2">&amp;mut </span>sched, PROVIDER, ipc_wire::IpcWireHeader { sender_generation: <span class="number">4</span>, ..header });
+<a href=#640 id=640 data-nosnippet>640</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase, Phase::Queued));
+<a href=#641 id=641 data-nosnippet>641</a>        dispatch(<span class="kw-2">&amp;mut </span>sched, PROVIDER, header);
+<a href=#642 id=642 data-nosnippet>642</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase, Phase::Dispatched));
+<a href=#643 id=643 data-nosnippet>643</a>        serve(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">11</span>);
+<a href=#644 id=644 data-nosnippet>644</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, FOREIGN_GENERATION, <span class="number">11</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Err</span>(Failure::Invalid));
+<a href=#645 id=645 data-nosnippet>645</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, FOREIGN_CELL, <span class="number">11</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Err</span>(Failure::Invalid));
+<a href=#646 id=646 data-nosnippet>646</a>        serve(<span class="kw-2">&amp;mut </span>sched, WORKER, OWNER, <span class="number">11</span>);
+<a href=#647 id=647 data-nosnippet>647</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, WORKER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#648 id=648 data-nosnippet>648</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase, Phase::Dispatched),
+<a href=#649 id=649 data-nosnippet>649</a>            <span class="string">"the implicit bridge cannot use sibling-worker authority"</span>);
+<a href=#650 id=650 data-nosnippet>650</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().cell_generation = <span class="number">4</span>;
+<a href=#651 id=651 data-nosnippet>651</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, WORKER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#652 id=652 data-nosnippet>652</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, WORKER, <span class="number">11</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Err</span>(Failure::Invalid));
+<a href=#653 id=653 data-nosnippet>653</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().cell_generation = <span class="number">3</span>;
+<a href=#654 id=654 data-nosnippet>654</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, WORKER, <span class="number">11</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Ok</span>(()));
+<a href=#655 id=655 data-nosnippet>655</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].current_async_op, <span class="number">0</span>,
+<a href=#656 id=656 data-nosnippet>656</a>            <span class="string">"worker completion ends the original receiver context"</span>);
+<a href=#657 id=657 data-nosnippet>657</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">None</span>,
+<a href=#658 id=658 data-nosnippet>658</a>            <span class="string">"a subsequent one-way event must not be quarantined as duplicate RPC"</span>);
+<a href=#659 id=659 data-nosnippet>659</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, WORKER, <span class="number">11</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Err</span>(Failure::Invalid));
+<a href=#660 id=660 data-nosnippet>660</a>    }
+<a href=#661 id=661 data-nosnippet>661</a>
+<a href=#662 id=662 data-nosnippet>662</a>    <span class="attr">#[test]
+<a href=#663 id=663 data-nosnippet>663</a>    </span><span class="kw">fn </span>outgoing_operation_terminal_does_not_replace_inbound_context() {
+<a href=#664 id=664 data-nosnippet>664</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = fixture();
+<a href=#665 id=665 data-nosnippet>665</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">11</span>, Phase::Dispatched);
+<a href=#666 id=666 data-nosnippet>666</a>        serve(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">11</span>);
+<a href=#667 id=667 data-nosnippet>667</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, PROVIDER, WORKER, <span class="number">21</span>, Phase::Dispatched);
+<a href=#668 id=668 data-nosnippet>668</a>        cancel_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">21</span>).unwrap();
+<a href=#669 id=669 data-nosnippet>669</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].current_caller, <span class="prelude-val">Some</span>(OWNER));
+<a href=#670 id=670 data-nosnippet>670</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].current_async_op, <span class="number">11</span>);
+<a href=#671 id=671 data-nosnippet>671</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#672 id=672 data-nosnippet>672</a>    }
+<a href=#673 id=673 data-nosnippet>673</a>
+<a href=#674 id=674 data-nosnippet>674</a>    <span class="attr">#[test]
+<a href=#675 id=675 data-nosnippet>675</a>    </span><span class="kw">fn </span>peer_death_publishes_terminal_before_waking_only_rpc_waiter() {
+<a href=#676 id=676 data-nosnippet>676</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = fixture();
+<a href=#677 id=677 data-nosnippet>677</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">11</span>, Phase::Dispatched);
+<a href=#678 id=678 data-nosnippet>678</a>        add_operation(<span class="kw-2">&amp;mut </span>sched, WORKER, PROVIDER, <span class="number">12</span>, Phase::Queued);
+<a href=#679 id=679 data-nosnippet>679</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().state = TaskState::WaitIpc { deadline: <span class="prelude-val">None </span>};
+<a href=#680 id=680 data-nosnippet>680</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>WORKER).unwrap().state = TaskState::Recv {
+<a href=#681 id=681 data-nosnippet>681</a>            mask: PROVIDER, buf_ptr: <span class="number">0</span>, buf_len: <span class="number">0</span>, deadline: <span class="prelude-val">None</span>,
+<a href=#682 id=682 data-nosnippet>682</a>        };
+<a href=#683 id=683 data-nosnippet>683</a>        peer_died(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">1_003</span>, <span class="number">7</span>);
+<a href=#684 id=684 data-nosnippet>684</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].state, TaskState::Ready));
+<a href=#685 id=685 data-nosnippet>685</a>        <span class="macro">assert!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.has_terminal());
+<a href=#686 id=686 data-nosnippet>686</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>WORKER].state, TaskState::Recv { mask: PROVIDER, .. }));
+<a href=#687 id=687 data-nosnippet>687</a>        <span class="macro">assert!</span>(sched.tasks[<span class="kw-2">&amp;</span>WORKER].async_operations.has_terminal());
+<a href=#688 id=688 data-nosnippet>688</a>        <span class="kw">super</span>::<span class="kw">super</span>::hart_local::ready::remove_from_all(OWNER);
+<a href=#689 id=689 data-nosnippet>689</a>    }
+<a href=#690 id=690 data-nosnippet>690</a>
+<a href=#691 id=691 data-nosnippet>691</a>    <span class="attr">#[test]
+<a href=#692 id=692 data-nosnippet>692</a>    </span><span class="kw">fn </span>queued_cancel_removes_only_exact_request_and_is_terminal() {
+<a href=#693 id=693 data-nosnippet>693</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = fixture();
+<a href=#694 id=694 data-nosnippet>694</a>        <span class="kw">for </span>token <span class="kw">in </span>[<span class="number">11</span>, <span class="number">12</span>] {
+<a href=#695 id=695 data-nosnippet>695</a>            add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, token, Phase::Queued);
+<a href=#696 id=696 data-nosnippet>696</a>            <span class="kw">let </span>header = ipc_wire::IpcWireHeader {
+<a href=#697 id=697 data-nosnippet>697</a>                sender_tid: OWNER, sender_cell_id: <span class="number">1_002</span>, sender_generation: <span class="number">3</span>,
+<a href=#698 id=698 data-nosnippet>698</a>                delivery_id: token <span class="kw">as </span>u64, async_op: token,
+<a href=#699 id=699 data-nosnippet>699</a>            };
+<a href=#700 id=700 data-nosnippet>700</a>            <span class="kw">super</span>::<span class="kw">super</span>::queue_wire_msg(sched.tasks.get_mut(<span class="kw-2">&amp;</span>PROVIDER).unwrap(),
+<a href=#701 id=701 data-nosnippet>701</a>                ipc_wire::IpcWireMessage::try_new(header, <span class="string">b"queued"</span>).unwrap(), <span class="number">64</span>).unwrap();
+<a href=#702 id=702 data-nosnippet>702</a>        }
+<a href=#703 id=703 data-nosnippet>703</a>        cancel_in_sched(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="number">11</span>).unwrap();
+<a href=#704 id=704 data-nosnippet>704</a>        cancel_in_sched(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="number">11</span>).unwrap();
+<a href=#705 id=705 data-nosnippet>705</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase,
+<a href=#706 id=706 data-nosnippet>706</a>            Phase::Terminal { kind: api::syscall::ipc_status::CANCELLED, .. }));
+<a href=#707 id=707 data-nosnippet>707</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">12</span>).unwrap().phase, Phase::Queued));
+<a href=#708 id=708 data-nosnippet>708</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].pending_msgs.len(), <span class="number">1</span>);
+<a href=#709 id=709 data-nosnippet>709</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].pending_msgs.as_slice()[<span class="number">0</span>].wire_header().unwrap().async_op, <span class="number">12</span>);
+<a href=#710 id=710 data-nosnippet>710</a>        <span class="macro">assert_eq!</span>(reply_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">11</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Err</span>(Failure::Invalid));
+<a href=#711 id=711 data-nosnippet>711</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase,
+<a href=#712 id=712 data-nosnippet>712</a>            Phase::Terminal { kind: api::syscall::ipc_status::CANCELLED, .. }));
+<a href=#713 id=713 data-nosnippet>713</a>        expire(<span class="kw-2">&amp;mut </span>sched, <span class="number">9</span>);
+<a href=#714 id=714 data-nosnippet>714</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase,
+<a href=#715 id=715 data-nosnippet>715</a>            Phase::Terminal { kind: api::syscall::ipc_status::CANCELLED, len: <span class="number">0 </span>}));
+<a href=#716 id=716 data-nosnippet>716</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">12</span>).unwrap().phase, Phase::Queued));
+<a href=#717 id=717 data-nosnippet>717</a>        expire(<span class="kw-2">&amp;mut </span>sched, <span class="number">10</span>);
+<a href=#718 id=718 data-nosnippet>718</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">11</span>).unwrap().phase,
+<a href=#719 id=719 data-nosnippet>719</a>            Phase::Terminal { kind: api::syscall::ipc_status::CANCELLED, len: <span class="number">0 </span>}),
+<a href=#720 id=720 data-nosnippet>720</a>            <span class="string">"the exact deadline cannot replace an already-terminal cancellation"</span>);
+<a href=#721 id=721 data-nosnippet>721</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">12</span>).unwrap().phase,
+<a href=#722 id=722 data-nosnippet>722</a>            Phase::Terminal { kind: api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT, len: <span class="number">0 </span>}));
+<a href=#723 id=723 data-nosnippet>723</a>        <span class="macro">assert!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].pending_msgs.is_empty());
+<a href=#724 id=724 data-nosnippet>724</a>    }
+<a href=#725 id=725 data-nosnippet>725</a>
+<a href=#726 id=726 data-nosnippet>726</a>    <span class="attr">#[test]
+<a href=#727 id=727 data-nosnippet>727</a>    </span><span class="kw">fn </span>caller_death_removes_only_exact_queued_identity_and_preserves_dispatch_context() {
+<a href=#728 id=728 data-nosnippet>728</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = fixture();
+<a href=#729 id=729 data-nosnippet>729</a>        <span class="kw">for </span>token <span class="kw">in </span>[<span class="number">11</span>, <span class="number">12</span>, <span class="number">13</span>, <span class="number">14</span>, <span class="number">15</span>, <span class="number">16</span>] {
+<a href=#730 id=730 data-nosnippet>730</a>            add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="kw">if </span>token &gt;= <span class="number">15 </span>{ WORKER } <span class="kw">else </span>{ PROVIDER },
+<a href=#731 id=731 data-nosnippet>731</a>                token, Phase::Queued);
+<a href=#732 id=732 data-nosnippet>732</a>        }
+<a href=#733 id=733 data-nosnippet>733</a>        <span class="kw">let </span>header = ipc_wire::IpcWireHeader {
+<a href=#734 id=734 data-nosnippet>734</a>            sender_tid: OWNER, sender_cell_id: <span class="number">1_002</span>, sender_generation: <span class="number">3</span>,
+<a href=#735 id=735 data-nosnippet>735</a>            delivery_id: <span class="number">13</span>, async_op: <span class="number">13</span>,
+<a href=#736 id=736 data-nosnippet>736</a>        };
+<a href=#737 id=737 data-nosnippet>737</a>        dispatch(<span class="kw-2">&amp;mut </span>sched, PROVIDER, header);
+<a href=#738 id=738 data-nosnippet>738</a>        serve(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">13</span>);
+<a href=#739 id=739 data-nosnippet>739</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">13</span>).unwrap().phase, Phase::Dispatched));
+<a href=#740 id=740 data-nosnippet>740</a>        <span class="kw">let </span>context = |task: <span class="kw-2">&amp;</span>Task| (
+<a href=#741 id=741 data-nosnippet>741</a>            task.current_caller, task.current_caller_cell_id, task.current_caller_cell_generation,
+<a href=#742 id=742 data-nosnippet>742</a>            task.current_caller_request_generation, task.current_async_op,
+<a href=#743 id=743 data-nosnippet>743</a>        );
+<a href=#744 id=744 data-nosnippet>744</a>        <span class="kw">let </span>dispatched_context = context(<span class="kw-2">&amp;</span>sched.tasks[<span class="kw-2">&amp;</span>PROVIDER]);
+<a href=#745 id=745 data-nosnippet>745</a>        <span class="macro">assert_ne!</span>(dispatched_context.<span class="number">3</span>, <span class="number">0</span>);
+<a href=#746 id=746 data-nosnippet>746</a>        <span class="kw">let </span>queued = [
+<a href=#747 id=747 data-nosnippet>747</a>            (PROVIDER, ipc_wire::IpcWireHeader { delivery_id: <span class="number">11</span>, async_op: <span class="number">11</span>, ..header }),
+<a href=#748 id=748 data-nosnippet>748</a>            (PROVIDER, ipc_wire::IpcWireHeader { delivery_id: <span class="number">12</span>, async_op: <span class="number">12</span>, ..header }),
+<a href=#749 id=749 data-nosnippet>749</a>            (PROVIDER, ipc_wire::IpcWireHeader {
+<a href=#750 id=750 data-nosnippet>750</a>                delivery_id: <span class="number">21</span>, async_op: <span class="number">21</span>, sender_generation: <span class="number">4</span>, ..header }),
+<a href=#751 id=751 data-nosnippet>751</a>            (PROVIDER, ipc_wire::IpcWireHeader {
+<a href=#752 id=752 data-nosnippet>752</a>                delivery_id: <span class="number">22</span>, async_op: <span class="number">22</span>, sender_cell_id: <span class="number">1_004</span>, ..header }),
+<a href=#753 id=753 data-nosnippet>753</a>            (PROVIDER, ipc_wire::IpcWireHeader {
+<a href=#754 id=754 data-nosnippet>754</a>                delivery_id: <span class="number">23</span>, async_op: <span class="number">23</span>, sender_tid: FOREIGN_CELL, ..header }),
+<a href=#755 id=755 data-nosnippet>755</a>            (PROVIDER, ipc_wire::IpcWireHeader { delivery_id: <span class="number">24</span>, async_op: <span class="number">0</span>, ..header }),
+<a href=#756 id=756 data-nosnippet>756</a>            (PROVIDER, ipc_wire::IpcWireHeader { delivery_id: <span class="number">14</span>, async_op: <span class="number">14</span>, ..header }),
+<a href=#757 id=757 data-nosnippet>757</a>            (WORKER, ipc_wire::IpcWireHeader { delivery_id: <span class="number">15</span>, async_op: <span class="number">15</span>, ..header }),
+<a href=#758 id=758 data-nosnippet>758</a>            (WORKER, ipc_wire::IpcWireHeader { delivery_id: <span class="number">25</span>, async_op: <span class="number">0</span>, ..header }),
+<a href=#759 id=759 data-nosnippet>759</a>            (WORKER, ipc_wire::IpcWireHeader { delivery_id: <span class="number">16</span>, async_op: <span class="number">16</span>, ..header }),
+<a href=#760 id=760 data-nosnippet>760</a>        ];
+<a href=#761 id=761 data-nosnippet>761</a>        <span class="kw">for </span>(peer, wire_header) <span class="kw">in </span>queued {
+<a href=#762 id=762 data-nosnippet>762</a>            <span class="kw">super</span>::<span class="kw">super</span>::queue_wire_msg(sched.tasks.get_mut(<span class="kw-2">&amp;</span>peer).unwrap(),
+<a href=#763 id=763 data-nosnippet>763</a>                ipc_wire::IpcWireMessage::try_new(wire_header, <span class="string">b"preserved"</span>).unwrap(), <span class="number">64</span>).unwrap();
+<a href=#764 id=764 data-nosnippet>764</a>        }
+<a href=#765 id=765 data-nosnippet>765</a>        owner_died(<span class="kw-2">&amp;mut </span>sched, OWNER + <span class="number">100</span>, <span class="number">1_002</span>, <span class="number">3</span>);
+<a href=#766 id=766 data-nosnippet>766</a>        owner_died(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="number">0</span>, <span class="number">3</span>);
+<a href=#767 id=767 data-nosnippet>767</a>        owner_died(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="number">1_002</span>, <span class="number">99</span>);
+<a href=#768 id=768 data-nosnippet>768</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>PROVIDER].pending_msgs.len(), <span class="number">7</span>);
+<a href=#769 id=769 data-nosnippet>769</a>        <span class="macro">assert_eq!</span>(sched.tasks[<span class="kw-2">&amp;</span>WORKER].pending_msgs.len(), <span class="number">3</span>);
+<a href=#770 id=770 data-nosnippet>770</a>        <span class="comment">// Death cleanup must use the captured identity even after the caller
+<a href=#771 id=771 data-nosnippet>771</a>        // has been removed, without releasing an already-dispatched context.
+<a href=#772 id=772 data-nosnippet>772</a>        </span>sched.tasks.remove(<span class="kw-2">&amp;</span>OWNER).unwrap();
+<a href=#773 id=773 data-nosnippet>773</a>        owner_died(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="number">1_002</span>, <span class="number">3</span>);
+<a href=#774 id=774 data-nosnippet>774</a>        owner_died(<span class="kw-2">&amp;mut </span>sched, OWNER, <span class="number">1_002</span>, <span class="number">3</span>);
+<a href=#775 id=775 data-nosnippet>775</a>        <span class="macro">assert_eq!</span>(context(<span class="kw-2">&amp;</span>sched.tasks[<span class="kw-2">&amp;</span>PROVIDER]), dispatched_context);
+<a href=#776 id=776 data-nosnippet>776</a>        <span class="kw">for </span>peer <span class="kw">in </span>[PROVIDER, WORKER] {
+<a href=#777 id=777 data-nosnippet>777</a>            <span class="kw">let </span>remaining: Vec&lt;<span class="kw">_</span>&gt; = sched.tasks[<span class="kw-2">&amp;</span>peer].pending_msgs.as_slice().iter()
+<a href=#778 id=778 data-nosnippet>778</a>                .map(|msg| {
+<a href=#779 id=779 data-nosnippet>779</a>                    <span class="kw">let </span>h = msg.wire_header().unwrap();
+<a href=#780 id=780 data-nosnippet>780</a>                    (h.sender_tid, h.sender_cell_id, h.sender_generation, h.delivery_id, h.async_op)
+<a href=#781 id=781 data-nosnippet>781</a>                }).collect();
+<a href=#782 id=782 data-nosnippet>782</a>            <span class="kw">let </span>expected: Vec&lt;<span class="kw">_</span>&gt; = queued.iter().filter(|(tid, h)|
+<a href=#783 id=783 data-nosnippet>783</a>                <span class="kw-2">*</span>tid == peer &amp;&amp; !(h.async_op != <span class="number">0 </span>&amp;&amp; h.sender_tid == OWNER
+<a href=#784 id=784 data-nosnippet>784</a>                    &amp;&amp; h.sender_cell_id == <span class="number">1_002 </span>&amp;&amp; h.sender_generation == <span class="number">3</span>))
+<a href=#785 id=785 data-nosnippet>785</a>                .map(|(<span class="kw">_</span>, h)| (h.sender_tid, h.sender_cell_id, h.sender_generation, h.delivery_id, h.async_op))
+<a href=#786 id=786 data-nosnippet>786</a>                .collect();
+<a href=#787 id=787 data-nosnippet>787</a>            <span class="macro">assert_eq!</span>(remaining, expected, <span class="string">"unrelated generations, cells, TIDs and raw IPC survive in order"</span>);
+<a href=#788 id=788 data-nosnippet>788</a>        }
+<a href=#789 id=789 data-nosnippet>789</a>    }
+<a href=#790 id=790 data-nosnippet>790</a>    <span class="attr">#[test]
+<a href=#791 id=791 data-nosnippet>791</a>    </span><span class="kw">fn </span>deterministic_two_hart_publication_and_wake_races() {
+<a href=#792 id=792 data-nosnippet>792</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
+<a href=#793 id=793 data-nosnippet>793</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = fixture();
+<a href=#794 id=794 data-nosnippet>794</a>
+<a href=#795 id=795 data-nosnippet>795</a>        <span class="comment">// 1. Race 1: Pre-park publication race
+<a href=#796 id=796 data-nosnippet>796</a>        // Provider publishes reply before caller on another hart arms WaitIpc.
+<a href=#797 id=797 data-nosnippet>797</a>        </span>add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">101</span>, Phase::Dispatched);
+<a href=#798 id=798 data-nosnippet>798</a>        serve(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">101</span>);
+<a href=#799 id=799 data-nosnippet>799</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().state = TaskState::Ready;
+<a href=#800 id=800 data-nosnippet>800</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#801 id=801 data-nosnippet>801</a>        <span class="comment">// When caller subsequently executes wait, has_terminal is true immediately,
+<a href=#802 id=802 data-nosnippet>802</a>        // so caller does not block or lose the wakeup.
+<a href=#803 id=803 data-nosnippet>803</a>        </span><span class="macro">assert!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.has_terminal());
+<a href=#804 id=804 data-nosnippet>804</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">101</span>).unwrap().phase,
+<a href=#805 id=805 data-nosnippet>805</a>            Phase::Terminal { kind: api::syscall::ipc_status::REPLY, .. }));
+<a href=#806 id=806 data-nosnippet>806</a>
+<a href=#807 id=807 data-nosnippet>807</a>        <span class="comment">// 2. Race 2: Cross-hart parked wake race
+<a href=#808 id=808 data-nosnippet>808</a>        // Caller is parked in WaitIpc when Provider settles the call.
+<a href=#809 id=809 data-nosnippet>809</a>        </span>add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">102</span>, Phase::Dispatched);
+<a href=#810 id=810 data-nosnippet>810</a>        serve(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">102</span>);
+<a href=#811 id=811 data-nosnippet>811</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().state = TaskState::WaitIpc { deadline: <span class="prelude-val">None </span>};
+<a href=#812 id=812 data-nosnippet>812</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, PROVIDER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#813 id=813 data-nosnippet>813</a>        <span class="comment">// Caller must be transitioned to Ready and pushed to the ready queue.
+<a href=#814 id=814 data-nosnippet>814</a>        </span><span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].state, TaskState::Ready));
+<a href=#815 id=815 data-nosnippet>815</a>        <span class="macro">assert!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.has_terminal());
+<a href=#816 id=816 data-nosnippet>816</a>        <span class="kw">super</span>::<span class="kw">super</span>::hart_local::ready::remove_from_all(OWNER);
+<a href=#817 id=817 data-nosnippet>817</a>
+<a href=#818 id=818 data-nosnippet>818</a>        <span class="comment">// 3. Race 3: Remote peer-death vs parked caller race
+<a href=#819 id=819 data-nosnippet>819</a>        // Caller is parked in WaitIpc when Provider crashes on another hart.
+<a href=#820 id=820 data-nosnippet>820</a>        </span>add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, PROVIDER, <span class="number">103</span>, Phase::Dispatched);
+<a href=#821 id=821 data-nosnippet>821</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>OWNER).unwrap().state = TaskState::WaitIpc { deadline: <span class="prelude-val">None </span>};
+<a href=#822 id=822 data-nosnippet>822</a>        peer_died(<span class="kw-2">&amp;mut </span>sched, PROVIDER, <span class="number">1_003</span>, <span class="number">7</span>);
+<a href=#823 id=823 data-nosnippet>823</a>        <span class="comment">// Caller must be transitioned to Ready with PeerGone terminal.
+<a href=#824 id=824 data-nosnippet>824</a>        </span><span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].state, TaskState::Ready));
+<a href=#825 id=825 data-nosnippet>825</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">103</span>).unwrap().phase,
+<a href=#826 id=826 data-nosnippet>826</a>            Phase::Terminal { kind: api::syscall::ipc_status::PEER_GONE, .. }));
+<a href=#827 id=827 data-nosnippet>827</a>        <span class="kw">super</span>::<span class="kw">super</span>::hart_local::ready::remove_from_all(OWNER);
+<a href=#828 id=828 data-nosnippet>828</a>
+<a href=#829 id=829 data-nosnippet>829</a>        <span class="comment">// 4. Race 4: Remote deadline expiration vs reply race
+<a href=#830 id=830 data-nosnippet>830</a>        // Case A: Reply wins lock first, deadline cannot overwrite it.
+<a href=#831 id=831 data-nosnippet>831</a>        </span>add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, WORKER, <span class="number">104</span>, Phase::Dispatched);
+<a href=#832 id=832 data-nosnippet>832</a>        serve(<span class="kw-2">&amp;mut </span>sched, WORKER, OWNER, <span class="number">104</span>);
+<a href=#833 id=833 data-nosnippet>833</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, WORKER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#834 id=834 data-nosnippet>834</a>        expire(<span class="kw-2">&amp;mut </span>sched, u64::MAX);
+<a href=#835 id=835 data-nosnippet>835</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">104</span>).unwrap().phase,
+<a href=#836 id=836 data-nosnippet>836</a>            Phase::Terminal { kind: api::syscall::ipc_status::REPLY, .. }));
+<a href=#837 id=837 data-nosnippet>837</a>
+<a href=#838 id=838 data-nosnippet>838</a>        <span class="comment">// Case B: Expire wins lock first, subsequent reply is rejected.
+<a href=#839 id=839 data-nosnippet>839</a>        </span>add_operation(<span class="kw-2">&amp;mut </span>sched, OWNER, WORKER, <span class="number">105</span>, Phase::Dispatched);
+<a href=#840 id=840 data-nosnippet>840</a>        serve(<span class="kw-2">&amp;mut </span>sched, WORKER, OWNER, <span class="number">105</span>);
+<a href=#841 id=841 data-nosnippet>841</a>        expire(<span class="kw-2">&amp;mut </span>sched, <span class="number">100</span>);
+<a href=#842 id=842 data-nosnippet>842</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">105</span>).unwrap().phase,
+<a href=#843 id=843 data-nosnippet>843</a>            Phase::Terminal { kind: api::syscall::ipc_status::INDETERMINATE, .. }));
+<a href=#844 id=844 data-nosnippet>844</a>        <span class="macro">assert_eq!</span>(reply_current_in_sched(<span class="kw-2">&amp;mut </span>sched, WORKER, OWNER, <span class="number">0</span>, <span class="number">0</span>), <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(())));
+<a href=#845 id=845 data-nosnippet>845</a>        <span class="comment">// Terminal remains Indeterminate, not overwritten by late reply.
+<a href=#846 id=846 data-nosnippet>846</a>        </span><span class="macro">assert!</span>(<span class="macro">matches!</span>(sched.tasks[<span class="kw-2">&amp;</span>OWNER].async_operations.find(<span class="number">105</span>).unwrap().phase,
+<a href=#847 id=847 data-nosnippet>847</a>            Phase::Terminal { kind: api::syscall::ipc_status::INDETERMINATE, .. }));
+<a href=#848 id=848 data-nosnippet>848</a>    }
+<a href=#849 id=849 data-nosnippet>849</a>}
 </code></pre></div></section></main></body></html>

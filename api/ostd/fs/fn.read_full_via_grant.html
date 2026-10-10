@@ -6,6 +6,6 @@ table (so it reaches the <code>/bin</code> cell-store overlay AND VIFS1 bootstra
 Returns <code>(grant_id, len)</code>; the caller OWNS the grant and MUST <code>sys_grant_free</code>
 it after use. Backs <code>sys_spawn_from_path</code>’s VFS routing — reads a cell ELF for
 <code>sys_spawn_from_elf</code> so the kernel loader needs no disk access post-boot.</p>
-<p>Uses masked <code>service_call_typed</code> (recv pinned to <code>vfs_tid</code>, spec 17 §2) so a
-spawning cell that holds input focus can’t decode a queued keystroke as the reply.</p>
+<p>Uses operation-correlated <code>service_call_typed</code>, so input events cannot be
+decoded as replies and provider death terminates the spawning cell’s RPC.</p>
 </div></details></section></div></main></body></html>

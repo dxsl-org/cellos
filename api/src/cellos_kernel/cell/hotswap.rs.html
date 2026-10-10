@@ -380,149 +380,165 @@
 <a href=#380 id=380 data-nosnippet>380</a>        }
 <a href=#381 id=381 data-nosnippet>381</a>    }
 <a href=#382 id=382 data-nosnippet>382</a>
-<a href=#383 id=383 data-nosnippet>383</a>    <span class="kw">let </span><span class="kw-2">mut </span>source_mailbox = {
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">let </span>source = sched.tasks.get_mut(<span class="kw-2">&amp;</span>source_tid).ok_or(ViError::NotFound)<span class="question-mark">?</span>;
-<a href=#385 id=385 data-nosnippet>385</a>        source.hotswap_ingress_closed = <span class="bool-val">true</span>;
-<a href=#386 id=386 data-nosnippet>386</a>        core::mem::take(<span class="kw-2">&amp;mut </span>source.pending_msgs)
-<a href=#387 id=387 data-nosnippet>387</a>    };
-<a href=#388 id=388 data-nosnippet>388</a>
-<a href=#389 id=389 data-nosnippet>389</a>    <span class="kw">if </span>!<span class="kw">crate</span>::cell::service_registry::commit_paused(service_id, source_tid, target_tid) {
-<a href=#390 id=390 data-nosnippet>390</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(source) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>source_tid) {
-<a href=#391 id=391 data-nosnippet>391</a>            source.pending_msgs = core::mem::take(<span class="kw-2">&amp;mut </span>source_mailbox);
-<a href=#392 id=392 data-nosnippet>392</a>            source.hotswap_ingress_closed = <span class="bool-val">false</span>;
-<a href=#393 id=393 data-nosnippet>393</a>        }
-<a href=#394 id=394 data-nosnippet>394</a>        rollback_mailbox_appends(sched, target_tid, target_start);
-<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::WouldBlock);
-<a href=#396 id=396 data-nosnippet>396</a>    }
-<a href=#397 id=397 data-nosnippet>397</a>
-<a href=#398 id=398 data-nosnippet>398</a>    <span class="comment">// A queued async request is bound to the old provider incarnation. Unlike
-<a href=#399 id=399 data-nosnippet>399</a>    // legacy sends it cannot be replayed at the replacement: doing so could
-<a href=#400 id=400 data-nosnippet>400</a>    // execute the same side effect after the caller was told the old peer died.
-<a href=#401 id=401 data-nosnippet>401</a>    // The source mailbox remains owned by the old task until retirement.
-<a href=#402 id=402 data-nosnippet>402</a>    </span><span class="kw">let </span>(source_cell, source_generation) = {
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="kw">let </span>source = sched.tasks.get(<span class="kw-2">&amp;</span>source_tid).ok_or(ViError::NotFound)<span class="question-mark">?</span>;
-<a href=#404 id=404 data-nosnippet>404</a>        (source.cell_id.<span class="number">0</span>, source.cell_generation)
-<a href=#405 id=405 data-nosnippet>405</a>    };
-<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">crate</span>::task::async_ipc::cutover_peer(sched, source_tid, source_cell, source_generation);
-<a href=#407 id=407 data-nosnippet>407</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
-<a href=#408 id=408 data-nosnippet>408</a>        target.hotswap_source_tid = <span class="prelude-val">None</span>;
-<a href=#409 id=409 data-nosnippet>409</a>    }
-<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sender_tid) = wake_sender {
-<a href=#411 id=411 data-nosnippet>411</a>        <span class="kw">let </span>sender_context = sched
-<a href=#412 id=412 data-nosnippet>412</a>            .tasks
-<a href=#413 id=413 data-nosnippet>413</a>            .get(<span class="kw-2">&amp;</span>sender_tid)
-<a href=#414 id=414 data-nosnippet>414</a>            .map(|sender| (sender_tid, sender.cell_id.<span class="number">0</span>, sender.cell_generation));
-<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
-<a href=#416 id=416 data-nosnippet>416</a>            target.state = TaskState::Ready;
-<a href=#417 id=417 data-nosnippet>417</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>((sender_tid, sender_cell_id, sender_generation)) = sender_context {
-<a href=#418 id=418 data-nosnippet>418</a>                target.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
-<a href=#419 id=419 data-nosnippet>419</a>            } <span class="kw">else </span>{
-<a href=#420 id=420 data-nosnippet>420</a>                target.clear_current_caller_context();
-<a href=#421 id=421 data-nosnippet>421</a>            }
-<a href=#422 id=422 data-nosnippet>422</a>        }
-<a href=#423 id=423 data-nosnippet>423</a>        sched.push_ready(target_tid);
-<a href=#424 id=424 data-nosnippet>424</a>    }
-<a href=#425 id=425 data-nosnippet>425</a>    <span class="prelude-val">Ok</span>(())
-<a href=#426 id=426 data-nosnippet>426</a>}
-<a href=#427 id=427 data-nosnippet>427</a>
-<a href=#428 id=428 data-nosnippet>428</a><span class="kw">fn </span>message_is_async(
-<a href=#429 id=429 data-nosnippet>429</a>    sched: <span class="kw-2">&amp;</span><span class="kw">crate</span>::task::scheduler::Scheduler,
-<a href=#430 id=430 data-nosnippet>430</a>    source_tid: usize,
-<a href=#431 id=431 data-nosnippet>431</a>    index: usize,
-<a href=#432 id=432 data-nosnippet>432</a>) -&gt; bool {
-<a href=#433 id=433 data-nosnippet>433</a>    sched.tasks.get(<span class="kw-2">&amp;</span>source_tid).is_some_and(|task| {
-<a href=#434 id=434 data-nosnippet>434</a>        task.pending_msgs.as_slice()[index]
-<a href=#435 id=435 data-nosnippet>435</a>            .wire_header()
-<a href=#436 id=436 data-nosnippet>436</a>            .is_some_and(|header| header.async_op != <span class="number">0</span>)
-<a href=#437 id=437 data-nosnippet>437</a>    })
-<a href=#438 id=438 data-nosnippet>438</a>}
-<a href=#439 id=439 data-nosnippet>439</a>
-<a href=#440 id=440 data-nosnippet>440</a><span class="kw">fn </span>rollback_mailbox_appends(
-<a href=#441 id=441 data-nosnippet>441</a>    sched: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::task::scheduler::Scheduler,
-<a href=#442 id=442 data-nosnippet>442</a>    target_tid: usize,
-<a href=#443 id=443 data-nosnippet>443</a>    target_start: usize,
-<a href=#444 id=444 data-nosnippet>444</a>) {
-<a href=#445 id=445 data-nosnippet>445</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
-<a href=#446 id=446 data-nosnippet>446</a>        <span class="kw">while </span>target.pending_msgs.len() &gt; target_start {
-<a href=#447 id=447 data-nosnippet>447</a>            <span class="kw">let </span>last = target.pending_msgs.len() - <span class="number">1</span>;
-<a href=#448 id=448 data-nosnippet>448</a>            drop(target.pending_msgs.remove(last));
-<a href=#449 id=449 data-nosnippet>449</a>        }
-<a href=#450 id=450 data-nosnippet>450</a>    }
-<a href=#451 id=451 data-nosnippet>451</a>}
-<a href=#452 id=452 data-nosnippet>452</a>
-<a href=#453 id=453 data-nosnippet>453</a><span class="doccomment">/// Terminate `tid` via the internal path, bypassing the Frozen kill-guard.
-<a href=#454 id=454 data-nosnippet>454</a>///
-<a href=#455 id=455 data-nosnippet>455</a>/// Used at the end of a successful swap to terminate the old cell.  The old cell
-<a href=#456 id=456 data-nosnippet>456</a>/// is Frozen at this point; the regular `ForceExit` syscall would reject the
-<a href=#457 id=457 data-nosnippet>457</a>/// request with `PermissionDenied`.
-<a href=#458 id=458 data-nosnippet>458</a>///
-<a href=#459 id=459 data-nosnippet>459</a>/// Uses the same scheduler retirement funnel as every other exit path. The
-<a href=#460 id=460 data-nosnippet>460</a>/// `CellId` is retained only to preserve this internal call shape; it must not
-<a href=#461 id=461 data-nosnippet>461</a>/// authorize Cell-wide cleanup for a worker target.
-<a href=#462 id=462 data-nosnippet>462</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>exit_task_internal(tid: usize, _cell_id: CellId) {
-<a href=#463 id=463 data-nosnippet>463</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
-<a href=#464 id=464 data-nosnippet>464</a>        <span class="comment">// 0xAAAA_AAAA = hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).
-<a href=#465 id=465 data-nosnippet>465</a>        </span>sched.exit_task(tid, <span class="number">0xAAAA_AAAAusize</span>);
+<a href=#383 id=383 data-nosnippet>383</a>    <span class="comment">// The replacement's identity is read under the same SCHEDULER lock that the
+<a href=#384 id=384 data-nosnippet>384</a>    // cutover runs inside, so the published binding names the incarnation that is
+<a href=#385 id=385 data-nosnippet>385</a>    // actually being handed the route rather than the source it replaces. Read it
+<a href=#386 id=386 data-nosnippet>386</a>    // before any mutation below, so a missing target cannot strand the source with
+<a href=#387 id=387 data-nosnippet>387</a>    // a taken mailbox or a closed ingress.
+<a href=#388 id=388 data-nosnippet>388</a>    </span><span class="kw">let </span>(target_cell_id, target_generation) = {
+<a href=#389 id=389 data-nosnippet>389</a>        <span class="kw">let </span>target = sched.tasks.get(<span class="kw-2">&amp;</span>target_tid).ok_or(ViError::NotFound)<span class="question-mark">?</span>;
+<a href=#390 id=390 data-nosnippet>390</a>        (target.cell_id.<span class="number">0</span>, target.cell_generation)
+<a href=#391 id=391 data-nosnippet>391</a>    };
+<a href=#392 id=392 data-nosnippet>392</a>
+<a href=#393 id=393 data-nosnippet>393</a>    <span class="kw">let </span><span class="kw-2">mut </span>source_mailbox = {
+<a href=#394 id=394 data-nosnippet>394</a>        <span class="kw">let </span>source = sched.tasks.get_mut(<span class="kw-2">&amp;</span>source_tid).ok_or(ViError::NotFound)<span class="question-mark">?</span>;
+<a href=#395 id=395 data-nosnippet>395</a>        source.hotswap_ingress_closed = <span class="bool-val">true</span>;
+<a href=#396 id=396 data-nosnippet>396</a>        core::mem::take(<span class="kw-2">&amp;mut </span>source.pending_msgs)
+<a href=#397 id=397 data-nosnippet>397</a>    };
+<a href=#398 id=398 data-nosnippet>398</a>
+<a href=#399 id=399 data-nosnippet>399</a>    <span class="kw">if </span>!<span class="kw">crate</span>::cell::service_registry::commit_paused(
+<a href=#400 id=400 data-nosnippet>400</a>        service_id,
+<a href=#401 id=401 data-nosnippet>401</a>        source_tid,
+<a href=#402 id=402 data-nosnippet>402</a>        target_tid,
+<a href=#403 id=403 data-nosnippet>403</a>        target_cell_id,
+<a href=#404 id=404 data-nosnippet>404</a>        target_generation,
+<a href=#405 id=405 data-nosnippet>405</a>    ) {
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(source) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>source_tid) {
+<a href=#407 id=407 data-nosnippet>407</a>            source.pending_msgs = core::mem::take(<span class="kw-2">&amp;mut </span>source_mailbox);
+<a href=#408 id=408 data-nosnippet>408</a>            source.hotswap_ingress_closed = <span class="bool-val">false</span>;
+<a href=#409 id=409 data-nosnippet>409</a>        }
+<a href=#410 id=410 data-nosnippet>410</a>        rollback_mailbox_appends(sched, target_tid, target_start);
+<a href=#411 id=411 data-nosnippet>411</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::WouldBlock);
+<a href=#412 id=412 data-nosnippet>412</a>    }
+<a href=#413 id=413 data-nosnippet>413</a>
+<a href=#414 id=414 data-nosnippet>414</a>    <span class="comment">// A queued async request is bound to the old provider incarnation. Unlike
+<a href=#415 id=415 data-nosnippet>415</a>    // legacy sends it cannot be replayed at the replacement: doing so could
+<a href=#416 id=416 data-nosnippet>416</a>    // execute the same side effect after the caller was told the old peer died.
+<a href=#417 id=417 data-nosnippet>417</a>    // The source mailbox remains owned by the old task until retirement.
+<a href=#418 id=418 data-nosnippet>418</a>    </span><span class="kw">let </span>(source_cell, source_generation) = {
+<a href=#419 id=419 data-nosnippet>419</a>        <span class="kw">let </span>source = sched.tasks.get(<span class="kw-2">&amp;</span>source_tid).ok_or(ViError::NotFound)<span class="question-mark">?</span>;
+<a href=#420 id=420 data-nosnippet>420</a>        (source.cell_id.<span class="number">0</span>, source.cell_generation)
+<a href=#421 id=421 data-nosnippet>421</a>    };
+<a href=#422 id=422 data-nosnippet>422</a>    <span class="kw">crate</span>::task::async_ipc::cutover_peer(sched, source_tid, source_cell, source_generation);
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
+<a href=#424 id=424 data-nosnippet>424</a>        target.hotswap_source_tid = <span class="prelude-val">None</span>;
+<a href=#425 id=425 data-nosnippet>425</a>    }
+<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sender_tid) = wake_sender {
+<a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">let </span>sender_context = sched
+<a href=#428 id=428 data-nosnippet>428</a>            .tasks
+<a href=#429 id=429 data-nosnippet>429</a>            .get(<span class="kw-2">&amp;</span>sender_tid)
+<a href=#430 id=430 data-nosnippet>430</a>            .map(|sender| (sender_tid, sender.cell_id.<span class="number">0</span>, sender.cell_generation));
+<a href=#431 id=431 data-nosnippet>431</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
+<a href=#432 id=432 data-nosnippet>432</a>            target.state = TaskState::Ready;
+<a href=#433 id=433 data-nosnippet>433</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>((sender_tid, sender_cell_id, sender_generation)) = sender_context {
+<a href=#434 id=434 data-nosnippet>434</a>                target.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
+<a href=#435 id=435 data-nosnippet>435</a>            } <span class="kw">else </span>{
+<a href=#436 id=436 data-nosnippet>436</a>                target.clear_current_caller_context();
+<a href=#437 id=437 data-nosnippet>437</a>            }
+<a href=#438 id=438 data-nosnippet>438</a>        }
+<a href=#439 id=439 data-nosnippet>439</a>        sched.push_ready(target_tid);
+<a href=#440 id=440 data-nosnippet>440</a>    }
+<a href=#441 id=441 data-nosnippet>441</a>    <span class="prelude-val">Ok</span>(())
+<a href=#442 id=442 data-nosnippet>442</a>}
+<a href=#443 id=443 data-nosnippet>443</a>
+<a href=#444 id=444 data-nosnippet>444</a><span class="kw">fn </span>message_is_async(
+<a href=#445 id=445 data-nosnippet>445</a>    sched: <span class="kw-2">&amp;</span><span class="kw">crate</span>::task::scheduler::Scheduler,
+<a href=#446 id=446 data-nosnippet>446</a>    source_tid: usize,
+<a href=#447 id=447 data-nosnippet>447</a>    index: usize,
+<a href=#448 id=448 data-nosnippet>448</a>) -&gt; bool {
+<a href=#449 id=449 data-nosnippet>449</a>    sched.tasks.get(<span class="kw-2">&amp;</span>source_tid).is_some_and(|task| {
+<a href=#450 id=450 data-nosnippet>450</a>        task.pending_msgs.as_slice()[index]
+<a href=#451 id=451 data-nosnippet>451</a>            .wire_header()
+<a href=#452 id=452 data-nosnippet>452</a>            .is_some_and(|header| header.async_op != <span class="number">0</span>)
+<a href=#453 id=453 data-nosnippet>453</a>    })
+<a href=#454 id=454 data-nosnippet>454</a>}
+<a href=#455 id=455 data-nosnippet>455</a>
+<a href=#456 id=456 data-nosnippet>456</a><span class="kw">fn </span>rollback_mailbox_appends(
+<a href=#457 id=457 data-nosnippet>457</a>    sched: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::task::scheduler::Scheduler,
+<a href=#458 id=458 data-nosnippet>458</a>    target_tid: usize,
+<a href=#459 id=459 data-nosnippet>459</a>    target_start: usize,
+<a href=#460 id=460 data-nosnippet>460</a>) {
+<a href=#461 id=461 data-nosnippet>461</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>target_tid) {
+<a href=#462 id=462 data-nosnippet>462</a>        <span class="kw">while </span>target.pending_msgs.len() &gt; target_start {
+<a href=#463 id=463 data-nosnippet>463</a>            <span class="kw">let </span>last = target.pending_msgs.len() - <span class="number">1</span>;
+<a href=#464 id=464 data-nosnippet>464</a>            drop(target.pending_msgs.remove(last));
+<a href=#465 id=465 data-nosnippet>465</a>        }
 <a href=#466 id=466 data-nosnippet>466</a>    }
-<a href=#467 id=467 data-nosnippet>467</a>
-<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">crate</span>::audit::log_event(
-<a href=#469 id=469 data-nosnippet>469</a>        <span class="kw">crate</span>::audit::AuditEvent::CellExit,
-<a href=#470 id=470 data-nosnippet>470</a>        <span class="kw-2">&amp;</span><span class="kw">crate</span>::audit::encode_u32x2(tid <span class="kw">as </span>u32, <span class="number">0xAA00_0000u32</span>), <span class="comment">// hot-swap marker
-<a href=#471 id=471 data-nosnippet>471</a>    </span>);
-<a href=#472 id=472 data-nosnippet>472</a>}
-<a href=#473 id=473 data-nosnippet>473</a>
-<a href=#474 id=474 data-nosnippet>474</a><span class="attr">#[cfg(test)]
-<a href=#475 id=475 data-nosnippet>475</a></span><span class="kw">mod </span>tests {
-<a href=#476 id=476 data-nosnippet>476</a>    <span class="kw">use </span>super::{CeilingState, ReplacementReservation, SWAP_CEILINGS};
-<a href=#477 id=477 data-nosnippet>477</a>    <span class="kw">use </span><span class="kw">crate</span>::task::cap::CapSet;
-<a href=#478 id=478 data-nosnippet>478</a>
-<a href=#479 id=479 data-nosnippet>479</a>    <span class="attr">#[test]
-<a href=#480 id=480 data-nosnippet>480</a>    </span><span class="kw">fn </span>stale_reservation_cannot_restore_a_new_freeze() {
-<a href=#481 id=481 data-nosnippet>481</a>        <span class="kw">const </span>TID: usize = usize::MAX - <span class="number">1</span>;
-<a href=#482 id=482 data-nosnippet>482</a>        <span class="kw">let </span>old = CapSet {
-<a href=#483 id=483 data-nosnippet>483</a>            spawn: <span class="bool-val">true</span>,
-<a href=#484 id=484 data-nosnippet>484</a>            ..CapSet::EMPTY
-<a href=#485 id=485 data-nosnippet>485</a>        };
-<a href=#486 id=486 data-nosnippet>486</a>        <span class="kw">let </span>new = CapSet {
-<a href=#487 id=487 data-nosnippet>487</a>            network: <span class="bool-val">true</span>,
-<a href=#488 id=488 data-nosnippet>488</a>            ..CapSet::EMPTY
-<a href=#489 id=489 data-nosnippet>489</a>        };
-<a href=#490 id=490 data-nosnippet>490</a>        SWAP_CEILINGS.lock().insert(
-<a href=#491 id=491 data-nosnippet>491</a>            TID,
-<a href=#492 id=492 data-nosnippet>492</a>            CeilingState::Reserved {
-<a href=#493 id=493 data-nosnippet>493</a>                generation: <span class="number">3</span>,
-<a href=#494 id=494 data-nosnippet>494</a>                swap_id: <span class="number">9</span>,
-<a href=#495 id=495 data-nosnippet>495</a>                freeze_nonce: <span class="number">41</span>,
-<a href=#496 id=496 data-nosnippet>496</a>            },
-<a href=#497 id=497 data-nosnippet>497</a>        );
-<a href=#498 id=498 data-nosnippet>498</a>        <span class="kw">let </span>stale = ReplacementReservation {
-<a href=#499 id=499 data-nosnippet>499</a>            source_tid: TID,
-<a href=#500 id=500 data-nosnippet>500</a>            source_generation: <span class="number">3</span>,
-<a href=#501 id=501 data-nosnippet>501</a>            swap_id: <span class="number">9</span>,
-<a href=#502 id=502 data-nosnippet>502</a>            freeze_nonce: <span class="number">41</span>,
-<a href=#503 id=503 data-nosnippet>503</a>            ceiling: <span class="prelude-val">Some</span>(old),
-<a href=#504 id=504 data-nosnippet>504</a>        };
-<a href=#505 id=505 data-nosnippet>505</a>        SWAP_CEILINGS.lock().insert(
-<a href=#506 id=506 data-nosnippet>506</a>            TID,
-<a href=#507 id=507 data-nosnippet>507</a>            CeilingState::Available {
-<a href=#508 id=508 data-nosnippet>508</a>                ceiling: new,
+<a href=#467 id=467 data-nosnippet>467</a>}
+<a href=#468 id=468 data-nosnippet>468</a>
+<a href=#469 id=469 data-nosnippet>469</a><span class="doccomment">/// Terminate `tid` via the internal path, bypassing the Frozen kill-guard.
+<a href=#470 id=470 data-nosnippet>470</a>///
+<a href=#471 id=471 data-nosnippet>471</a>/// Used at the end of a successful swap to terminate the old cell.  The old cell
+<a href=#472 id=472 data-nosnippet>472</a>/// is Frozen at this point; the regular `ForceExit` syscall would reject the
+<a href=#473 id=473 data-nosnippet>473</a>/// request with `PermissionDenied`.
+<a href=#474 id=474 data-nosnippet>474</a>///
+<a href=#475 id=475 data-nosnippet>475</a>/// Uses the same scheduler retirement funnel as every other exit path. The
+<a href=#476 id=476 data-nosnippet>476</a>/// `CellId` is retained only to preserve this internal call shape; it must not
+<a href=#477 id=477 data-nosnippet>477</a>/// authorize Cell-wide cleanup for a worker target.
+<a href=#478 id=478 data-nosnippet>478</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>exit_task_internal(tid: usize, _cell_id: CellId) {
+<a href=#479 id=479 data-nosnippet>479</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
+<a href=#480 id=480 data-nosnippet>480</a>        <span class="comment">// 0xAAAA_AAAA = hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).
+<a href=#481 id=481 data-nosnippet>481</a>        </span>sched.exit_task(tid, <span class="number">0xAAAA_AAAAusize</span>);
+<a href=#482 id=482 data-nosnippet>482</a>    }
+<a href=#483 id=483 data-nosnippet>483</a>
+<a href=#484 id=484 data-nosnippet>484</a>    <span class="kw">crate</span>::audit::log_event(
+<a href=#485 id=485 data-nosnippet>485</a>        <span class="kw">crate</span>::audit::AuditEvent::CellExit,
+<a href=#486 id=486 data-nosnippet>486</a>        <span class="kw-2">&amp;</span><span class="kw">crate</span>::audit::encode_u32x2(tid <span class="kw">as </span>u32, <span class="number">0xAA00_0000u32</span>), <span class="comment">// hot-swap marker
+<a href=#487 id=487 data-nosnippet>487</a>    </span>);
+<a href=#488 id=488 data-nosnippet>488</a>}
+<a href=#489 id=489 data-nosnippet>489</a>
+<a href=#490 id=490 data-nosnippet>490</a><span class="attr">#[cfg(test)]
+<a href=#491 id=491 data-nosnippet>491</a></span><span class="kw">mod </span>tests {
+<a href=#492 id=492 data-nosnippet>492</a>    <span class="kw">use </span>super::{CeilingState, ReplacementReservation, SWAP_CEILINGS};
+<a href=#493 id=493 data-nosnippet>493</a>    <span class="kw">use </span><span class="kw">crate</span>::task::cap::CapSet;
+<a href=#494 id=494 data-nosnippet>494</a>
+<a href=#495 id=495 data-nosnippet>495</a>    <span class="attr">#[test]
+<a href=#496 id=496 data-nosnippet>496</a>    </span><span class="kw">fn </span>stale_reservation_cannot_restore_a_new_freeze() {
+<a href=#497 id=497 data-nosnippet>497</a>        <span class="kw">const </span>TID: usize = usize::MAX - <span class="number">1</span>;
+<a href=#498 id=498 data-nosnippet>498</a>        <span class="kw">let </span>old = CapSet {
+<a href=#499 id=499 data-nosnippet>499</a>            spawn: <span class="bool-val">true</span>,
+<a href=#500 id=500 data-nosnippet>500</a>            ..CapSet::EMPTY
+<a href=#501 id=501 data-nosnippet>501</a>        };
+<a href=#502 id=502 data-nosnippet>502</a>        <span class="kw">let </span>new = CapSet {
+<a href=#503 id=503 data-nosnippet>503</a>            network: <span class="bool-val">true</span>,
+<a href=#504 id=504 data-nosnippet>504</a>            ..CapSet::EMPTY
+<a href=#505 id=505 data-nosnippet>505</a>        };
+<a href=#506 id=506 data-nosnippet>506</a>        SWAP_CEILINGS.lock().insert(
+<a href=#507 id=507 data-nosnippet>507</a>            TID,
+<a href=#508 id=508 data-nosnippet>508</a>            CeilingState::Reserved {
 <a href=#509 id=509 data-nosnippet>509</a>                generation: <span class="number">3</span>,
 <a href=#510 id=510 data-nosnippet>510</a>                swap_id: <span class="number">9</span>,
-<a href=#511 id=511 data-nosnippet>511</a>                freeze_nonce: <span class="number">42</span>,
+<a href=#511 id=511 data-nosnippet>511</a>                freeze_nonce: <span class="number">41</span>,
 <a href=#512 id=512 data-nosnippet>512</a>            },
 <a href=#513 id=513 data-nosnippet>513</a>        );
-<a href=#514 id=514 data-nosnippet>514</a>
-<a href=#515 id=515 data-nosnippet>515</a>        drop(stale);
-<a href=#516 id=516 data-nosnippet>516</a>
-<a href=#517 id=517 data-nosnippet>517</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#518 id=518 data-nosnippet>518</a>            SWAP_CEILINGS.lock().remove(<span class="kw-2">&amp;</span>TID),
-<a href=#519 id=519 data-nosnippet>519</a>            <span class="prelude-val">Some</span>(CeilingState::Available {
-<a href=#520 id=520 data-nosnippet>520</a>                ceiling,
-<a href=#521 id=521 data-nosnippet>521</a>                generation: <span class="number">3</span>,
-<a href=#522 id=522 data-nosnippet>522</a>                swap_id: <span class="number">9</span>,
-<a href=#523 id=523 data-nosnippet>523</a>                freeze_nonce: <span class="number">42</span>,
-<a href=#524 id=524 data-nosnippet>524</a>            }) <span class="kw">if </span>ceiling == new
-<a href=#525 id=525 data-nosnippet>525</a>        ));
-<a href=#526 id=526 data-nosnippet>526</a>    }
-<a href=#527 id=527 data-nosnippet>527</a>}
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="kw">let </span>stale = ReplacementReservation {
+<a href=#515 id=515 data-nosnippet>515</a>            source_tid: TID,
+<a href=#516 id=516 data-nosnippet>516</a>            source_generation: <span class="number">3</span>,
+<a href=#517 id=517 data-nosnippet>517</a>            swap_id: <span class="number">9</span>,
+<a href=#518 id=518 data-nosnippet>518</a>            freeze_nonce: <span class="number">41</span>,
+<a href=#519 id=519 data-nosnippet>519</a>            ceiling: <span class="prelude-val">Some</span>(old),
+<a href=#520 id=520 data-nosnippet>520</a>        };
+<a href=#521 id=521 data-nosnippet>521</a>        SWAP_CEILINGS.lock().insert(
+<a href=#522 id=522 data-nosnippet>522</a>            TID,
+<a href=#523 id=523 data-nosnippet>523</a>            CeilingState::Available {
+<a href=#524 id=524 data-nosnippet>524</a>                ceiling: new,
+<a href=#525 id=525 data-nosnippet>525</a>                generation: <span class="number">3</span>,
+<a href=#526 id=526 data-nosnippet>526</a>                swap_id: <span class="number">9</span>,
+<a href=#527 id=527 data-nosnippet>527</a>                freeze_nonce: <span class="number">42</span>,
+<a href=#528 id=528 data-nosnippet>528</a>            },
+<a href=#529 id=529 data-nosnippet>529</a>        );
+<a href=#530 id=530 data-nosnippet>530</a>
+<a href=#531 id=531 data-nosnippet>531</a>        drop(stale);
+<a href=#532 id=532 data-nosnippet>532</a>
+<a href=#533 id=533 data-nosnippet>533</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#534 id=534 data-nosnippet>534</a>            SWAP_CEILINGS.lock().remove(<span class="kw-2">&amp;</span>TID),
+<a href=#535 id=535 data-nosnippet>535</a>            <span class="prelude-val">Some</span>(CeilingState::Available {
+<a href=#536 id=536 data-nosnippet>536</a>                ceiling,
+<a href=#537 id=537 data-nosnippet>537</a>                generation: <span class="number">3</span>,
+<a href=#538 id=538 data-nosnippet>538</a>                swap_id: <span class="number">9</span>,
+<a href=#539 id=539 data-nosnippet>539</a>                freeze_nonce: <span class="number">42</span>,
+<a href=#540 id=540 data-nosnippet>540</a>            }) <span class="kw">if </span>ceiling == new
+<a href=#541 id=541 data-nosnippet>541</a>        ));
+<a href=#542 id=542 data-nosnippet>542</a>    }
+<a href=#543 id=543 data-nosnippet>543</a>}
 </code></pre></div></section></main></body></html>

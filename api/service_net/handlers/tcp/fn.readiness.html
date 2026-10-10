@@ -4,7 +4,7 @@
     owner: <a class="struct" href="../../socket_table/struct.SocketOwner.html" title="struct service_net::socket_table::SocketOwner">SocketOwner</a>,
     sockets: &amp;mut SocketSet&lt;'_&gt;,
     table: &amp;<a class="struct" href="../../socket_table/struct.SocketTable.html" title="struct service_net::socket_table::SocketTable">SocketTable</a>,
-) -&gt; Result&lt;(Vec&lt;TcpReadyEvent, READY_PAGE&gt;, u16), ()&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Level-triggered readiness after interface progress. Every cap is validated
+) -&gt; Result&lt;(Vec&lt;<a class="struct" href="../../../api/services/ipc/struct.TcpReadyEvent.html" title="struct api::services::ipc::TcpReadyEvent">TcpReadyEvent</a>, READY_PAGE&gt;, u16), ()&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Level-triggered readiness after interface progress. Every cap is validated
 before returning any events; foreign owners cannot probe another owner’s
 socket even if its cap is mixed into an otherwise valid batch.</p>
 </div></details></section></div></main></body></html>
