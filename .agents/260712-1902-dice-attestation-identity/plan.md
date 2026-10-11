@@ -7,9 +7,15 @@ effort: 21
 branch: main
 tags: [security, attestation, dice, kms, identity, g2, silo, planning-only]
 created: 2026-07-12
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Pending P01-P05 and deferred P06 identity/authority work"
 ---
 
 # DICE/RIoT attestation + KMS Cell + K2/K3 node identity
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Pending P01–P05 and deferred P06 identity/authority work require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md), naming an Intel C2C consumer. Completed P00 and prior evidence remain unchanged. Protected-root, independent, hardware and ABI gates remain; documentation completion unlocks nothing. See the [inventory](../cell-contract-0024-locks.md).
 
 > **D35 portfolio ruling (2026-08-01):** child of Trust & Identity, not a merged
 > manifest/revocation plan. P00 landed in `aebc092a`; retain phase-local Law-1 and

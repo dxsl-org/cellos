@@ -1,4 +1,13 @@
+---
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished WASM host/import authority or tier reinterpretation"
+---
+
 # Phase 28 — Tier 2 WASM Cells + RISC-V ePMP Foundation
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Unfinished WASM host/import authority or tier reinterpretation requires explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). The partial/suspect status remains unchanged; RISC-V ePMP stays parked and hardware-gated. Documentation completion does not unlock execution or redefine native Tier 2. See the [inventory](../cell-contract-0024-locks.md).
 
 **Status**: PARTIAL/SUSPECT (D38 correction, 2026-08-01)  
 **Priority**: P2  

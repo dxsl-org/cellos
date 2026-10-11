@@ -6,12 +6,17 @@ priority: P1
 effort: 9d
 branch: main
 tags: [feature, backend, critical]
-blockedBy: []
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
 blocks: []
 created: 2026-08-09
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished caller migration, pointer retirement, owner-scoped handles and closure"
 ---
 
 # SAS/LBI Revocable VFS Access Plan
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Unfinished caller migration, pointer retirement, owner-scoped handles and closure gates require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed P01–P04 and prior progress remain evidence. Documentation completion does not unlock execution or broaden the original no-ABI scope. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Overview
 

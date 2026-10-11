@@ -6,12 +6,17 @@ priority: P2
 effort: 38d
 branch: feat/common-drivers-g1-g2-g3
 tags: [feature, drivers, hardware, g1, g2, g3]
-blockedBy: []
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
 blocks: []
 created: 2026-08-19
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished or reopened shared device/MMIO/DMA authority contracts only"
 ---
 
 # Common Driver Port Plan for G1-G3
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Unfinished or reopened shared device/MMIO/DMA authority contracts require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed P01–P05 are not reset; G3/platform expansion remains parked under ADR-0022, not admitted by this lock. Hardware qualification and ABI gates remain. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Scope Contract
 

@@ -2,6 +2,13 @@
 
 **Date**: 2026-07-31 | **Status**: Accepted | **Authors**: Cellos core team
 
+> **2026-10-11 target amendment:** [ADR-0024](../decisions/0024-cell-kernel-authority-contract.md)
+> and [Spec 25 §3](25-cell-kernel-authority-contract.md#3-authority-model) retain typed handles,
+> transitive revoke, issuer-owned resource semantics and reacquire-on-restart. They select
+> explicit post-start receipt only within an immutable admission ceiling/receive policy.
+> That differs from this record's spawn-only rule; current behavior remains until its exact
+> protocol/ABI amendment is approved in the [cutover plan](../../.agents/261011-1200-cell-contract-authority/plan.md).
+
 ---
 
 ## Decision

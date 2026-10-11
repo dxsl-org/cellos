@@ -6,12 +6,17 @@ priority: P1
 effort: 18h
 branch: main
 tags: [bugfix, kernel, vfs, testing, critical]
-blockedBy: []
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
 blocks: [phase-01-p02-runtime-verify-fast-IPC-gap]
 created: 2026-08-01
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Blocked conditional ReadGrant and fast-IPC followups only"
 ---
 
 # Midori Phase 01 Partial Closure Plan
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Blocked conditional `ReadGrant` and fast-IPC followups require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed evidence and prior blockers remain; no completed phase is reset. Documentation completion does not unlock execution or waive Law 1. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Overview
 

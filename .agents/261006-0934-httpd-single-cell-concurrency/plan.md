@@ -6,10 +6,15 @@ priority: P1
 tier: thinking
 tags: [backend, api, feature]
 created: 2026-10-06
-blockedBy: [260927-1100-c2c-anywhere-tier-aware/phase-03-async-ipc]
+blockedBy: [260927-1100-c2c-anywhere-tier-aware/phase-03-async-ipc, .agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "All unfinished reactor, async IPC, completion-capacity and connection-lifecycle slices"
 ---
 
 # Kế hoạch nâng cấp httpd một cell
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** All unfinished reactor, async IPC, completion-capacity and connection-lifecycle slices require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). The older async prerequisite remains provenance, not permission to execute the locked C2C plan: unfinished prerequisite work is owned inside the controlling plan. Prior status, budgets and no-ABI limits remain. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Quyết định
 Một cell httpd, một reactor sở hữu socket/request/buffer; không spawn cell hoặc thread theo request. Request chờ mạng/VFS/AI chuyển sang Pending để reactor phục vụ request khác. Không bọc synchronous IPC trong async fn. Chưa triển khai code.

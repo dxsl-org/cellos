@@ -6,12 +6,17 @@ priority: P1
 effort: 5d
 branch: main
 tags: [phase-06, tier-1, rust-std, pal, compiler, benchmark, feasibility]
-blockedBy: []
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
 blocks: []
 created: 2026-08-21
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Pending security backing, human approval and PAL owner/lifetime promotion"
 ---
 
 # Tier 1 rust-std PAL Feasibility and Decision Plan
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Pending security backing, human approval and PAL owner/lifetime promotion require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). The verified feasibility package remains verified; no completed implementation is reset. Named independent approvals and ABI gates remain. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Overview
 

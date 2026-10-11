@@ -6,12 +6,17 @@ priority: P1
 effort: "phased; no fixed estimate until target runtime matrix is available"
 branch: main
 tags: [bugfix, critical, tech-debt]
-blockedBy: []
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
 blocks: []
 created: 2026-09-27
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "All unfinished grant/domain, snapshot and qualification slices"
 ---
 
 # Kernel architecture repair plan
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** The [Cell contract plan](../261011-1200-cell-contract-authority/plan.md) is the sole contract-cutover owner. All unfinished grant/domain, snapshot and qualification slices are blocked pending explicit per-slice rebase and file-owner handoff. Completed repairs and the status/progress below remain historical evidence. Documentation completion does not unlock execution. Existing no-ABI authorization, Law-1 checkpoints, protected identity and independent/physical gates are unchanged. See the [lock inventory](../cell-contract-0024-locks.md).
 
 ## Scope and disposition
 

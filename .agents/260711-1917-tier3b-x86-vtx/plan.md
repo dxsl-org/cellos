@@ -7,9 +7,15 @@ effort: 10 phases (~5-6K new LOC; heavy reuse of shipped ARM64 cell)
 branch: main
 tags: [hypervisor, x86_64, vt-x, vmx, svm, ept, pvh, virtio, vmm, tier3b]
 created: 2026-07-11
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Intel VMX/EPT P09 and unfinished guest-lifecycle/authority integration"
 ---
 
 # Intel x86-64 VMX — required Tier-3 dependency for Cell-to-Cell Anywhere
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Intel VMX/EPT P09 and unfinished guest-lifecycle/authority integration require explicit per-slice rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Historical SVM/shared-VMM evidence and prior status remain unchanged; AMD remains parked under ADR-0022. Documentation completion does not unlock execution. Law-1, physical and production gates remain separate. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Current direction (2026-10-08)
 

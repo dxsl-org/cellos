@@ -2,128 +2,126 @@
 
 [![CI](https://github.com/dxsl-org/cellos/actions/workflows/ci.yml/badge.svg)](https://github.com/dxsl-org/cellos/actions/workflows/ci.yml)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Donate-%23FF5E5B?logo=ko-fi)](https://ko-fi.com/dxsl_org)
-[🌐 Tiếng Việt](./README_VN.md)
+[Tiếng Việt](./README_VN.md)
 
-**Cellos is a Rust-native research OS with one active direction: Cell-to-Cell Anywhere on Intel x86-64.**
+**Cellos is a Rust-native research operating system for explicit Cell-to-Cell communication on Intel x86-64.**
 
-The target is explicit Cell-to-Cell communication across local execution, LAN, and a gated relay on one fixed, headless Intel hardware configuration. Software participates through defined contracts and adapters, not transparent distribution of arbitrary applications. Trusted native Cells use a shared Single Address Space (SAS); Rust language-based isolation is not a blanket hardware or security boundary.
+Its design unit is the **Cell**: a principal with scoped authority, bounded resources and a recoverable lifetime—not a process per request or a distributed address space. The goal is to connect native Cells, isolated C/C++ workloads and VM guests through defined service contracts, locally and across admitted nodes, without hiding authorization or failure.
 
-The [Intel-only direction (ADR-0022)](./docs/decisions/0022-intel-x86-64-c2c-only-direction.md) and [current focus](./docs/roadmap/current-focus.md) govern all work. Every task must name a direct C2C-on-Intel deliverable, dependency, or necessary regression. GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V platform work are paused as independent programs; existing code, evidence, and necessary cross-architecture regressions are retained.
+**Architecture selected; runtime cutover pending.** [ADR-0024](./docs/decisions/0024-cell-kernel-authority-contract.md), [Spec 25 v1.2](./docs/specs/25-cell-kernel-authority-contract.md) and [Spec 26](./docs/specs/26-workload-placement-scaling-contract.md) define the target below. Existing local mechanisms and evidence are a foundation, not proof that cluster routing, recovery or autoscaling are shipped.
 
----
+## Key ideas
 
-## ✨ What Makes Cellos Unique? (Compared to traditional OSes)
+- **Cell-owned authority.** The target uses one shared, kernel-protected capability space per Cell incarnation: typed generational handles, attenuated delegation and bounded revocation. Names, signatures, thread IDs and authenticated peer connections do not themselves grant method or resource rights.
+- **One operation contract, explicit failures.** Local IPC and remote C2C share correlation, admission, deadlines, cancellation and incarnation binding—not pointers or identical failure behavior. Copied IPC is the default; authorized local grants/rings are optional transports. After dispatch, a timeout or lost reply can mean uncertain effects, not permission to replay.
+- **A small privileged substrate, explicit service owners.** Kernel Cell is the exceptional root and local enforcement substrate. VFS owns file/directory semantics; service-net owns IP/TCP; a broker owns peer sessions and bounded connection pools; protected authority owns peer trust and protected relay admission.
+- **Recovery separate from execution.** Replacement prepares, restores committed business state, reacquires resource rights and becomes Ready before publication. Mutable state has one fenced writer per state domain. Recovery must match the declared failure class; serialized handles and a worker-local snapshot are not durable authority.
+- **Workload distribution by opt-in.** Compatible typed methods may use a logical workload endpoint with bounded weighted round-robin routing; concrete generation-bound endpoints stay pinned. A separate fixed-home controller selects placement and adjusts replicas within one durable application-wide budget, including router/controller overhead and uncertain children.
+- **Compatibility without making POSIX the core.** The selected native model uses C2C directly. Optional local runtime adapters and domain-selected POSIX personality Cells provide only the compatibility semantics a workload requires; full Linux binary compatibility is not promised.
 
-The architecture provides mechanisms to evaluate for that program, with distinct evidence and trust boundaries:
+These are design choices to implement and measure, not claims of universal security, zero-copy across machines, hard real-time behavior or superiority to Linux.
 
-*   **Cellular Single Address Space (SAS):** Trusted components can share memory and transfer ownership of buffers. This does not promise zero-copy transport across tier or machine boundaries.
-*   **Language-Based Isolation (LBI):** Safe Rust checks reduce memory-safety risks within the reviewed compiler/kernel/unsafe-code trust base. They do not isolate arbitrary untrusted binaries from the SAS.
-*   **Heap Snapshot research:** Snapshot-format work exists, but capture and restore remain disabled in shipping images pending quiescence and a real board save/reset/restore/resume witness; instant-on is not a shipped guarantee.
-*   **Three-tier target:** Native Cells, C/C++ paged domains, and VM guests are intended C2C participants through explicit adapters. This is a research and qualification direction, not a claim that all three tiers work end-to-end on Intel today.
+## Architecture
 
----
+A **node is one kernel instance**, on physical hardware or in a VM. A cluster contains multiple nodes. Each Cell incarnation resides on exactly one node; its threads stay node-local. Hundreds of requests can use a Cell's bounded workers and operations without hundreds of Cells or connections.
 
-## 🎯 Vision & Positioning: What is Cellos (and what is it not)?
+The following is a **selected target diagram**, not a map of shipped cluster services:
 
-The sole active goal is **Cell-to-Cell Anywhere on a fixed, headless Intel x86-64 configuration**, not a general-purpose desktop, robotics, or multi-market OS program.
-
-*   **One hardware model first:** Qualify one exact configuration before a second machine of the same model. Target requirements include VT-x/EPT, VT-d, COM1, HPET, and the exact firmware/device contract in the [Hardware Compatibility List](./docs/hardware-compatibility-list.md).
-*   **Local, LAN, and relay are separate gates:** Existing identity, authorization, protected-authority, and production gates remain in force. This decision authorizes neither purchases nor ABI/security relaxation, automatic remote execution, or production activation.
-*   **No arbitrary-app transparency:** Existing applications require a defined port or adapter; a VM guest does not automatically become a distributed Cell.
-
-### The 3-Tier Execution Model
-
-All three tiers belong to the C2C target, with different trust boundaries:
-1.  **Tier 1 (Core & Native Cell):** Trusted native Cells in the shared SAS, subject to signing and reviewed trust constraints.
-2.  **Tier 2 (Paged Domain Cell):** Hardware-paged domains for C/C++ and other workloads requiring isolation. x86 admission evidence is test-only; the C++ shim gap remains open.
-3.  **Tier 3 (VM Guest):** VM-backed participants connected through explicit guest adapters. Intel VMX is incomplete, and AMD SVM evidence on QEMU does not qualify Intel. The [Guest Guide](./docs/guides/tier3b-linux-vm.md) is a technical reference; the [earlier browser decision](./docs/decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md) is not an active browser program.
-
----
-
-## 🚀 Project Status: `v0.2.1-dev` (Mycelium)
-
-Active direction: **Intel x86-64 Cell-to-Cell Anywhere**. Existing architecture evidence is retained below; it is not a list of parallel development programs.
-
-| Target | Role / evidence | Limits |
-|--------|-----------------|--------|
-| `x86_64-unknown-none` (Intel) | **Sole active target**; QEMU q35 boot/CPL3 evidence | [q35 instructions](./boards/qemu/q35-x86_64/README.md); Intel VMX incomplete; no qualified physical x86 HCL entry. |
-| `riscv64gc-unknown-none-elf` | Existing reference/QEMU lane; new platform work paused | Retain evidence and necessary shared-code regressions; not the primary direction. |
-| `aarch64-unknown-none` | Existing boot and exact-device evidence; new platform work paused | Protected-authority evidence may inform Intel dependencies, not authorize a new ARM program. |
-| `riscv32imc-unknown-none-elf` | Existing Cellos-Nano QEMU boot evidence; new platform work paused | Retain implementation and necessary regressions. |
-
-QEMU is software/integration evidence, not physical hardware qualification. The supported `igb` IDs (`8086:10c9` in QEMU and flash-backed i210 `8086:1533`) do not establish that an actual machine is qualified.
-
----
-
-## Getting Started
-
-**Active x86 path:** Follow the checked-in [QEMU q35 x86-64 build and test instructions](./boards/qemu/q35-x86_64/README.md). That lane is a software witness, not Intel VMX completion or physical-PC certification.
-
-### Legacy RV64 quickstart reference
-
-The commands below are retained for the existing RV64 reference lane, not the Intel program's default build. They require **Rust nightly**, `qemu-system-riscv64`, and Python 3/PowerShell.
-
-```powershell
-# 1. Clone the repository
-git clone https://github.com/dxsl-org/cellos.git
-cd cellos
-
-# 2. Build kernel (Rust handles PIC flags automatically, don't set globally)
-cargo build --release
-
-# 3. Create FAT32 disk image and boot QEMU
-./gen_disk.ps1
-./run.ps1        # Use Ctrl+A X to exit QEMU
+```mermaid
+flowchart TB
+    subgraph CLUSTER["One admitted cluster: explicit grants and resource ceilings"]
+        C["Fixed-home controller Cell<br/>Durable budget, placement/autoscaling, membership"]
+        W["Ingress router Cell<br/>Opt-in endpoint, bounded selection"]
+        R["Ready replica Cells<br/>Selected nodes"]
+        B["Broker Cell<br/>Sessions, relay/direct policy"]
+        N["service-net<br/>IP/TCP"]
+        P["Protected authority<br/>Trust, protected relay admission"]
+        A["Resource/state authority<br/>One fenced writer per mutable domain"]
+        subgraph LOCAL["Each node: local substrate"]
+            K["Kernel Cell<br/>Isolation, scheduling, capabilities, IPC, publish/retire"]
+            I["Init / supervisors"]
+            K -->|"Bounded bootstrap grants"| I
+        end
+        C -->|"Scoped lifecycle"| I
+        C -->|"Route publication, not per request"| W
+        I -->|"Prepare / Ready / retire"| R
+        W -->|"Local IPC"| R
+        W -->|"Remote C2C"| B
+        B -->|"Broker-mediated C2C"| R
+        N -.->|"IP/TCP resources"| B
+        P -.->|"Trust / relay admission"| B
+        A -->|"Effect authorization / writer fencing"| R
+    end
 ```
-*The Cellos command-line interface will appear. Try typing `ls /bin`, `date`, `cat /proc/version`!*
 
----
+The router preserves original-subject authority and freezes one concrete target at submission. It does not silently retry, hedge or turn local failure into remote fallback. The controller is not a cluster root or a per-request scheduler. It reserves before create dispatch, retains unknown outcomes as charged, and drains admitted work before scale-down. Missing telemetry freezes scaling; a partition or timeout cannot promote another controller or state authority. There is no distributed shared memory, cross-node thread migration, automatic resharding or general multi-writer consensus in this contract.
 
-## 🧩 Source Structure & Architecture
+Kernel Cell is not an ordinary restartable service: kernel failure requires node recovery. Internal kernel functions need not become queued RPCs. Resource issuers retain their own semantic authority; the kernel does not duplicate every service ACL.
+
+## Status and evidence boundaries
+
+| Area | Existing foundation / selected work | Current limit |
+|---|---|---|
+| Local foundation | Generation-bound principals/endpoints, bounded RPC mechanisms, directory capabilities and userspace supervision; x86 q35 boot/CPL3 integration evidence | Prior evidence keeps its exact architecture/profile scope. It does not establish the complete new Cell contract. |
+| Shared Cell authority | **Selected; pending** Kernel Cell identity, one shared CSpace, typed delegation/revocation and aggregate budgets (P02/P05) | Existing per-task capability snapshots are not the target shared authority model. |
+| Threads and SMP | **Selected; pending** unified thread ownership, multi-wait operations, whole-Cell retirement and CPU/DMA quiescence (P03/P04) | Existing scheduler/completion work is reused; the new lifetime and multicore contract is not qualified by it. |
+| State and recovery | **Selected; pending** committed-state watermark, single-writer fencing, resource reacquisition and bounded crash evidence (P06) | Node/power-loss recovery needs durable state and ordering proof. Whole-kernel warm snapshot remains disabled and unqualified. |
+| Remote C2C | **Selected; pending** authenticated exports, remote operations/lifecycle and reconciliation (P08) | No shipped cluster-runtime claim. Relay-first is the baseline; direct LAN and protected relay/production activation have separate gates. |
+| Workload distribution | **Selected; pending** logical pools, bounded weighted routing, deterministic constrained placement and demand-based autoscaling (P08/P10) | Durable application reservations, hysteresis/cooldown, safe drain and actual load-driven spawn still require implementation and runtime evidence. |
+| Intel tiers and hardware | q35 software evidence and retained test-image Tier 2/runtime evidence; Intel VMX and physical qualification remain required (P07/P09/P10) | QEMU does not qualify a physical PC, Intel VMX/EPT or protected production authority. No physical x86 HCL entry is qualified. |
+
+Spec 25 owns **AC-01..AC-43**, all pending implementation; Spec 26 extends it without a competing acceptance ledger. The [controlling plan](./.agents/261011-1200-cell-contract-authority/plan.md) has ten pending phases. **CELL-CONTRACT-0024** keeps [38 overlapping plan dispositions](./.agents/cell-contract-0024-locks.md) in force: writing documentation does not unlock execution, approve ABI bytes or activate remote/production paths.
+
+### Active scope
+
+[ADR-0022](./docs/decisions/0022-intel-x86-64-c2c-only-direction.md) makes **headless Intel x86-64 C2C Anywhere the sole active direction**. Qualify one exact configuration, then a separately qualified second Intel node; the same model is preferred, not assumed qualified. Hardware requirements and evidence live in the [HCL](./docs/hardware-compatibility-list.md).
+
+Existing ARM, RISC-V, AMD and other board code/evidence remain available for necessary shared-code regressions. New platform work and independent GUI/browser, AI, robotics and general-purpose OS programs are paused. Every task must name an Intel C2C deliverable, dependency or necessary regression. Performance comparisons require the same scoped workload and hardware; no “faster than Linux” claim follows from this architecture.
+
+## Execution tiers and trust
+
+Roles such as application, service, driver and supervisor are separate from isolation tier. Tier or locality never grants authority.
+
+| Tier | Intended boundary | Trust and qualification |
+|---|---|---|
+| **1 — Native SAS** | Admitted native safe Rust and reviewed privileged/unsafe substrate share a Single Address Space | Trusted components, not a hostile native-code sandbox. Rust language-based isolation depends on the compiler, kernel and reviewed unsafe-code trust base. |
+| **2 — Paged domain** | Hardware-isolated native C/C++, FFI, dynamic runtimes and other untrusted native code | Never downgrade to SAS when admission fails. Test-image/runtime evidence is not Intel production qualification. |
+| **3 — VM guest** | Guests participate through explicit scoped adapters/bridges | Separate guest identity and grants; no inherited host root. Intel VMX is incomplete; AMD SVM/QEMU evidence cannot qualify Intel. |
+
+All three tiers remain part of the C2C destination. A guest boot, a local native demo or an application running in a VM is not end-to-end all-tier C2C completion. Software requires an explicit port or adapter; arbitrary applications do not become distributed automatically.
+
+## Getting started
+
+1. Read the [getting-started guide](./docs/getting-started.md) for setup and lane selection.
+2. For the active x86 software lane, follow the checked-in [QEMU q35 build and integration instructions](./boards/qemu/q35-x86_64/README.md), including their prerequisites and separate production/test images. This is a software witness, not physical or production certification.
+3. Before choosing work, consult [current focus](./docs/roadmap/current-focus.md), the [contract cutover plan](./.agents/261011-1200-cell-contract-authority/plan.md) and [lock register](./.agents/cell-contract-0024-locks.md).
+
+Use the relevant guide's exact commands and evidence scope rather than a generic workspace build/test recipe or a legacy RV64 default quickstart.
+
+## Source layout
 
 ```text
-Cellos/
-├── kernel/             Nano-kernel: Scheduler, memory, VFS, Cell loader, IPC
-├── hal/                Abstraction layer & hardware mechanisms (RISC-V, ARM, x86)
-├── boards/             Board identities, firmware contracts, and wiring
-├── libs/               Shared libraries: ABI, ostd, ViUI, HTTP
-├── cells/              Distributed software: apps, demos, drivers, tools, services
-├── tests/integration/  Integration tests (Host-driven & QEMU)
-└── docs/               Design specs & development guides
+kernel/     Privileged boot, scheduling, memory, loader, IPC and enforcement
+hal/        Architecture mechanisms, SoC contracts, core and hardware traits
+boards/     Board identities, firmware/device contracts and board instructions
+libs/       ABI/types, ostd SDK, runtime adapters and shared libraries
+cells/      Apps, services, drivers, runtimes, guests, demos, tools and test Cells
+scripts/    Build, image, integration and evidence runners
+tools/      Host-side image, SDK and development tooling
+tests/      Host/integration suites, fixtures and acceptance harnesses
+docs/       Specifications, decisions, guides, roadmaps and recorded evidence
 ```
 
-Before contributing or developing, please review the system design at [system-architecture.md](./docs/system-architecture.md) and the security model at [security-model.md](./docs/security-model.md).
+This tree includes retained historical programs; their presence does not make them active or make proposed controller/router services implemented.
 
----
+## Documentation and contributing
 
-## ⚖️ The 8 Coding Laws of Cellos
+- **Documentation entrypoint:** [docs index](./docs/README.md)
+- **Direction and status:** [ADR-0022](./docs/decisions/0022-intel-x86-64-c2c-only-direction.md) · [current focus](./docs/roadmap/current-focus.md) · [project roadmap](./docs/project-roadmap.md)
+- **Canonical target:** [ADR-0024](./docs/decisions/0024-cell-kernel-authority-contract.md) · [Spec 25](./docs/specs/25-cell-kernel-authority-contract.md) · [Spec 26](./docs/specs/26-workload-placement-scaling-contract.md)
+- **System and trust:** [system architecture](./docs/system-architecture.md) · [security model](./docs/security-model.md) · [hardware guide](./docs/hardware-dev-guide.md)
+- **Contribution rules:** [CONTRIBUTING](./CONTRIBUTING.md) · [code standards](./docs/code-standards.md)
 
-To maintain our uncompromising vision of memory safety and modular design, the entire codebase strictly adheres to:
+Read the applicable contract and admission gates before implementation. Preserve frozen interfaces; exact ABI changes require their existing Law-1 approvals. Use trait objects (`dyn Trait`) for dynamic dispatch at prescribed boundaries. Tie cleanup to actual thread, operation, Cell and issuer/resource lifetimes: RAII handles normal ownership release, but fatal faults require enforced retirement and quiescence, not an assumption that destructors run. Select verification from the affected guide/profile and report only the evidence actually obtained. Contributions require DCO sign-off as described in the contribution guide.
 
-1. **Interface is Sacred:** Changing `libs/api/` requires high consensus (2x review).
-2. **Owned Buffers for Async:** Always use `Box<[u8]>` instead of borrowed `&mut [u8]` for data crossing IPC/async boundaries.
-3. **Preserve Architecture Boundaries:** Use `VAddr`/`PAddr` types, never hardcode pointer sizes. Keeping existing cross-architecture code correct does not activate other hardware programs.
-4. **Unsafe Management:** Safe Cells use `#![forbid(unsafe_code)]`; reviewed driver/FFI exemptions remain explicit. Kernel/HAL unsafe operations require documented `// SAFETY:` invariants.
-5. **Modern Module Style:** Use `foo.rs` alongside a `foo/` directory. `mod.rs` is forbidden.
-6. **Cellos Naming:** Traits and Types use the `Vi` prefix (Virtual Interface, e.g., `ViDriver`). Files use `snake_case`.
-7. **Trait Objects:** At system boundaries, use static polymorphism via `Arc<dyn ViDriver + Send + Sync>`.
-8. **RAII - Clean Up Explicitly:** Cells are responsible for their own resource cleanup (Drop). There is no process-based cleanup due to the shared SAS nature.
-
-👉 Read the details in [CONTRIBUTING.md](./CONTRIBUTING.md) and [code-standards.md](./docs/code-standards.md).
-
----
-
-## 📚 Documentation
-
-Cellos has a transparent specification and architecture system. Before working on a new subsystem, please read the corresponding documentation:
-
-*   **Active Direction:** [ADR-0022](./docs/decisions/0022-intel-x86-64-c2c-only-direction.md) | [current-focus.md](./docs/roadmap/current-focus.md)
-*   **Getting Started:** [getting-started.md](./docs/getting-started.md) | [project-roadmap.md](./docs/project-roadmap.md)
-*   **Architecture:** [system-architecture.md](./docs/system-architecture.md) | [hardware-dev-guide.md](./docs/hardware-dev-guide.md)
-*   **System Specs:** From context ([00-context.md](./docs/specs/00-context.md)) to memory ([02-memory.md](./docs/specs/02-memory.md)), application tiers ([05-application.md](./docs/specs/05-application.md)), networking, VFS... (Found in `docs/specs/`).
-
----
-
-**Have an idea or code to contribute?** Run `cargo clippy -- -D warnings` and `cargo test --all` before creating a PR!
-
-Cellos extends thanks for the great ideas from: *Theseus OS* (SAS & Live Evolution), *Asterinas* (FrameKernel Safety), *Tock* (Embedded traits), and *Redox OS* (Microkernel IPC).
+Cellos draws inspiration from Theseus OS, Asterinas, Tock and Redox OS.

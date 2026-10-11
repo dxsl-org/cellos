@@ -7,9 +7,15 @@ effort: 4 phases (~9-13 dev-days)
 branch: main
 tags: [g2, package-manager, cell-store, signing, capability, vfs, sas, lbi, distribution]
 created: 2026-07-12
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished installer, cell-store mutation, package/spawn and replacement authority"
 ---
 
 # Cell Package Distribution
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Unfinished installer, cell-store mutation, package/spawn and replacement authority requires explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). A scoped installer redesign remains necessary; ambient/name-authorized writes are not restored. Prior status and evidence remain. Documentation completion does not unlock execution or relax Law-1/signing gates. See the [inventory](../cell-contract-0024-locks.md).
 
 > Roadmap `docs/project-roadmap.md` §E: "Package manager / app distribution [G2] — no install/update
 > mechanism beyond baking into the disk image." This plan closes that gap **without a Linux-style

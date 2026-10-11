@@ -7,9 +7,15 @@ effort: 9 phases (~28-36 dev-days)
 branch: main
 tags: [kernel-boundary, driver-cells, virtio, pcie, mmc, sas, lbi, migration]
 created: 2026-06-24
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished kernel/Driver-Cell ownership and MMIO/DMA/IRQ/registry authority migration"
 ---
 
 # Kernel Boundary Law Cleanup — Driver Cell Migration
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Unfinished kernel/Driver-Cell ownership and MMIO/DMA/IRQ/registry authority migration require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Prior progress remains evidence, not a new authorization to repeat migrations or restore path-derived authority. Documentation completion does not unlock execution; ABI, hardware and promotion gates remain. See the [inventory](../cell-contract-0024-locks.md).
 
 > Ratified law: `docs/specs/15-kernel-boundary.md` (2026-06-23). After NVMe + e1000 + hotswap
 > migration (commit c70d8273), the kernel still hosts VirtIO device drivers, the PCIe ECAM

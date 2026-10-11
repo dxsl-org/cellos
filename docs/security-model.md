@@ -1,21 +1,32 @@
 # Cellos Security Model
 
-**Version:** v0.2.3-dev | **Updated:** 2026-08-19
+**Updated:** 2026-10-11 — architecture precedence clarified; dated threat rows below are historical assessments, not fresh security verification.
 
 ## Design Philosophy
 
-Cellos uses a **Cellular Single Address Space (SAS)** model with
-Language-Based Isolation (LBI) via Rust's type system.  Traditional OS
-security relies on hardware MMU separation between processes; Cellos instead
-relies on:
+The current authority/trust contract is [ADR-0024](decisions/0024-cell-kernel-authority-contract.md)
+and [Spec 25](specs/25-cell-kernel-authority-contract.md), with workload routing
+and scaling constraints in [Spec 26](specs/26-workload-placement-scaling-contract.md).
+The [architecture guide](system-architecture.md) distinguishes existing mechanisms
+from pending implementation. These contracts supersede incompatible claims below,
+but do not certify those historical mitigations or close an open risk.
 
-1. **Rust ownership + borrow checker** — prevents spatial/temporal memory bugs
-2. **Capability tokens (`CapId`)** — unforgeable, kernel-managed access rights
-3. **`#![forbid(unsafe_code)]` on Cells** — enforced at the signing gate by
-   `scripts/cellos-sign --check` (both CI workflows), absolute outside a reviewed allowlist
-   (`scripts/unsafe-allowlist.toml`); each allowlisted file is an approved hole in the LBI
-   wall, not an exempt no-op
-4. **VFS access through capabilities** — no direct file-descriptor integers
+- Tier 1 SAS is for admitted trusted Rust and audited unsafe substrate, not a
+  hardware sandbox for hostile native code. Untrusted/FFI workloads require
+  the qualified isolation tier; unavailable isolation means refusal, not downgrade.
+- Typed, generation-bound capabilities, shared Cell CSpace and scoped delegation
+  are the target authority model; a name, signature, tier or authenticated node
+  does not itself grant a method/resource right. Shared CSpace migration is pending.
+- Close releases a reference; revoke cuts descendant authority and quiescence
+  must precede reuse. These are distinct, not interchangeable security operations.
+- Issuers validate their own resources. Routers preserve original-subject
+  authority; controllers cannot bypass destination admission or multiply budget.
+- Signing/provenance, isolation, scoped authority and resource accounting are
+  separate requirements. Rust memory safety alone does not establish all of them.
+
+The STRIDE tables retain earlier observations and code references. Their status
+labels must be revalidated at the applicable source/profile/runtime ceiling before
+release; they are not a current all-tier or production security PASS.
 
 ## STRIDE Threat Model
 
@@ -29,8 +40,8 @@ relies on:
 ### Tampering
 | Threat | Mitigation | Status |
 |--------|-----------|--------|
-| Cell writes to another Cell's memory | SAS + Rust ownership; no `unsafe` in cells/ | ✅ Mitigated |
-| Cell modifies a revoked capability | Kernel removes CapId from table on Close; subsequent ops return PermissionDenied | ✅ Mitigated |
+| Cell writes to another Cell's memory | Historical SAS ownership assessment applies only within admitted safe-Rust/audited trust constraints; hostile/unsafe code requires qualified hardware isolation | Historical scope — not universal mitigation |
+| Attacker uses a closed/revoked handle | Target distinguishes close, transitive authority revoke and resource quiescence; exact current issuer enforcement must be verified before promotion | Contract selected; shared-authority migration pending |
 | Attacker modifies disk image to inject malicious ELF | Every spawn source reaches the same SHA-256 measurement + Ed25519 verification hook. A present invalid signature is denied, but default G1 leaves `signing-required` off: stripping `__ViCell_sig` turns the image into an admitted unsigned SAS cell. The reproducible dev seed is forgeable and no production public-key provisioning path exists yet. | ⚠️ Partial — mechanism shipped; fleet enforcement open |
 
 ### Repudiation

@@ -1,6 +1,6 @@
 # Cellos Documentation Index
 
-**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-10-08
+**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-10-11
 
 ---
 
@@ -8,7 +8,39 @@
 
 The sole active program is **Cell-to-Cell Anywhere on Intel x86-64**, using one fixed headless hardware configuration. Read [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md) and [current focus](roadmap/current-focus.md) before choosing work: every task must identify a direct C2C-on-Intel deliverable, dependency, or necessary regression.
 
-The target includes Tier 1 native Cells, Tier 2 C/C++ domains, and Tier 3 VM participants through explicit adapters across local/LAN/relay paths, not transparent arbitrary-app distribution. Intel VMX is incomplete, x86 Tier 2 admission evidence is test-only with a C++ shim gap, and no physical x86 HCL entry is qualified. Existing security, ABI, purchase, remote-activation, and production gates remain unchanged.
+The current contract-cutover owner is [ADR-0024](decisions/0024-cell-kernel-authority-contract.md)
+and [Spec 25](specs/25-cell-kernel-authority-contract.md), with the
+[detailed implementation plan](../.agents/261011-1200-cell-contract-authority/plan.md).
+Related unfinished execution is scoped and locked by
+[CELL-CONTRACT-0024](../.agents/cell-contract-0024-locks.md); old phase links and
+admissions cannot bypass that lock. Architecture approval is not concrete ABI or remote activation approval.
+
+Use the [root README](../README.md) ([Tiếng Việt](../README_VN.md)) for key
+features and implementation status; the [architecture guide](system-architecture.md)
+for component ownership and flows; Spec 25/26 for normative requirements.
+Current runtime evidence belongs to the roadmap/portfolio and lane guides, not
+feature descriptions or a diagram.
+
+The approved target keeps one Cell on one node (one physical/VM kernel instance);
+a cluster has multiple nodes. Broker Cell owns bounded peer sessions/reconnect and
+direct/relay routing, service-net owns IP/TCP, protected authority owns trust, and
+kernel owns local primitives. P08 now includes a scoped placement/autoscaling
+controller Cell for one application across selected nodes within the admitted
+cluster (not federation), with durable application-wide reservations and explicit destination
+admission, Ready routing and safe drain. Its authority is single active, fenced
+and fixed-home: unknown creates retain budget, with no timeout promotion or
+implicit remote fallback. C2C hides transport, not failures. P10 qualifies actual
+hundreds of concurrent clients, not hundreds of Cells or promised throughput.
+The ten phases remain pending and all 38 locks remain; this is documentation-only
+approval, not implementation, ABI ratification or remote activation.
+
+[Spec 26](specs/26-workload-placement-scaling-contract.md) completes the workload
+contract: opt-in logical endpoints, per-ingress router Cells with bounded weighted
+round-robin, explicit node placement, accounted control-plane/replica shares and
+sample-driven autoscaling. P08 delivers these in gated internal slices; P10 must
+observe load-driven spawn and safe scale-down, not merely pre-created replicas.
+
+The target includes Tier 1 native Cells, Tier 2 C/C++ domains, and Tier 3 VM participants through explicit adapters across local/LAN/relay paths, not transparent arbitrary-app distribution. Retained x86 Tier 2/runtime evidence is profile-specific, not production qualification; Intel VMX remains incomplete and no physical x86 HCL entry is qualified. Existing security, ABI, purchase, remote-activation, and production gates remain unchanged.
 
 GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V platform work are paused as independent programs. The reference lists below preserve existing contracts, code documentation, and historical evidence; listing a document does not activate its old roadmap. Necessary shared-code regressions and existing ARM protected-authority evidence may support the Intel program without reopening another platform program.
 
@@ -16,6 +48,7 @@ GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V
 |------|---------|
 | [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md) | Canonical sole-program decision |
 | [ADR-0023](decisions/0023-local-service-generation-binding.md) | Local service binding axis `(cell_id, generation)`; additive `LookupServiceBound = 429` (Law-1 FROZEN) |
+| [ADR-0024](decisions/0024-cell-kernel-authority-contract.md) | Node-local Cell/Kernel identity, object-capability authority, scoped cluster placement/autoscaling and execution freeze |
 | [roadmap/current-focus.md](roadmap/current-focus.md) | Current Intel C2C priorities and evidence gates |
 | [QEMU q35 x86-64](../boards/qemu/q35-x86_64/README.md) | Documented x86 build/test path; software evidence, not physical qualification |
 | [getting-started.md](getting-started.md) | Setup, build, run, first contribution |
@@ -109,3 +142,5 @@ Internal design docs — read before implementing a subsystem.
 | [specs/17-ipc-wire-contract.md](specs/17-ipc-wire-contract.md) | Cell IPC: framing, recv-mask, byte-0 registry |
 | [specs/23-native-sdk-contract.md](specs/23-native-sdk-contract.md) | Ratified Native SDK family contract and evidence matrix |
 | [specs/24-ai-inference-architecture.md](specs/24-ai-inference-architecture.md) | Ratified AI Inference & Small Language Model Architecture |
+| [specs/25-cell-kernel-authority-contract.md](specs/25-cell-kernel-authority-contract.md) | Selected Cell/Kernel/authority contract; node/cluster ownership, workload distribution and AC-01..AC-43; implementation/ABI gates remain |
+| [specs/26-workload-placement-scaling-contract.md](specs/26-workload-placement-scaling-contract.md) | Workload endpoints, weighted routing, deterministic placement, application-wide budget and bounded autoscaling; architecture selected, runtime pending |

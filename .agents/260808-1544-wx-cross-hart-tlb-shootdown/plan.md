@@ -6,12 +6,17 @@ priority: P0
 effort: 4d
 branch: main
 tags: [critical, kernel, memory, security]
-blockedBy: []
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
 blocks: []
 created: 2026-08-08
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished or reopened cross-hart permission retirement and reuse gates"
 ---
 
 # W^X Cross-Hart TLB Shootdown Plan
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Unfinished or reopened cross-hart permission retirement and reuse gates require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed RV64 evidence remains evidence, not Intel qualification; non-Intel expansion remains parked. Original hardware/security blockers remain. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Overview
 

@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-10-08 — Intel x86-64 C2C-only direction
+**Last updated**: 2026-10-11 — Cell/Kernel Cell/authority and scoped placement/autoscaling contract cutover within Intel C2C
 
 ## Sole active direction: C2C Anywhere on Intel x86-64
 
@@ -15,14 +15,70 @@ lifecycle semantics. Local IPC, LAN and relay remain distinct transports:
 `anywhere` does not mean shared pointers across machines, automatic distribution
 of arbitrary applications, invisible failures or unbounded retries.
 
+### Current admission: contract cutover and execution freeze
+
+[ADR-0024](../decisions/0024-cell-kernel-authority-contract.md) and the
+[controlling Cell contract plan](../../.agents/261011-1200-cell-contract-authority/plan.md)
+now own Cell/Kernel Cell/authority contracts within the unchanged ADR-0022 direction.
+**The current approval authorizes documentation/planning and freezes only.** It
+does not approve a concrete ABI, implementation slice, remote route or production.
+
+`CELL-CONTRACT-0024` blocks conflicting unfinished work in the
+[plan lock inventory](../../.agents/cell-contract-0024-locks.md). The lock applies
+to every affected subordinate phase even when reached directly: old `ready`,
+`active`, cook instructions and handoffs cannot bypass it. Prior status/progress,
+completed evidence and frozen approvals retain their original meaning. Completed
+cap-revocation, native-portability/PAL, dual-mode and completion/reactor records
+are evidence, not tasks to reset or rebuild.
+
+The controlling plan adopts needed unfinished prerequisites internally rather than
+waiting for locked legacy plans: Cell/Kernel shared capability space; Task/thread
+and SMP budgets; operation/wait/completion; resource/delegation/device authority;
+lifecycle/state; optional POSIX/runtime adapters; remote authority and a scoped
+placement/autoscaling controller Cell with durable application-wide budgets;
+Intel VMX/guest bridge; and exact physical/profile qualification. The existing
+ten-phase DAG stays pending. **Documentation completion does not unlock any slice.**
+Explicit per-slice rebase, file-owner handoff, applicable Law-1 approvals and
+portfolio selection are required; only that named slice can be released. Protected
+identity/nonrollback state, independent human and physical gates remain. There is
+no automatic replay of uncertain dispatched work, no remote pointer contract and
+no global superuser credential in the target direction.
+
+One Cell belongs to one node (one physical/VM kernel instance); a cluster has
+multiple nodes. Many requests use bounded workers/operations in a Cell, not one
+Cell per request. Broker Cell owns peer sessions/reconnect/direct-relay selection
+and bounded pools; service-net owns IP/TCP, protected authority owns trust and
+kernel owns local primitives. C2C hides transport choice, never failure semantics.
+The approved controller has one active fenced authority at a fixed home, atomic
+durable application reservations before spawn across selected nodes within the
+admitted cluster (not federation or a new trust domain) and explicit destination admission.
+Unknown creates remain charged until confirmed Gone/absence; startup reconciles.
+Policy bounds replicas/rates/queues/cooldown, routes only to Ready replicas and
+drains before retirement without killing admitted work or unsafe state relocation.
+Single-writer state, relay-first/direct-LAN gates and all 38 scoped locks remain;
+no consensus, DSM, transparent thread migration, timeout promotion or implicit
+remote fallback on local failure. Spec 25 retains AC-01..AC-35 and appends
+AC-36..AC-43 for the complete workload distribution contract; no new runtime/
+ABI/activation permission or proof follows.
+
+[Spec 26](../specs/26-workload-placement-scaling-contract.md) separates per-ingress
+router Cells from the controller and broker: bounded weighted round-robin for
+new logical-endpoint requests, fixed affinity for stateful methods, explicit
+placement constraints and sample-driven desired replicas. Application budget
+includes routers/control capacity, unknown work and safe pending shrink. Missing
+telemetry never means zero load; stale routers cannot bypass destination drain.
+P08 has ordered transport/budget/routing/autoscale/failure slices; P10 observes
+actual load-driven spawn, balanced requests and drain, not only a client count.
+
 ### Task admission and working limits
 
 - Every task names the Intel C2C milestone/consumer it serves, its dependency or
   measured defect, and an observable acceptance scenario/evidence ceiling.
 - No direct connection means **parked**, even if an older document says `ready`.
-- One implementation slice at a time; reuse existing contracts and child plans.
-  The [portfolio](../../.agents/plan-portfolio.md) selects the next executable
-  slice after ABI, security and ownership gates pass.
+- One implementation slice at a time, only after explicit admission under the
+  controlling plan. Reuse completed evidence, rebase unfinished child scopes.
+  The [portfolio](../../.agents/plan-portfolio.md) selects a named slice only
+  after its contract, ABI, security and ownership gates pass.
 - Console/CLI, kernel, networking, storage, isolation, SDK and build/CI work are
   supporting work only. GUI, a terminal product, AI, robotics, general Linux
   replacement and additional hardware ports are not separate objectives.
@@ -34,16 +90,18 @@ of arbitrary applications, invisible failures or unbounded retries.
 ### Milestone projection
 
 These are target outcomes, not a claim that the existing implementations pass.
-Local/software work may proceed without unrelated physical or production gates.
+Local/software work is not globally gated on unrelated physical qualification,
+but affected unfinished execution remains locked until its explicit rebase/handoff.
 
 | Milestone | Required outcome | Present boundary / owning work |
 |---|---|---|
-| Contract and local C2C | Typed local service calls, authority, bounded waits/cancellation, restart/stale-reference behavior and explicit errors | [Tier-aware C2C plan](../../.agents/260927-1100-c2c-anywhere-tier-aware/plan.md); Phase 01 review/ABI entry gates remain. Local binding is design-decided and **Law-1 FROZEN** in [ADR-0023](../decisions/0023-local-service-generation-binding.md) with the opcode implemented and verified; Phase 01 now waits only on contract-owner sign-off |
-| One Intel node | Exact machine boots with usable console, stable bidirectional wired network, persistence across reboot and applicable DMA isolation | [PC plan](../../.agents/261004-1957-x86-pc-lane/plan.md), [HCL](../hardware-compatibility-list.md); QEMU controller evidence exists, no physical row yet; procurement remains separate |
-| Intel tier prerequisites | Qualified x86 Tier 2 C/C++ runtime/admission and Intel VMX/EPT guest lifecycle, storage and network | Tier 2 is test-image-only; x86 C++ runtime gap remains; [VMX plan](../../.agents/260711-1917-tier3b-x86-vtx/plan.md) P09 is required; SVM/TCG does not qualify Intel |
-| Two-node LAN C2C | Same service contract across two identified Intel nodes, authority enforcement, bounded disconnect/reconnect, restart and uncertain outcomes | A separately qualified second Intel machine follows first-node qualification; matching model is preferred, not required; two QEMU nodes are software evidence only; tier-aware transport/identity gates still apply |
-| All-tier and remote closure | Explicit Tier 2/guest adapters, local/LAN/relay interoperability and negative authority/replay cases | Existing guest bridge scope is not blanket cross-node authorization; protected relay identity/time/persistence gates remain, with no insecure fallback |
-| Measured usefulness | Reproducible workload and same-hardware Linux comparison: latency distribution, throughput, CPU/RAM use and recovery | Establish baseline before optimization; no universal performance or commercial-readiness claim |
+| Contract and local C2C | Cell principal/incarnation distinct from Task; shared per-Cell CSpace, typed attenuable/revocable authority, bounded operations/waits and explicit lifecycle outcomes | [Cell contract plan](../../.agents/261011-1200-cell-contract-authority/plan.md) P01–P06 owns cutover; [tier-aware C2C](../../.agents/260927-1100-c2c-anywhere-tier-aware/plan.md) supplies completed evidence, not a parallel owner. ADR-0023 binding approval remains frozen for its exact surface, not blanket approval of ADR-0024 implementation |
+| One Intel node | Exact machine boots with usable console, stable bidirectional wired network, persistence across reboot and applicable DMA isolation | [PC plan](../../.agents/261004-1957-x86-pc-lane/plan.md) completed QEMU controller evidence is retained; unfinished authority/qualification work rebases into controlling P05/P10. [HCL](../hardware-compatibility-list.md) has no physical row yet; procurement remains separate |
+| Intel tier prerequisites | Qualified x86 Tier 2 C/C++ runtime/admission and Intel VMX/EPT guest lifecycle, storage and network | Completed x86 C++ runtime/admission evidence is retained in the portfolio; optional POSIX/runtime contracts rebase in controlling P07. [VMX plan](../../.agents/260711-1917-tier3b-x86-vtx/plan.md) P09 is an unfinished prerequisite adopted by controlling P09, not an independently executable dependency; SVM/TCG does not qualify Intel |
+| Two-node LAN C2C | Same service contract across two identified Intel nodes, explicit authority, bounded disconnect/reconnect, restart and uncertain outcomes | Controlling P08 owns remote authority/RPC/lifecycle and placement/autoscaling; P10 owns exact-node qualification. Relay-only proof precedes qualified direct LAN. A separately qualified second Intel machine follows first-node qualification; two QEMU nodes are software evidence only |
+| Scoped cluster placement/autoscaling | Explicit destination/template/authority policy, node admission and durable application-wide budget; bounded replicas/rates/queue thresholds/cooldown, Ready routing and safe drain | P01 inventories exact ABI/manifest/lifecycle/budget deltas; P08 implements the fixed-home single active fenced controller and unknown-create reconciliation; P10 qualifies quotas/failures. No timeout promotion or implicit remote fallback; all phases/locks/gates remain |
+| All-tier and remote closure | Explicit Tier 2/guest adapters, local/LAN/relay interoperability and negative authority/replay cases | Controlling P07–P09 own integration; guest bridge scope is not blanket cross-node authorization. Protected relay identity/time/persistence gates remain, with no insecure fallback or automatic retry after uncertain dispatch |
+| Measured usefulness | Actual hundreds of simultaneous clients locally and across cluster replicas with immutable request semantics; same-hardware Linux comparison of latency, throughput, CPU/RAM and recovery | Controlling P10 owns qualification and comparison; record actual client/Cell/thread/replica counts separately and establish baseline before optimization. No hundred-Cell count, CPU/throughput guarantee, universal superiority, physical qualification or commercial-readiness claim follows from the design |
 
 Completion requires the all-tier destination, not just local Tier 1 or guest boot.
 Do not add an unneeded application ecosystem to demonstrate it. First choose a
@@ -67,8 +125,9 @@ and production gates remain mandatory where applicable.
 ## Historical capability snapshots — not the execution queue
 
 The remainder preserves earlier evidence and plans. Its `next`, `active`,
-`executable` and stage-order wording is historical and cannot reopen a program.
-Use the direction and milestone table above, then the portfolio, for scheduling.
+`executable`, owner and stage-order wording is historical and cannot reopen a
+program or bypass `CELL-CONTRACT-0024`. Use the controlling plan and scoped lock
+inventory above, then the portfolio, for scheduling.
 
 ## Development-first, solo-first execution boundary
 

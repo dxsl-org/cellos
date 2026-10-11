@@ -1,4 +1,13 @@
+---
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished typed protocol and syscall-authority contract changes"
+---
+
 # Phase 27 Protocol Hardening
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Unfinished typed protocol and syscall-authority contract changes require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Original phase status and completed outputs remain provenance; this does not authorize rebuilding later shipped protocols. Existing Law-1 gates remain and documentation completion unlocks nothing. See the [inventory](../cell-contract-0024-locks.md).
 
 **Status**: 📋 Planned  
 **Created**: 2026-06-07  

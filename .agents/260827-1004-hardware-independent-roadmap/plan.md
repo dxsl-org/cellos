@@ -6,12 +6,17 @@ priority: P1
 effort: "36.5d"
 branch: main
 tags: [roadmap, hardware-gates, qemu, sdk, security]
-blockedBy: []
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
 blocks: []
 created: 2026-08-27
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished shared security, guest-lifecycle, C2C and contract scheduling slices"
 ---
 
 # Hardware-Independent Capability Roadmap
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Unfinished shared security, guest-lifecycle, C2C and contract scheduling slices require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md), now sole contract-cutover owner within ADR-0022. Completed evidence stays completed. Unrelated desktop/platform work remains parked by ADR-0022, not newly frozen by keyword. Documentation completion does not unlock any slice or relax ABI/authority/promotion gates. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Scope Contract
 

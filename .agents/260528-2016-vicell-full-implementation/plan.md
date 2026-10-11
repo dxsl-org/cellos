@@ -7,9 +7,15 @@ effort: 2180h
 branch: main
 tags: [kernel, hal, infra, feature, security, ViCell, ipc, vfs, network, compositor, runtime]
 created: 2026-05-28
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Only unfinished kernel, Cell, authority, runtime and lifecycle contract slices"
 ---
 
 # ViCell Complete Implementation Roadmap
+
+> **CELL-CONTRACT-0024 — legacy umbrella scoped lock (2026-10-11).** Only unfinished kernel, Cell, authority, runtime and lifecycle contract slices require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Historical completion/progress stays intact; unrelated product scope remains parked under ADR-0022, not newly frozen by keyword. Old handoff/parallel instructions cannot bypass the controlling plan. Documentation completion does not unlock execution or ABI changes. See the [inventory](../cell-contract-0024-locks.md).
 
 **Target:** v0.2.0 (current) → v1.0.0 stable release
 **Window:** 2026-05-28 → 2027-06-30 (~13 months)

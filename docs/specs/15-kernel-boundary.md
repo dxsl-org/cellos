@@ -4,6 +4,11 @@
 >
 > This document defines what belongs in the Cellos kernel and what does not. It is the
 > authoritative reference. The summary in `CLAUDE.md` is derived from this spec.
+>
+> **2026-10-11 contract follow-on:** [ADR-0024](../decisions/0024-cell-kernel-authority-contract.md)
+> and [Spec 25](25-cell-kernel-authority-contract.md) define Kernel Cell and target shared
+> Cell authority while retaining this minimality/enforcement boundary. CapSet-to-CSpace
+> migration is gated; policy delegation is not delegation of kernel enforcement.
 
 ---
 

@@ -6,11 +6,16 @@ priority: P1
 effort: "milestone-gated; no calendar estimate"
 branch: main
 tags: [cell-to-cell-anywhere, ipc, dual-mode, relay, security]
-blockedBy: []
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
 created: 2026-09-27
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "All unfinished local, async, fastpath, LAN, relay and tier-adapter execution"
 ---
 
 # Cell-to-Cell Anywhere on Intel x86-64 — sole program, gated delivery
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** The [Cell contract plan](../261011-1200-cell-contract-authority/plan.md) replaces this plan as sole contract-cutover owner within ADR-0022. All unfinished local, async, fastpath, LAN, relay and tier-adapter execution is blocked pending explicit per-slice rebase and file-owner handoff. Completed slices, frozen ABI approvals and evidence below are retained, not reset or broadened. Documentation completion does not unlock execution or activate remote/production paths. See the [lock inventory](../cell-contract-0024-locks.md).
 
 ## Decision and scope
 

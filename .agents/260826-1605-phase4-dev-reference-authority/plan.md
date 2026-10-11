@@ -6,12 +6,17 @@ priority: P1
 effort: "not estimated"
 branch: main
 tags: [security, kms, dev-reference, visionfive2, stm32h5, tpm, signed-time]
-blockedBy: [hardware-assets, aws-dev-account]
+blockedBy: [hardware-assets, aws-dev-account, .agents/261011-1200-cell-contract-authority/plan.md]
 blocks: [260825-1726-kms-silo-production-root-phase-4]
 created: 2026-08-26
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished protected authority, time, enrollment and KMS handoff contracts"
 ---
 
 # Phase 4 DEV_REFERENCE Authority Execution
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Unfinished protected authority, time, enrollment and KMS handoff contracts require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed SOFTWARE_HARNESS evidence is not protected-source proof. Hardware assets, AWS authorization, frozen-ABI, independent and production gates remain intact; no deployment or non-Intel program is activated. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Objective
 

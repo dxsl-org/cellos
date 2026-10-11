@@ -1,4 +1,13 @@
+---
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished Phase02 client/relay authority and Phase06 integration closure"
+---
+
 # SDK Delivery Plan
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Unfinished Phase02 client/relay authority and Phase06 integration closure require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Verified SDK/UI/VFS outputs remain evidence; unrelated UI work is not newly suspended. Frozen ABI, protected-root and production gates remain. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Goal
 Complete roadmap-aligned SDK behavior without changing frozen ABI or claiming G2 qualification.

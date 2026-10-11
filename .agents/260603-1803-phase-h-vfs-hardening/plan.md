@@ -7,9 +7,15 @@ effort: 5h
 branch: main
 tags: [vfs, fat16, kernel, capabilities, posix, shell]
 created: 2026-06-03
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished kernel permission and VFS mutation authority contract slices only"
 ---
 
 # Phase H: VFS Capability & Write Hardening
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Unfinished kernel permission and VFS mutation authority contract slices require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Prior status/evidence remains; unrelated utility breadth is not newly frozen but still needs ADR-0022 admission. Documentation completion does not unlock execution or broaden the original no-ABI scope. See the [inventory](../cell-contract-0024-locks.md).
 
 Phases C–G built a complete FAT16 filesystem on the VirtIO disk. Phase H closes the four
 remaining correctness and security gaps without touching the Law 1 ABI surface

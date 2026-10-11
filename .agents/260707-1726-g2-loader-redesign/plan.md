@@ -1,4 +1,13 @@
+---
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Deferred loader/address-access and remaining regression closure"
+---
+
 # Plan — G2 Loader Redesign: Ramdisk Boot + virtio-blk Driver Cell (Full Closure)
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Deferred loader/address-access and remaining regression closure require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed P01–P06 and the historical status below are retained. Non-Intel expansion remains parked. Documentation completion does not unlock execution or broaden the original ABI approval. See the [inventory](../cell-contract-0024-locks.md).
 
 > **Goal:** Shrink the kernel from owning a full `virtio_blk` driver to a minimal RAM-image boot reader + a post-boot **virtio-blk Driver Cell**, closing the last open thread of the Kernel Boundary migration (RC-4). Leverages SAS/LBI: the kernel drives **no** block hardware.
 >

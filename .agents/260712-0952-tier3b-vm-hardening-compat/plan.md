@@ -8,9 +8,15 @@ branch: main
 created: 2026-07-12
 source_research: .agents/reports/research-260712-1010-tier3b-linux-vm-safety-perf-compat.md
 tags: [tier3b, hypervisor, security, compat, virtio, x86-svm, docs]
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished shared guest backing, device and lifecycle authority"
 ---
 
 # Tier 3b Linux VM — Hardening & Compatibility
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Unfinished shared guest backing, device and lifecycle authority requires explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed analysis/evidence remains; non-Intel and general VM-platform breadth stays parked under ADR-0022. Original ABI and hardware gates remain. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 Chuyển các phát hiện trong `research-260712-1010` thành lộ trình có phân pha.
 **Ranh giới cửa sổ Mythos (analysis-only, tới 2026-07-14):** P01-P03 là docs/threat-model/design

@@ -5,12 +5,17 @@ status: in-progress
 priority: P1
 effort: ""
 tags: [architecture, sas, lbi, performance, reliability, lab, robotics]
-blockedBy: []
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
 blocks: []
 created: 2026-09-05
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished Phase03 authenticated state/replacement transaction and related shared authority"
 ---
 
 # SAS/LBI Closure and Lab-First Robot Workflows
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Unfinished Phase03 authenticated state/replacement transactions and related shared authority work require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed workloads and historical evidence remain; robot physical phases stay parked under ADR-0022 with their original safety/physical gates. Documentation completion does not unlock execution, an ABI delta or actuation. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Approval and Decision
 User approved Approach A in the architecture brainstorm on 2026-09-05 (`duyệt`). Keep trusted native SAS, mediated typed IPC/grants, generation-aware retirement and selective containment. This artifact is the planning handoff, not implementation or qualification evidence.

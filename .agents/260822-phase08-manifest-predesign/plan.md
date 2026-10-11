@@ -8,9 +8,15 @@ tier: thinking
 branch: main
 created: 2026-08-22
 tags: [manifest, abi, predesign, compatibility, downgrade, security]
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Future manifest handoff and implementation only"
 ---
 
 # Phase 08 Manifest ABI Pre-Design Corpus and Downgrade Model
+
+> **CELL-CONTRACT-0024 — future execution locked (2026-10-11).** Completed non-promotional predesign remains completed. Any manifest handoff or implementation requires explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md), with the existing dependency and Law-1 gates. Documentation completion does not unlock execution or approve manifest v3. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Overview
 

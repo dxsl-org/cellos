@@ -4,6 +4,10 @@
 > under [ADR 0001](../decisions/0001-readiness-notifications-remain-draft-until-implemented.md).
 > New cells and every change to a Ratified IPC path MUST comply. Amendments require
 > an entry in §9.
+> [Spec 25](25-cell-kernel-authority-contract.md) defines the target Cell/authority
+> semantics under [ADR-0024](../decisions/0024-cell-kernel-authority-contract.md);
+> it does not amend these frozen wire rules. Concrete deltas still require §9 and
+> Law-1 checkpoints. Related unfinished execution is governed by CELL-CONTRACT-0024.
 >
 > This spec exists because the single largest source of recurring bugs in Cellos
 > is not algorithms — it is **unspecified IPC contracts**. Every service invented

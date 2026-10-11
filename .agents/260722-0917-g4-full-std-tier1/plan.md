@@ -7,9 +7,15 @@ effort: ~120-175 engineer-days (8 phases; ~10-17K LOC across rust-src fork + pol
 branch: fix/ci-followups-srv-lua-qemu
 tags: [g4, std, rustc-target, pal, tokio, mio, polling, tier1, app-platform]
 created: 2026-07-22
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished std/PAL, task/thread, owner-scoped I/O and reactor contracts"
 ---
 
 # G4 — Full Rust std for Tier 1 apps
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Unfinished std/PAL, task/thread, owner-scoped I/O and reactor contracts require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Later completed PAL/native-portability outputs are evidence, not instructions to rebuild them. Prior status remains provenance; standalone runtime breadth stays parked under ADR-0022. Documentation completion does not unlock execution or ABI changes. See the [inventory](../cell-contract-0024-locks.md).
 
 Deliver a `std`-capable Tier 1 target so unmodified crates.io crates (serde/regex/clap → tokio+axum)
 build and run in Cellos cells with **zero C in the Tier 1 TCB**. Route = pure-Rust PAL in a rust-src

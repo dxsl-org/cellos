@@ -7,9 +7,15 @@ effort: Track A ~9.5-13K LOC / ~110-160 eng-days (coding, part real-HW-gated) ·
 branch: fix/ci-followups-srv-lua-qemu
 tags: [tier3b, hypervisor, g5, cow-golden, x86-svm, ept-npt, virtio, security, design]
 created: 2026-07-22
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished guest clone, VMID, reset, snapshot and shared device authority"
 ---
 
 # Tier 3b finish + G5 Lite foundations
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Unfinished guest clone, VMID, reset, snapshot and shared device authority requires explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Historical completed evidence is retained; unrelated wide-guest/platform breadth stays parked under ADR-0022. Law-1, exact hardware and production gates remain. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 Two tracks. **Track A = CODING** (finish the Tier 3b Linux VM; ARM64 EL2 VMM shipped, x86 greenfield). **Track B = DESIGN/SPEC, now-able** (G5 Lite CoW-golden foundations, now with ARM64 **and** x86 EPT/NPT parity per user scope decision; NO coding until a real-HW VMX/SVM/EL2 testbed exists). Every phase labelled **now-able** (design) or **coding** (needs real-HW testbed for final validation).
 

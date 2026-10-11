@@ -8,9 +8,15 @@ branch: main
 tags: [tier1, admission, provenance, signing, owner-consent, anti-rollback]
 created: 2026-08-21
 parent: ".agents/260821-0642-app-tiers-completion/phase-03-tier1-baseline-admission.md"
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished publisher, owner A/B, external-floor and production-admission gates"
 ---
 
 # Tier 1 Baseline and Production Admission
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Unfinished publisher, owner A/B, external-floor and admission work requires explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed core/harness/prequalification outputs remain non-promotional evidence. Protected backing and independent human approvals are not replaced by this decision. Documentation completion does not unlock execution or production. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Child Contract
 

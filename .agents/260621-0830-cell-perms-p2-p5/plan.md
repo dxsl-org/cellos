@@ -1,4 +1,13 @@
+---
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Deferred syscall delegation, parameterized authority and reopened root/bootstrap policy only"
+---
+
 # Plan — Cell Permission Model G1: P2 (delegation) + P5 (operator policy)
+
+> **CELL-CONTRACT-0024 — deferred followups locked (2026-10-11).** Completed P2/P5 and later revocation work remain evidence. Deferred syscall delegation, parameterized authority and reopened root/bootstrap policy require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Historical `CapSet::ALL`/root-exemption language below is not current authority or permission to restore ambient root. Documentation completion does not unlock execution or ABI changes. See the [inventory](../cell-contract-0024-locks.md).
 
 **Created:** 2026-06-21
 **Branch base:** `feat/cell-security-p1-p3` (P1+P3 already shipped here)

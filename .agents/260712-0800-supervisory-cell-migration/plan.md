@@ -7,9 +7,15 @@ effort: 5 phases (~14-19 dev-days)
 branch: main
 tags: [kernel-boundary, supervisor-cell, hotswap, snapshot, reliability, sas, lbi, migration]
 created: 2026-07-12
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Deferred/post-plan snapshot, restart and replacement-authority followups only"
 ---
 
 # Supervisory Cell Migration
+
+> **CELL-CONTRACT-0024 — followup execution locked (2026-10-11).** Completed P00–P04 remain completed. Only deferred/post-plan snapshot, restart and replacement-authority followups require explicit per-slice rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Prior evidence and all ABI/physical gates remain unchanged. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 > **Portfolio correction (D39, 2026-08-01):** P-TRUST landed in `721e1f6f`; Phase 00 is
 > no longer blocked on that plan. Supervisory migration is complete; this program remains

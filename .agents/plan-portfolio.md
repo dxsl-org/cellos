@@ -1,7 +1,7 @@
 # Cellos plan portfolio
 
 **Status:** Canonical scheduling index
-**Updated:** 2026-10-08 — Intel x86-64 C2C Anywhere is the sole active program
+**Updated:** 2026-10-11 — Cell/Kernel Cell/authority and scoped cluster placement/autoscaling contract cutover owns Intel C2C execution scheduling
 
 This file owns scheduling intent. Source/tests own implementation truth; individual plan
 files preserve detailed scope and provenance. Untouched checkboxes are not proof that code
@@ -12,10 +12,75 @@ regression/security/build repair protecting that path, plus its acceptance
 scenario and evidence ceiling. An old plan's `active`/`ready` status is not
 authorization. Plans not admitted below are parked/historical.
 
-## Active program — Intel x86-64 C2C Anywhere only
+## Sole contract-cutover owner — CELL-CONTRACT-0024
 
-- `260927-1100-c2c-anywhere-tier-aware` — **primary program**, not a queued
-  alternative. [Plan](260927-1100-c2c-anywhere-tier-aware/plan.md).
+The [Cell contract and authority plan](261011-1200-cell-contract-authority/plan.md)
+is the sole owner of unfinished Cell/Kernel Cell/authority contract cutover within
+[ADR-0022](../docs/decisions/0022-intel-x86-64-c2c-only-direction.md).
+[ADR-0024](../docs/decisions/0024-cell-kernel-authority-contract.md) records the
+Cell-centric direction. **Current admission is documentation/planning and freezes
+only, not runtime implementation, concrete ABI ratification, remote activation or
+production admission. WIP remains one implementation slice when separately admitted.**
+
+- The [lock inventory](cell-contract-0024-locks.md) identifies every considered
+  plan, preserves prior progress, scopes each new block and maps replacement phase
+  areas. Entry-point `blockedBy`, `executionLock` and `lockScope` fields are
+  scheduling relations, not claims that completed implementation stopped working.
+- **Precedence applies to direct phase-file navigation too:** a locked plan's
+  unfinished subordinate phase, checklist, old cook command, file-owner grant,
+  `ready`/`active` label or earlier admission cannot bypass `CELL-CONTRACT-0024`.
+  Completed evidence is read-only input at its original ceiling.
+- The new plan consumes completed evidence, not execution of locked legacy plans.
+  Needed unfinished prerequisites are adopted as named slices inside its phases:
+  P02 Cell/Kernel CSpace, P03 threads/SMP/CPU budgets, P04 operations/wait/completion,
+  P05 resource/delegation/device authority, P06 lifecycle/state/crash recovery,
+  P07 optional POSIX/runtime, P08 remote authority and placement/autoscaling with
+  durable application-wide budgets, P09 Intel VMX/guest bridge and P10 exact
+  physical/profile qualification and concurrent local/cluster workloads. P01 owns
+  exact contract/ABI/manifest/lifecycle/budget inventory and adoption. The existing
+  ten-phase DAG remains pending; this avoids a circular prerequisite/unlock dependency.
+- **No automatic unlock:** documentation completion, a green old test, or finishing
+  the controlling plan does not release a legacy slice. Record explicit per-slice
+  rebase against the new contracts, file-owner handoff, retained technical/approval
+  gates, acceptance evidence and scheduling selection in this index and the
+  controlling plan; update only that slice's lock relation in the same change.
+- Law 1 still requires its two approvals for each concrete affected ABI surface.
+  Existing frozen surfaces and no-ABI authorizations are not broadened. Protected
+  identity/nonrollback state, independent human, physical-device, signing and
+  production gates remain separate. Non-Intel and unrelated product work remains
+  parked under ADR-0022; the lock does not create a new blanket maintenance ban.
+
+Approved placement is an application-policy controller Cell, not kernel scheduling
+across machines. One Cell belongs to one node (one physical/VM kernel instance),
+and a cluster has multiple nodes. The broker owns bounded peer sessions/reconnect/
+direct-relay choice; service-net owns IP/TCP and protected authority owns trust.
+The controller has one active fenced authority at a fixed home, with atomic
+durable application reservations before spawn across selected nodes within the
+admitted cluster (not federation or a new trust domain), destination-local admission and
+unknown-create charge retention until confirmed Gone/absence. Scaling obeys
+min/max/rate/queue-threshold/cooldown policy, Ready-only routing and safe drain.
+Single-writer state, relay-first/direct-LAN qualification and all 38 scoped locks
+remain; no consensus, DSM, transparent thread migration, timeout promotion or
+implicit local-failure remote fallback. AC-36..AC-43 append to unchanged AC-01..AC-35.
+P10 measures actual hundreds of concurrent clients, not Cell counts or guaranteed
+CPU/throughput capacity. No historical evidence below is upgraded by this amendment.
+
+[Spec 26](../docs/specs/26-workload-placement-scaling-contract.md) is the detailed
+workload architecture: logical versus pinned endpoints, bounded weighted routers,
+deterministic constrained placement, nested application shares and a measured-demand
+control loop. P08's internal ordered slices preserve the ten-phase DAG; P10 proves
+load-triggered creation/routing/drain, not pre-spawned replicas alone. Router and
+control-plane capacity is budgeted; no per-request controller hop or durable ledger write.
+
+## Historical Intel C2C execution ledger — not current admission
+
+The remainder of this ledger preserves completed work and prior admissions.
+Its `primary`, `next`, `admitted`, `authorized` and owner-handoff wording is historical
+where it would authorize unfinished locked execution. Use the controlling plan,
+scoped lock inventory and promotion rule, not those older statements, to schedule.
+
+- `260927-1100-c2c-anywhere-tier-aware` — **former primary execution plan; unfinished
+  execution locked**. [Plan](260927-1100-c2c-anywhere-tier-aware/plan.md).
   Next executable scope is Phase 01 contract inventory/review and non-activating
   evidence preparation. Kernel-owner review, contract ratification and Law-1
   approvals still precede affected implementation. This direction decision does
@@ -379,12 +444,18 @@ Satisfying an old trigger alone does not reopen an independent program.
 
 ## Promotion rule
 
-A slice becomes executable only when it names a concrete Intel C2C outcome,
-dependency and acceptance scenario, its technical/approval triggers are evidenced,
-file ownership does not collide, Law-1 confirmations are satisfied where needed,
-and this index records the selected slice in the same change. An unrelated
-program requires an explicit new owner direction decision, not just a local plan
-trigger. Direction approval does not authorize procurement, paid services,
-irreversible provisioning, an ABI change, remote enablement or production.
-Do not advertise aggregate COMPLETE/OPEN counts until a generated inventory can
-reconcile source evidence with plan metadata.
+A slice becomes executable only after the controlling Cell contract plan records
+its explicit adoption/rebase and file-owner handoff, this index selects it as the
+single implementation slice, and its concrete Intel C2C outcome, dependency,
+acceptance scenario and evidence ceiling are named. `CELL-CONTRACT-0024` is not
+released by completion of documentation or an older prerequisite. Update the
+affected lock scope and [inventory](cell-contract-0024-locks.md) in the same change;
+all unselected scope remains blocked or parked.
+
+Technical and approval triggers must be evidenced and applicable Law-1 checkpoints
+must be satisfied. No-ABI authorizations do not silently become ABI authorization.
+An unrelated program requires an explicit new owner direction decision, not a
+local plan trigger. Direction approval does not authorize procurement, paid
+services, irreversible provisioning, remote enablement or production. Preserve
+independent human and physical qualification gates. Historical aggregate counts
+are not current implementation truth.

@@ -6,12 +6,17 @@ priority: P1
 effort: 2.5d
 branch: feat/wx-post-reloc-and-f1-signing
 tags: [critical, runtime, security]
-blockedBy: [phase-01-p02-runtime-verify-fast-IPC-gap]
+blockedBy: [phase-01-p02-runtime-verify-fast-IPC-gap, .agents/261011-1200-cell-contract-authority/plan.md]
 blocks: [midori-phase08-stack-sizing, package-distribution-bin-write, cap-revocation-phase02]
 created: 2026-08-01
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished read-grant, completion/peer-death and merge-gate execution only"
 ---
 
 # Parallel Midori Closure Plan
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Unfinished read-grant, completion/peer-death and merge-gate execution requires explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed audits/branches and prior blockers remain historical; the old parallel-worktree instructions are not executable admission. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Verdict
 

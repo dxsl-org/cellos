@@ -16,6 +16,11 @@
 > **Relates to**: [Spec 17](../specs/17-ipc-wire-contract.md) (ratified wire),
 > [Spec 20 draft v3](../specs/20-unified-ipc-contract.md) §2.2/§4,
 > [ADR-0008](0008-protected-relay-tls-endpoint-ownership.md)/[ADR-0009](0009-correlate-relay-packet-failures.md).
+>
+> **2026-10-11 follow-on:** [ADR-0024](0024-cell-kernel-authority-contract.md) and
+> [Spec 25](../specs/25-cell-kernel-authority-contract.md) reuse this incarnation axis.
+> They do not change the frozen opcode/layout or substitute local generation for a protected
+> remote replay epoch. Unfinished C2C execution is now under CELL-CONTRACT-0024.
 
 ## 1. Context
 

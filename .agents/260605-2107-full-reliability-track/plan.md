@@ -5,9 +5,15 @@ created: 2026-06-05
 status: planned
 owner: ViOS Team
 spec: docs/specs/12-reliability.md
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished fault/reclaim/supervisor/restart/state/scheduler contracts"
 ---
 
 # Full Reliability Track — ViCell "Never-Die"
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Unfinished fault/reclaim/supervisor/restart/state/scheduler contracts require explicit per-slice rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Historical status and completed outputs are retained; this plan cannot create a competing root-supervisor or legacy tier contract. Documentation completion does not unlock execution. Law-1 and existing safety/evidence gates remain. See the [inventory](../cell-contract-0024-locks.md).
 
 Raise ViCell's aggregate never-die score from ~25-30% toward ~55-60% by building the
 **detection + recovery** layer that turns isolated cell crashes into recoverable events.

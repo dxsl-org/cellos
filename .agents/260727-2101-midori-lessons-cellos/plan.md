@@ -1,4 +1,13 @@
+---
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Deferred init recovery, generic reactor, async VFS/DMA, RecvScatter and permission-reuse followups only"
+---
+
 # Midori Lessons → Cellos: Async, No-Root, Lightweight
+
+> **CELL-CONTRACT-0024 — deferred followups locked (2026-10-11).** Completed P01–P11 remain completed. Only deferred init recovery, generic reactor, async VFS/DMA, `RecvScatter` and permission-reuse followups require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Existing evidence and Law-1 gates remain; documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 **Created**: 2026-07-27 · **Red-teamed**: 2026-07-27 · **Validated**: 2026-07-27
 **Status**: COMPLETED CONVERGENCE PROGRAM (D39, 2026-08-06). Complete: 01, 02, 03, 04,

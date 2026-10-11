@@ -2,7 +2,7 @@
 
 > Your complete guide to building and contributing to Cellos
 >
-> **Version**: 0.2.1-dev | **Last Updated**: 2026-06-19
+> **Version**: 0.2.1-dev | **Last Updated**: 2026-10-11
 
 > **Direction update (2026-10-08):** Intel x86-64 C2C Anywhere is the only
 > active program; see [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md),
@@ -11,6 +11,22 @@
 > The RV64 quickstart below is a retained runnable reference, not the primary
 > platform or permission to expand RISC-V. QEMU is software evidence, never a
 > replacement for exact physical Intel qualification.
+
+## Active Intel entry path
+
+Start with the [q35 x86-64 guide](../boards/qemu/q35-x86_64/README.md) for
+lane-specific prerequisites, image construction and runtime verification. Do not
+use the RV64 commands below as the default Intel build or infer a two-node runtime
+from a successful local boot.
+
+Read the [architecture guide](system-architecture.md), [Cell/authority contract](specs/25-cell-kernel-authority-contract.md)
+and [workload distribution contract](specs/26-workload-placement-scaling-contract.md)
+before selecting an implementation slice. Placement, load balancing, application
+budgets and autoscaling are selected architecture, not enabled features.
+The [controlling plan](../.agents/261011-1200-cell-contract-authority/plan.md)
+begins with exact interface/profile/adoption work; all 38
+[scoped locks](../.agents/cell-contract-0024-locks.md) remain in effect.
+This update supplies no new runnable cluster command, manifest schema or ABI approval.
 
 ## Legacy RV64 Reference Quick Start
 
@@ -51,8 +67,8 @@ winget install LLVM.LLVM
 #     .cargo/config.toml sets CC_riscv64gc_unknown_none_elf automatically.
 
 # 3. Clone and enter repository
-git clone https://github.com/your-org/Cellos.git
-cd Cellos
+git clone https://github.com/dxsl-org/cellos.git
+cd cellos
 
 # 4. Build kernel
 cargo build --release

@@ -7,9 +7,15 @@ effort: 4 phases (~2.5 days once P00 confirmed)
 branch: main
 tags: [manifest, abi, law1, pku, capabilities, kernel-boundary]
 created: 2026-07-12
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Deferred P03 cap_args and new manifest authority interpretation only"
 ---
 
 # Manifest v2
+
+> **CELL-CONTRACT-0024 — deferred execution locked (2026-10-11).** Completed P00–P02 and their frozen ABI remain unchanged. Deferred P03 `cap_args` or any new authority interpretation requires explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md), plus applicable Law-1 approvals. Documentation completion does not unlock execution or authorize a new manifest. See the [inventory](../cell-contract-0024-locks.md).
 
 Versioned FIXED 16-byte `#[repr(C)]` manifest replacing the 8-byte v1. NOT a TLV
 (rejected: in-kernel hot parser at spawn gate must stay minimal — see dossier).

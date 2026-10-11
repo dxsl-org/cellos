@@ -1,4 +1,13 @@
+---
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished ServiceRef, dispatch, AppContext and SDK lifecycle contract work"
+---
+
 # ViCell App SDK v1 — Plan
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Unfinished `ServiceRef`, dispatch, `AppContext` and SDK lifecycle contract work requires explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Newer completed SDK behavior remains evidence, not work to rebuild. Prior status and no-syscall/no-ABI scope remain. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 **Status**: 📋 Planned  
 **Created**: 2026-06-15  

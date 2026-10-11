@@ -2,9 +2,15 @@
 name: SAS caller-owned range ledger
 status: runtime_evidence_complete_approval_pending
 created: 2026-08-27
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Pending approvals and further owner-generation lease integration"
 ---
 
 # SAS Caller-Owned Range Ledger
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Pending approvals and further owner-generation lease integration require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Runtime evidence remains complete at its recorded ceiling; the frozen `GetRandom` ABI and named approval gates are unchanged. Documentation completion does not unlock execution or promotion. See the [inventory](../cell-contract-0024-locks.md).
 
 Close `PAL-031` without changing the frozen `GetRandom` ABI: callers may pass buffers larger than 64 bytes; the kernel writes `min(len, 64)` bytes.
 

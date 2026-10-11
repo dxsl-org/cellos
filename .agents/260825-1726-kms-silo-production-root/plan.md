@@ -6,12 +6,17 @@ priority: P1
 effort: "not estimated"
 branch: main
 tags: [security, kms, silo, mtls, relay, production-root]
-blockedBy: []
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
 blocks: [260825-sdk-delivery]
 created: 2026-08-25
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished mTLS, relay, protected signer and production-root integration"
 ---
 
 # KMS/Silo Protected Relay Identity
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Unfinished mTLS, relay, protected signer and production-root integration require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed evidence, frozen-ABI limits and the production-root NO-GO remain unchanged. Protected identity, independent approval and physical/service gates remain mandatory; documentation completion unlocks nothing. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Overview
 Build `net-broker Noise ciphertext → service-net byte carrier → Protected Relay

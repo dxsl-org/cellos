@@ -7,9 +7,15 @@ effort: 37 weeks
 branch: main
 tags: [app-tiers, sdk, admission, virtualization, abi, security]
 created: 2026-08-21
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished admission, runtime, native-domain, manifest and promotion slices"
 ---
 
 # Cellos App Tiers Completion
+
+> **CELL-CONTRACT-0024 — execution locked (2026-10-11).** Unfinished admission, runtime, native-domain, manifest and promotion slices require explicit per-slice rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). Completed SDK/ledger outputs and prior progress remain evidence. Documentation completion does not unlock execution, ratify ABI, satisfy independent approval or promote production evidence. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Program Contract
 

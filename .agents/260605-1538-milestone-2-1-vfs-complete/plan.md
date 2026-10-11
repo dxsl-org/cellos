@@ -1,4 +1,13 @@
+---
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Remaining Phase05 authority and async-read integration evidence"
+---
+
 # Milestone 2.1 — Complete VFS Service
+
+> **CELL-CONTRACT-0024 — residual execution locked (2026-10-11).** Remaining Phase05 authority/async-read integration evidence must rebase with explicit owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). P01–P04 remain completed despite the older headline status. Existing evidence ceilings and ABI limits remain unchanged; documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 **Status**: 📋 PLANNED  
 **Priority**: P0  

@@ -3,6 +3,12 @@
 > **Status**: Accepted 2026-09-22.
 > **Supersedes**: None. Extends [ADR-0015](0015-dual-mode-hybrid-architecture.md) (tier model)
 > and [ADR-0017](0017-dual-browser-strategy-ocel-and-tier3-chrome.md) (first Tier 2 application).
+>
+> **2026-10-11 target amendment:** [ADR-0024](0024-cell-kernel-authority-contract.md)
+> selects explicit optional C/POSIX runtime linkage and Cell-scoped authority.
+> TLS/futex and justified native stream mechanisms remain kernel primitives; no blanket
+> pipe deletion or new Linux personality is authorized. Existing ABI/implementation stays
+> in force until approved migration under the [cutover plan](../../.agents/261011-1200-cell-contract-authority/plan.md).
 
 ## 1. Context
 

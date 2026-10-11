@@ -7,9 +7,15 @@ effort: 7 phases; per-family driver estimates follow spec 04 §7 scale (NVMe ~3-
 branch: main
 created: 2026-10-04
 tags: [x86, pc, ahci, xhci, igb, dmar, iommu, hcl, qemu-first, g2]
+blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]
+executionStatus: blocked
+executionLock: CELL-CONTRACT-0024
+lockScope: "Unfinished device-authority or qualification changes affecting Cell contracts"
 ---
 
 # Intel x86-64 C2C substrate — fixed headless target (QEMU first)
+
+> **CELL-CONTRACT-0024 — scoped execution lock (2026-10-11).** Unfinished device-authority or qualification changes affecting Cell contracts require explicit rebase and owner handoff through the [Cell contract plan](../261011-1200-cell-contract-authority/plan.md). P01–P06 QEMU evidence remains completed; P07 retains its procurement/physical gates. No new hardware, ABI or production authority is granted, and unrelated hardware work is not newly suspended by this lock. Documentation completion does not unlock execution. See the [inventory](../cell-contract-0024-locks.md).
 
 ## Goal
 

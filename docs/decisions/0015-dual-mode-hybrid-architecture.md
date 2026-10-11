@@ -4,6 +4,12 @@
 **Status**: Accepted — definitive architectural baseline for Cellos  
 **Decider**: Cellos maintainer, through explicit user approval in session  
 
+> **2026-10-11 contract follow-on:** [ADR-0024](0024-cell-kernel-authority-contract.md)
+> and [Spec 25](../specs/25-cell-kernel-authority-contract.md) retain these isolation tiers,
+> but require capability/lifetime-governed fast paths rather than treating a raw shared
+> address as authority. Historical performance/admission statements below are not
+> qualification of the new contract. Unfinished related plans are locked pending rebase.
+
 ---
 
 ## 1. Context
