@@ -142,5 +142,5 @@ Internal design docs — read before implementing a subsystem.
 | [specs/17-ipc-wire-contract.md](specs/17-ipc-wire-contract.md) | Cell IPC: framing, recv-mask, byte-0 registry |
 | [specs/23-native-sdk-contract.md](specs/23-native-sdk-contract.md) | Ratified Native SDK family contract and evidence matrix |
 | [specs/24-ai-inference-architecture.md](specs/24-ai-inference-architecture.md) | Ratified AI Inference & Small Language Model Architecture |
-| [specs/25-cell-kernel-authority-contract.md](specs/25-cell-kernel-authority-contract.md) | Selected Cell/Kernel/authority contract; node/cluster ownership, workload distribution and AC-01..AC-43; implementation/ABI gates remain |
-| [specs/26-workload-placement-scaling-contract.md](specs/26-workload-placement-scaling-contract.md) | Workload endpoints, weighted routing, deterministic placement, application-wide budget and bounded autoscaling; architecture selected, runtime pending |
+| [specs/25-cell-kernel-authority-contract.md](specs/25-cell-kernel-authority-contract.md) | Selected Cell/Kernel/authority contract v1.3; independent budget enforcement and AC-01..AC-50; implementation/ABI gates remain |
+| [specs/26-workload-placement-scaling-contract.md](specs/26-workload-placement-scaling-contract.md) | v1.1: placement, bounded routing, Budget Authority/genesis/live claims, challenge freshness and homogeneous-domain autoscaling; runtime pending |

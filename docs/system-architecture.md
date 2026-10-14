@@ -14,7 +14,7 @@ The sole active development direction is **Intel x86-64 C2C Anywhere** under
 
 This guide explains the design and the reusable baseline; it does not ratify an
 ABI or report that the selected design is implemented. In particular,
-[Spec 25 v1.2](specs/25-cell-kernel-authority-contract.md) has **AC-01..AC-43 pending
+[Spec 25 v1.3](specs/25-cell-kernel-authority-contract.md) has **AC-01..AC-50 pending
 implementation**. [Spec 26](specs/26-workload-placement-scaling-contract.md) supplies
 normative workload routing, placement, application-budget and autoscaling detail
 under that same acceptance ledger. The ten implementation phases remain pending;
@@ -89,6 +89,8 @@ flowchart TB
     Authority["Protected authority"] -.->|protected relay boundary| Net
     Controller["Fixed-home controller (target)"] -->|route publication| Router
     Controller -->|keyed lifecycle| Supervisor["Destination supervisor"]
+    Budget["Independent fixed-home Budget Authority (target)"] -->|live destination claim| Supervisor
+    Controller -->|reservation request| Budget
     Supervisor -->|prepare / publish / drain| Provider["Provider incarnation"]
     Provider -->|authorized effects| State["Resource / state issuer"]
     Kernel["Kernel Cell / HAL substrate"] -.->|local enforcement| IPC
@@ -427,18 +429,17 @@ A TCP connection or heartbeat alone is not Ready.
 
 ### Placement and one application budget
 
-The **fixed-home fenced controller Cell** owns desired replicas, durable
-application reservations and versioned route publication. It is not a cluster
-root or per-request scheduler. Supervisor owns destination lifecycle; broker owns
-transport; issuer/state authority owns authorization and effects.
+The controller owns desired replicas, placement/scaling policy and versioned
+membership. Independent fixed-home **Budget Authority Cell** enforces durable
+application reservations and fences; controller cannot mint allowance. Budget
+Authority and destination kernel are the enforcement TCB. Application issuer
+precommits genesis and control envelopes before spawn; supervisor consumes a
+one-use keyed bootstrap grant rather than inventing an initial balance.
 
-Before local or remote create submission, commit one durable reservation under a
-stable creation key. The finite application vector includes replica count,
-memory/stacks/metadata, common-period CPU entitlement, threads, capabilities,
-operations and queued bytes, including controller/router envelopes and ingress
-shares. Preparing, live, draining, in-flight and unknown children stay charged;
-nested sublimits do not multiply allowance. Destination-local admission is an
-additional boundary, not another application budget.
+Authority reserves the finite vector before create dispatch; destination performs
+a live atomic claim before publication. Authority/controller/router overhead and
+preparing/live/draining/unknown children remain charged. Unknown claim fails closed;
+same-key recovery cannot create another allowance. No offline copied budget lease.
 
 Placement filters granted destinations, artifact/tier/architecture, resource and
 state-locality constraints and fresh authenticated capacity. Rank eligible nodes
@@ -456,19 +457,19 @@ unreachable node or stale inventory.
 
 ### Bounded demand-based scaling and outage
 
-Only authorized accepted ingress queued-plus-in-flight demand contributes, once
-per request. Source incarnation/epoch, monotonic sequence and local receive age
-prevent replay/double counting; workers are not counted again. Missing/stale data
-is not zero and freezes scaling.
+Only authorized eligible queued-plus-in-flight requests contribute once, within
+an explicitly homogeneous interchangeable template/resource/concurrency domain.
+Receiver-start bounded nonce challenges cover routes, health, capacity and telemetry;
+late unseen higher sequences cannot renew age from arrival. A prior unresolved
+ingress generation remains required until authoritative operation reconciliation
+and retired-share fencing; a new generation's zero cannot erase it. Both scale
+directions freeze while coverage is incomplete.
 
-The selected target is `clamp(ceil(demand / targetConcurrencyPerReplica), min, max)`
-with finite profile parameters, consecutive-window hysteresis, stricter downscale
-thresholds, cooldown, step/rate and pending-create bounds. The target concurrency
-is workload configuration, not a CPU guarantee. Durable decision intents reconcile
-observations/restarts; infeasible targets report their reason rather than granting
-capacity or promising immediate relief.
+Each domain computes `clamp(ceil(demand / targetConcurrencyPerReplica), min, max)`
+with hysteresis/cooldown/rate/pending bounds and shared application budget. Affine
+or noninterchangeable unmet demand reports unsatisfied, not a useless sibling.
 
-Scale-to-zero requires explicit policy and reserved always-on controller/router
+Scale-to-zero requires explicit policy and charged always-on Authority/controller/router
 capacity. Authorized cold wakes are bounded/coalesced into one creation intent;
 requests retain ordinary queue/deadline limits and expired work never replays.
 Scale-down withdraws routing, closes destination admission, drains/classifies
@@ -481,6 +482,13 @@ A cached route is not cached authorization. No placement, resize, scaling or
 budget release proceeds without recovered durable ledger/epoch. Partition cannot
 promote another controller or state home. Stale routers cannot bypass a destination
 drain cutoff.
+
+Destination Ready evidence independently binds artifact/tier/application/reservation/
+creation key/export/schema/generation. Origin proof binds immutable payload, deadline
+and operation; origin kernel/approved issuer seals one concrete target and permits
+only that attenuation. Router cannot mint a second target. Incarnation maxima remain
+immutable; live allocation growth reserves its delta, above-max growth needs explicit
+replacement and below-use shrink stays pending.
 
 ## 10. Isolation tiers, native SDK and optional POSIX
 
@@ -617,6 +625,6 @@ phase-local logs in their owners. A guide edit neither ratifies new ABI bytes no
 releases locks, enables a feature or promotes evidence.
 
 **Revision note — 2026-10-11:** replaced the cumulative architecture/status ledger
-with this bounded guide; aligned identity/ownership with Spec 25 v1.2 and workload
+with this bounded guide; aligned identity/ownership with Spec 25 v1.3 and workload
 policy with Spec 26; retained access to existing historical evidence without
 creating an archive or changing implementation/qualification status.

@@ -18,9 +18,11 @@ The [Cell contract and authority plan](261011-1200-cell-contract-authority/plan.
 is the sole owner of unfinished Cell/Kernel Cell/authority contract cutover within
 [ADR-0022](../docs/decisions/0022-intel-x86-64-c2c-only-direction.md).
 [ADR-0024](../docs/decisions/0024-cell-kernel-authority-contract.md) records the
-Cell-centric direction. **Current admission is documentation/planning and freezes
-only, not runtime implementation, concrete ABI ratification, remote activation or
-production admission. WIP remains one implementation slice when separately admitted.**
+Cell-centric direction. Current admission includes the user-requested
+[scoped G1/G2 prerequisite authorization](261011-1200-cell-contract-authority/scoped-g1-g2-authorization.md):
+G1 Intel-private edits followed by G2-R-core/B disposable-image edits only.
+WIP remains one implementation slice; actual-diff and pre-capture gates remain.
+G2-J, downstream ABI ratification, remote activation and production stay blocked.
 
 - The [lock inventory](cell-contract-0024-locks.md) identifies every considered
   plan, preserves prior progress, scopes each new block and maps replacement phase
@@ -54,14 +56,14 @@ Approved placement is an application-policy controller Cell, not kernel scheduli
 across machines. One Cell belongs to one node (one physical/VM kernel instance),
 and a cluster has multiple nodes. The broker owns bounded peer sessions/reconnect/
 direct-relay choice; service-net owns IP/TCP and protected authority owns trust.
-The controller has one active fenced authority at a fixed home, with atomic
-durable application reservations before spawn across selected nodes within the
-admitted cluster (not federation or a new trust domain), destination-local admission and
-unknown-create charge retention until confirmed Gone/absence. Scaling obeys
-min/max/rate/queue-threshold/cooldown policy, Ready-only routing and safe drain.
-Single-writer state, relay-first/direct-LAN qualification and all 38 scoped locks
-remain; no consensus, DSM, transparent thread migration, timeout promotion or
-implicit local-failure remote fallback. AC-36..AC-43 append to unchanged AC-01..AC-35.
+Independent fixed-home Budget Authority enforces the durable application vector;
+controller owns placement/scaling policy and membership, not allowance minting.
+Issuer precommits genesis before control spawn; destination live atomic claim
+precedes child publication. Unknown/draining children remain charged until terminal
+key closure. Challenge freshness, old-generation reconciliation and homogeneous
+scaling domains are mandatory. Spec 25 v1.3 covers AC-01..AC-50 with approved
+earlier semantic amendments. Ten phases, 38 locks and protected/ABI gates remain;
+no consensus, DSM, timeout promotion or implicit fallback.
 P10 measures actual hundreds of concurrent clients, not Cell counts or guaranteed
 CPU/throughput capacity. No historical evidence below is upgraded by this amendment.
 
@@ -71,6 +73,22 @@ deterministic constrained placement, nested application shares and a measured-de
 control loop. P08's internal ordered slices preserve the ten-phase DAG; P10 proves
 load-triggered creation/routing/drain, not pre-spawned replicas alone. Router and
 control-plane capacity is budgeted; no per-request controller hop or durable ledger write.
+
+## Deferred application consumer — Haily
+
+The owner selected [Haily personal assistant](../docs/roadmap/haily-personal-assistant.md)
+as the planned first flagship Cellos application, covering coding, scientific
+research, writing and other user-directed workflows rather than only chat.
+The existing Rust/Windows project remains at `/mnt/d/haily/`; Cellos port and
+integration wait for owner-accepted completion of Haily's first version.
+
+During that wait, only admitted Cellos substrate work continues under the
+controlling plan. The roadmap maps future application needs to P02–P10 and
+records release review, single-node, distributed, physical and deployment
+stages; it is not an executable child plan or a second WIP lane. Completion of
+Haily's first version requires an exact release/behavior/dependency review and
+subsequent scoped entry/handoff before implementation. No legacy lock, ABI,
+protected authority, physical gate or production admission is released here.
 
 ## Historical Intel C2C execution ledger — not current admission
 

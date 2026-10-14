@@ -8,7 +8,7 @@
 
 Its design unit is the **Cell**: a principal with scoped authority, bounded resources and a recoverable lifetime—not a process per request or a distributed address space. The goal is to connect native Cells, isolated C/C++ workloads and VM guests through defined service contracts, locally and across admitted nodes, without hiding authorization or failure.
 
-**Architecture selected; runtime cutover pending.** [ADR-0024](./docs/decisions/0024-cell-kernel-authority-contract.md), [Spec 25 v1.2](./docs/specs/25-cell-kernel-authority-contract.md) and [Spec 26](./docs/specs/26-workload-placement-scaling-contract.md) define the target below. Existing local mechanisms and evidence are a foundation, not proof that cluster routing, recovery or autoscaling are shipped.
+**Architecture selected; runtime cutover pending.** [ADR-0024](./docs/decisions/0024-cell-kernel-authority-contract.md), [Spec 25 v1.3](./docs/specs/25-cell-kernel-authority-contract.md) and [Spec 26 v1.1](./docs/specs/26-workload-placement-scaling-contract.md) define the target. Existing local evidence does not qualify cluster routing, recovery or autoscaling.
 
 ## Key ideas
 
@@ -16,7 +16,7 @@ Its design unit is the **Cell**: a principal with scoped authority, bounded reso
 - **One operation contract, explicit failures.** Local IPC and remote C2C share correlation, admission, deadlines, cancellation and incarnation binding—not pointers or identical failure behavior. Copied IPC is the default; authorized local grants/rings are optional transports. After dispatch, a timeout or lost reply can mean uncertain effects, not permission to replay.
 - **A small privileged substrate, explicit service owners.** Kernel Cell is the exceptional root and local enforcement substrate. VFS owns file/directory semantics; service-net owns IP/TCP; a broker owns peer sessions and bounded connection pools; protected authority owns peer trust and protected relay admission.
 - **Recovery separate from execution.** Replacement prepares, restores committed business state, reacquires resource rights and becomes Ready before publication. Mutable state has one fenced writer per state domain. Recovery must match the declared failure class; serialized handles and a worker-local snapshot are not durable authority.
-- **Workload distribution by opt-in.** Compatible typed methods may use a logical workload endpoint with bounded weighted round-robin routing; concrete generation-bound endpoints stay pinned. A separate fixed-home controller selects placement and adjusts replicas within one durable application-wide budget, including router/controller overhead and uncertain children.
+- **Opt-in workload distribution, independently enforced budget.** Compatible typed methods use bounded weighted routing; concrete endpoints remain pinned. Controller chooses placement/scaling; an isolated Budget Authority enforces the cluster-wide application vector, including control overhead and uncertain children. Automatic scaling uses homogeneous domains and reconciled generation-complete demand.
 - **Compatibility without making POSIX the core.** The selected native model uses C2C directly. Optional local runtime adapters and domain-selected POSIX personality Cells provide only the compatibility semantics a workload requires; full Linux binary compatibility is not promised.
 
 These are design choices to implement and measure, not claims of universal security, zero-copy across machines, hard real-time behavior or superiority to Linux.
@@ -30,7 +30,10 @@ The following is a **selected target diagram**, not a map of shipped cluster ser
 ```mermaid
 flowchart TB
     subgraph CLUSTER["One admitted cluster: explicit grants and resource ceilings"]
-        C["Fixed-home controller Cell<br/>Durable budget, placement/autoscaling, membership"]
+        C["Controller Cell<br/>Placement/autoscaling policy, membership"]
+        BA["Fixed-home Budget Authority Cell<br/>Durable budget, genesis, live claims"]
+        C -->|reservation request| BA
+        BA -->|destination-bound admission| R
         W["Ingress router Cell<br/>Opt-in endpoint, bounded selection"]
         R["Ready replica Cells<br/>Selected nodes"]
         B["Broker Cell<br/>Sessions, relay/direct policy"]
@@ -54,7 +57,7 @@ flowchart TB
     end
 ```
 
-The router preserves original-subject authority and freezes one concrete target at submission. It does not silently retry, hedge or turn local failure into remote fallback. The controller is not a cluster root or a per-request scheduler. It reserves before create dispatch, retains unknown outcomes as charged, and drains admitted work before scale-down. Missing telemetry freezes scaling; a partition or timeout cannot promote another controller or state authority. There is no distributed shared memory, cross-node thread migration, automatic resharding or general multi-writer consensus in this contract.
+Router verifies destination Ready provenance and preserves immutable origin payload/deadline/operation with one issuer-sealed target; no retry, hedge or implicit remote fallback. Receiver-start challenges bound freshness; unresolved old ingress generations freeze scaling. Budget Authority reserves before spawn, retains unknown charges and requires live destination claims. Controller is neither cluster root nor budget issuer. No distributed shared memory, cross-node threads or automatic authority-home promotion.
 
 Kernel Cell is not an ordinary restartable service: kernel failure requires node recovery. Internal kernel functions need not become queued RPCs. Resource issuers retain their own semantic authority; the kernel does not duplicate every service ACL.
 
@@ -70,7 +73,7 @@ Kernel Cell is not an ordinary restartable service: kernel failure requires node
 | Workload distribution | **Selected; pending** logical pools, bounded weighted routing, deterministic constrained placement and demand-based autoscaling (P08/P10) | Durable application reservations, hysteresis/cooldown, safe drain and actual load-driven spawn still require implementation and runtime evidence. |
 | Intel tiers and hardware | q35 software evidence and retained test-image Tier 2/runtime evidence; Intel VMX and physical qualification remain required (P07/P09/P10) | QEMU does not qualify a physical PC, Intel VMX/EPT or protected production authority. No physical x86 HCL entry is qualified. |
 
-Spec 25 owns **AC-01..AC-43**, all pending implementation; Spec 26 extends it without a competing acceptance ledger. The [controlling plan](./.agents/261011-1200-cell-contract-authority/plan.md) has ten pending phases. **CELL-CONTRACT-0024** keeps [38 overlapping plan dispositions](./.agents/cell-contract-0024-locks.md) in force: writing documentation does not unlock execution, approve ABI bytes or activate remote/production paths.
+Spec 25 owns **AC-01..AC-50**, all pending implementation; Spec 26 supplies normative detail. The [controlling plan](./.agents/261011-1200-cell-contract-authority/plan.md) has ten pending phases. [38 overlapping-plan locks](./.agents/cell-contract-0024-locks.md) remain active: documentation does not approve ABI bytes or activate remote/production paths.
 
 ### Active scope
 

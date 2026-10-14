@@ -16,6 +16,10 @@ Roadmap content is split by lookup intent:
 - [technical-milestones.md](technical-milestones.md): phase/milestone snapshot
   without per-commit status logs.
 - [completed-history.md](completed-history.md): condensed completion ledger for shipped work.
+- [haily-personal-assistant.md](haily-personal-assistant.md): planned flagship
+  personal assistant for coding, scientific research, writing and other work;
+  port/integration deferred until Haily's first version is complete, with Cellos
+  readiness prerequisites and staged acceptance gates.
 - [open-risk-register.md](open-risk-register.md): confirmed open code or
   production-readiness risks.
 - [project-roadmap-legacy.md](../project-roadmap-legacy.md): read-only pre-split

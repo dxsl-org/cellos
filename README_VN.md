@@ -8,7 +8,7 @@
 
 Đơn vị thiết kế là **Cell**: một chủ thể có quyền hạn giới hạn, tài nguyên hữu hạn và vòng đời có thể phục hồi—không phải một process cho mỗi request hay một không gian địa chỉ phân tán. Mục tiêu là kết nối Cell native, workload C/C++ được cô lập và guest VM qua hợp đồng dịch vụ xác định, cả cục bộ lẫn giữa các node được chấp nhận, mà không che giấu việc phân quyền hoặc lỗi.
 
-**Đã chọn kiến trúc; chuyển đổi runtime chưa triển khai.** [ADR-0024](./docs/decisions/0024-cell-kernel-authority-contract.md), [Spec 25 v1.2](./docs/specs/25-cell-kernel-authority-contract.md) và [Spec 26](./docs/specs/26-workload-placement-scaling-contract.md) định nghĩa đích thiết kế bên dưới. Cơ chế và bằng chứng cục bộ hiện có là nền tảng, không chứng minh routing, recovery hay autoscaling trong cluster đã được cung cấp.
+**Đã chốt kiến trúc; chưa triển khai cutover runtime.** [ADR-0024](./docs/decisions/0024-cell-kernel-authority-contract.md), [Spec 25 v1.3](./docs/specs/25-cell-kernel-authority-contract.md) và [Spec 26 v1.1](./docs/specs/26-workload-placement-scaling-contract.md) định nghĩa đích thiết kế. Bằng chứng cục bộ không chứng minh routing, recovery hay autoscaling trong cluster đã được qualify.
 
 ## Ý tưởng cốt lõi
 
@@ -16,7 +16,7 @@
 - **Một hợp đồng thao tác, lỗi minh bạch.** IPC cục bộ và C2C từ xa dùng chung quy tắc tương quan request/reply, admission, deadline, cancellation và ràng buộc incarnation—không dùng chung con trỏ hay có hành vi lỗi giống hệt nhau. IPC sao chép là mặc định; grant/ring cục bộ được cấp quyền là transport tùy chọn. Sau dispatch, timeout hoặc mất reply có thể khiến tác động chưa xác định, không phải quyền để thực hiện lại.
 - **Nền tảng đặc quyền gọn, chủ sở hữu dịch vụ rõ ràng.** Kernel Cell là root đặc biệt và nền tảng cưỡng chế cục bộ. VFS sở hữu ngữ nghĩa file/directory; service-net sở hữu IP/TCP; broker sở hữu phiên peer và pool kết nối hữu hạn; protected authority sở hữu niềm tin peer và admission cho relay được bảo vệ.
 - **Tách phục hồi khỏi thực thi.** Cell thay thế được chuẩn bị, khôi phục trạng thái nghiệp vụ đã commit, xin lại quyền tài nguyên và đạt Ready trước khi công bố. Mỗi miền trạng thái có thể thay đổi có một writer được fencing. Recovery phải đáp ứng loại lỗi đã khai báo; handle được serialize và snapshot riêng của worker không phải quyền hạn bền vững.
-- **Phân phối workload phải opt-in.** Phương thức định kiểu tương thích có thể dùng logical workload endpoint với routing weighted round-robin hữu hạn; endpoint cụ thể gắn generation vẫn được ghim. Controller riêng có home cố định chọn placement và điều chỉnh replica trong một ngân sách bền vững cho toàn ứng dụng, tính cả router/controller và child chưa rõ kết quả.
+- **Phân phối workload opt-in, ngân sách được thực thi độc lập.** Phương thức tương thích dùng weighted routing hữu hạn; endpoint cụ thể vẫn ghim. Controller chọn placement/scaling; Budget Authority độc lập thực thi vector ngân sách toàn ứng dụng trên cluster, tính cả control overhead và child chưa rõ kết quả. Autoscaling chỉ áp dụng trong domain đồng nhất với demand đủ generation đã reconcile.
 - **Tương thích mà không biến POSIX thành lõi.** Mô hình native đã chọn dùng C2C trực tiếp. Adapter runtime cục bộ tùy chọn và POSIX personality Cell được chọn theo domain chỉ cung cấp ngữ nghĩa tương thích workload cần; không hứa tương thích nhị phân Linux đầy đủ.
 
 Đây là lựa chọn thiết kế cần triển khai và đo lường, không phải tuyên bố an toàn tuyệt đối, zero-copy giữa các máy, hard real-time hay vượt trội hơn Linux.
@@ -30,7 +30,10 @@ Sơ đồ sau mô tả **thiết kế đích đã chọn**, không phải các d
 ```mermaid
 flowchart TB
     subgraph CLUSTER["Một cluster được chấp nhận: grant rõ ràng và trần tài nguyên"]
-        C["Controller Cell có home cố định<br/>Ngân sách bền vững, placement/autoscaling, thành viên"]
+        C["Controller Cell<br/>Chính sách placement/autoscaling, thành viên"]
+        BA["Budget Authority Cell có home cố định<br/>Ngân sách bền vững, genesis, live claim"]
+        C -->|yêu cầu reservation| BA
+        BA -->|admission gắn đích| R
         W["Ingress router Cell<br/>Endpoint opt-in, lựa chọn hữu hạn"]
         R["Replica Cell đã Ready<br/>Node được chọn"]
         B["Broker Cell<br/>Phiên, chính sách relay/direct"]
@@ -54,7 +57,7 @@ flowchart TB
     end
 ```
 
-Router giữ nguyên quyền của chủ thể gốc và cố định một đích cụ thể khi submit. Nó không âm thầm retry, hedge hay chuyển lỗi cục bộ thành fallback từ xa. Controller không phải cluster root hoặc bộ lập lịch theo từng request. Nó reserve trước dispatch tạo Cell, tiếp tục tính ngân sách cho kết quả chưa rõ và drain công việc đã được nhận trước scale-down. Thiếu telemetry thì đóng băng scaling; partition hoặc timeout không cho phép thay controller hay state authority. Hợp đồng này không bao gồm bộ nhớ chia sẻ phân tán, di chuyển thread giữa node, tự động resharding hay consensus multi-writer tổng quát.
+Router kiểm tra provenance của Destination Ready và giữ bất biến payload/deadline/operation gốc với một đích được issuer niêm phong; không retry, hedge hay fallback từ xa ngầm. Challenge tính từ lúc receiver mở round giới hạn freshness; ingress generation cũ chưa reconcile đóng băng scaling. Budget Authority reserve trước spawn, giữ charge chưa rõ và yêu cầu destination live claim. Controller không phải cluster root hay budget issuer. Không DSM, thread xuyên node hoặc tự promote authority home.
 
 Kernel Cell không phải dịch vụ có thể restart như Cell thông thường: lỗi kernel đòi hỏi phục hồi node. Hàm nội bộ kernel không bắt buộc trở thành RPC qua hàng đợi. Issuer tài nguyên giữ quyền ngữ nghĩa riêng; kernel không sao chép ACL của mọi dịch vụ.
 
@@ -70,7 +73,7 @@ Kernel Cell không phải dịch vụ có thể restart như Cell thông thườ
 | Phân phối workload | **Đã chọn; chưa triển khai** logical pool, weighted routing hữu hạn, placement xác định theo ràng buộc và autoscaling theo nhu cầu (P08/P10) | Reservation bền vững toàn ứng dụng, hysteresis/cooldown, drain an toàn và spawn thực sự theo tải vẫn cần triển khai và bằng chứng runtime. |
 | Tier Intel và phần cứng | Bằng chứng phần mềm q35 và bằng chứng Tier 2/runtime trong test image được giữ lại; vẫn cần Intel VMX và xác minh phần cứng thật (P07/P09/P10) | QEMU không xác minh PC vật lý, Intel VMX/EPT hay protected authority cho production. Chưa có mục x86 vật lý đạt chuẩn trong HCL. |
 
-Spec 25 sở hữu **AC-01..AC-43**, tất cả chưa triển khai; Spec 26 mở rộng nó mà không lập acceptance ledger cạnh tranh. [Kế hoạch điều khiển](./.agents/261011-1200-cell-contract-authority/plan.md) có mười phase đang pending. **CELL-CONTRACT-0024** giữ nguyên [38 quyết định xử lý kế hoạch chồng lấn](./.agents/cell-contract-0024-locks.md): viết xong tài liệu không mở khóa thực thi, duyệt byte ABI hay kích hoạt đường từ xa/production.
+Spec 25 sở hữu **AC-01..AC-50**, tất cả pending implementation; Spec 26 cung cấp chi tiết chuẩn tắc. [Plan điều khiển](./.agents/261011-1200-cell-contract-authority/plan.md) có mười phase pending. [38 khóa plan chồng lấn](./.agents/cell-contract-0024-locks.md) vẫn giữ nguyên: tài liệu không duyệt byte ABI hay kích hoạt remote/production.
 
 ### Phạm vi đang hoạt động
 

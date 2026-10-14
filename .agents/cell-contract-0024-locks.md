@@ -2,7 +2,7 @@
 lockToken: CELL-CONTRACT-0024
 controller: .agents/261011-1200-cell-contract-authority/plan.md
 recorded: 2026-10-11
-mode: documentation-only
+mode: scoped-prerequisite-development
 blocks:
   - .agents/260528-2016-vicell-full-implementation/plan.md
   - .agents/260603-1803-phase-h-vfs-hardening/plan.md
@@ -57,26 +57,27 @@ There are 38 scoped lock relations below, 34 explicitly related completed/supers
 
 Each locked entrypoint carries the repository-relative machine-readable relation `blockedBy: [.agents/261011-1200-cell-contract-authority/plan.md]` (alongside any prior blockers), `executionStatus: blocked`, `executionLock: CELL-CONTRACT-0024`, and a specific `lockScope`. Original `status`/progress remains historical; where no status field existed, none was invented. The blocked execution state applies only to the named unfinished/deferred scope, including a scoped future handoff from an otherwise completed record.
 
-**Precedence covers every subordinate phase and direct phase-file link.** An old phase header, checkbox, cook command, `ready`/`active` label, parallel-worktree instruction, no-ABI admission or file-owner grant is not an escape hatch. Read its owning plan's lock and this inventory before resuming. Existing locks/approvals and new locks are cumulative. Current authorization is documentation/planning and freezes only: no new implementation, concrete ABI approval, remote activation, production admission, procurement or provisioning.
+**Precedence covers every subordinate phase and direct phase-file link.** Old headers, checkboxes, commands or owner grants cannot bypass this inventory. Original documentation-only admission is superseded **solely** by the user-requested [scoped G1/G2 development authorization](261011-1200-cell-contract-authority/scoped-g1-g2-authorization.md) and its pinned manifest: controlling P01 owns G1 Intel-private edits then G2-R-core/B disposable-image edits, with actual-diff/capture gates. This is no legacy-plan unlock or blanket ABI approval. All38relations remain effective; G2-J, downstream deltas, remote/production, procurement and protected provisioning remain blocked.
 
-The approved documentation amendment adds P08's placement/autoscaling controller
-Cell and application-wide durable budget, plus P10's actual concurrent local/cluster
-client qualification (AC-30..AC-43, with AC-01..AC-29 unchanged). One Cell stays on
-one physical/VM kernel-instance node; placement serves one application across
-selected nodes within the admitted cluster, not federation or new trust domains,
-and cluster replicas do not migrate threads.
-Controller authority is single active, fenced and fixed-home, reserving durably
-before spawn and retaining unknown-create/draining charges until confirmed
-Gone/absence; destination admission can refuse. Ready routing and bounded
-min/max/rate/queue-threshold/cooldown policy precede safe drain/retire. This does
-not unlock any of the 38 relations, alter prior status/evidence or admit runtime/
-ABI/remote activation. Single-writer state and relay-first/direct-LAN gates remain;
-no consensus, DSM, timeout replica promotion or implicit remote fallback.
+The approved red-team architecture amendment covers Spec 25 v1.3 AC-01..AC-50,
+explicitly amending affected earlier semantics. Independent fixed-home Budget
+Authority enforces issuer-precommitted genesis and durable finite reservations;
+controller owns policy/membership and cannot mint allowance. Destination live
+claim precedes publication; uncertain children retain charge until key closure.
+Challenge freshness, old-generation reconciliation, homogeneous scaling domains,
+immutable maxima/current allocations, Destination Ready provenance and origin
+single-target proof enter P03/P08 and full P10 qualification. One Cell remains
+node-local. Ten phases and all 38 lock relations stay unchanged; no runtime,
+ABI, remote or production activation is authorized by documentation.
+Single-writer and relay-first/direct-LAN gates remain; no consensus, DSM,
+timeout promotion or implicit fallback.
 
 [Spec 26](../docs/specs/26-workload-placement-scaling-contract.md) details P08
 workload-router/load-balancing, placement, budget-share and autoscaling ownership.
 Its internal slice gates do not create new executable legacy-plan dependencies.
 The lock set remains the same 38 relations; no broader unrelated work is frozen.
+
+The 2026-10-14 scoped exception is a controlling-owner prerequisite handoff, not removal of any `blocks`/`blockedBy` relation. Its exact candidate/path/baseline manifest is authoritative for that exception; scope drift requires amendment. No subordinate old plan may claim it as permission to execute.
 
 Unrelated work is not suspended merely because it mentions a Cell, capability, driver, thread, IPC or Rust. Ordinary consumers and baseline repairs that do not change these contracts have no new lock here; they still need a concrete Intel C2C connection and portfolio admission under ADR-0022. Non-Intel hardware, GUI/browser, AI, robot and general ecosystem programs stay parked under that older direction decision.
 

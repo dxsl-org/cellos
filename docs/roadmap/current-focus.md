@@ -49,17 +49,16 @@ multiple nodes. Many requests use bounded workers/operations in a Cell, not one
 Cell per request. Broker Cell owns peer sessions/reconnect/direct-relay selection
 and bounded pools; service-net owns IP/TCP, protected authority owns trust and
 kernel owns local primitives. C2C hides transport choice, never failure semantics.
-The approved controller has one active fenced authority at a fixed home, atomic
-durable application reservations before spawn across selected nodes within the
-admitted cluster (not federation or a new trust domain) and explicit destination admission.
-Unknown creates remain charged until confirmed Gone/absence; startup reconciles.
-Policy bounds replicas/rates/queues/cooldown, routes only to Ready replicas and
-drains before retirement without killing admitted work or unsafe state relocation.
-Single-writer state, relay-first/direct-LAN gates and all 38 scoped locks remain;
-no consensus, DSM, transparent thread migration, timeout promotion or implicit
-remote fallback on local failure. Spec 25 retains AC-01..AC-35 and appends
-AC-36..AC-43 for the complete workload distribution contract; no new runtime/
-ABI/activation permission or proof follows.
+Independent fixed-home Budget Authority enforces the application budget;
+controller owns placement/scaling policy and membership, never allowance minting.
+Issuer-precommitted genesis and live atomic destination claims precede publication.
+Unknown creates remain charged until terminal key closure. Spec 25 v1.3 covers
+AC-01..AC-50 with approved amendments to affected earlier semantics.
+Receiver-start challenges bound freshness; unresolved old ingress generations
+freeze both scale directions; demand/T applies only within homogeneous domains.
+Destination Ready provenance and origin-issuer single-target request proofs are
+mandatory. Ten phases, 38 locks and all ABI/protected/physical/production gates
+remain unchanged; no consensus, DSM, timeout promotion or implicit fallback.
 
 [Spec 26](../specs/26-workload-placement-scaling-contract.md) separates per-ingress
 router Cells from the controller and broker: bounded weighted round-robin for
@@ -106,6 +105,24 @@ but affected unfinished execution remains locked until its explicit rebase/hando
 Completion requires the all-tier destination, not just local Tier 1 or guest boot.
 Do not add an unneeded application ecosystem to demonstrate it. First choose a
 bounded service workload that exercises the contract; optimize observed costs.
+
+### Planned application consumer — Haily
+
+The owner selected [Haily](haily-personal-assistant.md) as the planned first
+flagship Cellos application: a general-purpose personal assistant for coding,
+scientific research, writing and other user-directed work, not a chatbot-only
+product. Its Rust/Windows development continues separately at `/mnt/d/haily/`.
+Cellos porting/integration is deferred until the owner considers Haily's first
+version complete and the exact release/dependency/behavior review passes.
+
+While waiting, continue admitted Intel C2C substrate work to make Cellos ready:
+authority/delegation, CPU/thread/memory profiles, bounded operations/streams,
+persistent task recovery, required runtime/tool adapters, remote routing and
+exact Intel qualification. The application roadmap records needs and deferred
+acceptance stages; it does not admit another implementation slice, reopen a
+parked AI/GPU/browser program, change the ten-phase DAG or release existing
+ABI/protected/physical/production gates. First-version completion triggers an
+entry review, never automatic deployment.
 
 ### Parked until an explicit scope decision
 
