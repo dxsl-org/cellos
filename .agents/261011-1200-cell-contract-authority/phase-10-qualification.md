@@ -11,7 +11,7 @@ dependencies: [2, 3, 4, 5, 6, 7, 8, 9]
 
 ## Deliverable and requirements
 
-AC-25/35/43 plus closure of every criterion AC-01..AC-43; AC-01..AC-35 retain existing requirements. Finish the Cell-centric Intel C2C program including logical workload routing, node admission, application-wide budgets and scoped placement/autoscaling with source-bound evidence, no obsolete bypasses, bounded resource cost and fair Linux comparison. [Spec 26](../../docs/specs/26-workload-placement-scaling-contract.md) details the Spec 25 workload extension, not another acceptance namespace. Production remains independently approved.
+AC-25/35/43 plus qualification of every AC-01..AC-50 under Spec 25 v1.3 and Spec 26 v1.1. The checkpoint explicitly amends affected earlier semantics. Evidence must cover the independent Budget Authority and complete router/placement/scaling contract, with bounded costs and fair Linux comparison. Runtime and production remain pending, independently gated.
 
 ## Related files / ownership
 
@@ -45,6 +45,7 @@ AC-25/35/43 plus closure of every criterion AC-01..AC-43; AC-01..AC-35 retain ex
 - [ ] Scaling obeys min/max/rate/threshold/cooldown; only Ready replicas receive new requests, and draining replicas finish admitted work or preserve explicit uncertainty/state fencing before retirement. No local failure causes implicit remote fallback.
 - [ ] AC-43 actual sustained load automatically spawns a newly Ready worker on another admitted node and routes new work across both with measured weighted distribution/caps; no manual scale action or client-count-only substitute. Reduced load safely drains and releases only terminally proven charges.
 - [ ] P08-A→C→B→D→E oracle traces run at the claimed ceiling, with C's durable budgets/real shares/bootstrap membership preceding B's live routing, never mock grants: unequal weights/saturation/affinity, demand windows/stale coverage, cold-start expiry, delayed create/dropped reply, drain-route race and dynamic shrink. Controller outage/partition preserves authority and accounting; original-subject checks and one-selected-attempt semantics survive routing changes.
+- [ ] Qualify AC-44..AC-50 at the claimed runtime ceiling: late unseen high-sequence challenges; old-generation unresolved demand/new zero; affine/heterogeneous wrong-domain refusal; malicious controller distinct-key attempts, genesis crash and live-claim partitions; immutable-max resize; forged Ready provenance; altered payload/deadline and second-target origin attenuation. Observe refusal before publication/effect and retention of charged/uncertain work, not only fixture validation.
 - [ ] Exact physical Intel and production rows have their own evidence/approval; all benchmark data includes semantics/configuration and raw samples.
 - [ ] Documentation graph, lock graph, public contract ledger and full affected caller census are consistent. Permanent tests exercise consumer-visible invariants, not source wording.
 
@@ -54,4 +55,4 @@ Do not let performance pressure convert revocation into eventual best-effort, re
 
 ## Assumptions and deviation log
 
-No blanket speed/security superiority to Linux, hundred-Cell count or CPU/throughput capacity is assumed. Physical hardware, genuine VMX and independent production approval remain external prerequisites; procurement is not authorized. Documentation amendment extends qualification through AC-43 with actual balanced multi-node load-driven spawn, not merely concurrent clients; ten phases/dependencies, 38 locks, pending states and all approval gates remain unchanged.
+No blanket speed/security superiority to Linux or CPU/throughput capacity is assumed. Physical Intel, genuine VMX and production approval remain external gates. Qualification covers all 50 criteria, including actual balanced load-driven spawn; ten phases/dependencies and 38 locks stay unchanged. Binary rollback cannot undo external effects or durable fence advancement; restore/forward migration is required.

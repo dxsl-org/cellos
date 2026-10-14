@@ -1,0 +1,112 @@
+{
+  "core_frames": [
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::mutate::<cellos_fs::format::InodeRecord, <cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::create::{closure#0}>",
+      1704
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::mutate::<usize, <cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::write_file::{closure#0}>",
+      2104
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::mutate::<(), <cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::sync::{closure#0}>",
+      8408
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::mutate::<(), <cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::remove::{closure#0}>",
+      1576
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::mutate::<(), <cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::rename::{closure#0}>",
+      2232
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::load_inodes",
+      584
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::lookup_inner",
+      696
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::remove_entry",
+      168
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::reserve_table",
+      24
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::validate_graph",
+      760
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::put",
+      616
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::find",
+      168
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::open",
+      4456
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::split",
+      40
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::format",
+      4168
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::insert",
+      184
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::mapped",
+      8
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::list_dir",
+      1192
+    ],
+    [
+      "<cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::read_file",
+      1096
+    ],
+    [
+      "<core::iter::adapters::filter::Filter<core::ops::range::Range<u64>, <cellos_fs::cow_experiment::Cow<cow_experiment::SectorDisk>>::count_free::{closure#0}> as core::iter::traits::iterator::Iterator>::count",
+      8
+    ]
+  ],
+  "core_frame_sum_conservative_nonrecursive": 30192,
+  "device_frames": [
+    [
+      "core::ptr::drop_in_place::<cellos_fs::engine::CellosFs<cow_experiment::SectorDisk>>",
+      24
+    ],
+    [
+      "<cow_experiment::SectorDisk>::from_image",
+      232
+    ],
+    [
+      "<cow_experiment::SectorDisk>::crash",
+      56
+    ],
+    [
+      "<cow_experiment::SectorDisk as cellos_fs::disk::BlockDevice>::read_block",
+      24
+    ],
+    [
+      "<cow_experiment::SectorDisk as cellos_fs::disk::BlockDevice>::write_block",
+      72
+    ],
+    [
+      "<cow_experiment::SectorDisk as cellos_fs::disk::BlockDevice>::flush",
+      72
+    ]
+  ],
+  "limits": "object-local compiled frames only; excludes external allocator/std/panic/library frames and host harness chains; not production stack qualification"
+}

@@ -1,0 +1,17 @@
+{
+  "scope": "planning and finite abstract model; no kernel execution this update",
+  "documents": 30,
+  "local_links": 321,
+  "missing_paths": 0,
+  "pending_phases": 10,
+  "acyclic": true,
+  "retained_reciprocal_locks": 38,
+  "AC_owners": 50,
+  "adoption_rows": 38,
+  "graph_negative_controls_rejected": 3,
+  "source_inputs_unchanged": 3174,
+  "strong_atomic_interleavings": 20774,
+  "scenarios": 4,
+  "overflow_and_fault_model_complete_states": 0,
+  "runtime_instrumentation_NOT_IMPLEMENTED": true
+}

@@ -1,0 +1,53 @@
+{
+  "scope": "finite strong-atomic sequential interleaving model; not Rust or weak-memory/runtime proof",
+  "producers": 2,
+  "closer": 1,
+  "scenarios": [
+    {
+      "capacity": 2,
+      "counter_only_second": false,
+      "fault_first_after_reservation": false,
+      "interleavings": 11472,
+      "complete_at_final_state": 9528,
+      "invalid_or_incomplete": 1944,
+      "memoized_states": 572
+    },
+    {
+      "capacity": 1,
+      "counter_only_second": false,
+      "fault_first_after_reservation": false,
+      "interleavings": 4848,
+      "complete_at_final_state": 0,
+      "invalid_or_incomplete": 4848,
+      "memoized_states": 500
+    },
+    {
+      "capacity": 2,
+      "counter_only_second": true,
+      "fault_first_after_reservation": false,
+      "interleavings": 1407,
+      "complete_at_final_state": 1017,
+      "invalid_or_incomplete": 390,
+      "memoized_states": 286
+    },
+    {
+      "capacity": 2,
+      "counter_only_second": false,
+      "fault_first_after_reservation": true,
+      "interleavings": 3047,
+      "complete_at_final_state": 0,
+      "invalid_or_incomplete": 3047,
+      "memoized_states": 416
+    }
+  ],
+  "invariants": [
+    "active count equals admitted unfinished guards",
+    "ready payload is written first",
+    "slot ownership unique",
+    "STOP preserved across release",
+    "no successful stale post-STOP admission",
+    "faulted reserved writer prevents complete final state"
+  ],
+  "late_invalid_reconciled_at_final_state": true,
+  "implementation_NOT_RUN": true
+}

@@ -1,0 +1,21 @@
+{
+  "scope": "planning/model checks only; no new runtime changes",
+  "documents": 29,
+  "local_links": 315,
+  "missing_paths": 0,
+  "pending_phases": 10,
+  "acyclic": true,
+  "reciprocal_locks_retained": 38,
+  "AC_owners": 50,
+  "adoption_rows": 38,
+  "graph_negative_controls_rejected": 3,
+  "source_input_hashes_unchanged": 3174,
+  "private_model_record_bytes": 160,
+  "conditional_max_events": 219,
+  "fixed_serialized_payload_bytes": 56896,
+  "model_negative_controls": [
+    8,
+    5
+  ],
+  "instrumentation_NOT_IMPLEMENTED": true
+}

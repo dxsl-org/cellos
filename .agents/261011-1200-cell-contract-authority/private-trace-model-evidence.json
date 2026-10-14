@@ -1,0 +1,88 @@
+{
+  "scope": "throwaway design model, not kernel runtime or instrumentation tests",
+  "record_bytes": 160,
+  "offsets": [
+    0,
+    8,
+    10,
+    12,
+    14,
+    15,
+    16,
+    24,
+    32,
+    40,
+    48,
+    56,
+    64,
+    72,
+    80,
+    88,
+    90,
+    92,
+    96,
+    104,
+    112,
+    120,
+    128
+  ],
+  "capacity_by_children": [
+    {
+      "children": 0,
+      "max_attempts": 2,
+      "max_records": 51
+    },
+    {
+      "children": 1,
+      "max_attempts": 3,
+      "max_records": 72
+    },
+    {
+      "children": 2,
+      "max_attempts": 4,
+      "max_records": 93
+    },
+    {
+      "children": 3,
+      "max_attempts": 5,
+      "max_records": 114
+    },
+    {
+      "children": 4,
+      "max_attempts": 6,
+      "max_records": 135
+    },
+    {
+      "children": 5,
+      "max_attempts": 7,
+      "max_records": 156
+    },
+    {
+      "children": 6,
+      "max_attempts": 8,
+      "max_records": 177
+    },
+    {
+      "children": 7,
+      "max_attempts": 9,
+      "max_records": 198
+    },
+    {
+      "children": 8,
+      "max_attempts": 10,
+      "max_records": 219
+    }
+  ],
+  "largest_bound": 219,
+  "headroom": 37,
+  "fixed_serialized_payload_bytes": 56896,
+  "record_negative_controls_rejected": 8,
+  "settled_negative_controls_rejected": 5,
+  "publication_roundtrip_model": {
+    "subject": 3,
+    "cell": 7,
+    "generation": 12
+  },
+  "implementation_NOT_RUN": true,
+  "publication_presence_flags_checked": true
+}

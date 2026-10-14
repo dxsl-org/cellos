@@ -1,0 +1,71 @@
+{
+  "format": "g2-j-cow-fault-development-grant-v1",
+  "authority_basis": "user request: review ri\u00eang proposal G2-J v\u00e0 ch\u1ed1t ph\u1ea1m vi authorization tr\u01b0\u1edbc tri\u1ec3n khai CoW/fault evidence",
+  "scope": "default-off private direct-library CoW/fault only; no journal/CP1/CP2/VFS/admission",
+  "documents": [
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/g2-j-preservation-design.md",
+      "sha256": "ad508e098c002335fb463cec0c67c5852a4c80f5608b5d8f67edf502323b8c03"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/g2-j-finite-layout-evidence.md",
+      "sha256": "d794371a6a77b6aadef99175ec07d7359a6f3fcd3658cad71d5b11375a57f56d"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/g2-j-cow-fault-authorization.md",
+      "sha256": "d73ccfd376cd9fcfe6c81a582b2117b64945e81fac4b626d158bdafcd09465b5"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/g2-j-proposal-review.md",
+      "sha256": "1f63243808ce2639ae036c6eb1d46e28337ff0be4a990f5b101ef53284558016"
+    }
+  ],
+  "existing_sources": [
+    {
+      "path": "libs/cellos-fs/Cargo.toml",
+      "sha256": "86c36d81d0d43d32f00d5a970ec4bfc13592918f3182bef97c5f8401556e858c"
+    },
+    {
+      "path": "libs/cellos-fs/src/lib.rs",
+      "sha256": "ae017db0123e5c16dec860e98101b0a70f123ca425bd1e1c88fe135657d95354"
+    },
+    {
+      "path": "libs/cellos-fs/src/engine.rs",
+      "sha256": "ae52dcd3436c8218d52aa8b2656eea41af82c9f063d944f984df8de9f44e5c54"
+    },
+    {
+      "path": "libs/cellos-fs/src/allocator.rs",
+      "sha256": "7b3c7a1fcc8c7277f9c197445732638eda00be901ca5a11d64f668374c1f8e3e"
+    },
+    {
+      "path": "libs/cellos-fs/tests/fs_tests.rs",
+      "sha256": "b117f0761d5ce5aa87d7f1073ee91ddac607783b7cabb84f0de85dfb6e51c1fe"
+    },
+    {
+      "path": "libs/cellos-fs/tests/power_cut_fuzz.rs",
+      "sha256": "bfa5c95a469bcde2ae0c46f189f60cdab81185d2965c8b26702bf4158f637895"
+    }
+  ],
+  "new_sources": [
+    {
+      "path": "libs/cellos-fs/src/cow_experiment.rs",
+      "required_preentry_state": "absent"
+    },
+    {
+      "path": "libs/cellos-fs/tests/cow_experiment.rs",
+      "required_preentry_state": "absent"
+    }
+  ],
+  "excluded": [
+    "cells/services/vfs/src/**",
+    "OGJ1",
+    "public exports",
+    "persistent format changes",
+    "floor/issuer",
+    "production/retained volumes"
+  ],
+  "feature": "g2-cow-experiment",
+  "default_enabled": false,
+  "production_admission": false,
+  "downstream_approval": false
+}

@@ -1,0 +1,45 @@
+{
+  "build": {
+    "command": [
+      "cargo",
+      "build",
+      "-p",
+      "cellos-fs",
+      "--target",
+      "x86_64-unknown-linux-gnu",
+      "--offline",
+      "--release",
+      "--features",
+      "g2-cow-experiment"
+    ],
+    "exit": 0,
+    "stderr": "   Compiling cellos-fs v0.1.0 (/home/dmin/cellos/libs/cellos-fs)\n    Finished `release` profile [optimized] target(s) in 0.20s\n"
+  },
+  "compile": {
+    "command": [
+      "rustc",
+      "--edition",
+      "2021",
+      "build/g2-j-cow/smoke.rs",
+      "--extern",
+      "cellos_fs=target/x86_64-unknown-linux-gnu/release/libcellos_fs.rlib",
+      "-L",
+      "dependency=target/x86_64-unknown-linux-gnu/release/deps",
+      "-o",
+      "build/g2-j-cow/smoke",
+      "-C",
+      "panic=abort"
+    ],
+    "exit": 0,
+    "stderr": ""
+  },
+  "run": {
+    "command": [
+      "build/g2-j-cow/smoke"
+    ],
+    "exit": 0,
+    "stdout": "real-CoW-smoke previous_sequence=2 recovered_sequence=3 final_bytes=5 free_blocks=120\n",
+    "stderr": ""
+  },
+  "initial_compile_failure": "missing -C panic=abort; release library panic strategy mismatch corrected"
+}

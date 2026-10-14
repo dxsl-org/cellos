@@ -1,0 +1,21 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "-p",
+    "cellos-fs",
+    "--test",
+    "cow_experiment",
+    "--target",
+    "x86_64-unknown-linux-gnu",
+    "--offline",
+    "--features",
+    "g2-cow-experiment",
+    "--release",
+    "--no-run"
+  ],
+  "RUSTFLAGS": "-Z emit-stack-sizes -C force-frame-pointers=yes -C save-temps",
+  "exit_code": 0,
+  "stdout": "",
+  "stderr": "   Compiling cellos-fs v0.1.0 (/home/dmin/cellos/libs/cellos-fs)\n    Finished `release` profile [optimized] target(s) in 5.46s\n  Executable tests/cow_experiment.rs (target/x86_64-unknown-linux-gnu/release/deps/cow_experiment-e9a85454bd9144ff)\n"
+}

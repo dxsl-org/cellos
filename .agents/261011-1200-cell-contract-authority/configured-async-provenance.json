@@ -1,0 +1,279 @@
+{
+  "scope": "fresh configured init/VFS/bench/probe minimal development baseline; not selected full-service image",
+  "inputs_reference": "service-x86-provenance.json:inputs_sha256",
+  "input_count": 3174,
+  "input_check_timing": "prior retained manifest checked before and after; not atomic snapshots or exhaustive external-input provenance",
+  "no_source_edits": true,
+  "signed_executables": {
+    "app-init": "6a63c402569fe5a0378b0e7cdd575b3271a5efc27e2f21aff8b072721a2f3b43",
+    "service-vfs": "4512f37b612b047f51f70282ba06c997ffe28bdc2d853d267f3c260610907920",
+    "bench": "cc806946a0913a2ef269ea87f8ca132de5f82b4c563e0e4fdcb1570edbfcd9e2",
+    "bench-probe": "0bea11d1c82ddfa678e2ebc7bf043632e8213d016e8347cbf0176e07c4893dc0"
+  },
+  "files": [
+    {
+      "host": "/home/dmin/cellos/build/p01-configured-x86-target/x86_64-unknown-none/release/service-vfs",
+      "image_path": "/bin/vfs",
+      "sha256": "4512f37b612b047f51f70282ba06c997ffe28bdc2d853d267f3c260610907920",
+      "readback_match": true
+    },
+    {
+      "host": "/home/dmin/cellos/build/p01-configured-x86-target/x86_64-unknown-none/release/bench",
+      "image_path": "/bin/bench",
+      "sha256": "cc806946a0913a2ef269ea87f8ca132de5f82b4c563e0e4fdcb1570edbfcd9e2",
+      "readback_match": true
+    },
+    {
+      "host": "/home/dmin/cellos/build/p01-configured-x86-target/x86_64-unknown-none/release/bench-probe",
+      "image_path": "/bin/bench-probe",
+      "sha256": "0bea11d1c82ddfa678e2ebc7bf043632e8213d016e8347cbf0176e07c4893dc0",
+      "readback_match": true
+    },
+    {
+      "host": "/home/dmin/cellos/build/p01-configured-x86-embedded/services.toml",
+      "image_path": "/etc/cellos/services.toml",
+      "sha256": "dbab12665d98aef021ba64953c61b0ed8a908cfb56a1c01e2fcb4b052b71a2a1",
+      "readback_match": true
+    },
+    {
+      "host": "/home/dmin/cellos/build/p01-configured-x86-embedded/autoload.toml",
+      "image_path": "/etc/cellos/autoload.toml",
+      "sha256": "c4ab8811ece6d5cddfdea95699356531c2e595d8fb791fcd2615c02fa08a5a09",
+      "readback_match": true
+    },
+    {
+      "host": "/home/dmin/cellos/build/p01-configured-x86-embedded/POLICY.BIN",
+      "image_path": "/POLICY.BIN",
+      "sha256": "a6232b6c5bb92108ff9055a285d0aada8398afab204fdc40f1ef75436156987c",
+      "readback_match": true
+    }
+  ],
+  "policy_changed_semantics": false,
+  "init_sha256": "6a63c402569fe5a0378b0e7cdd575b3271a5efc27e2f21aff8b072721a2f3b43",
+  "ramdisk_sha256": "1d3888a998c39a095bcb1b11a1de7cab089af9e3d9c9541dbca1af17ef671743",
+  "kernel_sha256": "c7004993664feab4891d05f2c4e37e6517bd61f897e0f87e4705d8bf2b06f1e1",
+  "iso_sha256": "d45de50bcc24751c50c832a44a4073bd2fb3b2a5043b7c69f49608920c1f6fda",
+  "iso_bytes": 11143168,
+  "containment": true,
+  "packaging_commands": [
+    [
+      "install",
+      "-m",
+      "0644",
+      "/home/dmin/cellos/build/p01-configured-x86-target/x86_64-unknown-none/release/app-init",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/init"
+    ],
+    [
+      "python3",
+      "scripts/sign-policy.py",
+      "--out",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/POLICY.BIN"
+    ],
+    [
+      "python3",
+      "tools/mkfat32.py",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/kernel_fs.img",
+      "/home/dmin/cellos/build/p01-configured-x86-target/x86_64-unknown-none/release/service-vfs",
+      "/bin/vfs",
+      "/home/dmin/cellos/build/p01-configured-x86-target/x86_64-unknown-none/release/bench",
+      "/bin/bench",
+      "/home/dmin/cellos/build/p01-configured-x86-target/x86_64-unknown-none/release/bench-probe",
+      "/bin/bench-probe",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/services.toml",
+      "/etc/cellos/services.toml",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/autoload.toml",
+      "/etc/cellos/autoload.toml",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/POLICY.BIN",
+      "/POLICY.BIN"
+    ],
+    [
+      "mtype",
+      "-i",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/kernel_fs.img",
+      "::/bin/vfs"
+    ],
+    [
+      "mtype",
+      "-i",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/kernel_fs.img",
+      "::/bin/vfs"
+    ],
+    [
+      "mtype",
+      "-i",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/kernel_fs.img",
+      "::/bin/bench"
+    ],
+    [
+      "mtype",
+      "-i",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/kernel_fs.img",
+      "::/bin/bench-probe"
+    ],
+    [
+      "mtype",
+      "-i",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/kernel_fs.img",
+      "::/etc/cellos/services.toml"
+    ],
+    [
+      "mtype",
+      "-i",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/kernel_fs.img",
+      "::/etc/cellos/autoload.toml"
+    ],
+    [
+      "mtype",
+      "-i",
+      "/home/dmin/cellos/build/p01-configured-x86-embedded/kernel_fs.img",
+      "::/POLICY.BIN"
+    ]
+  ],
+  "kernel_build": "env CARGO_TARGET_DIR=build/p01-configured-x86-target EMBEDDED_OVERRIDE=/home/dmin/cellos/build/p01-configured-x86-embedded cargo build --locked --offline --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc --features test-hooks",
+  "runs": [
+    {
+      "qemu": [
+        "qemu-system-x86_64",
+        "-machine",
+        "q35",
+        "-accel",
+        "tcg",
+        "-cpu",
+        "qemu64,+pdpe1gb",
+        "-smp",
+        "1",
+        "-m",
+        "256M",
+        "-nographic",
+        "-cdrom",
+        "build/p01-configured-x86.iso",
+        "-boot",
+        "d",
+        "-no-reboot",
+        "-snapshot",
+        "-nic",
+        "none",
+        "-monitor",
+        "none"
+      ],
+      "elapsed_seconds": 11.237767744998564,
+      "termination": "scenario-or-init-terminal observed; capture10s settling window",
+      "results": {
+        "scenario_markers": "PASS",
+        "outstanding_completed": 8,
+        "lost": 0,
+        "wrong_seq": 0,
+        "death_outstanding": 4,
+        "submit_refused": 0,
+        "peer_gone": 4,
+        "latency_ticks": {
+          "median": 923350,
+          "maximum_labelled_p99": 965490,
+          "frequency_hz": 1000000000,
+          "wait_rounds": 1
+        },
+        "exit_task_observed": 3,
+        "bench_exit_identity": "INFERENCE: ordered terminal/exit records; no explicit spawn TID/generation mapping in log",
+        "known_VMM_failure_incidental": true
+      }
+    },
+    {
+      "qemu": [
+        "qemu-system-x86_64",
+        "-machine",
+        "q35",
+        "-accel",
+        "tcg",
+        "-cpu",
+        "qemu64,+pdpe1gb",
+        "-smp",
+        "2",
+        "-m",
+        "256M",
+        "-nographic",
+        "-cdrom",
+        "build/p01-configured-x86.iso",
+        "-boot",
+        "d",
+        "-no-reboot",
+        "-snapshot",
+        "-nic",
+        "none",
+        "-monitor",
+        "none"
+      ],
+      "elapsed_seconds": 11.468964500003494,
+      "termination": "scenario-or-init-terminal observed; capture10s settling window",
+      "results": {
+        "scenario_markers": "PASS",
+        "outstanding_completed": 8,
+        "lost": 0,
+        "wrong_seq": 0,
+        "death_outstanding": 4,
+        "submit_refused": 0,
+        "peer_gone": 4,
+        "latency_ticks": {
+          "median": 918230,
+          "maximum_labelled_p99": 948900,
+          "frequency_hz": 1000000000,
+          "wait_rounds": 1
+        },
+        "exit_task_observed": 3,
+        "bench_exit_identity": "INFERENCE: ordered terminal/exit records; no explicit spawn TID/generation mapping in log",
+        "known_VMM_failure_incidental": true
+      }
+    }
+  ],
+  "resource_reclamation_proven": false,
+  "aggregate_CPU_quota_proven": false,
+  "new_contract_ACs_qualified": false,
+  "cell_builds": [
+    {
+      "packages": [
+        "app-init"
+      ],
+      "target": "x86_64-unknown-none",
+      "flags": [
+        "--locked",
+        "--offline",
+        "--release",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "target_dir": "build/p01-configured-x86-target",
+      "rustflags": "-Crelocation-model=pic"
+    },
+    {
+      "packages": [
+        "app-bench",
+        "service-vfs"
+      ],
+      "target": "x86_64-unknown-none",
+      "flags": [
+        "--locked",
+        "--offline",
+        "--release",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "target_dir": "build/p01-configured-x86-target",
+      "rustflags": "-Crelocation-model=pic",
+      "CC": "cc",
+      "CFLAGS": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+      "BINDGEN_ARGS": "--target=x86_64-linux-gnu"
+    }
+  ],
+  "sign_command": [
+    "python3",
+    "scripts/cellos-sign",
+    "--quiet",
+    "--objcopy",
+    "objcopy",
+    "--sign",
+    "/home/dmin/cellos/build/p01-configured-x86-target/x86_64-unknown-none/release/app-init",
+    "/home/dmin/cellos/build/p01-configured-x86-target/x86_64-unknown-none/release/service-vfs",
+    "/home/dmin/cellos/build/p01-configured-x86-target/x86_64-unknown-none/release/bench",
+    "/home/dmin/cellos/build/p01-configured-x86-target/x86_64-unknown-none/release/bench-probe"
+  ],
+  "iso_command": "env X86_KERNEL=build/p01-configured-x86-target/x86_64-unknown-none/release/cellos-kernel X86_ISO_ROOT=build/p01-configured-x86-iso-root bash scripts/x86/make-iso-ci.sh build/p01-configured-x86.iso"
+}

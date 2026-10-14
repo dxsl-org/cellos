@@ -1,0 +1,20 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "-p",
+    "cellos-fs",
+    "--target",
+    "x86_64-unknown-linux-gnu",
+    "--offline",
+    "--features",
+    "g2-cow-experiment",
+    "--lib",
+    "compiled_fixed_storage_profile",
+    "--",
+    "--nocapture"
+  ],
+  "exit_code": 0,
+  "stdout": "\nrunning 1 test\ng2-cow fixed storage: allocated_storage=220232 Cow_handle=16 total_fixed=220248 device_handle=8 roots=8224 active=4104 reachability=4096 reservations=2048 scratch=2048 roles=65536 inodes=129024 seen=256 queue=512 tables=256 io_buffer=4096 wrapper=16\ng2-cow stack evidence method: compiler-emitted LLVM .stack_sizes (RUSTC_BOOTSTRAP=1 RUSTFLAGS='-Z emit-stack-sizes -C force-frame-pointers=yes' cargo test -p cellos-fs --features g2-cow-experiment --no-run); retain object/llvm-readobj --stack-sizes output and sum the nonrecursive call chains including BlockDevice frames. Include bounded Superblock values and encoding buffers, and report host device/test frames separately. Storage initializes in-place; traversal queue depth<=256, Rust recursion depth=0; extent planning=416 bytes. Fixed storage excludes device backing, bounded list_dir API output, allocator bookkeeping and test diagnostics (no engine lock).\ntest cow_experiment::tests::compiled_fixed_storage_profile ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s\n\n",
+  "stderr": "   Compiling cellos-fs v0.1.0 (/home/dmin/cellos/libs/cellos-fs)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.58s\n     Running unittests src/lib.rs (target/x86_64-unknown-linux-gnu/debug/deps/cellos_fs-1acc113f33b0f121)\n"
+}

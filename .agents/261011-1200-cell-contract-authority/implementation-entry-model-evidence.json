@@ -1,0 +1,111 @@
+{
+  "scope": "throwaway planning decision model, not actual build-script/kernel verification",
+  "build_matrix": [
+    {
+      "input": null,
+      "test_hooks": false,
+      "architecture": "x86_64",
+      "decision": "omitted"
+    },
+    {
+      "input": null,
+      "test_hooks": false,
+      "architecture": "aarch64",
+      "decision": "omitted"
+    },
+    {
+      "input": null,
+      "test_hooks": true,
+      "architecture": "x86_64",
+      "decision": "omitted"
+    },
+    {
+      "input": null,
+      "test_hooks": true,
+      "architecture": "aarch64",
+      "decision": "omitted"
+    },
+    {
+      "input": "0",
+      "test_hooks": false,
+      "architecture": "x86_64",
+      "decision": "omitted"
+    },
+    {
+      "input": "0",
+      "test_hooks": false,
+      "architecture": "aarch64",
+      "decision": "omitted"
+    },
+    {
+      "input": "0",
+      "test_hooks": true,
+      "architecture": "x86_64",
+      "decision": "omitted"
+    },
+    {
+      "input": "0",
+      "test_hooks": true,
+      "architecture": "aarch64",
+      "decision": "omitted"
+    },
+    {
+      "input": "1",
+      "test_hooks": false,
+      "architecture": "x86_64",
+      "decision": "reject"
+    },
+    {
+      "input": "1",
+      "test_hooks": false,
+      "architecture": "aarch64",
+      "decision": "reject"
+    },
+    {
+      "input": "1",
+      "test_hooks": true,
+      "architecture": "x86_64",
+      "decision": "measurement-only"
+    },
+    {
+      "input": "1",
+      "test_hooks": true,
+      "architecture": "aarch64",
+      "decision": "reject"
+    },
+    {
+      "input": "yes",
+      "test_hooks": false,
+      "architecture": "x86_64",
+      "decision": "reject"
+    },
+    {
+      "input": "yes",
+      "test_hooks": false,
+      "architecture": "aarch64",
+      "decision": "reject"
+    },
+    {
+      "input": "yes",
+      "test_hooks": true,
+      "architecture": "x86_64",
+      "decision": "reject"
+    },
+    {
+      "input": "yes",
+      "test_hooks": true,
+      "architecture": "aarch64",
+      "decision": "reject"
+    }
+  ],
+  "enabled_cases": 1,
+  "omitted_cases": 8,
+  "rejected_cases": 7,
+  "source_custody_cases": 5,
+  "unknown_target_invalidated": true,
+  "generation_not_name_identity": true,
+  "publication_and_failure_finalization_cases": 2,
+  "compile_gate_currently_NOT_IMPLEMENTED": true,
+  "bootstrap_marker_currently_NOT_IMPLEMENTED": true,
+  "guard_is_short_observation_not_loader_lifetime": true
+}

@@ -1,0 +1,14 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "-p",
+    "cellos-fs",
+    "--target",
+    "x86_64-unknown-linux-gnu",
+    "--offline"
+  ],
+  "exit_code": 0,
+  "stdout": "\nrunning 1 test\ntest crc32::tests::test_crc32c_standard_vectors ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 15 tests\ntest allocator_rejects_reserved_and_duplicate_releases ... ok\ntest creation_and_mapping_limits_refuse_without_counter_or_disk_changes ... ok\ntest rename_refuses_duplicates_and_normalizes_parent_identity ... ok\ntest fragmented_mapping_capacity_refuses_instead_of_omitting_extents ... ok\ntest positional_inline_transition_and_reused_blocks_zero_fill_gaps ... ok\ntest test_create_and_read_inline_file ... ok\ntest test_inline_metadata_write_cut_read_only_reopen ... ok\ntest test_format_and_open ... ok\ntest test_rename_atomic ... ok\ntest test_posix_mkdir_repro ... ok\ntest test_directory_hierarchy_and_listing ... ok\ntest test_unlink_and_reclaim ... ok\ntest test_create_and_read_large_extent_file ... ok\ntest replacement_truncates_and_positional_writes_preserve_multiblock_data ... ok\ntest test_sync_advances_cyclic_superblocks ... ok\n\ntest result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\n\nrunning 11 tests\ntest bounded_and_vectorized_requests_check_entire_range_before_io ... ok\ntest later_multiblock_read_and_data_write_failures_are_not_short_successes ... ok\ntest inode_number_exhaustion_and_unlink_release_errors_propagate ... ok\ntest open_refuses_selected_inode_table_blocks_marked_free_without_writing ... ok\ntest preserved_data_metadata_and_rename_lookup_read_errors_propagate ... ok\ntest malformed_inode_mappings_refuse_instead_of_short_or_fabricated_reads ... ok\ntest sequence_exhaustion_refuses_every_mutation_before_writes ... ok\ntest open_transport_geometry_and_allocator_failures_never_write ... ok\ntest direct_library_seven_mutations_propagate_both_flush_failures ... ok\ntest test_exhaustive_power_cut_injections ... ok\ntest test_ten_thousand_random_power_cut_injections ... ok\n\ntest result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+  "stderr": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.12s\n     Running unittests src/lib.rs (target/x86_64-unknown-linux-gnu/debug/deps/cellos_fs-60d909ba9e3183e4)\n     Running tests/fs_tests.rs (target/x86_64-unknown-linux-gnu/debug/deps/fs_tests-867bb93b39dbd10e)\n     Running tests/power_cut_fuzz.rs (target/x86_64-unknown-linux-gnu/debug/deps/power_cut_fuzz-3a01c718d5f30526)\n   Doc-tests cellos_fs\n"
+}

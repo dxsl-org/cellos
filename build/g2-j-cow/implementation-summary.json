@@ -1,0 +1,76 @@
+{
+  "format": "g2-j-cow-software-evidence-v1",
+  "source_delta": [
+    {
+      "path": "libs/cellos-fs/Cargo.toml",
+      "sha256": "e90ac3c56dc461cf933190af852b80152d074ee28e3479fd1b8d07411014dd38",
+      "baseline_sha256": "86c36d81d0d43d32f00d5a970ec4bfc13592918f3182bef97c5f8401556e858c"
+    },
+    {
+      "path": "libs/cellos-fs/src/lib.rs",
+      "sha256": "8a97255db825aa6536430cbef0c2146512ad0e37ea9c55b2f16ca830b83a6e73",
+      "baseline_sha256": "ae017db0123e5c16dec860e98101b0a70f123ca425bd1e1c88fe135657d95354"
+    },
+    {
+      "path": "libs/cellos-fs/src/engine.rs",
+      "sha256": "0c390fa180da2d77df89960a7fa76b24fbf9d07702e6be2945d51892675e6c12",
+      "baseline_sha256": "ae52dcd3436c8218d52aa8b2656eea41af82c9f063d944f984df8de9f44e5c54"
+    },
+    {
+      "path": "libs/cellos-fs/src/allocator.rs",
+      "sha256": "7b3c7a1fcc8c7277f9c197445732638eda00be901ca5a11d64f668374c1f8e3e",
+      "baseline_sha256": "7b3c7a1fcc8c7277f9c197445732638eda00be901ca5a11d64f668374c1f8e3e"
+    },
+    {
+      "path": "libs/cellos-fs/tests/fs_tests.rs",
+      "sha256": "1d535450760ca8db3ae00d709c98c98872e1244ba8f0694447fbd332d8108636",
+      "baseline_sha256": "b117f0761d5ce5aa87d7f1073ee91ddac607783b7cabb84f0de85dfb6e51c1fe"
+    },
+    {
+      "path": "libs/cellos-fs/tests/power_cut_fuzz.rs",
+      "sha256": "0ef54d449cf2eeb0df0b590531cb481d85460caf1e44169254a8fcfe2f4ce564",
+      "baseline_sha256": "bfa5c95a469bcde2ae0c46f189f60cdab81185d2965c8b26702bf4158f637895"
+    },
+    {
+      "path": "libs/cellos-fs/src/cow_experiment.rs",
+      "sha256": "5ff88899e811f67aac194f36eda5b8abcfcc1e3a3757098efa585a37069c124f",
+      "baseline_sha256": null
+    },
+    {
+      "path": "libs/cellos-fs/tests/cow_experiment.rs",
+      "sha256": "da87268447859c1bb0ddba95de44f308b097309f770b903df4863daeca35df00",
+      "baseline_sha256": null
+    }
+  ],
+  "grant_sha256": "a15f12ec20742d059a70ed9e8f878daab6501ebf0ed8f2ab72a550777014de7e",
+  "enabled_tests": 39,
+  "default_tests": 27,
+  "sector_barrier_cuts": 1144,
+  "bootstrap_edges": 136,
+  "exact_prior": 1116,
+  "exact_successor": 28,
+  "fixed_core_bytes": 220248,
+  "conservative_emitted_frames_bytes": 52288,
+  "review": {
+    "safety": "accepted after published free-count fix; old baseline findings withdrawn",
+    "evidence": "accepted target-gate/core compiled partition, bitmap-only assertion removed",
+    "full_host_stack_certificate": "UNAVAILABLE opaque platform allocator/std/panic/memcpy; not production proof"
+  },
+  "receipts": [
+    "entry.json",
+    "default-baseline.json",
+    "first-fault-run.json",
+    "enabled-first-suite.json",
+    "final-enabled-suite.json",
+    "final-isolation-default.json",
+    "unified-feature-metadata.json",
+    "whole-stack-inventory.json",
+    "final-storage-profile.json",
+    "standalone-smoke.json"
+  ],
+  "limits": [
+    "fresh disposable host atomic512sectors/ordered truthful flush only",
+    "no OGJ1/VFS/Unknown/floor/issuer/device/production",
+    "global1024/8192/2048/128 and full-host/profile footprint unqualified"
+  ]
+}

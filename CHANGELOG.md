@@ -8,6 +8,55 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- Implement the authorized default-off, host-only private G2-J CoW experiment.
+  Validate both recoverable roots, reconstruct allocation independently of the
+  shared bitmap, copy changed data/inode tables and delay reuse until durable
+  root displacement. Real sector/barrier fault scenarios preserve exact prior
+  or successor graphs; failures close the instance. Normal bare-metal/VFS paths,
+  V1 bytes and public signatures remain unchanged. OGJ1, Unknown lifecycle,
+  admitted floor/device and production qualification remain blocked.
+- Record Haily as the planned first flagship Cellos application: a general-purpose
+  personal assistant for coding, scientific research, writing and other work,
+  not a chatbot-only product. Defer port/integration until its first version
+  is owner-accepted; map Cellos readiness prerequisites and staged rollout
+  evidence without opening an AI program, releasing locks or granting deployment.
+  Define single-PC usefulness and admitted-node expansion for capacity/capabilities;
+  add enrollment/Ready/drain semantics and mixed-workload C2C acceptance with
+  equivalent Linux comparison, without claiming model quality or linear speedup.
+- Implement scoped G2-R-core/B native V1 open-only recovery and explicit
+  offline P4/P5 provisioning. Preserve transport/read/count/sync errors;
+  failed native mutation or barrier poisons the instance and closes further I/O.
+  Correct multiblock and inline/extent writes, exact whole-file truncation,
+  checked geometry/counters and authorization-first dispatch health gates.
+  Migrate fresh image producers and verify-only reuse; preserve public wire
+  errors, V1 bytes and protected denial. G2-J, crash-preserving acknowledgement,
+  Unknown quota ownership and production storage admission remain blocked.
+- Implement scoped Intel-private G1 CPU accounting with checked shared HPET,
+  aggregate same-Cell SMP charging, period/burst/debt enforcement, bounded
+  witness storage, safe switch ownership and retained retirement evidence.
+  Add source-bound private workloads/capture/replay for overlap, yield and
+  retention; preserve normal-image exclusion and existing public ABI.
+  Final QEMU development evidence: 9/9 one-CPU and 9/9 two-CPU captures,
+  actual distinct-hart worker overlap, decoder tests 107/107 and accounting
+  module tests 9/9. No physical Intel/VMX, hardware D/W, production budget,
+  downstream CP1/CP2 or G2 admission follows.
+- Add D01–D12/C01–C11 exact-delta preparation packages with concrete local
+  carrier/status/lifetime proposals, compatibility and cluster transition
+  obligations, candidate-specific migration paths and named blocking inputs.
+  Keep preparation revision/digest separate from CP1/CP2 approval. Extend the
+  P01 verifier to check all 23 package digests, the pinned source denominator
+  and rejection of byte tampering, omitted inputs and forged approval state.
+  No public ABI change, profile activation, approval or scoped lock release.
+- Harden legacy Intel VT-d root/context publication: preserve present descriptors
+  when extending an existing domain; clear and globally invalidate/drain an old
+  requester before replacing its DID/SLPT. Failed pre-publication drains retain
+  old ownership and reject the new range. Require nonzero hardware-reported
+  invalidation granularity no narrower than requested, order table stores before
+  MMIO commands, and verify RTADDR plus RTPS/TES before declaring isolation active.
+  Verification: x86 release build, driver helper tests 6/6, VT-d structure tests
+  9/9, trace parser tests 98/98, and fresh q35 multi-bus NVMe tests 2/2, including
+  translated DMA from `01:00.0`. Evidence is QEMU-only; private P01 descriptor
+  snapshots still do not certify hardware publication or DMA authority.
 - Unified Zig C/C++ cross-compiler migration (Phase 4 — QuickJS & DOOM):
   migrated `ocel-quickjs` and `doom` to the unified Zig CC toolchain across all 3
   targets (`riscv64gc-unknown-none-elf`, `x86_64-unknown-none`, and

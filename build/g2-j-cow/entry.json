@@ -1,0 +1,31 @@
+{
+  "grant_verified": true,
+  "grant_sha256": "a15f12ec20742d059a70ed9e8f878daab6501ebf0ed8f2ab72a550777014de7e",
+  "lsp": "references CellosFs failed: server exited unexpectedly code0",
+  "baseline": [
+    {
+      "path": "libs/cellos-fs/Cargo.toml",
+      "sha256": "86c36d81d0d43d32f00d5a970ec4bfc13592918f3182bef97c5f8401556e858c"
+    },
+    {
+      "path": "libs/cellos-fs/src/lib.rs",
+      "sha256": "ae017db0123e5c16dec860e98101b0a70f123ca425bd1e1c88fe135657d95354"
+    },
+    {
+      "path": "libs/cellos-fs/src/engine.rs",
+      "sha256": "ae52dcd3436c8218d52aa8b2656eea41af82c9f063d944f984df8de9f44e5c54"
+    },
+    {
+      "path": "libs/cellos-fs/src/allocator.rs",
+      "sha256": "7b3c7a1fcc8c7277f9c197445732638eda00be901ca5a11d64f668374c1f8e3e"
+    },
+    {
+      "path": "libs/cellos-fs/tests/fs_tests.rs",
+      "sha256": "b117f0761d5ce5aa87d7f1073ee91ddac607783b7cabb84f0de85dfb6e51c1fe"
+    },
+    {
+      "path": "libs/cellos-fs/tests/power_cut_fuzz.rs",
+      "sha256": "bfa5c95a469bcde2ae0c46f189f60cdab81185d2965c8b26702bf4158f637895"
+    }
+  ]
+}

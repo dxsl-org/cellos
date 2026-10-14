@@ -1,0 +1,445 @@
+{
+  "format": "cell-contract-scoped-prerequisite-authorization-v1",
+  "recorded": "2026-10-14",
+  "decision_source": "User: review v\u00e0 c\u1ea5p quy\u1ec1n tri\u1ec3n khai scoped G1/G2 \u0111\u1ec3 t\u1ea1o s\u1ed1 \u0111o th\u1ef1c",
+  "scope": "development source-edit authority; not downstream CP1/CP2 or deployment admission",
+  "authorization_document": ".agents/261011-1200-cell-contract-authority/scoped-g1-g2-authorization.md",
+  "authorization_sha256": "92c18299005d3c5a7f871101253a0c7ccee425eb5f88083d0e101804694ae049",
+  "review_sha256": "f2bd9cd9ab11ec0957658b40fd84418aeb0fad51bf0e70aef6c43daeb3c404f9",
+  "wip_order": [
+    "G1",
+    "G2-R-core/B"
+  ],
+  "owner": "controlling P01 integration owner",
+  "legacy_lock_count": 38,
+  "legacy_locks_released": 0,
+  "G2-J": "blocked-separate-exact-review-required",
+  "slices": [
+    {
+      "slice": "G1",
+      "revision": "r2",
+      "candidate": ".agents/261011-1200-cell-contract-authority/g1-local-accounting-candidate.md",
+      "candidate_sha256": "a39068f68536aed723f4e7c8c622df3a0b4cc00c8133febe4efd6998c6e81b83",
+      "decision": "authorized-development-source-edits",
+      "allowed_files": [
+        "kernel/src/task/cpu_accounting.rs",
+        "kernel/src/task.rs",
+        "kernel/src/task/scheduler.rs",
+        "kernel/src/task/launch.rs",
+        "kernel/src/task/hart_local/ready.rs",
+        "kernel/build.rs",
+        "kernel/src/main.rs",
+        "hal/arch/x86/src/x86_64/hpet.rs",
+        "hal/arch/x86/src/x86_64.rs",
+        "hal/arch/x86/src/x86_64/context.rs",
+        "kernel/src/task/retirement_selftest.rs",
+        "kernel/src/task/stack_overflow_probe.rs",
+        "kernel/src/task/x86_idt_cpl3.rs",
+        "kernel/src/task/domain_switch_tests.rs",
+        "cells/tests/bench/src/main.rs",
+        "cells/tests/bench/src/bench-probe.rs",
+        "cells/tests/bench/src/scenarios/cpu_accounting.rs",
+        "cells/tests/bench/Cargo.toml",
+        "scripts/x86/p01_capture.py",
+        "scripts/x86/p01_trace.py",
+        "scripts/x86/test_p01_trace.py"
+      ],
+      "new_file_paths": [
+        "cells/tests/bench/src/scenarios/cpu_accounting.rs",
+        "kernel/src/task/cpu_accounting.rs"
+      ],
+      "allowed_new_subtree": null,
+      "runtime_capture": "blocked-until-actual-diff-and-pre-capture-gates",
+      "release": "blocked",
+      "downstream_cp1_cp2": "unchanged-pending"
+    },
+    {
+      "slice": "G2-R-core/B",
+      "revision": "r3",
+      "candidate": ".agents/261011-1200-cell-contract-authority/g2-ordinary-persistence-candidate.md",
+      "candidate_sha256": "f6a5a6cd9facaaf7de7075fad64399925b053bee54be23215d383b8ea5e14552",
+      "decision": "authorized-development-source-edits",
+      "allowed_files": [
+        "cells/services/vfs/src/backend_cellosfs.rs",
+        "cells/services/vfs/src/backend.rs",
+        "cells/services/vfs/src/manager.rs",
+        "cells/services/vfs/src/mount.rs",
+        "cells/services/vfs/src/paths.rs",
+        "cells/services/vfs/src/dispatch_paths.rs",
+        "cells/services/vfs/src/dispatch_grants.rs",
+        "cells/services/vfs/src/dispatch_file_handles.rs",
+        "cells/services/vfs/src/dispatch_dirs.rs",
+        "cells/services/vfs/src/dispatch.rs",
+        "cells/services/vfs/src/grant_write.rs",
+        "cells/services/vfs/src/grant_read.rs",
+        "cells/services/vfs/src/backend_ramfs.rs",
+        "cells/services/vfs/src/backend_fat.rs",
+        "cells/services/vfs/src/backend_bootfs.rs",
+        "cells/services/vfs/src/backend_bin_overlay.rs",
+        "cells/services/vfs/src/access/stub.rs",
+        "libs/cellos-fs/src/engine.rs",
+        "libs/cellos-fs/src/allocator.rs",
+        "libs/cellos-fs/src/format.rs",
+        "libs/cellos-fs/src/disk.rs",
+        "libs/cellos-fs/tests/fs_tests.rs",
+        "libs/cellos-fs/tests/power_cut_fuzz.rs",
+        "Cargo.toml",
+        "Cargo.lock",
+        "scripts/mksrv-img.sh",
+        "scripts/format-disk-arm.sh",
+        "scripts/gen-disk-ci.sh",
+        "scripts/gen-disk-aarch64-ci.sh",
+        "scripts/format-disk-hv-arm.sh",
+        "gen_disk.ps1",
+        ".github/workflows/ci.yml",
+        "tests/integration/tests/srv-cellosfs.rs",
+        "libs/api/src/abi/disk.rs",
+        "docs/decisions/0016-cellosfs-native-replaces-redoxfs.md",
+        "CHANGELOG.md"
+      ],
+      "new_file_paths": [],
+      "allowed_new_subtree": "tools/cellos-fs-provision/",
+      "runtime_capture": "blocked-until-actual-diff-and-pre-capture-gates",
+      "release": "blocked",
+      "downstream_cp1_cp2": "unchanged-pending"
+    }
+  ],
+  "source_baseline": [
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/dependency-checkpoint-amendment.md",
+      "sha256": "2005e35720aab335030468e92ad94a84c393a95d96fe6cdfc33d32da58091d48"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/issuer-persistence-candidate.md",
+      "sha256": "ce3f0f718dbac4d4723e51c137fbab9e0a0297dd188275a4bdfc1cd019b00abd"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/measured-profile-candidate.md",
+      "sha256": "1aad0a79a0f99c5154782a93d6162f575df60fac46201c42406133b33f791589"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/profile-budgets.md",
+      "sha256": "a7e50675dd2a7a612b378c01d5acef1d3a55532f17f14c3a7f4fed4a9efef131"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "8ddd36965b2115fd30724acde366ea11405e6f293bbb7878ae0c90b0963f3108"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "498796d299f0918f1fb01938f3e5045847025e9b1f35a9bcd66720f5252e5f3e"
+    },
+    {
+      "path": "Cargo.lock",
+      "sha256": "ed30dd8bbe36ba2e65dbc121cea6bb1139f1911951950309e976a8b8231d5151"
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "64073f9da88129db318bb28452cf32ba386a82971085dbce9fa380fb7e163072"
+    },
+    {
+      "path": "cells/services/hypervisor/src/virtio_blk.rs",
+      "sha256": "4fdbe67f895968d495b2485ba219779f57834d959b5e8be1dd84b73ffca3b2f8"
+    },
+    {
+      "path": "cells/services/kms/src/storage.rs",
+      "sha256": "d3fa592c54782bced2a09d58912b42eb43054e253126c9eda8f27751dd89c0d2"
+    },
+    {
+      "path": "cells/services/kms/src/storage/backend.rs",
+      "sha256": "a44591d80324fe52707a75fedc46eac9c41e7e79e23ef06b6af90a9d171f8b92"
+    },
+    {
+      "path": "cells/services/kms/src/storage/journal.rs",
+      "sha256": "09b51dc1a168e4a5308d92fbbed080c94268be68aced7b6af03acac39b83d2b8"
+    },
+    {
+      "path": "cells/services/kms/src/storage/provider/relay.rs",
+      "sha256": "d96972e221ba1dc8c736b51b33660230392b62afe34d51f0c428e54dce729d28"
+    },
+    {
+      "path": "cells/services/kms/src/storage/runtime.rs",
+      "sha256": "f12a8807d0fcfc22aea25eb9eab078ae41a71e5abf4f3be2c2446278be2530b8"
+    },
+    {
+      "path": "cells/services/vfs/src/access/stub.rs",
+      "sha256": "30f85af1a895856706f9e37136129716c19497c725ca8866ac25843b7e41417c"
+    },
+    {
+      "path": "cells/services/vfs/src/backend.rs",
+      "sha256": "21c9cea0d24e1ce2cef678eacae1de74213aa20d86eebbbfc4c05dc7bee808d8"
+    },
+    {
+      "path": "cells/services/vfs/src/backend_bin_overlay.rs",
+      "sha256": "bada3fe73aed4927956d22298a869152b30a50a707a86f7b8600cfbf7158e61e"
+    },
+    {
+      "path": "cells/services/vfs/src/backend_bootfs.rs",
+      "sha256": "84c6f2c522a3aa5af03ca3348cfd934e1462e64e1826057ca756e4eeb4d2c955"
+    },
+    {
+      "path": "cells/services/vfs/src/backend_cellosfs.rs",
+      "sha256": "65d61ee272e8356804f51fce844fb20669168b3ddd8abca58077cc16574dc993"
+    },
+    {
+      "path": "cells/services/vfs/src/backend_fat.rs",
+      "sha256": "bf532e8020ca4748b1631349d8b07a763929d58df4a9d124a524c534a6e06c64"
+    },
+    {
+      "path": "cells/services/vfs/src/backend_ramfs.rs",
+      "sha256": "266711de40e460a31792816b4496761b67e3cede55b4ace3f163a909efceae83"
+    },
+    {
+      "path": "cells/services/vfs/src/blk_router.rs",
+      "sha256": "581be672f0f65d7d8407fd04c0b52934f1d67dd1250d6c565f0ca1f43a989e28"
+    },
+    {
+      "path": "cells/services/vfs/src/disk_cellosfs.rs",
+      "sha256": "48a7d7aa23a826fd0cfd0a105bdf38d60f946ad9b7396d81f1e7b774cf885bc1"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch.rs",
+      "sha256": "f092284dd5e1305ecb915402e86184ac1c282e619a2d0290c4deb71de1f53327"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch_dirs.rs",
+      "sha256": "eb1520dcad9cce59ceca78f37875dbb385cd06ff3dc298467291c56e9866f7e5"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch_file_handles.rs",
+      "sha256": "8197c0b30acfdf5e71d78bb2096313ff41e9822d94724f53631f886224b7233b"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch_grants.rs",
+      "sha256": "214142357bfcd60d503e04f2cc67454b847febd2388d296d28bec087b0e4180c"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch_paths.rs",
+      "sha256": "244526135f598bc532ba74bd064a10eddc6214b45526bccaccb656c52f5263f5"
+    },
+    {
+      "path": "cells/services/vfs/src/grant_read.rs",
+      "sha256": "456c25e49ec943a599a9bce6c762424672df2c8eb47c4ec9ff0b5317dd911d63"
+    },
+    {
+      "path": "cells/services/vfs/src/grant_write.rs",
+      "sha256": "2c710eeea585992f7a9c043275e4b2b9719a2614cf1634dc7f4ddd528f04a739"
+    },
+    {
+      "path": "cells/services/vfs/src/manager.rs",
+      "sha256": "7bf3359af501043d8067ec363bdd40e9abe74b79ba14eead78eba2a5111b9bcb"
+    },
+    {
+      "path": "cells/services/vfs/src/mount.rs",
+      "sha256": "fd21627b956b31925382a0912a41a9cb3ba2711f9f6714de45ab2c4a34b8af2e"
+    },
+    {
+      "path": "cells/services/vfs/src/paths.rs",
+      "sha256": "8c8802671476c4d4f80f842ad1707cc9e78222d273308b1f6f1233ff63b5044d"
+    },
+    {
+      "path": "cells/services/vfs/src/subtree.rs",
+      "sha256": "51e8fdad9e2956c9c23b42c2c6a75e1c8f719dbd778769b752d40a17c09155e0"
+    },
+    {
+      "path": "cells/tests/bench/Cargo.toml",
+      "sha256": "9eabb93dd547c59cc8e7a46bb2eb6f7f734a810b778b3153ba1617b6deb51dc5"
+    },
+    {
+      "path": "cells/tests/bench/src/bench-probe.rs",
+      "sha256": "9baaf8817da99138e260af2401c031d8862529f0fba9ca01e9b956abebbea0ff"
+    },
+    {
+      "path": "cells/tests/bench/src/main.rs",
+      "sha256": "4cd9f3bef24d1e91d962154ccebd834f461e3b3190cea639183c89acdeef2f8b"
+    },
+    {
+      "path": "docs/decisions/0016-cellosfs-native-replaces-redoxfs.md",
+      "sha256": "ae1784006b6bd257281e8a84a4405b01c476c9345c9d2afd09f9d83e4c1f0952"
+    },
+    {
+      "path": "gen_disk.ps1",
+      "sha256": "c268e80ebe9e1256b6accdee8b9eb00663b8d099c3ce88d6bad1dedbd853000c"
+    },
+    {
+      "path": "hal/arch/arm/src/aarch64/timer.rs",
+      "sha256": "01485e336f9af4b8d8e910f1863680611b99f115205da5e46fc0a69389d0ab07"
+    },
+    {
+      "path": "hal/arch/riscv/src/common/timer.rs",
+      "sha256": "90cef44df003387524da8a1c1bd073658cbebf968acca0bfb8f3747c3a7bf089"
+    },
+    {
+      "path": "hal/arch/riscv/src/rv64/asm/switch.S",
+      "sha256": "e3d05ee207ed3e4e60856440f5a072e693e51acf225010eaaec374ffb22b872d"
+    },
+    {
+      "path": "hal/arch/x86/src/x86_64.rs",
+      "sha256": "12fe2d627d13682e0bb4b556de9b18d0911482b50c156ce07d826e0a5635af13"
+    },
+    {
+      "path": "hal/arch/x86/src/x86_64/apic.rs",
+      "sha256": "78d1e4b75a502af0bc814d162d9cd4c272d3c71cd961ea5fd542387d9e3f0856"
+    },
+    {
+      "path": "hal/arch/x86/src/x86_64/context.rs",
+      "sha256": "de32b45d66f0fd97cef6c2e9aa8c52b69a1383e74a396f43e16f9fe5f24aaf80"
+    },
+    {
+      "path": "hal/arch/x86/src/x86_64/hpet.rs",
+      "sha256": "d6b64b34016c56da393e8a9e543c042ec446e976920948d40bedf930ed3b6dce"
+    },
+    {
+      "path": "hal/arch/x86/src/x86_64/timer.rs",
+      "sha256": "32058550f1b47c534dd05ddf92683b58da926c6c9eedc574077863f9eaa14b49"
+    },
+    {
+      "path": "kernel/build.rs",
+      "sha256": "c24d30f85cc804d4bf09af9c3d80047110bf873a856a7f47fd8bdb550d83ef24"
+    },
+    {
+      "path": "kernel/src/acpi.rs",
+      "sha256": "69578dc0d908e85d351870fae2194f653faacf9f5f38328c7a23dee421a7e3ab"
+    },
+    {
+      "path": "kernel/src/main.rs",
+      "sha256": "13045c7171fb6cdccce8f387ab9e73c6c72603fc22b60e54789b2c082f6399ab"
+    },
+    {
+      "path": "kernel/src/memory/cell_quota.rs",
+      "sha256": "feab58aca5d6fbdcf2dd5c82aa70295773746473f594783f4e220568926cffdd"
+    },
+    {
+      "path": "kernel/src/sync.rs",
+      "sha256": "af04e22463edbd340eaca78602c9109e8e85bba503975f3747583031b240e3ee"
+    },
+    {
+      "path": "kernel/src/task.rs",
+      "sha256": "d949042fbf43892ae86ebe50fc9de07c4884ecce6c43c5f2c7087efac0c24de8"
+    },
+    {
+      "path": "kernel/src/task/domain_switch_tests.rs",
+      "sha256": "c52734af2fc050ab8e4560ef8d358d686c017d28305c5fbc2baf6336fdc0e399"
+    },
+    {
+      "path": "kernel/src/task/hart_local/ready.rs",
+      "sha256": "bf19c0e2a8dc2dc4630bf55eb9c91ee148c3d73d5a98b4668246589e1de14019"
+    },
+    {
+      "path": "kernel/src/task/launch.rs",
+      "sha256": "dc465f643d9ed7fd96d5faee0b3ab69f1e344985eefdfec1ff98ea2341a76875"
+    },
+    {
+      "path": "kernel/src/task/retirement_selftest.rs",
+      "sha256": "519cc68ebd7da89d96cd6e795d8d1e45831ef9cc9de8f718d5e55540f5832a5f"
+    },
+    {
+      "path": "kernel/src/task/scheduler.rs",
+      "sha256": "4b00e25c5ac465df03c364bde5f77b0aae0d0609d1d4de67f8488f2d7a027cfb"
+    },
+    {
+      "path": "kernel/src/task/smp.rs",
+      "sha256": "478943ae5f8a592ce1f76219770ecb73db8a7b339111ee3da0157aa05b33eec1"
+    },
+    {
+      "path": "kernel/src/task/stack_overflow_probe.rs",
+      "sha256": "6fcba015d28ab154d6c094c68c82d519e1a8fb6261fa9a046ec4844039c5d189"
+    },
+    {
+      "path": "kernel/src/task/syscall.rs",
+      "sha256": "c201a33ec08efdb7fb77a0f5dcda1f6bd73489f4368f5c4c43dd1ed68fc9c372"
+    },
+    {
+      "path": "kernel/src/task/tcb.rs",
+      "sha256": "046677f8da00afa1f6db275cfdb28a70935dc7dcb981e7b701f0ab1a793e3181"
+    },
+    {
+      "path": "kernel/src/task/x86_idt_cpl3.rs",
+      "sha256": "1419f033d1705ce196a4586052e82d5570f674b9ee0fd1a92e104460708a0860"
+    },
+    {
+      "path": "libs/api/src/abi/disk.rs",
+      "sha256": "403a177c92a3d8a93648c5968c5afc89523457d51383f401de4fc4acc7b0e52c"
+    },
+    {
+      "path": "libs/api/src/abi/syscall.rs",
+      "sha256": "7cb9c3ff34f9b354821014caba499b133c1a3118683154858fe0ae7593fea856"
+    },
+    {
+      "path": "libs/api/src/services/ipc.rs",
+      "sha256": "844801ef25dbecb86c7f140927b351c7c8b9e4cdfcb736a3a25bd56a376057b6"
+    },
+    {
+      "path": "libs/cellos-fs/src/allocator.rs",
+      "sha256": "52c851394d6abcc01ada7c28f1988a9377a4a8d8b8fddeedc7886996a5a3bf74"
+    },
+    {
+      "path": "libs/cellos-fs/src/disk.rs",
+      "sha256": "d327225ba686af1a6be8ce2fb91f7581dc0cacbf86c9b2ef14a9ae983271641b"
+    },
+    {
+      "path": "libs/cellos-fs/src/engine.rs",
+      "sha256": "a7b05c05ead06aac234dbb7153f8c6d1da45efbead634183fc793fb1091a7771"
+    },
+    {
+      "path": "libs/cellos-fs/src/format.rs",
+      "sha256": "189eea2013099f546d014b7e5cb60d249d33e59fec2b5c0f4bf0d50ccd433270"
+    },
+    {
+      "path": "libs/cellos-fs/tests/fs_tests.rs",
+      "sha256": "2e2b0fdc4e4c89a96d6a3a1ba8319bbb1417b49f85732706a35033d1bbea4c60"
+    },
+    {
+      "path": "libs/cellos-fs/tests/power_cut_fuzz.rs",
+      "sha256": "1be56b503d9308f38f035acdd719b5ccb8dd5849b0c83c55e3cbf1ecb429e35e"
+    },
+    {
+      "path": "libs/ostd/src/clients/vfs.rs",
+      "sha256": "dfd62625a7fdefd3335919a0d7813f7f8baace03f5f12d2d146b44095c5823a6"
+    },
+    {
+      "path": "libs/text-engine/src/top.rs",
+      "sha256": "c799d3d2eeacfc584140dfc0ebb045092cd9a3561731d1c452e73c82f4f20f3e"
+    },
+    {
+      "path": "libs/text-engine/src/top/tests.rs",
+      "sha256": "5edc8857ca4404757ce00471cc1fcf637ffab3a228e99a2d46093fbaacef7c29"
+    },
+    {
+      "path": "scripts/format-disk-arm.sh",
+      "sha256": "7eed244ebf4d5a89f81ddd3c455c26f71e7346418634d277c15769b60d345199"
+    },
+    {
+      "path": "scripts/format-disk-hv-arm.sh",
+      "sha256": "9bcaf341d678d16800a6c36f744274dd0c07e699aba724e077d942fa0b260af2"
+    },
+    {
+      "path": "scripts/gen-disk-aarch64-ci.sh",
+      "sha256": "d6ca74dce02ddf6b4f5572687976c5df3480feb96cd4ced371c18b6003bf58be"
+    },
+    {
+      "path": "scripts/gen-disk-ci.sh",
+      "sha256": "40ed70695eaf2574a044e950fc84c5beef0e472790e8a6a868ec0f0b043fe722"
+    },
+    {
+      "path": "scripts/mksrv-img.sh",
+      "sha256": "e7f2b86c8e7e7072333d6cd6bdbbc4e589eab1cc7f2d0fec51d2a911bc73bef2"
+    },
+    {
+      "path": "scripts/x86/p01_capture.py",
+      "sha256": "47e1d09135a0a2d9955b8b06531d407e86eccc102a8f7e33e83456537a3912f2"
+    },
+    {
+      "path": "scripts/x86/p01_trace.py",
+      "sha256": "66e31241ec60c8369cbda1d7cdcba1723af6828c4adeb4a4e1e20cc705cc2ba8"
+    },
+    {
+      "path": "scripts/x86/test_p01_trace.py",
+      "sha256": "f60f6296caa75a3d0ceb6ea31e769149ab0572af963411eab26e12fb3c6973b8"
+    },
+    {
+      "path": "tests/integration/tests/srv-cellosfs.rs",
+      "sha256": "538c22718e2f2ccc9ef2b6f96f92f329508cd7a35f9c4538851fdaa522b3f89f"
+    }
+  ]
+}

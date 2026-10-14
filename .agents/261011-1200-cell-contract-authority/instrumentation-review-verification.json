@@ -1,0 +1,19 @@
+{
+  "scope": "planning/source review only; no new runtime test",
+  "documents": 28,
+  "local_links": 308,
+  "missing_paths": 0,
+  "pending_phases": 10,
+  "acyclic": true,
+  "retained_reciprocal_locks": 38,
+  "AC_owners": 50,
+  "adoption_rows": 38,
+  "negative_controls_rejected": 3,
+  "source_inputs_unchanged": 3174,
+  "prior_ISO_digest_and_lifecycle_markers_preserved": true,
+  "independent_reviewers": 2,
+  "raw_findings": 11,
+  "adjudicated_major_groups": 5,
+  "adjudicated_minor_groups": 1,
+  "instrumentation_implemented": false
+}

@@ -1,0 +1,152 @@
+{
+  "format": "g2-j-finite-proposal-certificate-v1",
+  "scope": "source geometry and conditional set model; not implementation or admission",
+  "source_pins": [
+    {
+      "path": "libs/cellos-fs/src/format.rs",
+      "sha256": "f462e6ce50c8ddd339f89b3d69f4efe01fd0d4303b095d3b964702cf9352998a"
+    },
+    {
+      "path": "libs/cellos-fs/src/engine.rs",
+      "sha256": "ae52dcd3436c8218d52aa8b2656eea41af82c9f063d944f984df8de9f44e5c54"
+    },
+    {
+      "path": "libs/cellos-fs/src/allocator.rs",
+      "sha256": "7b3c7a1fcc8c7277f9c197445732638eda00be901ca5a11d64f668374c1f8e3e"
+    },
+    {
+      "path": "libs/cellos-fs/src/inode.rs",
+      "sha256": "fd3acd939f30eec4818879f05bcaf7394c328aafb846a208e27db31654e3d85b"
+    },
+    {
+      "path": "libs/cellos-fs/src/disk.rs",
+      "sha256": "ddfa0b3a01456fc4985c890be52a96ffc20ec4a3ab64f47bb1d4cd3a4417416d"
+    }
+  ],
+  "geometry": {
+    "block_bytes": 4096,
+    "inode_bytes": 512,
+    "inline_bytes": 428,
+    "directory_entry_bytes": 56,
+    "directory_entries": 7,
+    "inode_capacity": 256,
+    "session_directories_including_volume_root_and_parents": 11,
+    "session_record_files": 12,
+    "session_created_inodes": 23,
+    "inode_table_blocks_per_root": 3,
+    "external_record_data_blocks_per_root": 6,
+    "max_payload_bytes": 436,
+    "commit_bytes": 184,
+    "selected_volume_blocks": 16384,
+    "bitmap_blocks": 1,
+    "three_graph_peak_blocks_including_reserved": 30,
+    "four_bitsets_storage_bytes": 8192,
+    "single_block_buffer_bytes": 4096,
+    "record_buffer_bytes": 436,
+    "remaining_inode_numbers_after_fresh_session": 233
+  },
+  "publication_cuts": [
+    {
+      "cut": "data_partial",
+      "protected_blocks": [
+        10,
+        11,
+        12
+      ],
+      "reclaimable_from_old_graphs": [],
+      "mutation_resume": false
+    },
+    {
+      "cut": "bitmap_partial",
+      "protected_blocks": [
+        10,
+        11,
+        12
+      ],
+      "reclaimable_from_old_graphs": [],
+      "mutation_resume": false
+    },
+    {
+      "cut": "FS1_failed",
+      "protected_blocks": [
+        10,
+        11,
+        12
+      ],
+      "reclaimable_from_old_graphs": [],
+      "mutation_resume": false
+    },
+    {
+      "cut": "superblock_torn",
+      "protected_blocks": [
+        10,
+        11,
+        12
+      ],
+      "reclaimable_from_old_graphs": [],
+      "mutation_resume": false
+    },
+    {
+      "cut": "FS2_reply_lost",
+      "protected_blocks": [
+        11,
+        12,
+        13,
+        14
+      ],
+      "reclaimable_from_old_graphs": [
+        10
+      ],
+      "mutation_resume": false
+    },
+    {
+      "cut": "FS2_success",
+      "protected_blocks": [
+        11,
+        12,
+        13,
+        14
+      ],
+      "reclaimable_from_old_graphs": [
+        10
+      ],
+      "mutation_resume": true
+    }
+  ],
+  "negative_controls": [
+    {
+      "mutation": "overlap reuse",
+      "detected": true,
+      "reason": "reachable block reuse or early reclamation"
+    },
+    {
+      "mutation": "early reclamation",
+      "detected": true,
+      "reason": "reachable block reuse or early reclamation"
+    },
+    {
+      "mutation": "missing old root",
+      "detected": true,
+      "reason": "missing recoverable root"
+    },
+    {
+      "mutation": "capacity overflow",
+      "detected": true,
+      "reason": "capacity overflow or uncharged Unknown"
+    },
+    {
+      "mutation": "uncharged Unknown",
+      "detected": true,
+      "reason": "capacity overflow or uncharged Unknown"
+    }
+  ],
+  "session_rule": "tx4 cp2 used once; no inode/slot cycling; refuse before new dispatch",
+  "unproven": [
+    "compiled stack/heap layouts",
+    "actual CoW/fault transitions",
+    "charge transfer producer",
+    "global1024 heap/8192 history/2048 ranges/128 obligations fit",
+    "authenticated floor/device durability",
+    "production profile and CP1/CP2"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "scope": "source-backed planning and decision model only",
+  "documents": 31,
+  "local_links": 330,
+  "missing_paths": 0,
+  "pending_phases": 10,
+  "acyclic": true,
+  "retained_reciprocal_locks": 38,
+  "AC_owners": 50,
+  "adoption_rows": 38,
+  "graph_negative_controls_rejected": 3,
+  "source_input_hashes_unchanged": 3174,
+  "source_custody_model_cases": 5,
+  "private_build_model_cases": 16,
+  "consistency": "superseded configured-ingress arm updated in active trace/protocol docs",
+  "runtime_instrumentation_NOT_IMPLEMENTED": true,
+  "public_ABI_gate_NOT_APPROVED": true
+}

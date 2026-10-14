@@ -1,0 +1,65 @@
+{
+  "iso": "/home/dmin/cellos/build/p01-service-x86.iso",
+  "iso_sha256": "eb09fc3019ba90bd042ed854333231f189942366118e1a5b0c1f123922e7a4e2",
+  "command": [
+    "qemu-system-x86_64",
+    "-machine",
+    "q35",
+    "-accel",
+    "tcg",
+    "-cpu",
+    "qemu64,+pdpe1gb",
+    "-smp",
+    "2",
+    "-m",
+    "256M",
+    "-nographic",
+    "-cdrom",
+    "build/p01-service-x86.iso",
+    "-boot",
+    "d",
+    "-no-reboot",
+    "-snapshot",
+    "-nic",
+    "none",
+    "-monitor",
+    "none"
+  ],
+  "commands_sent_seconds": [
+    [
+      "free",
+      5.92
+    ],
+    [
+      "exec /bin/bench async-lifecycle",
+      5.94
+    ],
+    [
+      "free",
+      6.12
+    ]
+  ],
+  "allocator_KiB": [
+    [
+      245680,
+      25752,
+      219928
+    ],
+    [
+      245680,
+      25752,
+      219928
+    ]
+  ],
+  "existing_boot_markers": [
+    "S22-X86-CONTEXT-HANDOFF: PASS",
+    "S22-X86-REMOTE-SHOOTDOWN: PASS harts=2",
+    "[x86-smp] topology online=2 processor_ids=0;1 qualified=yes",
+    "S22-X86-SAS-FASTPATH: PASS",
+    "S22-X86-PIN-DYING: PASS harts=2"
+  ],
+  "async_scenario": "NOT_RUN: direct shell launch denied; no START/PASS marker",
+  "reclamation_claim": false,
+  "CPU_quota_or_SMP_throughput_claim": false,
+  "known_VMM_failure_incidental": true
+}

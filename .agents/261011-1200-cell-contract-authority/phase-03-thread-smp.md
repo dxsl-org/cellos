@@ -13,6 +13,10 @@ dependencies: [2]
 
 AC-06..AC-09 and the local admission portion of AC-30. Threads share Cell identity/CSpace/resource ceilings, not TLS, stack or current receive context. Actual Intel x86 two-CPU execution is required; host interleaving tests alone do not prove context safety. P08 owns destination placement admission and service/broker capacity; P10 qualifies the integrated node/application bounds.
 
+AC-48 is shared, like AC-30: P03 proves immutable maxima/current-limit distinction and local reserve/admit/retire primitives. P08-C supplies the real application Authority grant/claim integration and end-to-end resizing witness; P10 qualifies both. P03 completion must not wait for P08, close the entire AC-48 row, or enable application-managed growth using fixture grants. That profile remains closed until the P08 evidence gate; no reverse dependency is introduced.
+
+AC-40 local ownership is limited to immutable-max/current-limit, aggregate accounting and reserve/admit/retire enforcement primitives. P08-C owns the application Authority vector, live destination claim and distributed shares; P03 neither approves their representation nor closes the distributed criterion.
+
 ## Related files / ownership
 
 - `kernel/src/task/{scheduler.rs,tcb.rs,smp.rs,futex.rs,tls.rs}`, `kernel/src/task/hart_local/ready.rs`, `kernel/src/task.rs`, `kernel/src/memory/cell_quota.rs`.
@@ -31,6 +35,7 @@ AC-06..AC-09 and the local admission portion of AC-30. Threads share Cell identi
 6. Close new admission, quiesce exact generation across all CPUs, wait for safe-root/retirement acknowledgements, then reclaim stacks, authority and quota. Missing CPU acknowledgement quarantines resources; no forced timeout release.
 7. Adapt client/runtime expectations to whole-Cell fault scope and explicit joins. This changes semantics and must be in P01 delta approvals; do not silently rewrite an old test to expect a different policy.
 8. Enforce P01's declared aggregate node admission bounds alongside per-Cell budgets. Reserve local Cell/thread/memory/CPU allocations before publication, roll back denied preparations, and preserve emergency/kernel reservations. Service-owned queue/socket/capacity limits remain enforced by their issuers and are integrated in P08; no fixed request capacity is inferred from CPU ceilings.
+9. AC-48: keep immutable incarnation authority/resource maxima separate from current admitted allocation. Growth reserves its delta at independent Budget Authority and destination before use; above-maximum growth refuses and requires explicit budgeted replacement. Shrink below charged use remains pending until drain/reconciliation fits without losing admitted work. P08 supplies Authority management integration.
 
 ## Verification / success criteria
 
@@ -40,6 +45,7 @@ AC-06..AC-09 and the local admission portion of AC-30. Threads share Cell identi
 - [ ] Flood thread creation and parallel CPU work; total memory/cap/CPU budget stays within documented bound, unrelated Cell makes progress, priority cannot be raised beyond ceiling.
 - [ ] Clean worker exit leaves sibling live; worker unhandled fault and root exit retire all members; no execution/frame reuse after retirement acknowledgement. Real runtime smoke plus isolated invariant tests retained.
 - [ ] AC-30 local saturation: several Cells below individual ceilings collectively reach node bounds; subsequent Cell/thread admission refuses before publication, accounting stays exact across failure/retirement, and released capacity becomes available only after confirmed reclamation.
+- [ ] AC-48 local portion: immutable maxima cannot widen, above-max/missing local reservation growth refuses before use and below-use shrink stays pending until safe drain. P08-C must separately show real Authority-reserved/live-claimed within-max growth and independently charged replacement; no fixture-backed activation or claim that P03 alone closes AC-48.
 
 ## Security, risk and rollback
 
