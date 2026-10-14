@@ -156,6 +156,13 @@ cells/apps/vove/
 /build/x86-prod-check-iso/
 /build/x86-prod-refusal-iso-root/
 /build/x86-python-gate/
+/build/cp1-prerequisites/g0-vtd-readiness*.json
+/build/cp1-prerequisites/profile-readiness.json
+/build/g1-*
+/build/g2-j-*-census-before.json
+/build/g2-runtime/*.cellosfs-receipts.*/
+/build/g2-runtime/pre-implementation-census.json
+/build/p01-*
 
 # Real-weight AI validation checkpoints (scripts/fetch-ai-test-model.sh)
 .ai-models/
