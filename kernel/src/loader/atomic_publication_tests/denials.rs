@@ -2,6 +2,7 @@ use super::baseline::with_populated_baseline;
 use super::snapshot::{
     denied_with_full_rollback, denied_with_governed_rollback, denied_with_logged_denial,
     platform_singleton_denial,
+    denied_without_frame_allocator,
 };
 
 const NO_AUDIT_RECORDS: usize = 0;
@@ -32,7 +33,7 @@ pub(super) fn run() -> usize {
             })
         })
     });
-    for case in ["AP-01", "AP-02", "AP-03", "AP-04"] {
+    for case in ["AP-01", "AP-02", "AP-03", "AP-04", "AP-RF", "AP-RM", "AP-RW"] {
         record(case, &mut failures, || {
             with_populated_baseline(case, NO_AUDIT_RECORDS, || {
                 denied_with_full_rollback(case, || {
@@ -47,6 +48,16 @@ pub(super) fn run() -> usize {
             })
         });
     }
+    record("AP-FA", &mut failures, || {
+        with_populated_baseline("AP-FA", NO_AUDIT_RECORDS, || {
+            denied_without_frame_allocator(|| {
+                crate::task::prepare_elf_task(
+                    crate::INIT_ELF, "atomic-no-allocator", types::CellId(0),
+                    alloc::vec::Vec::new(),
+                ).map(|_| ())
+            })
+        })
+    });
     record("AP-05", &mut failures, || {
         with_populated_baseline(
             "AP-05",

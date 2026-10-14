@@ -72,11 +72,18 @@ impl viConsole {
                 let c = $c;
                 if input_tid != 0 {
                     if !relay_ascii_to_input(input_tid, c) {
-                        PENDING_ASCII.lock().push_back(c);
+                        let mut pending = PENDING_ASCII.lock();
+                        #[cfg(cellos_p01_trace)]
+                        let _semantic = crate::memory::heap::p01_owner::creation(None,
+                            crate::memory::heap::p01_owner::DRIVER_SHARED);
+                        pending.push_back(c);
                         return true; // stop draining; order preserved via backlog
                     }
                 } else {
                     if self.buffer.len() < Self::MAX_BUFFERED {
+                        #[cfg(cellos_p01_trace)]
+                        let _semantic = crate::memory::heap::p01_owner::creation(None,
+                            crate::memory::heap::p01_owner::DRIVER_SHARED);
                         self.buffer.push_back(c);
                     }
                 }

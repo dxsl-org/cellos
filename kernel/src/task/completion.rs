@@ -89,6 +89,8 @@ struct Ring {
     drainable: [u16; QUEUE_CAPACITY],
     head: usize,
     len: usize,
+    #[cfg(cellos_p01_trace)]
+    p01_obligations: [Option<crate::p01_resources::Obligation>; QUEUE_CAPACITY],
 }
 
 /// Raised by any append, cleared by [`deliver_pending_wakes`]. A single relaxed
@@ -109,6 +111,8 @@ pub struct CompletionQueue {
     /// waiting. See [`CompletionQueue::register_waiter`] for the contract.
     waiter: AtomicUsize,
     wake_requested: AtomicBool,
+    #[cfg(cellos_p01_trace)]
+    p01_tid: AtomicUsize,
 }
 
 impl CompletionQueue {
@@ -120,10 +124,24 @@ impl CompletionQueue {
                 drainable: [0; QUEUE_CAPACITY],
                 head: 0,
                 len: 0,
+                #[cfg(cellos_p01_trace)]
+                p01_obligations: [None; QUEUE_CAPACITY],
             }),
             waiter: AtomicUsize::new(0),
             wake_requested: AtomicBool::new(false),
+            #[cfg(cellos_p01_trace)]
+            p01_tid: AtomicUsize::new(0),
         }
+    }
+
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn p01_bind(&self, owner: crate::p01_measurement::Owner) {
+        let refused = {
+            let previous = self.p01_tid.load(Ordering::Acquire);
+            if previous == owner.tid as usize { return; }
+            self.p01_tid.compare_exchange(0, owner.tid as usize, Ordering::Release, Ordering::Relaxed).is_err()
+        };
+        if refused { crate::p01_resources::unknown(owner, 2); }
     }
 
     /// Cell this queue belongs to.
@@ -141,8 +159,18 @@ impl CompletionQueue {
     /// flight.
     pub fn reserve(&self) -> Option<SlotId> {
         let mut ring = self.ring.lock();
-        let index = ring.slots.iter().position(|s| *s == Slot::Free)?;
+        let Some(index) = ring.slots.iter().position(|s| *s == Slot::Free) else {
+            #[cfg(cellos_p01_trace)]
+            if let Some(owner) = crate::p01_resources::owner_for_tid(self.p01_tid.load(Ordering::Acquire)) {
+                crate::p01_resources::unknown(owner, 2);
+            }
+            return None;
+        };
         ring.slots[index] = Slot::Reserved;
+        #[cfg(cellos_p01_trace)]
+        if let Some(owner) = crate::p01_resources::owner_for_tid(self.p01_tid.load(Ordering::Acquire)) {
+            ring.p01_obligations[index] = crate::p01_resources::completion_obligation(owner);
+        }
         Some(SlotId(index as u16))
     }
 
@@ -179,6 +207,8 @@ impl CompletionQueue {
             match ring.slots.get(index) {
                 Some(Slot::Reserved) => {
                     ring.slots[index] = Slot::Done { source, result };
+                    #[cfg(cellos_p01_trace)]
+                    crate::p01_resources::reservation_terminal(&mut ring.p01_obligations[index]);
                     // Cannot overflow: `drainable` is as long as `slots`, and a
                     // slot is only pushed on the Reserved -> Done edge, which
                     // happens once per reservation.
@@ -233,6 +263,8 @@ impl CompletionQueue {
         match ring.slots.get(slot.index()) {
             Some(Slot::Reserved) => {
                 ring.slots[slot.index()] = Slot::Free;
+                #[cfg(cellos_p01_trace)]
+                crate::p01_resources::finish(ring.p01_obligations[slot.index()].take(), 1);
                 true
             }
             _ => false,
@@ -258,6 +290,8 @@ impl CompletionQueue {
             match ring.slots[index] {
                 Slot::Done { source, result } => {
                     ring.slots[index] = Slot::Free;
+                    #[cfg(cellos_p01_trace)]
+                    crate::p01_resources::finish(ring.p01_obligations[index].take(), 1);
                     Ok(Completion {
                         slot: SlotId(index as u16),
                         source,
@@ -328,6 +362,19 @@ impl CompletionQueue {
     }
 }
 
+#[cfg(cellos_p01_trace)]
+impl Drop for CompletionQueue {
+    fn drop(&mut self) {
+        let mut ring = self.ring.lock();
+        for token in &mut ring.p01_obligations {
+            crate::p01_resources::finish(token.take(), 1);
+        }
+        if let Some(owner) = crate::p01_resources::owner_for_tid(self.p01_tid.load(Ordering::Acquire)) {
+            crate::p01_resources::checked(owner, 2);
+        }
+    }
+}
+
 /// The queue serving `tid`'s cell, created on first use.
 ///
 /// Threads of one cell share one queue, so the handle is looked up across the
@@ -347,7 +394,15 @@ pub fn queue_for(sched: &mut Scheduler, tid: usize) -> Option<Arc<CompletionQueu
         .values()
         .filter(|t| t.cell_id == cell)
         .find_map(|t| t.completion.clone())
-        .unwrap_or_else(|| Arc::new(CompletionQueue::new(cell)));
+        .unwrap_or_else(|| {
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None, crate::memory::heap::p01_owner::COMPLETION_SHARED);
+            Arc::new(CompletionQueue::new(cell))
+        });
+    #[cfg(cellos_p01_trace)]
+    if let Some(owner) = crate::p01_resources::owner_for_tid(tid) {
+        queue.p01_bind(owner);
+    }
     sched.tasks.get_mut(&tid)?.completion = Some(queue.clone());
     Some(queue)
 }

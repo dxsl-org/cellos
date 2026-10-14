@@ -167,7 +167,15 @@ const MAX_RETURNABLE_OWNER_WATCH_TOKEN: u64 = isize::MAX as u64;
 pub fn subscribe_death(watched: usize, watcher: usize) {
     let _allocation = KernelAllocationContext::enter();
     let mut subscribers = DEATH_SUBSCRIBERS.lock();
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None, crate::memory::heap::p01_owner::DEATH_SHARED);
     let registered = subscribers.entry(watched).or_default();
+    #[cfg(cellos_p01_trace)]
+    if registered.capacity() != 0 {
+        crate::memory::heap::p01_owner::shared_buffer(registered.as_ptr() as usize,
+            core::alloc::Layout::array::<usize>(registered.capacity()).unwrap(),
+            crate::memory::heap::p01_owner::DEATH_SHARED);
+    }
     // NotifyOnExit is one-shot state, not an event-counter subscription.
     // Idempotence bounds kernel-funded entries to live watched/watcher pairs.
     if !registered.contains(&watcher) {
@@ -177,7 +185,16 @@ pub fn subscribe_death(watched: usize, watcher: usize) {
 pub(crate) fn queue_pending_death(task: &mut Task, watched: usize, exit_reason: usize) {
     let _allocation = KernelAllocationContext::enter();
     if !task.pending_deaths.contains(&(watched, exit_reason)) {
+        #[cfg(cellos_p01_trace)]
+        crate::memory::heap::p01_owner::runtime_vec(&task.pending_deaths,
+            crate::p01_resources::owner(task), crate::memory::heap::p01_owner::DEATH_QUEUE);
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            Some(crate::p01_resources::owner(task)), crate::memory::heap::p01_owner::DEATH_QUEUE);
         task.pending_deaths.push((watched, exit_reason));
+        #[cfg(cellos_p01_trace)]
+        crate::memory::heap::p01_owner::runtime_vec(&task.pending_deaths,
+            crate::p01_resources::owner(task), crate::memory::heap::p01_owner::DEATH_QUEUE);
     }
 }
 
@@ -322,6 +339,11 @@ impl Default for Scheduler {
 
 impl Scheduler {
     pub fn new() -> Self {
+        // This fixed owner directory belongs to the scheduler, not to the
+        // task whose execution or launch happens to trigger its construction.
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
         Self {
             tasks: BTreeMap::new(),
             zombies: Vec::new(),
@@ -406,6 +428,8 @@ impl Scheduler {
     }
 
     fn begin_root_retirement(&mut self, owner: api::cell_owner::CellOwner) {
+        #[cfg(cellos_g1_cpu)]
+        super::cpu_accounting::require(super::cpu_accounting::begin_retirement(self, owner));
         if let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) {
             *slot = CellOwnerSlot::Retiring(owner);
         }
@@ -415,6 +439,15 @@ impl Scheduler {
     /// The result is the admission invariant: callers MUST retain the matching
     /// CellId quota unless this exact `Retiring(owner)` slot became `Empty`.
     pub(crate) fn finish_root_retirement(&mut self, owner: api::cell_owner::CellOwner) -> bool {
+        #[cfg(cellos_g1_cpu)]
+        if !matches!(self.cell_owners.get(owner.cell_id as usize),
+            Some(CellOwnerSlot::Retiring(current)) if *current == owner) {
+            return false;
+        }
+        #[cfg(cellos_g1_cpu)]
+        if !super::cpu_accounting::require(super::cpu_accounting::finish_retirement(self, owner)) {
+            return false;
+        }
         let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) else {
             return false;
         };
@@ -438,6 +471,9 @@ impl Scheduler {
     /// generation. A zombie remains a member because its saved context can be
     /// the one still executing on another hart.
     fn root_generation_member_tids(&self, owner: api::cell_owner::CellOwner) -> Vec<usize> {
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
         self.tasks
             .values()
             .chain(self.zombies.iter())
@@ -480,6 +516,8 @@ impl Scheduler {
         }
         let owner = self.resolve_live_cell_owner(cell_id, generation)?;
         let token = self.take_cell_owner_watch_token()?;
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None, crate::memory::heap::p01_owner::DEATH_SHARED);
         self.cell_owner_watches.insert(
             token,
             CellOwnerWatch {
@@ -726,7 +764,15 @@ impl Scheduler {
             name, id, stack_base, stack_top, entry
         );
 
-        self.tasks.insert(id, task);
+        #[cfg(cellos_p01_trace)]
+        crate::memory::heap::p01_owner::task_backing(&task);
+        {
+            // Observe actual map-node allocations while its owner is locked.
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+            self.tasks.insert(id, task);
+        }
         self.push_ready(id);
         self.advance_task_id();
         id
@@ -740,6 +786,16 @@ impl Scheduler {
         entry: usize,
         arg: usize,
     ) -> Result<usize, ViError> {
+        #[cfg(cellos_p01_trace)]
+        if let Some(parent) = self.tasks.get(&parent_id) {
+            let owner = crate::p01_resources::owner(parent);
+            if crate::p01_measurement::subject(owner).is_some() {
+                // Root-only capture does not certify shared-thread resources.
+                crate::p01_resources::unknown(owner, 1);
+                crate::p01_resources::unknown(owner, 8);
+                crate::p01_measurement::invalidate(1 << 12);
+            }
+        }
         #[cfg(all(
             feature = "native-domains",
             any(
@@ -795,6 +851,8 @@ impl Scheduler {
                 _ => None,
             })
             .ok_or(ViError::PermissionDenied)?;
+        #[cfg(cellos_g1_cpu)]
+        super::cpu_accounting::inherit(self, owner).map_err(|_| ViError::PermissionDenied)?;
         let live = self
             .tasks
             .values()
@@ -891,6 +949,21 @@ impl Scheduler {
                     // them loudly is the counted half of the fail-closed contract.
                     let pages = kstack.pages + ustack.pages;
                     crate::memory::deferred_release::note_leaked_stack_frames(pages);
+                    #[cfg(cellos_p01_trace)]
+                    if let Some(owner) = self.tasks.get(&parent_id)
+                        .map(|task| crate::p01_resources::owner(task))
+                        .or_else(|| crate::p01_resources::owner_for_tid(parent_id)) {
+                        crate::p01_retained::begin(Some(owner), kstack.base,
+                            kstack.pages + kstack.guard_pages,
+                            crate::p01_retained::Reason::ThreadStackForget);
+                        crate::p01_retained::begin(Some(owner), ustack.base,
+                            ustack.pages + ustack.guard_pages,
+                            crate::p01_retained::Reason::ThreadStackForget);
+                        let bytes = (kstack.allocated_bytes() + ustack.allocated_bytes()) as u64;
+                        let token = crate::p01_resources::obligation(owner, 1, bytes);
+                        crate::p01_resources::finish(token, 5);
+                        crate::p01_resources::retained(owner, 1);
+                    }
                     log::error!(
                         "[sched] cell {:?} thread stacks withheld from the allocator: {} frame(s) stay unreleased until the tag's invalidation is confirmed",
                         cell_id,
@@ -956,7 +1029,14 @@ impl Scheduler {
             );
         }
 
-        self.tasks.insert(id, task);
+        #[cfg(cellos_p01_trace)]
+        crate::memory::heap::p01_owner::task_backing(&task);
+        {
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+            self.tasks.insert(id, task);
+        }
         self.push_ready(id);
         self.advance_task_id();
         Ok(id)
@@ -1106,6 +1186,16 @@ impl Scheduler {
         {
             return;
         }
+        #[cfg(cellos_p01_trace)]
+        if let Some(task) = self.tasks.get(&tid) {
+            crate::p01_resources::terminal(task);
+            let owner = crate::p01_resources::owner(task);
+            if task.current_caller.is_some() || task.current_async_op != 0 {
+                crate::p01_resources::unknown(owner, 4);
+            } else {
+                crate::p01_resources::checked(owner, 4);
+            }
+        }
         if let Some(task) = self.tasks.get_mut(&tid) {
             task.exit_code = Some(exit_reason);
         }
@@ -1179,13 +1269,18 @@ impl Scheduler {
                 .retain(|pending_tid| !members.contains(pending_tid));
             self.pending_vfs_holder_release
                 .retain(|pending_tid| !members.contains(pending_tid));
-            self.pending_root_retirements.push(RootRetirement {
-                owner,
-                member_tids: members,
-                zombies: Vec::new(),
-                waiter_wakes: Vec::new(),
-                requested_switch_completion: [0; super::smp::MAX_HARTS],
-            });
+            {
+                #[cfg(cellos_p01_trace)]
+                let _semantic = crate::memory::heap::p01_owner::creation(None,
+                    crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+                self.pending_root_retirements.push(RootRetirement {
+                    owner,
+                    member_tids: members,
+                    zombies: Vec::new(),
+                    waiter_wakes: Vec::new(),
+                    requested_switch_completion: [0; super::smp::MAX_HARTS],
+                });
+            }
         }
         let (dead_caller, retiring_member) = self
             .tasks
@@ -1232,6 +1327,9 @@ impl Scheduler {
                 .map(|queue| (tid, queue.clone(), wait.slot))
         });
         if let Some(release) = timer_release {
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::SCHEDULER_SHARED);
             self.pending_completion_release.push(release);
         }
 
@@ -1280,10 +1378,16 @@ impl Scheduler {
         // after the remote switch-completion proof.
         if !retiring_member {
             if let Some(task) = self.tasks.remove(&tid) {
+                #[cfg(cellos_p01_trace)]
+                let _semantic = crate::memory::heap::p01_owner::creation(None,
+                    crate::memory::heap::p01_owner::SCHEDULER_SHARED);
                 self.zombies.push(task);
             }
         }
         if !retiring_member {
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::SCHEDULER_SHARED);
             self.pending_vfs_holder_release.push(tid);
         }
 
@@ -1387,7 +1491,18 @@ impl Scheduler {
         for (token, watcher) in owner_watchers {
             self.cell_owner_watches.remove(&token);
             if let Some(task) = self.tasks.get_mut(&watcher) {
+                #[cfg(cellos_p01_trace)]
+                crate::memory::heap::p01_owner::runtime_vec(&task.pending_owner_deaths,
+                    crate::p01_resources::owner(task), crate::memory::heap::p01_owner::DEATH_QUEUE);
+                #[cfg(cellos_p01_trace)]
+                let _semantic = crate::memory::heap::p01_owner::creation(
+                    Some(crate::p01_resources::owner(task)), crate::memory::heap::p01_owner::DEATH_QUEUE);
                 task.pending_owner_deaths.push((token, tid, exit_reason));
+                #[cfg(cellos_p01_trace)]
+                drop(_semantic);
+                #[cfg(cellos_p01_trace)]
+                crate::memory::heap::p01_owner::runtime_vec(&task.pending_owner_deaths,
+                    crate::p01_resources::owner(task), crate::memory::heap::p01_owner::DEATH_QUEUE);
                 if matches!(
                     task.state,
                     TaskState::Recv { mask, .. }
@@ -1407,6 +1522,9 @@ impl Scheduler {
         // resources are released only by the deferred retirement funnel after
         // completed context-switch proof.
         if root_owner.is_none() && !retiring_member {
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::SCHEDULER_SHARED);
             self.pending_grant_reap.push(tid);
         }
     }
@@ -1505,6 +1623,10 @@ impl Scheduler {
         let mut pending = Vec::new();
         for mut retirement in core::mem::take(&mut self.pending_root_retirements) {
             let mut members_live = false;
+            #[cfg(cellos_g1_cpu)]
+            if !super::cpu_accounting::quiescent(self, retirement.owner) {
+                members_live = true;
+            }
             for hart in 0..super::smp::MAX_HARTS {
                 // Read selection before execution. Switch completion publishes
                 // executing (Release) before clearing selection (Release), so
@@ -1615,7 +1737,37 @@ impl Scheduler {
     /// Other harts only do the per-hart pick + work stealing.
     ///
     /// Returns: Option<(current_context_ptr, next_context_ptr)>
+    #[cfg(cellos_g1_cpu)]
     pub fn pick_next(
+        &mut self,
+        hart_id: usize,
+    ) -> Option<(*mut crate::hal::arch::Context, *const crate::hal::arch::Context)> {
+        let result = self.pick_next_unaccounted(hart_id);
+        let tid = super::hart_local::ready::current_task_id_for(hart_id);
+        let task = self.tasks.get(&tid).map(|t| &**t)
+            .or_else(|| self.zombies.iter().find(|t| t.id == tid).map(|t| &**t));
+        match result {
+            Some((_, incoming)) if incoming.is_null() => {
+                super::cpu_accounting::require(super::cpu_accounting::stage(self, hart_id, None));
+            }
+            Some(_) => {} // Incoming accounting tuple was staged before publication.
+            None => super::cpu_accounting::require(super::cpu_accounting::no_switch(self, hart_id, task)),
+        }
+        result
+    }
+
+    #[cfg(not(cellos_g1_cpu))]
+    pub fn pick_next(
+        &mut self,
+        hart_id: usize,
+    ) -> Option<(
+        *mut crate::hal::arch::Context,
+        *const crate::hal::arch::Context,
+    )> {
+        self.pick_next_unaccounted(hart_id)
+    }
+
+    fn pick_next_unaccounted(
         &mut self,
         hart_id: usize,
     ) -> Option<(
@@ -1627,6 +1779,42 @@ impl Scheduler {
         // to prevent double-wake races on multihart setups.
         if hart_id != 0 {
             return self.pick_next_local(hart_id, now);
+        }
+        #[cfg(cellos_g1_cpu)]
+        {
+            let join = super::cpu_accounting::require(
+                super::cpu_accounting::join_wait_target(self));
+            let period = super::cpu_accounting::require(
+                super::cpu_accounting::period_wait_target(self));
+            let (start, harts) = super::cpu_accounting::require(
+                super::cpu_accounting::start_wait_targets(self));
+            for tid in start.into_iter().flatten() {
+                let task = self.tasks.get_mut(&tid).expect("locked G1 start target");
+                let data = super::pending_mailbox::PendingMsgData::try_copy(&[0x74, harts, 0], 0)
+                    .expect("three-byte inline G1 compute barrier");
+                if task.pending_msgs.try_push(super::tcb::PendingMsg {
+                    sender_tid: 0, data, wire: None, enqueued_tick: now as u64,
+                }).is_err() {
+                    super::cpu_accounting::fatal(super::cpu_accounting::Error::WitnessFull);
+                }
+                task.state = TaskState::Ready;
+                self.push_ready(tid);
+            }
+            for (target, token) in [(join, [0x73, 0]), (period, [0x72, 16])] {
+                let Some(tid) = target else { continue };
+                // Existing inline mailbox after ACCOUNTING unlock: either the
+                // root has installed a real Wait, or checked HPET reached16P.
+                let task = self.tasks.get_mut(&tid).expect("locked G1 wait target");
+                let data = super::pending_mailbox::PendingMsgData::try_copy(&token, 0)
+                    .expect("two-byte inline G1 notification");
+                if task.pending_msgs.try_push(super::tcb::PendingMsg {
+                    sender_tid: 0, data, wire: None, enqueued_tick: now as u64,
+                }).is_err() {
+                    super::cpu_accounting::fatal(super::cpu_accounting::Error::WitnessFull);
+                }
+                task.state = TaskState::Ready;
+                self.push_ready(tid);
+            }
         }
 
         let time_advanced = now > self.last_global_sweep_tick;
@@ -1841,6 +2029,8 @@ impl Scheduler {
             for id in keys {
                 if let Some(task) = self.tasks.get_mut(&id) {
                     if task.state == TaskState::Polling {
+                        #[cfg(cellos_p01_trace)]
+                        let heap_owner = crate::p01_resources::owner(task);
                         if let Some(ref mut future_enum) = task.pending_future {
                             match future_enum {
                                 SyscallFuture::FileRead(fd, future) => {
@@ -1849,6 +2039,9 @@ impl Scheduler {
                                         Poll::Ready((file, res)) => {
                                             // Restore file handle
                                             // file is Box<dyn ViFile>
+                                            #[cfg(cellos_p01_trace)]
+                                            let _semantic = crate::memory::heap::p01_owner::creation(
+                                                Some(heap_owner), crate::memory::heap::p01_owner::TASK_FIELDS);
                                             task.open_files.insert(*fd, FileHandle::new(file));
 
                                             // Set return value (a0 / regs[10]); errors use the
@@ -1982,10 +2175,37 @@ impl Scheduler {
         // A wake may have queued a task while its origin still owns the old
         // Context. `pick_local_eligible` leaves that entry deferred until the
         // incoming completion hook releases the origin handoff state.
-        let next_id = rl::pick_local_eligible(hart_id).or_else(|| {
-            super::hart_local::ready::steal_from_busiest(hart_id);
-            rl::pick_local_eligible(hart_id)
+        #[cfg(not(cellos_g1_cpu))]
+        let next_id = rl::pick_local_eligible_with(hart_id).or_else(|| {
+            rl::steal_from_busiest_with(hart_id);
+            rl::pick_local_eligible_with(hart_id)
         });
+        #[cfg(cellos_g1_cpu)]
+        let next_id = {
+            let mut accepted = None;
+            // A normal precommit exhaustion defers that exact queue entry and
+            // refreshes eligibility, so it cannot hide a lower eligible head.
+            // The fixed Cell slot bound also bounds selection retries.
+            for _ in 0..crate::memory::cell_quota::MAX_CELLS {
+                let eligibility = super::cpu_accounting::require(super::cpu_accounting::eligibility(self));
+                let eligible = |id| self.tasks.get(&id).is_some_and(|t| eligibility.permits_on(t, hart_id));
+                let mut reservation = None;
+                let candidate = rl::pick_local_eligible_with(hart_id, &eligible, &mut reservation)
+                    .or_else(|| {
+                        rl::steal_from_busiest_with(hart_id, &eligible);
+                        rl::pick_local_eligible_with(hart_id, &eligible, &mut reservation)
+                    });
+                let Some(id) = candidate else { break };
+                let task = self.tasks.get(&id).map(|task| &**task);
+                if Some(id) == current_id || super::cpu_accounting::require(
+                    super::cpu_accounting::stage(self, hart_id, task)) {
+                    accepted = Some(id);
+                    break;
+                }
+                rl::restore_selection(reservation.take().expect("uncommitted selection"));
+            }
+            accepted
+        };
 
         // Execution-pin gate runs here, BEFORE the task is dequeued or marked
         // Running: a root that flipped Dying under `SCHEDULER` fails
@@ -2010,6 +2230,13 @@ impl Scheduler {
                 return true;
             }
             rl::remove_from_all(*id);
+            #[cfg(cellos_g1_cpu)]
+            if Some(*id) != current_id {
+                // No raw switch or scheduler identity publication occurred.
+                super::cpu_accounting::require(unsafe {
+                    super::cpu_accounting::abort_pending_before_raw(self, hart_id)
+                });
+            }
             if let Some(task) = self.tasks.get_mut(id) {
                 task.state = TaskState::Retiring;
             }

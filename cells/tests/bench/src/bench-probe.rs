@@ -31,6 +31,12 @@ ostd::cell_main!(cell_main);
 fn cell_main() {
     let argv = ostd::args();
     let role = argv.first().map(|arg| arg.as_str()).unwrap_or("");
+    // G1 concurrency is exclusively same-Cell threads in bench, never probe processes.
+    #[cfg(feature = "g1-cpu-workload")]
+    if role.starts_with("cpu-accounting:") {
+        ostd::io::println("G1-WORKLOAD invalid=process-substitution");
+        ostd::syscall::sys_exit(1);
+    }
     ostd::io::println(&alloc::format!(
         "[bench-probe] Started with role: '{}'",
         role
@@ -57,6 +63,7 @@ fn cell_main() {
         scenarios::async_lifecycle::run_echo_reverse(role);
     }
     match role {
+        "parked-footprint-probe" => scenarios::parked_footprint::run_probe(),
         "c2c-client" => scenarios::c2c_broker_oracle::run_client(),
         "c2c-provider" => scenarios::local_service_lifecycle::run_provider(),
         "c2c-slow-parked" => scenarios::async_lifecycle::run_slow_parked(),

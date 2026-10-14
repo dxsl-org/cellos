@@ -51,6 +51,14 @@ pub unsafe fn force_unlock_locks() {
 pub(crate) fn commit_staged(tid: usize, path: String, hash: [u8; 32]) {
     {
         let mut log = LOG.lock();
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None, crate::memory::heap::p01_owner::LOG_SHARED);
+        #[cfg(cellos_p01_trace)]
+        if log.entries.capacity() != 0 {
+            crate::memory::heap::p01_owner::shared_buffer(log.entries.as_ptr() as usize,
+                core::alloc::Layout::array::<MeasureEntry>(log.entries.capacity()).unwrap(),
+                crate::memory::heap::p01_owner::LOG_SHARED);
+        }
         let mut buf = [0u8; 64];
         buf[..32].copy_from_slice(&log.aggregate);
         buf[32..].copy_from_slice(&hash);
@@ -70,6 +78,12 @@ pub(crate) fn commit_staged(tid: usize, path: String, hash: [u8; 32]) {
                     log.entries.len()
                 );
             } else {
+                #[cfg(cellos_p01_trace)]
+                if path.capacity() != 0 {
+                    crate::memory::heap::p01_owner::shared_buffer(path.as_ptr() as usize,
+                        core::alloc::Layout::array::<u8>(path.capacity()).unwrap(),
+                        crate::memory::heap::p01_owner::LOG_PATH);
+                }
                 log.entries.push(MeasureEntry {
                     tid: tid as u32,
                     hash,

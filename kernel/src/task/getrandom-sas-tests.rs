@@ -100,6 +100,13 @@ pub(crate) fn run_fixture() -> bool {
         {
             return false;
         }
+        #[cfg(cellos_p01_trace)]
+        for task in [&caller, &sibling, &peer] {
+            crate::memory::heap::p01_owner::task_backing(task);
+        }
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
         scheduler.tasks.insert(CALLER, caller);
         scheduler.tasks.insert(SIBLING, sibling);
         scheduler.tasks.insert(PEER, peer);

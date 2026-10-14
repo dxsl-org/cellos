@@ -37,6 +37,11 @@ pub(super) fn prepare_root() -> Option<(usize, usize)> {
         {
             return None;
         }
+        #[cfg(cellos_p01_trace)]
+        crate::memory::heap::p01_owner::task_backing(&root);
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
         scheduler.tasks.insert(RETIRE_CALLER, root);
     }
     let grant_base =

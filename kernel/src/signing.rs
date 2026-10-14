@@ -126,6 +126,11 @@ fn verify_cell_with_key(elf_bytes: &[u8], sig: &[u8; 64], pubkey: &[u8; 32]) -> 
     // `/bin/bench-probe`) was the one that no longer found a contiguous run
     // (289 KiB free), and it ended the capacity sweep.
     let mut scratch = PAYLOAD_SCRATCH.lock();
+    // Retained verification workspace is shared signing state, not an
+    // exclusive object of the unpublished task being verified.
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::SIGNING_SHARED);
     let payload = &mut *scratch;
     payload.clear();
     payload
@@ -139,6 +144,8 @@ fn verify_cell_with_key(elf_bytes: &[u8], sig: &[u8; 64], pubkey: &[u8; 32]) -> 
         })?;
     payload.extend_from_slice(&elf_bytes[..signature_offset]);
     payload.extend_from_slice(&elf_bytes[signature_offset + signature_size..]);
+    #[cfg(cellos_p01_trace)]
+    drop(_semantic);
     Ok(crate::ed25519::verify(pubkey, payload, sig))
 }
 

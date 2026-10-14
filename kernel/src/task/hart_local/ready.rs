@@ -123,12 +123,11 @@ const _: [(); 0] = [(); HAS_OUTGOING_CONTEXT_SAVE_HOOK as usize];
 /// Call while holding SCHEDULER (lock order: SCHEDULER → ready).
 pub fn push_on_hart(hart_id: usize, id: usize, priority: u8) {
     if hart_id < MAX_HARTS {
-        HART_LOCALS[hart_id]
-            .ready
-            .lock()
-            .entry(priority)
-            .or_default()
-            .push_back(id);
+        let mut ready = HART_LOCALS[hart_id].ready.lock();
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        ready.entry(priority).or_default().push_back(id);
     }
 }
 
@@ -156,21 +155,50 @@ pub fn owned_by_another_hart(hart_id: usize, task_id: usize) -> bool {
         })
 }
 
+#[cfg(cellos_g1_cpu)]
+pub(crate) struct SelectionReservation {
+    hart: usize, priority: u8, index: usize, tid: usize,
+}
+
+#[cfg(cellos_g1_cpu)]
+pub(crate) fn restore_selection(reservation: SelectionReservation) {
+    // SCHEDULER remains held from removal through rollback. The queue retains
+    // its allocation and no publisher can consume the vacated capacity.
+    let mut ready = HART_LOCALS[reservation.hart].ready.lock();
+    let queue = ready.get_mut(&reservation.priority).expect("reserved ready queue");
+    queue.insert(reservation.index, reservation.tid);
+}
 /// Pop the highest-priority task whose Context is not owned by another hart.
 ///
 /// Ineligible entries stay in place rather than being popped and requeued:
 /// that preserves priority/FIFO order and prevents a protected-only queue from
 /// spinning the scheduler or losing its wake.
 pub fn pick_local_eligible(hart_id: usize) -> Option<usize> {
+    pick_local_eligible_with(hart_id,
+        #[cfg(cellos_g1_cpu)] &|_| true,
+        #[cfg(cellos_g1_cpu)] &mut None,
+    )
+}
+
+pub(crate) fn pick_local_eligible_with(hart_id: usize,
+    #[cfg(cellos_g1_cpu)] eligible: &impl Fn(usize) -> bool,
+    #[cfg(cellos_g1_cpu)] reservation: &mut Option<SelectionReservation>,
+) -> Option<usize> {
     if hart_id >= MAX_HARTS {
         return None;
     }
     let mut rq = HART_LOCALS[hart_id].ready.lock();
-    for queue in rq.values_mut().rev() {
+    for (&_priority, queue) in rq.iter_mut().rev() {
         if let Some(index) = queue
             .iter()
-            .position(|&id| !owned_by_another_hart(hart_id, id))
+            .position(|&id| !owned_by_another_hart(hart_id, id)
+                && {
+                    #[cfg(cellos_g1_cpu)] { eligible(id) }
+                    #[cfg(not(cellos_g1_cpu))] { true }
+                })
         {
+            #[cfg(cellos_g1_cpu)]
+            { *reservation = Some(SelectionReservation { hart: hart_id, priority: _priority, index, tid: queue[index] }); }
             return queue.remove(index);
         }
     }
@@ -372,6 +400,14 @@ pub fn any_hart_running(task_id: usize) -> bool {
 ///
 /// Always locks hart 0 then hart 1 (ABBA-safe for MAX_HARTS=2).
 pub fn steal_from_busiest(thief: usize) {
+    steal_from_busiest_with(thief,
+        #[cfg(cellos_g1_cpu)] &|_| true,
+    );
+}
+
+pub(crate) fn steal_from_busiest_with(thief: usize,
+    #[cfg(cellos_g1_cpu)] eligible: &impl Fn(usize) -> bool,
+) {
     if thief >= MAX_HARTS {
         return;
     }
@@ -381,6 +417,9 @@ pub fn steal_from_busiest(thief: usize) {
     // Acquire in hart-id order to prevent ABBA deadlock.
     let mut g0 = HART_LOCALS[0].ready.lock();
     let mut g1 = HART_LOCALS[1].ready.lock();
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::SCHEDULER_SHARED);
 
     // Count only tasks whose Context is not owned by another hart and which
     // are not reserved by test-only controlled dispatch setup. The ownership
@@ -395,6 +434,10 @@ pub fn steal_from_busiest(thief: usize) {
                     .filter(|&&id| {
                         !owned_by_another_hart(thief, id)
                             && !test_dispatch_reserved_by_another_hart(thief, id)
+                            && {
+                                #[cfg(cellos_g1_cpu)] { eligible(id) }
+                                #[cfg(not(cellos_g1_cpu))] { true }
+                            }
                     })
                     .count()
             })
@@ -407,6 +450,10 @@ pub fn steal_from_busiest(thief: usize) {
                     .filter(|&&id| {
                         !owned_by_another_hart(thief, id)
                             && !test_dispatch_reserved_by_another_hart(thief, id)
+                            && {
+                                #[cfg(cellos_g1_cpu)] { eligible(id) }
+                                #[cfg(not(cellos_g1_cpu))] { true }
+                            }
                     })
                     .count()
             })
@@ -430,6 +477,10 @@ pub fn steal_from_busiest(thief: usize) {
                     match vq.iter().position(|&id| {
                         !owned_by_another_hart(thief, id)
                             && !test_dispatch_reserved_by_another_hart(thief, id)
+                            && {
+                                #[cfg(cellos_g1_cpu)] { eligible(id) }
+                                #[cfg(not(cellos_g1_cpu))] { true }
+                            }
                     }) {
                         Some(index) => {
                             let id = vq
@@ -449,6 +500,10 @@ pub fn steal_from_busiest(thief: usize) {
                     match vq.iter().position(|&id| {
                         !owned_by_another_hart(thief, id)
                             && !test_dispatch_reserved_by_another_hart(thief, id)
+                            && {
+                                #[cfg(cellos_g1_cpu)] { eligible(id) }
+                                #[cfg(not(cellos_g1_cpu))] { true }
+                            }
                     }) {
                         Some(index) => {
                             let id = vq

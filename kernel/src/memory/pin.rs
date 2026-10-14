@@ -160,6 +160,33 @@ struct FrameHold {
     /// Zero marks a free slot.
     pages: usize,
     release: ReleaseKey,
+    #[cfg(cellos_p01_trace)]
+    p01_obligation: Option<crate::p01_resources::Obligation>,
+    #[cfg(cellos_p01_trace)]
+    p01_range: Option<crate::p01_retained::Token>,
+}
+
+/// Internal custody handoff. Private provenance survives removal from REGISTRY
+/// and is retired by the caller only after actual allocator release.
+#[derive(Debug, Clone, Copy)]
+pub struct ReleasedRange {
+    pub base: usize,
+    pub pages: usize,
+    #[cfg(cellos_p01_trace)]
+    pub(crate) p01_range: Option<crate::p01_retained::Token>,
+    #[cfg(cellos_p01_trace)]
+    pub(crate) p01_obligation: Option<crate::p01_resources::Obligation>,
+}
+impl PartialEq for ReleasedRange {
+    fn eq(&self, other: &Self) -> bool { self.base == other.base && self.pages == other.pages }
+}
+impl Eq for ReleasedRange {}
+
+// Existing source selftests compare physical custody, not private provenance.
+impl PartialEq<(usize, usize)> for ReleasedRange {
+    fn eq(&self, other: &(usize, usize)) -> bool {
+        (self.base, self.pages) == *other
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -211,6 +238,10 @@ const EMPTY_HOLD: FrameHold = FrameHold {
     base: 0,
     pages: 0,
     release: ReleaseKey::None,
+    #[cfg(cellos_p01_trace)]
+    p01_obligation: None,
+    #[cfg(cellos_p01_trace)]
+    p01_range: None,
 };
 
 const EMPTY_VFS_LEASE: VfsLeaseEntry = VfsLeaseEntry {
@@ -241,6 +272,35 @@ static REGISTRY: Spinlock<Registry> = Spinlock::new(Registry {
     vfs_leases: [EMPTY_VFS_LEASE; MAX_VFS_LEASES],
     quarantine: [EMPTY_HOLD; MAX_QUARANTINED_REGIONS],
 });
+
+#[cfg(cellos_p01_trace)]
+pub(crate) fn p01_static_bytes() -> usize {
+    // FrameHold was already eight-byte aligned; the added field has the same
+    // alignment, so no additional per-entry padding is introduced on x86_64.
+    MAX_QUARANTINED_REGIONS * (core::mem::size_of::<Option<crate::p01_resources::Obligation>>()
+        + core::mem::size_of::<Option<crate::p01_retained::Token>>())
+}
+
+#[cfg(cellos_p01_trace)]
+pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
+    let tid = owner.tid as usize;
+    let registry = REGISTRY.lock();
+    let pending = registry.pins.iter().any(|e| e.pages != 0 && e.owner == tid)
+        || registry.cache_sync.iter().any(|e| e.pages != 0 && e.owner == tid)
+        || registry.vfs_leases.iter().any(|e| e.pages != 0 && (e.grant_owner == tid || e.holder_tid == tid))
+        || registry.quarantine.iter().any(|e| e.pages != 0 && match e.release {
+            ReleaseKey::Owner(owner) => owner == tid,
+            ReleaseKey::VfsLease { holder_tid, grant_owner, .. } => holder_tid == tid || grant_owner == tid,
+            _ => false,
+        });
+    if pending {
+        crate::p01_resources::unknown(owner, 3);
+        crate::p01_resources::unknown(owner, 5);
+    } else {
+        crate::p01_resources::checked(owner, 3);
+        crate::p01_resources::checked(owner, 5);
+    }
+}
 
 /// Page-aligned `(base, page_count)` covering `[base, base + len)`.
 fn span(base: usize, len: usize) -> Option<(usize, usize)> {
@@ -316,27 +376,64 @@ fn hold_quarantined_frames(
     if pages == 0 {
         return false;
     }
+    #[cfg(cellos_p01_trace)]
+    let p01_owner = match release {
+        ReleaseKey::Owner(tid) => crate::p01_resources::owner_for_tid(tid),
+        ReleaseKey::VfsLease { grant_owner, .. } => crate::p01_resources::owner_for_tid(grant_owner),
+        ReleaseKey::CacheSyncBootLifetime => reg.cache_sync.iter()
+            .find(|entry| entry.pages != 0 && overlaps((base, pages), (entry.base, entry.pages)))
+            .and_then(|entry| crate::p01_resources::owner_for_tid(entry.owner)),
+        _ => None,
+    };
+    #[cfg(cellos_p01_trace)]
+    let p01_obligation = p01_owner.and_then(|owner|
+        crate::p01_resources::obligation(owner, 3, (pages * PAGE_SIZE) as u64));
+    #[cfg(cellos_p01_trace)]
+    let p01_range = crate::p01_retained::begin(p01_owner, base, pages,
+        if release == ReleaseKey::CacheSyncBootLifetime {
+            crate::p01_retained::Reason::CacheSync
+        } else { crate::p01_retained::Reason::PinWithheld });
     match reg.quarantine.iter_mut().find(|entry| entry.pages == 0) {
         Some(slot) => {
             *slot = FrameHold {
                 base,
                 pages,
                 release,
+                #[cfg(cellos_p01_trace)]
+                p01_obligation,
+                #[cfg(cellos_p01_trace)]
+                p01_range,
             };
             true
         }
-        None => false,
+        None => {
+            #[cfg(cellos_p01_trace)]
+            {
+                // Observe Full before frames lose their only structured release key.
+                crate::p01_retained::mark(p01_range, crate::p01_retained::Reason::PinFull);
+                crate::p01_resources::finish(p01_obligation, 5);
+                if let Some(owner) = p01_owner { crate::p01_resources::retained(owner, 3); }
+            }
+            false
+        },
     }
 }
 
-fn release_quarantined_frames<F>(reg: &mut Registry, mut matches: F) -> Vec<(usize, usize)>
+fn release_quarantined_frames<F>(reg: &mut Registry, mut matches: F) -> Vec<ReleasedRange>
 where
     F: FnMut(ReleaseKey) -> bool,
 {
     let mut released = Vec::new();
     for hold in reg.quarantine.iter_mut() {
         if hold.pages != 0 && matches(hold.release) {
-            released.push((hold.base, hold.pages));
+            released.push(ReleasedRange {
+                base: hold.base,
+                pages: hold.pages,
+                #[cfg(cellos_p01_trace)]
+                p01_range: hold.p01_range,
+                #[cfg(cellos_p01_trace)]
+                p01_obligation: hold.p01_obligation,
+            });
             *hold = EMPTY_HOLD;
         }
     }
@@ -658,11 +755,20 @@ pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer
         };
     }
 
-    if reg
+    #[cfg_attr(not(cellos_p01_trace), allow(unused_variables))]
+    if let Some(entry) = reg
         .cache_sync
         .iter()
-        .any(|entry| entry.pages != 0 && overlaps(probe, (entry.base, entry.pages)))
+        .find(|entry| entry.pages != 0 && overlaps(probe, (entry.base, entry.pages)))
     {
+        #[cfg(cellos_p01_trace)]
+        if let Some(owner) = crate::p01_resources::owner_for_tid(entry.owner) {
+            // CacheSyncBootLifetime intentionally has no release owner. Save
+            // attribution before replacing it with that permanent retention key.
+            let token = crate::p01_resources::obligation(owner, 3, (pages * PAGE_SIZE) as u64);
+            crate::p01_resources::finish(token, 5);
+            crate::p01_resources::retained(owner, 3);
+        }
         return if hold_quarantined_frames(&mut reg, base, pages, ReleaseKey::CacheSyncBootLifetime)
         {
             FrameTransfer::Withheld
@@ -698,7 +804,7 @@ pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer
 /// ordinary pins, and the reaper then frees the frames itself. Cache-sync pins
 /// deliberately do not participate: a VideoCore response has no trustworthy
 /// driver acknowledgement and remains boot-lifetime after task death.
-pub fn acknowledge(tid: usize) -> Vec<(usize, usize)> {
+pub fn acknowledge(tid: usize) -> Vec<ReleasedRange> {
     let mut reg = REGISTRY.lock();
     for e in reg.pins.iter_mut() {
         if e.pages != 0 && e.owner == tid {
@@ -791,7 +897,7 @@ pub fn release_vfs_lease(
     holder_tid: usize,
     grant_owner: usize,
     request_generation: u64,
-) -> Vec<(usize, usize)> {
+) -> Vec<ReleasedRange> {
     let mut reg = REGISTRY.lock();
     for e in reg.vfs_leases.iter_mut() {
         if same_vfs_lease(e, holder_tid, grant_owner, request_generation) {
@@ -808,7 +914,7 @@ pub fn release_vfs_lease(
     })
 }
 
-pub fn release_vfs_holder_leases(holder_tid: usize) -> Vec<(usize, usize)> {
+pub fn release_vfs_holder_leases(holder_tid: usize) -> Vec<ReleasedRange> {
     let mut reg = REGISTRY.lock();
     for e in reg.vfs_leases.iter_mut() {
         if e.pages != 0 && e.holder_tid == holder_tid {

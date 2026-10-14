@@ -180,6 +180,14 @@ pub(super) fn spawn_gated(
     let (pku_key, pku_value) = (0, 0);
 
     let name = path.rsplit('/').next().unwrap_or(path);
+    // This private origin predates the child's CellId/generation. Quota routing
+    // remains unchanged; publication binds the token only after exact identity.
+    #[cfg(cellos_p01_trace)]
+    let _heap_origin = crate::memory::heap::p01_owner::scope(request.trace);
+    #[cfg(cellos_p01_trace)]
+    if let Some(argv) = request.argv.as_ref() {
+        crate::memory::heap::p01_owner::adopt_vec(argv);
+    }
     let prepared = crate::task::prepare_elf_task(elf, name, CellId(0), alloc::vec::Vec::new())?;
     let state = crate::task::TaskLaunchState::complete(
         request.caller.take(),
@@ -208,10 +216,21 @@ pub(super) fn spawn_gated(
         }),
         is_domain,
     );
+    #[cfg(cellos_p01_trace)]
+    let state = { let mut state = state; state.trace = request.trace; state };
     crate::task::publish_prepared(prepared, state).map(|(tid, _)| tid)
 }
 
 pub(super) fn spawn_trusted_init(elf: &[u8]) -> ViResult<usize> {
+    spawn_init(elf, #[cfg(cellos_p01_trace)] false)
+}
+
+#[cfg(cellos_p01_trace)]
+pub(super) fn spawn_bootstrap_init(elf: &[u8]) -> ViResult<usize> {
+    spawn_init(elf, true)
+}
+
+fn spawn_init(elf: &[u8], #[cfg(cellos_p01_trace)] bootstrap_init: bool) -> ViResult<usize> {
     let granted = super::boot_ceiling::boot_ceiling("/bin/init");
     let prepared = crate::task::prepare_elf_task(elf, "init", CellId(0), alloc::vec::Vec::new())?;
     let state = crate::task::TaskLaunchState::complete(
@@ -241,5 +260,7 @@ pub(super) fn spawn_trusted_init(elf: &[u8]) -> ViResult<usize> {
         }),
         false,
     );
+    #[cfg(cellos_p01_trace)]
+    let state = { let mut state = state; state.bootstrap_init = bootstrap_init; state };
     crate::task::publish_prepared(prepared, state).map(|(tid, _)| tid)
 }

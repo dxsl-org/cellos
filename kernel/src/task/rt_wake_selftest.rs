@@ -68,22 +68,20 @@ pub(crate) fn self_test() -> bool {
 
     // Occupants pin each hart's running priority: the target hart runs a Normal
     // task, the waking hart a RealTime one.
-    sched.tasks.insert(
-        SENDER_TID,
-        fixture_task(SENDER_TID, SENDER_CELL, TaskPriority::RealTime),
-    );
-    sched.tasks.insert(
-        RECEIVER_TID,
-        fixture_task(RECEIVER_TID, RECEIVER_CELL, TaskPriority::Normal),
-    );
-    sched.tasks.insert(
-        TARGET_OCCUPANT_TID,
-        fixture_task(TARGET_OCCUPANT_TID, OCCUPANT_CELL, TaskPriority::Normal),
-    );
-    sched.tasks.insert(
-        WAKING_OCCUPANT_TID,
-        fixture_task(WAKING_OCCUPANT_TID, OCCUPANT_CELL, TaskPriority::RealTime),
-    );
+    for (tid, cell, priority) in [
+        (SENDER_TID, SENDER_CELL, TaskPriority::RealTime),
+        (RECEIVER_TID, RECEIVER_CELL, TaskPriority::Normal),
+        (TARGET_OCCUPANT_TID, OCCUPANT_CELL, TaskPriority::Normal),
+        (WAKING_OCCUPANT_TID, OCCUPANT_CELL, TaskPriority::RealTime),
+    ] {
+        let task = fixture_task(tid, cell, priority);
+        #[cfg(cellos_p01_trace)]
+        crate::memory::heap::p01_owner::task_backing(&task);
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        sched.tasks.insert(tid, task);
+    }
     if let Some(sender) = sched.tasks.get_mut(&SENDER_TID) {
         sender.state = TaskState::Sending {
             target: RECEIVER_TID,

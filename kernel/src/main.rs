@@ -51,6 +51,20 @@ pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)
 pub mod layer2_selftest; // Layer-2 hardware security self-tests (test-hooks only)
 pub mod loader;
 pub mod measurement_log; // Per-Cell integrity measurement (IMA-style, TPM-free)
+#[cfg(cellos_p01_trace)]
+pub(crate) mod p01_measurement;
+#[cfg(cellos_p01_trace)]
+pub(crate) mod p01_resources;
+#[cfg(cellos_p01_trace)]
+pub(crate) mod p01_retained;
+#[cfg(cellos_p01_trace)]
+pub(crate) mod p01_topology;
+#[cfg(cellos_p01_trace)]
+pub(crate) mod p01_noncpu;
+#[cfg(cellos_p01_trace)]
+pub(crate) mod p01_noncpu_topology;
+#[cfg(cellos_p01_trace)]
+pub(crate) mod p01_vtd_topology;
 pub mod memory;
 pub mod policy; // Signed operator policy (P5b) — headless consent
 pub mod system_config; // Bounded cold-boot settings, loaded after embedded FS mount
@@ -538,10 +552,48 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 acpi_info.ioapic_gsi_base,
             );
             crate::hal::set_hpet_base(x86_hpet_base as usize);
+            #[cfg(not(cellos_g1_cpu))]
             crate::hal::init_timers();
+            #[cfg(cellos_g1_cpu)]
+            {
+                let vendor = core::arch::x86_64::__cpuid(0);
+                assert!(vendor.ebx == u32::from_le_bytes(*b"Genu")
+                    && vendor.edx == u32::from_le_bytes(*b"ineI")
+                    && vendor.ecx == u32::from_le_bytes(*b"ntel"),
+                    "G1 private lane requires GenuineIntel CPUID");
+                let calibration = crate::hal::init_timers_observed()
+                    .expect("G1 requires actual HPET/LAPIC timer initialization");
+                let clock = crate::hal::hpet::checked_sample()
+                    .expect("G1 requires a checked shared 64-bit HPET");
+                let initial = calibration.ticks_per_ms.checked_mul(10)
+                    .and_then(|count| u32::try_from(count).ok())
+                    .expect("G1 rejects overflowed LAPIC calibration");
+                assert!(calibration.hpet_used && initial >= 10_000
+                    && initial == calibration.initial_count
+                    && calibration.lvt & (1 << 16) == 0
+                    && (calibration.lvt >> 17) & 3 == 1,
+                    "G1 rejects LAPIC fallback, stopped or masked timer");
+                // Logger registration follows heap setup; emit this boot receipt
+                // without allocation instead of dropping it through log::info.
+                struct G1BootWriter;
+                impl core::fmt::Write for G1BootWriter {
+                    fn write_str(&mut self, text: &str) -> core::fmt::Result {
+                        for byte in text.bytes() { crate::hal::uart_16550::putchar(byte); }
+                        Ok(())
+                    }
+                }
+                core::fmt::write(&mut G1BootWriter, format_args!(
+                    "\nG1-CLOCK-BOOT raw={} period_fs={} base={} caps={} config={} ticks_per_ms={} initial={} lvt={}\n",
+                    clock.raw_counter, clock.period_fs, clock.base, clock.capabilities,
+                    clock.configuration, calibration.ticks_per_ms,
+                    calibration.initial_count, calibration.lvt,
+                )).expect("G1 boot receipt formatting");
+            }
             log_info("x86_64 timers initialized from ACPI (HPET + LAPIC)");
         } else {
             log::error!("[x86-gate] timer CLOSED: validated MADT + HPET required");
+            #[cfg(cellos_g1_cpu)]
+            panic!("G1 private measurement requires validated MADT and HPET");
         }
 
         // Tier 3 x86 VMM P01: enter root-of-virtualization on the BSP.
@@ -1419,7 +1471,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("ATOMIC_PUBLICATION_AP-15: armed for trusted init");
         }
         log_info("Publishing trusted init");
-        match crate::loader::spawn_trusted_init(INIT_ELF) {
+        #[cfg(cellos_p01_trace)]
+        let init_result = crate::loader::spawn_bootstrap_init(INIT_ELF);
+        #[cfg(not(cellos_p01_trace))]
+        let init_result = crate::loader::spawn_trusted_init(INIT_ELF);
+        match init_result {
             Ok(tid) => {
                 #[cfg(feature = "test-hooks")]
                 crate::loader::atomic_publication_tests::finish_trusted_success(tid);

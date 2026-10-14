@@ -195,7 +195,18 @@ pub fn load_from_vifs1() {
                 crate::audit::AuditEvent::PolicyLoaded,
                 &crate::audit::encode_u32x2(n, loaded.flags as u32),
             );
-            *POLICY.lock() = Some(PolicyState::Loaded(loaded));
+            let mut policy = POLICY.lock();
+            // The verified, parsed containers are now retained by POLICY.
+            // Join their public capacities, never the temporary signed blob.
+            #[cfg(cellos_p01_trace)]
+            {
+                use crate::memory::heap::p01_owner::{self, SYSTEM_CONFIG_SHARED};
+                p01_owner::shared_vec(&loaded.entries, SYSTEM_CONFIG_SHARED);
+                for entry in &loaded.entries {
+                    p01_owner::shared_string(&entry.path, SYSTEM_CONFIG_SHARED);
+                }
+            }
+            *policy = Some(PolicyState::Loaded(loaded));
         }
         None => {
             log::warn!("[policy] malformed body — fail-closed");

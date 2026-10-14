@@ -24,15 +24,23 @@ pub static VIFS1: Spinlock<Option<Box<dyn ViFileSystem>>> = Spinlock::new(None);
 /// when VIFS1 is not mounted or the path does not exist.
 pub fn read_file_from_vifs1(path: &str) -> ViResult<Box<[u8]>> {
     // Build an uppercase copy of the path: FAT16 names are uppercase.
+    #[cfg(cellos_p01_trace)]
+    let scratch = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED);
     let mut upper = Vec::with_capacity(path.len());
     for b in path.bytes() {
         upper.push(b.to_ascii_uppercase());
     }
+    #[cfg(cellos_p01_trace)]
+    drop(scratch);
     let upper_path = core::str::from_utf8(&upper).map_err(|_| ViError::InvalidInput)?;
 
     let mut file = {
         let guard = VIFS1.lock();
         let fs = guard.as_ref().ok_or(ViError::NotFound)?;
+        #[cfg(cellos_p01_trace)]
+        let _scratch = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED);
         fs.open(path, OpenMode::Read)
             .or_else(|_| fs.open(upper_path, OpenMode::Read))?
     };
@@ -42,10 +50,15 @@ pub fn read_file_from_vifs1(path: &str) -> ViResult<Box<[u8]>> {
         return Err(ViError::NotFound);
     }
     let mut buf = Vec::new();
+    #[cfg(cellos_p01_trace)]
+    let scratch = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED);
     buf.try_reserve_exact(size).map_err(|_| {
         log::error!("[fs] OOM: VIFS1 read of {} bytes for {:?}", size, path);
         ViError::OutOfMemory
     })?;
+    #[cfg(cellos_p01_trace)]
+    drop(scratch);
     buf.resize(size, 0);
     let mut read = 0usize;
     while read < size {
@@ -85,6 +98,9 @@ pub fn read_file_from_vifs1(path: &str) -> ViResult<Box<[u8]>> {
     // typed `OutOfMemory` to the spawner.
     log::error!("[fs] {}: short read {} of {} bytes", path, read, size);
     let mut exact = Vec::new();
+    #[cfg(cellos_p01_trace)]
+    let scratch = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED);
     exact.try_reserve_exact(read).map_err(|_| {
         log::error!(
             "[fs] OOM: short-read copy of {} bytes for {:?}",
@@ -93,6 +109,8 @@ pub fn read_file_from_vifs1(path: &str) -> ViResult<Box<[u8]>> {
         );
         ViError::OutOfMemory
     })?;
+    #[cfg(cellos_p01_trace)]
+    drop(scratch);
     exact.extend_from_slice(&buf[..read]);
     Ok(exact.into_boxed_slice())
 }
@@ -100,11 +118,16 @@ pub fn read_file_from_vifs1(path: &str) -> ViResult<Box<[u8]>> {
 pub fn init() {
     log::info!("Filesystem: Initializing...");
 
+    let mut mounted = VIFS1.lock();
     // Attempt to mount the embedded FAT filesystem (FAT16) from the RAM disk.
     match fat::ViFatFS::new() {
         Ok(fs) => {
             log::info!("Filesystem: FAT16 mounted successfully.");
-            *VIFS1.lock() = Some(Box::new(fs));
+            // Only the retained trait-object box is constructed in this scope.
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::FILESYSTEM_SHARED);
+            *mounted = Some(Box::new(fs));
         }
         Err(e) => {
             log::error!("Filesystem: Failed to mount FAT: {:?}", e);

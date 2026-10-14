@@ -56,6 +56,27 @@ fn collect_reserved<T>(iter: impl ExactSizeIterator<Item = T>) -> Result<Vec<T>,
     Ok(out)
 }
 
+/// Own the PIE reservation before any subsequent fallible preparation step.
+struct PreparationVa(usize);
+impl Drop for PreparationVa {
+    fn drop(&mut self) {
+        if self.0 != 0 { crate::loader::va_alloc::free_cell_va(self.0); }
+    }
+}
+
+/// LoadedPage is metadata, so bridge its mappings into CellSegments ownership
+/// without another allocation. This guard must be declared after the page Vec.
+struct PreparationMappings<'a>(Option<&'a [crate::loader::elf::LoadedPage]>);
+impl Drop for PreparationMappings<'_> {
+    fn drop(&mut self) {
+        if let Some(pages) = self.0.take() {
+            let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
+            let allocator = frames.as_mut().expect("loaded ELF lost its frame allocator");
+            crate::loader::ElfLoader::unwind(pages, allocator);
+        }
+    }
+}
+
 /// Parse, map, relocate, protect, and stack an ELF without touching scheduler state.
 pub fn prepare_elf_task(
     data: &[u8],
@@ -78,44 +99,65 @@ pub fn prepare_elf_task(
     } else {
         0
     };
-    if let Err(error) = crate::loader::atomic_checkpoint("AP-01") {
-        if load_base != 0 {
-            crate::loader::va_alloc::free_cell_va(load_base);
-        }
-        return Err(error);
-    }
+    let mut va_rollback = PreparationVa(load_base);
+    crate::loader::atomic_checkpoint("AP-01")?;
 
     let seg_pages = {
         let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
         let allocator = frames.as_mut().ok_or(ViError::OutOfMemory)?;
-        match loader.load_segments(elf_data, allocator, load_base) {
-            Ok(pages) => pages,
-            Err(error) => {
-                if load_base != 0 {
-                    crate::loader::va_alloc::free_cell_va(load_base);
-                }
-                return Err(error);
-            }
-        }
+        loader.load_segments(elf_data, allocator, load_base)?
     };
-    let final_flags = collect_reserved(seg_pages.iter().map(|p| (p.va, p.final_flags)))?;
-    let mapped_pages = collect_reserved(seg_pages.iter().map(|p| (p.va, p.frame)))?;
+    let mut mapping_rollback = PreparationMappings(Some(&seg_pages));
+    #[cfg(feature = "test-hooks")]
+    crate::loader::atomic_publication_tests::observe_unpublished_pages(&seg_pages);
+    let final_flags = crate::loader::atomic_checkpoint("AP-RF")
+        .map_err(|_| ViError::OutOfMemory)
+        .and_then(|_| collect_reserved(seg_pages.iter().map(|p| (p.va, p.final_flags))))
+        .map_err(|error| {
+            #[cfg(cellos_p01_trace)]
+            p01_post_load_failure(&seg_pages, load_base, 2);
+            error
+        })?;
+    let mapped_pages = crate::loader::atomic_checkpoint("AP-RM")
+        .map_err(|_| ViError::OutOfMemory)
+        .and_then(|_| collect_reserved(seg_pages.iter().map(|p| (p.va, p.frame))))
+        .map_err(|error| {
+            #[cfg(cellos_p01_trace)]
+            p01_post_load_failure(&seg_pages, load_base, 3);
+            error
+        })?;
     // The filtered set has at most one entry per page, so the page count is an
     // upper bound: reserving it means no growth, hence no infallible reallocation.
     let mut writable_pages = Vec::new();
-    writable_pages
-        .try_reserve_exact(seg_pages.len())
-        .map_err(|_| ViError::OutOfMemory)?;
+    crate::loader::atomic_checkpoint("AP-RW")
+        .map_err(|_| ViError::OutOfMemory)
+        .and_then(|_| writable_pages.try_reserve_exact(seg_pages.len()).map_err(|_| ViError::OutOfMemory))
+        .map_err(|_| {
+            #[cfg(cellos_p01_trace)]
+            p01_post_load_failure(&seg_pages, load_base, 4);
+            ViError::OutOfMemory
+        })?;
     for page in seg_pages.iter() {
         if page.final_flags.bits() & crate::memory::paging::Flags::WRITE != 0 {
             writable_pages.push(page.va);
         }
+    }
+    #[cfg(cellos_p01_trace)]
+    {
+        // These exclusive backing arrays survive in CellSegments. Other loader
+        // scratch/shared-helper allocations retain origin-only classification.
+        crate::memory::heap::p01_owner::adopt_vec(&mapped_pages);
+        crate::memory::heap::p01_owner::adopt_vec(&writable_pages);
     }
     let segments = super::stack::CellSegments::with_writable_pages(
         mapped_pages,
         writable_pages,
         load_base,
     );
+    // Constructor is infallible: the segment owner now exclusively owns both
+    // frame reclamation and PIE release, including every later failure edge.
+    mapping_rollback.0 = None;
+    va_rollback.0 = 0;
     #[cfg(feature = "test-hooks")]
     crate::loader::atomic_publication_tests::observe_unpublished_segments(&segments);
     crate::loader::atomic_checkpoint("AP-02")?;
@@ -151,4 +193,17 @@ pub fn prepare_elf_task(
         entry: header.entry.wrapping_add(load_base),
         load_base,
     })
+}
+
+/// Observe each exact reserve failure while rollback still owns the live frames.
+/// This witness precedes real unwind; it is not a final retained-leak assertion.
+#[cfg(cellos_p01_trace)]
+fn p01_post_load_failure(pages: &[crate::loader::elf::LoadedPage], load_base: usize, edge: u64) {
+    // Source lock only, no scheduler/owner invention. Preserve one coherent
+    // physical witness batch while the mapped leaves remain allocator-resident.
+    let _frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
+    let _physical_write = crate::p01_retained::physical_write();
+    for page in pages {
+        crate::p01_retained::physical_prepare_failed(page.frame, page.va, load_base, edge);
+    }
 }

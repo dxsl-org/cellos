@@ -99,6 +99,8 @@ pub struct Stack {
     pub guard_pages: usize,
     /// Top of the stack (initial SP).
     pub top: VAddr,
+    #[cfg(cellos_p01_trace)]
+    pub(crate) p01_obligation: Option<crate::p01_resources::Obligation>,
     /// Test-only lifetime registration for a kernel stack selected by a
     /// native-domain private root.
     #[cfg(all(
@@ -280,6 +282,8 @@ impl Stack {
             pages,
             guard_pages,
             top,
+            #[cfg(cellos_p01_trace)]
+            p01_obligation: None,
             #[cfg(all(
                 feature = "native-domains",
                 feature = "test-hooks",
@@ -403,6 +407,17 @@ impl Drop for Stack {
         let mut frame_guard = FRAME_ALLOCATOR.lock();
         if let Some(allocator) = frame_guard.as_mut() {
             release_frames(allocator, self.base, total_pages);
+            #[cfg(cellos_p01_trace)]
+            crate::p01_resources::finish(self.p01_obligation.take(), 1);
+        }
+        #[cfg(cellos_p01_trace)]
+        if self.p01_obligation.is_some() {
+            let owner = crate::p01_resources::obligation_owner(self.p01_obligation);
+            if owner.is_some() {
+                crate::p01_retained::begin(owner, self.base, total_pages,
+                    crate::p01_retained::Reason::TaskStackForget);
+            }
+            crate::p01_resources::finish(self.p01_obligation.take(), 6);
         }
     }
 }
@@ -422,6 +437,8 @@ pub struct CellSegments {
     /// VA base allocated by `va_alloc::alloc_cell_va` for PIE cells; `0` for
     /// fixed-VA cells.  Returned to the allocator's free list on drop.
     pie_va_base: usize,
+    #[cfg(cellos_p01_trace)]
+    pub(crate) p01_obligation: Option<crate::p01_resources::Obligation>,
 }
 
 impl CellSegments {
@@ -433,6 +450,8 @@ impl CellSegments {
             pages,
             writable_pages: alloc::vec::Vec::new(),
             pie_va_base,
+            #[cfg(cellos_p01_trace)]
+            p01_obligation: None,
         }
     }
 
@@ -445,10 +464,22 @@ impl CellSegments {
             pages,
             writable_pages,
             pie_va_base,
+            #[cfg(cellos_p01_trace)]
+            p01_obligation: None,
         }
     }
     pub fn pages(&self) -> &[(types::VAddr, types::PhysAddr)] {
         &self.pages
+    }
+
+    /// Exact capacities of this task's exclusive segment metadata, not frames.
+    /// Publication calls this while holding SCHEDULER with the final identity.
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn p01_backing(&self, owner: crate::p01_measurement::Owner) {
+        crate::memory::heap::p01_owner::runtime_vec(&self.pages, owner,
+            crate::memory::heap::p01_owner::TASK_SEGMENTS);
+        crate::memory::heap::p01_owner::runtime_vec(&self.writable_pages, owner,
+            crate::memory::heap::p01_owner::TASK_SEGMENTS);
     }
 
     pub fn is_writable(&self, va: types::VAddr) -> bool {
@@ -535,6 +566,12 @@ impl Drop for CellSegments {
             for &(_vaddr, frame) in &self.pages {
                 allocator.deallocate_frame(frame);
             }
+            #[cfg(cellos_p01_trace)]
+            crate::p01_resources::finish(self.p01_obligation.take(), 1);
+        }
+        #[cfg(cellos_p01_trace)]
+        if self.p01_obligation.is_some() {
+            crate::p01_resources::finish(self.p01_obligation.take(), 6);
         }
         if self.pie_va_base != 0 {
             crate::loader::va_alloc::free_cell_va(self.pie_va_base);

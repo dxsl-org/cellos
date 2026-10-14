@@ -213,17 +213,18 @@ pub(crate) fn test_register_region(
     if checked_mmio_end(base, len).is_err() {
         return false;
     }
-    REGISTRY
-        .lock()
-        .insert(
-            base,
-            MmioRegion {
-                len,
-                owner: cell_id,
-                class,
-            },
-        )
-        .is_none()
+    let mut registry = REGISTRY.lock();
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    registry.insert(
+        base,
+        MmioRegion {
+            len,
+            owner: cell_id,
+            class,
+        },
+    ).is_none()
 }
 
 /// The per-arch static allowlist, for callers that must reason about which
@@ -289,7 +290,11 @@ pub fn register_pcie_bar(base: usize, len: usize) {
         );
         return;
     }
-    PCIE_BARS.lock().insert(base, len);
+    let mut bars = PCIE_BARS.lock();
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    bars.insert(base, len);
 }
 
 /// Current Driver Cells support bounded conventional BARs only.
@@ -383,6 +388,9 @@ pub fn request_dwc2_mmio(cell_id: CellId, base: usize, len: usize) -> ViResult<(
             return Err(ViError::AlreadyExists);
         }
     }
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED);
     reg.insert(
         base,
         MmioRegion {
@@ -447,6 +455,9 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
             return Err(ViError::AlreadyExists);
         }
     }
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED);
     reg.insert(
         base,
         MmioRegion {
@@ -559,6 +570,9 @@ pub fn revoke_mmio_for(cell_id: CellId, device_mask: MmioClass) -> alloc::vec::V
     REGISTRY.lock().retain(|&base, region| {
         let hit = region.owner == cell_id && region.class & device_mask != 0;
         if hit {
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::DRIVER_SHARED);
             revoked.push((base, region.len));
         }
         !hit
@@ -761,6 +775,9 @@ pub fn claim_bdf_owner(bdf: u32, tid: usize) -> bool {
     match owners.get(&bdf).copied() {
         Some(owner) => owner == tid,
         None => {
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::DRIVER_SHARED);
             owners.insert(bdf, tid);
             true
         }

@@ -29,11 +29,26 @@ pub struct Operation {
     deadline: u64,
     phase: Phase,
     reply: ipc_wire::IpcWireMessage,
+    #[cfg(cellos_p01_trace)]
+    _p01_obligation: ObservedOperation,
 }
 
 impl Operation {
     fn owned_by(&self, task: &Task) -> bool {
         self.owner_cell == task.cell_id.0 && self.owner_generation == task.cell_generation
+    }
+}
+
+#[cfg(cellos_p01_trace)]
+#[derive(Debug)]
+struct ObservedOperation(Option<crate::p01_resources::Obligation>);
+
+#[cfg(cellos_p01_trace)]
+impl Drop for ObservedOperation {
+    fn drop(&mut self) {
+        // This last field drops after reply storage, including a push rollback.
+        // Terminal phase alone never releases the operation's retained storage.
+        crate::p01_resources::finish(self.0.take(), 1);
     }
 }
 
@@ -45,6 +60,10 @@ pub struct Operations(Vec<Operation>);
 impl Operations {
     pub fn new() -> Self { Self(Vec::new()) }
     pub fn len(&self) -> usize { self.0.len() }
+    #[cfg(cellos_p01_trace)]
+    fn observe_owner(&self, owner: crate::p01_measurement::Owner) {
+        crate::memory::heap::p01_owner::runtime_vec(&self.0, owner, crate::memory::heap::p01_owner::OPERATIONS);
+    }
     pub fn find(&self, id: usize) -> Option<&Operation> { self.0.iter().find(|op| op.id == id) }
     fn find_mut(&mut self, id: usize) -> Option<&mut Operation> { self.0.iter_mut().find(|op| op.id == id) }
     fn remove(&mut self, id: usize) -> Option<Operation> {
@@ -69,6 +88,8 @@ impl Operations {
             if op.peer_tid == tid && op.peer_cell == cell && op.peer_generation == generation
                 && !matches!(op.phase, Phase::Terminal { .. }) {
                 op.phase = Phase::Terminal { kind: api::syscall::ipc_status::PEER_GONE, len: 0 };
+                #[cfg(cellos_p01_trace)]
+                crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
                 changed = true;
             }
         }
@@ -107,11 +128,15 @@ fn new_token() -> Result<usize, Failure> {
 
 pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize, Failure> {
     if len > ipc_wire::MAX_IPC_WIRE_PAYLOAD { return Err(Failure::Invalid); }
+    #[cfg(cellos_p01_trace)]
+    let heap_owner;
     let (view, binding, peer_binding) = {
         let guard = SCHEDULER.lock();
         let sched = guard.as_ref().ok_or(Failure::PeerGone)?;
         let task = sched.tasks.get(&owner).filter(|task| live(task)).ok_or(Failure::Invalid)?;
         let target = sched.tasks.get(&peer).filter(|task| live(task)).ok_or(Failure::PeerGone)?;
+        #[cfg(cellos_p01_trace)]
+        { heap_owner = crate::p01_resources::owner(task); }
         (TaskCopyView::of(task), (task.cell_id.0, task.cell_generation),
          (target.cell_id.0, target.cell_generation))
     };
@@ -122,7 +147,8 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
         delivery_id: super::next_delivery_id(), async_op: token,
     };
     // Copy outside SCHEDULER; no peer or user pointer persists in a task slot.
-    let wire = ipc_wire::IpcWireMessage::try_from_user(header, &view, ptr, len)
+    let wire = ipc_wire::IpcWireMessage::try_from_user(header, &view, ptr, len,
+        #[cfg(cellos_p01_trace)] heap_owner)
         .map_err(|_| Failure::Invalid)?;
     let reply_header = ipc_wire::IpcWireHeader {
         sender_tid: peer, sender_cell_id: peer_binding.0,
@@ -130,6 +156,8 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
     };
     let reply = ipc_wire::IpcWireMessage::try_new(
         reply_header, &[0u8; ipc_wire::MAX_IPC_WIRE_PAYLOAD]).map_err(|_| Failure::Busy)?;
+    #[cfg(cellos_p01_trace)]
+    reply.observe_owner(heap_owner, crate::memory::heap::p01_owner::REPLY);
     let mut guard = SCHEDULER.lock();
     let sched = guard.as_mut().ok_or(Failure::PeerGone)?;
     let caller = sched.tasks.get(&owner).filter(|task| live(task)
@@ -139,12 +167,25 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
         && (task.cell_id.0, task.cell_generation) == peer_binding).ok_or(Failure::PeerGone)?;
     if super::paused_target_rejects(sched, owner, peer) { return Err(Failure::Busy); }
     if receiver.pending_msgs.len() >= super::tcb::HOTSWAP_MSG_QUEUE_DEPTH { return Err(Failure::Busy); }
-    sched.tasks.get_mut(&owner).ok_or(Failure::Invalid)?.async_operations.push(Operation {
+    #[cfg(cellos_p01_trace)]
+    let p01_obligation = ObservedOperation(crate::p01_resources::operation_obligation(
+        crate::p01_resources::owner(caller)));
+    #[cfg(cellos_p01_trace)]
+    let _operations = crate::memory::heap::p01_owner::creation(Some(heap_owner),
+        crate::memory::heap::p01_owner::OPERATIONS);
+    let pushed = sched.tasks.get_mut(&owner).ok_or(Failure::Invalid)?.async_operations.push(Operation {
         id: token, owner_cell: binding.0, owner_generation: binding.1,
         peer_tid: peer, peer_cell: peer_binding.0, peer_generation: peer_binding.1,
         deadline: (super::system_ticks() as u64).saturating_add(OPERATION_TIMEOUT_TICKS),
         phase: Phase::Queued, reply,
-    })?;
+        #[cfg(cellos_p01_trace)]
+        _p01_obligation: p01_obligation,
+    });
+    #[cfg(cellos_p01_trace)]
+    drop(_operations);
+    #[cfg(cellos_p01_trace)]
+    sched.tasks.get(&owner).unwrap().async_operations.observe_owner(heap_owner);
+    pushed?;
     let target = sched.tasks.get_mut(&peer).ok_or(Failure::PeerGone)?;
     let recv_eligible = matches!(target.state, TaskState::Recv { mask, .. } if mask == 0 || mask == owner);
     if super::queue_wire_msg(target, wire, super::tcb::HOTSWAP_MSG_QUEUE_DEPTH).is_err() {
@@ -195,6 +236,8 @@ fn terminal(sched: &mut Scheduler, owner_tid: usize, token: usize, provider: usi
     let op = sched.tasks.get_mut(&owner_tid).unwrap().async_operations.find_mut(token).unwrap();
     if len > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
         op.phase = Phase::Terminal { kind: api::syscall::ipc_status::INDETERMINATE, len: 0 };
+        #[cfg(cellos_p01_trace)]
+        crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
         wake(sched, owner_tid);
         return Err(Failure::Invalid);
     }
@@ -204,6 +247,8 @@ fn terminal(sched: &mut Scheduler, owner_tid: usize, token: usize, provider: usi
             else { api::syscall::ipc_status::INDETERMINATE },
         len: if copied.is_ok() { len } else { 0 },
     };
+    #[cfg(cellos_p01_trace)]
+    crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
     wake(sched, owner_tid);
     copied.map_err(|_| Failure::Invalid)
 }
@@ -294,6 +339,8 @@ fn cancel_in_sched(sched: &mut Scheduler, owner: usize, token: usize) -> Result<
     if !matches!(op.phase, Phase::Terminal { .. }) {
         op.phase = Phase::Terminal { kind: if queued { api::syscall::ipc_status::CANCELLED }
             else { api::syscall::ipc_status::INDETERMINATE }, len: 0 };
+        #[cfg(cellos_p01_trace)]
+        crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
         wake(sched, owner);
     }
     Ok(())
@@ -384,6 +431,8 @@ pub(crate) fn cutover_peer(sched: &mut Scheduler, peer: usize, cell: u64, genera
                     op.phase = Phase::Terminal {
                         kind: api::syscall::ipc_status::PEER_GONE, len: 0,
                     };
+                    #[cfg(cellos_p01_trace)]
+                    crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
                     changed = true;
                 }
             }
@@ -413,6 +462,8 @@ pub fn expire(sched: &mut Scheduler, now: u64) {
                             else { api::syscall::ipc_status::INDETERMINATE },
                         len: 0,
                     };
+                    #[cfg(cellos_p01_trace)]
+                    crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
                     Some((op.id, op.peer_tid, queued))
                 }
             };
@@ -449,6 +500,8 @@ mod tests {
             id: MAX_OPERATIONS + 1, owner_cell: 1_002, owner_generation: 3,
             peer_tid: PROVIDER, peer_cell: 1_003, peer_generation: 7,
             deadline: 10, phase: Phase::Queued, reply: test_reply(),
+            #[cfg(cellos_p01_trace)]
+            _p01_obligation: ObservedOperation(None),
         };
         assert_eq!(sched.tasks[&OWNER].async_operations.len(), MAX_OPERATIONS);
         assert!(matches!(sched.tasks.get_mut(&OWNER).unwrap().async_operations.push(overflow()),
@@ -565,6 +618,8 @@ mod tests {
             id, owner_cell: task.cell_id.0, owner_generation: task.cell_generation,
             peer_tid: peer, peer_cell, peer_generation, deadline: 10,
             phase, reply: test_reply(),
+            #[cfg(cellos_p01_trace)]
+            _p01_obligation: ObservedOperation(None),
         }).unwrap();
     }
 

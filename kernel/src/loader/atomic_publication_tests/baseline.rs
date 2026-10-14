@@ -129,9 +129,15 @@ impl SharedStateBaseline {
                 let mut task = crate::task::Task::new(tid, cell, name, alloc::vec::Vec::new());
                 task.priority = (tid - VFS_TID + 1) as u8;
                 task.syscall_allowlist = 1u64 << (tid - VFS_TID);
+                let task = alloc::boxed::Box::new(task);
+                #[cfg(cellos_p01_trace)]
+                crate::memory::heap::p01_owner::task_backing(&task);
+                #[cfg(cellos_p01_trace)]
+                let _semantic = crate::memory::heap::p01_owner::creation(
+                    None, crate::memory::heap::p01_owner::SCHEDULER_SHARED);
                 assert!(sched
                     .tasks
-                    .insert(tid, alloc::boxed::Box::new(task))
+                    .insert(tid, task)
                     .is_none());
             }
             sched

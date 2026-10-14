@@ -668,6 +668,9 @@ unsafe fn scan(ecam_base: usize, config_bus: u8, reported_bus: u8) {
                 );
             }
 
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::DRIVER_SHARED);
             devices.push(PciDevice {
                 bdf: (reported_bus, dev, fun),
                 vendor_id: vid,
@@ -915,7 +918,11 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
         bar0_base
     );
 
-    PCI_DEVICES.lock().push(PciDevice {
+    let mut devices = PCI_DEVICES.lock();
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    devices.push(PciDevice {
         bdf: (bus, dev, fun),
         vendor_id,
         device_id,
@@ -926,6 +933,9 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
         msix: None,
         pm: None,
     });
+    #[cfg(cellos_p01_trace)]
+    drop(_semantic);
+    drop(devices);
 
     if bar0_base != 0 && bar0_size != 0 {
         crate::resource_registry::register_pcie_bar(bar0_base, bar0_size);
@@ -934,7 +944,11 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
 
 /// Return a cloned snapshot of the discovered device list.
 pub fn devices() -> Vec<PciDevice> {
-    PCI_DEVICES.lock().clone()
+    let devices = PCI_DEVICES.lock();
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    devices.clone()
 }
 
 /// Find the first supported device matching (class, subclass, prog_if).

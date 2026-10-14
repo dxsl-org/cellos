@@ -77,6 +77,66 @@ pub fn now_ns() -> u64 {
     ((count as u128 * period_fs as u128) / 1_000_000) as u64
 }
 
+/// A checked HPET observation for private occupied-time accounting.
+/// Availability is not a frequency, drift, or hardware qualification claim.
+#[derive(Clone, Copy)]
+pub struct CheckedSample {
+    pub raw_counter: u64,
+    pub period_fs: u64,
+    pub base: usize,
+    pub capabilities: u64,
+    pub configuration: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CheckedSampleError {
+    Unavailable,
+    InvalidPeriod,
+    NarrowCounter,
+    Disabled,
+    Reconfigured,
+}
+
+/// Read only the initialized shared 64-bit counter; never use PIT/TSC fallback.
+pub fn checked_sample() -> Result<CheckedSample, CheckedSampleError> {
+    let base = HPET_BASE.load(Ordering::Acquire);
+    let period_fs = HPET_PERIOD_FS.load(Ordering::Acquire);
+    if base == 0 || period_fs == 0 {
+        return Err(CheckedSampleError::Unavailable);
+    }
+    // HPET specifies a nonzero tick period of at most 100 ns.
+    if period_fs > 100_000_000 {
+        return Err(CheckedSampleError::InvalidPeriod);
+    }
+    let capabilities = read64(GCAP_ID);
+    if capabilities & (1 << 13) == 0 {
+        return Err(CheckedSampleError::NarrowCounter);
+    }
+    if capabilities >> 32 != period_fs {
+        return Err(CheckedSampleError::Reconfigured);
+    }
+    let configuration = read64(GEN_CONF);
+    if configuration & 1 == 0 {
+        return Err(CheckedSampleError::Disabled);
+    }
+    let raw_counter = read64(MAIN_COUNTER);
+    // Reject observable reconfiguration across the compound observation.
+    if read64(GCAP_ID) != capabilities
+        || read64(GEN_CONF) != configuration
+        || HPET_BASE.load(Ordering::Acquire) != base
+        || HPET_PERIOD_FS.load(Ordering::Acquire) != period_fs
+    {
+        return Err(CheckedSampleError::Reconfigured);
+    }
+    Ok(CheckedSample {
+        raw_counter,
+        period_fs,
+        base,
+        capabilities,
+        configuration,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

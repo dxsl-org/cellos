@@ -139,6 +139,8 @@ impl NestedPageTable {
     ///
     /// Returns `None` when the frame allocator is exhausted.
     pub fn new(format: NestedFormat) -> Option<Self> {
+        #[cfg(cellos_p01_trace)]
+        let _p01_activity = crate::p01_noncpu::activity();
         let root_pa = {
             let mut g = FRAME_ALLOCATOR.lock();
             g.as_mut()?.allocate_frame()? as u64
@@ -148,6 +150,10 @@ impl NestedPageTable {
         unsafe {
             core::ptr::write_bytes(root_va, 0, 512);
         }
+        #[cfg(cellos_p01_trace)]
+        crate::p01_noncpu::created_frame(root_pa, match format {
+            NestedFormat::Npt => 1, NestedFormat::Ept => 2,
+        });
         Some(Self {
             format,
             root_pa,
@@ -384,6 +390,8 @@ impl NestedPageTable {
 
 impl Drop for NestedPageTable {
     fn drop(&mut self) {
+        #[cfg(cellos_p01_trace)]
+        let _p01_activity = crate::p01_noncpu::activity();
         let mut g = FRAME_ALLOCATOR.lock();
         if let Some(alloc) = g.as_mut() {
             for &pa in &self.sub_frames {
@@ -396,6 +404,8 @@ impl Drop for NestedPageTable {
                     alloc.deallocate_frame(base + i * PAGE_SIZE);
                 }
             }
+            #[cfg(cellos_p01_trace)]
+            crate::p01_noncpu::released(self.root_pa);
         }
     }
 }

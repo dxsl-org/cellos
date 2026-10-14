@@ -206,9 +206,13 @@ impl ViFatFS {
 
         let options = fatfs::FsOptions::new().update_accessed_date(false);
         match fatfs::FileSystem::new(stream, options) {
-            Ok(fs) => Ok(Self {
-                inner: Arc::new(Spinlock::new(fs)),
-            }),
+            Ok(fs) => {
+                // The Arc header and mounted FAT state are retained together.
+                #[cfg(cellos_p01_trace)]
+                let _semantic = crate::memory::heap::p01_owner::creation(None,
+                    crate::memory::heap::p01_owner::FILESYSTEM_SHARED);
+                Ok(Self { inner: Arc::new(Spinlock::new(fs)) })
+            }
             Err(e) => {
                 log::error!("ViFatFS: Mount failed: {:?}", e);
                 Err(ViError::InvalidArgument)
@@ -261,6 +265,9 @@ impl ViFileSystem for ViFatFS {
         // This is inefficient (Stateless), but works.
         // So successful creation here is enough.
 
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation_fallback(
+            crate::memory::heap::p01_owner::FILESYSTEM_SHARED);
         Ok(Box::new(FatFile {
             path: String::from(path),
             pos: 0,

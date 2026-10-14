@@ -119,6 +119,9 @@ pub(crate) fn register(
         return Err(());
     }
     let id = SupervisorRangeId(NEXT_ID.fetch_add(1, Ordering::Relaxed));
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DOMAIN_SHARED);
     ranges.push(SupervisorRange {
         id,
         start,

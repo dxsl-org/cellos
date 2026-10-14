@@ -734,6 +734,9 @@ impl Task {
             attributes,
         };
 
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            Some(crate::p01_resources::owner(self)), crate::memory::heap::p01_owner::TASK_FIELDS);
         self.leases.insert(id, lease);
         id
     }
@@ -750,6 +753,9 @@ impl Task {
     pub fn add_grant(&mut self, ptr: VAddr, len: usize, flags: u32, sender_id: usize) -> usize {
         let id = self.next_grant_id;
         self.next_grant_id += 1;
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            Some(crate::p01_resources::owner(self)), crate::memory::heap::p01_owner::TASK_FIELDS);
         self.grant_table.insert(
             id,
             GrantEntry {
@@ -866,6 +872,8 @@ impl Task {
 
 impl Drop for Task {
     fn drop(&mut self) {
+        #[cfg(cellos_p01_trace)]
+        crate::p01_resources::prepare_drop(self);
         #[cfg(all(
             feature = "native-domains",
             any(
@@ -875,7 +883,8 @@ impl Drop for Task {
             )
         ))]
         if self.has_dynamic_stack_mapping {
-            if let (TaskAddressSpace::Domain(space), Some(kernel_stack), Some(user_stack)) = (
+            #[cfg_attr(not(cellos_p01_trace), allow(unused_mut))]
+            if let (TaskAddressSpace::Domain(space), Some(mut kernel_stack), Some(mut user_stack)) = (
                 &self.address_space,
                 self.kernel_stack.take(),
                 self.user_stack.take(),
@@ -890,6 +899,20 @@ impl Drop for Task {
                     // never reused, and the log says which teardown did it.
                     let pages = kernel_stack.pages + user_stack.pages;
                     crate::memory::deferred_release::note_leaked_stack_frames(pages);
+                    #[cfg(cellos_p01_trace)]
+                    {
+                        let owner = crate::p01_resources::owner(self);
+                        // Unlike the existing runtime leak counter, include guard frames.
+                        crate::p01_retained::begin(Some(owner), kernel_stack.base,
+                            kernel_stack.pages + kernel_stack.guard_pages,
+                            crate::p01_retained::Reason::TaskStackForget);
+                        crate::p01_retained::begin(Some(owner), user_stack.base,
+                            user_stack.pages + user_stack.guard_pages,
+                            crate::p01_retained::Reason::TaskStackForget);
+                        crate::p01_resources::retained(owner, 1);
+                        crate::p01_resources::finish(kernel_stack.p01_obligation.take(), 5);
+                        crate::p01_resources::finish(user_stack.p01_obligation.take(), 5);
+                    }
                     log::error!(
                         "[aspace] task stack teardown deferred ({:?}): {} frame(s) withheld from the allocator until the tag's invalidation is confirmed",
                         error,

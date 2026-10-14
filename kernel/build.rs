@@ -9,6 +9,37 @@ fn main() {
     // Choose linker script based on target architecture (and board feature).
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    println!("cargo:rustc-check-cfg=cfg(cellos_p01_trace)");
+    println!("cargo:rerun-if-env-changed=CELLOS_P01_TRACE");
+    println!("cargo:rerun-if-env-changed=CELLOS_P01_FAULT");
+    let p01 = match std::env::var("CELLOS_P01_TRACE").as_deref() {
+        Err(std::env::VarError::NotPresent) | Ok("0") => false,
+        Ok("1") if target_arch == "x86_64" && std::env::var_os("CARGO_FEATURE_TEST_HOOKS").is_some() => true,
+        Ok("1") => panic!("CELLOS_P01_TRACE requires test-hooks and x86_64"),
+        Err(_) | Ok(_) => panic!("CELLOS_P01_TRACE must be absent, 0, or 1"),
+    };
+    let fault = match std::env::var("CELLOS_P01_FAULT") {
+        Ok(value) => value,
+        Err(std::env::VarError::NotPresent) => String::new(),
+        Err(_) => panic!("CELLOS_P01_FAULT must be valid UTF-8"),
+    };
+    if !matches!(fault.as_str(), "" | "contention" | "full" | "unready" | "late") || (!p01 && !fault.is_empty()) {
+        panic!("CELLOS_P01_FAULT requires private trace and a supported observer fault");
+    }
+    if p01 {
+        println!("cargo:rustc-cfg=cellos_p01_trace");
+        println!("cargo:rustc-env=CELLOS_P01_FAULT={fault}");
+    }
+    println!("cargo:rustc-check-cfg=cfg(cellos_g1_cpu)");
+    println!("cargo:rerun-if-env-changed=CELLOS_G1_CPU");
+    match std::env::var("CELLOS_G1_CPU").as_deref() {
+        Err(std::env::VarError::NotPresent) | Ok("0") => {}
+        Ok("1") if p01 && fault.is_empty() && target_os == "none" => {
+            println!("cargo:rustc-cfg=cellos_g1_cpu");
+        }
+        Ok("1") => panic!("CELLOS_G1_CPU requires x86_64 test-hooks private trace without observer faults"),
+        Err(_) | Ok(_) => panic!("CELLOS_G1_CPU must be absent, 0, or 1"),
+    }
     let board_rpi3 = std::env::var("CARGO_FEATURE_BOARD_RPI3").is_ok();
     let (ld_script, rerun_path) = match target_arch.as_str() {
         // board-rpi3: VideoCore loads at 0x80000; use dedicated linker script.
@@ -70,6 +101,13 @@ fn main() {
     } else {
         PathBuf::from("src/embedded")
     };
+    if p01 {
+        let src = embedded_src.join("p01_manifest.bin");
+        println!("cargo:rerun-if-changed={}", src.display());
+        let manifest = fs::read(&src).expect("private P01 build requires p01_manifest.bin");
+        assert_eq!(manifest.len(), 96, "P01 manifest is exactly three SHA256 digests");
+        fs::write(embedded_out.join("p01_manifest.bin"), manifest).expect("embed P01 manifest");
+    }
     // Only two artifacts are actually embedded: `init` (kernel/src/main.rs
     // INIT_ELF) and `kernel_fs.img` (ramdisk.rs VIFS1 — bootstrap cells only,
     // G2 kernel-shrink). Everything else ships in the disk cell-store.

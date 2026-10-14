@@ -120,6 +120,9 @@ fn shm_register(handle: usize) {
         *guard = Some(BTreeSet::new());
     }
     if let Some(set) = guard.as_mut() {
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::GRANT_SHARED);
         set.insert(handle);
     }
 }
@@ -159,6 +162,31 @@ static PAGE_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, PageGrant>>> = Spinlock
 
 fn grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize, PageGrant>>> {
     &PAGE_GRANT_TABLE
+}
+
+/// Called outside source locks after exact root teardown. Never infer pin/DMA or
+/// historical heap ownership from grant-table absence.
+#[cfg(cellos_p01_trace)]
+pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
+    let page_clear = {
+        let table = grant_table_lock().lock();
+        table.as_ref().map_or(Some(true), |table| {
+            if table.len() > 128 { return None; }
+            Some(!table.values().any(|g| g.owner_cell.0 == owner.cell && g.owner_generation == owner.generation))
+        })
+    };
+    let registered_clear = {
+        let table = reg_grant_table_lock().lock();
+        table.as_ref().map_or(Some(true), |table| {
+            if table.len() > 128 { return None; }
+            Some(!table.values().any(|g| g.owner_cell.0 == owner.cell && g.owner_generation == owner.generation))
+        })
+    };
+    if page_clear == Some(true) && registered_clear == Some(true) {
+        crate::p01_resources::checked(owner, 3);
+    } else {
+        crate::p01_resources::unknown(owner, 3);
+    }
 }
 
 /// Maximum pages in a single GrantAlloc or GrantRegister call (16 MiB ceiling).
@@ -486,6 +514,9 @@ fn clone_domain_record(_domain: &Option<DomainRecord>) -> Option<DomainRecord> {
     )
 ))]
 fn new_domain_record(space: &DomainRoot, base: usize, size: usize) -> Option<DomainRecord> {
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::GRANT_SHARED);
     Some(Arc::new(super::domain_grant::DomainGrant::new(
         space, base, size,
     )))
@@ -878,6 +909,18 @@ fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
 /// Lock order: FRAME_ALLOCATOR → (map_page/unmap_page → KERNEL_ROOT). Mirrors
 /// `Stack::drop`. Must NOT be called while already holding FRAME_ALLOCATOR.
 fn free_grant_pages(base: usize, n_pages: usize) {
+    free_grant_pages_inner(base, n_pages, #[cfg(cellos_p01_trace)] None);
+}
+
+fn free_released_range(range: crate::memory::pin::ReleasedRange) {
+    free_grant_pages_inner(range.base, range.pages, #[cfg(cellos_p01_trace)] Some(range));
+}
+
+fn free_grant_pages_inner(
+    base: usize,
+    n_pages: usize,
+    #[cfg(cellos_p01_trace)] range: Option<crate::memory::pin::ReleasedRange>,
+) {
     use crate::memory::frame::FRAME_ALLOCATOR;
     use crate::memory::paging::Flags;
     const PAGE_SIZE: usize = 4096;
@@ -885,16 +928,33 @@ fn free_grant_pages(base: usize, n_pages: usize) {
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
     );
 
+    #[cfg(cellos_p01_trace)]
+    let _range_write = crate::p01_retained::release_write();
+    #[cfg(cellos_p01_trace)]
+    let mut released = false;
     let mut fa = FRAME_ALLOCATOR.lock();
     if let Some(alloc) = fa.as_mut() {
+        #[cfg(cellos_p01_trace)]
+        { released = true; }
         for i in 0..n_pages {
             let f = base + i * PAGE_SIZE;
             let _ = crate::memory::paging::unmap_page(f);
             let _ = crate::memory::paging::map_page(alloc, f, f, kernel_rwx);
+            #[cfg(cellos_p01_trace)]
+            { released &= alloc.p01_allocated(f); }
             alloc.deallocate_frame(f);
         }
     }
     crate::memory::paging::tlb_flush_all();
+    #[cfg(cellos_p01_trace)]
+    if let Some(range) = range {
+        if released {
+            crate::p01_retained::retire(range.p01_range);
+            crate::p01_resources::finish(range.p01_obligation, 1);
+        } else {
+            crate::p01_retained::fault();
+        }
+    }
 }
 
 /// Refuse an owner-initiated teardown of `[base, base + size)` while an
@@ -1039,6 +1099,9 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
                     *table = Some(BTreeMap::new());
                 }
                 table.as_mut().is_some_and(|grants| {
+                    #[cfg(cellos_p01_trace)]
+                    let _semantic = crate::memory::heap::p01_owner::creation(None,
+                        crate::memory::heap::p01_owner::GRANT_SHARED);
                     grants
                         .insert(
                             base,
@@ -1466,20 +1529,22 @@ fn withhold_or_free(base: usize, pages: usize) -> bool {
 ///
 /// Must run with neither FRAME_ALLOCATOR nor SCHEDULER held.
 pub(crate) fn release_acked_frames(tid: usize) {
-    for (base, pages) in crate::memory::pin::acknowledge(tid) {
+    for range in crate::memory::pin::acknowledge(tid) {
+        let (base, pages) = (range.base, range.pages);
         log::info!(
             "[grant] task {tid} acknowledged: releasing {pages} quarantined page(s) at {base:#x}"
         );
-        free_grant_pages(base, pages);
+        free_released_range(range);
     }
 }
 
 pub(crate) fn release_vfs_holder_leases(tid: usize) {
-    for (base, pages) in crate::memory::pin::release_vfs_holder_leases(tid) {
+    for range in crate::memory::pin::release_vfs_holder_leases(tid) {
+        let (base, pages) = (range.base, range.pages);
         log::info!(
             "[grant] VFS holder {tid} died: releasing {pages} quarantined page(s) at {base:#x}"
         );
-        free_grant_pages(base, pages);
+        free_released_range(range);
     }
 }
 
@@ -1487,12 +1552,12 @@ pub(crate) fn release_vfs_holder_leases(tid: usize) {
 /// context. This runs outside SCHEDULER after grant reaping has quarantined any
 /// owner-dead frames.
 pub(crate) fn release_vfs_context_lease(release: super::scheduler::VfsLeaseRelease) {
-    for (base, pages) in crate::memory::pin::release_vfs_lease(
+    for range in crate::memory::pin::release_vfs_lease(
         release.holder_tid,
         release.grant_owner,
         release.request_generation,
     ) {
-        free_grant_pages(base, pages);
+        free_released_range(range);
     }
 }
 
@@ -1723,12 +1788,19 @@ fn governed_spawn_request(
     caller_id: usize,
     child_ceiling: super::cap::CapSet,
     priority: u8,
+    #[cfg(cellos_p01_trace)] trace: Option<crate::p01_measurement::Attempt>,
 ) -> Result<crate::loader::SpawnRequest, SyscallError> {
     let (generation, caller_authority) = super::SCHEDULER
         .lock()
         .as_ref()
         .and_then(|sched| sched.tasks.get(&caller_id))
-        .map(|task| (task.cell_generation, super::cap::CapSet::of_task(task)))
+        .map(|task| {
+            #[cfg(cellos_p01_trace)]
+            if trace.is_some_and(|a| a.parent != crate::p01_measurement::Owner::of(task)) {
+                crate::p01_measurement::invalidate(crate::p01_measurement::IDENTITY);
+            }
+            (task.cell_generation, super::cap::CapSet::of_task(task))
+        })
         .ok_or(SyscallError::PermissionDenied)?;
     let argv = crate::cell::state_stash::take_spawn_argv(caller_id);
     Ok(crate::loader::SpawnRequest::governed_caller(
@@ -2532,6 +2604,9 @@ pub(super) fn snapshot_resume(task: &super::Task, mask: usize) -> Result<ResumeS
             Some(h) => (h.sender_cell_id, h.sender_generation),
             None => (0, 0),
         };
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(Some(crate::p01_resources::owner(task)),
+            crate::memory::heap::p01_owner::RECEIVE_SCRATCH);
         let mut payload = alloc::vec::Vec::new();
         payload
             .try_reserve_exact(msg.payload().len())
@@ -2811,8 +2886,8 @@ fn finish_vfs_send_release(caller_id: usize, target: usize, context: Option<VfsG
         context.grant_owner,
         context.request_generation,
     );
-    for (base, pages) in released {
-        free_grant_pages(base, pages);
+    for range in released {
+        free_released_range(range);
     }
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&caller_id) {
@@ -2828,10 +2903,10 @@ fn finish_vfs_context_drop(caller_id: usize, dropped: Option<(usize, u64)>) {
     let Some((grant_owner, request_generation)) = dropped else {
         return;
     };
-    for (base, pages) in
+    for range in
         crate::memory::pin::release_vfs_lease(caller_id, grant_owner, request_generation)
     {
-        free_grant_pages(base, pages);
+        free_released_range(range);
     }
 }
 
@@ -4123,12 +4198,61 @@ pub(crate) fn send_cap_revoked_event(target_tid: usize, mask: u32) -> bool {
 ///
 /// `caller_id` is the ID of the task invoking the syscall.
 pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
+    #[cfg(cellos_p01_trace)]
+    let mut trace = {
+        let route = match &syscall {
+            Syscall::SpawnFromElf { .. } => 1,
+            Syscall::SpawnFromPath { .. } => 2,
+            Syscall::SpawnPinned { .. } => 3,
+            _ => 0,
+        };
+        if route == 0 { None } else {
+            let parent = super::SCHEDULER.lock().as_ref()
+                .and_then(|sched| sched.tasks.get(&caller_id))
+                .map(|task| crate::p01_measurement::Owner::of(task));
+            parent.and_then(|owner| crate::p01_measurement::ingress(owner, route))
+        }
+    };
+    let result = handle_syscall_inner(caller_id, syscall, #[cfg(cellos_p01_trace)] &mut trace);
+    #[cfg(cellos_p01_trace)]
+    {
+        crate::p01_measurement::outcome(trace, result);
+        crate::p01_measurement::safe_point();
+    }
+    result
+}
+
+fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
+    #[cfg(cellos_p01_trace)] trace: &mut Option<crate::p01_measurement::Attempt>,
+) -> SyscallResult {
     let Some(allowed) = syscall_allowlist_for(caller_id) else {
         log::warn!("[kernel] syscall denied for non-live tid {}", caller_id);
         return Err(SyscallError::PermissionDenied);
     };
 
     let _staged_spawn_argv_cleanup = staged_spawn_argv_cleanup(&syscall, caller_id);
+    #[cfg(cellos_p01_trace)]
+    {
+        // These non-fixture routes do not have historical per-object provenance
+        // in this observer. Preserve the uncertainty before any source can lose it.
+        let class = match &syscall {
+            Syscall::GrantAlloc { .. } | Syscall::GrantShare { .. } |
+            Syscall::GrantSlice { .. } | Syscall::GrantFree { .. } |
+            Syscall::GrantRegister { .. } | Syscall::GrantUnregister { .. } |
+            Syscall::GrantCacheSyncBegin { .. } | Syscall::GrantCacheSyncComplete { .. } |
+            Syscall::ShmAlloc { .. } | Syscall::ShmMap { .. } | Syscall::Grant { .. } |
+            Syscall::Map { .. } => Some(3),
+            Syscall::GrantDma { .. } => Some(5),
+            Syscall::CreateVm { .. } | Syscall::CreateVcpu { .. } |
+            Syscall::MapGuestMemory { .. } => Some(8),
+            _ => None,
+        };
+        if let Some(class) = class {
+            if let Some(owner) = crate::p01_resources::owner_for_tid(caller_id) {
+                crate::p01_resources::unknown(owner, class);
+            }
+        }
+    }
 
     // Syscall allowlist enforcement: reject if this syscall's bit is not set in
     // the per-Cell bitset loaded from ELF section `__ViCell_syscalls`.
@@ -4997,6 +5121,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 .as_mut()
                 .and_then(|sched| sched.tasks.get_mut(&caller_id))
                 .map(|task| {
+                    #[cfg(cellos_p01_trace)]
+                    let _semantic = crate::memory::heap::p01_owner::creation(
+                        Some(crate::p01_resources::owner(task)), crate::memory::heap::p01_owner::TASK_FIELDS);
                     task.pipe_handles.insert(read_handle);
                     task.pipe_handles.insert(write_handle);
                 })
@@ -5191,18 +5318,27 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 .tasks
                 .get_mut(&target_tid)
                 .expect("target task remained live while holding SCHEDULER");
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(
+                Some(crate::p01_resources::owner(target)), crate::memory::heap::p01_owner::TASK_FIELDS);
             target.pipe_handles.insert(handle);
             Ok(0)
         }
         Syscall::Wait { pid } => {
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 let already_reaped = if let Some(target) = sched.tasks.get_mut(&pid) {
+                    #[cfg(cellos_p01_trace)]
+                    let _semantic = crate::memory::heap::p01_owner::creation(
+                        Some(crate::p01_resources::owner(target)), crate::memory::heap::p01_owner::TASK_FIELDS);
                     target.waiters.push(caller_id);
                     false
                 } else if let Some(zombie) = sched.zombies.iter_mut().find(|task| task.id == pid) {
                     // It exited but a hart may still hold its saved context.
                     // The zombie reaper transfers these waiters only after the
                     // exact selected/executing quiescence proof.
+                    #[cfg(cellos_p01_trace)]
+                    let _semantic = crate::memory::heap::p01_owner::creation(
+                        Some(crate::p01_resources::owner(zombie)), crate::memory::heap::p01_owner::TASK_FIELDS);
                     zombie.waiters.push(caller_id);
                     false
                 } else {
@@ -5293,6 +5429,25 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
         Syscall::Log { msg_ptr, msg_len } => {
             if let Ok(msg) = read_user_string(caller_id, msg_ptr, msg_len, MAX_LOG_MSG) {
+                #[cfg(cellos_p01_trace)]
+                {
+                    let owner = super::SCHEDULER.lock().as_ref()
+                        .and_then(|sched| sched.tasks.get(&caller_id))
+                        .map(|task| {
+                            let owner = crate::p01_measurement::Owner::of(task);
+                            // The temporary user-copy buffer belongs to this Log
+                            // invocation, including while a stage census reads it.
+                            if let Ok(layout) = core::alloc::Layout::array::<u8>(msg.capacity()) {
+                                crate::memory::heap::p01_owner::runtime_buffer(
+                                    msg.as_ptr() as usize, layout, owner,
+                                    crate::memory::heap::p01_owner::TASK_IO);
+                            } else {
+                                crate::p01_measurement::invalidate(crate::p01_measurement::COUNTER);
+                            }
+                            owner
+                        });
+                    if let Some(owner) = owner { crate::p01_measurement::stage(owner, &msg); }
+                }
                 crate::task::print_user_log(&msg, caller_id);
             }
             Ok(0)
@@ -5913,6 +6068,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 path_len,
                 crate::loader::disk_layout::MAX_CELL_PATH,
             )?;
+            #[cfg(cellos_p01_trace)]
+            crate::p01_measurement::classify(trace, &path_str);
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
@@ -5925,6 +6082,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 caller_id,
                 profile.child_ceiling,
                 api::TaskPriority::Normal as u8,
+                #[cfg(cellos_p01_trace)] *trace,
             ) {
                 Ok(request) => request,
                 Err(error) => {
@@ -5932,7 +6090,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Err(error);
                 }
             };
+            #[cfg(cellos_p01_trace)]
+            let request = { let mut request = request; request.trace = *trace; request };
             let spawned = crate::loader::spawn_from_path(&path_str, request);
+            #[cfg(cellos_p01_trace)]
+            if let Err(error) = spawned { crate::p01_measurement::source_error(*trace, error); }
             // A successful spawn consumed any staged directory-handle set inside
             // task creation. Clearing unconditionally covers the failure paths:
             // a set left staged by a spawn that never produced a child would be
@@ -6154,6 +6316,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 path_len,
                 crate::loader::disk_layout::MAX_CELL_PATH,
             )?;
+            #[cfg(cellos_p01_trace)]
+            crate::p01_measurement::classify(trace, &path_str);
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
@@ -6172,6 +6336,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 caller_id,
                 profile.child_ceiling,
                 api::TaskPriority::Normal as u8,
+                #[cfg(cellos_p01_trace)] *trace,
             ) {
                 Ok(request) => request,
                 Err(error) => {
@@ -6179,7 +6344,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Err(error);
                 }
             };
+            #[cfg(cellos_p01_trace)]
+            let request = { let mut request = request; request.trace = *trace; request };
             let spawned = crate::loader::spawn_gated(elf_bytes, &path_str, request);
+            #[cfg(cellos_p01_trace)]
+            if let Err(error) = spawned { crate::p01_measurement::source_error(*trace, error); }
             crate::task::dir_inherit::clear_staged(caller_id);
             let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
@@ -6213,6 +6382,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 path_len,
                 crate::loader::disk_layout::MAX_CELL_PATH,
             )?;
+            #[cfg(cellos_p01_trace)]
+            crate::p01_measurement::classify(trace, &path_str);
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
@@ -6221,14 +6392,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 crate::loader::launch_profile::LaunchRoute::Pinned,
                 &path_str,
             )?;
-            let request = match governed_spawn_request(caller_id, profile.child_ceiling, priority) {
+            let request = match governed_spawn_request(caller_id, profile.child_ceiling, priority, #[cfg(cellos_p01_trace)] *trace) {
                 Ok(request) => request,
                 Err(error) => {
                     crate::task::dir_inherit::clear_staged(caller_id);
                     return Err(error);
                 }
             };
+            #[cfg(cellos_p01_trace)]
+            let request = { let mut request = request; request.trace = *trace; request };
             let spawned = crate::loader::spawn_from_path(&path_str, request);
+            #[cfg(cellos_p01_trace)]
+            if let Err(error) = spawned { crate::p01_measurement::source_error(*trace, error); }
             crate::task::dir_inherit::clear_staged(caller_id);
             let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
@@ -6642,6 +6817,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 caller_id,
                 profile.child_ceiling,
                 api::TaskPriority::Normal as u8,
+                #[cfg(cellos_p01_trace)] *trace,
             ) {
                 Ok(request) => request,
                 Err(error) => {
@@ -7728,6 +7904,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if table.is_none() {
                 *table = Some(BTreeMap::new());
             }
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::GRANT_SHARED);
             table.as_mut().unwrap().insert(
                 paddr,
                 PageGrant {
@@ -8179,6 +8358,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if table.is_none() {
                 *table = Some(BTreeMap::new());
             }
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::GRANT_SHARED);
             table.as_mut().unwrap().insert(
                 paddr,
                 RegGrant {

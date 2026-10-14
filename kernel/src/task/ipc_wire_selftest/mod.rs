@@ -88,6 +88,11 @@ fn setup_task(tid: usize, cell: u64, name: &'static str, va: usize) -> Option<Ar
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         let owner = api::cell_owner::CellOwner::new(cell, 1, tid as u64);
         sched.publish_live_cell_owner(owner);
+        #[cfg(cellos_p01_trace)]
+        crate::memory::heap::p01_owner::task_backing(&task);
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
         sched.tasks.insert(tid, task);
     }
     Some(space)

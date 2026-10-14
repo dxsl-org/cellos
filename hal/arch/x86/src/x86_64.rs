@@ -167,9 +167,29 @@ pub fn set_hpet_base(base: usize) {
 /// in its HHDM, so the HHDM-offset address would fault after the CR3 switch.
 #[cfg(target_arch = "x86_64")]
 pub fn init_timers() {
+    let _ = init_timers_inner(false);
+}
+
+/// Actual BSP calibration outcome, without a second calibration or fallback claim.
+#[cfg(target_arch = "x86_64")]
+#[derive(Clone, Copy)]
+pub struct TimerCalibration {
+    pub ticks_per_ms: u64,
+    pub hpet_used: bool,
+    pub initial_count: u32,
+    pub lvt: u32,
+}
+
+#[cfg(target_arch = "x86_64")]
+pub fn init_timers_observed() -> Option<TimerCalibration> {
+    init_timers_inner(true)
+}
+
+#[cfg(target_arch = "x86_64")]
+fn init_timers_inner(observe: bool) -> Option<TimerCalibration> {
     let hpet_base = HPET_MMIO_BASE.load(Ordering::Relaxed);
     if hpet_base == 0 {
-        return;
+        return None;
     }
 
     // Switch LAPIC/IOAPIC accesses to the identity-mapped PAs we set up in our PML4.
@@ -189,6 +209,7 @@ pub fn init_timers() {
     uart_16550::putchar(b'H'); // after HPET init (H=HPET attempted)
 
     let ticks_per_ms = hpet::calibrate_lapic();
+    let hpet_used = observe && hpet::checked_sample().is_ok();
     uart_16550::putchar(b'C'); // calibration done
                                // '0'=zero (timer disabled!), '1'=ok.
     uart_16550::putchar(if ticks_per_ms == 0 { b'0' } else { b'1' });
@@ -243,6 +264,12 @@ pub fn init_timers() {
         }
         uart_16550::putchar(b'~'); // '~' = returned from this hlt iteration
     }
+    Some(TimerCalibration {
+        ticks_per_ms,
+        hpet_used,
+        initial_count: init_cnt,
+        lvt,
+    })
 }
 
 /// x86_64 architecture implementation.

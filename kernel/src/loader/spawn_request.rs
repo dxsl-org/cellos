@@ -9,6 +9,8 @@ pub struct SpawnRequest {
     pub(crate) replacement: Option<crate::cell::hotswap::ReplacementReservation>,
     pub(crate) inherit_from: usize,
     pub(crate) argv: Option<Vec<u8>>,
+    #[cfg(cellos_p01_trace)]
+    pub(crate) trace: Option<crate::p01_measurement::Attempt>,
 }
 
 impl SpawnRequest {
@@ -21,6 +23,8 @@ impl SpawnRequest {
             replacement: None,
             inherit_from: 0,
             argv: None,
+            #[cfg(cellos_p01_trace)]
+            trace: None,
         }
     }
 
@@ -51,6 +55,8 @@ impl SpawnRequest {
             replacement: None,
             inherit_from: tid,
             argv,
+            #[cfg(cellos_p01_trace)]
+            trace: None,
         }
     }
 
@@ -76,6 +82,8 @@ impl SpawnRequest {
             replacement: Some(replacement),
             inherit_from: tid,
             argv,
+            #[cfg(cellos_p01_trace)]
+            trace: None,
         }
     }
 }

@@ -481,19 +481,35 @@ pub(super) fn denied_with_full_rollback(
     case: &'static str,
     action: impl FnOnce() -> Result<(), ViError>,
 ) -> bool {
-    if case == "AP-02" {
+    let check_pages = matches!(case, "AP-02" | "AP-RF" | "AP-RM" | "AP-RW");
+    if check_pages {
         super::probe::arm_ap02();
     }
     let before = snapshot();
     arm_failure(case);
-    let denied = action().is_err();
+    let result = action();
+    let reserve_refusal = matches!(case, "AP-RF" | "AP-RM" | "AP-RW");
+    let denied = if reserve_refusal { matches!(result, Err(ViError::OutOfMemory)) }
+        else { result.is_err() };
     let restored = snapshot_matches(case, "denial-rollback", &before, &snapshot());
-    let unpublished_cleanup = case != "AP-02" || super::probe::ap02_cleanup_complete();
+    let unpublished_cleanup = !check_pages || super::probe::ap02_cleanup_complete();
     let reached = failure_reached();
     report_contract(case, "denied", denied);
     report_contract(case, "checkpoint", reached);
-    report_contract(case, "ap02-translation-cleanup", unpublished_cleanup);
+    report_contract(case, "unpublished-translation-cleanup", unpublished_cleanup);
     denied && reached && unpublished_cleanup && restored
+}
+
+/// A genuinely unavailable allocator, not another checkpoint replacing that
+/// branch. Restore the fixture allocator before comparing every global source.
+pub(super) fn denied_without_frame_allocator(action: impl FnOnce() -> Result<(), ViError>) -> bool {
+    let before = snapshot();
+    let allocator = crate::memory::frame::FRAME_ALLOCATOR.lock().take();
+    let denied = matches!(action(), Err(ViError::OutOfMemory));
+    *crate::memory::frame::FRAME_ALLOCATOR.lock() = allocator;
+    let restored = snapshot_matches("AP-FA", "missing-frame-allocator", &before, &snapshot());
+    report_contract("AP-FA", "out-of-memory", denied);
+    denied && restored
 }
 
 /// Governed admission appends the verified-signature and privileged-grant audit

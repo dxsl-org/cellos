@@ -317,7 +317,14 @@ const MAX_RX_BUFFERED: usize = 4096;
 
 /// Initialize Input Buffer (Must be called after Heap Init)
 pub fn init_input() {
-    *RX_BUFFER.lock() = Some(VecDeque::with_capacity(MAX_RX_BUFFERED));
+    let mut input = RX_BUFFER.lock();
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    *input = Some(VecDeque::with_capacity(MAX_RX_BUFFERED));
+    #[cfg(cellos_p01_trace)]
+    drop(_semantic);
+    drop(input);
     log::info!("UART Input Buffer Initialized");
 }
 

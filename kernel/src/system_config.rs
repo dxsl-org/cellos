@@ -58,11 +58,19 @@ fn read_system() -> Result<Option<Vec<u8>>, &'static str> {
         if stat.size == 0 { return Err("configuration is empty"); }
         if stat.size > MAX_CONFIG_BYTES as u64 { return Err("configuration exceeds 16384 bytes"); }
         let size = usize::try_from(stat.size).map_err(|_| "configuration size is not representable")?;
+        #[cfg(cellos_p01_trace)]
+        let _scratch = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED);
         let file = fs.open(SYSTEM_PATH, OpenMode::Read).map_err(|_| "cannot open embedded configuration")?;
         (file, size)
     };
     let mut bytes = Vec::new();
+    #[cfg(cellos_p01_trace)]
+    let scratch = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED);
     bytes.try_reserve_exact(size).map_err(|_| "cannot allocate configuration buffer")?;
+    #[cfg(cellos_p01_trace)]
+    drop(scratch);
     bytes.resize(size, 0);
     let mut offset = 0;
     while offset < size {

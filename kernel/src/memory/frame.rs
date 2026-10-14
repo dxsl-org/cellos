@@ -75,6 +75,10 @@ pub struct FrameAllocator {
     bitmap: BitmapStorage,
     /// Index of the last allocated frame (for next-fit search)
     last_alloc_index: usize,
+    #[cfg(cellos_p01_trace)]
+    p01_epoch: u64,
+    #[cfg(cellos_p01_trace)]
+    p01_peak: usize,
 }
 
 impl FrameAllocator {
@@ -107,6 +111,10 @@ impl FrameAllocator {
             used_frames: 0,
             bitmap: BitmapStorage::Borrowed(bitmap),
             last_alloc_index: 0,
+            #[cfg(cellos_p01_trace)]
+            p01_epoch: 1,
+            #[cfg(cellos_p01_trace)]
+            p01_peak: 0,
         };
 
         // The bitmap lives inside managed memory, so its own frames are reserved.
@@ -195,6 +203,12 @@ impl FrameAllocator {
         }
     }
 
+    #[cfg(any(cellos_p01_trace, feature = "test-hooks"))]
+    pub(crate) fn p01_allocated(&self, frame: PhysAddr) -> bool {
+        frame.is_multiple_of(PAGE_SIZE)
+            && self.addr_to_frame_index(frame).is_some_and(|index| self.is_frame_allocated(index))
+    }
+
     // --- Helper bits ---
 
     fn find_free(&self, start_idx: usize, end_idx: usize) -> Option<usize> {
@@ -228,8 +242,15 @@ impl FrameAllocator {
         if self.bitmap.slice()[u64_idx] & mask != 0 {
             return false;
         }
+        #[cfg(cellos_p01_trace)]
+        let p01_physical = crate::p01_retained::physical_write();
         self.bitmap.slice_mut()[u64_idx] |= mask;
         self.used_frames += 1;
+        #[cfg(cellos_p01_trace)]
+        if let Some(write) = p01_physical.as_ref() {
+            self.p01_transition();
+            crate::p01_retained::physical_allocated(write, self.frame_index_to_addr(idx), self.p01_epoch);
+        }
         true
     }
 
@@ -240,9 +261,65 @@ impl FrameAllocator {
         if self.bitmap.slice()[u64_idx] & mask == 0 {
             return false;
         }
+        #[cfg(cellos_p01_trace)]
+        let p01_physical = crate::p01_retained::physical_write();
         self.bitmap.slice_mut()[u64_idx] &= !mask;
         self.used_frames -= 1;
+        #[cfg(cellos_p01_trace)]
+        if let Some(write) = p01_physical.as_ref() {
+            self.p01_transition();
+            crate::p01_retained::physical_freed(write, self.frame_index_to_addr(idx), self.p01_epoch);
+        }
         true
+    }
+
+    #[cfg(cellos_p01_trace)]
+    fn p01_transition(&mut self) {
+        // The enclosing PhysicalWrite already owns admission through the bitmap
+        // transition. A second admission could fail after the actual mutation,
+        // leaving an invented/repeated source epoch in the physical inventory.
+        if let Some(next) = self.p01_epoch.checked_add(1) {
+            self.p01_epoch = next;
+            self.p01_peak = self.p01_peak.max(self.used_frames);
+        } else {
+            crate::p01_retained::physical_fault();
+        }
+    }
+
+    /// Arm-time exact bitmap population, including bitmap backing reservations.
+    /// Caller holds FRAME_ALLOCATOR and keeps admission closed through the census.
+    /// This records unknown births, not synthetic allocations at the census epoch.
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn p01_seed_physical(&self) {
+        let mut counted = 0usize;
+        for (word_index, word) in self.bitmap.slice().iter().copied().enumerate() {
+            let mut used = word;
+            while used != 0 {
+                let bit = used.trailing_zeros() as usize;
+                let index = word_index * 64 + bit;
+                if index >= self.total_frames {
+                    crate::p01_retained::physical_fault();
+                } else {
+                    crate::p01_retained::physical_preexisting(
+                        self.frame_index_to_addr(index), self.p01_epoch);
+                    counted += 1;
+                }
+                used &= used - 1;
+            }
+        }
+        if counted != self.used_frames { crate::p01_retained::physical_fault(); }
+    }
+
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn p01_snapshot(&self) -> (u64, usize) {
+        (self.p01_epoch, self.p01_peak)
+    }
+
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn p01_reset_peak(&mut self) {
+        if let Some(_observation) = crate::p01_measurement::observation() {
+            self.p01_peak = self.used_frames;
+        }
     }
 
     fn frame_index_to_addr(&self, idx: usize) -> PhysAddr {
@@ -499,23 +576,61 @@ pub static FRAME_ALLOCATOR: crate::sync::Spinlock<Option<FrameAllocator>> =
     crate::sync::Spinlock::new(None);
 
 /// A non-copyable allocation lease returned to the bitmap only on drop.
-pub struct OwnedFrame(PhysAddr);
+pub struct OwnedFrame {
+    physical: PhysAddr,
+    #[cfg(cellos_p01_trace)]
+    p01_retained: Option<crate::p01_retained::Token>,
+}
 
 impl OwnedFrame {
     pub fn allocate() -> Option<Self> {
-        FRAME_ALLOCATOR.lock().as_mut()?.allocate_frame().map(Self)
+        FRAME_ALLOCATOR.lock().as_mut()?.allocate_frame().map(|physical| Self {
+            physical,
+            #[cfg(cellos_p01_trace)]
+            p01_retained: None,
+        })
     }
 
     pub const fn physical_address(&self) -> PhysAddr {
-        self.0
+        self.physical
+    }
+
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn p01_retain(&mut self, owner: Option<crate::p01_measurement::Owner>, reason: &str) {
+        if self.p01_retained.is_some() {
+            crate::p01_retained::fault();
+            return;
+        }
+        let provenance = crate::p01_retained::Reason::deferred(reason);
+        if owner.is_some() && provenance.is_none() { crate::p01_retained::fault(); }
+        self.p01_retained = crate::p01_retained::begin(owner, self.physical, 1,
+            provenance.unwrap_or(crate::p01_retained::Reason::Deferred));
+    }
+
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn p01_quarantine(&self) {
+        crate::p01_retained::mark(self.p01_retained,
+            crate::p01_retained::Reason::AddressSpaceQuarantine);
     }
 }
 
 impl Drop for OwnedFrame {
     fn drop(&mut self) {
+        #[cfg(cellos_p01_trace)]
+        let _range_write = crate::p01_retained::release_write();
         if let Some(frames) = FRAME_ALLOCATOR.lock().as_mut() {
-            frames.deallocate_frame(self.0);
+            #[cfg(cellos_p01_trace)]
+            let released = frames.p01_allocated(self.physical);
+            frames.deallocate_frame(self.physical);
+            #[cfg(cellos_p01_trace)]
+            if released {
+                crate::p01_retained::retire(self.p01_retained.take());
+            } else if self.p01_retained.is_some() {
+                crate::p01_retained::fault();
+            }
         }
+        #[cfg(cellos_p01_trace)]
+        if self.p01_retained.is_some() { crate::p01_retained::fault(); }
     }
 }
 
@@ -714,6 +829,10 @@ pub(crate) fn allocator_for_tests(ranges: &[(usize, usize)]) -> FrameAllocator {
         used_frames: 0,
         bitmap: BitmapStorage::Owned(alloc::vec![0u64; total.div_ceil(64)].into_boxed_slice()),
         last_alloc_index: 0,
+        #[cfg(cellos_p01_trace)]
+        p01_epoch: 1,
+        #[cfg(cellos_p01_trace)]
+        p01_peak: 0,
     }
 }
 
@@ -893,6 +1012,10 @@ mod tests {
                 alloc::vec![0u64; total_frames.div_ceil(64)].into_boxed_slice(),
             ),
             last_alloc_index: 0,
+            #[cfg(cellos_p01_trace)]
+            p01_epoch: 1,
+            #[cfg(cellos_p01_trace)]
+            p01_peak: 0,
         }
     }
 

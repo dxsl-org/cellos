@@ -75,6 +75,9 @@ impl CapTable {
         let next = self.next_id.wrapping_add(1);
         debug_assert!(next != 0, "CapId counter wrapped to 0");
         self.next_id = if next == 0 { 1 } else { next };
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None, crate::memory::heap::p01_owner::SERVICE_SHARED);
         self.entries.insert(
             id,
             CapEntry {

@@ -11,7 +11,14 @@ use alloc::alloc::{alloc_zeroed, Layout};
 fn alloc_page() -> (usize, u64) {
     let layout = Layout::from_size_align(4096, 4096).expect("iommu_pt: page");
     // SAFETY: layout is non-zero and 4096-aligned.
-    let ptr = unsafe { alloc_zeroed(layout) } as usize;
+    // The witness is the heap table allocation, including hardware-independent
+    // boot probes, not the physical DMA frames later named by its leaf entries.
+    let ptr = {
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED);
+        (unsafe { alloc_zeroed(layout) }) as usize
+    };
     assert!(ptr != 0, "[iommu_pt] OOM allocating IOMMU page");
     (ptr, virt_to_phys(ptr))
 }
@@ -67,7 +74,11 @@ impl Default for Sv39IommuPt {
 
 impl Sv39IommuPt {
     pub fn new() -> Self {
+        #[cfg(cellos_p01_trace)]
+        let _p01_activity = crate::p01_noncpu::activity();
         let (v, p) = alloc_page();
+        #[cfg(cellos_p01_trace)]
+        crate::p01_noncpu::created_heap(p, 3, v);
         Self {
             root_phys: p,
             root_virt: v,
@@ -203,7 +214,11 @@ impl Default for VtdSlpt {
 
 impl VtdSlpt {
     pub fn new() -> Self {
+        #[cfg(cellos_p01_trace)]
+        let _p01_activity = crate::p01_noncpu::activity();
         let (v, p) = alloc_page();
+        #[cfg(cellos_p01_trace)]
+        crate::p01_noncpu::created_heap(p, 4, v);
         Self {
             root_phys: p,
             root_virt: v,

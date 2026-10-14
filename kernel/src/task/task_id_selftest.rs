@@ -52,6 +52,11 @@ fn insert_parent() {
             let owner = api::cell_owner::CellOwner::new(QUOTA_CELL, 1, PARENT_TID as u64);
             sched.publish_live_cell_owner(owner);
         }
+        #[cfg(cellos_p01_trace)]
+        crate::memory::heap::p01_owner::task_backing(&parent);
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
         sched.tasks.insert(PARENT_TID, parent);
     }
 }

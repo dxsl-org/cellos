@@ -14,6 +14,12 @@ static AP13_TARGET_TID: AtomicUsize = AtomicUsize::new(usize::MAX);
 #[cfg(target_arch = "riscv64")]
 static AP13_REMOTE_ACK: AtomicU8 = AtomicU8::new(0);
 pub(super) fn code(case: &str) -> u8 {
+    match case {
+        "AP-RF" => return 17,
+        "AP-RM" => return 18,
+        "AP-RW" => return 19,
+        _ => {}
+    }
     let Some(raw) = case.strip_prefix("AP-") else {
         return 0;
     };

@@ -200,7 +200,11 @@ fn local_tag_flush(asid: usize) {
     core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
     #[cfg(feature = "test-hooks")]
     if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
-        TEST_FLUSHED_TAGS.lock().push(asid);
+        let mut tags = TEST_FLUSHED_TAGS.lock();
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED);
+        tags.push(asid);
     }
     // Every leaf that differs between roots is non-global (`PageFlags::NON_GLOBAL`
     // -> `PTE_nG`), so the retiring root's own tag is the whole invalidation
@@ -323,7 +327,11 @@ pub fn flush_page(vaddr: VAddr) {
     let page = vaddr & !(PAGE_SIZE - 1);
     #[cfg(feature = "test-hooks")]
     if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
-        TEST_FLUSHED_PAGES.lock().push(page);
+        let mut pages = TEST_FLUSHED_PAGES.lock();
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED);
+        pages.push(page);
     }
     flush_range(page, PAGE_SIZE);
 }

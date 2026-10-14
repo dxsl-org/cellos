@@ -67,14 +67,24 @@ fn install_tasks(ok: &mut bool) -> bool {
         check(ok, false, "synthetic task IDs unused");
         return false;
     }
-    scheduler.tasks.insert(
-        TASK_A,
-        Box::new(Task::new(TASK_A, CellId(0), "cwd-a", Vec::new())),
-    );
-    scheduler.tasks.insert(
-        TASK_B,
-        Box::new(Task::new(TASK_B, CellId(0), "cwd-b", Vec::new())),
-    );
+    let task_a = Box::new(Task::new(TASK_A, CellId(0), "cwd-a", Vec::new()));
+    #[cfg(cellos_p01_trace)]
+    crate::memory::heap::p01_owner::task_backing(&task_a);
+    {
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        scheduler.tasks.insert(TASK_A, task_a);
+    }
+    let task_b = Box::new(Task::new(TASK_B, CellId(0), "cwd-b", Vec::new()));
+    #[cfg(cellos_p01_trace)]
+    crate::memory::heap::p01_owner::task_backing(&task_b);
+    {
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        scheduler.tasks.insert(TASK_B, task_b);
+    }
     true
 }
 

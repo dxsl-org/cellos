@@ -18,7 +18,12 @@ unsafe impl Hal for VirtioHal {
 
         // SAFETY: layout is non-zero size and properly aligned (4096-byte alignment
         // satisfies VirtIO virtqueue alignment requirement of ≥16 bytes).
-        let ptr = unsafe { alloc::alloc::alloc(layout) };
+        let ptr = {
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::DRIVER_SHARED);
+            unsafe { alloc::alloc::alloc(layout) }
+        };
 
         if ptr.is_null() {
             // The Hal trait cannot signal failure (it must return an address),

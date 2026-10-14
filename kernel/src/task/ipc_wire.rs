@@ -66,6 +66,7 @@ impl IpcWireMessage {
         view: &super::copy_glue::TaskCopyView,
         ptr: usize,
         len: usize,
+        #[cfg(cellos_p01_trace)] owner: crate::p01_measurement::Owner,
     ) -> Result<Self, ()> {
         if len > MAX_IPC_WIRE_PAYLOAD { return Err(()); }
         let previous_cell = super::hart_local::current_cell_id();
@@ -78,6 +79,8 @@ impl IpcWireMessage {
         })();
         super::hart_local::set_current_cell_id(previous_cell);
         let mut message = Self { header, payload: allocated? };
+        #[cfg(cellos_p01_trace)]
+        message.observe_owner(owner, crate::memory::heap::p01_owner::SENDER_WIRE);
         view.read_into(ptr, message.as_mut_slice())?;
         Ok(message)
     }
@@ -101,6 +104,28 @@ impl IpcWireMessage {
     /// Kernel-owned reply storage reserved before an async request is accepted.
     pub(crate) fn as_mut_slice(&mut self) -> &mut [u8] {
         &mut self.payload
+    }
+
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn observe_synthetic(&self) {
+        if self.payload.is_empty() { return; }
+        crate::memory::heap::p01_owner::shared_buffer(self.payload.as_ptr() as usize,
+            core::alloc::Layout::array::<u8>(self.payload.len()).unwrap(),
+            crate::memory::heap::p01_owner::SYNTHETIC_WIRE);
+    }
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn observe_owner(&self, owner: crate::p01_measurement::Owner, kind: u64) {
+        if self.payload.is_empty() { return; }
+        crate::memory::heap::p01_owner::runtime_buffer(self.payload.as_ptr() as usize,
+            core::alloc::Layout::array::<u8>(self.payload.len()).unwrap(), owner, kind);
+    }
+    /// Called only after successful receiver queue commit under SCHEDULER.
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn observe_queue_commit(&self, receiver: crate::p01_measurement::Owner) {
+        if self.payload.is_empty() { return; }
+        crate::memory::heap::p01_owner::transfer_wire(self.payload.as_ptr() as usize,
+            core::alloc::Layout::array::<u8>(self.payload.len()).unwrap(), receiver,
+            self.header.sender_tid as u64, self.header.sender_cell_id, self.header.sender_generation);
     }
 
     /// Fallibly duplicate this message. Unlike `Clone`, allocation failure is

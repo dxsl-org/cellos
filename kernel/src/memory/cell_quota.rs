@@ -57,6 +57,64 @@ static QUOTA_LIMITS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::
 /// `Copy`, which the `[expr; N]` repeat form otherwise requires.
 static IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
 
+#[cfg(cellos_p01_trace)]
+struct BoundQuota {
+    ready: core::sync::atomic::AtomicBool,
+    cell: core::sync::atomic::AtomicU64,
+    generation: core::sync::atomic::AtomicU64,
+    retired: core::sync::atomic::AtomicBool,
+}
+#[cfg(cellos_p01_trace)]
+static P01_SOURCE: crate::p01_resources::Source = crate::p01_resources::Source::new();
+#[cfg(cellos_p01_trace)]
+static P01_SUBJECTS: [BoundQuota; 9] = [const { BoundQuota {
+    ready: core::sync::atomic::AtomicBool::new(false),
+    cell: core::sync::atomic::AtomicU64::new(0),
+    generation: core::sync::atomic::AtomicU64::new(0),
+    retired: core::sync::atomic::AtomicBool::new(false),
+} }; 9];
+
+#[cfg(cellos_p01_trace)]
+pub(crate) fn p01_static_bytes() -> usize {
+    core::mem::size_of_val(&P01_SOURCE) + core::mem::size_of_val(&P01_SUBJECTS)
+}
+/// Publication binds the quota row while the exact incarnation still owns it.
+/// This is a copy-only hook; it never takes QUOTA_LIMITS or allocator locks.
+#[cfg(cellos_p01_trace)]
+pub(crate) fn p01_bind(subject: u8, cell: u64, generation: u64) {
+    let _write = P01_SOURCE.write();
+    let Some(row) = P01_SUBJECTS.get(subject as usize) else { P01_SOURCE.fault(); return; };
+    if cell == 0 || cell as usize >= MAX_CELLS || generation == 0
+        || row.ready.load(Ordering::SeqCst) { P01_SOURCE.fault(); return; }
+    row.cell.store(cell, Ordering::SeqCst);
+    row.generation.store(generation, Ordering::SeqCst);
+    row.ready.store(true, Ordering::SeqCst);
+}
+#[cfg(cellos_p01_trace)]
+pub(crate) fn p01_snapshot() -> crate::p01_resources::Metric {
+    let before = P01_SOURCE.before();
+    let mut charge = 0u64;
+    for (index, row) in P01_SUBJECTS.iter().enumerate() {
+        if !row.ready.load(Ordering::SeqCst) || row.retired.load(Ordering::SeqCst) { continue; }
+        let cell = row.cell.load(Ordering::SeqCst);
+        let generation = row.generation.load(Ordering::SeqCst);
+        // Worker rows, if ever present, describe the same Cell charge. Never
+        // multiply the execution-context counter by the number of task rows.
+        if P01_SUBJECTS[..index].iter().any(|prior| prior.ready.load(Ordering::SeqCst)
+            && !prior.retired.load(Ordering::SeqCst)
+            && prior.cell.load(Ordering::SeqCst) == cell
+            && prior.generation.load(Ordering::SeqCst) == generation) { continue; }
+        let value = IN_USE[cell as usize].load(Ordering::SeqCst) as u64;
+        match charge.checked_add(value) {
+            Some(next) => charge = next,
+            None => P01_SOURCE.fault(),
+        }
+    }
+    // Retired means this execution-context charge row was reset/deregistered,
+    // never that deferred physical resources or historical objects were freed.
+    P01_SOURCE.metric(charge, before, 5)
+}
+
 /// Force-release this module's locks during fault teardown.
 ///
 /// # Safety
@@ -81,6 +139,12 @@ pub unsafe fn force_unlock_locks() {
 pub fn register(cell_id: CellId, limit: usize) {
     let id = cell_id.0 as usize;
     if id < MAX_CELLS {
+        #[cfg(cellos_p01_trace)]
+        let _write = P01_SOURCE.write();
+        #[cfg(cellos_p01_trace)]
+        if P01_SUBJECTS.iter().any(|row| row.ready.load(Ordering::SeqCst)
+            && !row.retired.load(Ordering::SeqCst)
+            && row.cell.load(Ordering::SeqCst) == cell_id.0) { P01_SOURCE.fault(); }
         IN_USE[id].store(0, Ordering::Relaxed);
     }
     // Pin to kernel context (0) so the BTreeMap::insert's node allocation does
@@ -88,7 +152,13 @@ pub fn register(cell_id: CellId, limit: usize) {
     // Deadlock contract: see module doc.
     let prev_cell = crate::task::hart_local::current_cell_id();
     crate::task::hart_local::set_current_cell_id(0);
-    QUOTA_LIMITS.lock().insert(id, limit);
+    {
+        let mut limits = QUOTA_LIMITS.lock();
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::QUOTA_SHARED);
+        limits.insert(id, limit);
+    }
     crate::task::hart_local::set_current_cell_id(prev_cell);
 }
 
@@ -96,6 +166,14 @@ pub fn register(cell_id: CellId, limit: usize) {
 pub fn deregister(cell_id: CellId) {
     let id = cell_id.0 as usize;
     if id < MAX_CELLS {
+        #[cfg(cellos_p01_trace)]
+        let _write = P01_SOURCE.write();
+        #[cfg(cellos_p01_trace)]
+        for row in &P01_SUBJECTS {
+            if row.ready.load(Ordering::SeqCst) && row.cell.load(Ordering::SeqCst) == cell_id.0 {
+                row.retired.store(true, Ordering::SeqCst);
+            }
+        }
         IN_USE[id].store(0, Ordering::Relaxed);
         DMA_IN_USE[id].store(0, Ordering::Relaxed);
     }
@@ -184,6 +262,8 @@ pub fn charge(cell_id_raw: usize, size: usize) -> bool {
     // Optimistic add; roll back on breach.
     // Use saturating_add to prevent wrapping past usize::MAX — a hostile layout.size()
     // near MAX would otherwise make the comparison read false and bypass the limit.
+    #[cfg(cellos_p01_trace)]
+    let _write = P01_SOURCE.write();
     let prev = IN_USE[cell_id_raw].fetch_add(size, Ordering::Relaxed);
     if prev.saturating_add(size) > limit {
         IN_USE[cell_id_raw].fetch_sub(size, Ordering::Relaxed);
@@ -202,6 +282,8 @@ pub fn refund(cell_id_raw: usize, size: usize) {
     if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
         return;
     }
+    #[cfg(cellos_p01_trace)]
+    let _write = P01_SOURCE.write();
     // fetch_update with saturating_sub prevents wrapping to usize::MAX on spurious frees.
     let _ = IN_USE[cell_id_raw].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
         Some(cur.saturating_sub(size))

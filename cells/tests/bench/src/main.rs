@@ -9,6 +9,11 @@ extern crate alloc;
 mod framework;
 mod scenarios;
 
+#[cfg(feature = "g1-cpu-workload")]
+#[path = "scenarios/cpu_accounting.rs"]
+mod cpu_accounting;
+
+#[cfg(not(feature = "g1-cpu-workload"))]
 api::declare_syscalls![
     Send,
     Recv,
@@ -21,6 +26,8 @@ api::declare_syscalls![
     GetTime,
     SetTimer,
     SpawnPinned,
+    NotifyOnExit,
+    GetProcs,
     StateStash,
     StateRestore,
     Snapshot,
@@ -29,6 +36,8 @@ api::declare_syscalls![
     Yield,
     VfsMutate
 ];
+#[cfg(feature = "g1-cpu-workload")]
+api::declare_syscalls![Spawn, Wait, Send, Recv, RecvTimeout, Log, GetTime, StateRestore, Exit, Yield];
 api::declare_manifest!(block_io = false, network = false, spawn = true);
 
 use api::benchmark::{BenchReport, ViBenchmark};
@@ -409,6 +418,11 @@ ostd::cell_main!(cell_main);
 fn cell_main() {
     let argv = ostd::args();
     let role = argv.first().map(|arg| arg.as_str()).unwrap_or("");
+    #[cfg(feature = "g1-cpu-workload")]
+    cpu_accounting::run(role);
+    if role.starts_with("parked-footprint:") {
+        scenarios::parked_footprint::run(role);
+    }
     if role.starts_with("hotswap-cached-inc:") {
         scenarios::hotswap_supervisor::run_cached_sender_probe(role);
     }

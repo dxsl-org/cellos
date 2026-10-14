@@ -111,6 +111,9 @@ pub fn parse_slot(data: &[u8]) -> Result<ParsedSlot, SlotParseError> {
         return Err(SlotParseError::LengthMismatch);
     }
 
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None, crate::memory::heap::p01_owner::SIGNING_SHARED);
     let mut admitted_elfs = Vec::with_capacity(admission_count);
     let mut offset = HEADER_SIZE;
     for _ in 0..admission_count {

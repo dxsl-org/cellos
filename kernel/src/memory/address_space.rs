@@ -28,12 +28,18 @@ pub(crate) fn quarantine_frames(frames: Vec<OwnedFrame>, reason: &str) {
     if count == 0 {
         return;
     }
+    #[cfg(cellos_p01_trace)]
+    for frame in &frames { frame.p01_quarantine(); }
     log::error!(
         "[aspace] quarantining {} frame(s): {} — they will not be reused",
         count,
         reason
     );
-    QUARANTINED_FRAMES.lock().extend(frames);
+    let mut quarantined = QUARANTINED_FRAMES.lock();
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DOMAIN_SHARED);
+    quarantined.extend(frames);
 }
 
 /// Test-hooks view of the quarantine: frames retained after an unacknowledged
@@ -331,7 +337,20 @@ impl AddressSpaceBuilder {
         });
         Ok(())
     }
-    pub fn build(mut self) -> Result<Arc<AddressSpace>, AddressSpaceError> {
+    pub fn build(self) -> Result<Arc<AddressSpace>, AddressSpaceError> {
+        self.build_inner(#[cfg(cellos_p01_trace)] None)
+    }
+
+    fn build_inner(
+        mut self,
+        #[cfg(cellos_p01_trace)] owner: Option<crate::p01_measurement::Owner>,
+    ) -> Result<Arc<AddressSpace>, AddressSpaceError> {
+        // Observe the actual Arc/header and retained Vec allocations. A fixture
+        // root has shared source custody; launch supplies its finalized root owner.
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(owner,
+            if owner.is_some() { crate::memory::heap::p01_owner::DOMAIN_BACKING }
+            else { crate::memory::heap::p01_owner::DOMAIN_SHARED });
         // Every published private root carries the shared supervisor ranges.
         // Production callers ask for them through `map_registered_execution`;
         // a fixture that only wants a private mapping gets them here, because
@@ -431,6 +450,8 @@ impl AddressSpaceBuilder {
             identity,
             generation: NEXT_DOMAIN.fetch_add(1, Ordering::Relaxed),
             asid,
+            #[cfg(cellos_p01_trace)]
+            p01_owner: owner,
             state: AtomicU8::new(AddressSpaceState::Live as u8),
             invalidation_pending: Spinlock::new(Vec::new()),
             ledger: Spinlock::new(ledger),
@@ -453,6 +474,8 @@ pub struct AddressSpace {
     identity: DomainId,
     generation: u64,
     asid: AsidLease,
+    #[cfg(cellos_p01_trace)]
+    p01_owner: Option<crate::p01_measurement::Owner>,
     state: AtomicU8,
     /// VAs removed from the ledger but not yet safe to remap under this tag.
     invalidation_pending: Spinlock<Vec<VAddr>>,
@@ -469,6 +492,13 @@ pub struct AddressSpace {
 }
 
 impl AddressSpace {
+    #[cfg(cellos_p01_trace)]
+    fn p01_creation(&self) -> crate::memory::heap::p01_owner::Creation {
+        crate::memory::heap::p01_owner::creation(self.p01_owner,
+            if self.p01_owner.is_some() { crate::memory::heap::p01_owner::DOMAIN_BACKING }
+            else { crate::memory::heap::p01_owner::DOMAIN_SHARED })
+    }
+
     pub fn identity(&self) -> DomainId {
         self.identity
     }
@@ -586,12 +616,16 @@ impl AddressSpace {
                     && kind.is_none_or(|kind| entry.kind == kind)
             })
             .ok_or(AddressSpaceError::NotFound)?;
+        #[cfg(cellos_p01_trace)]
+        let _semantic = self.p01_creation();
         pending.push(virtual_address);
         Ok(ledger.remove(position))
     }
 
     fn abort_unmap(&self, entry: MappingEntry) {
         let mut pending = self.invalidation_pending.lock();
+        #[cfg(cellos_p01_trace)]
+        let _semantic = self.p01_creation();
         self.ledger.lock().push(entry);
         pending.retain(|address| *address != entry.virtual_address);
     }
@@ -674,6 +708,8 @@ impl AddressSpace {
         let mut table_frames = self.table_frames.lock();
         let mut frames = self.frames.lock();
         let mut pruned_tables = Vec::new();
+        #[cfg(cellos_p01_trace)]
+        let _semantic = self.p01_creation();
         let result = map_page_retaining_pruned_tables(
             self.root.physical_address(),
             &mut table_frames,
@@ -682,6 +718,8 @@ impl AddressSpace {
             page.physical_address(),
             user_flags(flags),
         );
+        #[cfg(cellos_p01_trace)]
+        drop(_semantic);
         if let Err(error) = result {
             // Allocation can publish an intermediate table before failing. The
             // rollback detached that table, and the tag's invalidation is what
@@ -704,6 +742,8 @@ impl AddressSpace {
         // infallible allocator, so a full heap would halt the kernel instead of
         // failing the spawn (measured 2026-10-03: the growth to 208 entries /
         // 6 656 bytes is what ended the capacity sweep).
+        #[cfg(cellos_p01_trace)]
+        let _semantic = self.p01_creation();
         ledger
             .try_reserve(1)
             .map_err(|_| AddressSpaceError::OutOfMemory)?;
@@ -782,6 +822,8 @@ impl AddressSpace {
         }
 
         let mut table_frames = self.table_frames.lock();
+        #[cfg(cellos_p01_trace)]
+        let _semantic = self.p01_creation();
         let mut pruned_table_frames = Vec::new();
         let mut unacked = false;
         let result = (|| {
@@ -824,6 +866,8 @@ impl AddressSpace {
             }
             Ok(())
         })();
+        #[cfg(cellos_p01_trace)]
+        drop(_semantic);
         if result.is_err() {
             for address in mapped.into_iter().rev() {
                 unmap_existing_page(
@@ -1052,6 +1096,8 @@ impl AddressSpace {
         }
         let mut table_frames = self.table_frames.lock();
         let mut pruned_tables = Vec::new();
+        #[cfg(cellos_p01_trace)]
+        let _semantic = self.p01_creation();
         let result = map_page_retaining_pruned_tables(
             self.root.physical_address(),
             &mut table_frames,
@@ -1060,6 +1106,8 @@ impl AddressSpace {
             physical_address,
             user_flags(flags),
         );
+        #[cfg(cellos_p01_trace)]
+        drop(_semantic);
         if let Err(error) = result {
             if crate::memory::tlb_shootdown::confirm_tag_invalidation(self.asid()).is_err() {
                 crate::memory::deferred_release::defer_frames(
@@ -1075,6 +1123,8 @@ impl AddressSpace {
         drop(pruned_tables);
         // Same reason as `map_private_page`: a ledger push must fail as an
         // operation error, never as a kernel halt.
+        #[cfg(cellos_p01_trace)]
+        let _semantic = self.p01_creation();
         ledger
             .try_reserve(1)
             .map_err(|_| AddressSpaceError::OutOfMemory)?;
@@ -1142,6 +1192,7 @@ pub fn create_cell_domain(
     kstack: &crate::task::stack::Stack,
     ustack: &crate::task::stack::Stack,
     segments: &crate::task::stack::CellSegments,
+    #[cfg(cellos_p01_trace)] owner: crate::p01_measurement::Owner,
 ) -> Result<Arc<AddressSpace>, AddressSpaceError> {
     let mut builder = AddressSpaceBuilder::new();
     builder.map_registered_execution(kstack);
@@ -1172,7 +1223,10 @@ pub fn create_cell_domain(
             crate::memory::paging::virt_to_phys(va).ok_or(AddressSpaceError::InvalidMapping)?;
         builder.map_existing_user_page(va, phys, kind, flags)?;
     }
-    builder.build()
+    #[cfg(cellos_p01_trace)]
+    { builder.build_inner(Some(owner)) }
+    #[cfg(not(cellos_p01_trace))]
+    { builder.build() }
 }
 
 impl Drop for AddressSpace {
@@ -1189,6 +1243,11 @@ impl Drop for AddressSpace {
         frames.extend(self.table_frames.lock().drain(..));
         let tag = self.asid.value;
         if acked {
+            #[cfg(cellos_p01_trace)]
+            let p01_owner = crate::p01_resources::owner_for_domain(self.identity.raw());
+            #[cfg(cellos_p01_trace)]
+            let p01_obligation = p01_owner.and_then(|owner|
+                crate::p01_resources::obligation(owner, 6, ((frames.len() + 1) * PAGE_SIZE) as u64));
             #[cfg(feature = "test-hooks")]
             log::info!(
                 "[selftest] DOMAIN-FRAME-RELEASE: PASS tag={} frames={} quarantined={}",
@@ -1198,6 +1257,11 @@ impl Drop for AddressSpace {
             );
             drop(frames);
             drop(root);
+            #[cfg(cellos_p01_trace)]
+            {
+                crate::p01_resources::finish(p01_obligation, 1);
+                if let Some(owner) = p01_owner { crate::p01_resources::checked(owner, 6); }
+            }
         } else {
             // The invalidation is unconfirmed, so the root and every frame behind
             // it are retained — including the tag slot, which `release` kept

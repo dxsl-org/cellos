@@ -183,12 +183,17 @@ pub(crate) fn create(
 
     let _kernel_allocation = PipeAllocationContext::enter();
     let mut buffer = Vec::new();
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::PIPE_SHARED);
     if buffer.try_reserve_exact(capacity).is_err() {
         drop(_kernel_allocation);
         crate::memory::cell_quota::refund(owner_cell, capacity);
         return Err(crate::task::syscall::SyscallError::OutOfMemory);
     }
     buffer.resize(capacity, 0);
+    #[cfg(cellos_p01_trace)]
+    drop(_semantic);
     let pipe = Pipe {
         buffer,
         head: 0,
@@ -200,7 +205,13 @@ pub(crate) fn create(
         owner_cell,
     };
     let id = next_pipe_id();
-    PIPES.lock().insert(id, pipe);
+    {
+        let mut pipes = PIPES.lock();
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::PIPE_SHARED);
+        pipes.insert(id, pipe);
+    }
     Ok((
         PipeHandle {
             pipe: id,
@@ -330,6 +341,9 @@ pub(crate) fn park_reader(handle: PipeHandle, tid: usize) {
     let mut pipes = PIPES.lock();
     if let Some(pipe) = pipes.get_mut(&handle.pipe) {
         if !pipe.read_waiters.contains(&tid) {
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::PIPE_SHARED);
             pipe.read_waiters.push_back(tid);
         }
     }
@@ -340,6 +354,9 @@ pub(crate) fn park_writer(handle: PipeHandle, tid: usize) {
     let mut pipes = PIPES.lock();
     if let Some(pipe) = pipes.get_mut(&handle.pipe) {
         if !pipe.write_waiters.contains(&tid) {
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::PIPE_SHARED);
             pipe.write_waiters.push_back(tid);
         }
     }

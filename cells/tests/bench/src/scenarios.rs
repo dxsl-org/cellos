@@ -25,6 +25,7 @@ pub mod lab_transfer_contract;
 pub mod local_service_lifecycle;
 pub mod memory_footprint;
 pub mod native_stateful;
+pub mod parked_footprint;
 pub mod preempt_latency;
 pub mod rt_load;
 pub mod smp;

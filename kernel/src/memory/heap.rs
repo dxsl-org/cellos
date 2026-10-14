@@ -9,6 +9,10 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use linked_list_allocator::LockedHeap;
 
+#[cfg(cellos_p01_trace)]
+#[path = "heap/p01_owner.rs"]
+pub(crate) mod p01_owner;
+
 /// Why the allocator last handed back null: the Cell's quota, or the heap itself.
 ///
 /// Counted here rather than logged: the log path may allocate, and an allocator
@@ -16,6 +20,25 @@ use linked_list_allocator::LockedHeap;
 /// spawn-refusal paths) so a capacity run can say *which* resource bound.
 static NULL_FROM_QUOTA: AtomicUsize = AtomicUsize::new(0);
 static NULL_FROM_HEAP: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(cellos_p01_trace)]
+static P01_EPOCH: AtomicUsize = AtomicUsize::new(1);
+#[cfg(cellos_p01_trace)]
+static P01_PEAK: AtomicUsize = AtomicUsize::new(0);
+
+// Called only with the existing heap lock held; never calls usage or allocates.
+#[cfg(cellos_p01_trace)]
+fn p01_transition(used: usize) {
+    if p01_owner::tracking() {
+        let epoch = P01_EPOCH.load(Ordering::Relaxed);
+        if let Some(next) = epoch.checked_add(1) {
+            P01_EPOCH.store(next, Ordering::Relaxed);
+            P01_PEAK.store(P01_PEAK.load(Ordering::Relaxed).max(used), Ordering::Relaxed);
+        } else {
+            crate::p01_measurement::invalidate(1 << 12);
+        }
+    }
+}
 
 /// Return addresses captured inside `alloc` at the moment it failed.
 ///
@@ -112,10 +135,12 @@ struct QuotaAlloc {
     inner: LockedHeap,
 }
 
-// SAFETY: QuotaAlloc delegates to LockedHeap which handles its own
-// interior mutability safely.  cell_quota operations are also thread-safe.
-unsafe impl GlobalAlloc for QuotaAlloc {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+impl QuotaAlloc {
+    unsafe fn alloc_impl(
+        &self,
+        layout: Layout,
+        #[cfg(cellos_p01_trace)] origin: Option<p01_owner::Provenance>,
+    ) -> *mut u8 {
         let cell = crate::task::scheduler::current_cell_id();
         if !crate::memory::cell_quota::charge(cell, layout.size()) {
             // Cell quota exceeded — return null, no panic.
@@ -127,7 +152,21 @@ unsafe impl GlobalAlloc for QuotaAlloc {
             };
             return core::ptr::null_mut();
         }
+        #[cfg(not(cellos_p01_trace))]
         let ptr = self.inner.alloc(layout);
+        #[cfg(cellos_p01_trace)]
+        let ptr = {
+            let mut heap = self.inner.lock();
+            let before = heap.used();
+            let result = heap.allocate_first_fit(layout)
+                .map_or(core::ptr::null_mut(), |allocation| allocation.as_ptr());
+            if !result.is_null() {
+                p01_owner::allocated(result, layout, origin, heap.used() - before,
+                    P01_EPOCH.load(Ordering::Relaxed).saturating_add(1) as u64);
+            }
+            p01_transition(heap.used());
+            result
+        };
         if ptr.is_null() {
             // Inner heap OOM — refund the charge we already applied.
             NULL_FROM_HEAP.fetch_add(1, Ordering::Relaxed);
@@ -143,12 +182,53 @@ unsafe impl GlobalAlloc for QuotaAlloc {
         }
         ptr
     }
+}
 
+// SAFETY: allocations delegate to LockedHeap, preserving quota charging and
+// refund routing. Private provenance is serialized by that same heap guard.
+unsafe impl GlobalAlloc for QuotaAlloc {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        self.alloc_impl(layout, #[cfg(cellos_p01_trace)] None)
+    }
+
+    #[cfg(cellos_p01_trace)]
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        let ptr = self.alloc_impl(layout, None);
+        if !ptr.is_null() { ptr.write_bytes(0, layout.size()); }
+        ptr
+    }
+
+    #[cfg(cellos_p01_trace)]
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        // Match GlobalAlloc's default allocate/copy/free behavior exactly.
+        // Only diagnostic provenance differs: it follows the old object rather
+        // than the current charging Cell. Failure leaves the old pointer live.
+        let origin = {
+            let _heap = self.inner.lock();
+            p01_owner::realloc_origin(ptr, layout)
+        };
+        let new_layout = Layout::from_size_align_unchecked(new_size, layout.align());
+        let new_ptr = self.alloc_impl(new_layout, Some(origin));
+        if !new_ptr.is_null() {
+            core::ptr::copy_nonoverlapping(ptr, new_ptr, core::cmp::min(layout.size(), new_size));
+            self.dealloc(ptr, layout);
+        }
+        new_ptr
+    }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         #[cfg(feature = "cell-scale-experiment")]
         size_hist::record_free(layout.size());
         crate::memory::cell_quota::refund(crate::task::scheduler::current_cell_id(), layout.size());
+        #[cfg(not(cellos_p01_trace))]
         self.inner.dealloc(ptr, layout);
+        #[cfg(cellos_p01_trace)]
+        {
+            let mut heap = self.inner.lock();
+            let before = heap.used();
+            heap.deallocate(core::ptr::NonNull::new_unchecked(ptr), layout);
+            p01_owner::freed(ptr, layout, before - heap.used());
+            p01_transition(heap.used());
+        }
     }
 }
 
@@ -175,6 +255,21 @@ pub unsafe fn init_heap(heap_start: usize, heap_size: usize) {
 pub fn usage() -> (usize, usize) {
     let heap = ALLOCATOR.inner.lock();
     (heap.used(), heap.free())
+}
+
+#[cfg(cellos_p01_trace)]
+pub(crate) fn p01_snapshot() -> (usize, usize, usize, usize) {
+    let heap = ALLOCATOR.inner.lock();
+    (heap.used(), heap.free(), P01_EPOCH.load(Ordering::Relaxed),
+        P01_PEAK.load(Ordering::Relaxed))
+}
+
+#[cfg(cellos_p01_trace)]
+pub(crate) fn p01_reset_peak() {
+    let heap = ALLOCATOR.inner.lock();
+    if let Some(_observation) = crate::p01_measurement::observation() {
+        P01_PEAK.store(heap.used(), Ordering::Relaxed);
+    }
 }
 
 /// Fallible `Box::new`.

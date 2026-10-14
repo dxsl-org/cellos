@@ -7,6 +7,7 @@ description = "Cellos performance benchmark cell — measures context-switch, IP
 
 [features]
 restart-oracle = ["service-net-broker/restart-oracle"]
+g1-cpu-workload = []
 
 [dependencies]
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }

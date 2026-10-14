@@ -161,6 +161,17 @@ impl PendingMailbox {
         self.messages.iter()
     }
 
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn observe_owner(&self, owner: crate::p01_measurement::Owner) {
+        crate::memory::heap::p01_owner::runtime_vec(&self.messages, owner, crate::memory::heap::p01_owner::MAILBOX);
+    }
+    #[cfg(cellos_p01_trace)]
+    pub(crate) fn observe_wire_commit(&self, owner: crate::p01_measurement::Owner) {
+        if let Some(wire) = self.messages.last().and_then(|message| message.wire.as_ref()) {
+            wire.observe_queue_commit(owner);
+        }
+    }
+
     pub fn remove(&mut self, index: usize) -> PendingMsg {
         self.messages.remove(index)
     }

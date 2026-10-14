@@ -127,7 +127,11 @@ impl EarlyLoader {
             );
         }
 
-        *CELL_TABLE.lock() = Some(EarlyTable { entries });
+        let mut table = CELL_TABLE.lock();
+        #[cfg(cellos_p01_trace)]
+        crate::memory::heap::p01_owner::shared_vec(&entries,
+            crate::memory::heap::p01_owner::BOOT_METADATA_SHARED);
+        *table = Some(EarlyTable { entries });
         Ok(())
     }
 
@@ -166,6 +170,9 @@ impl EarlyLoader {
         let whole = size / SECTOR_SIZE;
         let tail = size % SECTOR_SIZE;
         let mut buf = Vec::new();
+        #[cfg(cellos_p01_trace)]
+        let scratch = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED);
         buf.try_reserve_exact(size).map_err(|_| {
             log::error!(
                 "[loader] OOM: block-table read of {} bytes for {:?}",
@@ -174,6 +181,8 @@ impl EarlyLoader {
             );
             ViError::OutOfMemory
         })?;
+        #[cfg(cellos_p01_trace)]
+        drop(scratch);
         buf.resize(size, 0);
         for i in 0..whole {
             let offset = i * SECTOR_SIZE;

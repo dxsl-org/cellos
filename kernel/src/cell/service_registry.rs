@@ -101,6 +101,9 @@ pub fn register(service_id: u16, tid: usize, cell_id: u64, generation: u64) -> b
         );
         return false;
     }
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::SERVICE_SHARED);
     map.insert(
         service_id,
         ServiceEntry::Active {
@@ -109,6 +112,8 @@ pub fn register(service_id: u16, tid: usize, cell_id: u64, generation: u64) -> b
             generation,
         },
     );
+    #[cfg(cellos_p01_trace)]
+    drop(_semantic);
     log::info!(
         "[service-registry] {} -> tid {} (cell {} gen {})",
         service_id,

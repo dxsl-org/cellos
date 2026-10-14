@@ -108,6 +108,21 @@ pub(super) fn is_present() -> bool {
     VTD_ROOT_VIRT.load(Ordering::Relaxed) != 0
 }
 
+/// Current software references only; caller excludes local preemption before
+/// taking these locks and never holds FRAME_ALLOCATOR or the heap lock.
+#[cfg(cellos_p01_trace)]
+pub(crate) fn p01_visit_roots(mut visit: impl FnMut(u64, u64, u64, u64, u64)) {
+    let root = VTD_ROOT_PHYS.load(Ordering::Relaxed) as u64;
+    if root != 0 { visit(root, 2, 0, 0, 0); }
+    // Normal mutators use DOMAINS -> CONTEXTS, so do not reverse that order.
+    let domains = VTD_DOMAINS.lock();
+    let contexts = VTD_CONTEXTS.lock();
+    for (&bus, table) in contexts.iter() { visit(table.phys, 3, bus as u64, 0, root); }
+    for (&holder, domain) in domains.iter() {
+        visit(domain.slpt.root_phys(), 4, holder, domain.did as u64, root);
+    }
+}
+
 // ── MMIO helpers ─────────────────────────────────────────────────────────────
 
 #[inline]
@@ -138,11 +153,20 @@ fn heap_to_phys(virt: usize) -> u64 {
 }
 
 /// Allocate a zeroed 4 KiB page for an IOMMU table. Panics on OOM.
-fn alloc_table() -> (usize, u64) {
+fn alloc_table(_kind: u64) -> (usize, u64) {
+    #[cfg(cellos_p01_trace)]
+    let _p01_activity = crate::p01_noncpu::activity();
     let layout = Layout::from_size_align(4096, 4096).expect("VT-d table layout");
     // SAFETY: layout is non-zero and 4096-aligned.
-    let ptr = unsafe { alloc_zeroed(layout) } as usize;
+    let ptr = {
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED);
+        (unsafe { alloc_zeroed(layout) }) as usize
+    };
     assert!(ptr != 0, "[vtd] OOM allocating IOMMU table");
+    #[cfg(cellos_p01_trace)]
+    crate::p01_noncpu::created_heap(heap_to_phys(ptr), _kind, ptr);
     (ptr, heap_to_phys(ptr))
 }
 
@@ -184,15 +208,27 @@ fn wait_for_invalidation(off: usize, busy: u64) -> bool {
     false
 }
 
+/// Hardware may invalidate more broadly than requested, never more narrowly.
+fn invalidation_acknowledged(command: u64, result: u64, request_shift: u32,
+    actual_shift: u32, busy: u64) -> bool {
+    let requested = (command >> request_shift) & 3;
+    let actual = (result >> actual_shift) & 3;
+    result & busy == 0 && actual != 0 && actual <= requested
+}
+
 fn issue_context_invalidation(cmd: u64) -> bool {
     let _guard = VTD_INVALIDATION_LOCK.lock();
     if !wait_for_invalidation(VTD_CCMD, CCMD_ICC) {
         return false;
     }
+    fence(Ordering::SeqCst);
     // SAFETY: reg_base() + VTD_CCMD is identity-mapped VT-d MMIO and the
     // serialized precheck proved no earlier command remains in flight.
     unsafe { write64(reg_base(), VTD_CCMD, cmd) };
-    wait_for_invalidation(VTD_CCMD, CCMD_ICC)
+    if !wait_for_invalidation(VTD_CCMD, CCMD_ICC) { return false; }
+    // SAFETY: the invalidation lock excludes a successor command/readback race.
+    invalidation_acknowledged(cmd, unsafe { read64(reg_base(), VTD_CCMD) },
+        61, 59, CCMD_ICC)
 }
 
 fn issue_iotlb_invalidation(cmd: u64, iva: Option<u64>) -> bool {
@@ -209,10 +245,14 @@ fn issue_iotlb_invalidation(cmd: u64, iva: Option<u64>) -> bool {
         // SAFETY: IVA belongs to the same serialized IOTLB register bank.
         unsafe { write64(reg_base(), iva_off, iva) };
     }
+    fence(Ordering::SeqCst);
     // SAFETY: reg_base() + iotlb_off is identity-mapped VT-d MMIO and the
     // serialized precheck proved no earlier command remains in flight.
     unsafe { write64(reg_base(), iotlb_off, cmd) };
-    wait_for_invalidation(iotlb_off, IOTLB_IVT)
+    if !wait_for_invalidation(iotlb_off, IOTLB_IVT) { return false; }
+    // SAFETY: the invalidation lock still owns this register bank.
+    invalidation_acknowledged(cmd, unsafe { read64(reg_base(), iotlb_off) },
+        60, 57, IOTLB_IVT)
 }
 
 fn ctx_flush_global() -> bool {
@@ -332,14 +372,19 @@ fn ensure_context_table(bus: u8) -> Option<usize> {
     }
 
     let mut contexts = VTD_CONTEXTS.lock();
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED);
     let table = contexts.entry(bus).or_insert_with(|| {
-        let (virt, phys) = alloc_table();
+        let (virt, phys) = alloc_table(6);
         ContextTable {
             virt,
             phys,
             publication_flushed: false,
         }
     });
+    #[cfg(cellos_p01_trace)]
+    drop(_semantic);
 
     if !table.publication_flushed {
         // SAFETY: both tables are 4 KiB pages allocated by alloc_table().
@@ -441,7 +486,7 @@ pub(super) fn init_hw(dma: super::iommu::DmaIsolationInput) {
     VTD_IVA_OFF.store(iva_off, Ordering::Relaxed);
     log::info!("[vtd] ECAP={:#x} IRO={} IVA_OFF={:#x}", ecap, iro, iva_off);
 
-    let (root_virt, root_phys) = alloc_table();
+    let (root_virt, root_phys) = alloc_table(5);
     VTD_ROOT_VIRT.store(root_virt, Ordering::Relaxed);
     VTD_ROOT_PHYS.store(root_phys as usize, Ordering::Relaxed);
 
@@ -468,6 +513,31 @@ pub(super) fn map_range_for_cell(
     };
 
     let mut domains = VTD_DOMAINS.lock();
+    // Break before make when a requester changes owners. Clearing P alone
+    // does not retire cached contexts/translations: drain the old DID globally
+    // before changing either descriptor word or software ownership.
+    let slot = context_slot(ctx_virt, bdf);
+    // SAFETY: both words are within the selected allocated context page;
+    // DOMAINS serializes every context mutator.
+    let current = unsafe {
+        [core::ptr::read_volatile(slot as *const u64),
+         core::ptr::read_volatile((slot + 8) as *const u64)]
+    };
+    let owned_here = domains.get(&tid).is_some_and(|domain| {
+        current == [(domain.slpt.root_phys() & !0xFFF) | CTX_PRESENT,
+                    ((domain.did as u64) << 8) | CTX_AW_39BIT_HI]
+    });
+    if !owned_here {
+        // SAFETY: slot belongs to the allocated context page for this bus.
+        unsafe { clear_ctx_slot(slot) };
+        fence(Ordering::SeqCst);
+        let context_done = ctx_flush_global();
+        let iotlb_done = iotlb_flush_global();
+        if !(context_done && iotlb_done) {
+            // No new range was published; preserve the old domain and its pins.
+            return super::iommu::DmaMapResult::Rejected;
+        }
+    }
     // A requester ID can name only one domain. Remove stale ownership before
     // publishing a replacement entry so later teardown remains exact.
     for (&owner_tid, domain) in domains.iter_mut() {
@@ -476,6 +546,9 @@ pub(super) fn map_range_for_cell(
         }
     }
 
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED);
     let entry = domains.entry(tid).or_insert_with(|| {
         let did = DID_COUNTER.fetch_add(1, Ordering::Relaxed);
         log::info!("[vtd] Cell {} allocated DID={}", tid, did);
@@ -485,15 +558,27 @@ pub(super) fn map_range_for_cell(
             bdfs: BTreeSet::new(),
         }
     });
+    #[cfg(cellos_p01_trace)]
+    drop(_semantic);
 
     entry.slpt.map_range(phys, size);
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED);
     entry.bdfs.insert(bdf);
+    #[cfg(cellos_p01_trace)]
+    drop(_semantic);
     let did = entry.did;
     let slpt_phys = entry.slpt.root_phys();
     let domain_count = domains.len();
 
-    // SAFETY: ctx_virt is the 4 KiB context page selected by bdf.bus.
-    unsafe { write_ctx_entry(ctx_virt, bdf, slpt_phys, did) };
+    // Existing owners retain an identical descriptor. Never rewrite its high
+    // word while P=1, even when only extending the same domain's SLPT.
+    if !owned_here {
+        // SAFETY: the absent slot's old hardware references were drained above.
+        unsafe { write_ctx_entry(ctx_virt, bdf, slpt_phys, did) };
+    }
+    fence(Ordering::SeqCst);
 
     // Context ownership may replace an older DID for the same requester ID, so
     // invalidate the context cache globally before flushing the new domain's
@@ -559,6 +644,7 @@ pub(super) fn activate() {
     }
 
     // Step 1: programme root table address.
+    fence(Ordering::SeqCst);
     // SAFETY: the register page is identity-mapped; root_phys is 4096-aligned.
     unsafe {
         write64(reg_base(), VTD_RTADDR, root_phys);
@@ -607,6 +693,15 @@ pub(super) fn activate() {
         core::hint::spin_loop();
     }
 
+    // Verify the legacy root address/type as well as the acknowledged state.
+    // A status bit alone cannot establish which root was programmed.
+    // SAFETY: the mapped register bank is initialized and activation owns CONTEXTS.
+    let published_root = unsafe { read64(reg_base(), VTD_RTADDR) };
+    let status = unsafe { read32(reg_base(), VTD_GSTS) };
+    if published_root != root_phys || status & (SRTP | TE) != SRTP | TE {
+        log::warn!("[vtd] root publication readback mismatch — isolation NOT confirmed");
+        return;
+    }
     super::iommu::set_active();
     // `warn!` — activation happens post-scheduler (deferred init fires from the
     // Platform Cell's RegisterPciDevice), after the kernel log level drops to
@@ -671,7 +766,12 @@ pub(super) fn unmap_cell_domain(tid: u64) -> bool {
     if !completed {
         // Cached translations may still reference the SLPT after a timeout.
         // Keep the domain and its page tables alive so teardown can be retried.
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED);
         domains.insert(tid, domain);
+        #[cfg(cellos_p01_trace)]
+        drop(_semantic);
         log::warn!(
             "[vtd] Cell {} DID={} teardown invalidation incomplete; domain retained",
             tid,
@@ -734,6 +834,42 @@ pub(super) fn unmap_range_for_cell(
 mod tests {
     use super::*;
     use core::cell::Cell;
+
+    #[test]
+    fn completion_requires_nonzero_actual_granularity_and_no_busy_bit() {
+        for (request_shift, actual_shift, busy) in [(61, 59, CCMD_ICC), (60, 57, IOTLB_IVT)] {
+            for requested in 1..=3 {
+                let command = busy | (requested << request_shift);
+                for actual in 0..=3 {
+                    let result = actual << actual_shift;
+                    assert_eq!(invalidation_acknowledged(command, result,
+                        request_shift, actual_shift, busy), actual != 0 && actual <= requested);
+                    assert!(!invalidation_acknowledged(command, result | busy,
+                        request_shift, actual_shift, busy));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_root_and_context_last_slots_preserve_reserved_words_and_neighbors() {
+        let mut root = [0u64; 512];
+        let mut context = [0u64; 512];
+        let root_virt = root.as_mut_ptr() as usize;
+        let ctx_virt = context.as_mut_ptr() as usize;
+        let bdf = canonical_bdf(255, 31, 7);
+        unsafe {
+            write_root_entry(root_virt, 255, 0x2000);
+            write_ctx_entry(ctx_virt, bdf, 0x3000, 0xffff);
+        }
+        assert_eq!(&root[510..], &[0x2001, 0]);
+        assert_eq!(&context[510..], &[0x3001, 0x00ff_ff01]);
+        assert!(root[..510].iter().all(|word| *word == 0));
+        assert!(context[..510].iter().all(|word| *word == 0));
+        unsafe { clear_ctx_slot(context_slot(ctx_virt, bdf)); }
+        assert_eq!(&context[510..], &[0, 0]);
+        assert_eq!(&root[510..], &[0x2001, 0]);
+    }
 
     fn fake_context(virt: usize) -> ContextTable {
         ContextTable {

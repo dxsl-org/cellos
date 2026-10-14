@@ -346,7 +346,7 @@ impl ElfLoader {
     /// rejected ELF leaves its already-mapped pages resident, which both leaks
     /// the frames and poisons the VA-collision guard for the next spawn at the
     /// same base.
-    fn unwind(mapped: &[LoadedPage], frame_allocator: &mut crate::memory::frame::FrameAllocator) {
+    pub(crate) fn unwind(mapped: &[LoadedPage], frame_allocator: &mut crate::memory::frame::FrameAllocator) {
         for page in mapped {
             let _ = crate::memory::paging::unmap_page(page.va);
             crate::memory::tlb_shootdown::flush_page(page.va);

@@ -41,6 +41,10 @@ pub struct TaskLaunchState {
     pub(crate) argv: Option<Vec<u8>>,
     pub(crate) routes: LaunchRoutes,
     pub(crate) measurement: Option<StagedMeasurement>,
+    #[cfg(cellos_p01_trace)]
+    pub(crate) trace: Option<crate::p01_measurement::Attempt>,
+    #[cfg(cellos_p01_trace)]
+    pub(crate) bootstrap_init: bool,
     #[allow(dead_code)]
     pub(crate) is_domain: bool,
 }
@@ -83,6 +87,10 @@ impl TaskLaunchState {
             argv,
             routes,
             measurement,
+            #[cfg(cellos_p01_trace)]
+            trace: None,
+            #[cfg(cellos_p01_trace)]
+            bootstrap_init: false,
             is_domain,
         }
     }
@@ -155,12 +163,16 @@ pub fn publish_prepared(
     super::hart_local::set_current_cell_id(0);
 
     let inherited_dirs = super::dir_inherit::take_for_launch(sched, state.inherit_from);
+    // InheritedDirHandles is bounded inline state, not an independently
+    // allocated buffer: its storage is already part of the task allocation.
     let (mut task, load_base) = prepared.into_task(tid, cell_id)?;
     task.inherited_dirs = inherited_dirs;
     // The command line lives on the task record itself, so it is reachable by
     // this task's own `StateRestore` and by nothing else, and it is installed
     // before the task can ever be selected.
     task.inherited_argv = state.argv.take();
+    #[cfg(cellos_p01_trace)]
+    crate::memory::heap::p01_owner::adopt_task(&task);
     task.syscall_allowlist = state.syscall_allowlist;
     task.cluster_mode = state.cluster_mode;
     task.cluster_id = state.cluster_id;
@@ -202,7 +214,8 @@ pub fn publish_prepared(
         if let (Some(ks), Some(us), Some(seg)) =
             (&task.kernel_stack, &task.user_stack, &task.segment_mem)
         {
-            let domain = crate::memory::address_space::create_cell_domain(ks, us, seg)
+            let domain = crate::memory::address_space::create_cell_domain(ks, us, seg,
+                #[cfg(cellos_p01_trace)] crate::p01_resources::owner(&task))
                 .map_err(|_| ViError::OutOfMemory)?;
             if !lease.remains_enabled() {
                 return Err(crate::loader::domain_admission::drain_refusal());
@@ -243,7 +256,41 @@ pub fn publish_prepared(
         return Err(ViError::NotSupported);
     }
 
-    sched.tasks.insert(tid, task);
+    #[cfg(cellos_p01_trace)]
+    crate::memory::heap::p01_owner::task_backing(&task);
+    // Private policy selection is tied to the measured artifact and the live
+    // kernel-bootstrap publisher, never a caller-selected budget or task name.
+    #[cfg(cellos_g1_cpu)]
+    if let Some(measurement) = state.measurement.as_ref() {
+        if measurement.path == "/bin/bench" {
+            let attempt = state.trace.ok_or(ViError::PermissionDenied)?;
+            let caller = state.caller.as_ref().ok_or(ViError::PermissionDenied)?;
+            let publisher = sched.tasks.get(&caller.tid).ok_or(ViError::PermissionDenied)?;
+            if !attempt.selected()
+                || attempt.parent != crate::p01_measurement::Owner::of(publisher)
+                || caller.generation != publisher.cell_generation
+                || attempt.parent.tid != attempt.parent.root
+                || !matches!(attempt.route, 1 | 2)
+                || measurement.digest.as_slice() != &crate::p01_measurement::MANIFEST[32..64]
+                || crate::p01_measurement::selected_owner(
+                    publisher.cell_id.0, publisher.cell_generation).is_some()
+            {
+                return Err(ViError::PermissionDenied);
+            }
+            super::cpu_accounting::bind(sched, owner).map_err(|_| ViError::PermissionDenied)?;
+        }
+    }
+
+    // Scheduler maps/route/audit storage are kernel bookkeeping, not child
+    // objects merely because they are allocated during a selected launch.
+    #[cfg(cellos_p01_trace)]
+    let _heap_bookkeeping = crate::memory::heap::p01_owner::bookkeeping();
+    {
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        sched.tasks.insert(tid, task);
+    }
     assert!(
         sched.publish_live_cell_owner(owner),
         "reserved CellId owner slot must be empty"
@@ -251,6 +298,20 @@ pub fn publish_prepared(
     sched.next_task_id = tid.checked_add(1).expect("task id space exhausted");
     quota.commit();
     crate::loader::commit_launch_routes(tid, cell_id, state.routes);
+    #[cfg(cellos_p01_trace)]
+    {
+        let task = sched.tasks.get_mut(&tid).expect("committed publication");
+        let diagnostic_owner = crate::p01_measurement::Owner::of(task);
+        if let Some(measurement) = state.measurement.as_ref() {
+            if state.bootstrap_init {
+                crate::p01_measurement::arm(diagnostic_owner, measurement.digest);
+            } else {
+                crate::p01_measurement::publication(diagnostic_owner, state.trace, measurement.digest);
+            }
+        }
+        crate::memory::heap::p01_owner::bind(state.trace, diagnostic_owner);
+        crate::p01_resources::published(task);
+    }
     if let Some(measurement) = state.measurement.take() {
         crate::measurement_log::commit_staged(tid, measurement.path, measurement.digest);
     }

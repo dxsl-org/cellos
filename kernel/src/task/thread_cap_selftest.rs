@@ -80,6 +80,11 @@ pub(crate) fn insert(task: alloc::boxed::Box<Task>) {
             );
             sched.publish_live_cell_owner(owner);
         }
+        #[cfg(cellos_p01_trace)]
+        crate::memory::heap::p01_owner::task_backing(&task);
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
         sched.tasks.insert(task.id, task);
     }
 }
