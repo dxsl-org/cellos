@@ -162,7 +162,16 @@ PART_FAT32_BASE_LBA=2048
 PART_SRV_BASE_LBA=931072
 PART_SRV_SECTORS=131072
 FULL_SECTORS=$((PART_SRV_BASE_LBA + PART_SRV_SECTORS))
-truncate -s "$((FULL_SECTORS * 512))" "$OUT"
+# Reuse is read-only native verification BEFORE changing any existing image byte.
+# truncate is never treated as proof of blank P4/P5.
+NATIVE_INTENT=fresh-blank
+if [[ -e "$OUT" ]]; then
+    bash tools/cellos-fs-provision/provision.sh "$OUT" verify-existing
+    NATIVE_INTENT=verify-existing
+else
+    truncate -s "$((FULL_SECTORS * 512))" "$OUT"
+fi
 "$PYTHON_BIN" tools/write-mbr.py "$OUT" >/dev/null
 dd if="$P1_IMG" of="$OUT" bs=512 seek="$PART_FAT32_BASE_LBA" conv=notrunc status=none
-echo "[format-disk-hv] Done: $OUT (MBR + P1 FAT guest disk)"
+bash tools/cellos-fs-provision/provision.sh "$OUT" "$NATIVE_INTENT"
+echo "[format-disk-hv] Done: $OUT (MBR + P1 FAT guest disk + verified P4/P5 CellosFS)"

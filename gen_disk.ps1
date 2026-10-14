@@ -12,7 +12,7 @@
 #       P1 @2048:   FAT32 interop volume (/mnt/sd)
 #       P2 @526336: Cell bootstrap table read by the early loader.
 #       P3 @560000: kernel heap snapshot region (Phase 29).
-#       P4 @800000: littlefs /data volume (power-safe persistent store).
+#       P4 @800000 and P5 @931072: offline-provisioned CellosFS /data and /srv.
 #       SpawnFromPath uses the P2 table to load VFS, config, shell.
 
 $kernel_root = Get-Location
@@ -693,7 +693,7 @@ if ($kernCode -ne 0) {
 }
 
 # 3c. Create a blank disk image for VirtIO block — MBR layout (Milestone 2.5 P03).
-#     P1 FAT32 @2048+524288 · P2 cell-table @526336 · P3 snapshot @560000 · P4 littlefs @800000
+#     P1 FAT32 @2048+524288 · P2 cell-table @526336 · P3 snapshot @560000 · P4/P5 CellosFS
 #     Must match tools/write-mbr.py and kernel/src/loader/disk_layout.rs.
 & $python "scripts/generate-boot-config.py" --preserve-persistent "disk_v3.img" `
     --output-dir "$embedded/boot-config"
@@ -761,6 +761,34 @@ $dfs.Write($storeBytes, 0, $storeBytes.Length)
 $dfs.Close()
 Remove-Item -Force "cell_store.img"
 Write-Host "  cell-store written: $([Math]::Round($storeBytes.Length/1MB,1)) MB at LBA $CELLSTORE_BASE_LBA"
+
+# Explicit offline blank-only native provisioning; host triple overrides the cell target.
+$hostTriple = (& rustc -vV | Select-String '^host: (.+)$').Matches.Groups[1].Value
+if (-not $hostTriple) { throw "Cannot determine Rust host target" }
+$nativeReceipts = "disk_v3.img.cellosfs-receipts.$([guid]::NewGuid().ToString('N'))"
+New-Item -ItemType Directory -Path $nativeReceipts | Out-Null
+$savedRustflags = $env:RUSTFLAGS
+$savedEncodedRustflags = $env:CARGO_ENCODED_RUSTFLAGS
+try {
+    Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue
+    Remove-Item Env:CARGO_ENCODED_RUSTFLAGS -ErrorAction SilentlyContinue
+    foreach ($base in @(800000, 931072)) {
+        & cargo run --quiet --locked --manifest-path "$tools_dir/cellos-fs-provision/Cargo.toml" --target $hostTriple -- `
+            --image "disk_v3.img" --base $base --sectors 131072 --intent fresh-blank `
+            --receipt "$nativeReceipts/$base.json"
+        if ($LASTEXITCODE -ne 0) { throw "CellosFS provisioning refused; image must not be published" }
+    }
+    foreach ($base in @(800000, 931072)) {
+        & cargo run --quiet --locked --manifest-path "$tools_dir/cellos-fs-provision/Cargo.toml" --target $hostTriple -- `
+            --image "disk_v3.img" --base $base --sectors 131072 --intent verify-existing `
+            --receipt "$nativeReceipts/$base-final.json"
+        if ($LASTEXITCODE -ne 0) { throw "CellosFS final verification refused" }
+    }
+} finally {
+    $env:RUSTFLAGS = $savedRustflags
+    $env:CARGO_ENCODED_RUSTFLAGS = $savedEncodedRustflags
+}
+Write-Host "CellosFS final image receipts: $nativeReceipts"
 
 if ($script:FailedOptional.Count -gt 0) {
     Write-Host ""

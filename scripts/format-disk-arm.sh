@@ -4,8 +4,8 @@
 # Generates a partitioned disk image:
 #   MBR: LBA 0 (tools/write-mbr.py)
 #   P1:  LBA 2048, 256 MB FAT32 interop volume (/mnt/sd, /bin)
-#   P5:  LBA 931072, 64 MB raw persistent partition (/srv; the VFS formats it as
-#        CellosFS Native on first mount)
+#   P4:  LBA 800000, 64 MB CellosFS Native (/data), provisioned offline
+#   P5:  LBA 931072, 64 MB CellosFS Native (/srv), provisioned offline
 #
 # Usage: bash scripts/format-disk-arm.sh [output.img]
 #   output.img  default: disk_arm_virt.img
@@ -120,5 +120,6 @@ dd if="$P6_IMG" of="$OUT" bs=512 seek="$PART_CELLSTORE_BASE_LBA" conv=notrunc st
 
 # Write bootstrap cell table at LBA 526336
 python3 tools/write-cell-table.py "$OUT" "${TABLE_ARGS[@]}"
+bash tools/cellos-fs-provision/provision.sh "$OUT" fresh-blank
 
-echo "[format-disk-arm] Done: $OUT (MBR + P1 FAT32 + P5 raw/CellosFS + P6 cell-store)"
+echo "[format-disk-arm] Done: $OUT (MBR + P1 FAT32 + P4/P5 CellosFS + P6 cell-store)"

@@ -375,7 +375,7 @@ fi
 # are load-bearing (the loader reads the table from a constant address), so a
 # change here must be a change there too.
 #   P1 FAT32 @2048+524288 · P2 cell table @526336 · P3 snapshot @560000
-#   P4 littlefs @800000 · P6 FAT cell-store @1062144 +65536
+#   P4 CellosFS @800000 · P5 CellosFS @931072 · P6 FAT cell-store @1062144 +65536
 echo "==> assembling $DISK"
 DISK_SECTORS=1127680                       # P6 end: 1062144 + 65536
 CELLSTORE_BASE_LBA=1062144
@@ -419,6 +419,7 @@ if (( store_bytes > CELLSTORE_SECTORS * 512 )); then
     exit 1
 fi
 dd if="$CELLSTORE" of="$NEW_DISK" bs=512 seek="$CELLSTORE_BASE_LBA" conv=notrunc status=none
+bash tools/cellos-fs-provision/provision.sh "$NEW_DISK" fresh-blank
 
 # ── 7. Verify the disk, then publish it ───────────────────────────────────────
 # Capture the listing once: `read-cell-table.py | grep -q` would SIGPIPE the

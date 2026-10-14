@@ -1,0 +1,13 @@
+[package]
+name = "cellos-fs-provision"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+description = "Offline blank-only development CellosFS image provisioning"
+
+[workspace]
+
+[dependencies]
+cellos-fs = { path = "../../libs/cellos-fs" }
+sha2 = "0.10.9"
+serde_json = "1.0"

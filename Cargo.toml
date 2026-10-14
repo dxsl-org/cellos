@@ -7,6 +7,7 @@ resolver = "2"
 exclude = [
     "tools/vi-compiler",
     "tools/viui-build",
+    "tools/cellos-fs-provision", # offline std host tool; never a bare-metal cell
     "third_party/redoxfs",   # vendored fork — own resolver; unused since the CellosFS Native switch
     "third_party/mlibc",     # mlibc vendored copy — built with Meson, not Cargo
     # cell-build is a build-script helper (uses std) — it compiles only for the host
