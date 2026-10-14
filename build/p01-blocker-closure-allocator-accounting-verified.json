@@ -1,0 +1,161 @@
+{
+  "all_observed_deltas_reconciled": true,
+  "captures": [
+    {
+      "baseline_uninventoried_used_bytes": 473544,
+      "capture_sha256": "eacad2f7945a4741727cb71cc5dde1458ea46a85fff7d4aa9d3097fc39042c9a",
+      "capture_uuid": "01da7c52-56a7-47af-84e2-76aa8e9e3df1",
+      "changed_layout_rounding": [
+        {
+          "charged": 16,
+          "incarnation": 5932,
+          "requested": 5,
+          "transition": "released"
+        },
+        {
+          "charged": 16,
+          "incarnation": 5933,
+          "requested": 1,
+          "transition": "released"
+        },
+        {
+          "charged": 16,
+          "incarnation": 5945,
+          "requested": 15,
+          "transition": "released"
+        }
+      ],
+      "created_charged_bytes": 16,
+      "final_uninventoried_used_bytes": 473544,
+      "observed_allocator_used_byte_delta": -8880,
+      "qualification_blockers_unchanged": [
+        "heap ownership capacity/coverage unproven",
+        "pending/retained/unknown/live component",
+        "physical inventory semantic/topology coverage unproven",
+        "settled nonzero/absent outstanding_cleanup_obligations",
+        "settled nonzero/absent unknown_retained_obligations",
+        "unknown heap origin or unresolved preparation owner",
+        "unreclaimed raw residual: actual_heap_used_bytes",
+        "unreclaimed raw residual: execution_context_quota_charge",
+        "unreclaimed raw residual: used_frames"
+      ],
+      "raw_sha256": "08c4f7d3614a7117c974e81c492bfd8f90b4deeeae10d6fb036066cca58dc311",
+      "released_charged_bytes": 8896,
+      "replayed_charged_byte_delta": -8880,
+      "requested_byte_delta": -8853,
+      "rounding_byte_delta": -27,
+      "unmatched_charged_byte_delta": 0
+    },
+    {
+      "baseline_uninventoried_used_bytes": 473544,
+      "capture_sha256": "b3857dfa7093fa2c132c569a13fffbf6e86fdbd3b50dcfbe7da68da96b9aea8d",
+      "capture_uuid": "4b0514fd-e957-4ba9-a67f-3e24f9a622aa",
+      "changed_layout_rounding": [
+        {
+          "charged": 16,
+          "incarnation": 5932,
+          "requested": 5,
+          "transition": "released"
+        },
+        {
+          "charged": 16,
+          "incarnation": 5933,
+          "requested": 1,
+          "transition": "released"
+        },
+        {
+          "charged": 16,
+          "incarnation": 5945,
+          "requested": 15,
+          "transition": "released"
+        }
+      ],
+      "created_charged_bytes": 16,
+      "final_uninventoried_used_bytes": 473544,
+      "observed_allocator_used_byte_delta": -8880,
+      "qualification_blockers_unchanged": [
+        "heap ownership capacity/coverage unproven",
+        "pending/retained/unknown/live component",
+        "physical inventory semantic/topology coverage unproven",
+        "settled nonzero/absent outstanding_cleanup_obligations",
+        "settled nonzero/absent unknown_retained_obligations",
+        "unknown heap origin or unresolved preparation owner",
+        "unreclaimed raw residual: actual_heap_used_bytes",
+        "unreclaimed raw residual: execution_context_quota_charge",
+        "unreclaimed raw residual: used_frames"
+      ],
+      "raw_sha256": "7799b29c1e6a072a0dc3adadfe8cfd9e2d64f4fb1dc54d869f654584cd67c460",
+      "released_charged_bytes": 8896,
+      "replayed_charged_byte_delta": -8880,
+      "requested_byte_delta": -8853,
+      "rounding_byte_delta": -27,
+      "unmatched_charged_byte_delta": 0
+    },
+    {
+      "baseline_uninventoried_used_bytes": 473544,
+      "capture_sha256": "c766119d091e14783b33f444641dd8cc17292cf88dcd19d3f237d53d8611cef9",
+      "capture_uuid": "a5e0bac1-5b61-458a-a235-0e98a2979516",
+      "changed_layout_rounding": [
+        {
+          "charged": 16,
+          "incarnation": 5932,
+          "requested": 5,
+          "transition": "released"
+        },
+        {
+          "charged": 16,
+          "incarnation": 5933,
+          "requested": 1,
+          "transition": "released"
+        },
+        {
+          "charged": 16,
+          "incarnation": 5945,
+          "requested": 15,
+          "transition": "released"
+        }
+      ],
+      "created_charged_bytes": 16,
+      "final_uninventoried_used_bytes": 473544,
+      "observed_allocator_used_byte_delta": -8880,
+      "qualification_blockers_unchanged": [
+        "heap ownership capacity/coverage unproven",
+        "pending/retained/unknown/live component",
+        "physical inventory semantic/topology coverage unproven",
+        "settled nonzero/absent outstanding_cleanup_obligations",
+        "settled nonzero/absent unknown_retained_obligations",
+        "unknown heap origin or unresolved preparation owner",
+        "unreclaimed raw residual: actual_heap_used_bytes",
+        "unreclaimed raw residual: execution_context_quota_charge",
+        "unreclaimed raw residual: used_frames"
+      ],
+      "raw_sha256": "700555489bc14d39dd6e5467f5f0c9beafeea9d2818383c4dff468c441acad3b",
+      "released_charged_bytes": 8896,
+      "replayed_charged_byte_delta": -8880,
+      "requested_byte_delta": -8853,
+      "rounding_byte_delta": -27,
+      "unmatched_charged_byte_delta": 0
+    }
+  ],
+  "coverage_proven": false,
+  "evidence_ceiling": "Per-Layout charged-byte delta only. Equal uninventoried remainders do not prove no churn, complete ownership, table fit, physical union or acceptance of unequal raw residuals.",
+  "fit_proven": false,
+  "fully_settled": false,
+  "provenance": {
+    "allocator_archive_sha256": "2b23ac50abb8261cb38c6e2a7192d3302e0836dac1628f6a93b82b4fad185897",
+    "allocator_sources_sha256": {
+      "src/hole.rs": "871d1e63af1d9b4a24c6001f0f7f6960286d5cfceaa685560c9bae2ad53f09a0",
+      "src/lib.rs": "5bc43056aafa772cdadeb99d0cf0fa9670636243b7b2ef8b0002d6e97f2c4884",
+      "src/test.rs": "54eea4eacc7ff55c9d0aa2aeb657f147bdd21fc130a479ebba211c91b9a42ab1"
+    },
+    "build_sha256": "31c06ee148028a3c8dda0fa4d301e376f339fea0b8dba6918807310a905f48c5",
+    "cargo_lock_sha256": "ed30dd8bbe36ba2e65dbc121cea6bb1139f1911951950309e976a8b8231d5151",
+    "inputs_sha256": "ce7c4636dab841aad3fc71e625df6b60281324a3c9345ca8c8bf6b7e2c471357",
+    "kernel_heap_sha256": "df8533091e15cfd9d6d68168c35f42f51a5851edb35fdd91c9c4718a1ce10a6a"
+  },
+  "replay": "Host 64-bit real Heap allocate/deallocate for each distinct captured Layout; not kernel execution or original heap topology replay.",
+  "replay_source_sha256": "10ceaab2fa268285a6ee92478b72d94e6fb5b3901f0513a575ef3c03f832e7bd",
+  "rustc": "rustc 1.97.0-nightly (f53b654a8 2026-04-30)\nbinary: rustc\ncommit-hash: f53b654a8882fd5fc036c4ca7a4ff41ce32497a6\ncommit-date: 2026-04-30\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0-nightly\nLLVM version: 22.1.4",
+  "scope": "private-P01-captured-Layout-accounting-replay",
+  "version": 1
+}

@@ -1,0 +1,63 @@
+{
+  "build_sha256": "220100b9dc7b430c2e02e87d3903a5ee441211604ab1523a7c61331e515c7fad",
+  "captures": [
+    {
+      "capture_uuid": "d89fe597-0c86-4582-89ba-46de096ae91e",
+      "count": "g1-overlap",
+      "g1_accounting_valid": false,
+      "replica": 0
+    },
+    {
+      "capture_uuid": "8705a175-4190-46e4-aa82-e020c42374b7",
+      "count": "g1-overlap",
+      "g1_accounting_valid": false,
+      "replica": 1
+    },
+    {
+      "capture_uuid": "dc617505-bbf6-4a78-8ea0-3c1cba5d65f7",
+      "count": "g1-overlap",
+      "g1_accounting_valid": false,
+      "replica": 2
+    },
+    {
+      "capture_uuid": "2fffd600-40b6-4c5e-992f-22572d54fa16",
+      "count": "g1-yield",
+      "g1_accounting_valid": false,
+      "replica": 0
+    },
+    {
+      "capture_uuid": "cb8324fb-f50c-4e04-a49a-3ad5b84cfaa2",
+      "count": "g1-yield",
+      "g1_accounting_valid": false,
+      "replica": 1
+    },
+    {
+      "capture_uuid": "e5170bae-b30f-4f2b-a289-f0465a0d1798",
+      "count": "g1-yield",
+      "g1_accounting_valid": false,
+      "replica": 2
+    },
+    {
+      "capture_uuid": "3fb803de-3429-4c22-9418-5054e3f0c7fb",
+      "count": "g1-retention",
+      "g1_accounting_valid": false,
+      "replica": 0
+    },
+    {
+      "capture_uuid": "50dea4b8-a1a8-441d-98c9-fc7516832024",
+      "count": "g1-retention",
+      "g1_accounting_valid": false,
+      "replica": 1
+    },
+    {
+      "capture_uuid": "3ef25382-980b-4792-817d-ecf2163b7596",
+      "count": "g1-retention",
+      "g1_accounting_valid": false,
+      "replica": 2
+    }
+  ],
+  "cpus": 1,
+  "hardware_D_W_qualified": false,
+  "one_cpu_g1_qualified": false,
+  "production_qualified": false
+}

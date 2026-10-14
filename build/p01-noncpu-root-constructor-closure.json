@@ -1,0 +1,50 @@
+{
+  "build_sha256": "eb1bfdf94f07370283ed821104faf22bf05bebf425a5fb3dbb3fcdb22a160c15",
+  "closed_valid_cutoff_invariant": "epoch = births + releases = 2*births - live_roots; no in-flight construction/destruction, sticky fault, partial rows, stale physical/heap incarnation or missing registry birth allowed",
+  "format": "p01-tracked-root-constructor-closure-v1",
+  "observed_each_cutoff": {
+    "births": 3,
+    "epoch": 4,
+    "live_roots": 2,
+    "nested_live_roots": 0,
+    "persistent_heap_root_kinds": [
+      3,
+      4
+    ],
+    "registry_reference_count": 0,
+    "retired_nested_roots": 1
+  },
+  "physical_semantic_coverage_proven": false,
+  "physical_tree_topology_proven": false,
+  "registry_lock_order": "local IRQ exclusion; VM_REGISTRY visitor separately; VT-d DOMAINS -> CONTEXTS; release visitors before FRAME_ALLOCATOR; lifetime lock released before visitors/frames",
+  "rules": [
+    {
+      "construct": "NestedPageTable::new records the actual frame root with an activity guard covering allocation through birth publication",
+      "family": "NPT/EPT",
+      "release": "NestedPageTable::Drop retires its ledger record only after actual table-frame release; failed allocation creates no root record"
+    },
+    {
+      "construct": "new records the actual heap pointer/incarnation and physical root after alloc_page",
+      "family": "Sv39IommuPt/VtdSlpt",
+      "release": "no freeing destructor; dropping the Rust handle does not end allocation lifetime"
+    },
+    {
+      "construct": "alloc_table records the actual heap-backed structure page before returning it",
+      "family": "VT-d root/context structures",
+      "release": "no free in this source; current software root/context slots are independent references"
+    }
+  ],
+  "scope": "allocation-lifetime roots in the tracked constructor families only",
+  "source_sha256": {
+    "kernel/src/hypervisor/svm_registry.rs": "806696e6bd9a438374ebdf9af0f4567fe1c904843bc7e0093fa18dc3cf982017",
+    "kernel/src/memory/ept.rs": "b89cba80ff130d1baec3606ebb00f8774ff41ea7aa600045f69ab138b76b78f9",
+    "kernel/src/memory/heap/p01_owner.rs": "2727a2b22a5a6049700291f29a8e41408eaa5037ec7db696fa8cf617c68ad5ec",
+    "kernel/src/p01_measurement.rs": "c32e3b820648db8f2cf1b45531f145c4e7a886a100b0e3a0094808ee3c435cd0",
+    "kernel/src/p01_noncpu.rs": "e734b32264d704a23e483d751198c2a321561bd8a26bee6ae780b3acbf5f4930",
+    "kernel/src/p01_retained.rs": "b0c23baeefb3e8b718226b7dfcbff719c2b6903c9439214220b2b4ab002e8b27",
+    "kernel/src/p01_topology.rs": "3b2489fc3956ab382735f89054c096923eab68559b05121c3b081bbb96a05f57",
+    "kernel/src/task/drivers/iommu_pt.rs": "47072181cf663db70b81b223088071f028a560f64fb653944d870791ba82a156",
+    "kernel/src/task/drivers/iommu_x86.rs": "737d24b8038a69e0425d6516b3b8ccf7b808cff62d89e967e00c6913ca6a2a05"
+  },
+  "workload_capacity_fit_proven": false
+}

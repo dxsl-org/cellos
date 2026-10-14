@@ -1,0 +1,27 @@
+{
+  "format": "cp1-prerequisite-replay-v1",
+  "command": "python3 scripts/x86/p01_budget_readiness.py --matrix build/p01-xtree-0-captures/matrix.json build/p01-xtree-1-captures/matrix.json build/p01-xtree-4-captures/matrix.json build/p01-xtree-8-captures/matrix.json build/p01-xtree-denied-captures/matrix.json --build build/p01-noncpu-descriptor-trees/build.json --out /tmp/cellos-cp1-profile-readiness.json --require-budget-ready",
+  "exit_code": 2,
+  "report": "build/cp1-prerequisites/profile-readiness.json",
+  "report_sha256": "d603e0c211aa5b5f1330d19b9a05b0b337e925fcf264251d273ac5ba78f1f1f7",
+  "budget_selection_ready": false,
+  "blockers": [
+    "aggregate_cpu: No admitted aggregate execution unit/period/burst/overshoot measurement; scheduler ticks and latency are not CPU entitlement.",
+    "authority_controller_router: Actual genesis, persistence, reserve/live-claim, queues and resize producer costs are not supplied by this fixture.",
+    "broker_and_lifecycle: Session/reconnect/durable-key/unknown-generation retention costs are outside this fixture.",
+    "heap ownership capacity/coverage unproven",
+    "operations_and_completion_retention: Parked footprint is not accepted/retained/unknown operation saturation and authoritative consume measurement.",
+    "pending/retained/unknown/live component",
+    "physical inventory semantic/topology coverage unproven",
+    "production_capacity: QEMU-TCG one-CPU finite samples do not qualify physical Intel/VMX, 200 overlapping clients or production capacity.",
+    "settled nonzero/absent outstanding_cleanup_obligations",
+    "settled nonzero/absent unknown_retained_obligations",
+    "settled samples not consecutive scheduler ticks",
+    "threads_and_shared_cspace: Fixture is root-only, not same-incarnation thread/SMP or lineage/handle saturation measurement.",
+    "unreclaimed raw residual: actual_heap_used_bytes",
+    "unreclaimed raw residual: execution_context_quota_charge",
+    "unreclaimed raw residual: used_frames"
+  ],
+  "candidate_budgets": null,
+  "complete_requested_matrix": true
+}

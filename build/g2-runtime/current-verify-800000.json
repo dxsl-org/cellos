@@ -1,0 +1,22 @@
+{
+  "authority": "development preparation only; no genesis, ledger migration, durability, protected storage or production admission",
+  "base_lba": 800000,
+  "block_size": 4096,
+  "format": "cellos-fs-development-provisioning-v1",
+  "formatter": "/home/dmin/cellos/tools/cellos-fs-provision/target/x86_64-unknown-linux-gnu/release/cellos-fs-provision",
+  "formatter_sha256": "2e6e3eb71a1d51a24af133e294f83c22e3d5a92997e3dfab5f61bcd879776fed",
+  "formatter_version": "0.1.0",
+  "free_blocks": 16380,
+  "image": "/home/dmin/cellos/build/g2-runtime/disk_srv.img",
+  "image_before_sha256": "f13a0e1e4811b0746b4249e73de31a42ebf824c799d388ec6b5feb55c2d51e0f",
+  "image_bytes": 543817728,
+  "image_sha256": "f13a0e1e4811b0746b4249e73de31a42ebf824c799d388ec6b5feb55c2d51e0f",
+  "intent": "verify-existing",
+  "partition": "P4",
+  "partition_sha256": "03abe0caa11da5fe0cd3567c24df937f143df037341dacf87e79d7eec64c4d71",
+  "reopen": "read-only V1 geometry and root verified",
+  "sectors": 131072,
+  "sequence": 1,
+  "source_digest_encoding": "ordered length-prefixed names and bytes; u64 little-endian",
+  "source_sha256": "f43e1dce16b6e05be3310c90d27bd28463a37de46b18b2fec00353adf932084f"
+}

@@ -1,0 +1,176 @@
+{
+  "format": "g2-r-core-b-implementation-source-v1",
+  "authorization_manifest_sha256": "7a5d7bb4999e8f9d6154bd916c7e3a086ba937b63256ba0cd13823c78b51e3e3",
+  "candidate_sha256": "f6a5a6cd9facaaf7de7075fad64399925b053bee54be23215d383b8ea5e14552",
+  "entry": "build/g2-implementation-entry.json",
+  "changed": [
+    {
+      "path": "cells/services/vfs/src/backend_cellosfs.rs",
+      "before_sha256": "65d61ee272e8356804f51fce844fb20669168b3ddd8abca58077cc16574dc993",
+      "after_sha256": "d51167aedda7aefc539e892de779e5554ebe39e46ca6ef22ea9498206b2fe7cf"
+    },
+    {
+      "path": "cells/services/vfs/src/backend.rs",
+      "before_sha256": "21c9cea0d24e1ce2cef678eacae1de74213aa20d86eebbbfc4c05dc7bee808d8",
+      "after_sha256": "ccddbb6d2166f26a4daacac5102642ea54279b24d3ab8e47d00c2093c58003eb"
+    },
+    {
+      "path": "cells/services/vfs/src/manager.rs",
+      "before_sha256": "7bf3359af501043d8067ec363bdd40e9abe74b79ba14eead78eba2a5111b9bcb",
+      "after_sha256": "6eeed297f5c1d569270e2f5c094e469f4b4f5b1cc3588b9d063b3c6d2a6a92be"
+    },
+    {
+      "path": "cells/services/vfs/src/paths.rs",
+      "before_sha256": "8c8802671476c4d4f80f842ad1707cc9e78222d273308b1f6f1233ff63b5044d",
+      "after_sha256": "f85d59b5014be9c1fae894cd0575d8d86f993df146132fc9d3b41bda8b1ca7a2"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch_paths.rs",
+      "before_sha256": "244526135f598bc532ba74bd064a10eddc6214b45526bccaccb656c52f5263f5",
+      "after_sha256": "4f229e809a4d8a674b865dcf6ba2b275e1d39c841cbdafcaae89e6e345c07a6b"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch_grants.rs",
+      "before_sha256": "214142357bfcd60d503e04f2cc67454b847febd2388d296d28bec087b0e4180c",
+      "after_sha256": "51de2bfbcfed20277daab199a521f5f338559f250c748c8822c84ea72b5093ec"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch_file_handles.rs",
+      "before_sha256": "8197c0b30acfdf5e71d78bb2096313ff41e9822d94724f53631f886224b7233b",
+      "after_sha256": "1e80f9e29dd99b937e1195df09c39913874186766c0d30295b1125c92e05aeeb"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch_dirs.rs",
+      "before_sha256": "eb1520dcad9cce59ceca78f37875dbb385cd06ff3dc298467291c56e9866f7e5",
+      "after_sha256": "7e90c82b94204d5a72f883dabfc2c93c7548969ca8a19d47bdae34a5ca63c443"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch.rs",
+      "before_sha256": "f092284dd5e1305ecb915402e86184ac1c282e619a2d0290c4deb71de1f53327",
+      "after_sha256": "82d22e7d9a1fab4ac7430224c63fef1cae10cf7aeb5e038094604a806a48900a"
+    },
+    {
+      "path": "cells/services/vfs/src/grant_write.rs",
+      "before_sha256": "2c710eeea585992f7a9c043275e4b2b9719a2614cf1634dc7f4ddd528f04a739",
+      "after_sha256": "af5506aeb70da8f6059fb5c1f1219b1c17fcbea9200bd4f262be272615beb555"
+    },
+    {
+      "path": "cells/services/vfs/src/grant_read.rs",
+      "before_sha256": "456c25e49ec943a599a9bce6c762424672df2c8eb47c4ec9ff0b5317dd911d63",
+      "after_sha256": "9990740bf9095346782dd8712ec80fe88f40bd20f1ea3ee2b646db9925467c30"
+    },
+    {
+      "path": "libs/cellos-fs/src/engine.rs",
+      "before_sha256": "a7b05c05ead06aac234dbb7153f8c6d1da45efbead634183fc793fb1091a7771",
+      "after_sha256": "ae52dcd3436c8218d52aa8b2656eea41af82c9f063d944f984df8de9f44e5c54"
+    },
+    {
+      "path": "libs/cellos-fs/src/allocator.rs",
+      "before_sha256": "52c851394d6abcc01ada7c28f1988a9377a4a8d8b8fddeedc7886996a5a3bf74",
+      "after_sha256": "7b3c7a1fcc8c7277f9c197445732638eda00be901ca5a11d64f668374c1f8e3e"
+    },
+    {
+      "path": "libs/cellos-fs/src/format.rs",
+      "before_sha256": "189eea2013099f546d014b7e5cb60d249d33e59fec2b5c0f4bf0d50ccd433270",
+      "after_sha256": "f462e6ce50c8ddd339f89b3d69f4efe01fd0d4303b095d3b964702cf9352998a"
+    },
+    {
+      "path": "libs/cellos-fs/src/disk.rs",
+      "before_sha256": "d327225ba686af1a6be8ce2fb91f7581dc0cacbf86c9b2ef14a9ae983271641b",
+      "after_sha256": "ddfa0b3a01456fc4985c890be52a96ffc20ec4a3ab64f47bb1d4cd3a4417416d"
+    },
+    {
+      "path": "libs/cellos-fs/tests/fs_tests.rs",
+      "before_sha256": "2e2b0fdc4e4c89a96d6a3a1ba8319bbb1417b49f85732706a35033d1bbea4c60",
+      "after_sha256": "b117f0761d5ce5aa87d7f1073ee91ddac607783b7cabb84f0de85dfb6e51c1fe"
+    },
+    {
+      "path": "libs/cellos-fs/tests/power_cut_fuzz.rs",
+      "before_sha256": "1be56b503d9308f38f035acdd719b5ccb8dd5849b0c83c55e3cbf1ecb429e35e",
+      "after_sha256": "bfa5c95a469bcde2ae0c46f189f60cdab81185d2965c8b26702bf4158f637895"
+    },
+    {
+      "path": "Cargo.toml",
+      "before_sha256": "64073f9da88129db318bb28452cf32ba386a82971085dbce9fa380fb7e163072",
+      "after_sha256": "cbc6f12dee26b820bc818a6d579bb90657560f7ed0bffffe677da2fdd37cba85"
+    },
+    {
+      "path": "scripts/mksrv-img.sh",
+      "before_sha256": "e7f2b86c8e7e7072333d6cd6bdbbc4e589eab1cc7f2d0fec51d2a911bc73bef2",
+      "after_sha256": "7c848a2756cf1ea768ce781f9186f5337940cc72d584f1fc6756ae8255b75d9b"
+    },
+    {
+      "path": "scripts/format-disk-arm.sh",
+      "before_sha256": "7eed244ebf4d5a89f81ddd3c455c26f71e7346418634d277c15769b60d345199",
+      "after_sha256": "031b33c56281abc62d8b235557e356f21426a5167ec4669de57c059e65c78259"
+    },
+    {
+      "path": "scripts/gen-disk-ci.sh",
+      "before_sha256": "40ed70695eaf2574a044e950fc84c5beef0e472790e8a6a868ec0f0b043fe722",
+      "after_sha256": "e95df3fc5726672dabfcb37f5cd1a6f0f8742020e6803b8a73adad29d0fd3665"
+    },
+    {
+      "path": "scripts/gen-disk-aarch64-ci.sh",
+      "before_sha256": "d6ca74dce02ddf6b4f5572687976c5df3480feb96cd4ced371c18b6003bf58be",
+      "after_sha256": "c3df055cd7fbd493fb8759499a01127243bcf7172431c56c6313b68881698027"
+    },
+    {
+      "path": "scripts/format-disk-hv-arm.sh",
+      "before_sha256": "9bcaf341d678d16800a6c36f744274dd0c07e699aba724e077d942fa0b260af2",
+      "after_sha256": "04c76fea0b3267fb26c77d3d06e8bb55c929a5d6995da201e64727888fcf1780"
+    },
+    {
+      "path": "gen_disk.ps1",
+      "before_sha256": "c268e80ebe9e1256b6accdee8b9eb00663b8d099c3ce88d6bad1dedbd853000c",
+      "after_sha256": "83bda7d770f3674ecaee3e1b0756aa7e97918711011705bf7ab14a19c1a21dc0"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "before_sha256": "8ddd36965b2115fd30724acde366ea11405e6f293bbb7878ae0c90b0963f3108",
+      "after_sha256": "d79044b0195f3b02d2a870f8bd1989f2b954438c7e17e4838dbb050a33107ee4"
+    },
+    {
+      "path": "tests/integration/tests/srv-cellosfs.rs",
+      "before_sha256": "538c22718e2f2ccc9ef2b6f96f92f329508cd7a35f9c4538851fdaa522b3f89f",
+      "after_sha256": "34316c23b9deeadf1d86e7d00899974835cf8090f1e896c33d4598f9e3c5a53c"
+    },
+    {
+      "path": "libs/api/src/abi/disk.rs",
+      "before_sha256": "403a177c92a3d8a93648c5968c5afc89523457d51383f401de4fc4acc7b0e52c",
+      "after_sha256": "a4dd29905b47a912646b6678d14357c15be06213d694dc01be598ca225ae207b"
+    },
+    {
+      "path": "docs/decisions/0016-cellosfs-native-replaces-redoxfs.md",
+      "before_sha256": "ae1784006b6bd257281e8a84a4405b01c476c9345c9d2afd09f9d83e4c1f0952",
+      "after_sha256": "59751ec65c3eda403c9d42a0ddbfc5df04f358432e6cd5d80b9e28a8b27e554b"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "before_sha256": "1c2c093c75d84091b110aa738eb1cbab9dcbc04f8873759ee51919bd1fe1ebf4",
+      "after_sha256": "2ee312b63273c8edb3a6bafdef113ab02a1dddad87affc6d4d21a71f42cca840"
+    }
+  ],
+  "new": [
+    {
+      "path": "tools/cellos-fs-provision/Cargo.toml",
+      "sha256": "d5aeefd9db27c7260ac1055681555fe5fcab4effa4bd1beeb17bc00d554becd7"
+    },
+    {
+      "path": "tools/cellos-fs-provision/Cargo.lock",
+      "sha256": "9f7aac1a0b8f0ebf3484ec208cc879b86e8849c981898d4950462ea7be6bdb5d"
+    },
+    {
+      "path": "tools/cellos-fs-provision/provision.sh",
+      "sha256": "b4ece38a47e1b325ad1f46f1e4f0d8fa8ae4651d1d756370f7199c0d5420f69a"
+    },
+    {
+      "path": "tools/cellos-fs-provision/src/main.rs",
+      "sha256": "0e843a176800cc24028cd285ce01de9d99851a6ff62f7285a1fc4d8aa10ee38e"
+    },
+    {
+      "path": "tools/cellos-fs-provision/src/tests.rs",
+      "sha256": "1d6fbffaae21596d216e2c048b1897ab03c624a7f1605ced47d2032124741efe"
+    }
+  ],
+  "scope": "Development disposable/staged; no G2-J/public wire/V1 serialization/production admission"
+}

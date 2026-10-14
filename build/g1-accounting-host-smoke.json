@@ -1,0 +1,10 @@
+{
+  "command": "rustc --edition=2021 --test /tmp/cellos-g1-accounting-smoke.rs -o /tmp/cellos-g1-accounting-smoke && /tmp/cellos-g1-accounting-smoke task::cpu_accounting::tests --test-threads=1",
+  "exit_code": 0,
+  "tests": 9,
+  "result": "9 passed;0 failed",
+  "source_sha256": "863b06b591864465901526cc41dda67c4e28433d7c068cbc32e629cc20a652a9",
+  "harness_sha256": "5d30d2a2352f879d0b434fa63add7cee48398435ab37cba4faa58923b20e7960",
+  "scope": "actual accounting module/tests and actual Spinlock included; unrelated scheduler/HPET environment stubbed; no hardware/scheduler runtime proof",
+  "cargo_host_attempt": "forced G1-only cfg lacked P01/test-hooks dependencies and pre-existing pin_tests type ambiguities; not a passing full kernel suite"
+}

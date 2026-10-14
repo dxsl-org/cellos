@@ -1,0 +1,20 @@
+{
+  "first_vm_matrix": {
+    "passed": 0,
+    "failed": 5,
+    "exit_code": 101,
+    "raw": "first-vm-matrix-failure.raw.log"
+  },
+  "confirmed_root_causes": [
+    {
+      "cause": "Native unsupported directory rename entered mutator, returned IsADirectory and poisoned instance; srv-test intentionally probes directory rename, then ignores cleanup and persistence Write failure. Subsequent POSIX creates and reboot marker fail.",
+      "proof": "directory-rename-poison-failing-regression.raw.log: actual Poisoned versus Ready assertion",
+      "fix": "Read-only source/type/destination preflight before mutation entry; engine failures still poison unconditionally, no suppression."
+    },
+    {
+      "cause": "Integration serial harness decodes UTF8 bytes separately (em dash appears as \u00e2); tests pinned exact Unicode warning and timed out despite actual refusal.",
+      "fix": "Delete incidental warning assertions; assert real six-operation refusal and exact unchanged P5 bytes instead, retain raw serial."
+    }
+  ],
+  "scope": "No tolerance/retry/poison-clearing/format fallback; failed artifacts retained"
+}

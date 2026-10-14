@@ -1,0 +1,20 @@
+{
+  "scope": "source identity and finite arithmetic model; no runtime implementation proof",
+  "candidates": [
+    {
+      "document": "g1-local-accounting-candidate.md",
+      "source_hashes_verified": 30,
+      "document_sha256": "6e33fca64075bcbabd2e3a56b5c63cf0a0d4830d0b3bde32ed7004d74af77b9f"
+    },
+    {
+      "document": "g2-ordinary-persistence-candidate.md",
+      "source_hashes_verified": 39,
+      "document_sha256": "1213c9bb5197e0b0676519220938eed4b72a073b9f5d7e36722f52c42edc3c6a"
+    }
+  ],
+  "cpu_storage_bytes": 29008,
+  "journal_header_bytes": 112,
+  "journal_max_experiment_payload_bytes": 436,
+  "journal_commit_bytes": 184,
+  "recurrence": "four explicit cases and finite empty-period equivalence checked"
+}

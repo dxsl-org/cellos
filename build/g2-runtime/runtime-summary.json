@@ -1,0 +1,65 @@
+{
+  "format": "g2-r-core-b-runtime-evidence-v1",
+  "matrix": {
+    "tests_passed": 5,
+    "tests_failed": 0,
+    "boots": 6,
+    "exit_code": 0,
+    "elapsed_seconds": 15.4
+  },
+  "raws": [
+    {
+      "path": "build/g2-runtime/vm-final-r3/basic.raw.log",
+      "sha256": "1b0800671518d0c6d457a6baa13cb0844eb0297429402a12072aa31fd93be272",
+      "bytes": 13171
+    },
+    {
+      "path": "build/g2-runtime/vm-final-r3/blank.raw.log",
+      "sha256": "fea3b09689bd93011827a56d2077dad88a79568bc2262f453b36617a7b36b5c2",
+      "bytes": 11969
+    },
+    {
+      "path": "build/g2-runtime/vm-final-r3/corrupt.raw.log",
+      "sha256": "0092dd018b5b4ebda451dfb3b0a5bdd6ce0f7da742e6e99e870b0c472b228c02",
+      "bytes": 12090
+    },
+    {
+      "path": "build/g2-runtime/vm-final-r3/no-disk.raw.log",
+      "sha256": "1d2792936d5ac9e230c36e67e096d9613b8f04ddd1145996e23343fb0456f245",
+      "bytes": 12076
+    },
+    {
+      "path": "build/g2-runtime/vm-final-r3/reboot-1.raw.log",
+      "sha256": "a45625a0a8f5f6eac57334e6599964609bca6abb303f93187611e0a107c7c9a9",
+      "bytes": 11990
+    },
+    {
+      "path": "build/g2-runtime/vm-final-r3/reboot-2.raw.log",
+      "sha256": "7001374d09f3f01d49fca13480067b959272dc06c139862e2c1d0cd6eee9190f",
+      "bytes": 11024
+    }
+  ],
+  "host_native_passed": 96,
+  "offline_provisioner_passed": 4,
+  "actual_native_flush_fault_matrix": {
+    "operations": 7,
+    "barriers": 2,
+    "checks": "false result, retained first IoError, Poisoned before next operation; no further reads/writes/flushes"
+  },
+  "image": "build/g2-runtime/disk_srv.img",
+  "image_sha256": "f13a0e1e4811b0746b4249e73de31a42ebf824c799d388ec6b5feb55c2d51e0f",
+  "kernel": "target/riscv64gc-unknown-none-elf/release/cellos-kernel-srv-test",
+  "kernel_sha256": "186efdfd0c0790714ad50f2de8c420eb163e2075d2349974ea577c89fdeece30",
+  "vfs_sha256": "2df0f5c5bee2f34f800240fb19755521dc99219c8b2bb9f25f8b197bed05c320",
+  "device_tuple": "qemu-system-riscv64 virt,256M,OpenSBI default,raw host temp image,virtio-blk-device; harness process stops are not power-loss qualification",
+  "blank_corrupt_p5": "complete64MiB equality asserted after VM stop; real Stat genericErr and Write failure; exact numeric ERR_IO host-only",
+  "failed_matrices_preserved": [
+    "first-vm-matrix-failure.raw.log",
+    "second-vm-matrix-failure.raw.log"
+  ],
+  "limits": [
+    "RV64 existing portable functional lane, not Intel production/profile qualification",
+    "Native Windows execution unavailable; PowerShell AST syntax passed only",
+    "No physical storage/cache/floor/issuer admission, durability, G2-J or downstream CP1/CP2"
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "runs": [
+    {
+      "command": [
+        "cargo",
+        "run",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "tools/cellos-fs-provision/Cargo.toml",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--",
+        "--image",
+        "build/g2-runtime/disk_srv.img",
+        "--base",
+        "800000",
+        "--sectors",
+        "131072",
+        "--intent",
+        "verify-existing",
+        "--receipt",
+        "build/g2-runtime/current-verify-800000.json"
+      ],
+      "exit_code": 0,
+      "receipt": "build/g2-runtime/current-verify-800000.json"
+    },
+    {
+      "command": [
+        "cargo",
+        "run",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "tools/cellos-fs-provision/Cargo.toml",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--",
+        "--image",
+        "build/g2-runtime/disk_srv.img",
+        "--base",
+        "931072",
+        "--sectors",
+        "131072",
+        "--intent",
+        "verify-existing",
+        "--receipt",
+        "build/g2-runtime/current-verify-931072.json"
+      ],
+      "exit_code": 0,
+      "receipt": "build/g2-runtime/current-verify-931072.json"
+    }
+  ],
+  "platform": "Linux WSL2 x86_64 host, regular staged file; no physical durability qualification"
+}

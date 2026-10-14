@@ -1,0 +1,35 @@
+{
+  "scope": "G0 source reconciliation and decoder smoke only; not producer high-water or hardware qualification",
+  "source_inputs": [
+    {
+      "path": "kernel/build.rs",
+      "sha256": "c24d30f85cc804d4bf09af9c3d80047110bf873a856a7f47fd8bdb550d83ef24"
+    },
+    {
+      "path": "kernel/src/p01_measurement.rs",
+      "sha256": "d6d9b10ac0f1952f744887da15bd3bb28ceec0c8340fccdb1b943526ed0007c7"
+    },
+    {
+      "path": "scripts/x86/p01_trace.py",
+      "sha256": "66e31241ec60c8369cbda1d7cdcba1723af6828c4adeb4a4e1e20cc705cc2ba8"
+    },
+    {
+      "path": "scripts/x86/test_p01_trace.py",
+      "sha256": "f60f6296caa75a3d0ceb6ea31e769149ab0572af963411eab26e12fb3c6973b8"
+    },
+    {
+      "path": "scripts/x86/p01_budget_readiness.py",
+      "sha256": "9e0dd3ef85c890be684e553729586ed9ecde82e3f87310523dedbc22ff6a0914"
+    }
+  ],
+  "command": "python3 -m unittest discover -s scripts/x86 -p test_p01_trace.py",
+  "exit_code": 0,
+  "tests_run": 98,
+  "result": "OK",
+  "new_vtd_producer_complete": false,
+  "remaining": [
+    "fresh source-bound VT-d structures producer/captures",
+    "event-complete per-owner high-water and all-path capacity",
+    "hardware publication/authority witness"
+  ]
+}

@@ -1,0 +1,710 @@
+{
+  "authority_pins": {
+    "g1-g2-scoped-review.md": "f2bd9cd9ab11ec0957658b40fd84418aeb0fad51bf0e70aef6c43daeb3c404f9",
+    "g1-local-accounting-candidate.md": "a39068f68536aed723f4e7c8c622df3a0b4cc00c8133febe4efd6998c6e81b83",
+    "scoped-g1-g2-authorization.json": "7a5d7bb4999e8f9d6154bd916c7e3a086ba937b63256ba0cd13823c78b51e3e3"
+  },
+  "commands": [
+    {
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc",
+        "-p",
+        "app-init"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc",
+        "-p",
+        "service-vfs",
+        "-p",
+        "app-bench",
+        "--bin",
+        "service-vfs",
+        "--bin",
+        "bench",
+        "--bin",
+        "bench-probe",
+        "--features",
+        "app-bench/g1-cpu-workload"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/bin/python3",
+        "scripts/cellos-sign",
+        "--quiet",
+        "--objcopy",
+        "objcopy",
+        "--sign",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/app-init",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/service-vfs",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/bench",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/bench-probe"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/bin/python3",
+        "scripts/sign-policy.py",
+        "--out",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override/POLICY.BIN"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/bin/python3",
+        "tools/mkfat32.py",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override/kernel_fs.img",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/service-vfs",
+        "/bin/vfs",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/bench",
+        "/bin/bench",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/bench-probe",
+        "/bin/bench-probe",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override/services.toml",
+        "/etc/cellos/services.toml",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override/autoload.toml",
+        "/etc/cellos/autoload.toml",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override/POLICY.BIN",
+        "/POLICY.BIN"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override/kernel_fs.img",
+        "::/bin/vfs"
+      ],
+      "readback_sha256": "4512f37b612b047f51f70282ba06c997ffe28bdc2d853d267f3c260610907920",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override/kernel_fs.img",
+        "::/bin/bench"
+      ],
+      "readback_sha256": "cc89a9f7435272f3a15fe8f60b47573bd515b5e55d013903198e4886b2b0e24b",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override/kernel_fs.img",
+        "::/bin/bench-probe"
+      ],
+      "readback_sha256": "23ab0b2ead20c8304f33a32325ddc1c9a69a30c2c8b40963cee8615c97b54a77",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override/kernel_fs.img",
+        "::/etc/cellos/services.toml"
+      ],
+      "readback_sha256": "dbab12665d98aef021ba64953c61b0ed8a908cfb56a1c01e2fcb4b052b71a2a1",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override/kernel_fs.img",
+        "::/etc/cellos/autoload.toml"
+      ],
+      "readback_sha256": "4d741040f28d21fc057aae8665bd713ba879dc85c5a86887fcc282468ad10cd3",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override/kernel_fs.img",
+        "::/POLICY.BIN"
+      ],
+      "readback_sha256": "a6232b6c5bb92108ff9055a285d0aada8398afab204fdc40f1ef75436156987c",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc",
+        "-p",
+        "cellos-kernel",
+        "--features",
+        "test-hooks"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_G1_CPU": "1",
+        "CELLOS_P01_TRACE": "1",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "EMBEDDED_OVERRIDE": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/override",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin",
+        "RUSTFLAGS": "-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "bash",
+        "scripts/x86/make-iso-ci.sh",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/image.iso"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin",
+        "X86_ISO_ROOT": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/iso-root",
+        "X86_KERNEL": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/kernel.elf"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/bin/python3",
+        "scripts/sign-policy.py",
+        "--out",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override/POLICY.BIN"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/bin/python3",
+        "tools/mkfat32.py",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override/kernel_fs.img",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/service-vfs",
+        "/bin/vfs",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/bench",
+        "/bin/bench",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/bench-probe",
+        "/bin/bench-probe",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override/services.toml",
+        "/etc/cellos/services.toml",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override/autoload.toml",
+        "/etc/cellos/autoload.toml",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override/POLICY.BIN",
+        "/POLICY.BIN"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override/kernel_fs.img",
+        "::/bin/vfs"
+      ],
+      "readback_sha256": "4512f37b612b047f51f70282ba06c997ffe28bdc2d853d267f3c260610907920",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override/kernel_fs.img",
+        "::/bin/bench"
+      ],
+      "readback_sha256": "cc89a9f7435272f3a15fe8f60b47573bd515b5e55d013903198e4886b2b0e24b",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override/kernel_fs.img",
+        "::/bin/bench-probe"
+      ],
+      "readback_sha256": "23ab0b2ead20c8304f33a32325ddc1c9a69a30c2c8b40963cee8615c97b54a77",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override/kernel_fs.img",
+        "::/etc/cellos/services.toml"
+      ],
+      "readback_sha256": "dbab12665d98aef021ba64953c61b0ed8a908cfb56a1c01e2fcb4b052b71a2a1",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override/kernel_fs.img",
+        "::/etc/cellos/autoload.toml"
+      ],
+      "readback_sha256": "26d477d35dbc95abd646b37cc1d3663f382de98df2d7d5cc392238cabd00656f",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override/kernel_fs.img",
+        "::/POLICY.BIN"
+      ],
+      "readback_sha256": "a6232b6c5bb92108ff9055a285d0aada8398afab204fdc40f1ef75436156987c",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc",
+        "-p",
+        "cellos-kernel",
+        "--features",
+        "test-hooks"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_G1_CPU": "1",
+        "CELLOS_P01_TRACE": "1",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "EMBEDDED_OVERRIDE": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/override",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin",
+        "RUSTFLAGS": "-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "bash",
+        "scripts/x86/make-iso-ci.sh",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/image.iso"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin",
+        "X86_ISO_ROOT": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/iso-root",
+        "X86_KERNEL": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/kernel.elf"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/bin/python3",
+        "scripts/sign-policy.py",
+        "--out",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override/POLICY.BIN"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/bin/python3",
+        "tools/mkfat32.py",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override/kernel_fs.img",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/service-vfs",
+        "/bin/vfs",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/bench",
+        "/bin/bench",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target/x86_64-unknown-none/release/bench-probe",
+        "/bin/bench-probe",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override/services.toml",
+        "/etc/cellos/services.toml",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override/autoload.toml",
+        "/etc/cellos/autoload.toml",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override/POLICY.BIN",
+        "/POLICY.BIN"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override/kernel_fs.img",
+        "::/bin/vfs"
+      ],
+      "readback_sha256": "4512f37b612b047f51f70282ba06c997ffe28bdc2d853d267f3c260610907920",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override/kernel_fs.img",
+        "::/bin/bench"
+      ],
+      "readback_sha256": "cc89a9f7435272f3a15fe8f60b47573bd515b5e55d013903198e4886b2b0e24b",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override/kernel_fs.img",
+        "::/bin/bench-probe"
+      ],
+      "readback_sha256": "23ab0b2ead20c8304f33a32325ddc1c9a69a30c2c8b40963cee8615c97b54a77",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override/kernel_fs.img",
+        "::/etc/cellos/services.toml"
+      ],
+      "readback_sha256": "dbab12665d98aef021ba64953c61b0ed8a908cfb56a1c01e2fcb4b052b71a2a1",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override/kernel_fs.img",
+        "::/etc/cellos/autoload.toml"
+      ],
+      "readback_sha256": "e61af208d3cf4e33bc70c2ae2ce0cbce90bcfdd126e3a251b8735290a46faf70",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "mtype",
+        "-i",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override/kernel_fs.img",
+        "::/POLICY.BIN"
+      ],
+      "readback_sha256": "a6232b6c5bb92108ff9055a285d0aada8398afab204fdc40f1ef75436156987c",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc",
+        "-p",
+        "cellos-kernel",
+        "--features",
+        "test-hooks"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_G1_CPU": "1",
+        "CELLOS_P01_TRACE": "1",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "EMBEDDED_OVERRIDE": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/override",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin",
+        "RUSTFLAGS": "-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "bash",
+        "scripts/x86/make-iso-ci.sh",
+        "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/image.iso"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "environment": {
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu",
+        "CARGO_TARGET_DIR": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C relocation-model=pic",
+        "CARGO_TERM_PROGRESS_WHEN": "never",
+        "CC_x86_64_unknown_none": "cc",
+        "CELLOS_P01_TRACE": "0",
+        "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+        "HOME": "/home/dmin",
+        "LANG": "C.UTF-8",
+        "PATH": "/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.local/bin:/home/dmin/.nvm/versions/node/v24.19.0/bin:/home/dmin/.local/bin:/home/dmin/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/ImageMagick-7.1.2-Q16-HDRI:/mnt/c/Program Files/Alacritty/:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/Go/bin:/mnt/c/Program Files/k6/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/PowerShell/7/:/mnt/c/Program Files/WSL/:/mnt/c/Users/Admin/AppData/Local/agy/bin:/mnt/c/Users/Admin/.herdr/packages/standalone/releases/0.8.2-x86_64-pc-windows-msvc:/mnt/c/Users/Admin/AppData/Local/FreeToken/bin:/mnt/c/Users/Admin/.grok/bin:/mnt/c/Users/Admin/AppData/Local/Programs/OpenAI/Codex/bin:/mnt/d/go-ladybug/lib:/mnt/c/msys64/ucrt64/bin:/mnt/c/laragon/bin/python/python-3.14/Scripts/:/mnt/c/laragon/bin/python/python-3.14/:/mnt/c/Program Files/PowerShell/7:/mnt/c/Program Files/glzr.io/GlazeWM/cli:/mnt/c/Program Files/Alacritty/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/dotnet/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Users/Admin/.local/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/bin:/mnt/c/Program Files/Tailscale/:/mnt/c/Program Files/starship/bin/:/mnt/c/Program Files/glzr.io/Zebar/:/mnt/c/Program Files/Go/bin:/mnt/c/laragon/bin:/mnt/c/laragon/bin/apache/httpd-2.4.62-win64-VS17/bin:/mnt/c/laragon/bin/composer:/mnt/c/laragon/bin/git/bin:/mnt/c/laragon/bin/git/cmd:/mnt/c/laragon/bin/git/mingw64/bin:/mnt/c/laragon/bin/git/usr/bin:/mnt/c/laragon/bin/laragon/utils:/mnt/c/laragon/bin/mysql/mysql-8.0.30-winx64/bin:/mnt/c/laragon/bin/nodejs/node-v20.19.2-win-x64:/mnt/c/laragon/bin/nginx/nginx-1.22.0:/mnt/c/laragon/bin/ngrok:/mnt/c/laragon/bin/postgresql/postgresql-17.0-1/bin:/mnt/c/laragon/bin/php/php-8.5.6-nts-Win32-vs17-x64:/mnt/c/laragon/bin/redis/redis-x64-5.0.14.1:/mnt/c/laragon/bin/telnet:/mnt/c/laragon/usr/bin:/mnt/c/Users/Admin/AppData/Local/Yarn/config/global/node_modules/.bin:/mnt/c/Users/Admin/AppData/Roaming/Composer/vendor/bin:/mnt/c/Users/Admin/AppData/Roaming/npm:/mnt/c/Users/Admin/.cargo/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/Zed/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/Admin/.cache/lm-studio/bin:/mnt/c/zig:/mnt/c/Users/Admin/.bun/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Links:/mnt/c/Users/Admin/go/bin:/mnt/c/protoc/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Ollama:/mnt/c/Users/Admin/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:/mnt/c/Users/Admin/Software/Microsoft VS Code/bin:/mnt/c/Users/Admin/AppData/Local/Programs/Antigravity IDE/bin:/mnt/c/Users/Admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/Admin/AppData/Local/Programs/nu/bin/:/mnt/c/Users/Admin/AppData/Local/Unity/bin:/mnt/c/Users/Admin/.dotnet/tools:/snap/bin",
+        "X86_ISO_ROOT": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/iso-root",
+        "X86_KERNEL": "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/kernel.elf"
+      },
+      "environment_scope": "operational allowlist; not exhaustive external-input provenance",
+      "returncode": 0
+    }
+  ],
+  "fault": null,
+  "g1": true,
+  "g1_experiment": {
+    "actions": {
+      "admit": 2,
+      "delay": 1,
+      "delay_ticks": 160,
+      "explicit_yield_max": 8,
+      "join": 2,
+      "release": 2,
+      "root_exit": 1,
+      "worker_exit": 2
+    },
+    "burst_cap_ns": 40000000,
+    "entitlement_ns": 20000000,
+    "exhaustion_to_departure_limit_ns": 20000000,
+    "hardware_D_W_qualified": false,
+    "initial_bank_ns": 0,
+    "initial_debt_ns": 0,
+    "lane": "Intel-x86_64-q35-TCG-development",
+    "max_capture_periods": 18,
+    "max_events": 256,
+    "max_schedule_events": 206,
+    "max_worker_chunks": 1000000,
+    "max_workload_stages": 64,
+    "pacing_clock_is_charge_source": false,
+    "period_ns": 100000000,
+    "periods": 16,
+    "service_gap_limit_ns": 20000000,
+    "service_summary_kind": 17,
+    "switch_delay_limit_ns": 20000000,
+    "workers": 2
+  },
+  "inputs_sha256": "1dd71ea99f32323be80081fe64d803217f593c699aa1550f9ee6582a24950b00",
+  "scenarios": {
+    "g1-overlap": {
+      "g1-overlap/image.iso": "cbfa073c94d22eaf2631c16c543be70f174e76e6f16da4e5c5309612310d468a",
+      "g1-overlap/kernel.elf": "6e34d0d8cc1f8cb726deffc3a695b4ed2b978ec307d82872fb90f7642a122e32",
+      "g1-overlap/override/POLICY.BIN": "a6232b6c5bb92108ff9055a285d0aada8398afab204fdc40f1ef75436156987c",
+      "g1-overlap/override/autoload.toml": "4d741040f28d21fc057aae8665bd713ba879dc85c5a86887fcc282468ad10cd3",
+      "g1-overlap/override/init": "6a63c402569fe5a0378b0e7cdd575b3271a5efc27e2f21aff8b072721a2f3b43",
+      "g1-overlap/override/kernel_fs.img": "82a7349740aa5382b74abb07082d85a9b372de785139dc622360b399dff09478",
+      "g1-overlap/override/p01_manifest.bin": "a4f1d0f0bc004cf3a499f4cf0d0b606a8ff2f53bddbd21d7831ed0d01b07c1b0",
+      "g1-overlap/override/services.toml": "dbab12665d98aef021ba64953c61b0ed8a908cfb56a1c01e2fcb4b052b71a2a1"
+    },
+    "g1-retention": {
+      "g1-retention/image.iso": "efc8b6a08ee732f50fdb6fd14010aa034d6975b7059cf651999d2b8beaf63c1c",
+      "g1-retention/kernel.elf": "85571b10472606d6033afd0f77f7c6da35517bd554047c20f7a2b0eecb000128",
+      "g1-retention/override/POLICY.BIN": "a6232b6c5bb92108ff9055a285d0aada8398afab204fdc40f1ef75436156987c",
+      "g1-retention/override/autoload.toml": "e61af208d3cf4e33bc70c2ae2ce0cbce90bcfdd126e3a251b8735290a46faf70",
+      "g1-retention/override/init": "6a63c402569fe5a0378b0e7cdd575b3271a5efc27e2f21aff8b072721a2f3b43",
+      "g1-retention/override/kernel_fs.img": "10e2df6b00012b8480a85949be84ba59f66a615439690c99c08a89af87cb0eba",
+      "g1-retention/override/p01_manifest.bin": "a4f1d0f0bc004cf3a499f4cf0d0b606a8ff2f53bddbd21d7831ed0d01b07c1b0",
+      "g1-retention/override/services.toml": "dbab12665d98aef021ba64953c61b0ed8a908cfb56a1c01e2fcb4b052b71a2a1"
+    },
+    "g1-yield": {
+      "g1-yield/image.iso": "accce3372c83a0fcc8f43160b5629f25be3011119c62602b01ddd0cc1e241d45",
+      "g1-yield/kernel.elf": "43e84b1a14b54903cd6371fc59c21fce5c6032f3ac6b36c166c8ec72ad221831",
+      "g1-yield/override/POLICY.BIN": "a6232b6c5bb92108ff9055a285d0aada8398afab204fdc40f1ef75436156987c",
+      "g1-yield/override/autoload.toml": "26d477d35dbc95abd646b37cc1d3663f382de98df2d7d5cc392238cabd00656f",
+      "g1-yield/override/init": "6a63c402569fe5a0378b0e7cdd575b3271a5efc27e2f21aff8b072721a2f3b43",
+      "g1-yield/override/kernel_fs.img": "0260a84c0e5c24aac06b14f9b962576bf08026660452e5d1c7157cbccbfd7e41",
+      "g1-yield/override/p01_manifest.bin": "a4f1d0f0bc004cf3a499f4cf0d0b606a8ff2f53bddbd21d7831ed0d01b07c1b0",
+      "g1-yield/override/services.toml": "dbab12665d98aef021ba64953c61b0ed8a908cfb56a1c01e2fcb4b052b71a2a1"
+    }
+  },
+  "scope": "private-G1-Intel-QEMU-development",
+  "signed": {
+    "app-init": "6a63c402569fe5a0378b0e7cdd575b3271a5efc27e2f21aff8b072721a2f3b43",
+    "bench": "cc89a9f7435272f3a15fe8f60b47573bd515b5e55d013903198e4886b2b0e24b",
+    "bench-probe": "23ab0b2ead20c8304f33a32325ddc1c9a69a30c2c8b40963cee8615c97b54a77",
+    "service-vfs": "4512f37b612b047f51f70282ba06c997ffe28bdc2d853d267f3c260610907920"
+  },
+  "version": 1
+}

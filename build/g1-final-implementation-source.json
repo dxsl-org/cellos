@@ -1,0 +1,90 @@
+{
+  "format": "g1-implemented-source-delta-v1",
+  "authorization_manifest_sha256": "7a5d7bb4999e8f9d6154bd916c7e3a086ba937b63256ba0cd13823c78b51e3e3",
+  "authorization_baseline_preserved": true,
+  "changed_baseline_files": [
+    {
+      "path": "cells/tests/bench/Cargo.toml",
+      "before_sha256": "9eabb93dd547c59cc8e7a46bb2eb6f7f734a810b778b3153ba1617b6deb51dc5",
+      "after_sha256": "8956fbce3bf7383092cd69796b5a96787376fa1c63423840be5e7d59ed34c365"
+    },
+    {
+      "path": "cells/tests/bench/src/bench-probe.rs",
+      "before_sha256": "9baaf8817da99138e260af2401c031d8862529f0fba9ca01e9b956abebbea0ff",
+      "after_sha256": "1ca0e9a6b0a56aa867400b18bcfb16c363ad22f004525ec64ec5adc5f35e3e7f"
+    },
+    {
+      "path": "cells/tests/bench/src/main.rs",
+      "before_sha256": "4cd9f3bef24d1e91d962154ccebd834f461e3b3190cea639183c89acdeef2f8b",
+      "after_sha256": "871f4700267533095df0487ad99a5a7c84a306cae630c3af49d127c0aca70c36"
+    },
+    {
+      "path": "hal/arch/x86/src/x86_64.rs",
+      "before_sha256": "12fe2d627d13682e0bb4b556de9b18d0911482b50c156ce07d826e0a5635af13",
+      "after_sha256": "85d8abe2d3b4801c08e55e4c1643e611914c053335162011696c4feea4179edc"
+    },
+    {
+      "path": "hal/arch/x86/src/x86_64/hpet.rs",
+      "before_sha256": "d6b64b34016c56da393e8a9e543c042ec446e976920948d40bedf930ed3b6dce",
+      "after_sha256": "886a425490f7975fbe2920f49536eb1e9d7fbb03d86c368d59f6cf84cc0e9b53"
+    },
+    {
+      "path": "kernel/build.rs",
+      "before_sha256": "c24d30f85cc804d4bf09af9c3d80047110bf873a856a7f47fd8bdb550d83ef24",
+      "after_sha256": "3da426bec9acba43350e3e25148abc511aff7b0c2c55a9d7eed1c96adcd5ba32"
+    },
+    {
+      "path": "kernel/src/main.rs",
+      "before_sha256": "13045c7171fb6cdccce8f387ab9e73c6c72603fc22b60e54789b2c082f6399ab",
+      "after_sha256": "94b21c3d38aacdecfd77c58102d1943acd780aa229b7d88a3fb61e7f3be6b315"
+    },
+    {
+      "path": "kernel/src/task.rs",
+      "before_sha256": "d949042fbf43892ae86ebe50fc9de07c4884ecce6c43c5f2c7087efac0c24de8",
+      "after_sha256": "73856182772f59e092b1550340ed857d44efd76f399beaced865fdb35eb2cefb"
+    },
+    {
+      "path": "kernel/src/task/hart_local/ready.rs",
+      "before_sha256": "bf19c0e2a8dc2dc4630bf55eb9c91ee148c3d73d5a98b4668246589e1de14019",
+      "after_sha256": "7b00764a4f89dfd9fd799c883d420e738f4dc73e356d6c2535782e6c433d3dbf"
+    },
+    {
+      "path": "kernel/src/task/launch.rs",
+      "before_sha256": "dc465f643d9ed7fd96d5faee0b3ab69f1e344985eefdfec1ff98ea2341a76875",
+      "after_sha256": "31433f3802819b3dd64d00dbdaeb7e261c19880afaf35fe0ba11d093762e876a"
+    },
+    {
+      "path": "kernel/src/task/scheduler.rs",
+      "before_sha256": "4b00e25c5ac465df03c364bde5f77b0aae0d0609d1d4de67f8488f2d7a027cfb",
+      "after_sha256": "3069522242f6f431fda16f473c682707e02f8b9dca0b2643f98f12152ca3ef9b"
+    },
+    {
+      "path": "scripts/x86/p01_capture.py",
+      "before_sha256": "47e1d09135a0a2d9955b8b06531d407e86eccc102a8f7e33e83456537a3912f2",
+      "after_sha256": "fe09307e5dc03dbd776c603c95f53c4ad3f4abaebd47b1c0e70bf4d1ec4e94b7"
+    },
+    {
+      "path": "scripts/x86/p01_trace.py",
+      "before_sha256": "66e31241ec60c8369cbda1d7cdcba1723af6828c4adeb4a4e1e20cc705cc2ba8",
+      "after_sha256": "0a6385d3cf3dbf891b920017a329dad5bcdcaaf65ae27d088f593df94eeef5ad"
+    },
+    {
+      "path": "scripts/x86/test_p01_trace.py",
+      "before_sha256": "f60f6296caa75a3d0ceb6ea31e769149ab0572af963411eab26e12fb3c6973b8",
+      "after_sha256": "fb81a5f7d876e89a4f507ed1cf936ffa239c89aa3fa4b2dcba3daf21852a8b92"
+    }
+  ],
+  "new_authorized_files": [
+    {
+      "path": "cells/tests/bench/src/scenarios/cpu_accounting.rs",
+      "sha256": "e7b8fe9b5542d564e5c4968ffe51821271db16f6711e4f9cb3997f5ed6c931ff"
+    },
+    {
+      "path": "kernel/src/task/cpu_accounting.rs",
+      "sha256": "3426effd3bdaffd037d8dde28ba516f23cddd261ed329a7ec4ca9570ecb8b21e"
+    }
+  ],
+  "G2_started": false,
+  "public_abi_or_persistent_bytes_changed": false,
+  "qualification": "private software runtime only; downstream approvals unchanged"
+}

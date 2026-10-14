@@ -1,0 +1,362 @@
+{
+  "artifacts": {
+    "bench": {
+      "elf_type": "ET_DYN",
+      "entry": 0,
+      "exclusive_segment_frames": 306,
+      "interval_sum_pages": 308,
+      "load_base": {
+        "actual_runtime_base_observed": false,
+        "kind": "normal-page-aligned-PIE-slot",
+        "maximum": 21441282048,
+        "minimum": 4294967296
+      },
+      "load_segments": [
+        {
+          "file_offset": 4096,
+          "file_size": 164922,
+          "flags": 5,
+          "interval_pages": 41,
+          "memory_size": 164922,
+          "p_align": 4096,
+          "page_interval_relative_to_base": [
+            0,
+            167936
+          ],
+          "program_header_index": 0,
+          "reservation_expression_pages": 41,
+          "virtual_address": 0
+        },
+        {
+          "file_offset": 169024,
+          "file_size": 27360,
+          "flags": 4,
+          "interval_pages": 7,
+          "memory_size": 27360,
+          "p_align": 4096,
+          "page_interval_relative_to_base": [
+            163840,
+            192512
+          ],
+          "program_header_index": 1,
+          "reservation_expression_pages": 7,
+          "virtual_address": 164928
+        },
+        {
+          "file_offset": 196608,
+          "file_size": 2192,
+          "flags": 6,
+          "interval_pages": 1,
+          "memory_size": 2192,
+          "p_align": 4096,
+          "page_interval_relative_to_base": [
+            192512,
+            196608
+          ],
+          "program_header_index": 2,
+          "reservation_expression_pages": 1,
+          "virtual_address": 192512
+        },
+        {
+          "file_offset": 0,
+          "file_size": 0,
+          "flags": 6,
+          "interval_pages": 257,
+          "memory_size": 1048625,
+          "p_align": 4096,
+          "page_interval_relative_to_base": [
+            196608,
+            1249280
+          ],
+          "program_header_index": 3,
+          "reservation_expression_pages": 257,
+          "virtual_address": 196608
+        },
+        {
+          "file_offset": 200760,
+          "file_size": 4100,
+          "flags": 4,
+          "interval_pages": 2,
+          "memory_size": 4100,
+          "p_align": 4096,
+          "page_interval_relative_to_base": [
+            1245184,
+            1253376
+          ],
+          "program_header_index": 4,
+          "reservation_expression_pages": 2,
+          "virtual_address": 1245240
+        }
+      ],
+      "loader_reservation_expression_pages": 308,
+      "machine": "EM_X86_64",
+      "mapped_page_entries": 306,
+      "no_reallocation_proven": false,
+      "overlap_pages_in_interval_sum": 2,
+      "path": "/home/dmin/cellos/build/p01-source-validity/target/x86_64-unknown-none/release/bench",
+      "program_header_count": 11,
+      "program_header_offset": 64,
+      "reservation_ceiling": "Request/count comparison only; actual Vec capacity, compiled library/allocator behavior and realloc overlap are not certified.",
+      "reservation_request_covers_union_count": true,
+      "reservation_request_shortfall_entries": 0,
+      "sha256": "1cfa2607fd7b7ce896891499979b4f0bf4aa36599fc827f4163e9596e10d2f7c",
+      "size_bytes": 226984,
+      "union_page_intervals_relative_to_base": [
+        [
+          0,
+          1253376
+        ]
+      ],
+      "union_pages": 306,
+      "writable_array_reservation_entries": 306,
+      "writable_page_entries": 258
+    },
+    "bench-probe": {
+      "elf_type": "ET_DYN",
+      "entry": 0,
+      "exclusive_segment_frames": 275,
+      "interval_sum_pages": 277,
+      "load_base": {
+        "actual_runtime_base_observed": false,
+        "kind": "normal-page-aligned-PIE-slot",
+        "maximum": 21441282048,
+        "minimum": 4294967296
+      },
+      "load_segments": [
+        {
+          "file_offset": 4096,
+          "file_size": 52666,
+          "flags": 5,
+          "interval_pages": 13,
+          "memory_size": 52666,
+          "p_align": 4096,
+          "page_interval_relative_to_base": [
+            0,
+            53248
+          ],
+          "program_header_index": 0,
+          "reservation_expression_pages": 13,
+          "virtual_address": 0
+        },
+        {
+          "file_offset": 56768,
+          "file_size": 10480,
+          "flags": 4,
+          "interval_pages": 4,
+          "memory_size": 10480,
+          "p_align": 4096,
+          "page_interval_relative_to_base": [
+            49152,
+            65536
+          ],
+          "program_header_index": 1,
+          "reservation_expression_pages": 3,
+          "virtual_address": 52672
+        },
+        {
+          "file_offset": 69632,
+          "file_size": 768,
+          "flags": 6,
+          "interval_pages": 1,
+          "memory_size": 768,
+          "p_align": 4096,
+          "page_interval_relative_to_base": [
+            65536,
+            69632
+          ],
+          "program_header_index": 2,
+          "reservation_expression_pages": 1,
+          "virtual_address": 65536
+        },
+        {
+          "file_offset": 0,
+          "file_size": 0,
+          "flags": 6,
+          "interval_pages": 257,
+          "memory_size": 1048625,
+          "p_align": 4096,
+          "page_interval_relative_to_base": [
+            69632,
+            1122304
+          ],
+          "program_header_index": 3,
+          "reservation_expression_pages": 257,
+          "virtual_address": 69632
+        },
+        {
+          "file_offset": 73784,
+          "file_size": 4100,
+          "flags": 4,
+          "interval_pages": 2,
+          "memory_size": 4100,
+          "p_align": 4096,
+          "page_interval_relative_to_base": [
+            1118208,
+            1126400
+          ],
+          "program_header_index": 4,
+          "reservation_expression_pages": 2,
+          "virtual_address": 1118264
+        }
+      ],
+      "loader_reservation_expression_pages": 276,
+      "machine": "EM_X86_64",
+      "mapped_page_entries": 275,
+      "no_reallocation_proven": false,
+      "overlap_pages_in_interval_sum": 2,
+      "path": "/home/dmin/cellos/build/p01-source-validity/target/x86_64-unknown-none/release/bench-probe",
+      "program_header_count": 11,
+      "program_header_offset": 64,
+      "reservation_ceiling": "Request/count comparison only; actual Vec capacity, compiled library/allocator behavior and realloc overlap are not certified.",
+      "reservation_request_covers_union_count": true,
+      "reservation_request_shortfall_entries": 0,
+      "sha256": "d93f80be2662d304ba32b420c5921968a4745e026fd330fbc6bccfe0a0a40f1b",
+      "size_bytes": 89896,
+      "union_page_intervals_relative_to_base": [
+        [
+          0,
+          1126400
+        ]
+      ],
+      "union_pages": 275,
+      "writable_array_reservation_entries": 275,
+      "writable_page_entries": 258
+    }
+  },
+  "assumptions": [
+    "Conditional successful preparation/publication: one bench driver and N bench-probe root tasks, no retries/replacements, empty allowed-driver buffers, selected bench/bench-probe stack names, normal 512-slot PIE policy.",
+    "Per-task page counts are translation-invariant at page-aligned PIE bases; no actual runtime base, collision-free VA assignment or concurrent admission is inferred.",
+    "Signed byte hashes are compared with the retained manifest; no cryptographic signature verification or fresh build execution is performed.",
+    "Reviewed source-policy hashes bind the retained build inventory, not the current working tree, compiler implementation proof or runtime evidence."
+  ],
+  "build_manifest": {
+    "path": "/home/dmin/cellos/build/p01-source-validity/build.json",
+    "sha256": "ff90c45d499758e7951bd8238b5b9f52054e6b8156d976d6e278ca1cfee44ebc"
+  },
+  "coverage_proven": false,
+  "evidence_ceiling": "Digest-bound static partition arithmetic only; no overall 1024-entry fit, complete semantic heap/physical coverage, reclamation, quota, authority or production qualification.",
+  "excluded_partitions": [
+    "Fallible aligned-ELF copy, LoadedPage Vec, final-flags Vec and prepared-name scratch; transient realloc old/new overlap.",
+    "Vec/String spare capacity, allocator rounding/metadata, Box conversion, BTreeMap nodes, shared scheduler/ready/death/log/quota containers and unrelated post-arm allocations.",
+    "Runtime Operations/mailbox/request/reply/death/completion backing and pre-arm transfers with immutable Unknown origin.",
+    "Shared SAS roots/intermediate tables, boot mappings, bitmap, reserved heap backing and shared physical union/release joins.",
+    "Failure handoff after load_segments and before CellSegments frame RAII; failed preparation retention/release is not proved by successful-path bounds."
+  ],
+  "fit_proven": false,
+  "no_reallocation_proven": false,
+  "ownership": "Immutable allocation origin and exclusive semantic adoption are separate facts; Preparation or Execution provenance alone is not per-Cell ownership.",
+  "page_size_bytes": 4096,
+  "rules": {
+    "interval": "[floor((p_vaddr+base)/4096)*4096, ceil((p_vaddr+base+p_memsz)/4096)*4096)",
+    "interval_sum": "Sum before overlap removal; conservative, not exclusive physical frames.",
+    "loader_reservation": "sum(ceil(p_memsz/4096)) omits the start offset and is not a general bound on mapped pages.",
+    "retained_exclusive_allocations_per_task": {
+      "bytes": "Actual Layout/capacity required; length, count and allocator-used bytes are not interchangeable.",
+      "empty_buffers": "May reduce allocation count; selected allowed-driver Vec is empty.",
+      "objects": [
+        "Task Box",
+        "Task name",
+        "cwd",
+        "argv",
+        "mapped-page array",
+        "writable-page array"
+      ],
+      "upper_bound": 6
+    },
+    "shared_sas_tables": "At most three new non-root tables per new leaf path. Coarse 3*(segment pages + 32 usable stack pages/task) assumes every mapping is a new path; reused/pre-existing root/tables are excluded and are never exclusively child-owned.",
+    "stacks_per_task": {
+      "allocated_frames": 36,
+      "count": 2,
+      "descriptors": "inline in Task, no separate heap allocation",
+      "guard_frames_each": 2,
+      "usable_frames_each": 16
+    },
+    "union": "Unique mapped pages; same-task segment overlap reuses frames and merges flags.",
+    "zero_size": "Unaligned zero-size PT_LOAD still touches one page in this loader; aligned zero-size touches none."
+  },
+  "runtime_evidence": false,
+  "scope": "private-P01-artifact-bound-exclusive-preparation-partitions",
+  "selected_bounds": [
+    {
+      "child_exclusive_preparation_retained_allocations_upper_bound": 0,
+      "child_stack_frames": 0,
+      "children": 0,
+      "driver_tasks": 1,
+      "exclusive_preparation_retained_allocations_upper_bound": 6,
+      "exclusive_segment_and_stack_frames": 342,
+      "exclusive_segment_frames": 306,
+      "exclusive_stack_allocated_bytes": 147456,
+      "exclusive_stack_frames": 36,
+      "exclusive_stack_guard_bytes": 16384,
+      "exclusive_stack_usable_bytes": 131072,
+      "mapped_page_entries": 306,
+      "segment_interval_sum_pages": 308,
+      "shared_sas_new_table_frames_coarse_upper_bound": 1014,
+      "total_root_tasks": 1
+    },
+    {
+      "child_exclusive_preparation_retained_allocations_upper_bound": 6,
+      "child_stack_frames": 36,
+      "children": 1,
+      "driver_tasks": 1,
+      "exclusive_preparation_retained_allocations_upper_bound": 12,
+      "exclusive_segment_and_stack_frames": 653,
+      "exclusive_segment_frames": 581,
+      "exclusive_stack_allocated_bytes": 294912,
+      "exclusive_stack_frames": 72,
+      "exclusive_stack_guard_bytes": 32768,
+      "exclusive_stack_usable_bytes": 262144,
+      "mapped_page_entries": 581,
+      "segment_interval_sum_pages": 585,
+      "shared_sas_new_table_frames_coarse_upper_bound": 1935,
+      "total_root_tasks": 2
+    },
+    {
+      "child_exclusive_preparation_retained_allocations_upper_bound": 24,
+      "child_stack_frames": 144,
+      "children": 4,
+      "driver_tasks": 1,
+      "exclusive_preparation_retained_allocations_upper_bound": 30,
+      "exclusive_segment_and_stack_frames": 1586,
+      "exclusive_segment_frames": 1406,
+      "exclusive_stack_allocated_bytes": 737280,
+      "exclusive_stack_frames": 180,
+      "exclusive_stack_guard_bytes": 81920,
+      "exclusive_stack_usable_bytes": 655360,
+      "mapped_page_entries": 1406,
+      "segment_interval_sum_pages": 1416,
+      "shared_sas_new_table_frames_coarse_upper_bound": 4698,
+      "total_root_tasks": 5
+    },
+    {
+      "child_exclusive_preparation_retained_allocations_upper_bound": 48,
+      "child_stack_frames": 288,
+      "children": 8,
+      "driver_tasks": 1,
+      "exclusive_preparation_retained_allocations_upper_bound": 54,
+      "exclusive_segment_and_stack_frames": 2830,
+      "exclusive_segment_frames": 2506,
+      "exclusive_stack_allocated_bytes": 1327104,
+      "exclusive_stack_frames": 324,
+      "exclusive_stack_guard_bytes": 147456,
+      "exclusive_stack_usable_bytes": 1179648,
+      "mapped_page_entries": 2506,
+      "segment_interval_sum_pages": 2524,
+      "shared_sas_new_table_frames_coarse_upper_bound": 8382,
+      "total_root_tasks": 9
+    }
+  ],
+  "source_inventory": {
+    "path": "/home/dmin/cellos/build/p01-source-validity/inputs.json",
+    "reviewed_rule_sources_sha256": {
+      "kernel/src/loader/elf.rs": "a3370d6ac9fd21d56e36b09c06777ec47ecbbc5d8c527e6f30a53b646aa7b758",
+      "kernel/src/loader/va_alloc.rs": "585fbb66677c68a6ac735436efa738d8cbf3dac66a2d9bc3189ca2ed7da77298",
+      "kernel/src/task.rs": "8bbfdf152be2cf29b3f985f79a6b5536c8cf1dfaf63ed7ff220f2559657181c7",
+      "kernel/src/task/elf_prepare.rs": "8f2fbebb65be232e6b3977787b40c228bfb2b1ac5b9eaf765c845d58286ffa1e",
+      "kernel/src/task/stack.rs": "e9c1d152d6532fdc3bb737186633a32562fa5eb5cf26c4d10d35f145cd1f03cb",
+      "kernel/src/task/tcb.rs": "67a2cf7b97614fee1262d88bcb136c777c04f703f826a459426579e3836c5d13"
+    },
+    "sha256": "62fb7026c4eb22712840fa50441c76f295fe113910f86e74259ba727f1fa98b0"
+  },
+  "version": 1
+}

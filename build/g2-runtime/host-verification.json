@@ -1,0 +1,45 @@
+{
+  "runs": [
+    {
+      "artifact": "initial-import-failure.raw.log",
+      "exit_code": 101
+    },
+    {
+      "artifact": "initial-unattested-fixture-failure.raw.log",
+      "exit_code": 101
+    },
+    {
+      "artifact": "initial-unprivileged-fixture-failure.raw.log",
+      "exit_code": 101
+    },
+    {
+      "artifact": "first-host-native-pass.raw.log",
+      "exit_code": 0
+    },
+    {
+      "artifact": "first-provisioning-host-pass.raw.log",
+      "exit_code": 0
+    },
+    {
+      "artifact": "final-provisioning-host-pass.raw.log",
+      "exit_code": 0
+    },
+    {
+      "artifact": "final-native-host-pass.raw.log",
+      "exit_code": 0
+    }
+  ],
+  "final_native_suites": {
+    "passed": 94,
+    "suites": 5
+  },
+  "final_offline_provisioner": {
+    "passed": 4,
+    "suites": 1
+  },
+  "limitations": [
+    "No pre-edit full native baseline was run; final existing and added scenarios pass, no baseline comparison claim",
+    "Native Windows locking/scripts not executed",
+    "In-memory fault media is not admitted durability or physical device evidence"
+  ]
+}

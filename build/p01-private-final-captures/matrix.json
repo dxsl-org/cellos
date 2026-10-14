@@ -1,0 +1,114 @@
+{
+  "architecture_approval": false,
+  "build_sha256": "353ff3bd88e33b8bf273f21bdde2402de8d9e055c643a3885b083fdc7fa60bda",
+  "captures": [
+    {
+      "capture_uuid": "b802d11f-c064-49ea-b075-08d35dfe8cec",
+      "count": "0",
+      "fully_settled": false,
+      "replica": 0,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "7c4ee7d4-e506-4bff-9d46-0c1785c8c614",
+      "count": "0",
+      "fully_settled": false,
+      "replica": 1,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "81934971-ecd8-468e-bc0e-fae6e9388979",
+      "count": "0",
+      "fully_settled": false,
+      "replica": 2,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "b5a9651c-f3fe-489b-8250-027c3792da4d",
+      "count": "1",
+      "fully_settled": false,
+      "replica": 0,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "52875e6b-4598-49db-8dc5-3119fbc11329",
+      "count": "1",
+      "fully_settled": false,
+      "replica": 1,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "79f6f7d4-39c7-4dce-badf-a9b5ea4d82b5",
+      "count": "1",
+      "fully_settled": false,
+      "replica": 2,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "f81c25f3-8ce8-4d41-bb69-0d4a907d3988",
+      "count": "4",
+      "fully_settled": false,
+      "replica": 0,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "a1b0e6bf-806c-4b7c-be9e-65c2e3bc1cb4",
+      "count": "4",
+      "fully_settled": false,
+      "replica": 1,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "a65ac7f0-7b31-45ec-a0d2-c692f65a2e0c",
+      "count": "4",
+      "fully_settled": false,
+      "replica": 2,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "b6be514c-651b-424f-bd9b-446326d91abd",
+      "count": "8",
+      "fully_settled": false,
+      "replica": 0,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "c5ec8edf-4166-4a47-ac7b-87315a565a32",
+      "count": "8",
+      "fully_settled": false,
+      "replica": 1,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "f935ba2d-d6a0-459a-b5db-c46d015c3c4a",
+      "count": "8",
+      "fully_settled": false,
+      "replica": 2,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "b5205177-5202-45d0-93ba-4f92d7e5ab0f",
+      "count": "denied",
+      "fully_settled": false,
+      "replica": 0,
+      "structurally_complete": false
+    },
+    {
+      "capture_uuid": "58c4c4b5-4a22-428a-ae5f-97cd2d1c16c2",
+      "count": "denied",
+      "fully_settled": false,
+      "replica": 1,
+      "structurally_complete": false
+    },
+    {
+      "capture_uuid": "bc0096b7-3de5-4113-8fc1-aa29e0983eb1",
+      "count": "denied",
+      "fully_settled": false,
+      "replica": 2,
+      "structurally_complete": false
+    }
+  ],
+  "cpus": 1,
+  "one_cpu_accounting_qualified": false,
+  "throughput_claim": false
+}

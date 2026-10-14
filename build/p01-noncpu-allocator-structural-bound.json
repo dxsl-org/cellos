@@ -1,0 +1,34 @@
+{
+  "build_sha256": "eb1bfdf94f07370283ed821104faf22bf05bebf425a5fb3dbb3fcdb22a160c15",
+  "dependency": {
+    "archive_checksum_matches_lockfile": true,
+    "archive_sha256": "2b23ac50abb8261cb38c6e2a7192d3302e0836dac1628f6a93b82b4fad185897",
+    "cached_source_matches_archive": true,
+    "name": "linked_list_allocator",
+    "source_sha256": {
+      "src/hole.rs": "871d1e63af1d9b4a24c6001f0f7f6960286d5cfceaa685560c9bae2ad53f09a0",
+      "src/lib.rs": "5bc43056aafa772cdadeb99d0cf0fa9670636243b7b2ef8b0002d6e97f2c4884"
+    },
+    "version": "0.10.6"
+  },
+  "format": "p01-allocator-structural-bound-v1",
+  "heap_bytes": 4194304,
+  "interpretation": "A genuine finite structural upper bound, not an observed maximum. It exceeds 1024 and cannot certify the existing ledger; a tighter closed workload/producer/failure bound is still required. No increase of the ledger or budget is authorized.",
+  "kernel_source_sha256": {
+    "Cargo.lock": "ed30dd8bbe36ba2e65dbc121cea6bb1139f1911951950309e976a8b8231d5151",
+    "kernel/src/main.rs": "ae7fb63ff10e3dc92494d98a8978144878c965a30246e2a1abccc0e9e913d301",
+    "kernel/src/memory/heap.rs": "0094be38c2f2c55e516b39b0ae44552cbc3a668eecfa80f793177bcc1f96e9d5"
+  },
+  "minimum_extent_bytes": 16,
+  "premises": [
+    "kernel/src/main.rs:648-669 reserves exactly 1024 contiguous 4096-byte frames and initializes the heap once",
+    "linked_list_allocator/src/hole.rs:368-374 normalizes every allocation Layout to at least min_size and Hole alignment",
+    "linked_list_allocator/src/hole.rs:427-430 defines min_size as 2*sizeof(usize), hence 16 bytes on x86_64",
+    "linked_list_allocator/src/lib.rs:182-186 increments used by that normalized allocation extent",
+    "successful live allocation extents are disjoint; realloc new-before-old-free is included in simultaneous occupancy"
+  ],
+  "private_heap_ledger_capacity": 1024,
+  "proves_heap_ledger_fit": false,
+  "scope": "pinned x86_64 fixed 4MiB kernel heap; successful disjoint allocation extents",
+  "structural_simultaneous_allocation_upper_bound": 262144
+}

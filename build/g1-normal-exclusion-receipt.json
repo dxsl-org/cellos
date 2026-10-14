@@ -1,0 +1,13 @@
+{
+  "command": "env CELLOS_G1_CPU=0 CELLOS_P01_TRACE=0 CARGO_TARGET_DIR=build/g1-normal-exclusion RUSTFLAGS='-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static' cargo build --locked --offline --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc --features test-hooks",
+  "exit_code": 0,
+  "kernel_sha256": "427910a46f177fe083ed1ddc82f77ce706b035442dd5c1611bc40b09e2980d89",
+  "absent_private_tags": [
+    "G1-HEADER",
+    "G1-EVENT",
+    "G1-CUTOFF",
+    "G1-CLOCK-BOOT",
+    "G1-MANIFEST"
+  ],
+  "scope": "normal image compiled, private exporter excluded; not runtime or hardware qualification"
+}

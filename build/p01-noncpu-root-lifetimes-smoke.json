@@ -1,0 +1,238 @@
+{
+  "actual_mutation_controls": [
+    {
+      "mutation": "stale physical incarnation",
+      "reason": "non-CPU root physical incarnation stale/free",
+      "rejected": true
+    },
+    {
+      "mutation": "stale heap allocation incarnation",
+      "reason": "heap root stale incarnation/Layout at baseline",
+      "rejected": true
+    },
+    {
+      "mutation": "in-flight construction as complete",
+      "reason": "valid non-CPU lifetime source incomplete/in-flight",
+      "rejected": true
+    },
+    {
+      "mutation": "missing allocated root as registry-empty",
+      "reason": "valid non-CPU lifetime source incomplete/in-flight",
+      "rejected": true
+    },
+    {
+      "mutation": "IOMMU allocation forged as VM root reference",
+      "reason": "VM registry reference uses wrong root family",
+      "rejected": true
+    }
+  ],
+  "allocator_bound_sha256": "6960b957576a3d9109edd85ea0a87f407d1109f4905546f06da19fe50f51f52b",
+  "budget_selection_ready": false,
+  "build_sha256": "eb1bfdf94f07370283ed821104faf22bf05bebf425a5fb3dbb3fcdb22a160c15",
+  "cpu_graph_cutoffs_storage_fit": 78,
+  "decoder_sha256": "1aaee63c27cc2b5edafda5e33e3a8a796aa6acaf3e071c5ee108425045a94d7a",
+  "format": "p01-noncpu-root-runtime-smoke-v1",
+  "physical_semantic_coverage_proven": false,
+  "physical_tree_topology_proven": false,
+  "raw_boot_markers": [
+    {
+      "capture": "76c10e4a-b5ac-4353-83b4-f94e237c44e1",
+      "count": "0",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "835deac7-597b-48bf-9f08-d688a93846e8",
+      "count": "0",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "299cc9f5-074f-426b-afc4-25438cc468b8",
+      "count": "0",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "075c86e6-96a4-4e41-b7be-29040e862950",
+      "count": "1",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "14ba90fb-0f67-470a-b130-a2383347787a",
+      "count": "1",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "5e07ebfa-2326-40ae-ad2f-421d5f8cd87f",
+      "count": "1",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "827b9aa9-be9c-43d1-ba47-6cf6a729a746",
+      "count": "4",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "9be32896-e7f6-4025-a0f6-b88cc4309785",
+      "count": "4",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "904e874d-0ba1-4873-9a6e-f260b862a17a",
+      "count": "4",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "8ec8672f-b5eb-406d-8bd8-f2c21d892ab1",
+      "count": "8",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "1eca6be9-81e2-4ae6-b659-358679be4b98",
+      "count": "8",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "40ba5e51-4fee-41ae-b02b-e67d263e4158",
+      "count": "8",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "db54877f-2a15-471c-a7cf-d5873115fadb",
+      "count": "denied",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "99f8e93b-c525-4574-9b93-c322287975be",
+      "count": "denied",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "f7e5a8fc-9dfc-43e6-96ab-de2a03be2d0d",
+      "count": "denied",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    }
+  ],
+  "report_sha256": "987f360cd55b80ac670c6208ac6e02a67a12376fed15952d5f96713afa2c579a",
+  "root_cutoffs": 78,
+  "root_cutoffs_complete": 78,
+  "workload_capacity_fit_proven": false
+}

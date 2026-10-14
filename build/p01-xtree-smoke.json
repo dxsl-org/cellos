@@ -1,0 +1,248 @@
+{
+  "actual_capture_rejections": [
+    {
+      "mutation": "stale_table_frame_incarnation",
+      "reason": "xtree table identity/incarnation",
+      "rejected": true
+    },
+    {
+      "mutation": "wrong_child_level",
+      "reason": "xtree child family/level",
+      "rejected": true
+    },
+    {
+      "mutation": "zero_leaf_run_span",
+      "reason": "xtree overlapping/index span",
+      "rejected": true
+    },
+    {
+      "mutation": "sv39_leaf_ppn_target_mismatch",
+      "reason": "xtree descriptor/run geometry",
+      "rejected": true
+    },
+    {
+      "mutation": "unnormalized_hardware_accessed_bit",
+      "reason": "xtree descriptor/run geometry",
+      "rejected": true
+    },
+    {
+      "mutation": "false_exact_preflight_count",
+      "reason": "xtree complete preflight missing",
+      "rejected": true
+    }
+  ],
+  "boot_scans": [
+    {
+      "capture_uuid": "26d0cdd5-30d8-4245-998c-0680a62f4047",
+      "count": "0",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "36d1dc39-803f-4a29-b335-77b6a23c4637",
+      "count": "0",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "5a25815a-3ad6-423c-b4e5-543b37028f09",
+      "count": "0",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "111d87d5-80b1-4a17-afbe-35fe1996ac0a",
+      "count": "1",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "ea913041-3c8f-4dc0-92bf-8c4428aeec9e",
+      "count": "1",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "1cf37bcf-5c17-4a2e-b4f0-0373250fba51",
+      "count": "1",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "9ce9c42f-7f0e-4ba2-8783-fa7b8d80a7bf",
+      "count": "4",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "ec602dab-63d4-4e6f-97fc-ac9cb53a88a5",
+      "count": "4",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "0c3fdb76-fe9e-4c16-b37f-683d97fad7fa",
+      "count": "4",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "7c53cae1-4aff-4f72-adcf-3c0a1d465f6b",
+      "count": "8",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "009a433e-78c5-4253-bd18-11c986b81e43",
+      "count": "8",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "dab3632a-bab9-4caf-898f-2e0cc0c035eb",
+      "count": "8",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "90540371-9dbc-4821-a38e-b6949560106b",
+      "count": "denied",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "6476bf85-7a83-4200-b860-d6371113a96e",
+      "count": "denied",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture_uuid": "27dbd891-48d3-4f8a-97f3-deae08a27609",
+      "count": "denied",
+      "known_vmm_preempted_retained": true,
+      "mismatch_or_panic": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    }
+  ],
+  "build_sha256": "ef39903abaf57638a52af2c9f1d1e65a33c2942e2fea6a1f5eca6aba1c211e61",
+  "each_cutoff": {
+    "compressed_edges": 6,
+    "leaf_descriptors": 6,
+    "live_roots": 2,
+    "mapping_paths": 2,
+    "planes": [
+      "noncpu"
+    ],
+    "shared_tables": 0,
+    "software_alias_end": 305430528,
+    "software_alias_start": 305418240,
+    "table_nodes": 6
+  },
+  "format": "p01-noncpu-software-tree-smoke-v1",
+  "hardware_publication_proven": false,
+  "native_domain_compile_passed": true,
+  "native_domain_runtime_certified": false,
+  "observed_tree_cutoffs": 78,
+  "observed_tree_heap_identity_joins": 468,
+  "parser_tests_passed": 86,
+  "physical_semantic_coverage_proven": false,
+  "private_trace_storage": {
+    "core_static_bytes": 59125,
+    "exporter_buffer_bytes": 352,
+    "linked_image_overhead_not_inferred": true,
+    "resource_static_bytes": 14014608,
+    "serialized_payload_bytes": 56896
+  },
+  "source_ledger_tests_passed": 54,
+  "trace_disabled_compile_passed": true,
+  "workload_capacity_fit_proven": false
+}

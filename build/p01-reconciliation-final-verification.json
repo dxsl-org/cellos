@@ -1,0 +1,556 @@
+{
+  "status": "completed",
+  "runs": [
+    {
+      "command": [
+        "python3",
+        "scripts/verify-cell-contract-p01.py",
+        "--negative-controls"
+      ],
+      "exit_code": 0,
+      "report": {
+        "counts": {
+          "ac_approvals": 50,
+          "ac_canonical": 50,
+          "ac_owners": 50,
+          "adoptions": 38,
+          "delta_approval_rows": 23,
+          "delta_packages": 23,
+          "lexical_consumer_inputs": 3724,
+          "lexical_exports": 2312,
+          "local_links": 1405,
+          "locked_direct_phase_links": 238,
+          "locks": 38,
+          "package_source_inputs": 3724,
+          "phases": 10,
+          "recorded_legacy_inventory": 161
+        },
+        "errors": [],
+        "negative_controls": [
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PHASE_LINK",
+                "detail": "no phase-table link to .agents/261011-1200-cell-contract-authority/phase-02-kernel-authority.md",
+                "path": ".agents/261011-1200-cell-contract-authority/plan.md"
+              }
+            ],
+            "mutation": "remove actual P02 controller link"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "RECIPROCAL_LOCK",
+                "detail": "missing blockedBy controller edge",
+                "path": ".agents/260528-2016-vicell-full-implementation/plan.md"
+              }
+            ],
+            "mutation": "remove actual reciprocal blockedBy edge",
+            "path": ".agents/260528-2016-vicell-full-implementation/plan.md"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PACKAGE_DIGEST",
+                "detail": "preparation bytes differ from pinned revision",
+                "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D01.md"
+              }
+            ],
+            "mutation": "alter pinned package bytes"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PACKAGE_APPROVAL",
+                "detail": "preparation must preserve pending checkpoints and blocked release",
+                "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D01.md"
+              }
+            ],
+            "mutation": "promote preparation checkpoint"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PACKAGE_SOURCE_DRIFT",
+                "detail": "pinned source bytes differ; revise preparation, not approval",
+                "path": "CHANGELOG.md"
+              }
+            ],
+            "mutation": "alter pinned source digest"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PACKAGE_SOURCE_SET",
+                "detail": "working-source denominator must equal the pinned lexical consumer inventory",
+                "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/manifest.json"
+              }
+            ],
+            "mutation": "omit pinned source input"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PACKAGE_SET",
+                "detail": "expected ordered D01..D12,C01..C11 once",
+                "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/manifest.json"
+              }
+            ],
+            "mutation": "omit preparation package"
+          }
+        ],
+        "pending_exact_deltas": [
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D01",
+            "owner": "P02"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D02",
+            "owner": "P02/P03/P06/P08"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D03",
+            "owner": "P02/P03/P05"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D04",
+            "owner": "P04"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D05",
+            "owner": "P02/P05/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D06",
+            "owner": "P05/P04/P08/P09"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D07",
+            "owner": "P03/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D08",
+            "owner": "P05/P07"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D09",
+            "owner": "P07/P02/P05"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D10",
+            "owner": "P05/P04/P02"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D11",
+            "owner": "P02/P03/P07/P08"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D12",
+            "owner": "P08"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C01",
+            "owner": "P08-C/P08-B"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C02",
+            "owner": "P03/P08-C"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C03",
+            "owner": "P08-C/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C04",
+            "owner": "P08-C/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C05",
+            "owner": "P03/P08-C/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C06",
+            "owner": "P08-B/P08-C/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C07",
+            "owner": "P04/P08-A/P08-B"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C08",
+            "owner": "P08-B/P08-C/P08-D"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C09",
+            "owner": "P08-B"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C10",
+            "owner": "P08-D"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C11",
+            "owner": "P08-C/P08-A"
+          }
+        ],
+        "scope": "document consistency only; no ABI approval, lock release, runtime or P01 completion"
+      },
+      "stderr": ""
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/verify-cell-contract-p01.py",
+        "--require-approved",
+        "--negative-controls"
+      ],
+      "exit_code": 1,
+      "report": {
+        "counts": {
+          "ac_approvals": 50,
+          "ac_canonical": 50,
+          "ac_owners": 50,
+          "adoptions": 38,
+          "delta_approval_rows": 23,
+          "delta_packages": 23,
+          "lexical_consumer_inputs": 3724,
+          "lexical_exports": 2312,
+          "local_links": 1405,
+          "locked_direct_phase_links": 238,
+          "locks": 38,
+          "package_source_inputs": 3724,
+          "phases": 10,
+          "recorded_legacy_inventory": 161
+        },
+        "errors": [
+          {
+            "code": "APPROVAL_PENDING",
+            "detail": "23 exact deltas lack checkpoint approval; P01 completion refused",
+            "path": ".agents/261011-1200-cell-contract-authority/abi-deltas.md"
+          }
+        ],
+        "negative_controls": [
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PHASE_LINK",
+                "detail": "no phase-table link to .agents/261011-1200-cell-contract-authority/phase-02-kernel-authority.md",
+                "path": ".agents/261011-1200-cell-contract-authority/plan.md"
+              }
+            ],
+            "mutation": "remove actual P02 controller link"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "RECIPROCAL_LOCK",
+                "detail": "missing blockedBy controller edge",
+                "path": ".agents/260528-2016-vicell-full-implementation/plan.md"
+              }
+            ],
+            "mutation": "remove actual reciprocal blockedBy edge",
+            "path": ".agents/260528-2016-vicell-full-implementation/plan.md"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PACKAGE_DIGEST",
+                "detail": "preparation bytes differ from pinned revision",
+                "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D01.md"
+              }
+            ],
+            "mutation": "alter pinned package bytes"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PACKAGE_APPROVAL",
+                "detail": "preparation must preserve pending checkpoints and blocked release",
+                "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D01.md"
+              }
+            ],
+            "mutation": "promote preparation checkpoint"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PACKAGE_SOURCE_DRIFT",
+                "detail": "pinned source bytes differ; revise preparation, not approval",
+                "path": "CHANGELOG.md"
+              }
+            ],
+            "mutation": "alter pinned source digest"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PACKAGE_SOURCE_SET",
+                "detail": "working-source denominator must equal the pinned lexical consumer inventory",
+                "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/manifest.json"
+              }
+            ],
+            "mutation": "omit pinned source input"
+          },
+          {
+            "detected": true,
+            "failures": [
+              {
+                "code": "PACKAGE_SET",
+                "detail": "expected ordered D01..D12,C01..C11 once",
+                "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/manifest.json"
+              }
+            ],
+            "mutation": "omit preparation package"
+          }
+        ],
+        "pending_exact_deltas": [
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D01",
+            "owner": "P02"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D02",
+            "owner": "P02/P03/P06/P08"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D03",
+            "owner": "P02/P03/P05"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D04",
+            "owner": "P04"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D05",
+            "owner": "P02/P05/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D06",
+            "owner": "P05/P04/P08/P09"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D07",
+            "owner": "P03/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D08",
+            "owner": "P05/P07"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D09",
+            "owner": "P07/P02/P05"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D10",
+            "owner": "P05/P04/P02"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D11",
+            "owner": "P02/P03/P07/P08"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "D12",
+            "owner": "P08"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C01",
+            "owner": "P08-C/P08-B"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C02",
+            "owner": "P03/P08-C"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C03",
+            "owner": "P08-C/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C04",
+            "owner": "P08-C/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C05",
+            "owner": "P03/P08-C/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C06",
+            "owner": "P08-B/P08-C/P06"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C07",
+            "owner": "P04/P08-A/P08-B"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C08",
+            "owner": "P08-B/P08-C/P08-D"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C09",
+            "owner": "P08-B"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C10",
+            "owner": "P08-D"
+          },
+          {
+            "candidate": "pending",
+            "checkpoint1": "pending",
+            "checkpoint2": "pending",
+            "delta": "C11",
+            "owner": "P08-C/P08-A"
+          }
+        ],
+        "scope": "document consistency only; no ABI approval, lock release, runtime or P01 completion"
+      },
+      "stderr": ""
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "format": "g2-r-core-b-actual-review-v1",
+  "candidate_sha256": "f6a5a6cd9facaaf7de7075fad64399925b053bee54be23215d383b8ea5e14552",
+  "vfs_review": {
+    "reviewer": "G2VfsReview",
+    "initial_findings": 4,
+    "all_accepted_fixed": true,
+    "followup": "correct",
+    "tested_by_reviewer": false
+  },
+  "provisioning_review": {
+    "reviewer": "G2ProvisionReview",
+    "initial_findings": 2,
+    "followup": "correct",
+    "tested_by_reviewer": false,
+    "limit": "VM S1 generic error only; exact ERR_IO host scenarios. Windows runtime not exercised"
+  },
+  "engine_review": {
+    "reviewer": "controlling integration owner",
+    "geometry_extent_counter_algorithms_read": true,
+    "selected_metadata_bitmap_gap_fixed": true,
+    "independent_engine_review_pass_claimed": false
+  },
+  "rollback": "Revert only G2 source/provisioning hooks. Preserve failures/images. Poison ends mutation; reopen read-only then discard. Reverting binaries does not undo accepted image writes or qualify ledger rollback.",
+  "scope": "Actual development source correctness review, not backend/floor/durability/production/CP1/CP2 admission"
+}

@@ -1,0 +1,237 @@
+{
+  "actual_capture_mutation_controls": [
+    {
+      "mutation": "zero leaf span",
+      "reason": "topology edge descriptor identity malformed",
+      "rejected": true
+    },
+    {
+      "mutation": "table edge as run",
+      "reason": "topology run crosses table/huge geometry",
+      "rejected": true
+    },
+    {
+      "mutation": "invented hardware accessed",
+      "reason": "topology run invents hardware accessed/dirty",
+      "rejected": true
+    },
+    {
+      "mutation": "wrong expanded geometry",
+      "reason": "topology descriptor target/leaf geometry mismatch",
+      "rejected": true
+    },
+    {
+      "mutation": "managed leaf relabeled external",
+      "reason": "topology external/mixed leaf is entirely allocator-owned",
+      "rejected": true
+    }
+  ],
+  "allocator_structural_proof_sha256": "70d67630da0f73e1a4ee035f58a82e4321cf298ad23f3a080db697a1d592550c",
+  "budget_selection_ready": false,
+  "build_sha256": "0f9489995fc04db8f4fef58183d0c172fd566b0667896ae064db186e6ad88ec9",
+  "cpu_graph_observed_complete": true,
+  "decoder_sha256": "2085570d133e8f66040bde079c100d1c36d3941c86a9b463d826af7b670ed2ab",
+  "format": "p01-private-topology-runtime-smoke-v1",
+  "global_physical_semantic_coverage_proven": false,
+  "graph_cutoffs": 78,
+  "graph_cutoffs_storage_fit_proven": 78,
+  "raw_boot_markers": [
+    {
+      "capture": "f038c88a-3a5d-4d45-98cf-2e145a8902d6",
+      "count": "0",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "12853d8c-dc80-4494-b266-26fc28b47b5a",
+      "count": "0",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "637a1594-9eda-42b2-8c26-f31e41b7d554",
+      "count": "0",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "e6fb8f1c-720b-43ca-8286-e4cfafb2fa90",
+      "count": "1",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "99801b97-f0d3-4733-9544-87f203f3ff1f",
+      "count": "1",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "2f227f7b-834c-4162-b32f-ff98407c3d3e",
+      "count": "1",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "8c0a0b4a-4024-4bf2-8e6a-08dff483ee74",
+      "count": "4",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "c6a44831-97f6-498c-9d2b-99784ab1cc48",
+      "count": "4",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "f5f48e1b-eafb-4408-ae10-3a70953cfad3",
+      "count": "4",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "24dc3248-2b70-4dd5-9b33-e2e39416c64d",
+      "count": "8",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "ed097eef-b9dd-4807-ab30-9665a04578be",
+      "count": "8",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "d32b7d50-9267-4e82-9506-7dbbf1b22f7e",
+      "count": "8",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "4abe93b8-d32e-4d78-8e60-35c6b8e35f19",
+      "count": "denied",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "bd49e92d-4e48-4b98-a81a-ce1bc5b16e0e",
+      "count": "denied",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    },
+    {
+      "capture": "c4cb5803-0ace-4000-b1a1-b15841d1df59",
+      "count": "denied",
+      "kernel_panic": false,
+      "known_vmm_failure": true,
+      "mismatch": false,
+      "rollback_markers": {
+        "AP-FA": true,
+        "AP-RF": true,
+        "AP-RM": true,
+        "AP-RW": true
+      }
+    }
+  ],
+  "report_sha256": "6bc0c3a550e02c7335e2951f8174f8a907849706c91fcc1be8fcb446691677b4",
+  "workload_capacity_fit_proven": false
+}

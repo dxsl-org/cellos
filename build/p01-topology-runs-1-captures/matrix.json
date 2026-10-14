@@ -1,0 +1,33 @@
+{
+  "architecture_approval": false,
+  "build_sha256": "0f9489995fc04db8f4fef58183d0c172fd566b0667896ae064db186e6ad88ec9",
+  "captures": [
+    {
+      "capture_uuid": "99801b97-f0d3-4733-9544-87f203f3ff1f",
+      "count": "1",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 0,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "e6fb8f1c-720b-43ca-8286-e4cfafb2fa90",
+      "count": "1",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 1,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "2f227f7b-834c-4162-b32f-ff98407c3d3e",
+      "count": "1",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 2,
+      "structurally_complete": true
+    }
+  ],
+  "cpus": 1,
+  "one_cpu_accounting_qualified": false,
+  "throughput_claim": false
+}

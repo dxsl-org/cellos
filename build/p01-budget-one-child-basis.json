@@ -1,0 +1,4292 @@
+{
+  "analyzer_sha256": "b8d57a145f910e3ff2bc9f5d79c6008300b5be63dee42ba70cf6716bbeeb059b",
+  "architecture_approval": false,
+  "budget_selection_blockers": [
+    "aggregate_cpu: No admitted aggregate execution unit/period/burst/overshoot measurement; scheduler ticks and latency are not CPU entitlement.",
+    "authority_controller_router: Actual genesis, persistence, reserve/live-claim, queues and resize producer costs are not supplied by this fixture.",
+    "broker_and_lifecycle: Session/reconnect/durable-key/unknown-generation retention costs are outside this fixture.",
+    "heap ownership capacity/coverage unproven",
+    "missing scenario/replicates: 0:0, 0:1, 0:2, 4:0, 4:1, 4:2, 8:0, 8:1, 8:2, denied:0, denied:1, denied:2",
+    "operations_and_completion_retention: Parked footprint is not accepted/retained/unknown operation saturation and authoritative consume measurement.",
+    "pending/retained/unknown/live component",
+    "physical inventory semantic/topology coverage unproven",
+    "production_capacity: QEMU-TCG one-CPU finite samples do not qualify physical Intel/VMX, 200 overlapping clients or production capacity.",
+    "settled nonzero/absent outstanding_cleanup_obligations",
+    "settled nonzero/absent unknown_retained_obligations",
+    "threads_and_shared_cspace: Fixture is root-only, not same-incarnation thread/SMP or lineage/handle saturation measurement.",
+    "unreclaimed raw residual: actual_heap_used_bytes",
+    "unreclaimed raw residual: execution_context_quota_charge",
+    "unreclaimed raw residual: used_frames"
+  ],
+  "budget_selection_ready": false,
+  "build_sha256": "ea98b5e38b49c763396bf13d572403eec201b76a8872cea296ed43b5eac87803",
+  "candidate_budgets": null,
+  "capture_pins": [
+    {
+      "build_sha256": "ea98b5e38b49c763396bf13d572403eec201b76a8872cea296ed43b5eac87803",
+      "capture_sha256": "c84b9918946fb009c47b284c7110b13128e1957fd67d8a41dd066bcb515cda9a",
+      "capture_uuid": "2f0c594c-9e4c-4572-adbf-22d5f8ec9b20",
+      "raw_sha256": "68a36c921bb5c885aab6d86d0d409806d33b8a72bc75d32747375884e91eb0ae"
+    },
+    {
+      "build_sha256": "ea98b5e38b49c763396bf13d572403eec201b76a8872cea296ed43b5eac87803",
+      "capture_sha256": "15bd85eb70faf59efea963d21b287e395fd3dd32edff070b667d5e1d3c08e440",
+      "capture_uuid": "27d28919-f87e-46f0-865b-8939237dc61d",
+      "raw_sha256": "c6728280fdd58c5d01fe635c8d86e7792b604f20dd6b3580a3167e922eef597d"
+    },
+    {
+      "build_sha256": "ea98b5e38b49c763396bf13d572403eec201b76a8872cea296ed43b5eac87803",
+      "capture_sha256": "e444272e1e53e08cab701c2a0e8dea5efb751ae1b01378ef692bbbbce388091f",
+      "capture_uuid": "1416ad65-a2dd-48e0-8d51-4fcf35693d55",
+      "raw_sha256": "c6728280fdd58c5d01fe635c8d86e7792b604f20dd6b3580a3167e922eef597d"
+    }
+  ],
+  "cohorts": {
+    "1": {
+      "census_live_highwater": {
+        "max": 174,
+        "min": 174
+      },
+      "control_difference_sensitivity_intervals": {
+        "2": {
+          "active_operations": null,
+          "actual_heap_used_bytes": null,
+          "allocated_stack_bytes": null,
+          "execution_context_quota_charge": null,
+          "outstanding_cleanup_obligations": null,
+          "reserved_completions": null,
+          "segment_bytes": null,
+          "unknown_retained_obligations": null,
+          "used_frames": null
+        },
+        "3": {
+          "active_operations": null,
+          "actual_heap_used_bytes": null,
+          "allocated_stack_bytes": null,
+          "execution_context_quota_charge": null,
+          "outstanding_cleanup_obligations": null,
+          "reserved_completions": null,
+          "segment_bytes": null,
+          "unknown_retained_obligations": null,
+          "used_frames": null
+        },
+        "4": {
+          "active_operations": null,
+          "actual_heap_used_bytes": null,
+          "allocated_stack_bytes": null,
+          "execution_context_quota_charge": null,
+          "outstanding_cleanup_obligations": null,
+          "reserved_completions": null,
+          "segment_bytes": null,
+          "unknown_retained_obligations": null,
+          "used_frames": null
+        },
+        "5": {
+          "active_operations": null,
+          "actual_heap_used_bytes": null,
+          "allocated_stack_bytes": null,
+          "execution_context_quota_charge": null,
+          "outstanding_cleanup_obligations": null,
+          "reserved_completions": null,
+          "segment_bytes": null,
+          "unknown_retained_obligations": null,
+          "used_frames": null
+        },
+        "6": {
+          "active_operations": null,
+          "actual_heap_used_bytes": null,
+          "allocated_stack_bytes": null,
+          "execution_context_quota_charge": null,
+          "outstanding_cleanup_obligations": null,
+          "reserved_completions": null,
+          "segment_bytes": null,
+          "unknown_retained_obligations": null,
+          "used_frames": null
+        }
+      },
+      "frame_peak_count": {
+        "max": 3755,
+        "min": 3699
+      },
+      "heap_peak_bytes": {
+        "max": 626184,
+        "min": 626152
+      },
+      "raw_delta_ranges": {
+        "2": {
+          "active_operations": {
+            "max": 0,
+            "min": 0
+          },
+          "actual_heap_used_bytes": {
+            "max": 9336,
+            "min": 9336
+          },
+          "allocated_stack_bytes": {
+            "max": 147456,
+            "min": 147456
+          },
+          "execution_context_quota_charge": {
+            "max": 6642,
+            "min": 6642
+          },
+          "outstanding_cleanup_obligations": {
+            "max": 3,
+            "min": 3
+          },
+          "reserved_completions": {
+            "max": 0,
+            "min": 0
+          },
+          "segment_bytes": {
+            "max": 1126400,
+            "min": 1126400
+          },
+          "unknown_retained_obligations": {
+            "max": 1,
+            "min": 1
+          },
+          "used_frames": {
+            "max": 256,
+            "min": 256
+          }
+        },
+        "3": {
+          "active_operations": {
+            "max": 0,
+            "min": 0
+          },
+          "actual_heap_used_bytes": {
+            "max": 9336,
+            "min": 9336
+          },
+          "allocated_stack_bytes": {
+            "max": 147456,
+            "min": 147456
+          },
+          "execution_context_quota_charge": {
+            "max": 6645,
+            "min": 6645
+          },
+          "outstanding_cleanup_obligations": {
+            "max": 3,
+            "min": 3
+          },
+          "reserved_completions": {
+            "max": 0,
+            "min": 0
+          },
+          "segment_bytes": {
+            "max": 1126400,
+            "min": 1126400
+          },
+          "unknown_retained_obligations": {
+            "max": 1,
+            "min": 1
+          },
+          "used_frames": {
+            "max": 256,
+            "min": 256
+          }
+        },
+        "4": {
+          "active_operations": {
+            "max": 0,
+            "min": 0
+          },
+          "actual_heap_used_bytes": {
+            "max": 784,
+            "min": 784
+          },
+          "allocated_stack_bytes": {
+            "max": 0,
+            "min": 0
+          },
+          "execution_context_quota_charge": {
+            "max": -5,
+            "min": -5
+          },
+          "outstanding_cleanup_obligations": {
+            "max": 0,
+            "min": 0
+          },
+          "reserved_completions": {
+            "max": 0,
+            "min": 0
+          },
+          "segment_bytes": {
+            "max": 0,
+            "min": 0
+          },
+          "unknown_retained_obligations": {
+            "max": 1,
+            "min": 1
+          },
+          "used_frames": {
+            "max": -56,
+            "min": -56
+          }
+        },
+        "5": {
+          "active_operations": {
+            "max": 0,
+            "min": 0
+          },
+          "actual_heap_used_bytes": {
+            "max": 784,
+            "min": 784
+          },
+          "allocated_stack_bytes": {
+            "max": 0,
+            "min": 0
+          },
+          "execution_context_quota_charge": {
+            "max": -5,
+            "min": -5
+          },
+          "outstanding_cleanup_obligations": {
+            "max": 0,
+            "min": 0
+          },
+          "reserved_completions": {
+            "max": 0,
+            "min": 0
+          },
+          "segment_bytes": {
+            "max": 0,
+            "min": 0
+          },
+          "unknown_retained_obligations": {
+            "max": 1,
+            "min": 1
+          },
+          "used_frames": {
+            "max": -56,
+            "min": -56
+          }
+        },
+        "6": {
+          "active_operations": {
+            "max": 0,
+            "min": 0
+          },
+          "actual_heap_used_bytes": {
+            "max": 784,
+            "min": 784
+          },
+          "allocated_stack_bytes": {
+            "max": 0,
+            "min": 0
+          },
+          "execution_context_quota_charge": {
+            "max": -5,
+            "min": -5
+          },
+          "outstanding_cleanup_obligations": {
+            "max": 0,
+            "min": 0
+          },
+          "reserved_completions": {
+            "max": 0,
+            "min": 0
+          },
+          "segment_bytes": {
+            "max": 0,
+            "min": 0
+          },
+          "unknown_retained_obligations": {
+            "max": 1,
+            "min": 1
+          },
+          "used_frames": {
+            "max": -56,
+            "min": -56
+          }
+        }
+      },
+      "replicates": 3,
+      "stage_ranges": {
+        "1": {
+          "active_operations": {
+            "max": 0,
+            "min": 0
+          },
+          "actual_heap_used_bytes": {
+            "max": 518592,
+            "min": 518592
+          },
+          "allocated_stack_bytes": {
+            "max": 147456,
+            "min": 147456
+          },
+          "execution_context_quota_charge": {
+            "max": 15,
+            "min": 15
+          },
+          "outstanding_cleanup_obligations": {
+            "max": 3,
+            "min": 3
+          },
+          "reserved_completions": {
+            "max": 0,
+            "min": 0
+          },
+          "segment_bytes": {
+            "max": 1253376,
+            "min": 1253376
+          },
+          "unknown_retained_obligations": {
+            "max": 1,
+            "min": 1
+          },
+          "used_frames": {
+            "max": 3443,
+            "min": 3443
+          }
+        },
+        "2": {
+          "active_operations": {
+            "max": 0,
+            "min": 0
+          },
+          "actual_heap_used_bytes": {
+            "max": 527928,
+            "min": 527928
+          },
+          "allocated_stack_bytes": {
+            "max": 294912,
+            "min": 294912
+          },
+          "execution_context_quota_charge": {
+            "max": 6657,
+            "min": 6657
+          },
+          "outstanding_cleanup_obligations": {
+            "max": 6,
+            "min": 6
+          },
+          "reserved_completions": {
+            "max": 0,
+            "min": 0
+          },
+          "segment_bytes": {
+            "max": 2379776,
+            "min": 2379776
+          },
+          "unknown_retained_obligations": {
+            "max": 2,
+            "min": 2
+          },
+          "used_frames": {
+            "max": 3699,
+            "min": 3699
+          }
+        },
+        "3": {
+          "active_operations": {
+            "max": 0,
+            "min": 0
+          },
+          "actual_heap_used_bytes": {
+            "max": 527928,
+            "min": 527928
+          },
+          "allocated_stack_bytes": {
+            "max": 294912,
+            "min": 294912
+          },
+          "execution_context_quota_charge": {
+            "max": 6660,
+            "min": 6660
+          },
+          "outstanding_cleanup_obligations": {
+            "max": 6,
+            "min": 6
+          },
+          "reserved_completions": {
+            "max": 0,
+            "min": 0
+          },
+          "segment_bytes": {
+            "max": 2379776,
+            "min": 2379776
+          },
+          "unknown_retained_obligations": {
+            "max": 2,
+            "min": 2
+          },
+          "used_frames": {
+            "max": 3699,
+            "min": 3699
+          }
+        },
+        "4": {
+          "active_operations": {
+            "max": 0,
+            "min": 0
+          },
+          "actual_heap_used_bytes": {
+            "max": 519376,
+            "min": 519376
+          },
+          "allocated_stack_bytes": {
+            "max": 147456,
+            "min": 147456
+          },
+          "execution_context_quota_charge": {
+            "max": 10,
+            "min": 10
+          },
+          "outstanding_cleanup_obligations": {
+            "max": 3,
+            "min": 3
+          },
+          "reserved_completions": {
+            "max": 0,
+            "min": 0
+          },
+          "segment_bytes": {
+            "max": 1253376,
+            "min": 1253376
+          },
+          "unknown_retained_obligations": {
+            "max": 2,
+            "min": 2
+          },
+          "used_frames": {
+            "max": 3387,
+            "min": 3387
+          }
+        },
+        "5": {
+          "active_operations": {
+            "max": 0,
+            "min": 0
+          },
+          "actual_heap_used_bytes": {
+            "max": 519376,
+            "min": 519376
+          },
+          "allocated_stack_bytes": {
+            "max": 147456,
+            "min": 147456
+          },
+          "execution_context_quota_charge": {
+            "max": 10,
+            "min": 10
+          },
+          "outstanding_cleanup_obligations": {
+            "max": 3,
+            "min": 3
+          },
+          "reserved_completions": {
+            "max": 0,
+            "min": 0
+          },
+          "segment_bytes": {
+            "max": 1253376,
+            "min": 1253376
+          },
+          "unknown_retained_obligations": {
+            "max": 2,
+            "min": 2
+          },
+          "used_frames": {
+            "max": 3387,
+            "min": 3387
+          }
+        },
+        "6": {
+          "active_operations": {
+            "max": 0,
+            "min": 0
+          },
+          "actual_heap_used_bytes": {
+            "max": 519376,
+            "min": 519376
+          },
+          "allocated_stack_bytes": {
+            "max": 147456,
+            "min": 147456
+          },
+          "execution_context_quota_charge": {
+            "max": 10,
+            "min": 10
+          },
+          "outstanding_cleanup_obligations": {
+            "max": 3,
+            "min": 3
+          },
+          "reserved_completions": {
+            "max": 0,
+            "min": 0
+          },
+          "segment_bytes": {
+            "max": 1253376,
+            "min": 1253376
+          },
+          "unknown_retained_obligations": {
+            "max": 2,
+            "min": 2
+          },
+          "used_frames": {
+            "max": 3387,
+            "min": 3387
+          }
+        }
+      }
+    }
+  },
+  "complete_requested_matrix": false,
+  "control_drift_subtracted": false,
+  "format": "p01-budget-measurement-v1",
+  "interpretation": [
+    "Ranges include every retained fresh boot; no percentile or extrapolation beyond counts0/1/4/8.",
+    "Control sensitivity is raw-range minus independent control-range, not paired causality or a residual acceptance tolerance.",
+    "Heap and frame peaks are independent windows; never add heap use to committed frame bytes, which include heap reservation.",
+    "Sample6 settled metrics and frozen final heap accounting have distinct cutoffs; neither substitutes for the other.",
+    "No live heap semantic snapshot or per-owner high-water is reconstructed from released final entries.",
+    "Observed high-water is a lower bound on a necessary budget, not a simultaneous fit certificate or safe upper bound.",
+    "No arbitrary safety margin, rounding, profile activation, quota enforcement or approval is supplied."
+  ],
+  "matrix_sha256": "76c28c74ec2eab3b71c6a0dd6c72547367893581075d458d84886176de125c81",
+  "measurement_samples_valid": true,
+  "runs": [
+    {
+      "admitted": 1,
+      "baseline_semantic_owners": [
+        {
+          "charged_bytes": 672,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 672,
+          "semantic_kind": 17
+        },
+        {
+          "charged_bytes": 448,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 448,
+          "semantic_kind": 19
+        },
+        {
+          "charged_bytes": 1536,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            3,
+            3,
+            3,
+            136
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1510,
+          "semantic_kind": 64
+        },
+        {
+          "charged_bytes": 7344,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            3,
+            3,
+            3,
+            136
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 7344,
+          "semantic_kind": 65
+        },
+        {
+          "charged_bytes": 1536,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1509,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 1552,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1515,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 8112,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 8112,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 32784,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 32784,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 280,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 280,
+          "semantic_kind": 83
+        },
+        {
+          "charged_bytes": 192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 192,
+          "semantic_kind": 6
+        },
+        {
+          "charged_bytes": 256,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 256,
+          "semantic_kind": 7
+        },
+        {
+          "charged_bytes": 48,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 27,
+          "semantic_kind": 8
+        },
+        {
+          "charged_bytes": 680,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 680,
+          "semantic_kind": 9
+        },
+        {
+          "charged_bytes": 1928,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1928,
+          "semantic_kind": 10
+        },
+        {
+          "charged_bytes": 3696,
+          "objects": 8,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3696,
+          "semantic_kind": 32
+        },
+        {
+          "charged_bytes": 409192,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 409192,
+          "semantic_kind": 33
+        },
+        {
+          "charged_bytes": 272,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 257,
+          "semantic_kind": 34
+        },
+        {
+          "charged_bytes": 30720,
+          "objects": 11,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 30720,
+          "semantic_kind": 35
+        },
+        {
+          "charged_bytes": 3256,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3256,
+          "semantic_kind": 36
+        },
+        {
+          "charged_bytes": 3496,
+          "objects": 55,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3284,
+          "semantic_kind": 38
+        },
+        {
+          "charged_bytes": 1616,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1616,
+          "semantic_kind": 41
+        },
+        {
+          "charged_bytes": 768,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 768,
+          "semantic_kind": 42
+        },
+        {
+          "charged_bytes": 8192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 8192,
+          "semantic_kind": 43
+        },
+        {
+          "charged_bytes": 16,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "unclassified",
+          "requested_bytes": 15,
+          "semantic_kind": 0
+        }
+      ],
+      "build_sha256": "ea98b5e38b49c763396bf13d572403eec201b76a8872cea296ed43b5eac87803",
+      "capture_uuid": "2f0c594c-9e4c-4572-adbf-22d5f8ec9b20",
+      "count": "1",
+      "cpus": 1,
+      "denied_control_accepted": false,
+      "final_semantic_owners": [
+        {
+          "charged_bytes": 672,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 672,
+          "semantic_kind": 17
+        },
+        {
+          "charged_bytes": 448,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 448,
+          "semantic_kind": 19
+        },
+        {
+          "charged_bytes": 1536,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1509,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 1552,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1515,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 8112,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 8112,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 32784,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 32784,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 280,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 280,
+          "semantic_kind": 83
+        },
+        {
+          "charged_bytes": 192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 192,
+          "semantic_kind": 6
+        },
+        {
+          "charged_bytes": 256,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 256,
+          "semantic_kind": 7
+        },
+        {
+          "charged_bytes": 64,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 43,
+          "semantic_kind": 8
+        },
+        {
+          "charged_bytes": 680,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 680,
+          "semantic_kind": 9
+        },
+        {
+          "charged_bytes": 1928,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1928,
+          "semantic_kind": 10
+        },
+        {
+          "charged_bytes": 3696,
+          "objects": 8,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3696,
+          "semantic_kind": 32
+        },
+        {
+          "charged_bytes": 409192,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 409192,
+          "semantic_kind": 33
+        },
+        {
+          "charged_bytes": 272,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 257,
+          "semantic_kind": 34
+        },
+        {
+          "charged_bytes": 30720,
+          "objects": 11,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 30720,
+          "semantic_kind": 35
+        },
+        {
+          "charged_bytes": 3256,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3256,
+          "semantic_kind": 36
+        },
+        {
+          "charged_bytes": 3496,
+          "objects": 55,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3284,
+          "semantic_kind": 38
+        },
+        {
+          "charged_bytes": 1616,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1616,
+          "semantic_kind": 41
+        },
+        {
+          "charged_bytes": 768,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 768,
+          "semantic_kind": 42
+        },
+        {
+          "charged_bytes": 8192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 8192,
+          "semantic_kind": 43
+        }
+      ],
+      "final_status": {
+        "active": 0,
+        "flags": 0,
+        "ready": 70,
+        "reserved": 70
+      },
+      "fully_settled": false,
+      "heap_charge": {
+        "baseline_objects": 118,
+        "baseline_partitions": {
+          "exclusive": 54264,
+          "shared": 464312,
+          "unowned": 16
+        },
+        "charged_byte_delta": -8880,
+        "coverage_proven": false,
+        "final_objects": 113,
+        "final_partitions": {
+          "exclusive": 45384,
+          "shared": 464328,
+          "unowned": 0
+        },
+        "fit_proven": false,
+        "measured_live_highwater": 174,
+        "prearm_allocations": 8968,
+        "prearm_live_objects": 97,
+        "unmatched_allocator_used_byte_delta": 0
+      },
+      "heap_incarnation_changes": {
+        "created": [
+          {
+            "alignment": 1,
+            "birth_epoch": 23835,
+            "charged_bytes": 16,
+            "incarnation": 25761,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222529024,
+            "prearm": 0,
+            "requested_bytes": 16,
+            "semantic_kind": 8,
+            "semantic_owner": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "created_charged_bytes": 16,
+        "preserved_incarnations": [
+          2,
+          4,
+          6,
+          7,
+          8,
+          80,
+          82,
+          83,
+          84,
+          85,
+          88,
+          89,
+          90,
+          91,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          199,
+          200,
+          201,
+          933,
+          964,
+          965,
+          6230,
+          16717,
+          17109,
+          17110,
+          17129,
+          17156,
+          17157,
+          17644,
+          17646,
+          18857,
+          19038,
+          19150,
+          19219,
+          19321,
+          19322,
+          19364,
+          19424,
+          19425,
+          19426,
+          19427,
+          19428,
+          19429,
+          19459,
+          19465,
+          19475,
+          19532,
+          19533,
+          19537,
+          19538,
+          19539,
+          19540,
+          19548,
+          19755,
+          20179,
+          20180,
+          20184,
+          20185,
+          20186,
+          20187,
+          20215,
+          20224,
+          20226,
+          20271,
+          21055,
+          21056,
+          25517
+        ],
+        "released": [
+          {
+            "alignment": 8,
+            "birth_epoch": 23603,
+            "charged_bytes": 4896,
+            "incarnation": 25510,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222620192,
+            "prearm": 0,
+            "requested_bytes": 4896,
+            "semantic_kind": 65,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 8,
+            "birth_epoch": 23604,
+            "charged_bytes": 2448,
+            "incarnation": 25511,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222542624,
+            "prearm": 0,
+            "requested_bytes": 2448,
+            "semantic_kind": 65,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 1,
+            "birth_epoch": 23609,
+            "charged_bytes": 16,
+            "incarnation": 25518,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222526760,
+            "prearm": 0,
+            "requested_bytes": 5,
+            "semantic_kind": 64,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 1,
+            "birth_epoch": 23610,
+            "charged_bytes": 16,
+            "incarnation": 25519,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222535040,
+            "prearm": 0,
+            "requested_bytes": 1,
+            "semantic_kind": 64,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 16,
+            "birth_epoch": 23611,
+            "charged_bytes": 1504,
+            "incarnation": 25520,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222546976,
+            "prearm": 0,
+            "requested_bytes": 1504,
+            "semantic_kind": 64,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 1,
+            "birth_epoch": 23615,
+            "charged_bytes": 16,
+            "incarnation": 25537,
+            "origin_kind": 3,
+            "origin_owner": [
+              3,
+              3,
+              3,
+              136
+            ],
+            "pointer": 18446603336222526000,
+            "prearm": 0,
+            "requested_bytes": 15,
+            "semantic_kind": 0,
+            "semantic_owner": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "released_charged_bytes": 8896,
+        "sample6_residual_explained": false,
+        "selected_semantic_owner_snapshots": [
+          {
+            "baseline_charged_bytes": 8880,
+            "baseline_owned_incarnations": [
+              25510,
+              25511,
+              25518,
+              25519,
+              25520
+            ],
+            "final_charged_bytes": 0,
+            "final_owned_incarnations": [],
+            "owner_tid_root_cell_generation": [
+              3,
+              3,
+              3,
+              136
+            ],
+            "role": "driver"
+          },
+          {
+            "baseline_charged_bytes": 0,
+            "baseline_owned_incarnations": [],
+            "final_charged_bytes": 0,
+            "final_owned_incarnations": [],
+            "owner_tid_root_cell_generation": [
+              4,
+              4,
+              4,
+              137
+            ],
+            "role": "child"
+          }
+        ],
+        "transient_lifetime_complete": false
+      },
+      "image_sha256": "7434fb03669ac39eab087cd9f3726989a31bd8752ad6d68b1dc1c72a639ef007",
+      "independent_peaks": {
+        "0": {
+          "epoch_after": 23956,
+          "epoch_before": 23956,
+          "source_owner": 2,
+          "status": 1,
+          "units": "actual_global_heap_used_bytes",
+          "value": 626152
+        },
+        "1": {
+          "epoch_after": 2932,
+          "epoch_before": 2932,
+          "source_owner": 1,
+          "status": 1,
+          "units": "global_allocator_used_frames",
+          "value": 3755
+        }
+      },
+      "late_status_flags": [
+        0
+      ],
+      "physical_sample_populations": {
+        "1": {
+          "allocator_epoch": 1909,
+          "allocator_used_frames": 3443,
+          "inventory_frames": 3443,
+          "unmatched_allocator_used_frames": 0
+        },
+        "2": {
+          "allocator_epoch": 2277,
+          "allocator_used_frames": 3699,
+          "inventory_frames": 3699,
+          "unmatched_allocator_used_frames": 0
+        },
+        "3": {
+          "allocator_epoch": 2277,
+          "allocator_used_frames": 3699,
+          "inventory_frames": 3699,
+          "unmatched_allocator_used_frames": 0
+        },
+        "4": {
+          "allocator_epoch": 2589,
+          "allocator_used_frames": 3387,
+          "inventory_frames": 3387,
+          "unmatched_allocator_used_frames": 0
+        },
+        "5": {
+          "allocator_epoch": 2589,
+          "allocator_used_frames": 3387,
+          "inventory_frames": 3387,
+          "unmatched_allocator_used_frames": 0
+        },
+        "6": {
+          "allocator_epoch": 2589,
+          "allocator_used_frames": 3387,
+          "inventory_frames": 3387,
+          "unmatched_allocator_used_frames": 0
+        }
+      },
+      "private_trace_storage": {
+        "core_static_bytes": 59125,
+        "exporter_buffer_bytes": 352,
+        "linked_image_overhead_not_inferred": true,
+        "resource_static_bytes": 1383352,
+        "serialized_payload_bytes": 56896
+      },
+      "qualification_blockers": [
+        "heap ownership capacity/coverage unproven",
+        "pending/retained/unknown/live component",
+        "physical inventory semantic/topology coverage unproven",
+        "settled nonzero/absent outstanding_cleanup_obligations",
+        "settled nonzero/absent unknown_retained_obligations",
+        "unreclaimed raw residual: actual_heap_used_bytes",
+        "unreclaimed raw residual: execution_context_quota_charge",
+        "unreclaimed raw residual: used_frames"
+      ],
+      "raw_stage_minus_pre": {
+        "2": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -9336,
+          "actual_heap_used_bytes": 9336,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6642,
+          "free_frames": -256,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1126400,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": 256
+        },
+        "3": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -9336,
+          "actual_heap_used_bytes": 9336,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6645,
+          "free_frames": -256,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1126400,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": 256
+        },
+        "4": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -784,
+          "actual_heap_used_bytes": 784,
+          "admitted_live_subjects": 0,
+          "allocated_stack_bytes": 0,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": -5,
+          "free_frames": 56,
+          "outstanding_cleanup_obligations": 0,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 0,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": -56
+        },
+        "5": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -784,
+          "actual_heap_used_bytes": 784,
+          "admitted_live_subjects": 0,
+          "allocated_stack_bytes": 0,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": -5,
+          "free_frames": 56,
+          "outstanding_cleanup_obligations": 0,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 0,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": -56
+        },
+        "6": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -784,
+          "actual_heap_used_bytes": 784,
+          "admitted_live_subjects": 0,
+          "allocated_stack_bytes": 0,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": -5,
+          "free_frames": 56,
+          "outstanding_cleanup_obligations": 0,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 0,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": -56
+        }
+      },
+      "replica": 0,
+      "requested": 1,
+      "settled_samples_stable": true,
+      "stage_ticks": {
+        "1": 23,
+        "2": 25,
+        "3": 25,
+        "4": 26,
+        "5": 27,
+        "6": 28
+      },
+      "stages": {
+        "1": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3675712,
+          "actual_heap_used_bytes": 518592,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 15,
+          "free_frames": 57276,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 1,
+          "used_frames": 3443
+        },
+        "2": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3666376,
+          "actual_heap_used_bytes": 527928,
+          "admitted_live_subjects": 2,
+          "allocated_stack_bytes": 294912,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6657,
+          "free_frames": 57020,
+          "outstanding_cleanup_obligations": 6,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 2379776,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3699
+        },
+        "3": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3666376,
+          "actual_heap_used_bytes": 527928,
+          "admitted_live_subjects": 2,
+          "allocated_stack_bytes": 294912,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6660,
+          "free_frames": 57020,
+          "outstanding_cleanup_obligations": 6,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 2379776,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3699
+        },
+        "4": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3674928,
+          "actual_heap_used_bytes": 519376,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 10,
+          "free_frames": 57332,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3387
+        },
+        "5": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3674928,
+          "actual_heap_used_bytes": 519376,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 10,
+          "free_frames": 57332,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3387
+        },
+        "6": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3674928,
+          "actual_heap_used_bytes": 519376,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 10,
+          "free_frames": 57332,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3387
+        }
+      },
+      "structurally_complete": true,
+      "workload_outcome": {
+        "admitted": 1,
+        "exited": 1,
+        "requested": 1,
+        "status": "LIFECYCLE_COMPLETE"
+      }
+    },
+    {
+      "admitted": 1,
+      "baseline_semantic_owners": [
+        {
+          "charged_bytes": 672,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 672,
+          "semantic_kind": 17
+        },
+        {
+          "charged_bytes": 448,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 448,
+          "semantic_kind": 19
+        },
+        {
+          "charged_bytes": 1536,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            3,
+            3,
+            3,
+            136
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1510,
+          "semantic_kind": 64
+        },
+        {
+          "charged_bytes": 7344,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            3,
+            3,
+            3,
+            136
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 7344,
+          "semantic_kind": 65
+        },
+        {
+          "charged_bytes": 1536,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1509,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 1552,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1515,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 8112,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 8112,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 32784,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 32784,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 280,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 280,
+          "semantic_kind": 83
+        },
+        {
+          "charged_bytes": 192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 192,
+          "semantic_kind": 6
+        },
+        {
+          "charged_bytes": 256,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 256,
+          "semantic_kind": 7
+        },
+        {
+          "charged_bytes": 48,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 27,
+          "semantic_kind": 8
+        },
+        {
+          "charged_bytes": 680,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 680,
+          "semantic_kind": 9
+        },
+        {
+          "charged_bytes": 1928,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1928,
+          "semantic_kind": 10
+        },
+        {
+          "charged_bytes": 3696,
+          "objects": 8,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3696,
+          "semantic_kind": 32
+        },
+        {
+          "charged_bytes": 409192,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 409192,
+          "semantic_kind": 33
+        },
+        {
+          "charged_bytes": 272,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 257,
+          "semantic_kind": 34
+        },
+        {
+          "charged_bytes": 30720,
+          "objects": 11,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 30720,
+          "semantic_kind": 35
+        },
+        {
+          "charged_bytes": 3256,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3256,
+          "semantic_kind": 36
+        },
+        {
+          "charged_bytes": 3496,
+          "objects": 55,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3284,
+          "semantic_kind": 38
+        },
+        {
+          "charged_bytes": 1616,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1616,
+          "semantic_kind": 41
+        },
+        {
+          "charged_bytes": 768,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 768,
+          "semantic_kind": 42
+        },
+        {
+          "charged_bytes": 8192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 8192,
+          "semantic_kind": 43
+        },
+        {
+          "charged_bytes": 16,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "unclassified",
+          "requested_bytes": 15,
+          "semantic_kind": 0
+        }
+      ],
+      "build_sha256": "ea98b5e38b49c763396bf13d572403eec201b76a8872cea296ed43b5eac87803",
+      "capture_uuid": "27d28919-f87e-46f0-865b-8939237dc61d",
+      "count": "1",
+      "cpus": 1,
+      "denied_control_accepted": false,
+      "final_semantic_owners": [
+        {
+          "charged_bytes": 672,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 672,
+          "semantic_kind": 17
+        },
+        {
+          "charged_bytes": 448,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 448,
+          "semantic_kind": 19
+        },
+        {
+          "charged_bytes": 1536,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1509,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 1552,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1515,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 8112,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 8112,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 32784,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 32784,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 280,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 280,
+          "semantic_kind": 83
+        },
+        {
+          "charged_bytes": 192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 192,
+          "semantic_kind": 6
+        },
+        {
+          "charged_bytes": 256,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 256,
+          "semantic_kind": 7
+        },
+        {
+          "charged_bytes": 64,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 43,
+          "semantic_kind": 8
+        },
+        {
+          "charged_bytes": 680,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 680,
+          "semantic_kind": 9
+        },
+        {
+          "charged_bytes": 1928,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1928,
+          "semantic_kind": 10
+        },
+        {
+          "charged_bytes": 3696,
+          "objects": 8,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3696,
+          "semantic_kind": 32
+        },
+        {
+          "charged_bytes": 409192,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 409192,
+          "semantic_kind": 33
+        },
+        {
+          "charged_bytes": 272,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 257,
+          "semantic_kind": 34
+        },
+        {
+          "charged_bytes": 30720,
+          "objects": 11,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 30720,
+          "semantic_kind": 35
+        },
+        {
+          "charged_bytes": 3256,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3256,
+          "semantic_kind": 36
+        },
+        {
+          "charged_bytes": 3496,
+          "objects": 55,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3284,
+          "semantic_kind": 38
+        },
+        {
+          "charged_bytes": 1616,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1616,
+          "semantic_kind": 41
+        },
+        {
+          "charged_bytes": 768,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 768,
+          "semantic_kind": 42
+        },
+        {
+          "charged_bytes": 8192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 8192,
+          "semantic_kind": 43
+        }
+      ],
+      "final_status": {
+        "active": 0,
+        "flags": 0,
+        "ready": 70,
+        "reserved": 70
+      },
+      "fully_settled": false,
+      "heap_charge": {
+        "baseline_objects": 118,
+        "baseline_partitions": {
+          "exclusive": 54264,
+          "shared": 464312,
+          "unowned": 16
+        },
+        "charged_byte_delta": -8880,
+        "coverage_proven": false,
+        "final_objects": 113,
+        "final_partitions": {
+          "exclusive": 45384,
+          "shared": 464328,
+          "unowned": 0
+        },
+        "fit_proven": false,
+        "measured_live_highwater": 174,
+        "prearm_allocations": 8968,
+        "prearm_live_objects": 97,
+        "unmatched_allocator_used_byte_delta": 0
+      },
+      "heap_incarnation_changes": {
+        "created": [
+          {
+            "alignment": 1,
+            "birth_epoch": 23842,
+            "charged_bytes": 16,
+            "incarnation": 25768,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222535376,
+            "prearm": 0,
+            "requested_bytes": 16,
+            "semantic_kind": 8,
+            "semantic_owner": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "created_charged_bytes": 16,
+        "preserved_incarnations": [
+          2,
+          4,
+          6,
+          7,
+          8,
+          80,
+          82,
+          83,
+          84,
+          85,
+          88,
+          89,
+          90,
+          91,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          199,
+          200,
+          201,
+          933,
+          964,
+          965,
+          6230,
+          16717,
+          17109,
+          17110,
+          17129,
+          17156,
+          17157,
+          17644,
+          17646,
+          18857,
+          19038,
+          19150,
+          19219,
+          19321,
+          19322,
+          19364,
+          19424,
+          19425,
+          19426,
+          19427,
+          19428,
+          19429,
+          19459,
+          19465,
+          19475,
+          19532,
+          19533,
+          19537,
+          19538,
+          19539,
+          19540,
+          19548,
+          19755,
+          20179,
+          20180,
+          20184,
+          20185,
+          20186,
+          20187,
+          20227,
+          20236,
+          20238,
+          20271,
+          21055,
+          21056,
+          25517
+        ],
+        "released": [
+          {
+            "alignment": 8,
+            "birth_epoch": 23603,
+            "charged_bytes": 4896,
+            "incarnation": 25510,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222620192,
+            "prearm": 0,
+            "requested_bytes": 4896,
+            "semantic_kind": 65,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 8,
+            "birth_epoch": 23604,
+            "charged_bytes": 2448,
+            "incarnation": 25511,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222542624,
+            "prearm": 0,
+            "requested_bytes": 2448,
+            "semantic_kind": 65,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 1,
+            "birth_epoch": 23609,
+            "charged_bytes": 16,
+            "incarnation": 25518,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222526760,
+            "prearm": 0,
+            "requested_bytes": 5,
+            "semantic_kind": 64,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 1,
+            "birth_epoch": 23610,
+            "charged_bytes": 16,
+            "incarnation": 25519,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222535040,
+            "prearm": 0,
+            "requested_bytes": 1,
+            "semantic_kind": 64,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 16,
+            "birth_epoch": 23611,
+            "charged_bytes": 1504,
+            "incarnation": 25520,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222546976,
+            "prearm": 0,
+            "requested_bytes": 1504,
+            "semantic_kind": 64,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 1,
+            "birth_epoch": 23615,
+            "charged_bytes": 16,
+            "incarnation": 25537,
+            "origin_kind": 3,
+            "origin_owner": [
+              3,
+              3,
+              3,
+              136
+            ],
+            "pointer": 18446603336222526000,
+            "prearm": 0,
+            "requested_bytes": 15,
+            "semantic_kind": 0,
+            "semantic_owner": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "released_charged_bytes": 8896,
+        "sample6_residual_explained": false,
+        "selected_semantic_owner_snapshots": [
+          {
+            "baseline_charged_bytes": 8880,
+            "baseline_owned_incarnations": [
+              25510,
+              25511,
+              25518,
+              25519,
+              25520
+            ],
+            "final_charged_bytes": 0,
+            "final_owned_incarnations": [],
+            "owner_tid_root_cell_generation": [
+              3,
+              3,
+              3,
+              136
+            ],
+            "role": "driver"
+          },
+          {
+            "baseline_charged_bytes": 0,
+            "baseline_owned_incarnations": [],
+            "final_charged_bytes": 0,
+            "final_owned_incarnations": [],
+            "owner_tid_root_cell_generation": [
+              4,
+              4,
+              4,
+              137
+            ],
+            "role": "child"
+          }
+        ],
+        "transient_lifetime_complete": false
+      },
+      "image_sha256": "7434fb03669ac39eab087cd9f3726989a31bd8752ad6d68b1dc1c72a639ef007",
+      "independent_peaks": {
+        "0": {
+          "epoch_after": 23956,
+          "epoch_before": 23956,
+          "source_owner": 2,
+          "status": 1,
+          "units": "actual_global_heap_used_bytes",
+          "value": 626184
+        },
+        "1": {
+          "epoch_after": 2932,
+          "epoch_before": 2932,
+          "source_owner": 1,
+          "status": 1,
+          "units": "global_allocator_used_frames",
+          "value": 3699
+        }
+      },
+      "late_status_flags": [
+        0
+      ],
+      "physical_sample_populations": {
+        "1": {
+          "allocator_epoch": 1909,
+          "allocator_used_frames": 3443,
+          "inventory_frames": 3443,
+          "unmatched_allocator_used_frames": 0
+        },
+        "2": {
+          "allocator_epoch": 2277,
+          "allocator_used_frames": 3699,
+          "inventory_frames": 3699,
+          "unmatched_allocator_used_frames": 0
+        },
+        "3": {
+          "allocator_epoch": 2277,
+          "allocator_used_frames": 3699,
+          "inventory_frames": 3699,
+          "unmatched_allocator_used_frames": 0
+        },
+        "4": {
+          "allocator_epoch": 2589,
+          "allocator_used_frames": 3387,
+          "inventory_frames": 3387,
+          "unmatched_allocator_used_frames": 0
+        },
+        "5": {
+          "allocator_epoch": 2589,
+          "allocator_used_frames": 3387,
+          "inventory_frames": 3387,
+          "unmatched_allocator_used_frames": 0
+        },
+        "6": {
+          "allocator_epoch": 2589,
+          "allocator_used_frames": 3387,
+          "inventory_frames": 3387,
+          "unmatched_allocator_used_frames": 0
+        }
+      },
+      "private_trace_storage": {
+        "core_static_bytes": 59125,
+        "exporter_buffer_bytes": 352,
+        "linked_image_overhead_not_inferred": true,
+        "resource_static_bytes": 1383352,
+        "serialized_payload_bytes": 56896
+      },
+      "qualification_blockers": [
+        "heap ownership capacity/coverage unproven",
+        "pending/retained/unknown/live component",
+        "physical inventory semantic/topology coverage unproven",
+        "settled nonzero/absent outstanding_cleanup_obligations",
+        "settled nonzero/absent unknown_retained_obligations",
+        "unreclaimed raw residual: actual_heap_used_bytes",
+        "unreclaimed raw residual: execution_context_quota_charge",
+        "unreclaimed raw residual: used_frames"
+      ],
+      "raw_stage_minus_pre": {
+        "2": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -9336,
+          "actual_heap_used_bytes": 9336,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6642,
+          "free_frames": -256,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1126400,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": 256
+        },
+        "3": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -9336,
+          "actual_heap_used_bytes": 9336,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6645,
+          "free_frames": -256,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1126400,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": 256
+        },
+        "4": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -784,
+          "actual_heap_used_bytes": 784,
+          "admitted_live_subjects": 0,
+          "allocated_stack_bytes": 0,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": -5,
+          "free_frames": 56,
+          "outstanding_cleanup_obligations": 0,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 0,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": -56
+        },
+        "5": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -784,
+          "actual_heap_used_bytes": 784,
+          "admitted_live_subjects": 0,
+          "allocated_stack_bytes": 0,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": -5,
+          "free_frames": 56,
+          "outstanding_cleanup_obligations": 0,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 0,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": -56
+        },
+        "6": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -784,
+          "actual_heap_used_bytes": 784,
+          "admitted_live_subjects": 0,
+          "allocated_stack_bytes": 0,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": -5,
+          "free_frames": 56,
+          "outstanding_cleanup_obligations": 0,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 0,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": -56
+        }
+      },
+      "replica": 1,
+      "requested": 1,
+      "settled_samples_stable": true,
+      "stage_ticks": {
+        "1": 21,
+        "2": 24,
+        "3": 24,
+        "4": 25,
+        "5": 26,
+        "6": 27
+      },
+      "stages": {
+        "1": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3675712,
+          "actual_heap_used_bytes": 518592,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 15,
+          "free_frames": 57276,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 1,
+          "used_frames": 3443
+        },
+        "2": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3666376,
+          "actual_heap_used_bytes": 527928,
+          "admitted_live_subjects": 2,
+          "allocated_stack_bytes": 294912,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6657,
+          "free_frames": 57020,
+          "outstanding_cleanup_obligations": 6,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 2379776,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3699
+        },
+        "3": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3666376,
+          "actual_heap_used_bytes": 527928,
+          "admitted_live_subjects": 2,
+          "allocated_stack_bytes": 294912,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6660,
+          "free_frames": 57020,
+          "outstanding_cleanup_obligations": 6,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 2379776,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3699
+        },
+        "4": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3674928,
+          "actual_heap_used_bytes": 519376,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 10,
+          "free_frames": 57332,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3387
+        },
+        "5": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3674928,
+          "actual_heap_used_bytes": 519376,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 10,
+          "free_frames": 57332,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3387
+        },
+        "6": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3674928,
+          "actual_heap_used_bytes": 519376,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 10,
+          "free_frames": 57332,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3387
+        }
+      },
+      "structurally_complete": true,
+      "workload_outcome": {
+        "admitted": 1,
+        "exited": 1,
+        "requested": 1,
+        "status": "LIFECYCLE_COMPLETE"
+      }
+    },
+    {
+      "admitted": 1,
+      "baseline_semantic_owners": [
+        {
+          "charged_bytes": 672,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 672,
+          "semantic_kind": 17
+        },
+        {
+          "charged_bytes": 448,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 448,
+          "semantic_kind": 19
+        },
+        {
+          "charged_bytes": 1536,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            3,
+            3,
+            3,
+            136
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1510,
+          "semantic_kind": 64
+        },
+        {
+          "charged_bytes": 7344,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            3,
+            3,
+            3,
+            136
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 7344,
+          "semantic_kind": 65
+        },
+        {
+          "charged_bytes": 1536,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1509,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 1552,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1515,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 8112,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 8112,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 32784,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 32784,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 280,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 280,
+          "semantic_kind": 83
+        },
+        {
+          "charged_bytes": 192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 192,
+          "semantic_kind": 6
+        },
+        {
+          "charged_bytes": 256,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 256,
+          "semantic_kind": 7
+        },
+        {
+          "charged_bytes": 48,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 27,
+          "semantic_kind": 8
+        },
+        {
+          "charged_bytes": 680,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 680,
+          "semantic_kind": 9
+        },
+        {
+          "charged_bytes": 1928,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1928,
+          "semantic_kind": 10
+        },
+        {
+          "charged_bytes": 3696,
+          "objects": 8,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3696,
+          "semantic_kind": 32
+        },
+        {
+          "charged_bytes": 409192,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 409192,
+          "semantic_kind": 33
+        },
+        {
+          "charged_bytes": 272,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 257,
+          "semantic_kind": 34
+        },
+        {
+          "charged_bytes": 30720,
+          "objects": 11,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 30720,
+          "semantic_kind": 35
+        },
+        {
+          "charged_bytes": 3256,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3256,
+          "semantic_kind": 36
+        },
+        {
+          "charged_bytes": 3496,
+          "objects": 55,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3284,
+          "semantic_kind": 38
+        },
+        {
+          "charged_bytes": 1616,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1616,
+          "semantic_kind": 41
+        },
+        {
+          "charged_bytes": 768,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 768,
+          "semantic_kind": 42
+        },
+        {
+          "charged_bytes": 8192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 8192,
+          "semantic_kind": 43
+        },
+        {
+          "charged_bytes": 16,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "unclassified",
+          "requested_bytes": 15,
+          "semantic_kind": 0
+        }
+      ],
+      "build_sha256": "ea98b5e38b49c763396bf13d572403eec201b76a8872cea296ed43b5eac87803",
+      "capture_uuid": "1416ad65-a2dd-48e0-8d51-4fcf35693d55",
+      "count": "1",
+      "cpus": 1,
+      "denied_control_accepted": false,
+      "final_semantic_owners": [
+        {
+          "charged_bytes": 672,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 672,
+          "semantic_kind": 17
+        },
+        {
+          "charged_bytes": 448,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 448,
+          "semantic_kind": 19
+        },
+        {
+          "charged_bytes": 1536,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1509,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 1552,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 1515,
+          "semantic_kind": 80
+        },
+        {
+          "charged_bytes": 8112,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            1,
+            1,
+            1,
+            134
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 8112,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 32784,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 32784,
+          "semantic_kind": 81
+        },
+        {
+          "charged_bytes": 280,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            2,
+            2,
+            2,
+            135
+          ],
+          "partition": "exclusive",
+          "requested_bytes": 280,
+          "semantic_kind": 83
+        },
+        {
+          "charged_bytes": 192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 192,
+          "semantic_kind": 6
+        },
+        {
+          "charged_bytes": 256,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 256,
+          "semantic_kind": 7
+        },
+        {
+          "charged_bytes": 64,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 43,
+          "semantic_kind": 8
+        },
+        {
+          "charged_bytes": 680,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 680,
+          "semantic_kind": 9
+        },
+        {
+          "charged_bytes": 1928,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1928,
+          "semantic_kind": 10
+        },
+        {
+          "charged_bytes": 3696,
+          "objects": 8,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3696,
+          "semantic_kind": 32
+        },
+        {
+          "charged_bytes": 409192,
+          "objects": 3,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 409192,
+          "semantic_kind": 33
+        },
+        {
+          "charged_bytes": 272,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 257,
+          "semantic_kind": 34
+        },
+        {
+          "charged_bytes": 30720,
+          "objects": 11,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 30720,
+          "semantic_kind": 35
+        },
+        {
+          "charged_bytes": 3256,
+          "objects": 4,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3256,
+          "semantic_kind": 36
+        },
+        {
+          "charged_bytes": 3496,
+          "objects": 55,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 3284,
+          "semantic_kind": 38
+        },
+        {
+          "charged_bytes": 1616,
+          "objects": 2,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 1616,
+          "semantic_kind": 41
+        },
+        {
+          "charged_bytes": 768,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 768,
+          "semantic_kind": 42
+        },
+        {
+          "charged_bytes": 8192,
+          "objects": 1,
+          "owner_tid_root_cell_generation": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "partition": "shared",
+          "requested_bytes": 8192,
+          "semantic_kind": 43
+        }
+      ],
+      "final_status": {
+        "active": 0,
+        "flags": 0,
+        "ready": 70,
+        "reserved": 70
+      },
+      "fully_settled": false,
+      "heap_charge": {
+        "baseline_objects": 118,
+        "baseline_partitions": {
+          "exclusive": 54264,
+          "shared": 464312,
+          "unowned": 16
+        },
+        "charged_byte_delta": -8880,
+        "coverage_proven": false,
+        "final_objects": 113,
+        "final_partitions": {
+          "exclusive": 45384,
+          "shared": 464328,
+          "unowned": 0
+        },
+        "fit_proven": false,
+        "measured_live_highwater": 174,
+        "prearm_allocations": 8968,
+        "prearm_live_objects": 97,
+        "unmatched_allocator_used_byte_delta": 0
+      },
+      "heap_incarnation_changes": {
+        "created": [
+          {
+            "alignment": 1,
+            "birth_epoch": 23842,
+            "charged_bytes": 16,
+            "incarnation": 25768,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222535376,
+            "prearm": 0,
+            "requested_bytes": 16,
+            "semantic_kind": 8,
+            "semantic_owner": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "created_charged_bytes": 16,
+        "preserved_incarnations": [
+          2,
+          4,
+          6,
+          7,
+          8,
+          80,
+          82,
+          83,
+          84,
+          85,
+          88,
+          89,
+          90,
+          91,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          199,
+          200,
+          201,
+          933,
+          964,
+          965,
+          6230,
+          16717,
+          17109,
+          17110,
+          17129,
+          17156,
+          17157,
+          17644,
+          17646,
+          18857,
+          19038,
+          19150,
+          19219,
+          19321,
+          19322,
+          19364,
+          19424,
+          19425,
+          19426,
+          19427,
+          19428,
+          19429,
+          19459,
+          19465,
+          19475,
+          19532,
+          19533,
+          19537,
+          19538,
+          19539,
+          19540,
+          19548,
+          19755,
+          20179,
+          20180,
+          20184,
+          20185,
+          20186,
+          20187,
+          20227,
+          20236,
+          20238,
+          20271,
+          21055,
+          21056,
+          25517
+        ],
+        "released": [
+          {
+            "alignment": 8,
+            "birth_epoch": 23603,
+            "charged_bytes": 4896,
+            "incarnation": 25510,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222620192,
+            "prearm": 0,
+            "requested_bytes": 4896,
+            "semantic_kind": 65,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 8,
+            "birth_epoch": 23604,
+            "charged_bytes": 2448,
+            "incarnation": 25511,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222542624,
+            "prearm": 0,
+            "requested_bytes": 2448,
+            "semantic_kind": 65,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 1,
+            "birth_epoch": 23609,
+            "charged_bytes": 16,
+            "incarnation": 25518,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222526760,
+            "prearm": 0,
+            "requested_bytes": 5,
+            "semantic_kind": 64,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 1,
+            "birth_epoch": 23610,
+            "charged_bytes": 16,
+            "incarnation": 25519,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222535040,
+            "prearm": 0,
+            "requested_bytes": 1,
+            "semantic_kind": 64,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 16,
+            "birth_epoch": 23611,
+            "charged_bytes": 1504,
+            "incarnation": 25520,
+            "origin_kind": 4,
+            "origin_owner": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "pointer": 18446603336222546976,
+            "prearm": 0,
+            "requested_bytes": 1504,
+            "semantic_kind": 64,
+            "semantic_owner": [
+              3,
+              3,
+              3,
+              136
+            ]
+          },
+          {
+            "alignment": 1,
+            "birth_epoch": 23615,
+            "charged_bytes": 16,
+            "incarnation": 25537,
+            "origin_kind": 3,
+            "origin_owner": [
+              3,
+              3,
+              3,
+              136
+            ],
+            "pointer": 18446603336222526000,
+            "prearm": 0,
+            "requested_bytes": 15,
+            "semantic_kind": 0,
+            "semantic_owner": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "released_charged_bytes": 8896,
+        "sample6_residual_explained": false,
+        "selected_semantic_owner_snapshots": [
+          {
+            "baseline_charged_bytes": 8880,
+            "baseline_owned_incarnations": [
+              25510,
+              25511,
+              25518,
+              25519,
+              25520
+            ],
+            "final_charged_bytes": 0,
+            "final_owned_incarnations": [],
+            "owner_tid_root_cell_generation": [
+              3,
+              3,
+              3,
+              136
+            ],
+            "role": "driver"
+          },
+          {
+            "baseline_charged_bytes": 0,
+            "baseline_owned_incarnations": [],
+            "final_charged_bytes": 0,
+            "final_owned_incarnations": [],
+            "owner_tid_root_cell_generation": [
+              4,
+              4,
+              4,
+              137
+            ],
+            "role": "child"
+          }
+        ],
+        "transient_lifetime_complete": false
+      },
+      "image_sha256": "7434fb03669ac39eab087cd9f3726989a31bd8752ad6d68b1dc1c72a639ef007",
+      "independent_peaks": {
+        "0": {
+          "epoch_after": 23956,
+          "epoch_before": 23956,
+          "source_owner": 2,
+          "status": 1,
+          "units": "actual_global_heap_used_bytes",
+          "value": 626184
+        },
+        "1": {
+          "epoch_after": 2932,
+          "epoch_before": 2932,
+          "source_owner": 1,
+          "status": 1,
+          "units": "global_allocator_used_frames",
+          "value": 3699
+        }
+      },
+      "late_status_flags": [
+        0
+      ],
+      "physical_sample_populations": {
+        "1": {
+          "allocator_epoch": 1909,
+          "allocator_used_frames": 3443,
+          "inventory_frames": 3443,
+          "unmatched_allocator_used_frames": 0
+        },
+        "2": {
+          "allocator_epoch": 2277,
+          "allocator_used_frames": 3699,
+          "inventory_frames": 3699,
+          "unmatched_allocator_used_frames": 0
+        },
+        "3": {
+          "allocator_epoch": 2277,
+          "allocator_used_frames": 3699,
+          "inventory_frames": 3699,
+          "unmatched_allocator_used_frames": 0
+        },
+        "4": {
+          "allocator_epoch": 2589,
+          "allocator_used_frames": 3387,
+          "inventory_frames": 3387,
+          "unmatched_allocator_used_frames": 0
+        },
+        "5": {
+          "allocator_epoch": 2589,
+          "allocator_used_frames": 3387,
+          "inventory_frames": 3387,
+          "unmatched_allocator_used_frames": 0
+        },
+        "6": {
+          "allocator_epoch": 2589,
+          "allocator_used_frames": 3387,
+          "inventory_frames": 3387,
+          "unmatched_allocator_used_frames": 0
+        }
+      },
+      "private_trace_storage": {
+        "core_static_bytes": 59125,
+        "exporter_buffer_bytes": 352,
+        "linked_image_overhead_not_inferred": true,
+        "resource_static_bytes": 1383352,
+        "serialized_payload_bytes": 56896
+      },
+      "qualification_blockers": [
+        "heap ownership capacity/coverage unproven",
+        "pending/retained/unknown/live component",
+        "physical inventory semantic/topology coverage unproven",
+        "settled nonzero/absent outstanding_cleanup_obligations",
+        "settled nonzero/absent unknown_retained_obligations",
+        "unreclaimed raw residual: actual_heap_used_bytes",
+        "unreclaimed raw residual: execution_context_quota_charge",
+        "unreclaimed raw residual: used_frames"
+      ],
+      "raw_stage_minus_pre": {
+        "2": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -9336,
+          "actual_heap_used_bytes": 9336,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6642,
+          "free_frames": -256,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1126400,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": 256
+        },
+        "3": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -9336,
+          "actual_heap_used_bytes": 9336,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6645,
+          "free_frames": -256,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1126400,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": 256
+        },
+        "4": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -784,
+          "actual_heap_used_bytes": 784,
+          "admitted_live_subjects": 0,
+          "allocated_stack_bytes": 0,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": -5,
+          "free_frames": 56,
+          "outstanding_cleanup_obligations": 0,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 0,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": -56
+        },
+        "5": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -784,
+          "actual_heap_used_bytes": 784,
+          "admitted_live_subjects": 0,
+          "allocated_stack_bytes": 0,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": -5,
+          "free_frames": 56,
+          "outstanding_cleanup_obligations": 0,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 0,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": -56
+        },
+        "6": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": -784,
+          "actual_heap_used_bytes": 784,
+          "admitted_live_subjects": 0,
+          "allocated_stack_bytes": 0,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": -5,
+          "free_frames": 56,
+          "outstanding_cleanup_obligations": 0,
+          "page_size": 0,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 0,
+          "total_frames": 0,
+          "unknown_retained_obligations": 1,
+          "used_frames": -56
+        }
+      },
+      "replica": 2,
+      "requested": 1,
+      "settled_samples_stable": true,
+      "stage_ticks": {
+        "1": 21,
+        "2": 24,
+        "3": 24,
+        "4": 25,
+        "5": 26,
+        "6": 27
+      },
+      "stages": {
+        "1": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3675712,
+          "actual_heap_used_bytes": 518592,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 15,
+          "free_frames": 57276,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 1,
+          "used_frames": 3443
+        },
+        "2": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3666376,
+          "actual_heap_used_bytes": 527928,
+          "admitted_live_subjects": 2,
+          "allocated_stack_bytes": 294912,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6657,
+          "free_frames": 57020,
+          "outstanding_cleanup_obligations": 6,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 2379776,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3699
+        },
+        "3": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3666376,
+          "actual_heap_used_bytes": 527928,
+          "admitted_live_subjects": 2,
+          "allocated_stack_bytes": 294912,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 6660,
+          "free_frames": 57020,
+          "outstanding_cleanup_obligations": 6,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 2379776,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3699
+        },
+        "4": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3674928,
+          "actual_heap_used_bytes": 519376,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 10,
+          "free_frames": 57332,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3387
+        },
+        "5": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3674928,
+          "actual_heap_used_bytes": 519376,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 10,
+          "free_frames": 57332,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3387
+        },
+        "6": {
+          "active_operations": 0,
+          "actual_heap_free_bytes": 3674928,
+          "actual_heap_used_bytes": 519376,
+          "admitted_live_subjects": 1,
+          "allocated_stack_bytes": 147456,
+          "capture_invalid_flags": 0,
+          "execution_context_quota_charge": 10,
+          "free_frames": 57332,
+          "outstanding_cleanup_obligations": 3,
+          "page_size": 4096,
+          "reserved_completions": 0,
+          "retained_physical_frame_union": 0,
+          "segment_bytes": 1253376,
+          "total_frames": 60719,
+          "unknown_retained_obligations": 2,
+          "used_frames": 3387
+        }
+      },
+      "structurally_complete": true,
+      "workload_outcome": {
+        "admitted": 1,
+        "exited": 1,
+        "requested": 1,
+        "status": "LIFECYCLE_COMPLETE"
+      }
+    }
+  ],
+  "scenario_replicates": {
+    "1": 3
+  },
+  "scope": "pinned root-only QEMU-TCG one-CPU fixture",
+  "throughput_claim": false,
+  "unsupported_dimensions": {
+    "aggregate_cpu": "No admitted aggregate execution unit/period/burst/overshoot measurement; scheduler ticks and latency are not CPU entitlement.",
+    "authority_controller_router": "Actual genesis, persistence, reserve/live-claim, queues and resize producer costs are not supplied by this fixture.",
+    "broker_and_lifecycle": "Session/reconnect/durable-key/unknown-generation retention costs are outside this fixture.",
+    "operations_and_completion_retention": "Parked footprint is not accepted/retained/unknown operation saturation and authoritative consume measurement.",
+    "production_capacity": "QEMU-TCG one-CPU finite samples do not qualify physical Intel/VMX, 200 overlapping clients or production capacity.",
+    "threads_and_shared_cspace": "Fixture is root-only, not same-incarnation thread/SMP or lineage/handle saturation measurement."
+  }
+}

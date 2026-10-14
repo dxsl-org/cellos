@@ -1,0 +1,56 @@
+{
+  "scope": "throwaway identity/scope checks, not runtime or semantic proof",
+  "errors": [],
+  "source_baseline_count": 84,
+  "CPU_payload_bytes": 41304,
+  "authorization_manifest_sha256": "7a5d7bb4999e8f9d6154bd916c7e3a086ba937b63256ba0cd13823c78b51e3e3",
+  "candidate_identities": [
+    {
+      "slice": "G1",
+      "revision": "r2",
+      "sha256": "a39068f68536aed723f4e7c8c622df3a0b4cc00c8133febe4efd6998c6e81b83"
+    },
+    {
+      "slice": "G2-R-core/B",
+      "revision": "r3",
+      "sha256": "f6a5a6cd9facaaf7de7075fad64399925b053bee54be23215d383b8ea5e14552"
+    }
+  ],
+  "negative_controls": [
+    {
+      "mutation": "candidate digest",
+      "detected": true,
+      "errors": [
+        "CANDIDATE_BYTES"
+      ]
+    },
+    {
+      "mutation": "source pin",
+      "detected": true,
+      "errors": [
+        "SOURCE_BYTES"
+      ]
+    },
+    {
+      "mutation": "journal promotion",
+      "detected": true,
+      "errors": [
+        "J_SCOPE"
+      ]
+    },
+    {
+      "mutation": "legacy unlock",
+      "detected": true,
+      "errors": [
+        "LOCK_SCOPE"
+      ]
+    },
+    {
+      "mutation": "capture promotion",
+      "detected": true,
+      "errors": [
+        "PROMOTION"
+      ]
+    }
+  ]
+}

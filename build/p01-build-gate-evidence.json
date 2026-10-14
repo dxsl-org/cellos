@@ -1,0 +1,165 @@
+{
+  "scope": "actual compiled build.rs process decisions; not cross-target kernel execution",
+  "cases": [
+    {
+      "flag": null,
+      "test_hooks": false,
+      "target_arch": "x86_64",
+      "expected": "omitted",
+      "actual": "omitted",
+      "returncode": 0,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\ncargo:rustc-link-arg=-Tkernel/linker-x86-64.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-changed=kernel/linker-rpi3.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-env-changed=EMBEDDED_OVERRIDE\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/init\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/kernel_fs.img\ncargo:rustc-env=EMBEDDED_OUT_DIR=/home/dmin/cellos/build/p01-gate-9_01w4dx/embedded\n",
+      "stderr": ""
+    },
+    {
+      "flag": null,
+      "test_hooks": false,
+      "target_arch": "aarch64",
+      "expected": "omitted",
+      "actual": "omitted",
+      "returncode": 0,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\ncargo:rustc-link-arg=-Tkernel/linker-aarch64.ld\ncargo:rerun-if-changed=kernel/linker-aarch64.ld\ncargo:rerun-if-changed=kernel/linker-rpi3.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-env-changed=EMBEDDED_OVERRIDE\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/init\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/kernel_fs.img\ncargo:rustc-env=EMBEDDED_OUT_DIR=/home/dmin/cellos/build/p01-gate-v3muycqg/embedded\n",
+      "stderr": ""
+    },
+    {
+      "flag": null,
+      "test_hooks": true,
+      "target_arch": "x86_64",
+      "expected": "omitted",
+      "actual": "omitted",
+      "returncode": 0,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\ncargo:rustc-link-arg=-Tkernel/linker-x86-64.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-changed=kernel/linker-rpi3.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-env-changed=EMBEDDED_OVERRIDE\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/init\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/kernel_fs.img\ncargo:rustc-env=EMBEDDED_OUT_DIR=/home/dmin/cellos/build/p01-gate-zc1oaxns/embedded\n",
+      "stderr": ""
+    },
+    {
+      "flag": null,
+      "test_hooks": true,
+      "target_arch": "aarch64",
+      "expected": "omitted",
+      "actual": "omitted",
+      "returncode": 0,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\ncargo:rustc-link-arg=-Tkernel/linker-aarch64.ld\ncargo:rerun-if-changed=kernel/linker-aarch64.ld\ncargo:rerun-if-changed=kernel/linker-rpi3.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-env-changed=EMBEDDED_OVERRIDE\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/init\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/kernel_fs.img\ncargo:rustc-env=EMBEDDED_OUT_DIR=/home/dmin/cellos/build/p01-gate-xj1olcwq/embedded\n",
+      "stderr": ""
+    },
+    {
+      "flag": "0",
+      "test_hooks": false,
+      "target_arch": "x86_64",
+      "expected": "omitted",
+      "actual": "omitted",
+      "returncode": 0,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\ncargo:rustc-link-arg=-Tkernel/linker-x86-64.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-changed=kernel/linker-rpi3.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-env-changed=EMBEDDED_OVERRIDE\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/init\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/kernel_fs.img\ncargo:rustc-env=EMBEDDED_OUT_DIR=/home/dmin/cellos/build/p01-gate-2tf6pv6p/embedded\n",
+      "stderr": ""
+    },
+    {
+      "flag": "0",
+      "test_hooks": false,
+      "target_arch": "aarch64",
+      "expected": "omitted",
+      "actual": "omitted",
+      "returncode": 0,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\ncargo:rustc-link-arg=-Tkernel/linker-aarch64.ld\ncargo:rerun-if-changed=kernel/linker-aarch64.ld\ncargo:rerun-if-changed=kernel/linker-rpi3.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-env-changed=EMBEDDED_OVERRIDE\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/init\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/kernel_fs.img\ncargo:rustc-env=EMBEDDED_OUT_DIR=/home/dmin/cellos/build/p01-gate-j31fndo8/embedded\n",
+      "stderr": ""
+    },
+    {
+      "flag": "0",
+      "test_hooks": true,
+      "target_arch": "x86_64",
+      "expected": "omitted",
+      "actual": "omitted",
+      "returncode": 0,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\ncargo:rustc-link-arg=-Tkernel/linker-x86-64.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-changed=kernel/linker-rpi3.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-env-changed=EMBEDDED_OVERRIDE\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/init\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/kernel_fs.img\ncargo:rustc-env=EMBEDDED_OUT_DIR=/home/dmin/cellos/build/p01-gate-q02wuk6w/embedded\n",
+      "stderr": ""
+    },
+    {
+      "flag": "0",
+      "test_hooks": true,
+      "target_arch": "aarch64",
+      "expected": "omitted",
+      "actual": "omitted",
+      "returncode": 0,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\ncargo:rustc-link-arg=-Tkernel/linker-aarch64.ld\ncargo:rerun-if-changed=kernel/linker-aarch64.ld\ncargo:rerun-if-changed=kernel/linker-rpi3.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-env-changed=EMBEDDED_OVERRIDE\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/init\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/kernel_fs.img\ncargo:rustc-env=EMBEDDED_OUT_DIR=/home/dmin/cellos/build/p01-gate-koeda5b9/embedded\n",
+      "stderr": ""
+    },
+    {
+      "flag": "1",
+      "test_hooks": false,
+      "target_arch": "x86_64",
+      "expected": "rejected",
+      "actual": "rejected",
+      "returncode": 101,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\n",
+      "stderr": "\nthread 'main' (126184) panicked at kernel/build.rs:18:20:\nCELLOS_P01_TRACE requires test-hooks and x86_64\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    },
+    {
+      "flag": "1",
+      "test_hooks": false,
+      "target_arch": "aarch64",
+      "expected": "rejected",
+      "actual": "rejected",
+      "returncode": 101,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\n",
+      "stderr": "\nthread 'main' (126191) panicked at kernel/build.rs:18:20:\nCELLOS_P01_TRACE requires test-hooks and x86_64\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    },
+    {
+      "flag": "1",
+      "test_hooks": true,
+      "target_arch": "x86_64",
+      "expected": "enabled",
+      "actual": "enabled",
+      "returncode": 0,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\ncargo:rustc-cfg=cellos_p01_trace\ncargo:rustc-env=CELLOS_P01_FAULT=\ncargo:rustc-link-arg=-Tkernel/linker-x86-64.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-changed=kernel/linker-rpi3.ld\ncargo:rerun-if-changed=kernel/linker-x86-64.ld\ncargo:rerun-if-env-changed=EMBEDDED_OVERRIDE\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/p01_manifest.bin\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/init\ncargo:rerun-if-changed=/home/dmin/cellos/build/p01-private-corrected/0/override/kernel_fs.img\ncargo:rustc-env=EMBEDDED_OUT_DIR=/home/dmin/cellos/build/p01-gate-scz9un5d/embedded\n",
+      "stderr": ""
+    },
+    {
+      "flag": "1",
+      "test_hooks": true,
+      "target_arch": "aarch64",
+      "expected": "rejected",
+      "actual": "rejected",
+      "returncode": 101,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\n",
+      "stderr": "\nthread 'main' (126205) panicked at kernel/build.rs:18:20:\nCELLOS_P01_TRACE requires test-hooks and x86_64\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    },
+    {
+      "flag": "yes",
+      "test_hooks": false,
+      "target_arch": "x86_64",
+      "expected": "rejected",
+      "actual": "rejected",
+      "returncode": 101,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\n",
+      "stderr": "\nthread 'main' (126212) panicked at kernel/build.rs:19:27:\nCELLOS_P01_TRACE must be absent, 0, or 1\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    },
+    {
+      "flag": "yes",
+      "test_hooks": false,
+      "target_arch": "aarch64",
+      "expected": "rejected",
+      "actual": "rejected",
+      "returncode": 101,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\n",
+      "stderr": "\nthread 'main' (126219) panicked at kernel/build.rs:19:27:\nCELLOS_P01_TRACE must be absent, 0, or 1\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    },
+    {
+      "flag": "yes",
+      "test_hooks": true,
+      "target_arch": "x86_64",
+      "expected": "rejected",
+      "actual": "rejected",
+      "returncode": 101,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\n",
+      "stderr": "\nthread 'main' (126226) panicked at kernel/build.rs:19:27:\nCELLOS_P01_TRACE must be absent, 0, or 1\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    },
+    {
+      "flag": "yes",
+      "test_hooks": true,
+      "target_arch": "aarch64",
+      "expected": "rejected",
+      "actual": "rejected",
+      "returncode": 101,
+      "stdout": "cargo:rustc-env=VERGEN_GIT_SHA=57a2bbdb0\ncargo:rerun-if-changed=/home/dmin/cellos/.git/HEAD\ncargo:rerun-if-changed=/home/dmin/cellos/.git/refs/heads/main\ncargo:rerun-if-changed=build.rs\ncargo:rerun-if-env-changed=VERGEN_IDEMPOTENT\ncargo:rerun-if-env-changed=SOURCE_DATE_EPOCH\ncargo:rustc-env=VERGEN_GIT_SHA=00000000\ncargo:rustc-check-cfg=cfg(cellos_p01_trace)\ncargo:rerun-if-env-changed=CELLOS_P01_TRACE\ncargo:rerun-if-env-changed=CELLOS_P01_FAULT\n",
+      "stderr": "\nthread 'main' (126233) panicked at kernel/build.rs:19:27:\nCELLOS_P01_TRACE must be absent, 0, or 1\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    }
+  ]
+}

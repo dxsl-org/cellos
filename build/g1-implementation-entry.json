@@ -1,0 +1,16 @@
+{
+  "format": "g1-implementation-entry-v1",
+  "authorization_manifest_sha256": "7a5d7bb4999e8f9d6154bd916c7e3a086ba937b63256ba0cd13823c78b51e3e3",
+  "G1_candidate_sha256": "a39068f68536aed723f4e7c8c622df3a0b4cc00c8133febe4efd6998c6e81b83",
+  "baseline_observed_before_edits": {
+    "files": 84,
+    "drift": []
+  },
+  "baseline_decoder": {
+    "command": "python3 -m unittest discover -s scripts/x86 -p test_p01_trace.py",
+    "exit_code": 0,
+    "tests": 98
+  },
+  "semantic_reference_status": "rust-analyzer references exited unexpectedly(code0); literal source caller/build closure required, not exhaustive semantic claim",
+  "implementation_scope": "G1 only; G2 not started; normal images no entitlement"
+}

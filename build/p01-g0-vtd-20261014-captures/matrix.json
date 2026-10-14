@@ -1,0 +1,129 @@
+{
+  "architecture_approval": false,
+  "build_sha256": "d627a21e32f0ced15b54ebfbad77a7f89c0774355a833a2a4a1abee943493285",
+  "captures": [
+    {
+      "capture_uuid": "bf68a17c-d752-4a58-8927-4400b17c908a",
+      "count": "0",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 0,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "9d7bcdbf-400d-4e51-ae3d-62ed15cdbdb0",
+      "count": "0",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 1,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "80a5a8b1-c765-4216-bc81-bba3559494de",
+      "count": "0",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 2,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "a6acba2d-fb31-450b-ad25-832fb86e023e",
+      "count": "1",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 0,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "10d25507-a2a4-408f-999a-27e94fa5236d",
+      "count": "1",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 1,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "74276d14-0f76-40ac-b80b-946bb93b990a",
+      "count": "1",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 2,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "812feb2f-068e-48d8-b499-733f7fe1de46",
+      "count": "4",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 0,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "9f8991b1-c7c8-45b4-8344-78920991a100",
+      "count": "4",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 1,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "1f9a7b21-1bb6-446b-baae-1dde261da6f4",
+      "count": "4",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 2,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "bb68c11a-1342-434c-aae0-a1726e9f1ab0",
+      "count": "8",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 0,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "09c97f19-71bf-4c90-8343-76196045ea6f",
+      "count": "8",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 1,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "0543623f-7103-4b32-8c45-4898d498e59b",
+      "count": "8",
+      "denied_control_accepted": false,
+      "fully_settled": false,
+      "replica": 2,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "bebe3f33-bbe5-47f9-8828-df14b4fdd262",
+      "count": "denied",
+      "denied_control_accepted": true,
+      "fully_settled": false,
+      "replica": 0,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "f49ccb15-116c-4fbf-890b-3049dd1b04d0",
+      "count": "denied",
+      "denied_control_accepted": true,
+      "fully_settled": false,
+      "replica": 1,
+      "structurally_complete": true
+    },
+    {
+      "capture_uuid": "678d4459-6a73-4a45-a573-efc4375bc07c",
+      "count": "denied",
+      "denied_control_accepted": true,
+      "fully_settled": false,
+      "replica": 2,
+      "structurally_complete": true
+    }
+  ],
+  "cpus": 1,
+  "one_cpu_accounting_qualified": false,
+  "throughput_claim": false
+}

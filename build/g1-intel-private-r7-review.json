@@ -1,0 +1,68 @@
+{
+  "format": "g1-private-source-review-v1",
+  "actual_diff_reviewed": true,
+  "finite_event_capacity_approved": true,
+  "max_events": 256,
+  "build_sha256": "965b461917e38bf17ad1a7c6003256f7722b5b2692109bbc0392678344c186b0",
+  "inputs_sha256": "944a5eec1f678592133c24806886077cfcc7c4a56557f6ea92dadbe7c0bf735d",
+  "experiment": {
+    "lane": "Intel-x86_64-q35-TCG-development",
+    "period_ns": 100000000,
+    "entitlement_ns": 20000000,
+    "burst_cap_ns": 40000000,
+    "service_gap_limit_ns": 20000000,
+    "switch_delay_limit_ns": 20000000,
+    "exhaustion_to_departure_limit_ns": 20000000,
+    "periods": 16,
+    "max_events": 256,
+    "workers": 2,
+    "actions": {
+      "admit": 2,
+      "release": 2,
+      "worker_exit": 2,
+      "join": 2,
+      "explicit_yield_max": 8,
+      "delay": 1,
+      "delay_source": "hpet-period16",
+      "root_exit": 1
+    },
+    "max_worker_chunks": 1000000,
+    "initial_bank_ns": 0,
+    "initial_debt_ns": 0,
+    "pacing_clock_is_charge_source": false,
+    "hardware_D_W_qualified": false,
+    "max_capture_periods": 18,
+    "max_workload_stages": 64,
+    "service_summary_kind": 17,
+    "max_schedule_events": 206
+  },
+  "reviewer": "integration-owner actual source adjudication; failed independent corrected-source follow-up not claimed PASS",
+  "review_document": ".agents/261011-1200-cell-contract-authority/g1-implementation-review.md",
+  "finite_schedule": {
+    "g1-overlap": {
+      "scheduler_transition_bound": 64,
+      "service_event_bound": 36,
+      "fixed_event_bound": 42,
+      "total_event_bound": 206,
+      "review_sha256": "d7bde00e482d2f46b4ad4a634fe279e5301efc326742591c6b014d448dcc3f68",
+      "source_reasoning": "one selected root; source elapsed<18P and64workload stages; completion/abort exclusive;2harts*18coalesced service rows;18period+18throttle+6lifecycle. Exceed guards rejects whole capture; no truncation."
+    },
+    "g1-yield": {
+      "scheduler_transition_bound": 64,
+      "service_event_bound": 36,
+      "fixed_event_bound": 42,
+      "total_event_bound": 206,
+      "review_sha256": "d7bde00e482d2f46b4ad4a634fe279e5301efc326742591c6b014d448dcc3f68",
+      "source_reasoning": "one selected root; source elapsed<18P and64workload stages; completion/abort exclusive;2harts*18coalesced service rows;18period+18throttle+6lifecycle. Exceed guards rejects whole capture; no truncation."
+    },
+    "g1-retention": {
+      "scheduler_transition_bound": 64,
+      "service_event_bound": 36,
+      "fixed_event_bound": 42,
+      "total_event_bound": 206,
+      "review_sha256": "d7bde00e482d2f46b4ad4a634fe279e5301efc326742591c6b014d448dcc3f68",
+      "source_reasoning": "one selected root; source elapsed<18P and64workload stages; completion/abort exclusive;2harts*18coalesced service rows;18period+18throttle+6lifecycle. Exceed guards rejects whole capture; no truncation."
+    }
+  },
+  "runtime_corrections": "Source-bound two-worker compute mailbox barrier before start; transient eligibility derives exact live same-generation workers from scheduler and places them on distinct admitted harts in2CPU capture. Shared STARTED handshake only2CPU after both workers already admitted/released;1CPU skips. Join/HPET period notifications remain source-bound; no normal-image placement or quota change;206event refusal guard retained."
+}

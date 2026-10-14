@@ -1,0 +1,11 @@
+{
+  "command": "python3 scripts/verify-cell-contract-p01.py --negative-controls",
+  "exit_code": 0,
+  "observed_errors": [],
+  "negative_controls_detected": 7,
+  "pending_exact_deltas": 23,
+  "source_inputs": 3720,
+  "source_exports": 2312,
+  "legacy_locks": 38,
+  "scope": "Observed preceding CLI result; document consistency only, no approval or runtime promotion"
+}

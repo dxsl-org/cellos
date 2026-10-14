@@ -1,0 +1,36 @@
+{
+  "scope": "fresh QEMU software root snapshot only; empty requester/context census, no physical hardware witness",
+  "build_sha256": "d627a21e32f0ced15b54ebfbad77a7f89c0774355a833a2a4a1abee943493285",
+  "matrix_sha256": "ef577fd9388ac1f89abae170389c9d2ee2bd8ee5f092fc92a50f50b687dc4331",
+  "readiness_sha256": "a377edd44c7a9b01571b21b46170c55cd3ba2618f723ef2774144f63095e9ca3",
+  "captures": 15,
+  "structurally_complete": 15,
+  "accepted_denied_controls": 3,
+  "vtd_cutoffs": 78,
+  "nodes_per_cutoff": [
+    1
+  ],
+  "edges_per_cutoff": [
+    0
+  ],
+  "budget_selection_ready": false,
+  "readiness_exit": 2,
+  "hardware_publication_proven": false,
+  "blockers": [
+    "aggregate_cpu: No admitted aggregate execution unit/period/burst/overshoot measurement; scheduler ticks and latency are not CPU entitlement.",
+    "authority_controller_router: Actual genesis, persistence, reserve/live-claim, queues and resize producer costs are not supplied by this fixture.",
+    "broker_and_lifecycle: Session/reconnect/durable-key/unknown-generation retention costs are outside this fixture.",
+    "heap ownership capacity/coverage unproven",
+    "operations_and_completion_retention: Parked footprint is not accepted/retained/unknown operation saturation and authoritative consume measurement.",
+    "pending/retained/unknown/live component",
+    "physical inventory semantic/topology coverage unproven",
+    "production_capacity: QEMU-TCG one-CPU finite samples do not qualify physical Intel/VMX, 200 overlapping clients or production capacity.",
+    "settled nonzero/absent outstanding_cleanup_obligations",
+    "settled nonzero/absent unknown_retained_obligations",
+    "settled samples not consecutive scheduler ticks",
+    "threads_and_shared_cspace: Fixture is root-only, not same-incarnation thread/SMP or lineage/handle saturation measurement.",
+    "unreclaimed raw residual: actual_heap_used_bytes",
+    "unreclaimed raw residual: execution_context_quota_charge",
+    "unreclaimed raw residual: used_frames"
+  ]
+}

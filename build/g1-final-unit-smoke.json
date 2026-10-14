@@ -1,0 +1,11 @@
+{
+  "accounting_command": "rustc --edition=2021 --test /tmp/cellos-g1-accounting-smoke.rs -o /tmp/cellos-g1-accounting-smoke && /tmp/cellos-g1-accounting-smoke task::cpu_accounting::tests --test-threads=1",
+  "accounting_exit": 0,
+  "accounting_tests": 9,
+  "accounting_source_sha256": "3426effd3bdaffd037d8dde28ba516f23cddd261ed329a7ec4ca9570ecb8b21e",
+  "decoder_command": "python3 -m unittest discover -s scripts/x86 -p test_p01_trace.py",
+  "decoder_exit": 0,
+  "decoder_tests": 107,
+  "decoder_sha256": "0a6385d3cf3dbf891b920017a329dad5bcdcaaf65ae27d088f593df94eeef5ad",
+  "limits": "Actual module and Spinlock, unrelated harness environment stubbed. Full hosted kernel test attempt failed unsupported forced cfg and unrelated existing pin_tests ambiguities; not counted as passing suite."
+}

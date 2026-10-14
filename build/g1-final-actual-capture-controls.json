@@ -1,0 +1,32 @@
+{
+  "scope": "actual final SMP raw bytes mutated in memory; no fixture source/wiring assertion or hardware proof",
+  "capture": "build/g1-intel-twocpu-r8-captures/3110c2cb-fd87-4c67-9652-da36cd62138a",
+  "source_raw_sha256": "37b58b88e5b6ce65eb9b1af4db02690adca4b51f11600a481cefda52ab3f69a7",
+  "controls": [
+    {
+      "mutation": "cutoff count",
+      "detected": true,
+      "reason": "G1 cutoff count/state mismatch or overflow"
+    },
+    {
+      "mutation": "missing terminal row",
+      "detected": true,
+      "reason": "G1 complete retained generation required"
+    },
+    {
+      "mutation": "disabled boot clock",
+      "detected": true,
+      "reason": "G1 checked HPET/calibration identity"
+    },
+    {
+      "mutation": "stale attested generation",
+      "detected": true,
+      "reason": "G1 release attested sender generation mismatch"
+    },
+    {
+      "mutation": "wrong transfer serial",
+      "detected": true,
+      "reason": "G1 switch delay/serial mismatch"
+    }
+  ]
+}
