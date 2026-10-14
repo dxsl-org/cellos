@@ -1589,17 +1589,12 @@ jobs:
         timeout-minutes: 5
         run: python3 -m pip install --user --quiet cryptography
 
-      - name: Build test-hooks kernel (needed by degrade test)
-        run: |
-          chmod +x scripts/build-test-hooks-ci.sh
-          bash scripts/build-test-hooks-ci.sh
-
       - name: Build srv-test kernel
         run: |
           chmod +x scripts/build-srv-test-ci.sh
           bash scripts/build-srv-test-ci.sh
 
-      - name: Build disk_srv.img
+      - name: Build offline-provisioned P4/P5 disk_srv.img
         run: |
           chmod +x scripts/mksrv-img.sh
           bash scripts/mksrv-img.sh build/disk_srv.img
@@ -1608,8 +1603,8 @@ jobs:
         env:
           CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
         # Full suite: S1–S6 on the CellosFS Native /srv backend, the no-disk
-        # degrade path, and the two-boot persistence check. The image's P5 is a
-        # raw partition the guest formats itself (scripts/mksrv-img.sh).
+        # degrade path, two-boot existing-volume persistence, and nonformatting
+        # blank/corrupt refusal. P4/P5 are provisioned offline by mksrv-img.sh.
         run: cd tests/integration && cargo test --test srv-cellosfs
 
   rv64-tier2-disk:

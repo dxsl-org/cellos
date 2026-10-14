@@ -12,9 +12,20 @@
 
 use alloc::vec::Vec;
 
+/// Operational state only: healthy does not certify a durability barrier.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BackendHealth {
+    Ready,
+    Unavailable,
+    Poisoned,
+}
+
 /// `Send` bound (Law 7): backends live inside the `GLOBAL_VFS` static Mutex,
 /// which requires its contents to be `Send` for the static to be `Sync`.
 pub trait FsBackend: Send {
+    fn health(&self) -> BackendHealth {
+        BackendHealth::Ready
+    }
     /// SAS zero-copy pointer to the file's bytes. Only in-memory backends
     /// return `Some` — pointers must stay valid while the VFS cell lives.
     /// Disk backends return `None`; callers fall back to the copy path.

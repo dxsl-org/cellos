@@ -1,6 +1,6 @@
 //! CellosFS Native /srv integration tests.
 //!
-//! Three test functions:
+//! Preprovisioned first boot, existing-volume reboot, and open-only refusal:
 //!
 //! 1. `riscv64_cellosfs_srv_basic` — single boot with a P5-formatted disk;
 //!    waits for all six srv-test scenarios, then runs the POSIX rename smoke.
@@ -12,9 +12,14 @@
 //!    temp disk; the srv-test cell writes a persist marker in boot 1 and the
 //!    harness verifies it is announced as found in boot 2.
 //!
+//! 4–5. Blank/corrupt attached P5 volumes refuse real Stat/write scenarios and
+//!    retain every selected partition byte; no runtime provisioning is permitted.
+//!
 //! Prerequisites:
 //!   scripts/build-srv-test-ci.sh  →  target/.../cellos-kernel-srv-test
 //!   scripts/mksrv-img.sh          →  build/disk_srv.img
+//! Test-only artifact overrides: CELLOS_SRV_TEST_KERNEL and CELLOS_SRV_TEST_DISK.
+//! The no-disk lane uses the same selected srv-test kernel without attaching a disk.
 //!
 //! Run:
 //!   cargo test --manifest-path tests/integration/Cargo.toml --test srv-cellosfs
@@ -31,26 +36,37 @@ fn repo_root() -> PathBuf {
 }
 
 fn srv_test_kernel() -> String {
+    if let Ok(path) = std::env::var("CELLOS_SRV_TEST_KERNEL") {
+        return path;
+    }
     repo_root()
         .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel-srv-test")
         .to_string_lossy()
         .into_owned()
 }
 
-/// Standard test-hooks kernel (no disk) — used by the degrade test to verify
-/// VFS behaves gracefully when no VirtIO-BLK device is present.
-fn test_hooks_kernel() -> String {
-    repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel-test-hooks")
-        .to_string_lossy()
-        .into_owned()
-}
-
 fn srv_disk() -> String {
+    if let Ok(path) = std::env::var("CELLOS_SRV_TEST_DISK") {
+        return path;
+    }
     repo_root()
         .join("build/disk_srv.img")
         .to_string_lossy()
         .into_owned()
+}
+
+fn retain_serial(name: &str, serial: &str) {
+    let Some(directory) = std::env::var_os("CELLOS_G2_EVIDENCE_DIR") else { return };
+    let directory = PathBuf::from(directory);
+    std::fs::create_dir_all(&directory).expect("create evidence directory");
+    let mut file = std::fs::OpenOptions::new().write(true).create_new(true)
+        .open(directory.join(format!("{name}.raw.log"))).expect("exclusive raw evidence");
+    // QemuRunner stores each incoming byte as one Latin-1 code point.
+    // Reverse that projection rather than UTF-8-encoding a mojibake string.
+    let bytes: Vec<u8> = serial.chars()
+        .map(|c| u8::try_from(c as u32).expect("serial byte projection")).collect();
+    std::io::Write::write_all(&mut file, &bytes).expect("retain raw serial");
+    file.sync_all().expect("sync raw evidence");
 }
 
 fn qemu_ok() -> bool {
@@ -131,6 +147,7 @@ fn riscv64_cellosfs_srv_basic() {
             panic!("{e}");
         });
     let serial = runner.dump();
+    retain_serial("basic", &serial);
     assert_eq!(
         serial
             .matches(
@@ -171,32 +188,23 @@ fn riscv64_cellosfs_srv_basic() {
 }
 
 /// S6: boot with no VirtIO-BLK → VFS must warn that /srv is unavailable but
-/// must NOT panic.  Uses the vfs-quota test-hooks kernel (smallest env).
+/// must NOT panic. Uses the same current srv-test kernel as the attached-disk lanes.
 #[test]
 fn riscv64_cellosfs_srv_degrade_no_disk() {
-    let kernel = PathBuf::from(test_hooks_kernel());
-    if !kernel.exists() {
-        eprintln!(
-            "SKIP: test-hooks kernel not found ({}). Run scripts/build-test-hooks-ci.sh first.",
-            test_hooks_kernel()
-        );
-        return;
-    }
-    if !qemu_ok() {
-        eprintln!("SKIP: qemu-system-riscv64 not on PATH");
+    let kernel = PathBuf::from(srv_test_kernel());
+    if !vicell_integration_tests::ci_guard(kernel.exists() && qemu_ok()) {
         return;
     }
 
-    // boot_rv64 attaches NO block device — VFS falls back to None on the /srv open. The message is
-    // the CellosFS backend's: `libs/cellos-fs` is the only /srv backend since the CellosFS Native
-    // switch, so the old "RedoxFS P5 open failed" string can never appear.
+    // No block device: open-only native volumes stay unavailable, with no fallback.
     let runner = QemuRunner::boot_rv64(kernel.to_str().unwrap());
     runner
-        .wait_for("[vfs] WARNING: CellosFS mount/format failed", 60)
+        .wait_for("[srv-test] Results: 0 PASS, 6 FAIL", 120)
         .unwrap_or_else(|e| {
             eprintln!("--- serial output ---\n{}\n---", runner.dump());
             panic!("{e}");
         });
+    retain_serial("no-disk", &runner.dump());
 }
 
 /// S7: write persist marker in boot 1, kill QEMU, boot 2 with same image →
@@ -226,6 +234,7 @@ fn riscv64_cellosfs_srv_persistence() {
                 eprintln!("--- boot-1 serial ---\n{}\n---", r.dump());
                 panic!("boot 1: {e}");
             });
+        retain_serial("reboot-1", &r.dump());
     } // drop kills QEMU; tmp file stays intact
 
     // Boot 2: srv-test finds /srv/persist.txt from boot 1 and prints PERSIST_READ_OK.
@@ -236,6 +245,79 @@ fn riscv64_cellosfs_srv_persistence() {
                 eprintln!("--- boot-2 serial ---\n{}\n---", r.dump());
                 panic!("boot 2 (persistence): {e}");
             });
+        retain_serial("reboot-2", &r.dump());
     }
     // tmp dropped here; temp disk image is deleted.
+}
+
+/// Compare the complete P5 window after QEMU has exited; checking just the
+/// superblocks could miss writes to data/allocator blocks during refusal.
+fn assert_p5_unchanged(path: &std::path::Path, mut before: std::fs::File) {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).expect("open P5 image");
+    file.seek(SeekFrom::Start(931_072 * 512)).expect("seek P5");
+    before.seek(SeekFrom::Start(0)).expect("rewind P5 snapshot");
+    let mut actual = [0; 65536];
+    let mut expected = [0; 65536];
+    for _ in 0..1024 {
+        file.read_exact(&mut actual).expect("read P5");
+        before.read_exact(&mut expected).expect("read P5 snapshot");
+        assert_eq!(actual, expected, "refused P5 bytes changed");
+    }
+}
+
+fn assert_attached_p5_refused(corrupt: bool) {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    if !prerequisites_ok_with_disk() {
+        return;
+    }
+    let mut tmp = tempfile::Builder::new().suffix(".img").tempfile().expect("create refusal image");
+    std::fs::copy(srv_disk(), tmp.path()).expect("copy preprovisioned image");
+    tmp.as_file_mut().seek(SeekFrom::Start(931_072 * 512)).expect("seek P5");
+    if corrupt {
+        // Destroy both recovery slots while leaving formatted allocator/root bytes
+        // in place: runtime cannot reinterpret this as blank/newly authorized media.
+        tmp.as_file_mut().write_all(&[0xA5; 8192]).expect("corrupt both P5 slots");
+    } else {
+        let zeros = [0; 65536];
+        for _ in 0..1024 {
+            tmp.as_file_mut().write_all(&zeros).expect("blank entire P5");
+        }
+    }
+    tmp.as_file().sync_all().expect("sync refusal fixture");
+    tmp.as_file_mut().seek(SeekFrom::Start(931_072 * 512)).expect("snapshot P5 seek");
+    let mut before = tempfile::tempfile().expect("create P5 snapshot");
+    assert_eq!(
+        std::io::copy(&mut tmp.as_file_mut().take(131_072 * 512), &mut before)
+            .expect("snapshot complete P5"),
+        131_072 * 512
+    );
+    {
+        let runner = QemuRunner::boot_rv64_with_disk(&srv_test_kernel(), tmp.path().to_str().unwrap());
+        // Live Stat refuses rather than synthesizing /srv. The fixture collapses
+        // error numbers; exact ERR_IO is covered by host dispatch fault scenarios.
+        runner.wait_for("[srv-test] S1 mount: FAIL (Err)", 120)
+            .unwrap_or_else(|e| panic!("{e}\n{}", runner.dump()));
+        runner.wait_for("[srv-test] S2 write+read: FAIL (write failed)", 120)
+            .unwrap_or_else(|e| panic!("{e}\n{}", runner.dump()));
+        runner.wait_for("[srv-test] FAILURES DETECTED", 120)
+            .unwrap_or_else(|e| panic!("{e}\n{}", runner.dump()));
+        let serial = runner.dump();
+        retain_serial(if corrupt { "corrupt" } else { "blank" }, &serial);
+        assert!(!serial.contains("[srv-test] S1 mount: PASS"), "{serial}");
+        assert!(!serial.contains("[srv-test] S2 write+read: PASS"), "{serial}");
+        assert!(!serial.contains("[srv-test] ALL TESTS PASSED"), "{serial}");
+        assert!(!serial.contains("[KERNEL PANIC]") && !serial.contains("panicked at"), "{serial}");
+    } // QemuRunner drop kills/waits before host reads the image.
+    assert_p5_unchanged(tmp.path(), before);
+}
+
+#[test]
+fn riscv64_cellosfs_srv_blank_refuses_without_format() {
+    assert_attached_p5_refused(false);
+}
+
+#[test]
+fn riscv64_cellosfs_srv_corrupt_refuses_without_format() {
+    assert_attached_p5_refused(true);
 }

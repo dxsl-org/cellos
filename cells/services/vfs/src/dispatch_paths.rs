@@ -152,6 +152,9 @@ pub(crate) fn handle_path_request(
             let Ok(new_key) = crate::namespace::NamespaceKey::parse(new) else {
                 return Some(VfsResponse::Err(ERR_DENIED));
             };
+            if !vfs.healthy(old) || !vfs.healthy(new) {
+                return Some(VfsResponse::Err(ERR_IO));
+            }
             if old_key == new_key {
                 return match vfs.stat(old) {
                     Some((_, false)) => Some(VfsResponse::Ok),

@@ -18,6 +18,7 @@ pub(crate) fn read_grant<'a>(
         Some(path) if !vfs.access.can_read(caller, path) => {
             return VfsResponse::Err(ERR_DENIED);
         }
+        Some(path) if !vfs.healthy(path) => return VfsResponse::Err(ERR_IO),
         _ => {}
     }
     match ostd::syscall::sys_grant_slice_with_len(grant) {
@@ -62,10 +63,12 @@ pub(crate) fn read_file_grant<'a>(
     if !vfs.access.can_read(caller, path) {
         return VfsResponse::Err(ERR_DENIED);
     }
+    if !vfs.healthy(path) || !matches!(vfs.stat(path), Some((_, false))) { return VfsResponse::Err(ERR_IO); }
     match ostd::syscall::sys_grant_slice_with_len(grant) {
         None => VfsResponse::Err(ERR_IO),
         Some((ptr, grant_len)) => {
             let data = vfs.read_to_vec(path);
+            if !vfs.healthy(path) { return VfsResponse::Err(ERR_IO); }
             let n = data.len().min(max).min(grant_len);
             unsafe {
                 core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, n);

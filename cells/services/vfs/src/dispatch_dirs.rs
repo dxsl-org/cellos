@@ -151,6 +151,7 @@ fn open_dir<'a>(
     if !vfs.access.can_read(caller, &path) {
         return VfsResponse::Err(ERR_DENIED);
     }
+    if !vfs.healthy(&path) { return VfsResponse::Err(ERR_IO); }
     match vfs.stat(&path) {
         Some((_, true)) => {}
         _ if vfs.is_mount_ancestor(&path) => {}
@@ -178,10 +179,11 @@ fn read_at<'a>(
     }
     // Absent and empty must not look alike: an empty reply for a missing file
     // would make a caller act on data that does not exist.
-    if vfs.stat(&path).is_none() {
+    if !matches!(vfs.stat(&path), Some((_, false))) {
         return VfsResponse::Err(ERR_IO);
     }
     let data = vfs.read_to_vec(&path);
+    if !vfs.healthy(&path) { return VfsResponse::Err(ERR_IO); }
     let n = data.len().min(MAX_INLINE_PAYLOAD);
     resp_buf[..n].copy_from_slice(&data[..n]);
     VfsResponse::Data(&resp_buf[..n])

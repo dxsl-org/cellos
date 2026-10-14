@@ -56,8 +56,8 @@ impl VfsManager {
     pub fn new() -> Self {
         let mut mounts = MountTable::new();
         let ram = mounts.add_backend(Box::new(RamFsBackend::new()));
-        // FAT32 (P1) is the SD-card/PC interop volume since P04 — /data moved
-        // to littlefs (P4), which survives power cuts (FAT has no journal).
+        // FAT32 P1 remains the interoperability/config override volume.
+        // Native P4/P5 require explicit offline provisioning; runtime never formats.
         let fat = mounts.add_backend(Box::new(FatBackend::mount(
             "/mnt/sd",
             api::disk::PART_FAT32_BASE_LBA,
@@ -80,7 +80,7 @@ impl VfsManager {
         mounts.mount("/data", data_fs);
         mounts.mount("/mnt/sd", fat);
         mounts.mount("/bin", binov);
-        // /srv (P5): CellosFS Native CoW Extent volume (replaces RedoxFS).
+        // /srv P5: existing native V1 volume, not an admitted durable journal.
         let srv_fs = mounts.add_backend(Box::new(CellosFsBackend::mount(
             "/srv",
             api::disk::PART_SRV_BASE_LBA,
@@ -108,16 +108,25 @@ impl VfsManager {
         }
     }
 
+    /// Consult after authorization and again after reads; never a durability claim.
+    pub fn healthy(&self, path: &str) -> bool {
+        let backend = self.config_source(path).map(|(backend, _)| backend)
+            .or_else(|| self.mounts.backend(path));
+        backend.is_some_and(|b| b.health() == crate::backend::BackendHealth::Ready)
+    }
+
     pub fn get_file_ptr(&self, path: &str) -> Option<(usize, usize)> {
         self.mounts.backend(path)?.get_file_ptr(path)
     }
 
     pub fn list_dir(&self, path: &str, out: &mut [u8]) -> usize {
+        if !self.healthy(path) { return 0; }
         let mut pos = self
             .mounts
             .backend(path)
             .map(|b| b.list(path, out))
             .unwrap_or(0);
+        if !self.healthy(path) { return 0; }
 
         let cap = out.len().min(480);
         for child in self.mounts.direct_mount_children(path) {
@@ -179,12 +188,13 @@ impl VfsManager {
     }
 
     pub fn stat(&self, path: &str) -> Option<(u64, bool)> {
+        if !self.healthy(path) { return None; }
         if let Some((backend, source)) = self.config_source(path) {
             return backend.stat(source);
         }
-        if let Some(res) = self.mounts.backend(path).and_then(|b| b.stat(path)) {
-            return Some(res);
-        }
+        let result = self.mounts.backend(path).and_then(|b| b.stat(path));
+        if !self.healthy(path) { return None; }
+        if result.is_some() { return result; }
         if self.mounts.is_mount_ancestor(path) {
             return Some((0, true));
         }
@@ -289,6 +299,8 @@ impl VfsManager {
     }
 
     pub fn rename_no_replace(&mut self, old: &str, new: &str) -> bool {
+        let (Some(old_backend), Some(new_backend)) = (self.mounts.backend(old), self.mounts.backend(new)) else { return false; };
+        if !core::ptr::eq(old_backend, new_backend) || !self.healthy(old) || !self.healthy(new) { return false; }
         self.mounts
             .backend_mut(old)
             .map(|b| b.rename_no_replace(old, new))

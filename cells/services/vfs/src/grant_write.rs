@@ -69,6 +69,7 @@ pub(crate) fn write<'a>(
     }
 
     let old = vfs.read_to_vec(&path);
+    if !vfs.healthy(&path) { return VfsResponse::Err(ERR_IO); }
     if old.len() != file_len {
         return VfsResponse::Err(ERR_IO);
     }
@@ -85,8 +86,8 @@ pub(crate) fn write<'a>(
     if !vfs.write(&path, &committed) {
         return VfsResponse::Err(ERR_IO);
     }
-    // Backends report success only after their synchronous write commits. Charge
-    // after that commit, then acknowledge the exact visible byte count.
+    // Observed native sync is functional completion, not crash-preserving
+    // durability. A failed mutation is possibly accepted and closes the instance.
     vfs.quota.release_path(&path, file_len as u64);
     let _ = vfs.quota.charge(caller.cell, new_len as u64);
     vfs.quota.set_writer(&path, caller.cell);

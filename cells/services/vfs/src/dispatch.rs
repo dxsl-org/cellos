@@ -7,7 +7,7 @@
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::{ERR_DENIED, ERR_HANDLE};
+use crate::paths::{ERR_DENIED, ERR_HANDLE, ERR_IO};
 
 /// Handle one decoded request on behalf of a caller the kernel has attested.
 ///
@@ -65,7 +65,10 @@ pub fn handle_request<'a>(
             if !vfs.access.can_read(caller, p) {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
+            if !vfs.healthy(p) { return api::ipc::VfsResponse::Err(ERR_IO); }
+            if !matches!(vfs.stat(p), Some((_, true))) { return api::ipc::VfsResponse::Err(ERR_IO); }
             let n = vfs.list_dir(p, resp_buf);
+            if !vfs.healthy(p) { return api::ipc::VfsResponse::Err(ERR_IO); }
             api::ipc::VfsResponse::Data(&resp_buf[..n])
         }
         api::ipc::VfsRequest::ReadAsync { path } => {
@@ -80,6 +83,7 @@ pub fn handle_request<'a>(
             if !caller.may_own_state() {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
+            if !vfs.healthy(path) || !matches!(vfs.stat(path), Some((_, false))) { return api::ipc::VfsResponse::Err(ERR_IO); }
             let lease = if path.starts_with("/srv") {
                 let Ok(k) = crate::namespace::NamespaceKey::parse(path) else {
                     return api::ipc::VfsResponse::Err(ERR_DENIED);
@@ -92,6 +96,7 @@ pub fn handle_request<'a>(
                 None
             };
             let data = vfs.read_to_vec(path);
+            if !vfs.healthy(path) { return api::ipc::VfsResponse::Err(ERR_IO); }
             let handle = vfs.pending.insert(caller, path, data, lease);
             api::ipc::VfsResponse::PendingHandle(handle)
         }
@@ -111,6 +116,10 @@ pub fn handle_request<'a>(
             };
             if !readable {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
+            }
+            if !vfs.pending.owned_path(caller, handle).is_some_and(|path| vfs.healthy(path)) {
+                let _ = vfs.pending.poll(caller, handle);
+                return api::ipc::VfsResponse::Err(ERR_IO);
             }
             match vfs.pending.poll(caller, handle) {
                 Some(data) => {
