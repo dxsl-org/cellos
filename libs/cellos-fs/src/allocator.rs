@@ -14,12 +14,19 @@ pub struct BitmapAllocator {
 }
 
 impl BitmapAllocator {
-    pub fn new(start_block: u64, bitmap_blocks: u32, total_blocks: u64) -> Self {
-        let byte_len = (bitmap_blocks as usize) * BLOCK_SIZE;
+    pub fn new(start_block: u64, bitmap_blocks: u32, total_blocks: u64) -> Result<Self, FsError> {
+        let byte_len = usize::try_from(bitmap_blocks).ok()
+            .and_then(|n| n.checked_mul(BLOCK_SIZE)).ok_or(FsError::NoSpace)?;
+        let reserved_blocks = start_block.checked_add(bitmap_blocks as u64)
+            .ok_or(FsError::PartitionOverflow)?;
+        if bitmap_blocks == 0 || start_block < 2 || reserved_blocks >= total_blocks
+            || bitmap_blocks as u64 * BLOCK_SIZE as u64 * 8 < total_blocks
+        {
+            return Err(FsError::PartitionOverflow);
+        }
         let mut data = alloc::vec![0u8; byte_len];
 
         // Mark blocks before FIRST_USABLE_BLOCK and bitmap blocks as allocated (1)
-        let reserved_blocks = start_block + bitmap_blocks as u64;
         for b in 0..reserved_blocks {
             let byte_idx = (b / 8) as usize;
             let bit_idx = (b % 8) as u8;
@@ -39,14 +46,14 @@ impl BitmapAllocator {
 
         let free_blocks = total_blocks.saturating_sub(reserved_blocks);
 
-        Self {
+        Ok(Self {
             start_block,
             bitmap_blocks,
             total_blocks,
             free_blocks,
             data,
             dirty: true,
-        }
+        })
     }
 
     pub fn load_from_disk<D: BlockDevice>(
@@ -55,7 +62,16 @@ impl BitmapAllocator {
         bitmap_blocks: u32,
         total_blocks: u64,
     ) -> Result<Self, FsError> {
-        let byte_len = (bitmap_blocks as usize) * BLOCK_SIZE;
+        let byte_len = usize::try_from(bitmap_blocks).ok()
+            .and_then(|n| n.checked_mul(BLOCK_SIZE)).ok_or(FsError::Corrupted)?;
+        let reserved_end = start_block.checked_add(bitmap_blocks as u64)
+            .ok_or(FsError::Corrupted)?;
+        if bitmap_blocks == 0 || start_block < 2 || reserved_end >= total_blocks
+            || total_blocks != disk.total_blocks()
+            || bitmap_blocks as u64 * BLOCK_SIZE as u64 * 8 < total_blocks
+        {
+            return Err(FsError::Corrupted);
+        }
         let mut data = alloc::vec![0u8; byte_len];
 
         for i in 0..bitmap_blocks {
@@ -70,7 +86,11 @@ impl BitmapAllocator {
         for b in 0..total_blocks {
             let byte_idx = (b / 8) as usize;
             let bit_idx = (b % 8) as u8;
-            if (data[byte_idx] & (1 << bit_idx)) == 0 {
+            let allocated = (data[byte_idx] & (1 << bit_idx)) != 0;
+            if b < reserved_end && !allocated {
+                return Err(FsError::Corrupted);
+            }
+            if !allocated {
                 free_count += 1;
             }
         }
@@ -128,16 +148,31 @@ impl BitmapAllocator {
         if block >= self.total_blocks {
             return Err(FsError::PartitionOverflow);
         }
+        if block < self.start_block + self.bitmap_blocks as u64 {
+            return Err(FsError::Corrupted);
+        }
         let byte_idx = (block / 8) as usize;
         let bit_idx = (block % 8) as u8;
         let mask = 1 << bit_idx;
 
-        if (self.data[byte_idx] & mask) != 0 {
-            self.data[byte_idx] &= !mask;
-            self.free_blocks += 1;
-            self.dirty = true;
+        if (self.data[byte_idx] & mask) == 0 {
+            return Err(FsError::Corrupted);
         }
+        let free_blocks = self.free_blocks.checked_add(1).ok_or(FsError::Corrupted)?;
+        self.data[byte_idx] &= !mask;
+        self.free_blocks = free_blocks;
+        self.dirty = true;
         Ok(())
+    }
+
+    /// Inspect an existing bitmap bit without changing allocation state.
+    pub fn is_allocated(&self, block: u64) -> Result<bool, FsError> {
+        if block >= self.total_blocks {
+            return Err(FsError::PartitionOverflow);
+        }
+        let byte_index = usize::try_from(block / 8).map_err(|_| FsError::Corrupted)?;
+        let byte = self.data.get(byte_index).ok_or(FsError::Corrupted)?;
+        Ok(byte & (1 << (block % 8)) != 0)
     }
 
     pub fn free_block_count(&self) -> u64 {

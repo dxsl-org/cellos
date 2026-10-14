@@ -11,6 +11,7 @@ description = "CellosFS Native: Pure-Rust, crash-resilient CoW Extent filesystem
 [features]
 default = []
 std = []
+g2-cow-experiment = []
 
 [dev-dependencies]
 # Host testing with std

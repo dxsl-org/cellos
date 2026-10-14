@@ -32,7 +32,12 @@ pub trait BlockDevice {
     /// Vectorized read: read `count` contiguous 4 KiB blocks into `buf`.
     /// Default implementation delegates to sequential `read_block`.
     fn read_blocks(&mut self, start_block: u64, count: u32, buf: &mut [u8]) -> Result<(), FsError> {
-        if buf.len() < (count as usize) * BLOCK_SIZE {
+        let bytes = usize::try_from(count).ok().and_then(|n| n.checked_mul(BLOCK_SIZE))
+            .ok_or(FsError::PartitionOverflow)?;
+        if start_block.checked_add(count as u64).filter(|&end| end <= self.total_blocks()).is_none() {
+            return Err(FsError::PartitionOverflow);
+        }
+        if buf.len() < bytes {
             return Err(FsError::IoError);
         }
         for i in 0..count {
@@ -47,7 +52,12 @@ pub trait BlockDevice {
     /// Vectorized write: write `count` contiguous 4 KiB blocks from `buf`.
     /// Default implementation delegates to sequential `write_block`.
     fn write_blocks(&mut self, start_block: u64, count: u32, buf: &[u8]) -> Result<(), FsError> {
-        if buf.len() < (count as usize) * BLOCK_SIZE {
+        let bytes = usize::try_from(count).ok().and_then(|n| n.checked_mul(BLOCK_SIZE))
+            .ok_or(FsError::PartitionOverflow)?;
+        if start_block.checked_add(count as u64).filter(|&end| end <= self.total_blocks()).is_none() {
+            return Err(FsError::PartitionOverflow);
+        }
+        if buf.len() < bytes {
             return Err(FsError::IoError);
         }
         for i in 0..count {
@@ -79,6 +89,16 @@ impl<D: BlockDevice> BoundedDisk<D> {
         }
     }
 
+    fn absolute_block(&self, block: u64) -> Result<u64, FsError> {
+        if block >= self.block_count
+            || self.start_block.checked_add(self.block_count)
+                .filter(|&end| end <= self.inner.total_blocks()).is_none()
+        {
+            return Err(FsError::PartitionOverflow);
+        }
+        self.start_block.checked_add(block).ok_or(FsError::PartitionOverflow)
+    }
+
     pub fn into_inner(self) -> D {
         self.inner
     }
@@ -86,20 +106,17 @@ impl<D: BlockDevice> BoundedDisk<D> {
 
 impl<D: BlockDevice> BlockDevice for BoundedDisk<D> {
     fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> Result<(), FsError> {
-        if block >= self.block_count {
-            return Err(FsError::PartitionOverflow);
-        }
-        self.inner.read_block(self.start_block + block, buf)
+        let absolute = self.absolute_block(block)?;
+        self.inner.read_block(absolute, buf)
     }
 
     fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> Result<(), FsError> {
-        if block >= self.block_count {
-            return Err(FsError::PartitionOverflow);
-        }
-        self.inner.write_block(self.start_block + block, buf)
+        let absolute = self.absolute_block(block)?;
+        self.inner.write_block(absolute, buf)
     }
 
     fn flush(&mut self) -> Result<(), FsError> {
+        self.absolute_block(0)?;
         self.inner.flush()
     }
 
@@ -155,7 +172,7 @@ impl MemDisk {
 impl BlockDevice for MemDisk {
     fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> Result<(), FsError> {
         let inner = self.inner.borrow();
-        let idx = block as usize;
+        let idx = usize::try_from(block).map_err(|_| FsError::PartitionOverflow)?;
         if idx >= inner.blocks.len() {
             return Err(FsError::PartitionOverflow);
         }
@@ -170,7 +187,7 @@ impl BlockDevice for MemDisk {
                 return Err(FsError::IoError); // Simulates power loss!
             }
         }
-        let idx = block as usize;
+        let idx = usize::try_from(block).map_err(|_| FsError::PartitionOverflow)?;
         if idx >= inner.blocks.len() {
             return Err(FsError::PartitionOverflow);
         }
