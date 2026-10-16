@@ -35,7 +35,7 @@ api::declare_syscalls![Log, Recv, Send, TryRecv, GetTime];
 
 // Cell heap includes QuickJS's 3 MiB accounted heap, Rust transfer buffers,
 // snapshot source and allocator overhead; the engine's own ceiling stays lower.
-#[cfg(not(qjs_c_unavailable))]
+#[cfg(all(not(qjs_c_unavailable), target_os = "none"))]
 ostd::declare_custom_heap!(8 * 1024 * 1024);
 
 #[cfg(not(qjs_c_unavailable))]
@@ -59,8 +59,8 @@ extern "C" fn main() -> usize {
 
 #[cfg(not(qjs_c_unavailable))]
 fn cell_main() {
+    #[cfg(target_os = "none")]
     init_custom_heap();
-    ostd::io::print("[ocel-quickjs] ");
     ostd::io::print(&engine::engine_identity());
     ostd::io::println(" engine ready (Tier 2)");
 

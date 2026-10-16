@@ -7,7 +7,12 @@ use alloc::vec::Vec;
 
 use crate::doc::{DocNode, StyledSpan};
 
+#[allow(dead_code)]
 pub fn parse_markdown(input: &str) -> Vec<DocNode> {
+    parse_markdown_with_base(input, None)
+}
+
+pub fn parse_markdown_with_base(input: &str, base_url: Option<&str>) -> Vec<DocNode> {
     let mut nodes = Vec::new();
     let mut in_code_block = false;
     let mut code_lang = String::new();
@@ -73,6 +78,39 @@ pub fn parse_markdown(input: &str) -> Vec<DocNode> {
             nodes.push(DocNode::Rule);
             continue;
         }
+        // 3.5 Markdown Images: ![alt](url)
+        if trimmed.starts_with("![") {
+            if let Some(close_bracket) = trimmed.find("](") {
+                if trimmed.ends_with(')') {
+                    let alt = &trimmed[2..close_bracket];
+                    let url = &trimmed[close_bracket + 2..trimmed.len() - 1];
+                    let mut loaded = false;
+                    if let Some(base) = base_url {
+                        if !base.is_empty() {
+                            if let Ok(bytes) = crate::resources::load_binary(base, url) {
+                                if let Some(img) = crate::image::decode(&bytes) {
+                                    nodes.push(DocNode::Image {
+                                        width: img.width,
+                                        height: img.height,
+                                        pixels: alloc::rc::Rc::new(img.pixels),
+                                    });
+                                    loaded = true;
+                                }
+                            }
+                        }
+                    }
+                    if !loaded {
+                        let mut span = StyledSpan::plain(&alloc::format!("[🖼 {}]", if alt.is_empty() { "Image" } else { alt }));
+                        span.color = Some(crate::draw::theme::TEXT_MUTED);
+                        nodes.push(DocNode::Paragraph {
+                            spans: alloc::vec![span],
+                        });
+                    }
+                    continue;
+                }
+            }
+        }
+
 
         // 4. Headings
         if let Some(rest) = trimmed.strip_prefix("# ") {

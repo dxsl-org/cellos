@@ -224,3 +224,59 @@ fn parsed_separate_whitespace_nodes_keep_anchor_hit_ownership() {
             if inside_anchor {Some(String::from("/next"))}else{None});
     }
 }
+
+#[test]
+fn test_html_and_markdown_image_embedding() {
+    // HTML image tag fallback when no base_url provided
+    let html = "<div><h1>Title</h1><img src=\"logo.png\" alt=\"CellOS Logo\"><p>Text</p></div>";
+    let parsed = crate::parser::html::parse_html(html);
+    assert!(parsed.nodes.iter().any(|node| match node {
+        crate::doc::DocNode::Paragraph { spans } => spans.iter().any(|s| s.text == "[🖼 CellOS Logo]"),
+        _ => false,
+    }));
+
+    // Markdown image syntax fallback
+    let md = "# Welcome\n\n![System Arch](arch.png)\n\nEnd of doc.";
+    let nodes = crate::parser::markdown::parse_markdown(md);
+    assert!(nodes.iter().any(|node| match node {
+        crate::doc::DocNode::Paragraph { spans } => spans.iter().any(|s| s.text == "[🖼 System Arch]"),
+        _ => false,
+    }));
+}
+
+#[test]
+fn test_html_form_input_and_submit_parsing() {
+    let form_html = r#"
+        <form action="/search" method="GET">
+            <input type="text" name="q" placeholder="Search keywords..." value="cellos">
+            <input type="checkbox" name="exact" checked>
+            <textarea name="comments">Feedback here</textarea>
+            <input type="submit" value="Go Search">
+        </form>
+    "#;
+    let parsed = crate::parser::html::parse_html(form_html);
+    assert!(parsed.nodes.iter().any(|node| match node {
+        crate::doc::DocNode::Input { input_type, name, value, placeholder, .. } => {
+            input_type == "text" && name == "q" && value == "cellos" && placeholder == "Search keywords..."
+        }
+        _ => false,
+    }));
+    assert!(parsed.nodes.iter().any(|node| match node {
+        crate::doc::DocNode::Input { input_type, name, checked, .. } => {
+            input_type == "checkbox" && name == "exact" && *checked
+        }
+        _ => false,
+    }));
+    assert!(parsed.nodes.iter().any(|node| match node {
+        crate::doc::DocNode::Input { input_type, name, value, .. } => {
+            input_type == "textarea" && name == "comments" && value == "Feedback here"
+        }
+        _ => false,
+    }));
+    assert!(parsed.nodes.iter().any(|node| match node {
+        crate::doc::DocNode::Input { input_type, value, .. } => {
+            input_type == "submit" && value == "Go Search"
+        }
+        _ => false,
+    }));
+}

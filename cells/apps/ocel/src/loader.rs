@@ -26,7 +26,7 @@ pub fn load_document(url: &str) -> LoadedDocument {
     };
 
     // 1. Check for built-in virtual documents
-    if path == "welcome" || path == "/welcome" || path == "/welcome.md" || path == "welcome.md" {
+    if clean_url == "ocel://welcome" || path == "welcome" || path == "/welcome" || path == "/welcome.md" || path == "welcome.md" {
         return LoadedDocument {
             url: String::from("file:///welcome.md"),
             title: String::from("Ocel — Welcome Guide"),
@@ -35,7 +35,7 @@ pub fn load_document(url: &str) -> LoadedDocument {
         };
     }
 
-    if path == "help" || path == "/help" || path == "/help.md" || path == "help.md" {
+    if clean_url == "ocel://help" || path == "help" || path == "/help" || path == "/help.md" || path == "help.md" {
         return LoadedDocument {
             url: String::from("file:///help.md"),
             title: String::from("Ocel — Keyboard & Usage Help"),
@@ -44,6 +44,14 @@ pub fn load_document(url: &str) -> LoadedDocument {
         };
     }
 
+    if clean_url == "ocel://bookmarks" || path == "bookmarks" || path == "/bookmarks" || path == "/bookmarks.md" || path == "bookmarks.md" {
+        return LoadedDocument {
+            url: String::from("ocel://bookmarks"),
+            title: String::from("Ocel — Bookmarks"),
+            content: get_bookmarks_content(),
+            direct_nodes: None,
+        };
+    }
     // 2. Check for HTTP network URL
     if clean_url.starts_with("http://") {
         return match crate::net::fetch_http(clean_url) {
@@ -99,6 +107,57 @@ pub fn load_document(url: &str) -> LoadedDocument {
             },
         };
     }
+    // 3.5 Check for Gemini network URL (gemini://)
+    if clean_url.starts_with("gemini://") {
+        return match crate::net::fetch_gemini(clean_url) {
+            Ok(resp) => {
+                let display_host = clean_url
+                    .trim_start_matches("gemini://")
+                    .split('/')
+                    .next()
+                    .unwrap_or(clean_url);
+                if resp.status >= 20 && resp.status < 30 {
+                    let nodes = crate::net::parse_gemtext(&resp.body, clean_url);
+                    LoadedDocument {
+                        url: String::from(clean_url),
+                        title: format!("Ocel — {} [Gemini]", display_host),
+                        content: String::new(),
+                        direct_nodes: Some(nodes),
+                    }
+                } else if resp.status >= 30 && resp.status < 40 {
+                    LoadedDocument {
+                        url: String::from(clean_url),
+                        title: format!("Ocel — Redirect ({})", resp.status),
+                        content: format!(
+                            "# Gemini Redirect (Status {})\n\nTarget: [{}]({})",
+                            resp.status, resp.meta, resp.meta
+                        ),
+                        direct_nodes: None,
+                    }
+                } else {
+                    LoadedDocument {
+                        url: String::from(clean_url),
+                        title: format!("Ocel — Gemini Error {}", resp.status),
+                        content: format!(
+                            "# Gemini Protocol Response: {}\n\n**Meta:** {}\n\n{}",
+                            resp.status, resp.meta, resp.body
+                        ),
+                        direct_nodes: None,
+                    }
+                }
+            }
+            Err(err) => LoadedDocument {
+                url: String::from(clean_url),
+                title: String::from("Ocel — Gemini Error"),
+                content: format!(
+                    "# Gemini Protocol Error\n\nCould not fetch `{}`.\n\n**Reason:** {}\n\n### Suggestions:\n- Check port 1965 and network connection.\n- Ensure CellOS `service-net` TLS broker is active.",
+                    clean_url, err
+                ),
+                direct_nodes: None,
+            },
+        };
+    }
+
 
     // PDFs are binary and are owned/decoded only by the isolated PDF service.
     // Keep the original URL for history and links; fragments never reach VFS.
@@ -284,4 +343,118 @@ fn get_help_content() -> String {
 - `file:///help.md` — This help page.
 "#,
     )
+}
+
+fn get_bookmarks_content() -> String {
+    if let Ok(mut f) = ostd::fs::File::open("/data/bookmarks.md") {
+        if let Ok(content) = f.read_to_string() {
+            if !content.trim().is_empty() {
+                return content;
+            }
+        }
+    }
+    String::from(
+        r#"# 📑 Ocel Bookmarks & Quick Links
+
+Danh sách liên kết nhanh và cổng thông tin được chọn lọc cho CellOS:
+
+---
+
+### 🌐 Tra Cứu & Tìm Kiếm Trực Tuyến
+- [🦆 DuckDuckGo Lite](https://html.duckduckgo.com/html/) — Máy tìm kiếm văn bản siêu nhẹ, bảo vệ quyền riêng tư, không JavaScript.
+- [📚 Wikipedia Mobile](https://en.m.wikipedia.org) — Bách khoa toàn thư mở phiên bản di động gọn nhẹ.
+- [📰 Hacker News](https://news.ycombinator.com) — Diễn đàn tin tức công nghệ và lập trình.
+- [🦀 Rust Standard Library](https://doc.rust-lang.org/std/) — Tra cứu tài liệu thư viện chuẩn Rust.
+
+---
+
+### 💻 Trang Cục Bộ & Quản Trị Hệ Thống
+- [🏠 Trang Chào Mừng Ocel](file:///welcome.md) — Giới thiệu kiến trúc Ocel và tính năng.
+- [❓ Trợ Giúp Phím Tắt](file:///help.md) — Danh sách phím tắt và mẹo duyệt web.
+- [⚡ C2C Gateway API](http://10.0.2.2:8080/api/status) — Cổng HTTP Async C2C Gateway nội bộ CellOS.
+
+---
+*Mẹo: Nhấn `Ctrl+D` để lưu trang hiện tại vào dấu trang này! Nhấn `Ctrl+B` để mở lại trang Bookmarks bất cứ lúc nào.*
+"#,
+    )
+}
+
+pub fn classify_smart_url(input: &str) -> String {
+    let s = input.trim();
+    if s.is_empty() {
+        return String::from("file:///welcome.md");
+    }
+
+    if s.starts_with("http://")
+        || s.starts_with("https://")
+        || s.starts_with("file://")
+        || s.starts_with("gemini://")
+        || s.starts_with("ocel://")
+    {
+        return String::from(s);
+    }
+
+    if s == "welcome" || s == "help" || s == "bookmarks" {
+        return format!("ocel://{}", s);
+    }
+
+    if s.starts_with('/') {
+        return format!("file://{}", s);
+    }
+
+    let has_spaces = s.contains(char::is_whitespace);
+    let has_dot = s.contains('.');
+    let is_localhost = s.starts_with("localhost") || s.starts_with("127.0.0.1") || s.starts_with("10.0.2.2");
+
+    if !has_spaces && (has_dot || is_localhost) {
+        return format!("https://{}", s);
+    }
+
+    let mut query_encoded = String::new();
+    for ch in s.chars() {
+        match ch {
+            ' ' => query_encoded.push('+'),
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' | '~' => query_encoded.push(ch),
+            _ => {
+                let mut buf = [0u8; 4];
+                for b in ch.encode_utf8(&mut buf).bytes() {
+                    let _ = alloc::fmt::write(&mut query_encoded, format_args!("%{:02X}", b));
+                }
+            }
+        }
+    }
+    format!("https://html.duckduckgo.com/html/?q={}", query_encoded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_classify_smart_url() {
+        assert_eq!(classify_smart_url(""), "file:///welcome.md");
+        assert_eq!(classify_smart_url("   "), "file:///welcome.md");
+        assert_eq!(classify_smart_url("welcome"), "ocel://welcome");
+        assert_eq!(classify_smart_url("bookmarks"), "ocel://bookmarks");
+        assert_eq!(classify_smart_url("https://cellos.org"), "https://cellos.org");
+        assert_eq!(classify_smart_url("http://example.com/foo"), "http://example.com/foo");
+        assert_eq!(classify_smart_url("file:///data/demo.html"), "file:///data/demo.html");
+        assert_eq!(classify_smart_url("/etc/hosts"), "file:///etc/hosts");
+        assert_eq!(classify_smart_url("news.ycombinator.com"), "https://news.ycombinator.com");
+        assert_eq!(classify_smart_url("wikipedia.org/wiki/Rust"), "https://wikipedia.org/wiki/Rust");
+        assert_eq!(classify_smart_url("localhost:8080/api"), "https://localhost:8080/api");
+        assert_eq!(
+            classify_smart_url("rust microkernel"),
+            "https://html.duckduckgo.com/html/?q=rust+microkernel"
+        );
+    }
+
+    #[test]
+    fn test_virtual_bookmarks_loading() {
+        let doc = load_document("ocel://bookmarks");
+        assert_eq!(doc.url, "ocel://bookmarks");
+        assert_eq!(doc.title, "Ocel — Bookmarks");
+        assert!(doc.content.contains("DuckDuckGo Lite"));
+        assert!(doc.content.contains("Wikipedia Mobile"));
+    }
 }

@@ -85,7 +85,8 @@
             }
         },
         id: { get() { return this.getAttribute("id") || ""; }, set(v) { this.setAttribute("id", v); } },
-        className: { get() { return this.getAttribute("class") || ""; }, set(v) { this.setAttribute("class", v); } }
+        className: { get() { return this.getAttribute("class") || ""; }, set(v) { this.setAttribute("class", v); } },
+        innerHTML: { get() { return this.textContent; }, set(v) { this.textContent = v; }, configurable: true }
     });
     Node.prototype.appendChild = function (child) { append(this, child); emit("P", record(this).id, record(child).id); return child; };
     Node.prototype.removeChild = function (child) {
@@ -129,6 +130,19 @@
         return found;
     }
     Node.prototype.getElementsByTagName = function (tag) { tag = String(tag).toLowerCase(); return descendants(this, n => tag === "*" || record(n).tag === tag); };
+    function matchesSelector(node, selector) {
+        if (!node || record(node).type !== 1) return false;
+        selector = String(selector).trim();
+        if (selector === "*") return true;
+        if (selector.startsWith("#")) return (node.getAttribute("id") || "") === selector.slice(1);
+        if (selector.startsWith(".")) {
+            const classes = (node.getAttribute("class") || "").split(/\s+/);
+            return classes.includes(selector.slice(1));
+        }
+        return (record(node).tag || "").toLowerCase() === selector.toLowerCase();
+    }
+    Node.prototype.querySelector = function (selector) { return descendants(this, n => matchesSelector(n, selector))[0] || null; };
+    Node.prototype.querySelectorAll = function (selector) { return descendants(this, n => matchesSelector(n, selector)); };
     function configureDocument(doc) {
         Object.defineProperties(doc, {
             title: { get() { return title; }, set(v) { title = str(v); emit("T", title); }, configurable: true },
@@ -144,6 +158,8 @@
         };
         doc.createTextNode = text => create(3, "", str(text));
         doc.createComment = text => create(8, "", str(text));
+        doc.querySelector = function (selector) { return descendants(doc, n => matchesSelector(n, selector))[0] || null; };
+        doc.querySelectorAll = function (selector) { return descendants(doc, n => matchesSelector(n, selector)); };
     }
     globalThis.__vios_sync = function (snapshot, newTitle) {
         // Reuse wrappers for existing IDs, preserving listeners and JS references.
@@ -189,5 +205,45 @@
         }
         event.currentTarget = null;
     };
-    globalThis.console = { log(...args) { logs.push("[script] " + args.map(String).join(" ")); } };
+    let nextTimerId = 1;
+    const timers = new Map();
+    globalThis.setTimeout = function (callback, delay, ...args) {
+        if (typeof callback !== "function") throw new TypeError("Callback must be a function");
+        const id = nextTimerId++;
+        timers.set(id, { callback, args, interval: false });
+        return id;
+    };
+    globalThis.clearTimeout = function (id) { timers.delete(id); };
+    globalThis.setInterval = function (callback, delay, ...args) {
+        if (typeof callback !== "function") throw new TypeError("Callback must be a function");
+        const id = nextTimerId++;
+        timers.set(id, { callback, args, interval: true });
+        return id;
+    };
+    globalThis.clearInterval = function (id) { timers.delete(id); };
+    globalThis.__vios_fireTimer = function (id) {
+        const t = timers.get(id);
+        if (!t) return;
+        try { t.callback.apply(null, t.args); } catch (e) { logs.push("[timer] error: " + String(e)); }
+        if (!t.interval) timers.delete(id);
+    };
+
+    globalThis.fetch = function (url, options) {
+        return new Promise((resolve) => {
+            resolve({
+                ok: true,
+                status: 200,
+                statusText: "OK",
+                text() { return Promise.resolve(""); },
+                json() { return Promise.resolve({}); }
+            });
+        });
+    };
+
+    globalThis.console = {
+        log(...args) { logs.push("[script] " + args.map(String).join(" ")); },
+        warn(...args) { logs.push("[warn] " + args.map(String).join(" ")); },
+        error(...args) { logs.push("[error] " + args.map(String).join(" ")); },
+        info(...args) { logs.push("[info] " + args.map(String).join(" ")); }
+    };
 })();

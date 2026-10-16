@@ -54,6 +54,33 @@ pub fn load_text(base: &str, reference: &str) -> Result<String, String> {
     if content.len() > MAX_RESOURCE_BYTES { return Err(String::from("Resource exceeds 256 KiB")); }
     Ok(content)
 }
+pub const MAX_IMAGE_BYTES: usize = 2 * 1024 * 1024; // 2 MiB per image
+
+pub fn load_binary(base: &str, reference: &str) -> Result<Vec<u8>, String> {
+    let url = resolve(base, reference)?;
+    if url.starts_with("https://") || url.starts_with("http://") {
+        let bytes = crate::net::fetch_binary(&url)?;
+        if bytes.len() > MAX_IMAGE_BYTES {
+            return Err(String::from("Image exceeds 2 MiB limit"));
+        }
+        Ok(bytes)
+    } else {
+        use ostd::fs::File;
+        let mut file = File::open(url.strip_prefix("file://").unwrap_or(&url))
+            .map_err(|_| format!("Cannot open {}", url))?;
+        let mut bytes = Vec::new();
+        let mut chunk = [0u8; 4096];
+        loop {
+            let count = file.read(&mut chunk).map_err(|_| format!("Cannot read {}", url))?;
+            if count == 0 { break; }
+            if bytes.len() + count > MAX_IMAGE_BYTES {
+                return Err(String::from("Image exceeds 2 MiB limit"));
+            }
+            bytes.extend_from_slice(&chunk[..count]);
+        }
+        Ok(bytes)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -66,5 +93,13 @@ mod tests {
         for url in ["https://example.com.evil/x", "https://evil/x", "//evil/x", "javascript:alert(1)", "data:text/plain,x"] {
             assert!(resolve("https://example.com/a.html", url).is_err());
         }
+    }
+
+    #[test]
+    fn image_binary_resolution_and_max_bounds() {
+        assert_eq!(resolve("https://example.com/blog/post.html", "images/pic.png").unwrap(), "https://example.com/blog/images/pic.png");
+        assert_eq!(resolve("https://example.com/blog/post.html", "/static/logo.jpg").unwrap(), "https://example.com/static/logo.jpg");
+        assert!(resolve("https://example.com/blog/post.html", "https://other.com/bad.png").is_err());
+        assert_eq!(MAX_IMAGE_BYTES, 2 * 1024 * 1024);
     }
 }

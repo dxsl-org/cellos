@@ -10,6 +10,9 @@ pub mod markdown;
 pub mod syntax;
 pub mod css;
 pub mod web;
+pub mod readability;
+#[allow(unused_imports)]
+pub use readability::{extract_article, ArticleExtract};
 
 use crate::doc::DocNode;
 
@@ -58,14 +61,23 @@ impl DocFormat {
     }
 }
 
+#[allow(dead_code)]
 pub fn parse_content(
     format: DocFormat,
     content: &str,
 ) -> (Vec<DocNode>, Vec<html::ScriptSource>, Option<dom_arena::DocumentArena>) {
+    parse_content_with_base(format, content, None)
+}
+
+pub fn parse_content_with_base(
+    format: DocFormat,
+    content: &str,
+    base_url: Option<&str>,
+) -> (Vec<DocNode>, Vec<html::ScriptSource>, Option<dom_arena::DocumentArena>) {
     match format {
-        DocFormat::Markdown => (markdown::parse_markdown(content), Vec::new(), None),
+        DocFormat::Markdown => (markdown::parse_markdown_with_base(content, base_url), Vec::new(), None),
         DocFormat::Html => {
-            let res = html::parse_html(content);
+            let res = html::parse_html_with_base(content, base_url);
             (res.nodes, res.scripts, Some(res.arena))
         }
         DocFormat::Source(language) => (

@@ -154,7 +154,11 @@ fn compile_engine(target: &str) {
     // A cell has no debugger and no dynamic linker; the symbol table is pure
     // file weight (700 KB of the engine's ~1.4 MB ELF) on a path that copies
     // the whole file. Keep it out of the link.
-    println!("cargo:rustc-link-arg=--strip-all");
+    if target.contains("none") {
+        println!("cargo:rustc-link-arg=--strip-all");
+    } else {
+        println!("cargo:rustc-link-arg=-Wl,--strip-all");
+    }
     // Cells link as -pie (cell.ld): the objects must be position independent.
     build.pic(true);
 

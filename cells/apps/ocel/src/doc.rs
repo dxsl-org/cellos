@@ -98,6 +98,14 @@ pub enum DocNode {
         text: String,
         node_id: Option<dom_arena::NodeId>,
     },
+    Input {
+        input_type: String,
+        name: String,
+        value: String,
+        placeholder: String,
+        checked: bool,
+        node_id: Option<dom_arena::NodeId>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -114,6 +122,15 @@ pub struct TableRowLayout {
     pub is_header: bool,
 }
 #[derive(Clone, Debug)]
+pub struct FormInputLayout {
+    pub input_type: String,
+    pub name: String,
+    pub value: String,
+    pub placeholder: String,
+    pub checked: bool,
+    pub is_focused: bool,
+}
+#[derive(Clone, Debug)]
 pub struct LayoutBox {
     pub y_offset: i32,
     pub height: i32,
@@ -126,12 +143,13 @@ pub struct LayoutBox {
     pub table_rows: Option<Vec<TableRowLayout>>,
     pub table_width: u32,
     pub node_id: Option<dom_arena::NodeId>,
+    pub input_data: Option<FormInputLayout>,
 }
 impl LayoutBox {
     fn new(y: i32) -> Self {
         Self { y_offset:y, height:0, lines:Vec::new(), bg_color:None,
             border_color:None, is_rule:false, left_margin:0, image:None,
-            table_rows:None, table_width:0, node_id:None }
+            table_rows:None, table_width:0, node_id:None, input_data: None }
     }
 }
 pub struct Document {
@@ -290,6 +308,30 @@ impl Document {
                     b.left_margin=8;b.bg_color=Some(theme::ACCENT_BLUE);
                     b.border_color=Some(theme::BORDER);b.node_id=*node_id;gap=8;
                 }
+                DocNode::Input { input_type, name, value, placeholder, checked, node_id } => {
+                    let inp_w = match input_type.as_str() {
+                        "checkbox" => 20,
+                        "submit" | "button" => {
+                            let label = if value.is_empty() { "Submit" } else { value.as_str() };
+                            (fonts.measure(FontFace::UiSemibold, label, 14.0) as u32 + 24).max(64)
+                        }
+                        _ => (width - 16.0).clamp(120.0, 360.0) as u32,
+                    };
+                    let inp_h = if input_type == "checkbox" { 20 } else { 28 };
+                    b.height = inp_h as i32 + 8;
+                    b.table_width = inp_w;
+                    b.left_margin = 8;
+                    b.node_id = *node_id;
+                    b.input_data = Some(FormInputLayout {
+                        input_type: input_type.clone(),
+                        name: name.clone(),
+                        value: value.clone(),
+                        placeholder: placeholder.clone(),
+                        checked: *checked,
+                        is_focused: false,
+                    });
+                    gap = 6;
+                }
             }
             if b.height==0 {b.height=lines_height(&b.lines)+8;}
             y+=b.height+gap;self.layout_boxes.push(b);
@@ -322,6 +364,41 @@ impl Document {
                 draw::draw_image_clipped(surf,view_x+b.left_margin,y+8,
                     (*iw).min(view_w.saturating_sub(32).max(1)),(b.height-16) as u32,
                     pixels,(*iw*4) as usize,*ih,clip);continue;
+            }
+            if let Some(input) = &b.input_data {
+                let inp_x = text_x;
+                let inp_y = y + 2;
+                if input.input_type == "checkbox" {
+                    draw::clipped_rect(surf, inp_x, inp_y, 18, 18, theme::BG_INPUT, clip);
+                    draw::clipped_rect(surf, inp_x, inp_y, 18, 1, theme::BORDER, clip);
+                    draw::clipped_rect(surf, inp_x, inp_y + 17, 18, 1, theme::BORDER, clip);
+                    draw::clipped_rect(surf, inp_x, inp_y, 1, 18, theme::BORDER, clip);
+                    draw::clipped_rect(surf, inp_x + 17, inp_y, 1, 18, theme::BORDER, clip);
+                    if input.checked {
+                        draw::clipped_rect(surf, inp_x + 3, inp_y + 3, 12, 12, theme::ACCENT_CYAN, clip);
+                    }
+                } else if input.input_type == "submit" || input.input_type == "button" {
+                    let label = if input.value.is_empty() { "Submit" } else { input.value.as_str() };
+                    draw::clipped_rect(surf, inp_x, inp_y, b.table_width, 28, theme::ACCENT_BLUE, clip);
+                    let mut span = StyledSpan::plain(label);
+                    span.bold = true;
+                    let line = lines_for(fonts, &[span], 14.0, b.table_width as f32, false);
+                    paint_lines(fonts, surf, &line, (inp_x + 8) as f32, (inp_y + 5) as f32, Color::rgb(17, 17, 27), clip);
+                } else {
+                    let inp_w = b.table_width.max(120);
+                    let border_col = if input.is_focused { theme::ACCENT_CYAN } else { theme::BORDER };
+                    draw::clipped_rect(surf, inp_x, inp_y, inp_w, 28, theme::BG_INPUT, clip);
+                    draw::clipped_rect(surf, inp_x, inp_y, inp_w, 1, border_col, clip);
+                    draw::clipped_rect(surf, inp_x, inp_y + 27, inp_w, 1, border_col, clip);
+                    draw::clipped_rect(surf, inp_x, inp_y, 1, 28, border_col, clip);
+                    draw::clipped_rect(surf, inp_x + inp_w as i32 - 1, inp_y, 1, 28, border_col, clip);
+                    let display_text = if !input.value.is_empty() { &input.value } else { &input.placeholder };
+                    let col = if !input.value.is_empty() { theme::TEXT_PRIMARY } else { theme::TEXT_MUTED };
+                    let span = StyledSpan::plain(display_text);
+                    let line = lines_for(fonts, &[span], 14.0, (inp_w.saturating_sub(12)) as f32, false);
+                    paint_lines(fonts, surf, &line, (inp_x + 6) as f32, (inp_y + 5) as f32, col, clip);
+                }
+                continue;
             }
             if let Some(rows)=&b.table_rows {
                 let x=view_x+b.left_margin;
@@ -380,6 +457,18 @@ impl Document {
             let x=view_x+8+b.left_margin;
             if click_y>=y && click_y<y+b.height && click_x>=x && click_x<x+b.table_width as i32 {
                 if let Some(id)=b.node_id{return Some(id);}
+            }
+        }
+        None
+    }
+    pub fn hit_test_input(&self, click_x: i32, click_y: i32, view_x: i32, view_y: i32, scroll_y: i32) -> Option<usize> {
+        for (idx, b) in self.layout_boxes.iter().enumerate() {
+            if b.input_data.is_some() {
+                let y = view_y + b.y_offset - scroll_y;
+                let x = view_x + 16 + b.left_margin;
+                if click_y >= y && click_y < y + b.height && click_x >= x && click_x < x + b.table_width as i32 {
+                    return Some(idx);
+                }
             }
         }
         None

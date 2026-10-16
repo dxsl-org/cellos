@@ -413,12 +413,12 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "c39e1bf381296b906a0cc683fd40ffc63c6619281db6db70f7a46dfabc7dda2c",
+  "source_census_sha256": "917d6cfd55c0b72375d24301a2d07eed949b980b8801978b50a38362dac76772",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "7a3a7619e70ee56a767ff52b7b52e8b19a47eace8ff0a453ef0729653e3af9e4"
+      "sha256": "421bead5301ae15077550cc4229275e558e70a0bbdecdac1088842f4cbb8dae9"
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -642,7 +642,7 @@
     },
     {
       "path": "cells/apps/ocel/src/doc.rs",
-      "sha256": "48c1c03b2c0235a07340c3862a317cefe97e88995f215ccfb57c7f428e5adb0c"
+      "sha256": "f4590e1fa0060745731732dcdc8f2150d2fa2bda60108e3e054cbc723e32a6d8"
     },
     {
       "path": "cells/apps/ocel/src/draw.rs",
@@ -682,19 +682,23 @@
     },
     {
       "path": "cells/apps/ocel/src/loader.rs",
-      "sha256": "63f565348e3a76f93a87a10cbc94f2411b7ee859b48df2f0949558403b930926"
+      "sha256": "1f453e77a5141e14bb4a8a095f2db1952c86cee7e18d35443d2cfabbe9fb0bc6"
     },
     {
       "path": "cells/apps/ocel/src/main.rs",
-      "sha256": "4a2b40a3166f584e8267b3db7ec1766deb4b5322116449a766c2e2a37035794b"
+      "sha256": "d3f394096b548d4afb82ea642021af000b47d5285e92c75e4f853323f79b8e6d"
+    },
+    {
+      "path": "cells/apps/ocel/src/net/gemini.rs",
+      "sha256": "50cac6f3fb95d75fe3298104acf6eb54875181d165ec8147395f04c6a0dc4571"
     },
     {
       "path": "cells/apps/ocel/src/net/http.rs",
-      "sha256": "1a4b45c8318d3a82b7ff43845a5b8b22564714e165562326b880e2e58e87caf6"
+      "sha256": "02f0fa9dd5d7c2bb0ff6852178e9624fc99fb156a30846a5a44013b4d3ddc77b"
     },
     {
       "path": "cells/apps/ocel/src/net/mod.rs",
-      "sha256": "855f87c824c51e35d8915166497a73c1f5e67410d076209fcf398e5a0421c4a7"
+      "sha256": "830bd2d69be22b1660c4e31c01cb43a2960ec87edf1316f10af39b09e65eac92"
     },
     {
       "path": "cells/apps/ocel/src/parser/css.rs",
@@ -706,15 +710,19 @@
     },
     {
       "path": "cells/apps/ocel/src/parser/html.rs",
-      "sha256": "5fa8f02d1c79493487bd6a42f002fcaa97216029aba2aa7e5cf87a4ee846a613"
+      "sha256": "7621087517a4f48d212542f79987a1324cbba21a536f937e3dd0304904cff267"
     },
     {
       "path": "cells/apps/ocel/src/parser/markdown.rs",
-      "sha256": "bac24ef028ea6807854bdf2ee1808df8efd4a71018c5d2c3973c5d8f060207b2"
+      "sha256": "0a94e77532bdd0b1750fd81d875907cc216e4691a0fcf25073dba395a5f20026"
     },
     {
       "path": "cells/apps/ocel/src/parser/mod.rs",
-      "sha256": "b4a3ff3b4111af7c8bbc82a29defb0299196e8957cc8b051a8a8e943118185d7"
+      "sha256": "59e8926f1d0a2d7bd9e2aba78b32997e78e0e7eeab6dc1a3093b38196270d5a0"
+    },
+    {
+      "path": "cells/apps/ocel/src/parser/readability.rs",
+      "sha256": "3165f94635a8bd3ef813b78b3787746b2fdfd2acfa7ef9f59c25bd3da2a47e7c"
     },
     {
       "path": "cells/apps/ocel/src/parser/syntax.rs",
@@ -730,7 +738,7 @@
     },
     {
       "path": "cells/apps/ocel/src/parser/web_tests.rs",
-      "sha256": "5954cde47e89d94b8f8263f409e7c4b28713648657ccc27a84be453c9dd3eb08"
+      "sha256": "26827c1869919dbeeddb5d4e46fcf0dd09360c460dcc778a73971e5dd03ff4d8"
     },
     {
       "path": "cells/apps/ocel/src/pdf.rs",
@@ -742,7 +750,7 @@
     },
     {
       "path": "cells/apps/ocel/src/resources.rs",
-      "sha256": "56244d205b565a5101de50c07b644559f4e0d5191de6c7dbfb566ff055b2a650"
+      "sha256": "2acb95c401e93b93777f5c673fadae0c2cff53a24aa98b95d689087348ffda24"
     },
     {
       "path": "cells/apps/robot-dashboard/Cargo.toml",
@@ -7878,7 +7886,7 @@
     },
     {
       "path": "cells/services/ocel-quickjs/build.rs",
-      "sha256": "55f4b965d939d37c65a52710d93ee25f25efeb62737e52b7030dc3f7c2c85ff5"
+      "sha256": "c380add68fa6acdd83fedfc7418f9bf1ddce0bfa75e3088c6bdbc0d25c67055a"
     },
     {
       "path": "cells/services/ocel-quickjs/src/c/qjs_cellos_glue.c",
@@ -7894,7 +7902,7 @@
     },
     {
       "path": "cells/services/ocel-quickjs/src/main.rs",
-      "sha256": "8c0489956d45ed16e3edcf8625b4ab88f52302f7a0e8ab521bfb1b3898f3762a"
+      "sha256": "ce2777ff37211960d98bf16c6de1844168bd7f30844f07ab856a5d57f8bb8dbd"
     },
     {
       "path": "cells/services/ocel-quickjs/tests/host_dom.c",

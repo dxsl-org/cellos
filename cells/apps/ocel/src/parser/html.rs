@@ -193,7 +193,12 @@ fn parse_attributes(input: &str) -> Vec<(String, String)> {
 }
 
 /// Parse HTML text into a `DocumentArena` and renderable `DocNode`s.
+#[allow(dead_code)]
 pub fn parse_html(input: &str) -> HtmlOutput {
+    parse_html_with_base(input, None)
+}
+
+pub fn parse_html_with_base(input: &str, base_url: Option<&str>) -> HtmlOutput {
     let (tokens, scripts) = tokenize_html(input);
     let mut arena = DocumentArena::new();
     let mut tag_stack: Vec<(String, NodeId)> = alloc::vec![(String::from("root"), arena.root)];
@@ -235,7 +240,7 @@ pub fn parse_html(input: &str) -> HtmlOutput {
         }
     }
 
-    let nodes = arena_to_doc_nodes(&arena);
+    let nodes = arena_to_doc_nodes_with_base(&arena, base_url);
     HtmlOutput {
         nodes,
         scripts,
@@ -245,12 +250,16 @@ pub fn parse_html(input: &str) -> HtmlOutput {
 
 /// Converts a `DocumentArena` DOM tree into renderable `DocNode`s for the layout engine.
 pub fn arena_to_doc_nodes(arena: &DocumentArena) -> Vec<DocNode> {
+    arena_to_doc_nodes_with_base(arena, None)
+}
+
+pub fn arena_to_doc_nodes_with_base(arena: &DocumentArena, base_url: Option<&str>) -> Vec<DocNode> {
     let mut doc_nodes = Vec::new();
-    render_children(arena, arena.root, &mut doc_nodes);
+    render_children(arena, arena.root, &mut doc_nodes, base_url);
     doc_nodes
 }
 
-fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNode>) {
+fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNode>, base_url: Option<&str>) {
     let Some(parent) = arena.get(parent_id) else {
         return;
     };
@@ -269,13 +278,37 @@ fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNo
                                 text: text.trim().into(),
                             });
                         }
-                        "p" | "div" | "section" | "article" | "header" | "footer" | "main" => {
+                        "p" => {
                             let mut spans = Vec::new();
                             collect_inline_spans(
                                 arena, child_id, &mut spans, false, false, false, None,
                             );
                             if !spans.is_empty() {
                                 out.push(DocNode::Paragraph { spans });
+                            }
+                        }
+                        "div" | "section" | "article" | "header" | "footer" | "main" => {
+                            let mut has_element_children = false;
+                            let mut scan = child.first_child;
+                            while let Some(sc_id) = scan {
+                                if let Some(sc_node) = arena.get(sc_id) {
+                                    if matches!(sc_node.data, NodeData::Element { .. }) {
+                                        has_element_children = true;
+                                        break;
+                                    }
+                                }
+                                scan = arena.get(sc_id).and_then(|n| n.next_sibling);
+                            }
+                            if has_element_children {
+                                render_children(arena, child_id, out, base_url);
+                            } else {
+                                let mut spans = Vec::new();
+                                collect_inline_spans(
+                                    arena, child_id, &mut spans, false, false, false, None,
+                                );
+                                if !spans.is_empty() {
+                                    out.push(DocNode::Paragraph { spans });
+                                }
                             }
                         }
                         "pre" => {
@@ -321,9 +354,66 @@ fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNo
                                 node_id: Some(child_id),
                             });
                         }
+                        "img" => {
+                            let src = child.get_attribute("src");
+                            let alt = child.get_attribute("alt").unwrap_or("Image");
+                            let mut loaded = false;
+                            if let (Some(src_val), Some(base)) = (src, base_url) {
+                                if !base.is_empty() {
+                                    if let Ok(bytes) = crate::resources::load_binary(base, src_val) {
+                                        if let Some(img) = crate::image::decode(&bytes) {
+                                            out.push(DocNode::Image {
+                                                width: img.width,
+                                                height: img.height,
+                                                pixels: alloc::rc::Rc::new(img.pixels),
+                                            });
+                                            loaded = true;
+                                        }
+                                    }
+                                }
+                            }
+                            if !loaded {
+                                let mut span = StyledSpan::plain(&alloc::format!("[🖼 {}]", alt));
+                                span.color = Some(theme::TEXT_MUTED);
+                                out.push(DocNode::Paragraph {
+                                    spans: alloc::vec![span],
+                                });
+                            }
+                        }
+                        "input" => {
+                            let itype = child.get_attribute("type").unwrap_or("text").to_ascii_lowercase();
+                            let name = child.get_attribute("name").unwrap_or("").into();
+                            let value = child.get_attribute("value").unwrap_or("").into();
+                            let placeholder = child.get_attribute("placeholder").unwrap_or("").into();
+                            let checked = child.get_attribute("checked").is_some();
+                            out.push(DocNode::Input {
+                                input_type: itype,
+                                name,
+                                value,
+                                placeholder,
+                                checked,
+                                node_id: Some(child_id),
+                            });
+                        }
+                        "textarea" => {
+                            let name = child.get_attribute("name").unwrap_or("").into();
+                            let placeholder = child.get_attribute("placeholder").unwrap_or("").into();
+                            let value = arena.get_text_content(child_id).trim().into();
+                            out.push(DocNode::Input {
+                                input_type: String::from("textarea"),
+                                name,
+                                value,
+                                placeholder,
+                                checked: false,
+                                node_id: Some(child_id),
+                            });
+                        }
+                        "form" => {
+                            render_children(arena, child_id, out, base_url);
+                        }
                         _ => {
                             // Recursively render other elements
-                            render_children(arena, child_id, out);
+                            render_children(arena, child_id, out, base_url);
                         }
                     }
                 }
@@ -383,6 +473,14 @@ fn collect_inline_spans(
                         next_code,
                         next_link,
                     );
+                    if tag == "img" {
+                        let alt = attributes.iter().find(|(k, _)| k == "alt").map(|(_, v)| v.as_str()).unwrap_or("Image");
+                        let mut span = StyledSpan::plain(&alloc::format!("[🖼 {}]", alt));
+                        span.color = Some(theme::TEXT_MUTED);
+                        out.push(span);
+                        cur = arena.get(child_id).and_then(|n| n.next_sibling);
+                        continue;
+                    }
                 }
                 NodeData::Text(text) if !text.is_empty() => {
                     let color = if link.is_some() {

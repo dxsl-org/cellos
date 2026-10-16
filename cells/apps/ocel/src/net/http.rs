@@ -11,9 +11,9 @@ use api::syscall::service;
 use ostd::ipc::recv_from;
 use ostd::syscall::{sys_lookup_service, sys_send, sys_yield};
 
-const RESP_BUF: usize = 32768; // 32 KB response buffer
+const RESP_BUF: usize = 2 * 1024 * 1024; // 2 MB max response buffer
 
-pub fn fetch_http(url: &str) -> Result<String, String> {
+pub fn fetch_http_binary(url: &str) -> Result<Vec<u8>, String> {
     let (host, port, path) = parse_url(url).ok_or_else(|| String::from("Invalid HTTP URL"))?;
 
     let net_ep = sys_lookup_service(service::NET)
@@ -136,15 +136,18 @@ pub fn fetch_http(url: &str) -> Result<String, String> {
     // 5. Separate HTTP Headers and Body
     if let Some(header_end) = response.windows(4).position(|w| w == b"\r\n\r\n") {
         let body = &response[header_end + 4..];
-        String::from_utf8(body.to_vec())
-            .map_err(|_| String::from("HTTP response contains non-UTF8 data"))
+        Ok(body.to_vec())
     } else {
-        String::from_utf8(response)
-            .map_err(|_| String::from("HTTP response contains non-UTF8 data"))
+        Ok(response)
     }
 }
 
-pub fn fetch_https(url: &str) -> Result<String, String> {
+pub fn fetch_http(url: &str) -> Result<String, String> {
+    let bytes = fetch_http_binary(url)?;
+    String::from_utf8(bytes).map_err(|_| String::from("HTTP response contains non-UTF8 data"))
+}
+
+pub fn fetch_https_binary(url: &str) -> Result<Vec<u8>, String> {
     let (host, port, path) =
         parse_url_scheme(url, "https://", 443).ok_or_else(|| String::from("Invalid HTTPS URL"))?;
 
@@ -211,11 +214,24 @@ pub fn fetch_https(url: &str) -> Result<String, String> {
     // 5. Separate HTTP headers and body
     if let Some(header_end) = response.windows(4).position(|w| w == b"\r\n\r\n") {
         let body = &response[header_end + 4..];
-        String::from_utf8(body.to_vec())
-            .map_err(|_| String::from("HTTPS response contains non-UTF8 data"))
+        Ok(body.to_vec())
     } else {
-        String::from_utf8(response)
-            .map_err(|_| String::from("HTTPS response contains non-UTF8 data"))
+        Ok(response)
+    }
+}
+
+pub fn fetch_https(url: &str) -> Result<String, String> {
+    let bytes = fetch_https_binary(url)?;
+    String::from_utf8(bytes).map_err(|_| String::from("HTTPS response contains non-UTF8 data"))
+}
+
+pub fn fetch_binary(url: &str) -> Result<Vec<u8>, String> {
+    if url.starts_with("https://") {
+        fetch_https_binary(url)
+    } else if url.starts_with("http://") {
+        fetch_http_binary(url)
+    } else {
+        Err(String::from("Unsupported protocol for binary fetch"))
     }
 }
 

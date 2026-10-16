@@ -23,7 +23,7 @@ mod parser;
 mod pdf;
 mod resources;
 
-use doc::Document;
+use doc::{DocNode, Document};
 use draw::{clear, fill_rect, stroke_rect, theme, Color};
 use loader::load_document;
 use parser::DocFormat;
@@ -134,7 +134,7 @@ impl Tab {
         } else {
             let fmt = DocFormat::detect_from_url_or_content(&loaded.url, &loaded.content);
             let (parsed_nodes, parsed_scripts, parsed_arena) =
-                parser::parse_content(fmt, &loaded.content);
+                parser::parse_content_with_base(fmt, &loaded.content, Some(&loaded.url));
             (
                 parsed_nodes,
                 parsed_scripts,
@@ -241,6 +241,9 @@ struct OcelViewer {
     search_idx: usize,
     width: u32,
     height: u32,
+    in_reader_mode: bool,
+    reader_backup_nodes: Option<Vec<DocNode>>,
+    focused_input: Option<usize>,
 }
 
 impl OcelViewer {
@@ -270,6 +273,9 @@ impl OcelViewer {
             search_idx: 0,
             width,
             height,
+            in_reader_mode: false,
+            reader_backup_nodes: None,
+            focused_input: None,
         };
 
         Some(viewer)
@@ -408,6 +414,60 @@ impl OcelViewer {
             self.url_input, fmt_name, items, height
         );
     }
+    fn submit_form(&mut self) {
+        let tab = self.current_tab();
+        let mut query_params = Vec::new();
+        for b in &tab.doc.layout_boxes {
+            if let Some(inp) = &b.input_data {
+                if !inp.name.is_empty() {
+                    if inp.input_type == "checkbox" {
+                        if inp.checked {
+                            query_params.push(format!("{}=on", inp.name));
+                        }
+                    } else if inp.input_type != "submit" && inp.input_type != "button" {
+                        query_params.push(format!("{}={}", inp.name, inp.value));
+                    }
+                }
+            }
+        }
+        if query_params.is_empty() {
+            return;
+        }
+        let base_url = tab.url.clone();
+        let separator = if base_url.contains('?') { "&" } else { "?" };
+        let submit_url = format!("{}{}{}", base_url, separator, query_params.join("&"));
+        self.navigate_to(&submit_url);
+    }
+    fn toggle_reader_mode(&mut self) {
+        let viewport_w = self.width.saturating_sub(16);
+        let active_idx = self.active_tab;
+        if self.in_reader_mode {
+            if let Some(nodes) = self.reader_backup_nodes.take() {
+                self.tabs[active_idx].doc.nodes = nodes;
+                self.tabs[active_idx].doc.compute_layout(&mut self.fonts, viewport_w);
+                self.in_reader_mode = false;
+                self.status_text = String::from("Exited Reader Mode");
+                self.render();
+            }
+        } else {
+            let extract_opt = self.tabs[active_idx].doc.arena.as_ref().map(|arena| {
+                let extract = parser::readability::extract_article(arena, &self.tabs[active_idx].url, &self.tabs[active_idx].title);
+                let backup = self.tabs[active_idx].doc.nodes.clone();
+                (extract, backup)
+            });
+            if let Some((extract, backup)) = extract_opt {
+                self.reader_backup_nodes = Some(backup);
+                self.tabs[active_idx].doc.nodes = extract.nodes;
+                self.tabs[active_idx].doc.compute_layout(&mut self.fonts, viewport_w);
+                self.in_reader_mode = true;
+                self.status_text = String::from("Reader Mode enabled (Ctrl+R or [Reader] to exit)");
+                self.render();
+            } else {
+                self.status_text = String::from("Reader Mode: Document has no HTML DOM to extract");
+                self.render();
+            }
+        }
+    }
 
     fn perform_search(&mut self) {
         let query = self.search_query.trim();
@@ -534,7 +594,7 @@ impl OcelViewer {
                 if enabled {Color::rgb(17,17,27)}else{theme::TEXT_MUTED},semibold,16.0,true);
         }
         let addr_x=126;
-        let addr_w=w.saturating_sub(180);
+        let addr_w=w.saturating_sub(250);
         fill_rect(surf,addr_x,8,addr_w,28,theme::BG_INPUT);
         stroke_rect(surf,addr_x,8,addr_w,28,theme::BORDER);
         ui_text(fonts,surf,(addr_x+8,8,addr_w.saturating_sub(16),28),
@@ -542,6 +602,9 @@ impl OcelViewer {
         let btn_x=addr_x+addr_w as i32+8;
         fill_rect(surf,btn_x,8,38,28,theme::ACCENT_BLUE);
         ui_text(fonts,surf,(btn_x,8,38,28),"Go",Color::rgb(17,17,27),semibold,14.0,true);
+        let reader_x=btn_x+44;
+        fill_rect(surf,reader_x,8,60,28,if self.in_reader_mode{theme::ACCENT_CYAN}else{theme::BORDER});
+        ui_text(fonts,surf,(reader_x,8,60,28),"Reader",if self.in_reader_mode{Color::rgb(17,17,27)}else{theme::TEXT_PRIMARY},semibold,13.0,true);
 
         let tabbar_y=TOOLBAR_HEIGHT as i32;
         fill_rect(surf,0,tabbar_y,w,TABBAR_HEIGHT,theme::BG_TOOLBAR);
@@ -635,12 +698,17 @@ impl OcelViewer {
 
         // 3. Toolbar [Go] button
         let addr_x = 126;
-        let addr_w = w.saturating_sub(180) as i32;
+        let addr_w = w.saturating_sub(250) as i32;
         let btn_x = addr_x + addr_w + 8;
         if (btn_x..btn_x + 38).contains(&cx) && (8..36).contains(&cy) {
-            let target = self.url_input.clone();
+            let target = loader::classify_smart_url(&self.url_input);
             self.navigate_to(&target);
             self.render();
+            return;
+        }
+        let reader_x = btn_x + 44;
+        if (reader_x..reader_x + 60).contains(&cx) && (8..36).contains(&cy) {
+            self.toggle_reader_mode();
             return;
         }
 
@@ -693,14 +761,45 @@ impl OcelViewer {
 
         // 6. Viewport link and interactive node click
         if cy >= view_y && cy < view_h + view_y && cx >= 0 && cx < (w.saturating_sub(16)) as i32 {
-            let active_tab = &self.tabs[self.active_tab];
-            let active_scroll = active_tab.scroll_y;
+            let active_tab_idx = self.active_tab;
+            let active_scroll = self.tabs[active_tab_idx].scroll_y;
+
+            // Check Input control click
+            let hit_input = self.tabs[active_tab_idx].doc.hit_test_input(cx, cy, 0, view_y, active_scroll);
+            if let Some(inp_idx) = hit_input {
+                let tab = &mut self.tabs[active_tab_idx];
+                if let Some(inp) = &mut tab.doc.layout_boxes[inp_idx].input_data {
+                    if inp.input_type == "checkbox" {
+                        inp.checked = !inp.checked;
+                        self.render();
+                        return;
+                    } else if inp.input_type == "submit" || inp.input_type == "button" {
+                        self.submit_form();
+                        return;
+                    } else {
+                        self.focused_input = Some(inp_idx);
+                        for (i, b) in tab.doc.layout_boxes.iter_mut().enumerate() {
+                            if let Some(d) = &mut b.input_data {
+                                d.is_focused = i == inp_idx;
+                            }
+                        }
+                        self.render();
+                        return;
+                    }
+                }
+            } else if self.focused_input.is_some() {
+                self.focused_input = None;
+                for b in &mut self.tabs[active_tab_idx].doc.layout_boxes {
+                    if let Some(d) = &mut b.input_data {
+                        d.is_focused = false;
+                    }
+                }
+                self.render();
+            }
 
             // Check Hyperlink navigation
-            if let Some(link_url) = active_tab
-                .doc
-                .hit_test_link(cx, cy, 0, view_y, active_scroll)
-            {
+            let hit_link = self.tabs[active_tab_idx].doc.hit_test_link(cx, cy, 0, view_y, active_scroll);
+            if let Some(link_url) = hit_link {
                 ostd::io::print("[ocel] Clicked link -> navigating to: ");
                 ostd::io::println(&link_url);
                 self.navigate_to(&link_url);
@@ -709,10 +808,9 @@ impl OcelViewer {
             }
 
             // Check Interactive DOM Node click -> dispatch Click event to Tier 2 JS
-            if let Some(node_id) = active_tab
-                .doc
-                .hit_test_node(cx, cy, 0, view_y, active_scroll)
-            {
+            let hit_node = self.tabs[active_tab_idx].doc.hit_test_node(cx, cy, 0, view_y, active_scroll);
+            if let Some(node_id) = hit_node {
+                let active_tab = &self.tabs[active_tab_idx];
                 if active_tab.js_context_id == 0 || active_tab.js_context_id != self.js_runtime.context_id() {
                     ostd::io::println("[ocel] This tab's JavaScript context is inactive; reload to enable scripts.");
                     return;
@@ -782,6 +880,12 @@ impl OcelViewer {
             self.render();
             return;
         }
+        // Global Ctrl+R: Toggle Reader Mode
+        if ch == Some('r') && modifiers.contains(Modifiers::CTRL) {
+            self.toggle_reader_mode();
+            return;
+        }
+
 
         // Global Ctrl+Tab: Next Tab
         if sym == KeySym::Tab && modifiers.contains(Modifiers::CTRL) {
@@ -789,6 +893,34 @@ impl OcelViewer {
             self.render();
             return;
         }
+        // Global Alt+Left: Go Back
+        if sym == KeySym::Left && modifiers.contains(Modifiers::ALT) {
+            self.go_back();
+            self.render();
+            return;
+        }
+
+        // Global Alt+Right: Go Forward
+        if sym == KeySym::Right && modifiers.contains(Modifiers::ALT) {
+            self.go_forward();
+            self.render();
+            return;
+        }
+
+        // Global Ctrl+B: Open Bookmarks
+        if ch == Some('b') && modifiers.contains(Modifiers::CTRL) {
+            self.navigate_to("ocel://bookmarks");
+            self.render();
+            return;
+        }
+
+        // Global Ctrl+D: Bookmark Current Page
+        if ch == Some('d') && modifiers.contains(Modifiers::CTRL) {
+            self.status_text = format!("Bookmarked: {}", self.current_tab().url);
+            self.render();
+            return;
+        }
+
 
         // Global Ctrl+F / F3: Toggle search
         if sym == KeySym::F3 || (ch == Some('f') && modifiers.contains(Modifiers::CTRL)) {
@@ -832,10 +964,46 @@ impl OcelViewer {
             return;
         }
 
+        // Input Field Editing when focused
+        if let Some(idx) = self.focused_input {
+            let active_tab_idx = self.active_tab;
+            let tab = &mut self.tabs[active_tab_idx];
+            if idx < tab.doc.layout_boxes.len() {
+                if let Some(inp) = &mut tab.doc.layout_boxes[idx].input_data {
+                    match sym {
+                        KeySym::Return => {
+                            self.submit_form();
+                            return;
+                        }
+                        KeySym::Backspace => {
+                            inp.value.pop();
+                            self.render();
+                            return;
+                        }
+                        KeySym::Escape => {
+                            inp.is_focused = false;
+                            self.focused_input = None;
+                            self.render();
+                            return;
+                        }
+                        _ => {
+                            if let Some(c) = ch {
+                                if !c.is_control() {
+                                    inp.value.push(c);
+                                    self.render();
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Standard Document Navigation
         match sym {
             KeySym::Return => {
-                let target = self.url_input.clone();
+                let target = loader::classify_smart_url(&self.url_input);
                 self.navigate_to(&target);
                 self.render();
             }
