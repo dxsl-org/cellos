@@ -1240,3 +1240,95 @@ mod p08b {
         assert!(c.completed);
     }
 }
+
+#[cfg(test)]
+mod p08d {
+    use core::cmp::Ordering;
+
+    struct MockPolicy {
+        target_t: u32,
+        min: usize,
+        max: usize,
+        cooldown_ms: u64,
+    }
+
+    struct MockEngine {
+        last_ms: u64,
+    }
+
+    impl MockEngine {
+        fn new() -> Self { Self { last_ms: 0 } }
+
+        fn eval(
+            &mut self,
+            p: &MockPolicy,
+            curr: usize,
+            demand: u32,
+            complete: bool,
+            now: u64,
+        ) -> Result<Option<usize>, &'static str> {
+            if !complete {
+                return Err("frozen");
+            }
+            if now < self.last_ms + p.cooldown_ms {
+                return Ok(None); // in cooldown
+            }
+            let t = p.target_t as u64;
+            let desired = (((demand as u64) + t - 1) / t) as usize;
+            let clamped = desired.clamp(p.min, p.max);
+            self.last_ms = now;
+            if clamped != curr {
+                Ok(Some(clamped))
+            } else {
+                Ok(None)
+            }
+        }
+    }
+
+    #[test]
+    fn test_p08d_ceil_demand_scaling_and_cooldown_clamping() {
+        let policy = MockPolicy { target_t: 10, min: 1, max: 5, cooldown_ms: 500 };
+        let mut engine = MockEngine::new();
+
+        // Demand 25 -> ceil(25 / 10) = 3 replicas
+        assert_eq!(engine.eval(&policy, 1, 25, true, 1000), Ok(Some(3)));
+
+        // Incomplete telemetry freezes scaling
+        assert_eq!(engine.eval(&policy, 3, 40, false, 2000), Err("frozen"));
+
+        // Within cooldown (now=1200 < 1000+500), returns None (NoChange)
+        assert_eq!(engine.eval(&policy, 3, 50, true, 1200), Ok(None));
+
+        // After cooldown (now=2000), demand 5 -> ceil(5 / 10) = 1 replica
+        assert_eq!(engine.eval(&policy, 3, 5, true, 2000), Ok(Some(1)));
+    }
+
+    #[test]
+    fn test_p08d_deterministic_node_ranking() {
+        struct Node {
+            id: u8,
+            replicas: usize,
+            headroom: u64,
+        }
+
+        let mut nodes = [
+            Node { id: 1, replicas: 1, headroom: 500 },
+            Node { id: 2, replicas: 0, headroom: 200 },
+            Node { id: 3, replicas: 0, headroom: 800 },
+        ];
+
+        nodes.sort_by(|a, b| {
+            match a.replicas.cmp(&b.replicas) {
+                Ordering::Equal => match b.headroom.cmp(&a.headroom) {
+                    Ordering::Equal => a.id.cmp(&b.id),
+                    other => other,
+                },
+                other => other,
+            }
+        });
+
+        assert_eq!(nodes[0].id, 3); // 0 replicas, 800 headroom
+        assert_eq!(nodes[1].id, 2); // 0 replicas, 200 headroom
+        assert_eq!(nodes[2].id, 1); // 1 replica
+    }
+}

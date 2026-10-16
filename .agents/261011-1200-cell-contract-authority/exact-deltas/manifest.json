@@ -413,12 +413,12 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "012d8646961741418f5b593a9c31fa23c7c7d456c8d51ff872a17aa8f9110658",
+  "source_census_sha256": "019bee565beb533df519d8d399025770e1ba07d25dc7a232341a0eb904367ef3",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "29e158f86fbbf1dfb802bd6f314c516e9d5485f3fdd82363cc4b4d076d458f80"
+      "sha256": "9109b2a2a1a0f8c31bd23a790e87183307f001e918fbf9147bc5f89d0ef42140"
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -430,7 +430,7 @@
     },
     {
       "path": "Cargo.toml",
-      "sha256": "7511c0280e07db67f34f44b2ea5755756a668db30a445a86da038f8233a2e4a4"
+      "sha256": "5483728b9a46fe88cc4997c5e739585453c329aa71e7fbcd68466a97d329d14e"
     },
     {
       "path": "LICENSING.md",
@@ -7989,6 +7989,42 @@
       "sha256": "2165f47772af9faee1798999a599fa9de850d1bf0259502dade1c25d4a588316"
     },
     {
+      "path": "cells/services/placement-controller/Cargo.toml",
+      "sha256": "c885727d4046d3217aba37b814cb33571c423b87275f62eea851ac302d18f166"
+    },
+    {
+      "path": "cells/services/placement-controller/build.rs",
+      "sha256": "309c7f94ddf64d2c2d1fce2f9472d674869c6feb2218ebcadbf4bab5626d5f90"
+    },
+    {
+      "path": "cells/services/placement-controller/src/budget_client.rs",
+      "sha256": "76157e50c5d37409eb567430f06da47ae4cb5874c0b1266d78ea75b595ed8c2a"
+    },
+    {
+      "path": "cells/services/placement-controller/src/lib.rs",
+      "sha256": "9411149178f2c29871eb0837d1b2fa024f66e0130b9aca7843dc844ac7159503"
+    },
+    {
+      "path": "cells/services/placement-controller/src/main.rs",
+      "sha256": "1fe205c5793262ec3152647e7a25113454b6d2eaa043936bd4da0a00bee85839"
+    },
+    {
+      "path": "cells/services/placement-controller/src/placement.rs",
+      "sha256": "a728eba81509a6c4d877eb74bc57d1eaf28fd312ab3e20b1666471b8929b8dc2"
+    },
+    {
+      "path": "cells/services/placement-controller/src/policy.rs",
+      "sha256": "d4ea53971d3214777b50e76a2f3bde8a0eaa4ce3e80d371c240dec1759a65439"
+    },
+    {
+      "path": "cells/services/placement-controller/src/reconcile.rs",
+      "sha256": "8595dd3f1c6275558f99fc5375d41aa8aba7af92162b637bc71336a115844889"
+    },
+    {
+      "path": "cells/services/placement-controller/src/scaling.rs",
+      "sha256": "ab79eff66bf660470e328b8575d234acda09334dc61a5c41b6c9b62054e2710c"
+    },
+    {
       "path": "cells/services/platform/Cargo.toml",
       "sha256": "51b982f0d9503ee4d705fb2b6a1c3c671755c12bf47ccec34252be4161fc9bd8"
     },
@@ -14550,7 +14586,7 @@
     },
     {
       "path": "tests/unit_cspace_smoke.rs",
-      "sha256": "d81f4fb281978be07b87019251417c5d9a15397198eefbf54f10218cc53b1b86"
+      "sha256": "ae2c12da6705662d77f8cdb0683e6d5a80d490729f2d52f131849bb42165bbb3"
     },
     {
       "path": "third_party/mlibc/sysdeps/vicell/crt-aarch64/crt1.S",

@@ -2750,6 +2750,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "service-placement-controller"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "types",
+]
+
+[[package]]
 name = "service-platform"
 version = "0.1.0"
 dependencies = [

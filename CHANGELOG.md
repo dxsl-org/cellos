@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Implement Phase 08-D (P08-D) Placement Controller service: compute demand-based scaling
+  using ceil(demand / T) with cooldown and telemetry completeness gating; rank nodes by
+  replica density and headroom; integrate Budget Authority reservations and downscale drain.
 - Implement Phase 08-B (P08-B) Workload Router service: verify workload endpoint
   management, destination Ready evidence checking, deterministic weighted selection with
   target freezing, bounded queue deadline eviction, and receiver-initiated challenge rounds.

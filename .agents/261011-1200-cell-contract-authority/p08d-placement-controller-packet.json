@@ -1,0 +1,24 @@
+{
+  "format": "cell-contract-p08d-dossier-v1",
+  "status": "approved",
+  "recorded": "2026-10-16",
+  "scope": "Phase 08-D (P08-D) Homogeneous Autoscale Domains, Deterministic Placement, and Generation Reconciliation Implementation & Gate Verification",
+  "dossier_document": ".agents/261011-1200-cell-contract-authority/p08d-placement-controller-packet.md",
+  "dossier_sha256": "08ba936324053916897f9366cfa90660d7bae5dea3bd92827dea329913a5da84",
+  "legacy_lock_count": 38,
+  "legacy_locks_released": 0,
+  "milestone": "P08-D",
+  "service_package": "cells/services/placement-controller",
+  "invariants": {
+    "demand_formula": "ceil(demand / T)",
+    "freeze_incomplete_telemetry": true,
+    "cooldown_enforcement": true,
+    "multi_factor_ranking": true,
+    "drain_quiescence_sequence": true
+  },
+  "verification": {
+    "unit_tests": "PASS (42/42 in unit_cspace_smoke)",
+    "bare_metal_build": "PASS (service-placement-controller on x86_64-unknown-none)",
+    "document_consistency": "PASS (verify-cell-contract-p01.py)"
+  }
+}

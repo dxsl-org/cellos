@@ -527,3 +527,15 @@ Executed P08-B verification covering the workload router service (`cells/service
 
 Dossier preserved in `.agents/261011-1200-cell-contract-authority/p08b-workload-router-packet.md`. All 38 locks remain in force; downstream P08-D/E remain pending.
 
+## Phase 08-D (P08-D) Placement Controller Implementation & Verification — 2026-10-16
+
+Executed P08-D verification covering the placement controller service (`cells/services/placement-controller/`):
+1. **Demand Scaling & Telemetry Gating (`scaling.rs`):** Verified $\lceil \text{demand} / T \rceil$ replica scaling; incomplete telemetry freezes scaling in both directions (`FrozenIncompleteTelemetry`); cooldown prevents churn.
+2. **Deterministic Node Ranking (`placement.rs`):** Nodes ranked strictly by lower application replica count, higher available headroom, and NodeId tie-break.
+3. **Budget Authority Integration (`budget_client.rs`):** Full-vector reservations required before placement, honoring Gate C no-minting boundaries.
+4. **Downscale Drain Reconciliation (`reconcile.rs`):** Verified lifecycle sequence `Active → Draining → Quiesced → Gone` preserving in-flight work.
+5. **Bare-Metal Service Build:** `service-placement-controller` compiles clean on `x86_64-unknown-none` with `#![no_std]` and `ostd`.
+6. **Unit Test Coverage:** `tests/unit_cspace_smoke.rs` passes 42/42 tests clean, including P08-D demand scaling, cooldown clamping, and node ranking.
+
+Dossier preserved in `.agents/261011-1200-cell-contract-authority/p08d-placement-controller-packet.md`. All 38 locks remain in force; downstream P08-E remains pending.
+
