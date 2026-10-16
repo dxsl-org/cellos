@@ -413,7 +413,7 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "b5a6e9f883650c111a0fb539aa1e3d46eb468db02b30be26e411e1b5f5a52109",
+  "source_census_sha256": "9987090ca74a7d52bf15b91a8293682eb04a91a5be80ca031819ad00ca275552",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
@@ -9587,6 +9587,10 @@
     {
       "path": "docs/evidence/app-tier-phase02-ledger-attestation.json",
       "sha256": "00b6f3fbe3d8ee0c0a0fc6fc27ddd4ceddaf53b174be13a758985a89fa00c417"
+    },
+    {
+      "path": "docs/evidence/benchmark-comparison-cellos-vs-linux.md",
+      "sha256": "34e128a122c1990f1781bdd0cb0a7ace324aa5889c9d7d5e3fde44bd40ab0ccf"
     },
     {
       "path": "docs/evidence/spec23-native-sdk-contract-027e1a2bbfb1.md",
