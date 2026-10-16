@@ -1,0 +1,23 @@
+[package]
+name = "app-haily-agent"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Haily Personal Assistant Native Agent Cell for CellOS"
+
+[dependencies]
+api = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+types = { path = "../../../libs/types", version = "0.1.0" }
+agent-proto = { path = "../../../libs/agent-proto", version = "0.1.0" }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+mio-cellos = { path = "../../../libs/mio-cellos", version = "0.1.0" }
+postcard = { version = "1", default-features = false, features = ["alloc"] }
+
+[[bin]]
+name = "haily-agent"
+path = "src/main.rs"
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

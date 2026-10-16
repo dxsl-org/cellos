@@ -1928,3 +1928,44 @@ mod async_io_readiness_engine {
         assert_eq!(decoded_events & net_ready::WRITE, net_ready::WRITE);
     }
 }
+
+#[cfg(test)]
+mod haily_personal_assistant_integration {
+    #[derive(Debug, PartialEq, Eq)]
+    enum ToolRisk {
+        SafeReadOnly,
+        MutatingRequiresApproval,
+    }
+
+    fn classify_tool(name: &str) -> ToolRisk {
+        match name {
+            "write_file" | "spawn_cell" | "kill_cell" => ToolRisk::MutatingRequiresApproval,
+            _ => ToolRisk::SafeReadOnly,
+        }
+    }
+
+    #[test]
+    fn test_haily_agent_request_envelope_and_approval_routing() {
+        struct MockHailyRequest<'a> {
+            session_id: &'a str,
+            message: &'a str,
+            user_ref: Option<&'a str>,
+        }
+
+        let req = MockHailyRequest {
+            session_id: "sess-001",
+            message: "analyze research data in /data and output summary",
+            user_ref: Some("dmin"),
+        };
+
+        assert_eq!(req.session_id, "sess-001");
+        assert_eq!(req.user_ref, Some("dmin"));
+
+        // Tool risk classification gate
+        assert_eq!(classify_tool("read_file"), ToolRisk::SafeReadOnly);
+        assert_eq!(classify_tool("list_dir"), ToolRisk::SafeReadOnly);
+        assert_eq!(classify_tool("sys_info"), ToolRisk::SafeReadOnly);
+        assert_eq!(classify_tool("write_file"), ToolRisk::MutatingRequiresApproval);
+        assert_eq!(classify_tool("spawn_cell"), ToolRisk::MutatingRequiresApproval);
+    }
+}

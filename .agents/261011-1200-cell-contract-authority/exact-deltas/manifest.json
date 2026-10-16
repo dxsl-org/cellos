@@ -413,12 +413,12 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "5409e6785b9c7a4f49fa1424b9462678ae5bb1d00d997d536facb4b2d17ce059",
+  "source_census_sha256": "babca7aae3359247ced45ba773b89d3396c9ad0d1eda98467b158eb52f85e234",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "8e360cbef11e904a3c1414ae2bde72a791bae2b4329f9642753cc9f1e6ac0bbf"
+      "sha256": "8076420d5dc725908be7cb8866f9a90ff8c5def1ec42d1d7196f1c2acd2026b3"
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -430,7 +430,7 @@
     },
     {
       "path": "Cargo.toml",
-      "sha256": "1f4d0474a64826417890a62eadcc6441a9e387acea41cfb5620b6e9fa1f5fb5d"
+      "sha256": "f0b83e348425948b4610ff1983950daf5447b9047bb83fad98d821dab6074df8"
     },
     {
       "path": "LICENSING.md",
@@ -515,6 +515,26 @@
     {
       "path": "cells/apps/fb-console/src/main.rs",
       "sha256": "95d7de30387a4eff4fd3e63eb6cea12cd46e096b4b6b7b8bab8e8f5e22b22c63"
+    },
+    {
+      "path": "cells/apps/haily-agent/Cargo.toml",
+      "sha256": "5676883c4c52e18dd5e821aeb4e23344ae45a794f164de7adf7c7897314fb0eb"
+    },
+    {
+      "path": "cells/apps/haily-agent/build.rs",
+      "sha256": "309c7f94ddf64d2c2d1fce2f9472d674869c6feb2218ebcadbf4bab5626d5f90"
+    },
+    {
+      "path": "cells/apps/haily-agent/src/dto.rs",
+      "sha256": "838661d8036ab966c203bac6a15ca23ace858ea2e0e04eaa0f1658019ee88d41"
+    },
+    {
+      "path": "cells/apps/haily-agent/src/main.rs",
+      "sha256": "30de07d9f10a597d9e983fe37bea00b9759a94c172b1d1b839788ffa3ecaf7cf"
+    },
+    {
+      "path": "cells/apps/haily-agent/src/tools.rs",
+      "sha256": "bda7e3285d3097b06aedf5a6e78cb08271c3232f1327157e41dbb0155a6b27f9"
     },
     {
       "path": "cells/apps/hypha/README.md",
@@ -14630,7 +14650,7 @@
     },
     {
       "path": "tests/unit_cspace_smoke.rs",
-      "sha256": "2a29d14e789897a97fa9128c8db20acdfba82f6200af178534789f959829d7ac"
+      "sha256": "c0d03a9e27029e9371a7a7b5e9111d29caef8b00df3964f813278c32be0fef42"
     },
     {
       "path": "third_party/mlibc/sysdeps/vicell/crt-aarch64/crt1.S",

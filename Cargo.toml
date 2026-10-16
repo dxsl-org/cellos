@@ -144,6 +144,7 @@ members = [
     "cells/apps/hypha/tools/fs",      # Hypha P2 — filesystem tool cell
     "cells/apps/hypha/tools/sys",     # Hypha P3 — system introspection tool cell
     "cells/apps/hypha/tools/spawn",   # Hypha P3 — cell lifecycle tool cell
+    "cells/apps/haily-agent",
 
     # Cells - Demos (hardware/feature demos + games)
     "cells/demos/doom",

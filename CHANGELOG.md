@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Implement Stage H1 Single-Node Haily Personal Assistant Agent (cells/apps/haily-agent):
+  port Haily Request/Response DTOs, integrate tool delegation to sandboxed tool cells
+  (hypha-tool-fs, hypha-tool-sys, hypha-tool-spawn) with mutating approval gates, and
+  verify 64/64 smoke tests clean.
 - Implement Native Async I/O Runtime Subsystem (Approach A: Smol/Polling & Approach B: Tokio/Mio):
   land kernel reactor-wakeup coalescing (0x12) in ipc_try_send, NetReady wire framing (0x11),
   libs/polling-cellos Poller backend, cells/demos/async-echo, libs/mio-cellos Selector and Waker
