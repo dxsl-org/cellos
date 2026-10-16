@@ -48,6 +48,8 @@ members = [
     "libs/ocel-pdf-proto",
     "libs/ocel-service-proto",
     
+    "libs/polling-cellos",
+    "libs/mio-cellos",
     # HAL
     "hal/core",
     "hal/soc/bcm27xx",
@@ -165,6 +167,8 @@ members = [
     "cells/demos/audio-demo",
     "cells/demos/hotswap-demo-v1",
     "cells/demos/hotswap-demo-v2",
+    "cells/demos/async-echo",
+    "cells/demos/tokio-smoke",
 
     # Cells - Tests
     "cells/tests/atomic-publication-probe",

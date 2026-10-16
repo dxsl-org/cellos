@@ -328,6 +328,15 @@ pub mod net_ready {
     pub const ERROR: u8 = 16;
 }
 
+/// Raw readiness opcode emitted by net service towards interest owners: `[0x11, events: u8, cap_id: u32 LE]`.
+pub const NET_READY_OPCODE: u8 = 0x11;
+
+/// Raw reactor wakeup opcode emitted within the same cell: `[0x12]`.
+pub const REACTOR_WAKE_OPCODE: u8 = 0x12;
+
+/// Fixed length of a raw `NET_READY` frame in bytes.
+pub const NET_READY_FRAME_BYTES: usize = 6;
+
 /// Packed TCP readiness record: cap_id (u32 LE) followed by one flags byte.
 /// Unlike borrowed structured slices, `&[u8]` deserializes without allocating.
 pub const NET_READY_RECORD_BYTES: usize = 5;

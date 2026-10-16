@@ -4365,9 +4365,10 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             msg_len,
         } => {
             // Non-blocking: deliver if target in Recv, else drop. Never blocks.
-            // (Input-service sends fall back to a bounded queue — see ipc_try_send.)
-            match super::ipc_try_send(caller_id, target, msg_ptr, msg_len) {
-                Ok(()) => Ok(0),           // delivered (or queued for the input service)
+            // Target 0 is resolved to caller_id for self-wake without an extra tid lookup.
+            let target_id = if target == 0 { caller_id } else { target };
+            match super::ipc_try_send(caller_id, target_id, msg_ptr, msg_len) {
+                Ok(()) => Ok(0),           // delivered (or queued for input service / same-cell wake)
                 Err(()) => Ok(usize::MAX), // dropped (target not ready or gone)
             }
         }

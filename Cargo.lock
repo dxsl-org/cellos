@@ -176,6 +176,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "app-async-echo"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "polling-cellos",
+ "types",
+]
+
+[[package]]
 name = "app-backend"
 version = "0.1.0"
 dependencies = [
@@ -390,6 +401,17 @@ dependencies = [
  "api",
  "cell-build",
  "ostd",
+]
+
+[[package]]
+name = "app-tokio-smoke"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "mio-cellos",
+ "ostd",
+ "types",
 ]
 
 [[package]]
@@ -1971,6 +1993,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "mio-cellos"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "ostd",
+ "spin",
+]
+
+[[package]]
 name = "mlibc-shim"
 version = "0.1.0"
 
@@ -2216,6 +2247,15 @@ checksum = "f950b2377845cebe5cf8b5165cb3cc1a5e0fa5cfa3e1f7f55707d8fd82e0a7b7"
 dependencies = [
  "der 0.7.10",
  "spki",
+]
+
+[[package]]
+name = "polling-cellos"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "ostd",
+ "spin",
 ]
 
 [[package]]

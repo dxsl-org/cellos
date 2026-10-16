@@ -2836,7 +2836,13 @@ pub fn ipc_try_send(
                 .get(&target_id)
                 .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
                 .unwrap_or(false);
-            if target_ready || is_trusted_input_sender(caller_id) {
+            let is_same_cell_wake_candidate = sched
+                .tasks
+                .get(&caller_id)
+                .and_then(|c| sched.tasks.get(&target_id).map(|t| (c, t)))
+                .map(|(c, t)| c.cell_id == t.cell_id && msg_len <= 8)
+                .unwrap_or(false);
+            if target_ready || is_trusted_input_sender(caller_id) || is_same_cell_wake_candidate {
                 let caller_view = sched
                     .tasks
                     .get(&caller_id)
@@ -2882,7 +2888,15 @@ pub fn ipc_try_send(
         .get(&target_id)
         .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
         .unwrap_or(false);
-    if !recv_eligible && !is_trusted_input_sender(caller_id) {
+    let is_reactor_wake = match (sched.tasks.get(&caller_id), sched.tasks.get(&target_id)) {
+        (Some(c), Some(t)) => {
+            c.cell_id == t.cell_id
+                && msg_bytes.len() <= 8
+                && msg_bytes.first() == Some(&api::ipc::REACTOR_WAKE_OPCODE)
+        }
+        _ => false,
+    };
+    if !recv_eligible && !is_trusted_input_sender(caller_id) && !is_reactor_wake {
         let state = sched
             .tasks
             .get(&target_id)
@@ -2891,6 +2905,13 @@ pub fn ipc_try_send(
         drop(guard);
         trace_try_send_refusal(caller_id, target_id, "not-recv-revalidate", state);
         return Err(());
+    }
+    if is_reactor_wake {
+        if let Some(target) = sched.tasks.get(&target_id) {
+            if target.pending_msgs.iter().any(|m| m.payload().first() == Some(&api::ipc::REACTOR_WAKE_OPCODE)) {
+                return Ok(());
+            }
+        }
     }
     let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
     let header = ipc_wire::IpcWireHeader {

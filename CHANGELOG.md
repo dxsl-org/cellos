@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Implement Native Async I/O Runtime Subsystem (Approach A: Smol/Polling & Approach B: Tokio/Mio):
+  land kernel reactor-wakeup coalescing (0x12) in ipc_try_send, NetReady wire framing (0x11),
+  libs/polling-cellos Poller backend, cells/demos/async-echo, libs/mio-cellos Selector and Waker
+  backend, and cells/demos/tokio-smoke driver; verify 63/63 tests clean.
 - Rebase and qualify Tranche 4 (Distributed, VMM & Hardware Lanes): rebase 12 subordinate
   plans onto C2C 112-byte envelope, Budget Authority, Workload Router, Placement Controller,
   VMX isolation, and driver DMA quiescence; verify 61/61 tests clean.

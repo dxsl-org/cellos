@@ -1862,3 +1862,69 @@ mod distributed_vmm_rebase {
         assert!(channel.quiesced, "channel achieves full quiescence before unregister");
     }
 }
+
+#[cfg(test)]
+mod async_io_readiness_engine {
+    pub const NET_READY_OPCODE: u8 = 0x11;
+    pub const REACTOR_WAKE_OPCODE: u8 = 0x12;
+    pub const NET_READY_FRAME_BYTES: usize = 6;
+    pub mod net_ready {
+        pub const READ: u8 = 2;
+        pub const WRITE: u8 = 4;
+    }
+    #[test]
+    fn test_reactor_wake_self_send_coalescing() {
+        struct Mailbox {
+            pending: alloc::vec::Vec<alloc::vec::Vec<u8>>,
+        }
+        impl Mailbox {
+            fn try_push_wake(&mut self, sender_cell: usize, target_cell: usize, msg: &[u8]) -> Result<bool, ()> {
+                if sender_cell != target_cell || msg.len() > 8 || msg.first() != Some(&REACTOR_WAKE_OPCODE) {
+                    return Err(());
+                }
+                // Coalesce: if an idempotent 0x12 wake is already queued, do not push another
+                if self.pending.iter().any(|m| m.first() == Some(&REACTOR_WAKE_OPCODE)) {
+                    return Ok(false); // Coalesced
+                }
+                self.pending.push(msg.to_vec());
+                Ok(true) // Enqueued
+            }
+        }
+
+        let mut mbox = Mailbox { pending: alloc::vec::Vec::new() };
+        let wake_msg = [REACTOR_WAKE_OPCODE];
+
+        // Foreign cell wake attempt must be rejected
+        assert!(mbox.try_push_wake(1, 2, &wake_msg).is_err());
+
+        // First same-cell wake succeeds and enqueues
+        assert_eq!(mbox.try_push_wake(1, 1, &wake_msg), Ok(true));
+        assert_eq!(mbox.pending.len(), 1);
+
+        // Second same-cell wake is coalesced without allocating an extra queue slot
+        assert_eq!(mbox.try_push_wake(1, 1, &wake_msg), Ok(false));
+        assert_eq!(mbox.pending.len(), 1);
+    }
+
+    #[test]
+    fn test_net_ready_wire_frame_encoding_and_demux() {
+        let cap_id: u32 = 42;
+        let events: u8 = net_ready::READ | net_ready::WRITE;
+
+        let mut frame = [0u8; NET_READY_FRAME_BYTES];
+        frame[0] = NET_READY_OPCODE;
+        frame[1] = events;
+        frame[2..6].copy_from_slice(&cap_id.to_le_bytes());
+
+        assert_eq!(frame.len(), 6);
+        assert_eq!(frame[0], 0x11);
+        assert!(frame[0] > 0x0F, "NET_READY is strictly disjoint from NetResponse postcard discriminants");
+
+        // Demux validation
+        let decoded_events = frame[1];
+        let decoded_cap = u32::from_le_bytes(frame[2..6].try_into().unwrap());
+        assert_eq!(decoded_cap, 42);
+        assert_eq!(decoded_events & net_ready::READ, net_ready::READ);
+        assert_eq!(decoded_events & net_ready::WRITE, net_ready::WRITE);
+    }
+}

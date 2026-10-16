@@ -413,12 +413,12 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "67f495021fb465e6404ad4c5a01db79721bf93a48c16132eed2b4d6396311613",
+  "source_census_sha256": "b1cd995dbebab1541507cd36d53f83639e20992189c230f72ed9cadde2fba803",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "b2a00496d9e26af8d204bd1a9df2a070b56175cab77a47c085184db99f2e6bb2"
+      "sha256": "8e360cbef11e904a3c1414ae2bde72a791bae2b4329f9642753cc9f1e6ac0bbf"
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -430,7 +430,7 @@
     },
     {
       "path": "Cargo.toml",
-      "sha256": "5483728b9a46fe88cc4997c5e739585453c329aa71e7fbcd68466a97d329d14e"
+      "sha256": "1f4d0474a64826417890a62eadcc6441a9e387acea41cfb5620b6e9fa1f5fb5d"
     },
     {
       "path": "LICENSING.md",
@@ -755,6 +755,18 @@
     {
       "path": "cells/demos/adc-demo/src/main.rs",
       "sha256": "b11fb460af95b64e09513c244b9ccbe9301978767c2449bdc9bcff2f63fdca77"
+    },
+    {
+      "path": "cells/demos/async-echo/Cargo.toml",
+      "sha256": "ea7ac0f1da70f8f608c473a227eb0b00c4dc3a243f628c5c797bd4e4884e3c50"
+    },
+    {
+      "path": "cells/demos/async-echo/build.rs",
+      "sha256": "309c7f94ddf64d2c2d1fce2f9472d674869c6feb2218ebcadbf4bab5626d5f90"
+    },
+    {
+      "path": "cells/demos/async-echo/src/main.rs",
+      "sha256": "934b7c00151ba04ac576f627c7f08c9375bd98ad3617fb3022b2217f3e2d815b"
     },
     {
       "path": "cells/demos/audio-demo/Cargo.toml",
@@ -1155,6 +1167,18 @@
     {
       "path": "cells/demos/tetris/src/main.rs",
       "sha256": "37c57b61ba8b11eeefb16a9f6666df414ac5a72cc062e66b783b7396421dcef7"
+    },
+    {
+      "path": "cells/demos/tokio-smoke/Cargo.toml",
+      "sha256": "2a4a87d5c4d19df17fa945311521182f03da5d519c5465bc9fe868a7b55e3a5f"
+    },
+    {
+      "path": "cells/demos/tokio-smoke/build.rs",
+      "sha256": "309c7f94ddf64d2c2d1fce2f9472d674869c6feb2218ebcadbf4bab5626d5f90"
+    },
+    {
+      "path": "cells/demos/tokio-smoke/src/main.rs",
+      "sha256": "f118a1b0c33390c49c855b6b7af186b2f15256df47ee41c874444398f0667a53"
     },
     {
       "path": "cells/demos/viui-demo/Cargo.toml",
@@ -11090,7 +11114,7 @@
     },
     {
       "path": "kernel/src/task.rs",
-      "sha256": "73856182772f59e092b1550340ed857d44efd76f399beaced865fdb35eb2cefb"
+      "sha256": "09f574dcb3b6ad23045848e592e6f8c2a6b28b038f5fe47f95b9175022c18632"
     },
     {
       "path": "kernel/src/task/async_ipc.rs",
@@ -11418,7 +11442,7 @@
     },
     {
       "path": "kernel/src/task/syscall.rs",
-      "sha256": "e5813ef539724af4d52b53e49f18664aeee6e1ebf637e7f45315bb7f0cead2e9"
+      "sha256": "3b28ffb34e7785e2897c6e2365fab3c7c8158bdb5aa31e9148907d744f0f96d3"
     },
     {
       "path": "kernel/src/task/task_id_selftest.rs",
@@ -11858,7 +11882,7 @@
     },
     {
       "path": "libs/api/src/services/ipc.rs",
-      "sha256": "844801ef25dbecb86c7f140927b351c7c8b9e4cdfcb736a3a25bd56a376057b6"
+      "sha256": "00d9a3e1c3497ca4e8ae06e629464423e01dc56a8d2602ac4b9b14b2454e9b57"
     },
     {
       "path": "libs/api/src/services/net.rs",
@@ -12397,6 +12421,14 @@
       "sha256": "0d3b0088e3b793fb8441dc1c0841de31c141c213c475bf5aa9ea5411f9b41417"
     },
     {
+      "path": "libs/mio-cellos/Cargo.toml",
+      "sha256": "2f234852fdb954941afab6114beed01ad110673bcaa77dba96a1f9b10e837a2a"
+    },
+    {
+      "path": "libs/mio-cellos/src/lib.rs",
+      "sha256": "6d76670bc97c9ab828ade77dbbc0eeee7ae7a36c40363855d9c2ffe03fba4729"
+    },
+    {
       "path": "libs/mlibc-shim/Cargo.toml",
       "sha256": "704aac4fa65f8e137f2532fc52df8ccd242811ee3ac6104e11c5f7a16d4f9836"
     },
@@ -12675,6 +12707,14 @@
     {
       "path": "libs/ostd/tests/cluster-endpoint.rs",
       "sha256": "f8c1f24780f3da9aa2bfe0d44036485fa71b9affee4b10c57727842b9c0a1430"
+    },
+    {
+      "path": "libs/polling-cellos/Cargo.toml",
+      "sha256": "449e6c0e027fa027c0dc11dd5c7a5caeaed6ac6d7f8e5fca6f955a8006937691"
+    },
+    {
+      "path": "libs/polling-cellos/src/lib.rs",
+      "sha256": "add124c7c41a8478a0e7d396258eec6512df868377742956689dfe38657a4edc"
     },
     {
       "path": "libs/port-platform/Cargo.toml",
@@ -14586,7 +14626,7 @@
     },
     {
       "path": "tests/unit_cspace_smoke.rs",
-      "sha256": "2f3a5e5eb93ffece5163e22239d1a9616a6705f82fa3f5a21cef451df7371e79"
+      "sha256": "2a29d14e789897a97fa9128c8db20acdfba82f6200af178534789f959829d7ac"
     },
     {
       "path": "third_party/mlibc/sysdeps/vicell/crt-aarch64/crt1.S",
