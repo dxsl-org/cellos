@@ -120,6 +120,7 @@ members = [
     "cells/services/ocel-js",
     "cells/services/ocel-quickjs",
     "cells/services/ocel-pdf",
+    "cells/services/budget-authority",
 
     # Cells - Tools (system + CLI)
     "cells/tools/init",

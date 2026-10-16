@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Implement Phase 08-C (P08-C) Independent Budget Authority service: provide multi-dimensional
+  application capacity ledger (6 dimensions), one-use bootstrap reservation, live destination
+  atomic claim, Closing serialization, monotonic enforcement fence, and fail-closed crash recovery.
 - Implement Phase 08-A (P08-A) Authenticated Transport and Lifecycle Substrate:
   verify C2C 112-byte canonical envelope encoding, 6-gate ingress evaluation,
   immutable origin operation proof binding, and bare-metal service-net-broker build.

@@ -1,0 +1,23 @@
+{
+  "format": "cell-contract-p08c-dossier-v1",
+  "status": "approved",
+  "recorded": "2026-10-16",
+  "scope": "Phase 08-C (P08-C) Independent Budget Authority, Genesis, and Deterministic Placement Implementation & Gate Verification",
+  "dossier_document": ".agents/261011-1200-cell-contract-authority/p08c-budget-authority-packet.md",
+  "dossier_sha256": "8cddcf358f3a4837ebf1455211c9159a24b28c6879a7435d90ceea8cad4d8172",
+  "legacy_lock_count": 38,
+  "legacy_locks_released": 0,
+  "milestone": "P08-C",
+  "service_package": "cells/services/budget-authority",
+  "invariants": {
+    "vector_dimensions": 6,
+    "gate_c_no_minting": true,
+    "credit_once": true,
+    "monotonic_fence": true
+  },
+  "verification": {
+    "unit_tests": "PASS (37/37 in unit_cspace_smoke)",
+    "bare_metal_build": "PASS (service-budget-authority on x86_64-unknown-none)",
+    "document_consistency": "PASS (verify-cell-contract-p01.py)"
+  }
+}

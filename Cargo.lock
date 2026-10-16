@@ -2638,6 +2638,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "service-budget-authority"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "types",
+]
+
+[[package]]
 name = "service-compositor"
 version = "0.1.0"
 dependencies = [

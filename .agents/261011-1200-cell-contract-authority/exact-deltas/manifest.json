@@ -413,12 +413,12 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "72c409ef087f5bf36a34916dc948a63b4ec3d7d23b17e0d473d94d5c6f59eadb",
+  "source_census_sha256": "221ff6f93cb30e11ef562b4fc10910113785bd27d81f37edb67a6e78b0d77fdd",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "5165b44cb03dfb8bc63fd5492a1fb0ec0395430219469806c803594d41fc8c9d"
+      "sha256": "6fb181138bed9733627213085288c80892035aaf58dcfdae24c04e57eaeb22b6"
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -430,7 +430,7 @@
     },
     {
       "path": "Cargo.toml",
-      "sha256": "cbc6f12dee26b820bc818a6d579bb90657560f7ed0bffffe677da2fdd37cba85"
+      "sha256": "68d7b770a90d42019040ac01efe9ad052290c0300b9453dec6cb5990876ec13b"
     },
     {
       "path": "LICENSING.md",
@@ -2043,6 +2043,46 @@
     {
       "path": "cells/services/ai/src/main.rs",
       "sha256": "4d00ef82917a9b5dfa9d736c0d395139d3ba3e6f8aacfafa9960cd6b544ab8ba"
+    },
+    {
+      "path": "cells/services/budget-authority/Cargo.toml",
+      "sha256": "97c96772a3b257ed6be40741d2947dce8be74e21f36492f72887219a59b8fd36"
+    },
+    {
+      "path": "cells/services/budget-authority/build.rs",
+      "sha256": "309c7f94ddf64d2c2d1fce2f9472d674869c6feb2218ebcadbf4bab5626d5f90"
+    },
+    {
+      "path": "cells/services/budget-authority/src/bootstrap.rs",
+      "sha256": "c75695d1d6f744f5843c0b20e59987d6e71697df5ef90b66824f5b175c9c2d7e"
+    },
+    {
+      "path": "cells/services/budget-authority/src/claim.rs",
+      "sha256": "d7d776c40143085369a93f412365e39b3c3eadf6362731a7b23496517335457f"
+    },
+    {
+      "path": "cells/services/budget-authority/src/fence.rs",
+      "sha256": "e7383c602b0526c5660f5e375c31f3c03812dbd146197df77bc67ac9540b76ab"
+    },
+    {
+      "path": "cells/services/budget-authority/src/ledger.rs",
+      "sha256": "487d552496a3f7a2d0b772a3546a7c8be313f36d0f87e5789e0c49ecd0df829e"
+    },
+    {
+      "path": "cells/services/budget-authority/src/lib.rs",
+      "sha256": "86ad8e2488b6263863eac487097caef26e103f56581e1fb33be05ea92e24336c"
+    },
+    {
+      "path": "cells/services/budget-authority/src/main.rs",
+      "sha256": "5fae27a6488e17c87f3344d6746936327f305cd23cc68949e50efd9cdcc1b8b6"
+    },
+    {
+      "path": "cells/services/budget-authority/src/recovery.rs",
+      "sha256": "7f5839d35c5a0d61c68055e6620ef98304bc4ea6f00b578237ca5f760d1b273f"
+    },
+    {
+      "path": "cells/services/budget-authority/src/reservations.rs",
+      "sha256": "17197e88bb9174104b149721bf5e8fcc4832b3a46973f98b6f3cf0f1d4810e5e"
     },
     {
       "path": "cells/services/compositor/Cargo.toml",
@@ -14474,7 +14514,7 @@
     },
     {
       "path": "tests/unit_cspace_smoke.rs",
-      "sha256": "a189872eb27a0ab4e88597e491c1aa054fe681ce957b17e86560437958e49ae8"
+      "sha256": "dbe608d31b3248cb66a037c966afb82204fb9ee28b4f1007e0b515674aae872b"
     },
     {
       "path": "third_party/mlibc/sysdeps/vicell/crt-aarch64/crt1.S",

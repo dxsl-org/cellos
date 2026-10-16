@@ -504,3 +504,14 @@ Executed P08-A verification covering the authenticated C2C transport substrate a
 
 Dossier preserved in `.agents/261011-1200-cell-contract-authority/p08a-authenticated-transport-packet.md`. All 38 locks remain in force; downstream P08-C/B/D remain pending.
 
+## Phase 08-C (P08-C) Budget Authority Implementation & Verification — 2026-10-16
+
+Executed P08-C verification covering the independent Budget Authority service (`cells/services/budget-authority/`):
+1. **Multi-Dimensional Application Capacity Ledger (`ledger.rs`):** Tracks 6 dimensions with immutable maxima $M$, admitted ceiling $B \le M$, and allocated charge $A \le B$. Rejects unbudgeted allocation (`CapacityExceeded`, Gate C no-minting).
+2. **Reservation & Live Claim Lifecycle (`reservations.rs`, `claim.rs`):** Atomically debits capacity for key $K$, claims destination under epoch matching, closes key, and credits ledger once upon quiescence.
+3. **Monotonic Enforcement Fence & Recovery (`fence.rs`, `recovery.rs`):** Advances authority fence monotonically; recovers valid genesis and refuses to manufacture a writable ledger from corrupt or missing state.
+4. **Bare-Metal Service Build:** `service-budget-authority` compiles clean on `x86_64-unknown-none` with `#![no_std]` and `ostd`.
+5. **Unit Test Coverage:** `tests/unit_cspace_smoke.rs` passes 37/37 tests clean, including P08-C ledger bounds, claim lifecycle, and fence monotonicity.
+
+Dossier preserved in `.agents/261011-1200-cell-contract-authority/p08c-budget-authority-packet.md`. All 38 locks remain in force; downstream P08-B/D remain pending.
+

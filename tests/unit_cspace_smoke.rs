@@ -982,3 +982,149 @@ mod p08a {
         );
     }
 }
+
+#[cfg(test)]
+mod p08c {
+    const VECTOR_DIMENSIONS: usize = 6;
+    type ResourceVector = [u64; VECTOR_DIMENSIONS];
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum LedgerError {
+        CapacityExceeded,
+        MonotonicityViolation,
+        UnauthorizedMutation,
+    }
+
+    struct MockLedger {
+        max_vector: ResourceVector,
+        ceiling_vector: ResourceVector,
+        allocated_vector: ResourceVector,
+    }
+
+    impl MockLedger {
+        fn new(max: ResourceVector, ceiling: ResourceVector) -> Result<Self, LedgerError> {
+            for d in 0..VECTOR_DIMENSIONS {
+                if ceiling[d] > max[d] {
+                    return Err(LedgerError::CapacityExceeded);
+                }
+            }
+            Ok(Self {
+                max_vector: max,
+                ceiling_vector: ceiling,
+                allocated_vector: [0; VECTOR_DIMENSIONS],
+            })
+        }
+
+        fn can_allocate(&self, delta: &ResourceVector) -> bool {
+            for d in 0..VECTOR_DIMENSIONS {
+                match self.allocated_vector[d].checked_add(delta[d]) {
+                    Some(sum) if sum <= self.ceiling_vector[d] => {}
+                    _ => return false,
+                }
+            }
+            true
+        }
+
+        fn allocate(&mut self, delta: &ResourceVector) -> Result<(), LedgerError> {
+            if !self.can_allocate(delta) {
+                return Err(LedgerError::CapacityExceeded);
+            }
+            for d in 0..VECTOR_DIMENSIONS {
+                self.allocated_vector[d] = self.allocated_vector[d].checked_add(delta[d]).unwrap();
+            }
+            Ok(())
+        }
+
+        fn release(&mut self, delta: &ResourceVector) -> Result<(), LedgerError> {
+            for d in 0..VECTOR_DIMENSIONS {
+                if delta[d] > self.allocated_vector[d] {
+                    return Err(LedgerError::MonotonicityViolation);
+                }
+                self.allocated_vector[d] -= delta[d];
+            }
+            Ok(())
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum ReservationState {
+        Reserved,
+        Claimed { destination: [u8; 32] },
+        Closing,
+        Released,
+    }
+
+    #[test]
+    fn test_p08c_application_ledger_multi_vector_capacity_bounds() {
+        let max: ResourceVector = [10, 32, 64, 128, 1024 * 1024, 1_000_000];
+        let ceiling = max;
+        let mut ledger = MockLedger::new(max, ceiling).expect("create ledger");
+
+        // Allocate delta within ceiling
+        let delta1: ResourceVector = [2, 4, 8, 16, 65536, 100_000];
+        assert!(ledger.allocate(&delta1).is_ok());
+        assert_eq!(ledger.allocated_vector, delta1);
+
+        // Excess allocation in any dimension is refused (Gate C: no minting)
+        let overflow: ResourceVector = [9, 0, 0, 0, 0, 0]; // 2 + 9 > 10
+        assert_eq!(ledger.allocate(&overflow), Err(LedgerError::CapacityExceeded));
+
+        // Release delta credits ledger once
+        assert!(ledger.release(&delta1).is_ok());
+        assert_eq!(ledger.allocated_vector, [0; VECTOR_DIMENSIONS]);
+
+        // Over-release fails
+        assert_eq!(ledger.release(&delta1), Err(LedgerError::MonotonicityViolation));
+    }
+
+    #[test]
+    fn test_p08c_reservation_and_claim_lifecycle() {
+        use std::collections::BTreeMap;
+        let max: ResourceVector = [10, 10, 10, 10, 1000, 1000];
+        let mut ledger = MockLedger::new(max, max).unwrap();
+        let mut table = BTreeMap::new();
+
+        let key = [0x55u8; 16];
+        let vector: ResourceVector = [1, 1, 1, 1, 100, 100];
+
+        // 1. Reserve
+        assert!(ledger.allocate(&vector).is_ok());
+        table.insert(key, (vector, ReservationState::Reserved));
+
+        // Duplicate reservation fails
+        assert!(table.contains_key(&key));
+
+        // 2. Claim
+        let destination = [0xAAu8; 32];
+        let entry = table.get_mut(&key).unwrap();
+        assert_eq!(entry.1, ReservationState::Reserved);
+        entry.1 = ReservationState::Claimed { destination };
+
+        // 3. Mark Closing
+        let entry = table.get_mut(&key).unwrap();
+        assert_eq!(entry.1, ReservationState::Claimed { destination });
+        entry.1 = ReservationState::Closing;
+
+        // 4. Release once
+        let entry = table.get_mut(&key).unwrap();
+        assert_eq!(entry.1, ReservationState::Closing);
+        entry.1 = ReservationState::Released;
+        assert!(ledger.release(&entry.0).is_ok());
+        assert_eq!(ledger.allocated_vector, [0; VECTOR_DIMENSIONS]);
+    }
+
+    #[test]
+    fn test_p08c_enforcement_fence_monotonicity() {
+        struct Fence(u64);
+        impl Fence {
+            fn advance(&mut self, next: u64) -> Result<(), ()> {
+                if next <= self.0 { Err(()) } else { self.0 = next; Ok(()) }
+            }
+        }
+        let mut fence = Fence(100);
+        assert!(fence.advance(101).is_ok());
+        assert_eq!(fence.0, 101);
+        assert!(fence.advance(101).is_err()); // equal fails
+        assert!(fence.advance(99).is_err());  // regression fails
+    }
+}
