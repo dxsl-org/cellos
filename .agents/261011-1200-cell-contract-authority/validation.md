@@ -483,3 +483,14 @@ Scope and ratified components:
 
 All 38 locks, complete-package CP2 gates, and external prerequisites remain in force.
 
+## G3 Lifecycle Authority & Durable Charge (OGJ1) Verification — 2026-10-16
+
+Executed the complete 5-suite G3 and OGJ1 gate verification:
+1. **GA-1 Document & Lock Governance:** `python3 scripts/verify-cell-contract-p01.py --negative-controls` exits 0 with all 7 negative controls detected.
+2. **GA-5 OGJ1 Codec & Unknown Lifecycle Model:** `python3 scripts/verify-ogj1-codec.py --out build/ogj1-codec-verification.json` exits 0 with 28/28 tests passed, covering canonical binary format, double-barrier D1/D2 state machine, Unknown prospective charge retention across 5 failure cuts, and S9 counterexample resolution (failing closed on uninitialized/corrupt media).
+3. **GA-8 DCO1 Durable Charge Codec & Proof Carrier:** `cargo test --manifest-path libs/durable-charge-codec/Cargo.toml --target x86_64-unknown-linux-gnu` passes 35/35 tests clean, covering all 27 DCO1 record schemas, acyclic graph reference validation, and Ed25519 NCF1 proof verification; compiles on `x86_64-unknown-none` with `#![no_std]` and `#![forbid(unsafe_code)]`.
+4. **GA-5/GA-6 Durable Charge Journal & AuthorityGate:** `cargo test --manifest-path libs/durable-charge-journal/Cargo.toml --target x86_64-unknown-linux-gnu` passes 7/7 tests clean, covering A/B double-buffered BlockDevice journal commit/recovery, two-plane mixed resize accounting ($G = \max(Q - B, 0)$, $L = \max(Q - E, 0)$), fold without credit, partial shrink credit installments, closing intent gate, and release_once.
+5. **GA-2/GA-3 Durable Charge Lab Keyring Boundaries:** `python3 -m unittest discover -s scripts/durable_charge_lab/` passes 13/13 tests clean.
+
+Total verification suite: **83/83 tests PASS**. Gate receipt preserved in `build/g3-gate-verification.json`.
+

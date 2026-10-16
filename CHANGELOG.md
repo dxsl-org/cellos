@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Verify G3 Lifecycle Authority and Durable Charge (OGJ1) gates: execute 83/83 passing
+  tests across OGJ1 double-barrier model (resolving S9 counterexamples), DCO1 durable
+  charge codec, A/B double-buffered BlockDevice journal, and AuthorityGate lifecycle.
 - Ratify Law-1 Checkpoint 1 (CP1) formal Wire ABI specification for D01, D04, D05,
   D07, and D12: approve 32-byte Control Result Header, 48-byte Bound Submit and scoped
   multiwait records, 112-byte ViDirHandleAttestation, 152-byte lifecycle event records,

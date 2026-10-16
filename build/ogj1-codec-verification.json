@@ -1,7 +1,15 @@
 {
   "status": "PASS",
-  "total_tests": 18,
-  "passed": 18,
+  "model_only": true,
+  "limitations": [
+    "Model inputs are not initialization, authority, signer, or floor trust evidence.",
+    "Digest convention is domain + header + body; governing byte ambiguity is unresolved.",
+    "Checkpoint context is an explicit model assumption, not a checkpoint implementation.",
+    "No durable charge vector, accounting reconstruction, or charge adoption is implemented.",
+    "Recovery never opens mutation admission; runtime/VFS/kernel and persistent cutover remain blocked."
+  ],
+  "total_tests": 28,
+  "passed": 28,
   "failed": 0,
   "receipts": [
     {
@@ -70,29 +78,79 @@
       "detail": "Post-D1 crash creates orphan payload, retains charge"
     },
     {
-      "test": "TC14_recover_contiguous_chain",
+      "test": "TC14_recover_contiguous_chain_mutation_closed",
       "passed": true,
-      "detail": "Contiguous commits recovered into WRITABLE state"
+      "detail": "Committed model result inspectable; no reconstructed charge or writable admission"
     },
     {
       "test": "TC15_recover_orphan_payload_unknown",
       "passed": true,
-      "detail": "Orphan payload recovered into UNKNOWN state, not deleted"
+      "detail": "Valid next-revision orphan remains Unknown; mutation admission stays closed"
     },
     {
-      "test": "TC16_recover_torn_commit_unknown",
+      "test": "TC16_recover_torn_commit_fails_closed",
       "passed": true,
-      "detail": "Torn commit detected, does not commit, yields UNKNOWN"
+      "detail": "Present malformed commit is RecoveryFailed, not a valid Unknown orphan"
     },
     {
       "test": "TC17_recover_revision_gap_fails",
       "passed": true,
-      "detail": "Revision gap triggers RECOVERY_FAILED"
+      "detail": "Valid-checksum, fully bound pair reaches and fails the revision continuity check"
     },
     {
       "test": "TC18_recover_fence_regression_fails",
       "passed": true,
-      "detail": "Fence regression triggers RECOVERY_FAILED"
+      "detail": "Rejects fence below boot floor, initialized checkpoint, or earlier revision"
+    },
+    {
+      "test": "TC19_d2_barrier_fail",
+      "passed": true,
+      "detail": "Actual modeled D2 cut retains all charge; matching commit inspectable, no durable charge claim"
+    },
+    {
+      "test": "TC19_post_d2_reply_loss",
+      "passed": true,
+      "detail": "Actual modeled D2 cut retains all charge; matching commit inspectable, no durable charge claim"
+    },
+    {
+      "test": "TC20_explicit_bounded_model_initialization",
+      "passed": true,
+      "detail": "Absent/invalid context fails closed, including empty/corrupt media; checkpoint is only a model assumption"
+    },
+    {
+      "test": "TC21_exact_layout_and_present_corruption",
+      "passed": true,
+      "detail": "Exact slot/name set enforced; malformed and zero-length present records cannot disappear"
+    },
+    {
+      "test": "TC22_adversarial_valid_checksum_binding",
+      "passed": true,
+      "detail": "Rechecksummed foreign ledger/kind/T/revision/fence/predecessor and reference slot/length/digest rejected"
+    },
+    {
+      "test": "TC23_revision_order_not_slot_order",
+      "passed": true,
+      "detail": "Valid chain in slots 3 then 0 is processed by revision"
+    },
+    {
+      "test": "TC24_duplicate_T_forks_and_orphan_successor",
+      "passed": true,
+      "detail": "Valid-checksum duplicate T, competing revisions and unresolved-orphan successors fail closed"
+    },
+    {
+      "test": "TC25_codec_numeric_and_kind_bounds",
+      "passed": true,
+      "detail": "Encode/decode reject bad bounds/body/slot/reference lengths with CodecError; valid boundaries accepted"
+    },
+    {
+      "test": "TC26_reserved_identity_and_phase",
+      "passed": true,
+      "detail": "Pre-encode before charge mutation; one active identity, D1 before D2, no duplicate T/slot overwrite"
+    },
+    {
+      "test": "TC27_all_possibly_accepted_charges_retained",
+      "passed": true,
+      "detail": "All five uncertainty cuts preserve prior and active full model charges; no abort/release inference"
     }
   ]
 }
