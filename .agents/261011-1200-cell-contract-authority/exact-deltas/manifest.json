@@ -413,7 +413,7 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "78d0728a8edb0d23793fb1e44306f1a36cd7ce857eebf47ef3c5d085b1b6336b",
+  "source_census_sha256": "5409e6785b9c7a4f49fa1424b9462678ae5bb1d00d997d536facb4b2d17ce059",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
@@ -9807,6 +9807,10 @@
     {
       "path": "docs/roadmap/haily-personal-assistant.md",
       "sha256": "c229fb8fa3cbf860707984823079682b6c7c0c7712fa05a466c91e6b173af906"
+    },
+    {
+      "path": "docs/roadmap/haily-portability-review.md",
+      "sha256": "c47bf69bdc2ca0680b05228af755cf1aedfaac05474eb7a730245de1faa9aa0f"
     },
     {
       "path": "docs/roadmap/hardware-tracks.md",
