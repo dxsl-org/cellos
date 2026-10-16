@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["extract_article","render_clean_subtree"],"struct":["ArticleExtract"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["parse_inlines","parse_markdown","split_table_cells"]};
+window.SIDEBAR_ITEMS = {"fn":["parse_inlines","parse_markdown","parse_markdown_with_base","split_table_cells"]};

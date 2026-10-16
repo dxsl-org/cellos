@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_RESOURCE_BYTES"],"fn":["load_text","resolve"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_IMAGE_BYTES","MAX_RESOURCE_BYTES"],"fn":["load_binary","load_text","resolve"]};
