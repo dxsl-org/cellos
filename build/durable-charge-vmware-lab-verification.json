@@ -1,0 +1,1357 @@
+{
+  "format": "durable-charge-vmware-lab-verification-v1",
+  "status": "PASS",
+  "scope": "Private Linux/SQLite/Ed25519 VMware runtime only; not native Cellos/DCO1 or physical persistence qualification",
+  "matrix_path": "/mnt/c/Temp/cellos-vmware/durable-charge-lab-lzdy5d2z/matrix-3f0c8d7b7361431ebd33306e9287d96b.json",
+  "matrix_sha256": "3bd3bc372426929ec3d9d278ef743fcf2bb5cfd6fa9126c4b9dbbb7adcd9184a",
+  "source_pins": {
+    "auth.py": "66b6f0b8239bc39cc1c1b21ed3342176ee98954533c6c5d863af2a20e19a5860",
+    "runtime.py": "219792663b5a5d28cfbff592e3d2c767d0d24454dceec4d30dac001326066477",
+    "scenarios.py": "07d9530fbab386570843cf06c83af0ec809fbfe5a8fa5dde2330b292db98cac8",
+    "vmware_lab.py": "ea8157bad4f66f1e6e9c48366548ae6f3af3cbffff7265dc210a9551adf2f794"
+  },
+  "normal_scenarios": 8,
+  "hardstop_recovery_pairs": 13,
+  "guest_boots": 34,
+  "all_cleanup_confirmed": true,
+  "all_retained_serial_hashes_verified": true,
+  "final_disk_config_hashes_verified": true,
+  "final_vmrun_list": "Total running VMs: 0",
+  "guest_backend": [
+    {
+      "bootstrap_hashes": {
+        "bootstrap": "259f3f3edfd139995471e27bd224fbdd353a104d8d967e7408632badb2d1a933",
+        "launcher": "4d4dd716cabcb23e3757c53cde17a5ed2d18d64890e61334867f54a663fcd24f",
+        "service": "b9ada20c6b9ed3cc51e20d84ac6fb1ba16656a542178bca9ba40e848f6bd3317"
+      },
+      "cryptography": "41.0.7",
+      "data_uuid": "17751552-ed94-461d-aa41-38813df885cc",
+      "kernel": "6.8.0-146-generic",
+      "mount": "/dev/sdb ext4   rw,noatime",
+      "openssl": "OpenSSL 3.0.13 30 Jan 2024",
+      "python": "3.12.3",
+      "sqlite": "3.45.1"
+    }
+  ],
+  "sequential_measurements": {
+    "caps": {
+      "admissions_per_obligation": 2,
+      "adoptions_per_store": 8,
+      "budget": [
+        32768,
+        128
+      ],
+      "credit_installments": 2,
+      "database_pages": 4096,
+      "dimensions": [
+        "blob_bytes",
+        "lab_slots"
+      ],
+      "journal_per_store": 256,
+      "obligations": 8,
+      "page_bytes": 4096,
+      "request_bytes": 32768,
+      "requests_per_store": 256,
+      "reserved_finish_slots": 64,
+      "resizes_per_obligation": 2,
+      "resource_rows": 8,
+      "u64_max": 18446744073709551615
+    },
+    "commits_this_boot": 25,
+    "effective_custody": [
+      "authority",
+      [
+        0,
+        0
+      ]
+    ],
+    "elapsed_ns": 456911140,
+    "max_rss_kib": 31864,
+    "sqlite_version": "3.45.1",
+    "stores": {
+      "authority": {
+        "charged": [
+          0,
+          0
+        ],
+        "epoch": 3,
+        "file_bytes": 86016,
+        "foreign_keys": 1,
+        "gate": "open",
+        "identity": "7adcdf091ff4c437eaf3223e85a41bdda309cd983ac0ff1e28aaeb2b54ff7514",
+        "journal": 13,
+        "journal_mode": "delete",
+        "page_count": 21,
+        "requests": 13,
+        "resource_highwater": [
+          0,
+          0
+        ],
+        "resources": [],
+        "revision": 13,
+        "synchronous": 2
+      },
+      "destination": {
+        "charged": [
+          0,
+          0
+        ],
+        "epoch": 1,
+        "file_bytes": 65536,
+        "foreign_keys": 1,
+        "gate": "inactive",
+        "identity": "73e38453218f188436749845eb752dd44c0d621de64bc82f7d3a93994eb09ea6",
+        "journal": 6,
+        "journal_mode": "delete",
+        "page_count": 16,
+        "requests": 6,
+        "resource_highwater": [
+          140,
+          10
+        ],
+        "resources": [
+          [
+            "O",
+            0,
+            0,
+            1,
+            3
+          ]
+        ],
+        "revision": 6,
+        "synchronous": 2
+      },
+      "issuer": {
+        "charged": [
+          100,
+          10
+        ],
+        "epoch": 1,
+        "file_bytes": 65536,
+        "foreign_keys": 1,
+        "gate": "redirect",
+        "identity": "5b09e7e231fea1d7757df937b0c40a92fc9ff26be8b6d0ec63b78207e147d5e9",
+        "journal": 6,
+        "journal_mode": "delete",
+        "page_count": 16,
+        "requests": 6,
+        "resource_highwater": [
+          0,
+          0
+        ],
+        "resources": [],
+        "revision": 6,
+        "synchronous": 2
+      }
+    }
+  },
+  "normal_results": [
+    {
+      "scenario": "sequential",
+      "checks": 101,
+      "measurements": {
+        "caps": {
+          "admissions_per_obligation": 2,
+          "adoptions_per_store": 8,
+          "budget": [
+            32768,
+            128
+          ],
+          "credit_installments": 2,
+          "database_pages": 4096,
+          "dimensions": [
+            "blob_bytes",
+            "lab_slots"
+          ],
+          "journal_per_store": 256,
+          "obligations": 8,
+          "page_bytes": 4096,
+          "request_bytes": 32768,
+          "requests_per_store": 256,
+          "reserved_finish_slots": 64,
+          "resizes_per_obligation": 2,
+          "resource_rows": 8,
+          "u64_max": 18446744073709551615
+        },
+        "commits_this_boot": 25,
+        "effective_custody": [
+          "authority",
+          [
+            0,
+            0
+          ]
+        ],
+        "elapsed_ns": 456911140,
+        "max_rss_kib": 31864,
+        "sqlite_version": "3.45.1",
+        "stores": {
+          "authority": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 3,
+            "file_bytes": 86016,
+            "foreign_keys": 1,
+            "gate": "open",
+            "identity": "7adcdf091ff4c437eaf3223e85a41bdda309cd983ac0ff1e28aaeb2b54ff7514",
+            "journal": 13,
+            "journal_mode": "delete",
+            "page_count": 21,
+            "requests": 13,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 13,
+            "synchronous": 2
+          },
+          "destination": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 65536,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "73e38453218f188436749845eb752dd44c0d621de64bc82f7d3a93994eb09ea6",
+            "journal": 6,
+            "journal_mode": "delete",
+            "page_count": 16,
+            "requests": 6,
+            "resource_highwater": [
+              140,
+              10
+            ],
+            "resources": [
+              [
+                "O",
+                0,
+                0,
+                1,
+                3
+              ]
+            ],
+            "revision": 6,
+            "synchronous": 2
+          },
+          "issuer": {
+            "charged": [
+              100,
+              10
+            ],
+            "epoch": 1,
+            "file_bytes": 65536,
+            "foreign_keys": 1,
+            "gate": "redirect",
+            "identity": "5b09e7e231fea1d7757df937b0c40a92fc9ff26be8b6d0ec63b78207e147d5e9",
+            "journal": 6,
+            "journal_mode": "delete",
+            "page_count": 16,
+            "requests": 6,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 6,
+            "synchronous": 2
+          }
+        }
+      }
+    },
+    {
+      "scenario": "refusal-controls",
+      "checks": 40,
+      "measurements": {
+        "caps": {
+          "admissions_per_obligation": 2,
+          "adoptions_per_store": 8,
+          "budget": [
+            32768,
+            128
+          ],
+          "credit_installments": 2,
+          "database_pages": 4096,
+          "dimensions": [
+            "blob_bytes",
+            "lab_slots"
+          ],
+          "journal_per_store": 256,
+          "obligations": 8,
+          "page_bytes": 4096,
+          "request_bytes": 32768,
+          "requests_per_store": 256,
+          "reserved_finish_slots": 64,
+          "resizes_per_obligation": 2,
+          "resource_rows": 8,
+          "u64_max": 18446744073709551615
+        },
+        "commits_this_boot": 8,
+        "effective_custody": [
+          "issuer",
+          [
+            107,
+            17
+          ]
+        ],
+        "elapsed_ns": 379656546,
+        "max_rss_kib": 31352,
+        "sqlite_version": "3.45.1",
+        "stores": {
+          "authority": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 40960,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "a65f9095b977eb0f574a0f7f6cc804edc70676ec0d4afe9ac250db878ad85cb3",
+            "journal": 0,
+            "journal_mode": "delete",
+            "page_count": 10,
+            "requests": 0,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 0,
+            "synchronous": 2
+          },
+          "destination": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 40960,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "1c0730337cc1a536ee7530b2263046acda00cf3dc3d86f63b99ab2c7509e1239",
+            "journal": 0,
+            "journal_mode": "delete",
+            "page_count": 10,
+            "requests": 0,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 0,
+            "synchronous": 2
+          },
+          "issuer": {
+            "charged": [
+              107,
+              17
+            ],
+            "epoch": 1,
+            "file_bytes": 53248,
+            "foreign_keys": 1,
+            "gate": "open",
+            "identity": "c7b9be815028b42de679fb36189297864bdb426aea8c13f1cb296a622fd584db",
+            "journal": 8,
+            "journal_mode": "delete",
+            "page_count": 13,
+            "requests": 8,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 8,
+            "synchronous": 2
+          }
+        }
+      }
+    },
+    {
+      "scenario": "abort-before-fence",
+      "checks": 14,
+      "measurements": {
+        "caps": {
+          "admissions_per_obligation": 2,
+          "adoptions_per_store": 8,
+          "budget": [
+            32768,
+            128
+          ],
+          "credit_installments": 2,
+          "database_pages": 4096,
+          "dimensions": [
+            "blob_bytes",
+            "lab_slots"
+          ],
+          "journal_per_store": 256,
+          "obligations": 8,
+          "page_bytes": 4096,
+          "request_bytes": 32768,
+          "requests_per_store": 256,
+          "reserved_finish_slots": 64,
+          "resizes_per_obligation": 2,
+          "resource_rows": 8,
+          "u64_max": 18446744073709551615
+        },
+        "commits_this_boot": 5,
+        "effective_custody": [
+          "issuer",
+          [
+            100,
+            10
+          ]
+        ],
+        "elapsed_ns": 238599867,
+        "max_rss_kib": 31484,
+        "sqlite_version": "3.45.1",
+        "stores": {
+          "authority": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 49152,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "2c29762d08a12d320c33d1941dbc2b8ebb385bcd57a5e7b9947735eb24f1fa5e",
+            "journal": 2,
+            "journal_mode": "delete",
+            "page_count": 12,
+            "requests": 2,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 2,
+            "synchronous": 2
+          },
+          "destination": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 40960,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "b9685a9be0229e33afdbb5b751c3e56d7f71cde28d10cdb27c423ae78d005d64",
+            "journal": 0,
+            "journal_mode": "delete",
+            "page_count": 10,
+            "requests": 0,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 0,
+            "synchronous": 2
+          },
+          "issuer": {
+            "charged": [
+              100,
+              10
+            ],
+            "epoch": 1,
+            "file_bytes": 49152,
+            "foreign_keys": 1,
+            "gate": "open",
+            "identity": "c768bf27332e7d7d5fc42d051c101bb4be2616057d7af99f8833b82e332affef",
+            "journal": 3,
+            "journal_mode": "delete",
+            "page_count": 12,
+            "requests": 3,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 3,
+            "synchronous": 2
+          }
+        }
+      }
+    },
+    {
+      "scenario": "reserved-tail",
+      "checks": 104,
+      "measurements": {
+        "caps": {
+          "admissions_per_obligation": 2,
+          "adoptions_per_store": 8,
+          "budget": [
+            32768,
+            128
+          ],
+          "credit_installments": 2,
+          "database_pages": 4096,
+          "dimensions": [
+            "blob_bytes",
+            "lab_slots"
+          ],
+          "journal_per_store": 256,
+          "obligations": 8,
+          "page_bytes": 4096,
+          "request_bytes": 32768,
+          "requests_per_store": 256,
+          "reserved_finish_slots": 64,
+          "resizes_per_obligation": 2,
+          "resource_rows": 8,
+          "u64_max": 18446744073709551615
+        },
+        "commits_this_boot": 205,
+        "effective_custody": [
+          "authority",
+          [
+            0,
+            0
+          ]
+        ],
+        "elapsed_ns": 2715434075,
+        "max_rss_kib": 32884,
+        "sqlite_version": "3.45.1",
+        "stores": {
+          "authority": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 3,
+            "file_bytes": 356352,
+            "foreign_keys": 1,
+            "gate": "open",
+            "identity": "b8a1df37ec3f71fc6a9c8542f80315cf684e4fcab198396f215bac6827ee0f22",
+            "journal": 193,
+            "journal_mode": "delete",
+            "page_count": 87,
+            "requests": 193,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 193,
+            "synchronous": 2
+          },
+          "destination": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 65536,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "ee64b68cc58bce3a1225135af818dee3d8fb74397038599f5f51e1140fefb230",
+            "journal": 6,
+            "journal_mode": "delete",
+            "page_count": 16,
+            "requests": 6,
+            "resource_highwater": [
+              140,
+              10
+            ],
+            "resources": [
+              [
+                "O",
+                0,
+                0,
+                1,
+                3
+              ]
+            ],
+            "revision": 6,
+            "synchronous": 2
+          },
+          "issuer": {
+            "charged": [
+              100,
+              10
+            ],
+            "epoch": 1,
+            "file_bytes": 65536,
+            "foreign_keys": 1,
+            "gate": "redirect",
+            "identity": "b3219f32c9c679daf86782979c891cbb5ced0500086c462bcc9d0df7ef1f9d4a",
+            "journal": 6,
+            "journal_mode": "delete",
+            "page_count": 16,
+            "requests": 6,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 6,
+            "synchronous": 2
+          }
+        }
+      }
+    },
+    {
+      "scenario": "b4-unknown",
+      "checks": 102,
+      "measurements": {
+        "caps": {
+          "admissions_per_obligation": 2,
+          "adoptions_per_store": 8,
+          "budget": [
+            32768,
+            128
+          ],
+          "credit_installments": 2,
+          "database_pages": 4096,
+          "dimensions": [
+            "blob_bytes",
+            "lab_slots"
+          ],
+          "journal_per_store": 256,
+          "obligations": 8,
+          "page_bytes": 4096,
+          "request_bytes": 32768,
+          "requests_per_store": 256,
+          "reserved_finish_slots": 64,
+          "resizes_per_obligation": 2,
+          "resource_rows": 8,
+          "u64_max": 18446744073709551615
+        },
+        "commits_this_boot": 25,
+        "effective_custody": [
+          "authority",
+          [
+            0,
+            0
+          ]
+        ],
+        "elapsed_ns": 542730971,
+        "max_rss_kib": 31732,
+        "sqlite_version": "3.45.1",
+        "stores": {
+          "authority": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 3,
+            "file_bytes": 86016,
+            "foreign_keys": 1,
+            "gate": "open",
+            "identity": "d5f813ff7ba9416a5a1138f284b69aba1d151004f0805ba7b122b96efbc06232",
+            "journal": 14,
+            "journal_mode": "delete",
+            "page_count": 21,
+            "requests": 14,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 14,
+            "synchronous": 2
+          },
+          "destination": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 65536,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "378978830a0a46b4a80e6bc3144d69c539e704fe5eb9ca248e464c4ab88c15e1",
+            "journal": 6,
+            "journal_mode": "delete",
+            "page_count": 16,
+            "requests": 6,
+            "resource_highwater": [
+              140,
+              10
+            ],
+            "resources": [
+              [
+                "O",
+                0,
+                0,
+                1,
+                3
+              ]
+            ],
+            "revision": 6,
+            "synchronous": 2
+          },
+          "issuer": {
+            "charged": [
+              100,
+              10
+            ],
+            "epoch": 1,
+            "file_bytes": 61440,
+            "foreign_keys": 1,
+            "gate": "redirect",
+            "identity": "216afdff087ae4fcef584e38ab975b20d6545284bcb02b20ab4ba2d3845d493b",
+            "journal": 5,
+            "journal_mode": "delete",
+            "page_count": 15,
+            "requests": 5,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 5,
+            "synchronous": 2
+          }
+        }
+      }
+    },
+    {
+      "scenario": "serializer-race",
+      "checks": 12,
+      "measurements": {
+        "caps": {
+          "admissions_per_obligation": 2,
+          "adoptions_per_store": 8,
+          "budget": [
+            32768,
+            128
+          ],
+          "credit_installments": 2,
+          "database_pages": 4096,
+          "dimensions": [
+            "blob_bytes",
+            "lab_slots"
+          ],
+          "journal_per_store": 256,
+          "obligations": 8,
+          "page_bytes": 4096,
+          "request_bytes": 32768,
+          "requests_per_store": 256,
+          "reserved_finish_slots": 64,
+          "resizes_per_obligation": 2,
+          "resource_rows": 8,
+          "u64_max": 18446744073709551615
+        },
+        "commits_this_boot": 2,
+        "effective_custody": [
+          "issuer",
+          [
+            100,
+            10
+          ]
+        ],
+        "elapsed_ns": 377864631,
+        "max_rss_kib": 31736,
+        "sqlite_version": "3.45.1",
+        "stores": {
+          "authority": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 40960,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "5d3554e80e55a969c0a384324673e284f38036efe544e5e35571629ac8dbec4f",
+            "journal": 0,
+            "journal_mode": "delete",
+            "page_count": 10,
+            "requests": 0,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 0,
+            "synchronous": 2
+          },
+          "destination": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 40960,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "8f1d11f64d4e2d407f4804956f3e10fb11c8bd603d3467ad0a0775c0e8f21070",
+            "journal": 1,
+            "journal_mode": "delete",
+            "page_count": 10,
+            "requests": 1,
+            "resource_highwater": [
+              100,
+              10
+            ],
+            "resources": [
+              [
+                "O",
+                100,
+                10,
+                0,
+                1
+              ]
+            ],
+            "revision": 1,
+            "synchronous": 2
+          },
+          "issuer": {
+            "charged": [
+              100,
+              10
+            ],
+            "epoch": 1,
+            "file_bytes": 40960,
+            "foreign_keys": 1,
+            "gate": "frozen",
+            "identity": "038e9e74ed2562c0dfad93cb2c0b56a1bf6b08aafb372ecf2c8dfd61d53a0720",
+            "journal": 2,
+            "journal_mode": "delete",
+            "page_count": 10,
+            "requests": 2,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 2,
+            "synchronous": 2
+          }
+        }
+      }
+    },
+    {
+      "scenario": "replay-corruption",
+      "checks": 8,
+      "measurements": {
+        "caps": {
+          "admissions_per_obligation": 2,
+          "adoptions_per_store": 8,
+          "budget": [
+            32768,
+            128
+          ],
+          "credit_installments": 2,
+          "database_pages": 4096,
+          "dimensions": [
+            "blob_bytes",
+            "lab_slots"
+          ],
+          "journal_per_store": 256,
+          "obligations": 8,
+          "page_bytes": 4096,
+          "request_bytes": 32768,
+          "requests_per_store": 256,
+          "reserved_finish_slots": 64,
+          "resizes_per_obligation": 2,
+          "resource_rows": 8,
+          "u64_max": 18446744073709551615
+        },
+        "commits_this_boot": 2,
+        "effective_custody": [
+          "issuer",
+          [
+            100,
+            10
+          ]
+        ],
+        "elapsed_ns": 292396993,
+        "max_rss_kib": 31220,
+        "sqlite_version": "3.45.1",
+        "stores": {
+          "authority": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 40960,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "fb2fa4540b95aa6113bc9152799ee3ee0e4113cd7b5697c49a92f3a3c8804082",
+            "journal": 0,
+            "journal_mode": "delete",
+            "page_count": 10,
+            "requests": 0,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 0,
+            "synchronous": 2
+          },
+          "destination": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 40960,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "5cff7a67eea2f1f6a2f2ca4cd416addd31020e31dc74d1c2e95c78ef1efc01af",
+            "journal": 0,
+            "journal_mode": "delete",
+            "page_count": 10,
+            "requests": 0,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 0,
+            "synchronous": 2
+          },
+          "issuer": {
+            "charged": [
+              100,
+              10
+            ],
+            "epoch": 1,
+            "file_bytes": 40960,
+            "foreign_keys": 1,
+            "gate": "open",
+            "identity": "8089c68e1d9dc16e9496b2b5ea0c068d35c09fa63344635e998f2517596cf2bc",
+            "journal": 2,
+            "journal_mode": "delete",
+            "page_count": 10,
+            "requests": 2,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 2,
+            "synchronous": 2
+          }
+        }
+      }
+    },
+    {
+      "scenario": "adoption-capacity",
+      "checks": 140,
+      "measurements": {
+        "caps": {
+          "admissions_per_obligation": 2,
+          "adoptions_per_store": 8,
+          "budget": [
+            32768,
+            128
+          ],
+          "credit_installments": 2,
+          "database_pages": 4096,
+          "dimensions": [
+            "blob_bytes",
+            "lab_slots"
+          ],
+          "journal_per_store": 256,
+          "obligations": 8,
+          "page_bytes": 4096,
+          "request_bytes": 32768,
+          "requests_per_store": 256,
+          "reserved_finish_slots": 64,
+          "resizes_per_obligation": 2,
+          "resource_rows": 8,
+          "u64_max": 18446744073709551615
+        },
+        "commits_this_boot": 43,
+        "effective_custody": [
+          "authority",
+          [
+            0,
+            0
+          ]
+        ],
+        "elapsed_ns": 894430318,
+        "max_rss_kib": 32884,
+        "sqlite_version": "3.45.1",
+        "stores": {
+          "authority": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 9,
+            "file_bytes": 204800,
+            "foreign_keys": 1,
+            "gate": "open",
+            "identity": "3d2d5128785f9960f6b8587861c758a421dcb700e13a433786425ac183d73afd",
+            "journal": 25,
+            "journal_mode": "delete",
+            "page_count": 50,
+            "requests": 25,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 25,
+            "synchronous": 2
+          },
+          "destination": {
+            "charged": [
+              0,
+              0
+            ],
+            "epoch": 1,
+            "file_bytes": 110592,
+            "foreign_keys": 1,
+            "gate": "inactive",
+            "identity": "a62901a3b0b72e1f69531774a9cb3815b28aecc91867f4ca3153209a25513200",
+            "journal": 12,
+            "journal_mode": "delete",
+            "page_count": 27,
+            "requests": 12,
+            "resource_highwater": [
+              140,
+              10
+            ],
+            "resources": [
+              [
+                "O",
+                0,
+                0,
+                1,
+                3
+              ]
+            ],
+            "revision": 12,
+            "synchronous": 2
+          },
+          "issuer": {
+            "charged": [
+              100,
+              10
+            ],
+            "epoch": 1,
+            "file_bytes": 65536,
+            "foreign_keys": 1,
+            "gate": "redirect",
+            "identity": "c888f978881e9bfb682f875a5c0fdaafcc2a1757f70035adcdffbabd323c488c",
+            "journal": 6,
+            "journal_mode": "delete",
+            "page_count": 16,
+            "requests": 6,
+            "resource_highwater": [
+              0,
+              0
+            ],
+            "resources": [],
+            "revision": 6,
+            "synchronous": 2
+          }
+        }
+      }
+    }
+  ],
+  "public_rosters": {
+    "sequential": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "4094df78356e03665a3486f66573934a1a8ea8f41135eacb9172ffab3e4df763",
+        "destination": "5eb673fcb0fe32e922d3be872158fc69ef0b9352384bc5a28623e33ff8483c58",
+        "issuer": "97fc4d091908bd688f08b93c8e30de97c1c4d7a5f62f01e28236b1242ed438d4",
+        "recovery": "6e342a757d4908c3e2976e76c4a337fba8e43927b02443ec234de0a28e684593",
+        "successor": "2c431f15f7fb37e269d83cac88130c93c2e819af33cf18c0bd639ef050991d34"
+      },
+      "roster_id": "e7fbf120e220d9e192eba43a7aa49d4888ab10e607271cae7be25b6b5cd9c412",
+      "scope": "vmware-durable-charge-lab/sequential",
+      "version": 1
+    },
+    "refusal-controls": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "961d3a78f8354fa9680050316360346b0805694f2daddfd9b44e5b535342b6e8",
+        "destination": "8eed74b7680ebfe0cb3edae081c617cfba2f74e1f0d6f22b1ceb5f29e2110ee3",
+        "issuer": "e5cd68db5ce97e8379b4cee8b53d0ff9fa391594939393a12cae3de97d29940c",
+        "recovery": "b269d2ff1cd8b790faced997bdfec19891e1f1c857ef5674202faf9a05456b17",
+        "successor": "6c26e3caf6a8f431351859b5b093a669e6d1ac0fbbb2a7b2e48d6a6d96d3e8e9"
+      },
+      "roster_id": "e1ab5cc595676096029d3aaacb216f75ffd065785671043299292957a3bc9dd0",
+      "scope": "vmware-durable-charge-lab/refusal-controls",
+      "version": 1
+    },
+    "abort-before-fence": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "767d957d17d4f2edd52b41f2a1037018c1efb6dc0e3ef0bb4fc0fd479a3cc98a",
+        "destination": "62c2f486ba19b6300cc9faa5b038a780ce151dda84be41a4bca3fd62a74da9ff",
+        "issuer": "e93e273bbd33b9e31ca16c6ada63b81c52c2c1f8122dbec3a7a46ec668262e96",
+        "recovery": "20301748553d2eb6a4715a6dcff6da1c1256e73a37adb4a78e37236ad6d52773",
+        "successor": "7e3a3a0edfbafce9e525bf59c0ed4415ae6a49df951f982e99269adb6f73b390"
+      },
+      "roster_id": "576c39152a3e394b9f1565b81e4e938b815ba3648cce824878abeb32e67c15f3",
+      "scope": "vmware-durable-charge-lab/abort-before-fence",
+      "version": 1
+    },
+    "reserved-tail": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "178a53f32d73b212984a7445577d0864412d8afb8b17a077104e2a25375855f8",
+        "destination": "7289399b44f9405edaa64988507d01b5d2288cd9abb836f59f1b5840e63e3d7d",
+        "issuer": "7fbbee9e6bc114837435f4cec93a55975a893371224d3ca9dedcdf290a450088",
+        "recovery": "b0605d0d4d1b10520b2f6c1cd2896d842a92e6ff57ce43502af1a049b51a2959",
+        "successor": "18de679b202a8cdd9fc351ac0a97f53f0b36afee1d622db781d664949ccbe914"
+      },
+      "roster_id": "12180c8ddb829992b2caacc00340953a484a490a64d75a51dc8d450f0187b6ae",
+      "scope": "vmware-durable-charge-lab/reserved-tail",
+      "version": 1
+    },
+    "b4-unknown": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "e5b20299d62afd7592de4982dc9056f59a56f8f9ad9fc0f8b42fd345891d6596",
+        "destination": "b51abbbf6feb1c47ce62cd4ad9abfd0c7b0239a74368d503f7aba079bf65f7da",
+        "issuer": "af594c4e9e773315d24cfc17237c6e0e9f9efad10b8208642adfae5212005ffb",
+        "recovery": "6bb1f40e2f70887d557edaf39b865082a7e3bcc023b445efe69c69c87ec29840",
+        "successor": "0daef9a13c1eaf14e03bb6fd23ae0a8a625a6030b43a551c6bf5022f2f86e800"
+      },
+      "roster_id": "13b8af0e87ba854f14b38f9bb5fce070e7f9b8f6cad9d1ba503eeff89c2c4edc",
+      "scope": "vmware-durable-charge-lab/b4-unknown",
+      "version": 1
+    },
+    "serializer-race": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "c284ca22fd24348b13ef2cbb05ac56a5b2f37372aaf3c4ffb3f8e1e714c4d9c7",
+        "destination": "9c536e7859cfe45d16f8ccbe7b154ecaefa25e5d7f66738b07679b6f1d0080df",
+        "issuer": "e118b2fd1cfafb80d927eba2d8a1e7f3ff6373511f94e3f77f0c8c507f77a2d7",
+        "recovery": "30fe2ffc43eaf684eff890c680c246dee4e0d4906f23701883fe7b8a96dce6a1",
+        "successor": "4ea2dc3fabd6904514919919debd92b310ac05c911f9b76d139b05f540410419"
+      },
+      "roster_id": "1216760a7311e5d9a70694e36a31f6a010aef1d859fad14b8b87075691d37659",
+      "scope": "vmware-durable-charge-lab/serializer-race",
+      "version": 1
+    },
+    "replay-corruption": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "3652c48f153e416c3051527f74844dfeb817aeff73e9be8c7d7b18281d3fdcc2",
+        "destination": "a901bbc5afa76ad404d30e167810b737283b9f99d3f0ca147ee066f1d2c3e0f0",
+        "issuer": "0c46a1db089ee89f5350d10d2f798de114bf688f4118b9c2ca72390e1a931d43",
+        "recovery": "8cd5c79ca8ac6cd40985ee54af35aaa393cc7b6b0f8f864b377befd1c0008bfc",
+        "successor": "73913bddd76a70bee50e82fdb63f90df1987d2ac962a6c65c498fe6f44278f96"
+      },
+      "roster_id": "69698b095c492b47517e2719e215b4d55f0987f60d1f3574c90a90759756ac80",
+      "scope": "vmware-durable-charge-lab/replay-corruption",
+      "version": 1
+    },
+    "adoption-capacity": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "1c948f96e79c808cb9f5ed200dcd273946c7d5749bb745560321d84eea52db4d",
+        "destination": "fd2002d882400adb63eac59766d2e329076399bc720d9c870987090af6a3df09",
+        "issuer": "54d003f036627886810f1ae9c3e0412158cdcdbea90c9a28ca93a6df01b99d81",
+        "recovery": "ab6f60b0c372ca20931ade62fe2ce229980d56b6f94c38e6829c11f4df95ad3b",
+        "successor": "2adafdf5d7bcf5fb87a6776b95e3c4a69bbc2d551ccb719c835b8029c63a8e8f"
+      },
+      "roster_id": "5749d21c069121ac9549b216affe38e3734a4997fe984bcba0b790568775a1bb",
+      "scope": "vmware-durable-charge-lab/adoption-capacity",
+      "version": 1
+    },
+    "reserve-before": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "c1bcca53c4b11b8f38a11d26bec67dbd4eb6f095d30f4d53393abcd84a726cd3",
+        "destination": "23e31e2e8d8f8b9581d85d5fad8c270282b578777398e5d796f35e2d9b09b29f",
+        "issuer": "f79c846a9ea8859f5bc7e88663208585d77cf9abdad29d7c777aa9cc47cfd354",
+        "recovery": "d4c367ad7540164bb564926c6c59e02976ed0c2f0c734eadb3fc7fc0c993e939",
+        "successor": "e64010ad0d8ea805f6054823229031f9356e0bb4aca357cc2dc0d73771de4f48"
+      },
+      "roster_id": "f3db8a54c7ae1444ddd80af8ebbec17e326fe68bb1b08b4a70968000d7f46641",
+      "scope": "vmware-durable-charge-lab/reserve-before",
+      "version": 1
+    },
+    "reserve-reply-loss": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "52288bf00e50a9c39e0bcb00b0d8ab625a7c848eeac3009d06ed68b8d2508240",
+        "destination": "773f400a9d93e325b78f74b1cac7f1d24c3a9ddf5740b0151bb749c2802a7980",
+        "issuer": "5c3d38a878598ea56778d5d410eebd43e5c41352d87d59d7a5973cc96f55e737",
+        "recovery": "87c238947f7e1d20f14e2abca3343d09ec237db47bd68973a36e0adb5f0eb43c",
+        "successor": "e33d33a460419d4ceb9e716b860fe4e21734d290e1dff1c9de77d7433817c559"
+      },
+      "roster_id": "77780272dbda37da95edef28cf6b9e2df57ac1e6bebe519264eb7a1b97a6439f",
+      "scope": "vmware-durable-charge-lab/reserve-reply-loss",
+      "version": 1
+    },
+    "publication-before": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "80c1f742ab68f48edf78b68a4c49867d379ab473c4712d226ba95f0e82ef1860",
+        "destination": "ec7baa927e611524fa48a4bd2fb1ccd008b170f16e1606eab61ca680447d9afd",
+        "issuer": "7408ced601e7dfacd1d9049148be274bdec33be94bc1c216ab01397d315e1911",
+        "recovery": "453db31dab1430927a4cf035b126e584483207ad0fe65c4b20b5083bde5f7654",
+        "successor": "5c06117516acd899e1bebfbabedfc416e086d595e4df88036d664e141b591ee0"
+      },
+      "roster_id": "7720f187ca5c5ac25c08bb98c205165eecf87e34defd688a4f1b4423bee9f2d8",
+      "scope": "vmware-durable-charge-lab/publication-before",
+      "version": 1
+    },
+    "publication-reply-loss": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "b4655aedcc984cc73be94bdb8af1c47d8177e89d3667fa201ed6e5bc77123472",
+        "destination": "a69be79e3cc8fbf27bcd79c770c8863d6908a4ae60ce85798030c900465419b2",
+        "issuer": "4c28919aeeb14b05d11b24a3df4a712b0e0ef3c00353a9b20a18a88cd6cb3052",
+        "recovery": "c199f4024c69bc2238144c8bc86df1f4790b994e55613c2b2f8341d7b34c19d1",
+        "successor": "56311cb3aecb58ac6ead9ca1f6df7d51147d82d7d3774202753e37c1f05c9d0f"
+      },
+      "roster_id": "cd52ebb418d81fb37485f82545d09e7e660f28de8e5286a31f592ea793132a0e",
+      "scope": "vmware-durable-charge-lab/publication-reply-loss",
+      "version": 1
+    },
+    "partial-credit-reply-loss": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "927df09c22e88a500c83adf1083cf02a95f53e1c058f2a2c36d8f928ba8e87ab",
+        "destination": "f3bda36f20b88327b9a28df4b9f548583d3721de52edb2c3a205255e99e1fd06",
+        "issuer": "7fc60ba9b16ebab9016685a24b94d349cae20f21e31c671d4affcadf6adc19d0",
+        "recovery": "e05fba3f2304b8c490b923f6590e2385f94e2b99f418dace623570e335a05abf",
+        "successor": "fda4a550a63754c8ae426ff72ba18ca955be7a76df3a31f668f77670e87609ae"
+      },
+      "roster_id": "48d4257f60897865d4f1a8d7718daac146cf329fc620d9cedf715ba5069109be",
+      "scope": "vmware-durable-charge-lab/partial-credit-reply-loss",
+      "version": 1
+    },
+    "fence-intent-before": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "ef5086122dfdefdc4e46732c0ae7acdd0a030b24ea818259f34a40c884672601",
+        "destination": "5ec1e6d1341323e50696b928e376983ffb030208b3751bf1ab3acf378da854c7",
+        "issuer": "e094698f46bb3e160000c61e5c9ce79dc096e67070b7f179bcfdc84c7bb69536",
+        "recovery": "31719952483e308d3215ff80096eb211692c3c16732608311deae2b988e0d147",
+        "successor": "98489949254a3051cfa57f4229490bafc88cfa76d193f0500e880787cd7ada16"
+      },
+      "roster_id": "6a93561de6c3d1b95444eef3ae6c29d622812fa0b369bfe43e10daae201d9808",
+      "scope": "vmware-durable-charge-lab/fence-intent-before",
+      "version": 1
+    },
+    "fence-intent-after": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "e543decaff1f2526d054cf963ebcfef7847ca3f3663bc186e7f791948bd495c3",
+        "destination": "cb912f0a369e252307badcbaddc8c957261217470ee3e35fd56a50dfe5beba63",
+        "issuer": "1cbee572ac58bc6c251940438f3fb3492c4a0b924e05fc9003e9d55d8b77361a",
+        "recovery": "4ad001cd40f60e19d50e9bfef97dd36db3d2add103ad23647c653f03c5b70de3",
+        "successor": "72d65023c886b8b52ef9bebbd843368cab52e0a6394413d6de0449b64114a63d"
+      },
+      "roster_id": "3b6c7b8c93fa1ec35f41b48e6d70b9ce0ca96eb28d072274d436f880da98f0a3",
+      "scope": "vmware-durable-charge-lab/fence-intent-after",
+      "version": 1
+    },
+    "acceptance-before": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "a5f6971793334c4ab20e0d4ca59d3b4bc345f53722ef4fd03b1a972b4def2107",
+        "destination": "fd50f9b29a78b0c4fb4f5939ecc7c992583a1d5e1c8c6111183e3f46167cff3e",
+        "issuer": "de5ab1f470e3b91ee346f6c827ca8576e60a5fa52c84d06f74920cdac118f8c3",
+        "recovery": "2de71e3af7701f4596b8fc7c57544df65108abac164f2a0fd7597c08ac20b257",
+        "successor": "d60d4e6786266e2c25ac330092db494321a4ef95fde96eb25e6d46f6fc997e03"
+      },
+      "roster_id": "dde5f18c1e6de41b6d26767e01ea377d8cdbe3d09809f1a3535cfa38798c0155",
+      "scope": "vmware-durable-charge-lab/acceptance-before",
+      "version": 1
+    },
+    "acceptance-reply-loss": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "a5a4f9de16be800eec25298095d18d019c7deaa5eb7dd207617feda425e29e18",
+        "destination": "1b2f52893053ab6a6087dfd5ce5efe59170c3d7710d3314c103b74ae24710d55",
+        "issuer": "08cee371549e96b4415e76b3ccfdddab22fab5872aaa498eebbbb0d02463ff4b",
+        "recovery": "345c3e9780211d731da8809b898689cf19a9becff0277eb9b8a718b26a15a5b0",
+        "successor": "9a31e87a0d73af40087a777cbfcac72924660b189254ebe91ed70f23800e5a20"
+      },
+      "roster_id": "789a142e657e03687bed8072546d7461eac9e8709859fac4c1db89138e17d41d",
+      "scope": "vmware-durable-charge-lab/acceptance-reply-loss",
+      "version": 1
+    },
+    "settlement-reply-loss": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "b52cb8bea008206a5cf64674387ffa36c16d6703acc7ec51c0305dfd77efa1c9",
+        "destination": "f3c8288ddf9c897244fde47eae15c1b7e8a21809738f8eaaf8787b5b2c16b0d3",
+        "issuer": "2b76dba73f12dbbcc241ebcce5642568f07917804479221f71d773d76503235e",
+        "recovery": "5efba8ed8bf830f293d74e9f53b40f7915ba4d4684ac62706932a89479a133ad",
+        "successor": "77c2eba10567ccf11397a7f6a78b0b06f1ecc7f1ebb6ff521d7f072bfabcb404"
+      },
+      "roster_id": "666f2d211a6856d1890a928d620e4b58cfe8d81688be1d800dcf869eef65520d",
+      "scope": "vmware-durable-charge-lab/settlement-reply-loss",
+      "version": 1
+    },
+    "successor-reply-loss": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "a31664f7eeefa7d1959319cade244d56881ca3eb502f9e75f62bade0572fc2b7",
+        "destination": "f4a2d66c10d6d96c29f5a6d5a6a00942781dcbc0b92f25bf33db3a2211f8fe1f",
+        "issuer": "de1dfe1bca44885f044f7313dc6ee39265b106bf0316a10b54f6407ecf4786b1",
+        "recovery": "120df280248b27a42b9a16e66b84b8ce7d624f251f1c6019a57561337e1018ce",
+        "successor": "183a76c3019989c776ab2da24d16f2cfef051a30db13feffc5eabd644d146b01"
+      },
+      "roster_id": "f50efcf87623ac7e7e1514f193c76083b5c8de13402bbab062fcde82cc1169ee",
+      "scope": "vmware-durable-charge-lab/successor-reply-loss",
+      "version": 1
+    },
+    "release-before": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "dcc24a3beb2e6beae2a429ac6fc58e4ac05a2478cf89289a7980c2e6da32ad55",
+        "destination": "8941c2ac700cd64744ffb9141821ff2042a71f81d668b4dbbfe6b87c1c5fb7bb",
+        "issuer": "e546057e0457e4250ebe47edb60fc61b9b3ef60f0f11c797d46e7494c2560de8",
+        "recovery": "ed377c062abfd3f1e20fba80f4e23d0eeac305223f3ba524fec9fd9b2cf5b9e9",
+        "successor": "19d7be0745d448a0be0167d31abe80042ea34d179a72c3e60b8f8eff8e74493b"
+      },
+      "roster_id": "e1fc2d6f5582fd74d235275153f2c4a00da6b92132bcce73ac70e4703d72eb6c",
+      "scope": "vmware-durable-charge-lab/release-before",
+      "version": 1
+    },
+    "release-reply-loss": {
+      "lane": "isolated-vmware-lab",
+      "protocol": "cellos-durable-charge-lab-json-ed25519",
+      "roles": {
+        "authority": "e4427364600153921a01477a51849036381a8e5a2a3b25820a3ab0eb754111ce",
+        "destination": "b933e181c4ea7145cd89438daaffa3346ea954b2f6f2456af1cd26a535f77524",
+        "issuer": "a64f2abe9cabb28effe7646b71052787511f5feac603fd0a3307280a51f16bf7",
+        "recovery": "c46ce9963abaf96b8c9251061fe4c651c547a4517889c73ed191042808e7c88c",
+        "successor": "ddfa604e9c87b2aab5bd084737349241d7843ef2917ec4c3bf6a25b43e71c23a"
+      },
+      "roster_id": "c4edf7d901a4c1f0c6c1e9ccc3f3d4ea3dbd6a58fe7f897e3379ba6c91c3aca6",
+      "scope": "vmware-durable-charge-lab/release-reply-loss",
+      "version": 1
+    }
+  },
+  "limits": [
+    "Not native Cellos G3 or DCO1 codec",
+    "Same guest/root signing domain; no independent antirollback",
+    "Guest virtual-volume crash only; not host physical power loss",
+    "Resource closure only finite lab SQLite BLOB/slot owner",
+    "Lab caps/samples are not production budgets"
+  ]
+}

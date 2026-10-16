@@ -1,0 +1,40 @@
+{
+  "format": "cell-contract-evidence-correction-v1",
+  "status": "INCOMPLETE_EVIDENCE",
+  "qualified": false,
+  "release": "blocked",
+  "correction_date": "2026-10-16",
+  "reason": "Historical standalone models and storage boot receipts do not establish phase/native CP2 acceptance; corrupt-refusal oracle also admitted false PASS.",
+  "controller": ".agents/261011-1200-cell-contract-authority/validation.md",
+  "historical_unqualified_claims": {
+    "format": "phase-05-resource-authority-verification-v1",
+    "phase": 5,
+    "title": "Service Resources, Namespaces and Buffer/Device Revocation Verification",
+    "date": "2026-10-15",
+    "scope": "AC-02, AC-04, AC-05, AC-13",
+    "verified_subsystems": [
+      "libs/api/src/abi/dir_handles.rs: ViSpawnDirHandles bound to 8 handles, version validation, zero-handle rejection",
+      "kernel/src/task/dir_inherit.rs: Spawner Cell provenance binding (spawner_cell_id, spawner_generation), root-bypass denial",
+      "kernel/src/task/domain_grant.rs: Domain memory grants, read-only vs read-write enforcement, bounds checking",
+      "kernel/src/memory/pin.rs: Memory pinning, quarantine on owner death while DMA in-flight, explicit driver acknowledgement before reclaim"
+    ],
+    "unit_tests": {
+      "harness": "tests/unit_p05_resource_smoke.rs",
+      "tests_passed": 3,
+      "tests_failed": 0,
+      "test_cases": [
+        "test_dir_handle_validation_and_bounds",
+        "test_domain_grant_permissions_and_bounds",
+        "test_dma_quiescence_and_quarantine"
+      ]
+    },
+    "runtime_vmware_verification": {
+      "runner": "scripts/x86/test-native-vmware-matrix.py",
+      "workspace": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-nl7k3c7y",
+      "scenarios_passed": 4,
+      "scenarios_total": 4,
+      "status": "PASS"
+    },
+    "phase_05_status": "IMPLEMENTATION AND VERIFICATION COMPLETED"
+  }
+}

@@ -1,0 +1,207 @@
+{
+  "format": "n02a-verification-v1",
+  "status": "completed-at-host-internal-invariant-ceiling",
+  "approval": {
+    "decision": ".agents/261011-1200-cell-contract-authority/native-development-handoff-decisions.jsonl",
+    "markdown_sha256": "f938bab6b1767e01e965b71ced29ae48377e5ea5881e0ce0ae5d70c6d2efbfb6",
+    "json_sha256": "41e30eb17226456bfbea018acdf0e3b340642394058e0e1ffcf79d2ec36761f8",
+    "baseline_pins_verified_before_edits": 35,
+    "immutable_inputs_verified_after_edits": 28
+  },
+  "source_changes": [
+    {
+      "path": "kernel/src/cell/cspace.rs",
+      "before_sha256": "c481571a83e55f78e6a7e449e17d6f791d6d576257df4c6f40c0d2a4175e57ca",
+      "after_sha256": "1b2fb1673ba9d60aced8fff5bf00587d2b672bcfdbdb4a11eac42f9c1de00e38"
+    },
+    {
+      "path": "tests/unit_cspace_smoke.rs",
+      "before_sha256": "e81fa2a2e01ed374b12f47ced066b596a9c7d058251d06b677cff04e71ff8d3e",
+      "after_sha256": "f47f283140847e593a60760f022889a0cc2e61dfd3530c0e10fec85d6f617c91"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "before_sha256": "ec315bb93e894d94a9c53e3d29a1831a0bcaef630cf846dc89e975c1fb4a6f5b",
+      "after_sha256": "bf03424b19dcf7f3c6261d878fde1267de33b535775015c594bb705127bae1e6"
+    }
+  ],
+  "baseline": {
+    "tests_passed": 10,
+    "tests_failed": 0,
+    "intentionally_deleted": "cspace::tests::test_retire_cell_authority asserted false instant quiescence; replaced by retired transition behavior regressions",
+    "retained_test_cases": 9
+  },
+  "regressions": {
+    "initial_new_cases_fail_before_fix": 7,
+    "mutex_poison_cases_rerun_individually": {
+      "retired_closed_ancestry_remains_retained_and_query_only": {
+        "exit": 101,
+        "stdout": "\nrunning 1 test\ntest n02a::retired_closed_ancestry_remains_retained_and_query_only ... FAILED\n\nfailures:\n\nfailures:\n    n02a::retired_closed_ancestry_remains_retained_and_query_only\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s\n\n",
+        "stderr": "\nthread 'n02a::retired_closed_ancestry_remains_retained_and_query_only' (346760) panicked at tests/unit_cspace_smoke.rs:205:9:\nassertion `left == right` failed\n  left: Err(Stale)\n right: Ok(AdmissionCut)\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      },
+      "retired_dispatchers_keep_close_and_query_without_quiescence_or_reuse": {
+        "exit": 101,
+        "stdout": "\nrunning 1 test\ntest n02a::retired_dispatchers_keep_close_and_query_without_quiescence_or_reuse ... FAILED\n\nfailures:\n\nfailures:\n    n02a::retired_dispatchers_keep_close_and_query_without_quiescence_or_reuse\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s\n\n",
+        "stderr": "\nthread 'n02a::retired_dispatchers_keep_close_and_query_without_quiescence_or_reuse' (346762) panicked at tests/unit_cspace_smoke.rs:170:13:\nassertion `left == right` failed\n  left: AdmissionCut\n right: Success\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      },
+      "unsupported_masks_and_class_widening_never_publish_children": {
+        "exit": 101,
+        "stdout": "\nrunning 1 test\ntest n02a::unsupported_masks_and_class_widening_never_publish_children ... FAILED\n\nfailures:\n\nfailures:\n    n02a::unsupported_masks_and_class_widening_never_publish_children\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s\n\n",
+        "stderr": "\nthread 'n02a::unsupported_masks_and_class_widening_never_publish_children' (346764) panicked at tests/unit_cspace_smoke.rs:158:13:\nassertion `left == right` failed\n  left: Success\n right: Invalid\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      }
+    },
+    "review_status_precedence_regression": "Denied versus Invalid failed before fix; passed after validation precedence correction",
+    "final_new_cases": 8,
+    "final_suite_passed": 17,
+    "final_suite_failed": 0
+  },
+  "smoke": {
+    "scope": "actual production module; host Mutex/CapSet environment only; non-test executable",
+    "exit": 0,
+    "stdout": "actual arena: subset child accepted; rights/expiry/unknown-class and cut-parent refusals preserve admission invariants\nactual handle dispatcher: retired cleanup/query, repeat-close/unknown/refused derive, retained non-quiesced ticket and duplicate registration verified\nactual CSpace dispatcher: retired cleanup/query, repeat-close/unknown/refused derive, retained non-quiesced ticket and duplicate registration verified\nactual Handle Derive: unknown CSpace class bit refuses Invalid before attenuation\n",
+    "stderr": "",
+    "temporary_driver_removed_at_closeout": true
+  },
+  "build": {
+    "x86_check": "passed",
+    "x86_release": "passed",
+    "release_command": "cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc",
+    "kernel_sha256": "d84e5e09d07577a304ff0c3a0930c9f33a320f22c04c8b475d3a48fce414f045",
+    "ceiling": "compile/link only; no ISO packaged and no native dispatcher execution"
+  },
+  "reference_closure": {
+    "lsp": "server exited code 0",
+    "fallback": "literal references in kernel/libs/cells/tests plus inspected scheduler register/retire callers; compile evidence",
+    "not_exhaustive_external_closure": true
+  },
+  "document_verification": {
+    "exit": 0,
+    "scope": "document consistency only; no ABI approval, lock release, runtime or P01 completion",
+    "errors": [],
+    "negative_controls": [
+      {
+        "detected": true,
+        "failures": [
+          {
+            "code": "PHASE_LINK",
+            "detail": "no phase-table link to .agents/261011-1200-cell-contract-authority/phase-02-kernel-authority.md",
+            "path": ".agents/261011-1200-cell-contract-authority/plan.md"
+          }
+        ],
+        "mutation": "remove actual P02 controller link"
+      },
+      {
+        "detected": true,
+        "failures": [
+          {
+            "code": "RECIPROCAL_LOCK",
+            "detail": "missing blockedBy controller edge",
+            "path": ".agents/260528-2016-vicell-full-implementation/plan.md"
+          }
+        ],
+        "mutation": "remove actual reciprocal blockedBy edge",
+        "path": ".agents/260528-2016-vicell-full-implementation/plan.md"
+      },
+      {
+        "detected": true,
+        "failures": [
+          {
+            "code": "PACKAGE_DIGEST",
+            "detail": "preparation bytes differ from pinned revision",
+            "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D01.md"
+          }
+        ],
+        "mutation": "alter pinned package bytes"
+      },
+      {
+        "detected": true,
+        "failures": [
+          {
+            "code": "PACKAGE_APPROVAL",
+            "detail": "preparation must preserve pending checkpoints and blocked release",
+            "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D01.md"
+          }
+        ],
+        "mutation": "promote preparation checkpoint"
+      },
+      {
+        "detected": true,
+        "failures": [
+          {
+            "code": "PACKAGE_SOURCE_DRIFT",
+            "detail": "pinned source bytes differ; revise preparation, not approval",
+            "path": "CHANGELOG.md"
+          }
+        ],
+        "mutation": "alter pinned source digest"
+      },
+      {
+        "detected": true,
+        "failures": [
+          {
+            "code": "PACKAGE_SOURCE_SET",
+            "detail": "working-source denominator must equal the pinned lexical consumer inventory",
+            "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/manifest.json"
+          }
+        ],
+        "mutation": "omit pinned source input"
+      },
+      {
+        "detected": true,
+        "failures": [
+          {
+            "code": "PACKAGE_SET",
+            "detail": "expected ordered D01..D12,C01..C11 once",
+            "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/manifest.json"
+          }
+        ],
+        "mutation": "omit preparation package"
+      }
+    ],
+    "counts": {
+      "ac_approvals": 50,
+      "ac_canonical": 50,
+      "ac_owners": 50,
+      "adoptions": 38,
+      "delta_approval_rows": 23,
+      "delta_packages": 23,
+      "lexical_consumer_inputs": 3755,
+      "lexical_exports": 2346,
+      "local_links": 1597,
+      "locked_direct_phase_links": 238,
+      "locks": 38,
+      "package_source_inputs": 3755,
+      "phases": 10,
+      "recorded_legacy_inventory": 161
+    }
+  },
+  "approval_refusal": {
+    "exit": 1,
+    "errors": [
+      {
+        "code": "APPROVAL_PENDING",
+        "detail": "23 exact deltas lack checkpoint approval; P01 completion refused",
+        "path": ".agents/261011-1200-cell-contract-authority/abi-deltas.md"
+      }
+    ],
+    "scope": "document consistency only; no ABI approval, lock release, runtime or P01 completion"
+  },
+  "predecessor_manifest_sha256": "af5f357482b1c68b6424957742fd76d24adced39f924f058976dca72cfa6b57c",
+  "predecessor_census_sha256": "bcd5b4270af43a9cff28013330fa5e801f5a7961d0c0d4c660312646803c3dca",
+  "reviews": "build/native-development-n02a/review.json",
+  "plan_complete": false,
+  "p02_complete": false,
+  "cp1_promoted": false,
+  "cp2_promoted": false,
+  "locks": 38,
+  "next_tranche": "N02-B remains separately gated",
+  "remaining_evidence_limits": [
+    "no global registry bound/charge",
+    "no scheduler-lock convergence",
+    "no holder/issuer/kind/receive admission",
+    "no actual expiry-at-invocation enforcement",
+    "no bootstrap/syscall/SDK cutover",
+    "no acknowledged resource/device quiescence",
+    "no SMP/native-dispatch/VMX/physical/production qualification"
+  ]
+}

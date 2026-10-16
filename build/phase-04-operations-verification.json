@@ -1,0 +1,39 @@
+{
+  "format": "cell-contract-evidence-correction-v1",
+  "status": "INCOMPLETE_EVIDENCE",
+  "qualified": false,
+  "release": "blocked",
+  "correction_date": "2026-10-16",
+  "reason": "Historical standalone models and storage boot receipts do not establish phase/native CP2 acceptance; corrupt-refusal oracle also admitted false PASS.",
+  "controller": ".agents/261011-1200-cell-contract-authority/validation.md",
+  "historical_unqualified_claims": {
+    "format": "phase-04-operations-verification-v1",
+    "phase": 4,
+    "title": "Unified Bounded Operation Lifecycle and Multi-Waiter Completion Verification",
+    "date": "2026-10-15",
+    "scope": "AC-10..AC-12, AC-06 aggregate budget, AC-09 worker death",
+    "verified_subsystems": [
+      "kernel/src/task/completion.rs: Multi-waiter registration (MAX_WAITERS = 32), bounded drainable queue, wake delivery to all registered waiters",
+      "kernel/src/task/completion_wait.rs: Atomic compare-and-park wait, cleanup on drop",
+      "kernel/src/task/async_ipc.rs: Bounded 64-slot operation ring, pre-dispatch clean cancellation vs post-dispatch indeterminate terminal"
+    ],
+    "unit_tests": {
+      "harness": "tests/unit_p04_operations_smoke.rs",
+      "tests_passed": 3,
+      "tests_failed": 0,
+      "test_cases": [
+        "test_multi_waiter_registration_and_wake",
+        "test_atomic_consuming_take",
+        "test_operation_token_cancellation_lifecycle"
+      ]
+    },
+    "runtime_vmware_verification": {
+      "runner": "scripts/x86/test-native-vmware-matrix.py",
+      "workspace": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-cr_gcl6y",
+      "scenarios_passed": 4,
+      "scenarios_total": 4,
+      "status": "PASS"
+    },
+    "phase_04_status": "IMPLEMENTATION AND VERIFICATION COMPLETED"
+  }
+}

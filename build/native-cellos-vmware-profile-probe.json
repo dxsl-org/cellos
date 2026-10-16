@@ -1,0 +1,29 @@
+{
+  "scope": "Actual native Cellos VMware AHCI/CellosFS transport/mount feasibility only; no DCO1/journal/authority/durability qualification",
+  "iso_sha256": "06f1317e96e143126596c8e8ee42885d2cf6b9114a59d9d1e5486346c32024e8",
+  "path": "/mnt/c/Temp/cellos-vmware/native-cellos-profile-xnv4zkuu",
+  "errors": [],
+  "cleanup": true,
+  "serial_sha256": "8cfdf36096efddb521f548902ce14b0dc78a8351fbfb7c46f3bbd2fad78e0a38",
+  "markers": [
+    "[ WARN] [policy] narrowed \"/bin/nvme\" (tid 3): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]",
+    "[ INFO] [wx] 'nvme': 6/264 cell pages lowered to read-only/execute-only",
+    "[ WARN] [policy] narrowed \"/bin/ahci\" (tid 4): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]",
+    "[ INFO] [wx] 'ahci': 7/265 cell pages lowered to read-only/execute-only",
+    "USER: [ahci] ABAR claim ok base=0xfebff000 len=0x1000",
+    "USER: [ahci] controller bound bdf=00:10.0 cap=0xc1341f1d version=0x00010300 pi=0x3fffffff",
+    "USER: [ahci] HBA reset complete (AE enabled)",
+    "USER: [ahci] port 0 link up (SSTS=0x00000133 SIG=0x00000101)",
+    "USER: [ahci] IDENTIFY DEVICE ok port=0 w0=0x427a sectors=1062144 model=\"VMware Virtual SATA Hard Drive\" fw=\"00000001\"",
+    "[ WARN] [driver_cell] block driver registered: tid=4",
+    "USER: [driver_cell] ahci storage driver ready (port=0 sectors=1062144 identify ok)",
+    "USER: [vfs] WARNING: FAT32 /mnt/sd mount failed",
+    "USER: [vfs] CellosFS Native mounted at existing volume",
+    "USER: [ahci] port=0 tag=0 READ DMA EXT rejected: LBA 1062144 >= capacity 1062144 sectors",
+    "USER: [ahci] port=0 tag=0 READ DMA EXT rejected: LBA 1062144 >= capacity 1062144 sectors",
+    "USER: [ahci] port=0 tag=0 READ DMA EXT rejected: LBA 1062144 >= capacity 1062144 sectors",
+    "USER: [ahci] port=0 tag=0 READ DMA EXT rejected: LBA 1062144 >= capacity 1062144 sectors",
+    "USER: [vfs] WARNING: FAT32 /bin mount failed",
+    "USER: [vfs] CellosFS Native mounted at existing volume"
+  ]
+}

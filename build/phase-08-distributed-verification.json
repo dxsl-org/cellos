@@ -1,0 +1,44 @@
+{
+  "format": "cell-contract-evidence-correction-v1",
+  "status": "INCOMPLETE_EVIDENCE",
+  "qualified": false,
+  "release": "blocked",
+  "correction_date": "2026-10-16",
+  "reason": "Historical standalone models and storage boot receipts do not establish phase/native CP2 acceptance; corrupt-refusal oracle also admitted false PASS.",
+  "controller": ".agents/261011-1200-cell-contract-authority/validation.md",
+  "historical_unqualified_claims": {
+    "format": "phase-08-distributed-verification-v1",
+    "phase": 8,
+    "title": "Protected Distribution, Lifecycle and Placement/Autoscaling Verification",
+    "date": "2026-10-15",
+    "scope": "AC-20..AC-23, AC-28/29, AC-31..AC-34, AC-36..AC-42, AC-44..AC-47, AC-49/50, shared AC-48",
+    "verified_subsystems": [
+      "libs/durable-charge-codec: 27 DCO1 record schemas, NCF1 Ed25519 proof carrier, static schema IDs",
+      "libs/durable-charge-journal: AuthorityGate state machine, two-plane resize (G, L), fold, closing gate, ReleaseOnce",
+      "Weighted router: GCD-normalized positive weighted round-robin, capacity cap skipping, affinity pinning refusal without spillover",
+      "Deterministic placement: Ineligible filtering, ranking by (charged_replicas ASC, headroom DESC, node_id ASC)",
+      "Receiver-start challenge freshness: Nonce binding, TTL elapsed check, single-consume replay rejection",
+      "Homogeneous autoscale: Demand ceiling formula ceil(D/T), clamped min/max, unresolved generation freeze across both directions"
+    ],
+    "unit_tests": {
+      "harness": "tests/unit_p08_distributed_smoke.rs",
+      "tests_passed": 5,
+      "tests_failed": 0,
+      "test_cases": [
+        "test_weighted_routing_and_cap_skipping",
+        "test_affinity_pinning_never_spills",
+        "test_placement_ranking_tiebreak",
+        "test_challenge_freshness_and_replay_protection",
+        "test_autoscale_demand_and_generation_freeze"
+      ]
+    },
+    "runtime_vmware_verification": {
+      "runner": "scripts/x86/test-native-vmware-matrix.py",
+      "workspace": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-uti9f7py",
+      "scenarios_passed": 4,
+      "scenarios_total": 4,
+      "status": "PASS"
+    },
+    "phase_08_status": "IMPLEMENTATION AND VERIFICATION COMPLETED"
+  }
+}

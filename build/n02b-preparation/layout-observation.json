@@ -1,0 +1,42 @@
+{
+  "format": "n02b-layout-observation-v1",
+  "scope": "actual module + inspected production CapSet declaration, host x86_64 layout only; no kernel resource high-water, allocation overhead, fit or admission selection",
+  "observations": [
+    {
+      "capset_bytes": 11,
+      "slot_entry_bytes": 112,
+      "slot_alignment": 8,
+      "authority_inline_bytes": 72,
+      "slot_capacity": 256,
+      "arena_payload_bytes": 28672
+    },
+    {
+      "retired_generations_retained": 8,
+      "arena_payload_bytes_retained": 229376,
+      "same_incarnation_reregister_added_records": 0
+    }
+  ],
+  "source_inputs": [
+    {
+      "path": "kernel/src/cell/cspace.rs",
+      "sha256": "1b2fb1673ba9d60aced8fff5bf00587d2b672bcfdbdb4a11eac42f9c1de00e38"
+    },
+    {
+      "path": "kernel/src/task/cap.rs",
+      "sha256": "768003d621513c20dcbfb631dbd025ad00f23e06bad6709f62dbbedf9470ef6e"
+    },
+    {
+      "path": "tests/unit_cspace_smoke.rs",
+      "sha256": "f47f283140847e593a60760f022889a0cc2e61dfd3530c0e10fec85d6f617c91"
+    }
+  ],
+  "extracted_declarations": {
+    "capset": "cap.rs lines 213-236",
+    "empty": "cap.rs lines 240-252"
+  },
+  "host_environment": "std Mutex as existing harness Spinlock; real types crate; production CellAuthority implementation",
+  "exit": 0,
+  "stderr": "",
+  "stdout": "{\"capset_bytes\":11,\"slot_entry_bytes\":112,\"slot_alignment\":8,\"authority_inline_bytes\":72,\"slot_capacity\":256,\"arena_payload_bytes\":28672}\n{\"retired_generations_retained\":8,\"arena_payload_bytes_retained\":229376,\"same_incarnation_reregister_added_records\":0}\n",
+  "production_bounds_selected": false
+}

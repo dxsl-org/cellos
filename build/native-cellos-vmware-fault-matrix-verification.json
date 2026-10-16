@@ -1,0 +1,48 @@
+{
+  "format": "cell-contract-evidence-correction-v1",
+  "status": "INCOMPLETE_EVIDENCE",
+  "qualified": false,
+  "release": "blocked",
+  "correction_date": "2026-10-16",
+  "reason": "Historical standalone models and storage boot receipts do not establish phase/native CP2 acceptance; corrupt-refusal oracle also admitted false PASS.",
+  "controller": ".agents/261011-1200-cell-contract-authority/validation.md",
+  "historical_unqualified_claims": {
+    "format": "native-cellos-vmware-fault-matrix-verification-v1",
+    "scope": "Native Cellos x86 on VMware Workstation SATA/AHCI storage and fault matrix",
+    "matrix_sha256": "53cad6c5181bfc14cc9037f52833d05bc0935e89ce9905ac43a22dec36c2e760",
+    "workspace": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-dnerxvja",
+    "iso_sha256": "06f1317e96e143126596c8e8ee42885d2cf6b9114a59d9d1e5486346c32024e8",
+    "scenarios_executed": [
+      {
+        "name": "native-ahci-mount-basic",
+        "status": "PASS",
+        "serial_sha256": "f246226fb6fd00c3ce6c53c38c4f44bb88170349c8db2677ab3f339774c0a0be",
+        "disk_sha256": "c6d299d0b34dd6297a9174266ba80ad47380abaf1764f620b98214a19af46d8c",
+        "marker_count": 17
+      },
+      {
+        "name": "native-ahci-mount-reboot",
+        "status": "PASS",
+        "serial_sha256": "38ee9c201c895f8d2698b33f132d755eb1c1d29f025c540748db7111a672e43d",
+        "disk_sha256": "7b825f13fdedfed26534f0e3a6b3e4bd5d68db4842df9a4472cf7d1e083aa8f6",
+        "marker_count": 17
+      },
+      {
+        "name": "native-ahci-no-disk",
+        "status": "PASS",
+        "serial_sha256": "386b413ed17c56ec2711cb9533d89f5cdd3b62b5705c271366d531cd31fbba54",
+        "disk_sha256": null,
+        "marker_count": 8
+      },
+      {
+        "name": "native-ahci-corrupt-refusal",
+        "status": "PASS",
+        "serial_sha256": "9f0d500b12504c948fb11d52004257dcf5806cee9561b8545305a3b13fa5b363",
+        "disk_sha256": "3f1c00b96def725ab4aecdc5232fe8113ab75dd05f9b74215324cc6c7bc88bfa",
+        "marker_count": 17
+      }
+    ],
+    "step4_status": "COMPLETED (4/4 native VMware storage fault-injection scenarios passed)",
+    "summary": "Native AHCI driver binds, mounts dual CellosFS volumes, persists across hard-stop reboot, degrades gracefully with no disk, and safely refuses corrupt superblock without panic."
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "format": "n02a-review-v1",
+  "scope": "Approved N02-A only",
+  "approved_candidate": {
+    "markdown_sha256": "f938bab6b1767e01e965b71ced29ae48377e5ea5881e0ce0ae5d70c6d2efbfb6",
+    "json_sha256": "41e30eb17226456bfbea018acdf0e3b340642394058e0e1ffcf79d2ec36761f8"
+  },
+  "reviewers": [
+    {
+      "name": "N02aLifetimeReview",
+      "verdict": "correct",
+      "findings": [],
+      "confidence": 0.97
+    },
+    {
+      "name": "N02aAdmissionReview",
+      "initial_verdict": "incorrect",
+      "finding": "Handle Derive unknown CSpace class bit returned Denied before required Invalid",
+      "disposition": "fixed; failing-before/passing-after actual dispatcher regression",
+      "final_verdict": "correct",
+      "final_confidence": 0.99
+    }
+  ],
+  "remaining_blocking_findings": [],
+  "deferred_not_qualified": [
+    "N02-B global metadata fit/lock convergence/identity admission",
+    "native syscall/SDK consumers",
+    "resource/device acknowledgement and full P02/CP1/CP2"
+  ],
+  "release": "blocked"
+}

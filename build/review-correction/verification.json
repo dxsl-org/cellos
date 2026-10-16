@@ -1,0 +1,53 @@
+{
+  "format": "cell-contract-review-fixes-verification-v1",
+  "scope": "Review finding corrections and local CSpace/runner fixes only; not phase or production qualification",
+  "plan_complete": false,
+  "cp2_qualified": false,
+  "release": "blocked",
+  "locks": 38,
+  "cspace_actual_module_host_tests": {
+    "passed": 10,
+    "failed": 0,
+    "limits": [
+      "host Mutex replaces Spinlock",
+      "stub CapSet",
+      "no SMP/device/runtime admission proof"
+    ]
+  },
+  "cspace_non_test_smoke": "Actual module: child ticket 2 survived unrelated ticket 3 revoke after parent 1 close; ticket 4294967296 resolved",
+  "runner_actual_function_tests": {
+    "passed": 9,
+    "failed": 0,
+    "limits": [
+      "injected VM outcomes test verdict logic, not guest execution"
+    ]
+  },
+  "kernel_check": "cargo check -p cellos-kernel --target x86_64-unknown-none passed",
+  "release_image_build": "standard x86 cell build/sign/package, kernel release build and make-iso-ci.sh passed",
+  "native_storage_matrix": {
+    "path": "build/review-correction/native-storage-matrix.json",
+    "raw_path": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-zwvadrb_/matrix-summary.json",
+    "sha256": "a59fc938ab3f4a02ae1593ba251b59d65a0b61063c3c32edba83154cfafab4b8",
+    "iso_sha256": "d47c73d2cfa8a408131f9e1ca94ed0d8913fb814d481724fc45042d674497f0f",
+    "passed": 4,
+    "cleanup_confirmed": true,
+    "unchanged_corrupt_disk": true
+  },
+  "historical_iso_failure": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-t_19xmgh/matrix-summary.json; corrected oracle rejected implicit formatting",
+  "document_verification": "build/review-correction/document-verification.json",
+  "consent_boundary": {
+    "packages": 21,
+    "omitted": [
+      "D05",
+      "D07"
+    ],
+    "complete_package_cp1": "pending",
+    "user_statements": "retained"
+  },
+  "remaining_gaps": [
+    "native Authority/issuer/destination integration and durable lifecycle admission",
+    "full P02 syscall/SDK/caller migration and resource-specific quiescence",
+    "P03-P10 criterion-specific runtime evidence including actual weighted router",
+    "SMP, Intel VMX, two-node 200-client workload, matched Linux comparison and physical/production evidence"
+  ]
+}

@@ -1,0 +1,14 @@
+[package]
+name = "durable-charge-journal"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+description = "Native crash-resilient DCO1 journal and lifecycle authority gates over BlockDevice"
+
+[workspace]
+
+[dependencies]
+durable-charge-codec = { path = "../durable-charge-codec" }
+cellos-fs = { path = "../cellos-fs" }
+sha2 = { version = "0.10", default-features = false }
+ed25519-compact = { version = "2", default-features = false }

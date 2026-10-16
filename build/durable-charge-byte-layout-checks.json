@@ -1,0 +1,459 @@
+{
+  "scope": "Packed arithmetic only; no codec/durability/authentication",
+  "header_bytes": 216,
+  "trailer_bytes": 32,
+  "fixed_record_layouts": [
+    {
+      "kind": 1,
+      "payload_bytes": 716,
+      "record_bytes": 964,
+      "fields": [
+        {
+          "type": "Scope",
+          "offset": 0,
+          "bytes": 108
+        },
+        {
+          "type": "DebitOrigin",
+          "offset": 108,
+          "bytes": 88
+        },
+        {
+          "type": "Keys",
+          "offset": 196,
+          "bytes": 48
+        },
+        {
+          "type": "Owner",
+          "offset": 244,
+          "bytes": 104
+        },
+        {
+          "type": "Binding",
+          "offset": 348,
+          "bytes": 144
+        },
+        {
+          "type": "VectorRef",
+          "offset": 492,
+          "bytes": 72
+        },
+        {
+          "type": "VectorRef",
+          "offset": 564,
+          "bytes": 72
+        },
+        {
+          "type": "Ref",
+          "offset": 636,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 676,
+          "bytes": 40
+        }
+      ]
+    },
+    {
+      "kind": 2,
+      "payload_bytes": 580,
+      "record_bytes": 828,
+      "fields": [
+        {
+          "type": "Scope",
+          "offset": 0,
+          "bytes": 108
+        },
+        {
+          "type": "Owner",
+          "offset": 108,
+          "bytes": 104
+        },
+        {
+          "type": "Owner",
+          "offset": 212,
+          "bytes": 104
+        },
+        {
+          "type": "Ref",
+          "offset": 316,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 356,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 396,
+          "bytes": 40
+        },
+        {
+          "type": "Watermark",
+          "offset": 436,
+          "bytes": 144
+        }
+      ]
+    },
+    {
+      "kind": 3,
+      "payload_bytes": 476,
+      "record_bytes": 724,
+      "fields": [
+        {
+          "type": "Scope",
+          "offset": 0,
+          "bytes": 108
+        },
+        {
+          "type": "Ref",
+          "offset": 108,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 148,
+          "bytes": 40
+        },
+        {
+          "type": "Owner",
+          "offset": 188,
+          "bytes": 104
+        },
+        {
+          "type": "Ref",
+          "offset": 292,
+          "bytes": 40
+        },
+        {
+          "type": "Watermark",
+          "offset": 332,
+          "bytes": 144
+        }
+      ]
+    },
+    {
+      "kind": 4,
+      "payload_bytes": 556,
+      "record_bytes": 804,
+      "fields": [
+        {
+          "type": "Scope",
+          "offset": 0,
+          "bytes": 108
+        },
+        {
+          "type": "Ref",
+          "offset": 108,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 148,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 188,
+          "bytes": 40
+        },
+        {
+          "type": "Owner",
+          "offset": 228,
+          "bytes": 104
+        },
+        {
+          "type": "Ref",
+          "offset": 332,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 372,
+          "bytes": 40
+        },
+        {
+          "type": "Watermark",
+          "offset": 412,
+          "bytes": 144
+        }
+      ]
+    },
+    {
+      "kind": 5,
+      "payload_bytes": 516,
+      "record_bytes": 764,
+      "fields": [
+        {
+          "type": "Scope",
+          "offset": 0,
+          "bytes": 108
+        },
+        {
+          "type": "Ref",
+          "offset": 108,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 148,
+          "bytes": 40
+        },
+        {
+          "type": "Owner",
+          "offset": 188,
+          "bytes": 104
+        },
+        {
+          "type": "Ref",
+          "offset": 292,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 332,
+          "bytes": 40
+        },
+        {
+          "type": "Watermark",
+          "offset": 372,
+          "bytes": 144
+        }
+      ]
+    },
+    {
+      "kind": 6,
+      "payload_bytes": 372,
+      "record_bytes": 620,
+      "fields": [
+        {
+          "type": "Scope",
+          "offset": 0,
+          "bytes": 108
+        },
+        {
+          "type": "Ref",
+          "offset": 108,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 148,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 188,
+          "bytes": 40
+        },
+        {
+          "type": "Watermark",
+          "offset": 228,
+          "bytes": 144
+        }
+      ]
+    },
+    {
+      "kind": 7,
+      "payload_bytes": 372,
+      "record_bytes": 620,
+      "fields": [
+        {
+          "type": "Scope",
+          "offset": 0,
+          "bytes": 108
+        },
+        {
+          "type": "Ref",
+          "offset": 108,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 148,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 188,
+          "bytes": 40
+        },
+        {
+          "type": "Watermark",
+          "offset": 228,
+          "bytes": 144
+        }
+      ]
+    },
+    {
+      "kind": 8,
+      "payload_bytes": 372,
+      "record_bytes": 620,
+      "fields": [
+        {
+          "type": "Scope",
+          "offset": 0,
+          "bytes": 108
+        },
+        {
+          "type": "Ref",
+          "offset": 108,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 148,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 188,
+          "bytes": 40
+        },
+        {
+          "type": "Watermark",
+          "offset": 228,
+          "bytes": 144
+        }
+      ]
+    },
+    {
+      "kind": 9,
+      "payload_bytes": 620,
+      "record_bytes": 868,
+      "fields": [
+        {
+          "type": "Scope",
+          "offset": 0,
+          "bytes": 108
+        },
+        {
+          "type": "Owner",
+          "offset": 108,
+          "bytes": 104
+        },
+        {
+          "type": "Owner",
+          "offset": 212,
+          "bytes": 104
+        },
+        {
+          "type": "Ref",
+          "offset": 316,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 356,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 396,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 436,
+          "bytes": 40
+        },
+        {
+          "type": "Watermark",
+          "offset": 476,
+          "bytes": 144
+        }
+      ]
+    },
+    {
+      "kind": 10,
+      "payload_bytes": 644,
+      "record_bytes": 892,
+      "fields": [
+        {
+          "type": "Scope",
+          "offset": 0,
+          "bytes": 108
+        },
+        {
+          "type": "DebitOrigin",
+          "offset": 108,
+          "bytes": 88
+        },
+        {
+          "type": "Keys",
+          "offset": 196,
+          "bytes": 48
+        },
+        {
+          "type": "Ref",
+          "offset": 244,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 284,
+          "bytes": 40
+        },
+        {
+          "type": "Owner",
+          "offset": 324,
+          "bytes": 104
+        },
+        {
+          "type": "VectorRef",
+          "offset": 428,
+          "bytes": 72
+        },
+        {
+          "type": "Watermark",
+          "offset": 500,
+          "bytes": 144
+        }
+      ]
+    },
+    {
+      "kind": 11,
+      "payload_bytes": 516,
+      "record_bytes": 764,
+      "fields": [
+        {
+          "type": "Scope",
+          "offset": 0,
+          "bytes": 108
+        },
+        {
+          "type": "Ref",
+          "offset": 108,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 148,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 188,
+          "bytes": 40
+        },
+        {
+          "type": "Ref",
+          "offset": 228,
+          "bytes": 40
+        },
+        {
+          "type": "Owner",
+          "offset": 268,
+          "bytes": 104
+        },
+        {
+          "type": "Watermark",
+          "offset": 372,
+          "bytes": 144
+        }
+      ]
+    }
+  ]
+}

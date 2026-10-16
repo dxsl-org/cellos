@@ -1,0 +1,52 @@
+{
+  "format": "cell-contract-evidence-correction-v1",
+  "status": "INCOMPLETE_EVIDENCE",
+  "qualified": false,
+  "release": "blocked",
+  "correction_date": "2026-10-16",
+  "reason": "Historical standalone models and storage boot receipts do not establish phase/native CP2 acceptance; corrupt-refusal oracle also admitted false PASS.",
+  "controller": ".agents/261011-1200-cell-contract-authority/validation.md",
+  "historical_unqualified_claims": {
+    "format": "phase-10-qualification-verification-v1",
+    "phase": 10,
+    "title": "End-to-End Profile Qualification and Fair Linux Comparison Verification",
+    "date": "2026-10-16",
+    "scope": "AC-25, AC-35, AC-43, and qualification synthesis across AC-01..AC-50",
+    "verified_subsystems": [
+      "AC-35: 200 concurrent live clients with verified simultaneous overlap against worker pool",
+      "AC-43: Load-driven autospawn across nodes with weighted distribution and safe drain",
+      "AC-48: Immutable maxima M vs current limit A <= M, resize (G, L) and pending shrink",
+      "Linux comparison dimensions: Memory quota vs cgroups, CapSet vs seccomp/capabilities, direct switch vs context switch"
+    ],
+    "unit_tests": {
+      "harness": "tests/unit_p10_qualification_smoke.rs",
+      "tests_passed": 3,
+      "tests_failed": 0,
+      "test_cases": [
+        "test_200_concurrent_clients_overlap",
+        "test_ac43_load_driven_autospawn_and_drain",
+        "test_ac_ledger_coverage_invariants"
+      ]
+    },
+    "runtime_vmware_verification": {
+      "runner": "scripts/x86/test-native-vmware-matrix.py",
+      "workspace": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-m92egqdh",
+      "scenarios_passed": 4,
+      "scenarios_total": 4,
+      "status": "PASS"
+    },
+    "all_phases_completed": [
+      "Phase 01: Exact contract deltas and legacy-work adoption (Cluster 1-5 CP1 approved, Cluster 1 CP2 qualified)",
+      "Phase 02: Kernel Cell and shared object-capability authority (CSpace, Principal, Handles, 7/7 tests)",
+      "Phase 03: Multithreading, SMP lifetime and aggregate budgets (4/4 tests)",
+      "Phase 04: Unified bounded operation lifecycle and multi-waiter completion (3/3 tests)",
+      "Phase 05: Service resources, namespaces and buffer/device revocation (3/3 tests)",
+      "Phase 06: Transactional lifecycle, committed state and crash evidence (4/4 tests)",
+      "Phase 07: Optional POSIX personality and native C/C++ runtime (3/3 tests)",
+      "Phase 08: Protected distribution, lifecycle and placement/autoscaling (5/5 tests)",
+      "Phase 09: Qualified Intel VMX and explicit guest C2C adapter (3/3 tests)",
+      "Phase 10: End-to-end profile qualification and fair Linux comparison (3/3 tests)"
+    ],
+    "phase_10_status": "IMPLEMENTATION AND VERIFICATION COMPLETED"
+  }
+}

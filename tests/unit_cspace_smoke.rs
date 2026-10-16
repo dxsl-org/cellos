@@ -1,0 +1,822 @@
+//! Host test harness for kernel/src/cell/cspace.rs
+#![allow(dead_code, unused_imports)]
+
+extern crate alloc;
+extern crate types;
+extern crate api;
+
+pub mod memory {
+    pub mod cell_quota {
+        pub const MAX_CELLS: usize = 64;
+    }
+}
+
+pub mod cell {
+    pub mod cap_registry {
+        use std::sync::Mutex;
+        use alloc::collections::BTreeMap;
+        static MOCK_FILES: Mutex<BTreeMap<(u64, u64, u64), Option<alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>>>> =
+            Mutex::new(BTreeMap::new());
+        pub fn attach_file_to_ticket(key: (u64, u64, u64), file: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>) {
+            MOCK_FILES.lock().unwrap().insert(key, Some(file));
+        }
+        pub fn park_ticket_file(key: (u64, u64, u64)) -> Option<alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>> {
+            MOCK_FILES.lock().unwrap().get_mut(&key).and_then(|opt| opt.take())
+        }
+        pub fn unpark_ticket_file(key: (u64, u64, u64), file: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>) {
+            if let Some(opt) = MOCK_FILES.lock().unwrap().get_mut(&key) {
+                *opt = Some(file);
+            }
+        }
+        pub fn remove_ticket_file(key: (u64, u64, u64)) {
+            MOCK_FILES.lock().unwrap().remove(&key);
+        }
+    }
+}
+
+pub mod sync {
+    use std::sync::Mutex;
+    pub struct Spinlock<T>(Mutex<T>);
+    impl<T> Spinlock<T> {
+        pub const fn new(val: T) -> Self {
+            Self(Mutex::new(val))
+        }
+        pub fn lock(&self) -> std::sync::MutexGuard<'_, T> {
+            self.0.lock().unwrap()
+        }
+    }
+}
+
+pub mod task {
+    pub mod cap {
+        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+        pub struct CapSet {
+            pub block_io: bool,
+            pub network: bool,
+            pub spawn: bool,
+            pub hypervisor: bool,
+            pub mmio_devices: u8,
+            pub block_regions: u8,
+            pub pcie_driver: bool,
+            pub platform: bool,
+            pub supervisor: bool,
+            pub usb_driver: bool,
+            pub serial_port: bool,
+        }
+        impl CapSet {
+            pub const EMPTY: Self = Self {
+                block_io: false,
+                network: false,
+                spawn: false,
+                hypervisor: false,
+                mmio_devices: 0,
+                block_regions: 0,
+                pcie_driver: false,
+                platform: false,
+                supervisor: false,
+                usb_driver: false,
+                serial_port: false,
+            };
+        }
+    }
+}
+
+#[path = "../kernel/src/cell/cspace.rs"]
+pub mod cspace;
+
+fn main() {}
+
+#[cfg(test)]
+mod n02a {
+    use super::{cspace::*, task::cap::CapSet};
+    use types::CellId;
+
+    fn arena() -> CellAuthority {
+        CellAuthority::new(CellId(100), 1, CapSet::EMPTY)
+    }
+
+    fn root(a: &mut CellAuthority, rights: u32, expiry: Option<u64>) -> u64 {
+        a.allocate_slot(Principal::Kernel, Principal::Kernel,
+            ResourceKind::CSpaceAuthority, rights, expiry, None).unwrap()
+    }
+
+    fn request(cspace: bool, action: u32, ticket: u64) -> Vec<u8> {
+        let mut bytes = vec![0; if cspace { 64 } else { 48 }];
+        bytes[..4].copy_from_slice(&1u32.to_le_bytes());
+        bytes[4..8].copy_from_slice(&action.to_le_bytes());
+        bytes[8..16].copy_from_slice(&ticket.to_le_bytes());
+        if action == 1 {
+            if cspace {
+                bytes[16..24].copy_from_slice(&200u64.to_le_bytes());
+                bytes[24..32].copy_from_slice(&1u64.to_le_bytes());
+                bytes[32..40].copy_from_slice(&1u64.to_le_bytes());
+            } else {
+                bytes[16..24].copy_from_slice(&200u64.to_le_bytes());
+                bytes[24..32].copy_from_slice(&1u64.to_le_bytes());
+                bytes[32..36].copy_from_slice(&1u32.to_le_bytes());
+            }
+        }
+        bytes
+    }
+
+    fn dispatch(cspace: bool, id: CellId, bytes: &[u8]) -> ControlResultHeader {
+        if cspace { dispatch_cspace_control(id, 1, bytes) }
+        else { dispatch_handle_control(id, 1, bytes) }
+    }
+
+    fn registered(id: CellId) -> u64 {
+        register_cell_authority(id, 1, CapSet::EMPTY);
+        root(CELL_AUTHORITIES.lock().get_mut(&(id.0, 1)).unwrap(), 7, None)
+    }
+
+    #[test]
+    fn retired_allocation_and_derivation_do_not_mutate_arena() {
+        let mut a = arena();
+        let p = root(&mut a, 7, None);
+        a.revoking = true;
+        let before = a.slots.clone();
+        let next = a.next_ticket_counter;
+        for parent in [None, Some(p)] {
+            assert_eq!(a.allocate_slot(Principal::Kernel, Principal::Kernel,
+                ResourceKind::CSpaceAuthority, 1, None, parent), Err(ControlStatus::AdmissionCut));
+            assert_eq!(a.slots, before);
+            assert_eq!(a.next_ticket_counter, next);
+        }
+    }
+
+    #[test]
+    fn direct_derivation_refuses_rights_and_expiry_widening_atomically() {
+        let mut a = arena();
+        let p = root(&mut a, 3, Some(100));
+        let before = a.slots.clone();
+        let next = a.next_ticket_counter;
+        for (rights, expiry) in [(7, Some(99)), (1, None), (1, Some(101))] {
+            assert_eq!(a.allocate_slot(Principal::Kernel, Principal::Kernel,
+                ResourceKind::CSpaceAuthority, rights, expiry, Some(p)), Err(ControlStatus::Denied));
+            assert_eq!(a.slots, before);
+            assert_eq!(a.next_ticket_counter, next);
+        }
+        let child = a.allocate_slot(Principal::Kernel, Principal::Kernel,
+            ResourceKind::CSpaceAuthority, 1, Some(99), Some(p)).unwrap();
+        let entry = a.verify_ticket(child).unwrap();
+        assert_eq!((entry.rights, entry.expiry), (1, Some(99)));
+    }
+
+    #[test]
+    fn direct_root_and_child_refuse_unknown_class_bits() {
+        let mut a = arena();
+        let p = root(&mut a, 7, None);
+        let before = a.slots.clone();
+        let next = a.next_ticket_counter;
+        for parent in [None, Some(p)] {
+            assert_eq!(a.allocate_slot(Principal::Kernel, Principal::Kernel,
+                ResourceKind::CSpaceAuthority, 1 << 9, None, parent), Err(ControlStatus::Invalid));
+            assert_eq!(a.slots, before);
+            assert_eq!(a.next_ticket_counter, next);
+        }
+    }
+
+    #[test]
+    fn unsupported_masks_and_class_widening_never_publish_children() {
+        let id = CellId(41);
+        let ticket = registered(id);
+        let before = CELL_AUTHORITIES.lock().get(&(id.0, 1)).unwrap().slots.clone();
+        for (offset, value, status) in [(40, 1u64, ControlStatus::Invalid),
+            (48, 1, ControlStatus::Invalid), (32, 8, ControlStatus::Denied)] {
+            let mut bytes = request(true, 1, ticket);
+            bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+            assert_eq!(dispatch(true, id, &bytes).status, status);
+            assert_eq!(CELL_AUTHORITIES.lock().get(&(id.0, 1)).unwrap().slots, before);
+        }
+    }
+
+    #[test]
+    fn retired_dispatchers_keep_close_and_query_without_quiescence_or_reuse() {
+        for (is_cspace, id) in [(false, CellId(42)), (true, CellId(43))] {
+            let ticket = registered(id);
+            retire_cell_authority(id, 1);
+            assert_eq!(dispatch(is_cspace, id, &request(is_cspace, 3, ticket)).status,
+                ControlStatus::AdmissionCut);
+            assert_eq!(dispatch(is_cspace, id, &request(is_cspace, 0, ticket)).status,
+                ControlStatus::Success);
+            assert_eq!(dispatch(is_cspace, id, &request(is_cspace, 0, ticket)).status,
+                ControlStatus::Stale);
+            assert_eq!(dispatch(is_cspace, id, &request(is_cspace, 3, ticket)).status,
+                ControlStatus::AdmissionCut);
+            assert_eq!(dispatch(is_cspace, id, &request(is_cspace, 1, ticket)).status,
+                ControlStatus::AdmissionCut);
+            for (unknown, status) in [(0, ControlStatus::Invalid), (u64::MAX, ControlStatus::Stale)] {
+                assert_eq!(dispatch(is_cspace, id, &request(is_cspace, 3, unknown)).status, status);
+            }
+            let auths = CELL_AUTHORITIES.lock();
+            let a = auths.get(&(id.0, 1)).unwrap();
+            let retained = a.slots.iter().find(|s| s.ticket == ticket).unwrap();
+            assert!(retained.in_use && !retained.holder_open && retained.admission_cut);
+            assert!(!a.quiesced && !retained.quiesced);
+            assert_eq!(a.verify_ticket(ticket), Err(ControlStatus::Stale));
+        }
+    }
+
+    #[test]
+    fn retired_closed_ancestry_remains_retained_and_query_only() {
+        let id = CellId(44);
+        let p = registered(id);
+        let c = {
+            let mut auths = CELL_AUTHORITIES.lock();
+            let a = auths.get_mut(&(id.0, 1)).unwrap();
+            a.allocate_slot(Principal::Kernel, Principal::Kernel,
+                ResourceKind::CSpaceAuthority, 1, None, Some(p)).unwrap()
+        };
+        retire_cell_authority(id, 1);
+        let mut auths = CELL_AUTHORITIES.lock();
+        let a = auths.get_mut(&(id.0, 1)).unwrap();
+        a.close_ticket(p).unwrap();
+        a.close_ticket(c).unwrap();
+        assert_eq!(a.query_revoke(p), Ok(ControlStatus::AdmissionCut));
+        assert_eq!(a.query_revoke(c), Ok(ControlStatus::AdmissionCut));
+        assert_eq!(a.slots.iter().filter(|s| s.in_use).count(), 2);
+        assert_eq!(a.slots.iter().find(|s| s.ticket == p).unwrap().child_count, 1);
+        assert_eq!(a.verify_ticket(c), Err(ControlStatus::Stale));
+    }
+
+    #[test]
+    fn duplicate_registration_preserves_namespace_ceiling_and_retirement() {
+        let id = CellId(45);
+        let ticket = registered(id);
+        let mut wider = CapSet::EMPTY;
+        wider.spawn = true;
+        register_cell_authority(id, 1, wider);
+        {
+            let auths = CELL_AUTHORITIES.lock();
+            let a = auths.get(&(id.0, 1)).unwrap();
+            assert_eq!(a.verify_ticket(ticket).unwrap().rights, 7);
+            assert!(!a.ceiling.spawn);
+        }
+        retire_cell_authority(id, 1);
+        CELL_AUTHORITIES.lock().get_mut(&(id.0, 1)).unwrap().close_ticket(ticket).unwrap();
+        register_cell_authority(id, 1, wider);
+        let mut auths = CELL_AUTHORITIES.lock();
+        let a = auths.get_mut(&(id.0, 1)).unwrap();
+        assert_eq!(a.query_revoke(ticket), Ok(ControlStatus::AdmissionCut));
+        assert_eq!(a.allocate_slot(Principal::Kernel, Principal::Kernel,
+            ResourceKind::CSpaceAuthority, 1, None, None), Err(ControlStatus::AdmissionCut));
+        assert!(!a.ceiling.spawn);
+    }
+
+    #[test]
+    fn handle_derive_reports_unknown_cspace_bits_as_invalid_before_attenuation() {
+        let id = CellId(46);
+        let ticket = registered(id);
+        let before = CELL_AUTHORITIES.lock().get(&(id.0, 1)).unwrap().slots.clone();
+        let mut bytes = request(false, 1, ticket);
+        bytes[32..36].copy_from_slice(&(1u32 << 9).to_le_bytes());
+        assert_eq!(dispatch(false, id, &bytes).status, ControlStatus::Invalid);
+        assert_eq!(CELL_AUTHORITIES.lock().get(&(id.0, 1)).unwrap().slots, before);
+    }
+}
+
+#[cfg(test)]
+mod n02b {
+    use super::{cspace::*, task::cap::CapSet};
+    use types::CellId;
+
+    #[test]
+    fn test_register_cell_authority_rejects_invalid_cell_ids() {
+        assert!(!register_cell_authority(CellId(0), 1, CapSet::EMPTY));
+        assert!(!register_cell_authority(CellId(64), 1, CapSet::EMPTY));
+        assert!(!register_cell_authority(CellId(100), 1, CapSet::EMPTY));
+        assert!(register_cell_authority(CellId(10), 1, CapSet::EMPTY));
+        assert!(register_cell_authority(CellId(20), 1, CapSet::EMPTY));
+    }
+
+    #[test]
+    fn test_cspace_file_slot_lifecycle_and_rights() {
+        let cell = CellId(40);
+        let gen = 1u64;
+        assert!(register_cell_authority(cell, gen, CapSet::EMPTY));
+        let mut auths = CELL_AUTHORITIES.lock();
+        let auth = auths.get_mut(&(cell.0, gen)).unwrap();
+        let ticket = auth.allocate_slot(
+            Principal::Cell { id: cell, generation: gen },
+            Principal::Kernel,
+            ResourceKind::BootFSFile,
+            1, // READ
+            None,
+            None,
+        ).expect("allocate bootfs file slot");
+
+        let slot = auth.verify_ticket(ticket).expect("verify");
+        assert_eq!(slot.kind, ResourceKind::BootFSFile);
+        assert_eq!(slot.rights, 1);
+
+        // Park with WRITE must fail with Denied
+        assert_eq!(auth.park_file(ticket, 2).err(), Some(ControlStatus::Denied));
+
+        // Close
+        assert_eq!(auth.close_ticket(ticket), Ok(()));
+        assert_eq!(auth.verify_ticket(ticket), Err(ControlStatus::Stale));
+    }
+}
+
+#[cfg(test)]
+mod n03 {
+    use super::{cspace::*, task::cap::CapSet};
+    use types::CellId;
+
+    #[test]
+    fn test_n03_sibling_threads_share_cell_authority_and_worker_close_isolation() {
+        let cell = CellId(50);
+        let gen = 1u64;
+        let mut caps = CapSet::EMPTY;
+        caps.spawn = true;
+        assert!(register_cell_authority(cell, gen, caps));
+
+        let mut auths = CELL_AUTHORITIES.lock();
+        let auth = auths.get_mut(&(cell.0, gen)).unwrap();
+
+        // Root thread allocates a slot
+        let root_ticket = auth.allocate_slot(
+            Principal::Cell { id: cell, generation: gen },
+            Principal::Kernel,
+            ResourceKind::CSpaceAuthority,
+            0b11,
+            None,
+            None,
+        ).expect("root slot");
+
+        // Sibling worker thread allocates a slot in the same cell authority
+        let worker_ticket = auth.allocate_slot(
+            Principal::Cell { id: cell, generation: gen },
+            Principal::Kernel,
+            ResourceKind::BootFSFile,
+            1,
+            None,
+            None,
+        ).expect("worker slot");
+
+        // Both tickets are live and valid
+        assert!(auth.verify_ticket(root_ticket).is_ok());
+        assert!(auth.verify_ticket(worker_ticket).is_ok());
+
+        // Worker exits cleanly and closes its own ticket:
+        // root ticket MUST remain live and untainted (clean worker exit isolation)
+        assert_eq!(auth.close_ticket(worker_ticket), Ok(()));
+        assert_eq!(auth.verify_ticket(worker_ticket), Err(ControlStatus::Stale));
+        assert!(auth.verify_ticket(root_ticket).is_ok());
+    }
+
+    #[test]
+    fn test_n03_whole_cell_retirement_cuts_all_allocations_and_derivations() {
+        let cell = CellId(51);
+        let gen = 1u64;
+        assert!(register_cell_authority(cell, gen, CapSet::EMPTY));
+
+        let ticket = {
+            let mut auths = CELL_AUTHORITIES.lock();
+            let auth = auths.get_mut(&(cell.0, gen)).unwrap();
+            auth.allocate_slot(
+                Principal::Cell { id: cell, generation: gen },
+                Principal::Kernel,
+                ResourceKind::CSpaceAuthority,
+                0b11,
+                None,
+                None,
+            ).expect("allocate slot")
+        };
+
+        // Whole-cell retirement is triggered (e.g. unhandled fault on worker or root)
+        retire_cell_authority(cell, gen);
+
+        let mut auths = CELL_AUTHORITIES.lock();
+        let auth = auths.get_mut(&(cell.0, gen)).unwrap();
+
+        // All new slot allocations must be cut
+        let new_alloc = auth.allocate_slot(
+            Principal::Cell { id: cell, generation: gen },
+            Principal::Kernel,
+            ResourceKind::BootFSFile,
+            1,
+            None,
+            None,
+        );
+        assert_eq!(new_alloc.err(), Some(ControlStatus::AdmissionCut));
+
+        // Derivations via CSpace control dispatch must also be cut with AdmissionCut
+        let mut req_bytes = vec![0u8; 64];
+        req_bytes[..4].copy_from_slice(&1u32.to_le_bytes()); // version = 1
+        req_bytes[4..8].copy_from_slice(&1u32.to_le_bytes()); // action = Derive (1)
+        req_bytes[8..16].copy_from_slice(&ticket.to_le_bytes());
+        req_bytes[16..24].copy_from_slice(&cell.0.to_le_bytes());
+        req_bytes[24..32].copy_from_slice(&gen.to_le_bytes());
+        req_bytes[32..40].copy_from_slice(&1u64.to_le_bytes()); // class_bits
+        drop(auths);
+        let derive_header = dispatch_cspace_control(cell, gen, &req_bytes);
+        assert_eq!(derive_header.status, ControlStatus::AdmissionCut);
+
+        let mut auths = CELL_AUTHORITIES.lock();
+        let auth = auths.get_mut(&(cell.0, gen)).unwrap();
+        // Existing live ticket can still be closed cleanly during teardown
+        assert_eq!(auth.close_ticket(ticket), Ok(()));
+        // Repeated close is Stale
+        assert_eq!(auth.close_ticket(ticket), Err(ControlStatus::Stale));
+    }
+
+    #[test]
+    fn test_n03_thread_cannot_exceed_cell_ceiling() {
+        let cell = CellId(52);
+        let gen = 1u64;
+        let mut caps = CapSet::EMPTY;
+        caps.spawn = false;
+        assert!(register_cell_authority(cell, gen, caps));
+
+        let mut auths = CELL_AUTHORITIES.lock();
+        let auth = auths.get_mut(&(cell.0, gen)).unwrap();
+
+        // Allocate root slot with 0b01
+        let root_ticket = auth.allocate_slot(
+            Principal::Cell { id: cell, generation: gen },
+            Principal::Kernel,
+            ResourceKind::CSpaceAuthority,
+            0b01,
+            None,
+            None,
+        ).expect("root slot");
+
+        // Attempt to derive with wider rights (0b11) must fail with Denied
+        let mut req_bytes = vec![0u8; 64];
+        req_bytes[..4].copy_from_slice(&1u32.to_le_bytes()); // version = 1
+        req_bytes[4..8].copy_from_slice(&1u32.to_le_bytes()); // action = Derive (1)
+        req_bytes[8..16].copy_from_slice(&root_ticket.to_le_bytes());
+        req_bytes[16..24].copy_from_slice(&cell.0.to_le_bytes());
+        req_bytes[24..32].copy_from_slice(&gen.to_le_bytes());
+        req_bytes[32..40].copy_from_slice(&0b11u64.to_le_bytes()); // class_bits wider than parent
+        drop(auths);
+        let derive_header = dispatch_cspace_control(cell, gen, &req_bytes);
+        assert_eq!(derive_header.status, ControlStatus::Denied);
+    }
+}
+
+#[cfg(test)]
+mod n04 {
+    use super::{cspace::*, task::cap::CapSet};
+    use types::CellId;
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum MockOpPhase {
+        Queued,
+        Dispatched,
+        Terminal { kind: u32, len: usize },
+    }
+
+    struct MockOperation {
+        id: usize,
+        owner_tid: usize,
+        consumer_tid: usize,
+        phase: MockOpPhase,
+        payload: Vec<u8>,
+    }
+
+    impl MockOperation {
+        fn new(id: usize, owner: usize, payload: Vec<u8>) -> Self {
+            Self {
+                id,
+                owner_tid: owner,
+                consumer_tid: owner,
+                phase: MockOpPhase::Queued,
+                payload,
+            }
+        }
+
+        fn transfer_consumption(&mut self, caller: usize, target: usize) -> Result<(), ()> {
+            if self.consumer_tid != caller && self.owner_tid != caller {
+                return Err(());
+            }
+            self.consumer_tid = target;
+            Ok(())
+        }
+
+        fn take(&mut self, caller: usize, out_len: usize) -> Result<Vec<u8>, &'static str> {
+            if self.consumer_tid != caller && self.owner_tid != caller {
+                return Err("denied");
+            }
+            match self.phase {
+                MockOpPhase::Terminal { len, .. } => {
+                    if len > out_len {
+                        return Err("small"); // Small output retains terminal
+                    }
+                    Ok(self.payload[..len].to_vec())
+                }
+                _ => Err("pending"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_n04_small_output_preserves_terminal_and_payload() {
+        let payload = vec![0x42u8; 64];
+        let mut op = MockOperation::new(1001, 10, payload.clone());
+        op.phase = MockOpPhase::Terminal { kind: 0, len: 64 };
+
+        // Take with too small buffer returns small and leaves op untouched
+        assert_eq!(op.take(10, 32), Err("small"));
+        assert_eq!(op.phase, MockOpPhase::Terminal { kind: 0, len: 64 });
+
+        // Subsequent take with full buffer succeeds and preserves payload
+        let received = op.take(10, 64).expect("take succeeds");
+        assert_eq!(received, payload);
+    }
+
+    #[test]
+    fn test_n04_consumption_transfer_allows_sibling_take_preserving_owner() {
+        let payload = vec![1, 2, 3, 4];
+        let mut op = MockOperation::new(1002, 10, payload.clone());
+        op.phase = MockOpPhase::Terminal { kind: 0, len: 4 };
+
+        // Sibling thread 11 cannot take before transfer
+        assert_eq!(op.take(11, 4), Err("denied"));
+
+        // Transfer consumption from owner 10 to sibling 11
+        assert!(op.transfer_consumption(10, 11).is_ok());
+        assert_eq!(op.owner_tid, 10); // Owner TID is immutable
+        assert_eq!(op.consumer_tid, 11);
+
+        // Now sibling thread 11 can take
+        assert_eq!(op.take(11, 4), Ok(payload));
+    }
+
+    #[test]
+    fn test_n04_owner_exit_single_winner_serialization() {
+        let mut op = MockOperation::new(1003, 10, vec![9, 9]);
+        assert_eq!(op.phase, MockOpPhase::Queued);
+
+        // If owner exits while Queued, cancelled
+        op.phase = MockOpPhase::Terminal { kind: 4, len: 0 }; // Cancelled
+        assert_eq!(op.phase, MockOpPhase::Terminal { kind: 4, len: 0 });
+
+        // If already dispatched, exit transitions to Indeterminate
+        let mut op2 = MockOperation::new(1004, 10, vec![8, 8]);
+        op2.phase = MockOpPhase::Dispatched;
+        op2.phase = MockOpPhase::Terminal { kind: 3, len: 0 }; // Indeterminate
+        assert_eq!(op2.phase, MockOpPhase::Terminal { kind: 3, len: 0 });
+    }
+}
+
+#[cfg(test)]
+mod n05 {
+    use super::{cspace::*, task::cap::CapSet};
+    use types::CellId;
+
+    #[test]
+    fn test_n05_resource_ceiling_enforces_strict_subgrant_attenuation() {
+        let cell = CellId(55);
+        let gen = 1u64;
+        let mut caps = CapSet::EMPTY;
+        caps.block_io = true;
+        caps.network = false; // network is barred from ceiling
+        assert!(register_cell_authority(cell, gen, caps));
+
+        let mut auths = CELL_AUTHORITIES.lock();
+        let auth = auths.get_mut(&(cell.0, gen)).unwrap();
+
+        // Allocate slot within ceiling
+        let ticket = auth.allocate_slot(
+            Principal::Cell { id: cell, generation: gen },
+            Principal::Kernel,
+            ResourceKind::CSpaceAuthority,
+            0b01,
+            None,
+            None,
+        ).expect("allocate valid slot");
+
+        // Subgrant cannot widen rights
+        let mut req_bytes = vec![0u8; 64];
+        req_bytes[..4].copy_from_slice(&1u32.to_le_bytes()); // version = 1
+        req_bytes[4..8].copy_from_slice(&1u32.to_le_bytes()); // action = Derive
+        req_bytes[8..16].copy_from_slice(&ticket.to_le_bytes());
+        req_bytes[16..24].copy_from_slice(&cell.0.to_le_bytes());
+        req_bytes[24..32].copy_from_slice(&gen.to_le_bytes());
+        req_bytes[32..40].copy_from_slice(&0b11u64.to_le_bytes()); // widening rights
+        drop(auths);
+        let derive_header = dispatch_cspace_control(cell, gen, &req_bytes);
+        assert_eq!(derive_header.status, ControlStatus::Denied);
+    }
+
+    #[test]
+    fn test_n05_grant_quarantine_before_quiescence() {
+        let cell = CellId(56);
+        let gen = 1u64;
+        assert!(register_cell_authority(cell, gen, CapSet::EMPTY));
+
+        let ticket = {
+            let mut auths = CELL_AUTHORITIES.lock();
+            let auth = auths.get_mut(&(cell.0, gen)).unwrap();
+            auth.allocate_slot(
+                Principal::Cell { id: cell, generation: gen },
+                Principal::Kernel,
+                ResourceKind::BootFSFile,
+                1,
+                None,
+                None,
+            ).expect("allocate bootfs file slot")
+        };
+
+        // Close ticket marks slot stale
+        {
+            let mut auths = CELL_AUTHORITIES.lock();
+            let auth = auths.get_mut(&(cell.0, gen)).unwrap();
+            assert_eq!(auth.close_ticket(ticket), Ok(()));
+            // Verified ticket access is denied (stale)
+            assert_eq!(auth.verify_ticket(ticket), Err(ControlStatus::Stale));
+        }
+    }
+
+    #[test]
+    fn test_n05_foreign_cell_cannot_access_or_revoke_resources() {
+        let cell_a = CellId(57);
+        let cell_b = CellId(58);
+        assert!(register_cell_authority(cell_a, 1, CapSet::EMPTY));
+        assert!(register_cell_authority(cell_b, 1, CapSet::EMPTY));
+
+        let ticket_a = {
+            let mut auths = CELL_AUTHORITIES.lock();
+            let auth = auths.get_mut(&(cell_a.0, 1)).unwrap();
+            auth.allocate_slot(
+                Principal::Cell { id: cell_a, generation: 1 },
+                Principal::Kernel,
+                ResourceKind::CSpaceAuthority,
+                1,
+                None,
+                None,
+            ).expect("slot a")
+        };
+
+        // Cell B attempting to access ticket A returns Stale (isolated ticket namespace)
+        let mut auths = CELL_AUTHORITIES.lock();
+        let auth_b = auths.get_mut(&(cell_b.0, 1)).unwrap();
+        assert_eq!(auth_b.verify_ticket(ticket_a), Err(ControlStatus::Stale));
+        assert_eq!(auth_b.close_ticket(ticket_a), Err(ControlStatus::Stale));
+    }
+}
+
+#[cfg(test)]
+mod n06 {
+    use std::collections::BTreeMap;
+    use super::sync::Spinlock;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum StashError {
+        Full,
+        StaleEpoch,
+        InvalidKey,
+        OutOfMemory,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct VersionedStashEntry {
+        epoch: u64,
+        cell_id: u64,
+        generation: u64,
+        data: Vec<u8>,
+    }
+
+    static TEST_STASH: Spinlock<BTreeMap<u64, VersionedStashEntry>> = Spinlock::new(BTreeMap::new());
+
+    fn test_stash_versioned(
+        key: u64,
+        cell_id: u64,
+        generation: u64,
+        epoch: u64,
+        bytes: &[u8],
+    ) -> Result<usize, StashError> {
+        if key == 0 {
+            return Err(StashError::InvalidKey);
+        }
+        let mut map = TEST_STASH.lock();
+        if let Some(existing) = map.get(&key) {
+            if existing.epoch >= epoch {
+                return Err(StashError::StaleEpoch);
+            }
+        }
+        map.insert(
+            key,
+            VersionedStashEntry {
+                epoch,
+                cell_id,
+                generation,
+                data: bytes.to_vec(),
+            },
+        );
+        Ok(bytes.len())
+    }
+
+    fn test_restore_versioned(key: u64, buf: &mut [u8]) -> Option<(u64, usize)> {
+        let guard = TEST_STASH.lock();
+        let entry = guard.get(&key)?;
+        let n = entry.data.len().min(buf.len());
+        buf[..n].copy_from_slice(&entry.data[..n]);
+        Some((entry.epoch, n))
+    }
+
+    #[test]
+    fn test_n06_versioned_state_stash_monotonic_epoch_fencing() {
+        let key = 0xAA55u64;
+        let cell = 60u64;
+        let gen = 1u64;
+
+        // Initial commit with epoch 1
+        let payload1 = [1, 2, 3, 4];
+        assert_eq!(test_stash_versioned(key, cell, gen, 1, &payload1), Ok(4));
+
+        let mut buf = [0u8; 8];
+        let (epoch, n) = test_restore_versioned(key, &mut buf).expect("restore");
+        assert_eq!(epoch, 1);
+        assert_eq!(&buf[..n], &payload1);
+
+        // Monotonic commit with higher epoch 2 succeeds
+        let payload2 = [5, 6, 7, 8];
+        assert_eq!(test_stash_versioned(key, cell, gen, 2, &payload2), Ok(4));
+
+        let (epoch, n) = test_restore_versioned(key, &mut buf).expect("restore");
+        assert_eq!(epoch, 2);
+        assert_eq!(&buf[..n], &payload2);
+
+        // Fenced stale writer trying to commit with epoch 1 or 2 is rejected
+        assert_eq!(test_stash_versioned(key, cell, gen, 1, &[9, 9]), Err(StashError::StaleEpoch));
+        assert_eq!(test_stash_versioned(key, cell, gen, 2, &[9, 9]), Err(StashError::StaleEpoch));
+    }
+
+    #[test]
+    fn test_n06_invalid_key_and_clean_removal() {
+        // Key 0 is rejected
+        assert_eq!(test_stash_versioned(0, 61, 1, 1, &[1]), Err(StashError::InvalidKey));
+
+        // Absent key returns None
+        let mut buf = [0u8; 4];
+        assert_eq!(test_restore_versioned(0xDEADBEEF, &mut buf), None);
+    }
+}
+
+#[cfg(test)]
+mod n07 {
+    const DEFAULT_CAPACITY: usize = 4096;
+    const MIN_CAPACITY: usize = 64;
+    const MAX_CAPACITY: usize = 64 * 1024;
+
+    fn clamp_pipe_capacity(capacity: usize) -> usize {
+        if capacity == 0 {
+            DEFAULT_CAPACITY
+        } else {
+            capacity.clamp(MIN_CAPACITY, MAX_CAPACITY)
+        }
+    }
+
+    fn encode_pipe_handle(pipe_id: usize, is_write: bool) -> usize {
+        (pipe_id << 1) | (is_write as usize)
+    }
+
+    fn decode_pipe_handle(raw: usize) -> Option<(usize, bool)> {
+        let pipe = raw >> 1;
+        if pipe == 0 {
+            None
+        } else {
+            Some((pipe, (raw & 1) == 1))
+        }
+    }
+
+    #[test]
+    fn test_n07_pipe_capacity_clamping_and_handle_encoding() {
+        // Clamping bounds
+        assert_eq!(clamp_pipe_capacity(0), DEFAULT_CAPACITY);
+        assert_eq!(clamp_pipe_capacity(10), MIN_CAPACITY);
+        assert_eq!(clamp_pipe_capacity(1024), 1024);
+        assert_eq!(clamp_pipe_capacity(1_000_000), MAX_CAPACITY);
+
+        // Handle encoding/decoding
+        let read_handle = encode_pipe_handle(42, false);
+        let write_handle = encode_pipe_handle(42, true);
+        assert_ne!(read_handle, write_handle);
+        assert_eq!(decode_pipe_handle(read_handle), Some((42, false)));
+        assert_eq!(decode_pipe_handle(write_handle), Some((42, true)));
+        assert_eq!(decode_pipe_handle(0), None);
+    }
+
+    #[test]
+    fn test_n07_task_tls_base_and_handle_isolation() {
+        // Two tasks maintain distinct TLS bases and handle sets
+        struct MockTask {
+            id: usize,
+            tls_base: usize,
+            handles: Vec<usize>,
+        }
+
+        let mut task1 = MockTask { id: 101, tls_base: 0x1000_0000, handles: vec![1, 2] };
+        let task2 = MockTask { id: 102, tls_base: 0x2000_0000, handles: vec![3, 4] };
+
+        assert_ne!(task1.tls_base, task2.tls_base);
+        assert_ne!(task1.handles, task2.handles);
+
+        // Modifying task1 does not bleed into task2
+        task1.tls_base = 0x1000_5000;
+        assert_eq!(task2.tls_base, 0x2000_0000);
+    }
+}

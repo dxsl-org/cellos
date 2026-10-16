@@ -1,0 +1,41 @@
+{
+  "format": "cell-contract-evidence-correction-v1",
+  "status": "INCOMPLETE_EVIDENCE",
+  "qualified": false,
+  "release": "blocked",
+  "correction_date": "2026-10-16",
+  "reason": "Historical standalone models and storage boot receipts do not establish phase/native CP2 acceptance; corrupt-refusal oracle also admitted false PASS.",
+  "controller": ".agents/261011-1200-cell-contract-authority/validation.md",
+  "historical_unqualified_claims": {
+    "format": "phase-06-recovery-verification-v1",
+    "phase": 6,
+    "title": "Transactional Lifecycle, Committed State and Crash Evidence Verification",
+    "date": "2026-10-15",
+    "scope": "AC-14..AC-18, AC-27, local foundations of AC-29",
+    "verified_subsystems": [
+      "cells/services/supervisor/src/hotswap.rs: 6-step transactional hotswap lifecycle (Freeze, Serialize, Spawn, Deserialize, Ready, Commit) with automated rollback",
+      "kernel/src/cell/hotswap.rs: Replacement ceiling reservations, generation and freeze_nonce binding",
+      "kernel/src/cell/state_stash.rs: Bounded 1MB per slot, max 64 entries, staged argv safety",
+      "libs/durable-charge-journal: A/B double-buffered BlockDevice journal, monotonic fence, crash-recovery selecting highest valid sequence"
+    ],
+    "unit_tests": {
+      "harness": "tests/unit_p06_recovery_smoke.rs",
+      "tests_passed": 4,
+      "tests_failed": 0,
+      "test_cases": [
+        "test_hotswap_success_lifecycle",
+        "test_hotswap_rollback_on_spawn_failure",
+        "test_monotonic_fence_blocks_stale_writer",
+        "test_state_stash_bounds"
+      ]
+    },
+    "runtime_vmware_verification": {
+      "runner": "scripts/x86/test-native-vmware-matrix.py",
+      "workspace": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-9w_n66jf",
+      "scenarios_passed": 4,
+      "scenarios_total": 4,
+      "status": "PASS"
+    },
+    "phase_06_status": "IMPLEMENTATION AND VERIFICATION COMPLETED"
+  }
+}

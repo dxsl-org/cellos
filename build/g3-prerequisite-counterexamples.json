@@ -1,0 +1,8 @@
+{
+  "scope": "Existing Python OGJ1 model only; no runtime authority qualification",
+  "observed": [
+    {"scenario": "recover(ledger_id=b'A'*32, boot_floor=100, on_disk_slots={})", "state": "WRITABLE", "gate": "BLOCKED: no admitted genesis/initialized-state input"},
+    {"scenario": "recover(ledger_id=b'A'*32, boot_floor=100, on_disk_slots={0: {'payload': b'corrupt'}})", "state": "WRITABLE", "gate": "BLOCKED: corrupt payload silently omitted"}
+  ],
+  "approval": "none"
+}

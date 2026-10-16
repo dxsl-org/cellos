@@ -1,0 +1,43 @@
+{
+  "format": "cell-contract-evidence-correction-v1",
+  "status": "INCOMPLETE_EVIDENCE",
+  "qualified": false,
+  "release": "blocked",
+  "correction_date": "2026-10-16",
+  "reason": "Historical standalone models and storage boot receipts do not establish phase/native CP2 acceptance; corrupt-refusal oracle also admitted false PASS.",
+  "controller": ".agents/261011-1200-cell-contract-authority/validation.md",
+  "historical_unqualified_claims": {
+    "format": "phase-02-kernel-authority-verification-v1",
+    "phase": 2,
+    "title": "Kernel Cell and CSpace Implementation Verification",
+    "date": "2026-10-15",
+    "components_implemented": [
+      "kernel/src/cell/cspace.rs: Principal discrimination (Kernel vs Cell), SlotArena, LocalHandle ticket codec, 48B handle request, 32B result header, 64B CSpace request, 48B BootFS file request",
+      "kernel/src/cell/mod.rs: Exposed pub mod cspace",
+      "kernel/src/task/cap.rs: Implemented CapSet::from_task",
+      "kernel/src/task/scheduler.rs: Wired publish_live_cell_owner to register_cell_authority and finish_root_retirement to retire_cell_authority"
+    ],
+    "unit_tests": {
+      "harness": "tests/unit_cspace_smoke.rs",
+      "tests_passed": 7,
+      "tests_failed": 0,
+      "test_cases": [
+        "test_principal_encoding_kernel",
+        "test_principal_encoding_cell",
+        "test_control_result_header_roundtrip",
+        "test_slot_allocation_and_verify",
+        "test_lineage_depth_bound",
+        "test_close_vs_revoke_semantics",
+        "test_retire_cell_authority"
+      ]
+    },
+    "runtime_vmware_verification": {
+      "runner": "scripts/x86/test-native-vmware-matrix.py",
+      "workspace": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-w_90po6y",
+      "scenarios_passed": 4,
+      "scenarios_total": 4,
+      "status": "PASS"
+    },
+    "phase_02_status": "IMPLEMENTATION AND VERIFICATION COMPLETED"
+  }
+}

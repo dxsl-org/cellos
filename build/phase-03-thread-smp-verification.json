@@ -1,0 +1,41 @@
+{
+  "format": "cell-contract-evidence-correction-v1",
+  "status": "INCOMPLETE_EVIDENCE",
+  "qualified": false,
+  "release": "blocked",
+  "correction_date": "2026-10-16",
+  "reason": "Historical standalone models and storage boot receipts do not establish phase/native CP2 acceptance; corrupt-refusal oracle also admitted false PASS.",
+  "controller": ".agents/261011-1200-cell-contract-authority/validation.md",
+  "historical_unqualified_claims": {
+    "format": "phase-03-thread-smp-verification-v1",
+    "phase": 3,
+    "title": "Multithreading, SMP Lifetime and Aggregate Budgets Verification",
+    "date": "2026-10-15",
+    "scope": "AC-06..AC-09, AC-30 local admission, AC-40/AC-48 local primitives",
+    "verified_subsystems": [
+      "kernel/src/task/scheduler.rs: Thread join, CapSet inheritance, 32-thread cap, whole-Cell root retirement vs local worker exit",
+      "kernel/src/task/cpu_accounting.rs: Multi-hart CPU entitlement, tick/switch charging, period replenishment, throttle and retirement hooks",
+      "kernel/src/task/futex.rs: Atomic compare-and-park under SCHEDULER with (space, generation, addr) domain keys",
+      "kernel/src/task/tls.rs: Per-thread user FS_BASE / thread-pointer save/restore across context switches"
+    ],
+    "unit_tests": {
+      "harness": "tests/unit_p03_smp_smoke.rs",
+      "tests_passed": 4,
+      "tests_failed": 0,
+      "test_cases": [
+        "test_thread_cap_and_inheritance",
+        "test_lifecycle_worker_exit_vs_root_exit",
+        "test_ac48_immutable_maxima_and_pending_shrink",
+        "test_futex_compare_and_park_with_domain_keys"
+      ]
+    },
+    "runtime_vmware_verification": {
+      "runner": "scripts/x86/test-native-vmware-matrix.py",
+      "workspace": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-wgzpn4vs",
+      "scenarios_passed": 4,
+      "scenarios_total": 4,
+      "status": "PASS"
+    },
+    "phase_03_status": "IMPLEMENTATION AND VERIFICATION COMPLETED"
+  }
+}

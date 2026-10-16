@@ -1,0 +1,276 @@
+{
+  "scope": "Actual VMware diagnostic observations and scoped user approval; no settled profile/durable service/backend/floor/physical power loss/CP1/CP2 qualification",
+  "approval_sha256": "2e35ff27a7b56fa25f13e77d14fa390383a7d32d121f3bdf7a20b4ce3cdf577a",
+  "approved_document_pins_verified": 5,
+  "preserved_predecessor_hashes_verified": 2,
+  "current_package_pins_verified": 23,
+  "changed_preparations": [
+    {
+      "blockers": [
+        "B01",
+        "B03",
+        "B05",
+        "B06",
+        "B07",
+        "B08"
+      ],
+      "checkpoint1": "pending",
+      "checkpoint2": "pending",
+      "delta": "C03",
+      "disposition": "blocked-inputs",
+      "owner": "P08-C/P06",
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/C03.md",
+      "release": "blocked",
+      "revision": "r2",
+      "sha256": "ff938e515847de684d975d4edf7bd9ac86a884f2ca516bf7b517a1ab76844cb4"
+    },
+    {
+      "blockers": [
+        "B01",
+        "B03",
+        "B05",
+        "B06",
+        "B07",
+        "B08"
+      ],
+      "checkpoint1": "pending",
+      "checkpoint2": "pending",
+      "delta": "C05",
+      "disposition": "blocked-inputs",
+      "owner": "P03/P08-C/P06",
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/C05.md",
+      "release": "blocked",
+      "revision": "r3",
+      "sha256": "819150994c582069e1d640ba836028c4f449dc0665317aabf891be3c085b0e00"
+    }
+  ],
+  "production_runner_failure": {
+    "backend": "vmware-workstation",
+    "status": "FAIL",
+    "host": "Linux-6.18.40.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "started_utc": "2026-10-15T06:40:47.469643+00:00",
+    "cpus": 1,
+    "memory_mib": 256,
+    "firmware": "bios",
+    "window_seconds": 90.0,
+    "evidence_dir": "/mnt/c/Temp/cellos-vmware/run-20261015T064047Z-z5xux70z",
+    "boot_to_prompt_seconds": null,
+    "metric_scope": "host monotonic time from immediately before vmrun start to first serial prompt observation; includes VM startup; polling resolution 0.1 seconds",
+    "qualification": "boot compatibility only; not physical hardware, driver, interrupt/I/O or SMP qualification",
+    "errors": [
+      "production image enabled Tier 2 admission"
+    ],
+    "cleanup_confirmed": true,
+    "vmrun": "/mnt/c/Program Files (x86)/VMware/VMware Workstation/vmrun.exe",
+    "iso": "/mnt/c/Temp/cellos-vmware/run-20261015T064047Z-z5xux70z/cellos.iso",
+    "iso_sha256": "06f1317e96e143126596c8e8ee42885d2cf6b9114a59d9d1e5486346c32024e8",
+    "vmrun_version_exit": 255,
+    "vmrun_version": "vmrun version 1.17.0.24995812",
+    "start_command": [
+      "/mnt/c/Program Files (x86)/VMware/VMware Workstation/vmrun.exe",
+      "-T",
+      "ws",
+      "start",
+      "C:/Temp/cellos-vmware/run-20261015T064047Z-z5xux70z/cellos.vmx",
+      "nogui"
+    ],
+    "backend_version": "Log for VMware Workstation pid=16572 version=25.0.0 build=24995812 option=Release",
+    "startup_observation_and_cleanup_seconds": 3.4481486159784254
+  },
+  "diagnostic_captures": [
+    {
+      "count": "0",
+      "capture": "/mnt/c/Temp/cellos-vmware/durable-charge-footprint-hjmlbd_l/46d7fdd4-a187-475e-9b38-39ef6a9771f8",
+      "result_sha256": "59c682139aab697ef69762f1bf1d9f19808bfb354216011d8bdb6e93de60c447",
+      "serial_sha256": "4ddcca418e0f5f18eab37429fc66f22e0df8ce623d9b803c1bd89ab46812c875",
+      "iso_sha256": "f3e732bcd1287c661eca4f910ebe247fb3b29a1e984485348482cca08826d188",
+      "stream_structurally_complete": true,
+      "stream_fully_settled": false,
+      "denied_control_accepted": false,
+      "workload_outcome": {
+        "status": "LIFECYCLE_COMPLETE",
+        "requested": 0,
+        "admitted": 0,
+        "exited": 0
+      },
+      "qualification_blockers": [
+        "heap ownership capacity/coverage unproven",
+        "pending/retained/unknown/live component",
+        "physical inventory semantic/topology coverage unproven",
+        "settled nonzero/absent outstanding_cleanup_obligations",
+        "settled nonzero/absent unknown_retained_obligations",
+        "unreclaimed raw residual: actual_heap_used_bytes",
+        "unreclaimed raw residual: execution_context_quota_charge",
+        "unreclaimed raw residual: used_frames"
+      ],
+      "live_delta": {
+        "total_frames": 0,
+        "used_frames": 0,
+        "free_frames": 0,
+        "page_size": 0,
+        "actual_heap_used_bytes": 0,
+        "actual_heap_free_bytes": 0,
+        "execution_context_quota_charge": -7,
+        "allocated_stack_bytes": 0,
+        "segment_bytes": 0,
+        "admitted_live_subjects": 0,
+        "active_operations": 0,
+        "reserved_completions": 0,
+        "outstanding_cleanup_obligations": 0,
+        "retained_physical_frame_union": 0,
+        "unknown_retained_obligations": 0,
+        "capture_invalid_flags": 0
+      },
+      "settled_delta": {
+        "total_frames": 0,
+        "used_frames": -56,
+        "free_frames": 56,
+        "page_size": 0,
+        "actual_heap_used_bytes": 32,
+        "actual_heap_free_bytes": -32,
+        "execution_context_quota_charge": -5,
+        "allocated_stack_bytes": 0,
+        "segment_bytes": 0,
+        "admitted_live_subjects": 0,
+        "active_operations": 0,
+        "reserved_completions": 0,
+        "outstanding_cleanup_obligations": 0,
+        "retained_physical_frame_union": 0,
+        "unknown_retained_obligations": 0,
+        "capture_invalid_flags": 0
+      },
+      "trace_storage": {
+        "serialized_payload_bytes": 56896,
+        "core_static_bytes": 59125,
+        "resource_static_bytes": 2367312,
+        "exporter_buffer_bytes": 352,
+        "linked_image_overhead_not_inferred": true
+      },
+      "cleanup_confirmed": true
+    },
+    {
+      "count": "8",
+      "capture": "/mnt/c/Temp/cellos-vmware/durable-charge-footprint-6pzohf49/b1019445-a548-4eb5-beca-d1b7954b15ae",
+      "result_sha256": "a8129856183d52224e0061c40ee7636d31a919e0447efc7fe60d7561c8b0debe",
+      "serial_sha256": "06d8041017d52551d2e5a60241d6ffda5d68511cae6123195819e27ad35f066e",
+      "iso_sha256": "d52c7581cd69be9f83b7eed1923d35accdf47a786097ac47b97a5684026844df",
+      "stream_structurally_complete": true,
+      "stream_fully_settled": false,
+      "denied_control_accepted": false,
+      "workload_outcome": {
+        "status": "LIFECYCLE_COMPLETE",
+        "requested": 8,
+        "admitted": 8,
+        "exited": 8
+      },
+      "qualification_blockers": [
+        "heap ownership capacity/coverage unproven",
+        "pending/retained/unknown/live component",
+        "physical inventory semantic/topology coverage unproven",
+        "settled nonzero/absent outstanding_cleanup_obligations",
+        "settled nonzero/absent unknown_retained_obligations",
+        "unreclaimed raw residual: actual_heap_used_bytes",
+        "unreclaimed raw residual: execution_context_quota_charge",
+        "unreclaimed raw residual: used_frames"
+      ],
+      "live_delta": {
+        "total_frames": 0,
+        "used_frames": 2440,
+        "free_frames": -2440,
+        "page_size": 0,
+        "actual_heap_used_bytes": 70528,
+        "actual_heap_free_bytes": -70528,
+        "execution_context_quota_charge": 53185,
+        "allocated_stack_bytes": 1179648,
+        "segment_bytes": 9011200,
+        "admitted_live_subjects": 8,
+        "active_operations": 0,
+        "reserved_completions": 0,
+        "outstanding_cleanup_obligations": 24,
+        "retained_physical_frame_union": 0,
+        "unknown_retained_obligations": 8,
+        "capture_invalid_flags": 0
+      },
+      "settled_delta": {
+        "total_frames": 0,
+        "used_frames": -56,
+        "free_frames": 56,
+        "page_size": 0,
+        "actual_heap_used_bytes": 1728,
+        "actual_heap_free_bytes": -1728,
+        "execution_context_quota_charge": -5,
+        "allocated_stack_bytes": 0,
+        "segment_bytes": 0,
+        "admitted_live_subjects": 0,
+        "active_operations": 0,
+        "reserved_completions": 0,
+        "outstanding_cleanup_obligations": 0,
+        "retained_physical_frame_union": 0,
+        "unknown_retained_obligations": 8,
+        "capture_invalid_flags": 0
+      },
+      "trace_storage": {
+        "serialized_payload_bytes": 56896,
+        "core_static_bytes": 59125,
+        "resource_static_bytes": 2367312,
+        "exporter_buffer_bytes": 352,
+        "linked_image_overhead_not_inferred": true
+      },
+      "cleanup_confirmed": true
+    },
+    {
+      "count": "denied",
+      "capture": "/mnt/c/Temp/cellos-vmware/durable-charge-footprint-6pzohf49/f2f08ee7-ea5e-4416-928d-83aae3c35939",
+      "result_sha256": "8beca0f24cf16353e51496d1c9b093b435c46079932f9534d9a9d2b7d2e1acf3",
+      "serial_sha256": "fb531301a5e32d7a11f305cb639334c6a204a459896b7cb6aae2d7baf9daf99a",
+      "iso_sha256": "ee97fbcf17df9486d36448cec6c968b08629d97de9251b179abbe42dfd4fbcae",
+      "stream_structurally_complete": true,
+      "stream_fully_settled": false,
+      "denied_control_accepted": true,
+      "workload_outcome": {
+        "status": "DENIED_CONTROL",
+        "requested": 1,
+        "admitted": 0,
+        "public_result": "Err(Unknown)"
+      },
+      "qualification_blockers": [
+        "heap ownership capacity/coverage unproven",
+        "intentional denied control; not a normal resource workload",
+        "pending/retained/unknown/live component",
+        "physical inventory semantic/topology coverage unproven"
+      ],
+      "post_refusal_delta": {
+        "total_frames": 0,
+        "used_frames": 0,
+        "free_frames": 0,
+        "page_size": 0,
+        "actual_heap_used_bytes": 0,
+        "actual_heap_free_bytes": 0,
+        "execution_context_quota_charge": -4,
+        "allocated_stack_bytes": 0,
+        "segment_bytes": 0,
+        "admitted_live_subjects": 0,
+        "active_operations": 0,
+        "reserved_completions": 0,
+        "outstanding_cleanup_obligations": 0,
+        "retained_physical_frame_union": 0,
+        "unknown_retained_obligations": 0,
+        "capture_invalid_flags": 0
+      },
+      "trace_storage": {
+        "serialized_payload_bytes": 56896,
+        "core_static_bytes": 59125,
+        "resource_static_bytes": 2367312,
+        "exporter_buffer_bytes": 352,
+        "linked_image_overhead_not_inferred": true
+      },
+      "cleanup_confirmed": true
+    }
+  ],
+  "executed_runner": {
+    "path": "build/durable-charge-vmware-footprint-runner.py",
+    "sha256": "161e80744b4933001c88ffa1132c086e83215852d07752491eaef1ab7ac365eb"
+  },
+  "final_vmrun_list": "Total running VMs: 0",
+  "no_checkpoint_or_lock_promotion": true
+}

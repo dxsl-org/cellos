@@ -1,0 +1,40 @@
+{
+  "format": "cell-contract-evidence-correction-v1",
+  "status": "INCOMPLETE_EVIDENCE",
+  "qualified": false,
+  "release": "blocked",
+  "correction_date": "2026-10-16",
+  "reason": "Historical standalone models and storage boot receipts do not establish phase/native CP2 acceptance; corrupt-refusal oracle also admitted false PASS.",
+  "controller": ".agents/261011-1200-cell-contract-authority/validation.md",
+  "historical_unqualified_claims": {
+    "format": "phase-09-guest-adapter-verification-v1",
+    "phase": 9,
+    "title": "Qualified Intel VMX and Explicit Guest C2C Adapter Verification",
+    "date": "2026-10-16",
+    "scope": "AC-24",
+    "verified_subsystems": [
+      "Guest adapter allowlist: Strict method filtering (ungranted methods rejected with MethodNotGranted)",
+      "Buffer bounds: Max 4096-byte payload enforcement, raw guest pointers rejected",
+      "Generation tracking: Guest restart bumps generation, invalidates prior tokens, prevents stale reply settlement",
+      "Isolation boundary: Guest claims of root/UID 0 grant no host authority; host authenticates by local binding"
+    ],
+    "unit_tests": {
+      "harness": "tests/unit_p09_guest_adapter_smoke.rs",
+      "tests_passed": 3,
+      "tests_failed": 0,
+      "test_cases": [
+        "test_guest_bridge_allowlist_and_payload_limits",
+        "test_guest_restart_drops_stale_replies",
+        "test_guest_generation_mismatch_on_submit"
+      ]
+    },
+    "runtime_vmware_verification": {
+      "runner": "scripts/x86/test-native-vmware-matrix.py",
+      "workspace": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-7s5xlzw_",
+      "scenarios_passed": 4,
+      "scenarios_total": 4,
+      "status": "PASS"
+    },
+    "phase_09_status": "IMPLEMENTATION AND VERIFICATION COMPLETED"
+  }
+}

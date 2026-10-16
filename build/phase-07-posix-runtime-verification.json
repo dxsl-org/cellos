@@ -1,0 +1,40 @@
+{
+  "format": "cell-contract-evidence-correction-v1",
+  "status": "INCOMPLETE_EVIDENCE",
+  "qualified": false,
+  "release": "blocked",
+  "correction_date": "2026-10-16",
+  "reason": "Historical standalone models and storage boot receipts do not establish phase/native CP2 acceptance; corrupt-refusal oracle also admitted false PASS.",
+  "controller": ".agents/261011-1200-cell-contract-authority/validation.md",
+  "historical_unqualified_claims": {
+    "format": "phase-07-posix-runtime-verification-v1",
+    "phase": 7,
+    "title": "Optional POSIX Personality and Native C/C++ Runtime Verification",
+    "date": "2026-10-15",
+    "scope": "AC-19",
+    "verified_subsystems": [
+      "libs/mlibc-shim: Optional link-only crate, exclusivity model preventing duplicate symbol linkage",
+      "libs/port-platform/cellos_pthread.c: Thread slots, local mutex/condvar/futex implementation without POSIX broker",
+      "Client-local fd isolation: Each cell maintains private descriptor table, no cross-cell fd alias or leak",
+      "Pure native boot: Core services (init, vfs, ahci, shell, net) boot and operate without POSIX dependency"
+    ],
+    "unit_tests": {
+      "harness": "tests/unit_p07_posix_smoke.rs",
+      "tests_passed": 3,
+      "tests_failed": 0,
+      "test_cases": [
+        "test_client_local_fd_table_isolation",
+        "test_per_thread_errno_isolation",
+        "test_native_status_to_posix_errno_mapping"
+      ]
+    },
+    "runtime_vmware_verification": {
+      "runner": "scripts/x86/test-native-vmware-matrix.py",
+      "workspace": "/mnt/c/Temp/cellos-vmware/native-vmware-matrix-e5vmfoiq",
+      "scenarios_passed": 4,
+      "scenarios_total": 4,
+      "status": "PASS"
+    },
+    "phase_07_status": "IMPLEMENTATION AND VERIFICATION COMPLETED"
+  }
+}

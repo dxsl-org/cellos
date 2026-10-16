@@ -1,0 +1,20 @@
+{
+  "scope": "Standalone Python model only",
+  "historical_repros_after": [
+    "RECOVERY_FAILED",
+    "RECOVERY_FAILED"
+  ],
+  "reply_loss": {
+    "live_state": "UNKNOWN",
+    "retained_charge": {
+      "cpu_ticks": 5000,
+      "mem_bytes": 65536,
+      "quota_blocks": 4
+    },
+    "recovered_state": "RECOVERED_MUTATION_CLOSED",
+    "same_transaction": true,
+    "mutation_admission": false,
+    "accounting_recovered": false
+  },
+  "script_sha256": "94fc97ec47d8ad96dea1452a5020fa630dcb4f797fddd705b82c4fcfc5c5367c"
+}

@@ -1,0 +1,33 @@
+{
+  "scope": "actual CapTable source + its permanent tests with real api/types and host Mutex; not native syscall/issuer proof",
+  "runs": [
+    {
+      "command": [
+        "test"
+      ],
+      "exit": 0,
+      "stdout": "\nrunning 2 tests\ntest tests::failed_leased_allocation_cannot_change_a_live_entry_or_lease ... ok\ntest tests::exhausted_ids_preserve_foreign_owners_and_never_reissue_after_close ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+      "stderr": "   Compiling proc-macro2 v1.0.107\n   Compiling quote v1.0.47\n   Compiling unicode-ident v1.0.27\n   Compiling thiserror v2.0.21\n   Compiling serde_core v1.0.229\n   Compiling serde v1.0.229\n   Compiling libm v0.2.16\n   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)\n   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)\n   Compiling syn v3.0.9\n   Compiling syn v2.0.119\n   Compiling thiserror-impl v2.0.21\n   Compiling serde_derive v1.0.229\n   Compiling postcard-derive v0.2.2\n   Compiling cobs v0.3.0\n   Compiling postcard v1.1.3\n   Compiling n02b-cap-registry-smoke v0.0.0 (/tmp/cellos-n02b-cap-registry)\nwarning: unexpected `cfg` condition name: `cellos_p01_trace`\n  --> src/main.rs:77:15\n   |\n77 |         #[cfg(cellos_p01_trace)]\n   |               ^^^^^^^^^^^^^^^^\n   |\n   = help: expected names are: `docsrs`, `feature`, and `test` and 32 more\n   = help: consider using a Cargo feature instead\n   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:\n            [lints.rust]\n            unexpected_cfgs = { level = \"warn\", check-cfg = ['cfg(cellos_p01_trace)'] }\n   = help: or consider adding `println!(\"cargo::rustc-check-cfg=cfg(cellos_p01_trace)\");` to the top of the `build.rs`\n   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration\n   = note: `#[warn(unexpected_cfgs)]` on by default\n\nwarning: `n02b-cap-registry-smoke` (bin \"n02b-cap-registry-smoke\" test) generated 1 warning\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.37s\n     Running unittests src/main.rs (target/x86_64-unknown-linux-gnu/debug/deps/n02b_cap_registry_smoke-6cefd858bd4d648b)\n"
+    },
+    {
+      "command": [
+        "test",
+        "--release"
+      ],
+      "exit": 0,
+      "stdout": "\nrunning 2 tests\ntest tests::exhausted_ids_preserve_foreign_owners_and_never_reissue_after_close ... ok\ntest tests::failed_leased_allocation_cannot_change_a_live_entry_or_lease ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+      "stderr": "   Compiling n02b-cap-registry-smoke v0.0.0 (/tmp/cellos-n02b-cap-registry)\nwarning: unexpected `cfg` condition name: `cellos_p01_trace`\n  --> src/main.rs:77:15\n   |\n77 |         #[cfg(cellos_p01_trace)]\n   |               ^^^^^^^^^^^^^^^^\n   |\n   = help: expected names are: `docsrs`, `feature`, and `test` and 32 more\n   = help: consider using a Cargo feature instead\n   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:\n            [lints.rust]\n            unexpected_cfgs = { level = \"warn\", check-cfg = ['cfg(cellos_p01_trace)'] }\n   = help: or consider adding `println!(\"cargo::rustc-check-cfg=cfg(cellos_p01_trace)\");` to the top of the `build.rs`\n   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration\n   = note: `#[warn(unexpected_cfgs)]` on by default\n\nwarning: `n02b-cap-registry-smoke` (bin \"n02b-cap-registry-smoke\" test) generated 1 warning\n    Finished `release` profile [optimized] target(s) in 0.39s\n     Running unittests src/main.rs (target/x86_64-unknown-linux-gnu/release/deps/n02b_cap_registry_smoke-12cd6435cecc67a3)\n"
+    },
+    {
+      "command": [
+        "run",
+        "--release"
+      ],
+      "exit": 0,
+      "stdout": "AFTER: old=CapId(1), last=CapId(18446744073709551614), refused=Err(OutOfMemory); original ownership/lease retained; no wrapped issuance\n",
+      "stderr": "   Compiling n02b-cap-registry-smoke v0.0.0 (/tmp/cellos-n02b-cap-registry)\nwarning: unexpected `cfg` condition name: `cellos_p01_trace`\n  --> src/main.rs:77:15\n   |\n77 |         #[cfg(cellos_p01_trace)]\n   |               ^^^^^^^^^^^^^^^^\n   |\n   = help: expected names are: `docsrs`, `feature`, and `test` and 32 more\n   = help: consider using a Cargo feature instead\n   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:\n            [lints.rust]\n            unexpected_cfgs = { level = \"warn\", check-cfg = ['cfg(cellos_p01_trace)'] }\n   = help: or consider adding `println!(\"cargo::rustc-check-cfg=cfg(cellos_p01_trace)\");` to the top of the `build.rs`\n   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration\n   = note: `#[warn(unexpected_cfgs)]` on by default\n\nwarning: `n02b-cap-registry-smoke` (bin \"n02b-cap-registry-smoke\") generated 1 warning\n    Finished `release` profile [optimized] target(s) in 0.30s\n     Running `target/x86_64-unknown-linux-gnu/release/n02b-cap-registry-smoke`\n"
+    }
+  ],
+  "source_sha256": "54027255f378004e9abbba365c32804f063e3af5061938465f714a09940760e5",
+  "public_wire_unchanged": true
+}

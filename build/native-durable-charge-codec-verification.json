@@ -1,0 +1,28 @@
+{
+  "format": "native-durable-charge-step2-step3-verification-v1",
+  "scope": "Native no_std DCO1 codec and native BlockDevice journal engine implementation; host and bare-metal target check; not production admission or CP1 approval",
+  "durable_charge_codec": {
+    "tests_exit": 0,
+    "no_std_x86_64_unknown_none": true,
+    "smoke_example": "DCO1 synthetic kind=32 bytes=308 profile_dimensions=1; encode/decode/reference checks completed\nIntegrity/profile consistency only; AuthenticatedCurrentState remains required, no native permission or durability asserted"
+  },
+  "durable_charge_journal": {
+    "tests_exit": 0,
+    "no_std_x86_64_unknown_none": true,
+    "double_barrier_crash_resilience": true,
+    "two_plane_resize_g_l": true,
+    "closing_intent_enforced": true,
+    "bootstrap_adoption_reconciliation_enforced": true
+  },
+  "step1_status": "COMPLETED (VMware SATA/AHCI probe observed)",
+  "step2_status": "COMPLETED (durable-charge-codec implements all 27 DCO1 schemas and NCF1 proof verification)",
+  "step3_implementation_status": "COMPLETED (durable-charge-journal implements atomic double-barrier BlockDevice journal and lifecycle authority gates)",
+  "step3_governance_blockers": {
+    "g0_instrumentation": "15 blocker classes remaining in build/cp1-prerequisites/g0-vtd-readiness-20261014.json",
+    "g2_owning_service_journal": "G2 owning-service D1/D2 recovery qualification blocked",
+    "actual_deployment_keys": "Production issuer credentials and public-key pinning packet required from deployment authority",
+    "law1_cp1_consent": "Maintainer approval on all 23 exact delta packages required before locked kernel/cells modification"
+  },
+  "step4_status": "PENDING (blocked on native service embedding under 38 scoped locks)",
+  "step5_status": "PENDING (blocked on live native measurements and caller migration)"
+}
