@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AdmissionError"],"fn":["check_admission"],"struct":["OriginProof"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["VECTOR_DIMENSIONS"],"enum":["LedgerError"],"struct":["ApplicationLedger"],"type":["ResourceVector"]};

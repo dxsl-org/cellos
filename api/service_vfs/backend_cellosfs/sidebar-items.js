@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CellosFsBackend"]};
+window.SIDEBAR_ITEMS = {"enum":["NativeState","Operation"],"fn":["path_tag"],"struct":["CellosFsBackend","Failure"]};

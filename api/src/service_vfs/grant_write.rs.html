@@ -69,27 +69,28 @@
 <a href=#69 id=69 data-nosnippet>69</a>    }
 <a href=#70 id=70 data-nosnippet>70</a>
 <a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">let </span>old = vfs.read_to_vec(<span class="kw-2">&amp;</span>path);
-<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">if </span>old.len() != file_len {
-<a href=#73 id=73 data-nosnippet>73</a>        <span class="kw">return </span>VfsResponse::Err(ERR_IO);
-<a href=#74 id=74 data-nosnippet>74</a>    }
-<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">let </span><span class="kw-2">mut </span>committed = Vec::with_capacity(new_len);
-<a href=#76 id=76 data-nosnippet>76</a>    committed.extend_from_slice(<span class="kw-2">&amp;</span>old);
-<a href=#77 id=77 data-nosnippet>77</a>    committed.resize(new_len, <span class="number">0</span>);
-<a href=#78 id=78 data-nosnippet>78</a>    <span class="comment">// GrantSlice resolution and VFS lease publication are one kernel grant-table
-<a href=#79 id=79 data-nosnippet>79</a>    // transaction. Copy into only the requested file range; a missing or short
-<a href=#80 id=80 data-nosnippet>80</a>    // grant is an I/O error and the backend remains untouched.
-<a href=#81 id=81 data-nosnippet>81</a>    </span><span class="kw">if </span>ostd::syscall::sys_grant_copy_to_slice(grant, <span class="kw-2">&amp;mut </span>committed[offset..end]) != <span class="prelude-val">Some</span>(bytes) {
-<a href=#82 id=82 data-nosnippet>82</a>        <span class="kw">return </span>VfsResponse::Err(ERR_IO);
-<a href=#83 id=83 data-nosnippet>83</a>    }
-<a href=#84 id=84 data-nosnippet>84</a>
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">if </span>!vfs.write(<span class="kw-2">&amp;</span>path, <span class="kw-2">&amp;</span>committed) {
-<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">return </span>VfsResponse::Err(ERR_IO);
-<a href=#87 id=87 data-nosnippet>87</a>    }
-<a href=#88 id=88 data-nosnippet>88</a>    <span class="comment">// Backends report success only after their synchronous write commits. Charge
-<a href=#89 id=89 data-nosnippet>89</a>    // after that commit, then acknowledge the exact visible byte count.
-<a href=#90 id=90 data-nosnippet>90</a>    </span>vfs.quota.release_path(<span class="kw-2">&amp;</span>path, file_len <span class="kw">as </span>u64);
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">let _ </span>= vfs.quota.charge(caller.cell, new_len <span class="kw">as </span>u64);
-<a href=#92 id=92 data-nosnippet>92</a>    vfs.quota.set_writer(<span class="kw-2">&amp;</span>path, caller.cell);
-<a href=#93 id=93 data-nosnippet>93</a>    VfsResponse::GrantDone { bytes }
-<a href=#94 id=94 data-nosnippet>94</a>}
+<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">if </span>!vfs.healthy(<span class="kw-2">&amp;</span>path) { <span class="kw">return </span>VfsResponse::Err(ERR_IO); }
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">if </span>old.len() != file_len {
+<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">return </span>VfsResponse::Err(ERR_IO);
+<a href=#75 id=75 data-nosnippet>75</a>    }
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">let </span><span class="kw-2">mut </span>committed = Vec::with_capacity(new_len);
+<a href=#77 id=77 data-nosnippet>77</a>    committed.extend_from_slice(<span class="kw-2">&amp;</span>old);
+<a href=#78 id=78 data-nosnippet>78</a>    committed.resize(new_len, <span class="number">0</span>);
+<a href=#79 id=79 data-nosnippet>79</a>    <span class="comment">// GrantSlice resolution and VFS lease publication are one kernel grant-table
+<a href=#80 id=80 data-nosnippet>80</a>    // transaction. Copy into only the requested file range; a missing or short
+<a href=#81 id=81 data-nosnippet>81</a>    // grant is an I/O error and the backend remains untouched.
+<a href=#82 id=82 data-nosnippet>82</a>    </span><span class="kw">if </span>ostd::syscall::sys_grant_copy_to_slice(grant, <span class="kw-2">&amp;mut </span>committed[offset..end]) != <span class="prelude-val">Some</span>(bytes) {
+<a href=#83 id=83 data-nosnippet>83</a>        <span class="kw">return </span>VfsResponse::Err(ERR_IO);
+<a href=#84 id=84 data-nosnippet>84</a>    }
+<a href=#85 id=85 data-nosnippet>85</a>
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">if </span>!vfs.write(<span class="kw-2">&amp;</span>path, <span class="kw-2">&amp;</span>committed) {
+<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">return </span>VfsResponse::Err(ERR_IO);
+<a href=#88 id=88 data-nosnippet>88</a>    }
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="comment">// Observed native sync is functional completion, not crash-preserving
+<a href=#90 id=90 data-nosnippet>90</a>    // durability. A failed mutation is possibly accepted and closes the instance.
+<a href=#91 id=91 data-nosnippet>91</a>    </span>vfs.quota.release_path(<span class="kw-2">&amp;</span>path, file_len <span class="kw">as </span>u64);
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">let _ </span>= vfs.quota.charge(caller.cell, new_len <span class="kw">as </span>u64);
+<a href=#93 id=93 data-nosnippet>93</a>    vfs.quota.set_writer(<span class="kw-2">&amp;</span>path, caller.cell);
+<a href=#94 id=94 data-nosnippet>94</a>    VfsResponse::GrantDone { bytes }
+<a href=#95 id=95 data-nosnippet>95</a>}
 </code></pre></div></section></main></body></html>

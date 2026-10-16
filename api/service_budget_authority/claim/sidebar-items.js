@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ClaimError"],"fn":["claim_reservation","mark_closing","release_closed"]};

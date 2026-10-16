@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["QUEUE_CAPACITY"],"enum":["Slot"],"fn":["deliver_pending_wakes","is_parked","queue_for","wakes_pending"],"static":["WAKES_PENDING"],"struct":["Completion","CompletionQueue","Ring","SlotId"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_WAITERS","QUEUE_CAPACITY"],"enum":["Slot"],"fn":["deliver_pending_wakes","is_parked","queue_for","wakes_pending"],"static":["WAKES_PENDING"],"struct":["Completion","CompletionQueue","Ring","SlotId"]};

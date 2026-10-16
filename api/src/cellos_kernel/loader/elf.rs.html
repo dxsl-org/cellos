@@ -346,7 +346,7 @@
 <a href=#346 id=346 data-nosnippet>346</a>    /// rejected ELF leaves its already-mapped pages resident, which both leaks
 <a href=#347 id=347 data-nosnippet>347</a>    /// the frames and poisons the VA-collision guard for the next spawn at the
 <a href=#348 id=348 data-nosnippet>348</a>    /// same base.
-<a href=#349 id=349 data-nosnippet>349</a>    </span><span class="kw">fn </span>unwind(mapped: <span class="kw-2">&amp;</span>[LoadedPage], frame_allocator: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::memory::frame::FrameAllocator) {
+<a href=#349 id=349 data-nosnippet>349</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>unwind(mapped: <span class="kw-2">&amp;</span>[LoadedPage], frame_allocator: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::memory::frame::FrameAllocator) {
 <a href=#350 id=350 data-nosnippet>350</a>        <span class="kw">for </span>page <span class="kw">in </span>mapped {
 <a href=#351 id=351 data-nosnippet>351</a>            <span class="kw">let _ </span>= <span class="kw">crate</span>::memory::paging::unmap_page(page.va);
 <a href=#352 id=352 data-nosnippet>352</a>            <span class="kw">crate</span>::memory::tlb_shootdown::flush_page(page.va);

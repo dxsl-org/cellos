@@ -152,30 +152,33 @@
 <a href=#152 id=152 data-nosnippet>152</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(new_key) = <span class="kw">crate</span>::namespace::NamespaceKey::parse(new) <span class="kw">else </span>{
 <a href=#153 id=153 data-nosnippet>153</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(VfsResponse::Err(ERR_DENIED));
 <a href=#154 id=154 data-nosnippet>154</a>            };
-<a href=#155 id=155 data-nosnippet>155</a>            <span class="kw">if </span>old_key == new_key {
-<a href=#156 id=156 data-nosnippet>156</a>                <span class="kw">return match </span>vfs.stat(old) {
-<a href=#157 id=157 data-nosnippet>157</a>                    <span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">false</span>)) =&gt; <span class="prelude-val">Some</span>(VfsResponse::Ok),
-<a href=#158 id=158 data-nosnippet>158</a>                    <span class="kw">_ </span>=&gt; <span class="prelude-val">Some</span>(VfsResponse::Err(ERR_IO)),
-<a href=#159 id=159 data-nosnippet>159</a>                };
-<a href=#160 id=160 data-nosnippet>160</a>            }
-<a href=#161 id=161 data-nosnippet>161</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(reservation) = vfs.ledger.reserve_two(<span class="kw-2">&amp;</span>old_key, <span class="kw-2">&amp;</span>new_key) <span class="kw">else </span>{
-<a href=#162 id=162 data-nosnippet>162</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(VfsResponse::Err(ERR_DENIED));
-<a href=#163 id=163 data-nosnippet>163</a>            };
-<a href=#164 id=164 data-nosnippet>164</a>            <span class="kw">let </span>ok = vfs.rename_no_replace(old, new);
-<a href=#165 id=165 data-nosnippet>165</a>            drop(reservation);
-<a href=#166 id=166 data-nosnippet>166</a>            <span class="kw">if </span>ok {
-<a href=#167 id=167 data-nosnippet>167</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(w) = vfs.quota.writer_of(old) {
-<a href=#168 id=168 data-nosnippet>168</a>                    vfs.quota.release_path(old, <span class="number">0</span>);
-<a href=#169 id=169 data-nosnippet>169</a>                    vfs.quota.set_writer(new, w);
-<a href=#170 id=170 data-nosnippet>170</a>                }
-<a href=#171 id=171 data-nosnippet>171</a>                VfsResponse::Ok
-<a href=#172 id=172 data-nosnippet>172</a>            } <span class="kw">else </span>{
-<a href=#173 id=173 data-nosnippet>173</a>                VfsResponse::Err(ERR_IO)
-<a href=#174 id=174 data-nosnippet>174</a>            }
-<a href=#175 id=175 data-nosnippet>175</a>        }
-<a href=#176 id=176 data-nosnippet>176</a>
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
-<a href=#178 id=178 data-nosnippet>178</a>    };
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="prelude-val">Some</span>(resp)
-<a href=#180 id=180 data-nosnippet>180</a>}
+<a href=#155 id=155 data-nosnippet>155</a>            <span class="kw">if </span>!vfs.healthy(old) || !vfs.healthy(new) {
+<a href=#156 id=156 data-nosnippet>156</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(VfsResponse::Err(ERR_IO));
+<a href=#157 id=157 data-nosnippet>157</a>            }
+<a href=#158 id=158 data-nosnippet>158</a>            <span class="kw">if </span>old_key == new_key {
+<a href=#159 id=159 data-nosnippet>159</a>                <span class="kw">return match </span>vfs.stat(old) {
+<a href=#160 id=160 data-nosnippet>160</a>                    <span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">false</span>)) =&gt; <span class="prelude-val">Some</span>(VfsResponse::Ok),
+<a href=#161 id=161 data-nosnippet>161</a>                    <span class="kw">_ </span>=&gt; <span class="prelude-val">Some</span>(VfsResponse::Err(ERR_IO)),
+<a href=#162 id=162 data-nosnippet>162</a>                };
+<a href=#163 id=163 data-nosnippet>163</a>            }
+<a href=#164 id=164 data-nosnippet>164</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(reservation) = vfs.ledger.reserve_two(<span class="kw-2">&amp;</span>old_key, <span class="kw-2">&amp;</span>new_key) <span class="kw">else </span>{
+<a href=#165 id=165 data-nosnippet>165</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(VfsResponse::Err(ERR_DENIED));
+<a href=#166 id=166 data-nosnippet>166</a>            };
+<a href=#167 id=167 data-nosnippet>167</a>            <span class="kw">let </span>ok = vfs.rename_no_replace(old, new);
+<a href=#168 id=168 data-nosnippet>168</a>            drop(reservation);
+<a href=#169 id=169 data-nosnippet>169</a>            <span class="kw">if </span>ok {
+<a href=#170 id=170 data-nosnippet>170</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(w) = vfs.quota.writer_of(old) {
+<a href=#171 id=171 data-nosnippet>171</a>                    vfs.quota.release_path(old, <span class="number">0</span>);
+<a href=#172 id=172 data-nosnippet>172</a>                    vfs.quota.set_writer(new, w);
+<a href=#173 id=173 data-nosnippet>173</a>                }
+<a href=#174 id=174 data-nosnippet>174</a>                VfsResponse::Ok
+<a href=#175 id=175 data-nosnippet>175</a>            } <span class="kw">else </span>{
+<a href=#176 id=176 data-nosnippet>176</a>                VfsResponse::Err(ERR_IO)
+<a href=#177 id=177 data-nosnippet>177</a>            }
+<a href=#178 id=178 data-nosnippet>178</a>        }
+<a href=#179 id=179 data-nosnippet>179</a>
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
+<a href=#181 id=181 data-nosnippet>181</a>    };
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="prelude-val">Some</span>(resp)
+<a href=#183 id=183 data-nosnippet>183</a>}
 </code></pre></div></section></main></body></html>

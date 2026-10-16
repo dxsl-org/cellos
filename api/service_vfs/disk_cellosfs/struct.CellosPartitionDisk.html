@@ -11,7 +11,7 @@
     count: u32,
     buf: &amp;mut [u8],
 ) -&gt; Result&lt;(), <a class="enum" href="../../cellos_fs/disk/enum.FsError.html" title="enum cellos_fs::disk::FsError">FsError</a>&gt;</h4></section></summary><div class='docblock'>Vectorized read: read <code>count</code> contiguous 4 KiB blocks into <code>buf</code>.
-Default implementation delegates to sequential <code>read_block</code>.</div></details><details class="toggle method-toggle" open><summary><section id="method.write_blocks" class="method trait-impl"><a class="src rightside" href="../../src/cellos_fs/disk.rs.html#49">Source</a><a href="#method.write_blocks" class="anchor">§</a><h4 class="code-header">fn <a href="../../cellos_fs/disk/trait.BlockDevice.html#method.write_blocks" class="fn">write_blocks</a>(
+Default implementation delegates to sequential <code>read_block</code>.</div></details><details class="toggle method-toggle" open><summary><section id="method.write_blocks" class="method trait-impl"><a class="src rightside" href="../../src/cellos_fs/disk.rs.html#54">Source</a><a href="#method.write_blocks" class="anchor">§</a><h4 class="code-header">fn <a href="../../cellos_fs/disk/trait.BlockDevice.html#method.write_blocks" class="fn">write_blocks</a>(
     &amp;mut self,
     start_block: u64,
     count: u32,

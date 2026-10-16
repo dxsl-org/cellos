@@ -151,39 +151,41 @@
 <a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">if </span>!vfs.access.can_read(caller, <span class="kw-2">&amp;</span>path) {
 <a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">return </span>VfsResponse::Err(ERR_DENIED);
 <a href=#153 id=153 data-nosnippet>153</a>    }
-<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">match </span>vfs.stat(<span class="kw-2">&amp;</span>path) {
-<a href=#155 id=155 data-nosnippet>155</a>        <span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">true</span>)) =&gt; {}
-<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">_ if </span>vfs.is_mount_ancestor(<span class="kw-2">&amp;</span>path) =&gt; {}
-<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">_ </span>=&gt; <span class="kw">return </span>VfsResponse::Err(ERR_IO),
-<a href=#158 id=158 data-nosnippet>158</a>    }
-<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">match </span>vfs.dirs.insert(caller, path, <span class="prelude-val">Some</span>(dir.<span class="number">0</span>)) {
-<a href=#160 id=160 data-nosnippet>160</a>        <span class="prelude-val">Ok</span>(handle) =&gt; VfsResponse::DirHandle(handle),
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="prelude-val">Err</span>(e) =&gt; VfsResponse::Err(dir_err(e)),
-<a href=#162 id=162 data-nosnippet>162</a>    }
-<a href=#163 id=163 data-nosnippet>163</a>}
-<a href=#164 id=164 data-nosnippet>164</a>
-<a href=#165 id=165 data-nosnippet>165</a><span class="kw">fn </span>read_at&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#166 id=166 data-nosnippet>166</a>    vfs: <span class="kw-2">&amp;mut </span>VfsManager,
-<a href=#167 id=167 data-nosnippet>167</a>    caller: Caller,
-<a href=#168 id=168 data-nosnippet>168</a>    dir: ViDirHandle,
-<a href=#169 id=169 data-nosnippet>169</a>    name: <span class="kw-2">&amp;</span>str,
-<a href=#170 id=170 data-nosnippet>170</a>    resp_buf: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8; IPC_BUF_SIZE],
-<a href=#171 id=171 data-nosnippet>171</a>) -&gt; VfsResponse&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">let </span>path = <span class="kw">match </span>resolve(vfs, caller, dir, name) {
-<a href=#173 id=173 data-nosnippet>173</a>        <span class="prelude-val">Ok</span>(p) =&gt; p,
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="prelude-val">Err</span>(code) =&gt; <span class="kw">return </span>VfsResponse::Err(code),
-<a href=#175 id=175 data-nosnippet>175</a>    };
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">if </span>!vfs.access.can_read(caller, <span class="kw-2">&amp;</span>path) {
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">return </span>VfsResponse::Err(ERR_DENIED);
-<a href=#178 id=178 data-nosnippet>178</a>    }
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="comment">// Absent and empty must not look alike: an empty reply for a missing file
-<a href=#180 id=180 data-nosnippet>180</a>    // would make a caller act on data that does not exist.
-<a href=#181 id=181 data-nosnippet>181</a>    </span><span class="kw">if </span>vfs.stat(<span class="kw-2">&amp;</span>path).is_none() {
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">return </span>VfsResponse::Err(ERR_IO);
-<a href=#183 id=183 data-nosnippet>183</a>    }
-<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span>data = vfs.read_to_vec(<span class="kw-2">&amp;</span>path);
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span>n = data.len().min(MAX_INLINE_PAYLOAD);
-<a href=#186 id=186 data-nosnippet>186</a>    resp_buf[..n].copy_from_slice(<span class="kw-2">&amp;</span>data[..n]);
-<a href=#187 id=187 data-nosnippet>187</a>    VfsResponse::Data(<span class="kw-2">&amp;</span>resp_buf[..n])
-<a href=#188 id=188 data-nosnippet>188</a>}
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">if </span>!vfs.healthy(<span class="kw-2">&amp;</span>path) { <span class="kw">return </span>VfsResponse::Err(ERR_IO); }
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">match </span>vfs.stat(<span class="kw-2">&amp;</span>path) {
+<a href=#156 id=156 data-nosnippet>156</a>        <span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">true</span>)) =&gt; {}
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">_ if </span>vfs.is_mount_ancestor(<span class="kw-2">&amp;</span>path) =&gt; {}
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">_ </span>=&gt; <span class="kw">return </span>VfsResponse::Err(ERR_IO),
+<a href=#159 id=159 data-nosnippet>159</a>    }
+<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">match </span>vfs.dirs.insert(caller, path, <span class="prelude-val">Some</span>(dir.<span class="number">0</span>)) {
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="prelude-val">Ok</span>(handle) =&gt; VfsResponse::DirHandle(handle),
+<a href=#162 id=162 data-nosnippet>162</a>        <span class="prelude-val">Err</span>(e) =&gt; VfsResponse::Err(dir_err(e)),
+<a href=#163 id=163 data-nosnippet>163</a>    }
+<a href=#164 id=164 data-nosnippet>164</a>}
+<a href=#165 id=165 data-nosnippet>165</a>
+<a href=#166 id=166 data-nosnippet>166</a><span class="kw">fn </span>read_at&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#167 id=167 data-nosnippet>167</a>    vfs: <span class="kw-2">&amp;mut </span>VfsManager,
+<a href=#168 id=168 data-nosnippet>168</a>    caller: Caller,
+<a href=#169 id=169 data-nosnippet>169</a>    dir: ViDirHandle,
+<a href=#170 id=170 data-nosnippet>170</a>    name: <span class="kw-2">&amp;</span>str,
+<a href=#171 id=171 data-nosnippet>171</a>    resp_buf: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8; IPC_BUF_SIZE],
+<a href=#172 id=172 data-nosnippet>172</a>) -&gt; VfsResponse&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span>path = <span class="kw">match </span>resolve(vfs, caller, dir, name) {
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="prelude-val">Ok</span>(p) =&gt; p,
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="prelude-val">Err</span>(code) =&gt; <span class="kw">return </span>VfsResponse::Err(code),
+<a href=#176 id=176 data-nosnippet>176</a>    };
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">if </span>!vfs.access.can_read(caller, <span class="kw-2">&amp;</span>path) {
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">return </span>VfsResponse::Err(ERR_DENIED);
+<a href=#179 id=179 data-nosnippet>179</a>    }
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="comment">// Absent and empty must not look alike: an empty reply for a missing file
+<a href=#181 id=181 data-nosnippet>181</a>    // would make a caller act on data that does not exist.
+<a href=#182 id=182 data-nosnippet>182</a>    </span><span class="kw">if </span>!<span class="macro">matches!</span>(vfs.stat(<span class="kw-2">&amp;</span>path), <span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">false</span>))) {
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">return </span>VfsResponse::Err(ERR_IO);
+<a href=#184 id=184 data-nosnippet>184</a>    }
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span>data = vfs.read_to_vec(<span class="kw-2">&amp;</span>path);
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">if </span>!vfs.healthy(<span class="kw-2">&amp;</span>path) { <span class="kw">return </span>VfsResponse::Err(ERR_IO); }
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">let </span>n = data.len().min(MAX_INLINE_PAYLOAD);
+<a href=#188 id=188 data-nosnippet>188</a>    resp_buf[..n].copy_from_slice(<span class="kw-2">&amp;</span>data[..n]);
+<a href=#189 id=189 data-nosnippet>189</a>    VfsResponse::Data(<span class="kw-2">&amp;</span>resp_buf[..n])
+<a href=#190 id=190 data-nosnippet>190</a>}
 </code></pre></div></section></main></body></html>

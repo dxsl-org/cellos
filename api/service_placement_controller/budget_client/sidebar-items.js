@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BudgetClientError"],"struct":["BudgetAuthorityClient"],"type":["ResourceVector"]};

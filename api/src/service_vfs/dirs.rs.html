@@ -67,7 +67,7 @@
 <a href=#67 id=67 data-nosnippet>67</a>    </span>UnknownHandle,
 <a href=#68 id=68 data-nosnippet>68</a>    <span class="doccomment">/// The name may not be resolved inside a directory.
 <a href=#69 id=69 data-nosnippet>69</a>    </span>BadName(DirNameError),
-<a href=#70 id=70 data-nosnippet>70</a>    <span class="doccomment">/// The caller holds [`MAX_HANDLES_PER_CELL`] already.
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="doccomment">/// The caller's handle limit or the issuer's non-reusable ID space is exhausted.
 <a href=#71 id=71 data-nosnippet>71</a>    </span>TooManyHandles,
 <a href=#72 id=72 data-nosnippet>72</a>}
 <a href=#73 id=73 data-nosnippet>73</a>
@@ -106,7 +106,7 @@
 <a href=#106 id=106 data-nosnippet>106</a>    <span class="doccomment">/// Issue a handle for an already-validated absolute directory path.
 <a href=#107 id=107 data-nosnippet>107</a>    ///
 <a href=#108 id=108 data-nosnippet>108</a>    /// # Errors
-<a href=#109 id=109 data-nosnippet>109</a>    /// [`DirError::TooManyHandles`] when the caller is at its limit, and
+<a href=#109 id=109 data-nosnippet>109</a>    /// [`DirError::TooManyHandles`] when the caller or issuer has no handle capacity, and
 <a href=#110 id=110 data-nosnippet>110</a>    /// [`DirError::UnknownHandle`] for a caller with no registered state, which
 <a href=#111 id=111 data-nosnippet>111</a>    /// cannot happen after `on_contact`.
 <a href=#112 id=112 data-nosnippet>112</a>    </span><span class="kw">pub fn </span>open_root(<span class="kw-2">&amp;mut </span><span class="self">self</span>, caller: Caller, path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;ViDirHandle, DirError&gt; {
@@ -150,28 +150,82 @@
 <a href=#150 id=150 data-nosnippet>150</a>        path: String,
 <a href=#151 id=151 data-nosnippet>151</a>        parent: <span class="prelude-ty">Option</span>&lt;u64&gt;,
 <a href=#152 id=152 data-nosnippet>152</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ViDirHandle, DirError&gt; {
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span>state = <span class="self">self</span>.state_mut(owner).ok_or(DirError::UnknownHandle)<span class="question-mark">?</span>;
-<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">if </span>state.handles &gt;= MAX_HANDLES_PER_CELL {
-<a href=#155 id=155 data-nosnippet>155</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(DirError::TooManyHandles);
-<a href=#156 id=156 data-nosnippet>156</a>        }
-<a href=#157 id=157 data-nosnippet>157</a>        state.handles += <span class="number">1</span>;
-<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">let </span>id = <span class="self">self</span>.next;
-<a href=#159 id=159 data-nosnippet>159</a>        <span class="self">self</span>.next = <span class="self">self</span>.next.saturating_add(<span class="number">1</span>);
-<a href=#160 id=160 data-nosnippet>160</a>        <span class="self">self</span>.entries.insert(
-<a href=#161 id=161 data-nosnippet>161</a>            id,
-<a href=#162 id=162 data-nosnippet>162</a>            DirEntry {
-<a href=#163 id=163 data-nosnippet>163</a>                owner,
-<a href=#164 id=164 data-nosnippet>164</a>                path,
-<a href=#165 id=165 data-nosnippet>165</a>                parent,
-<a href=#166 id=166 data-nosnippet>166</a>            },
-<a href=#167 id=167 data-nosnippet>167</a>        );
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="prelude-val">Ok</span>(ViDirHandle(id))
-<a href=#169 id=169 data-nosnippet>169</a>    }
-<a href=#170 id=170 data-nosnippet>170</a>}
-<a href=#171 id=171 data-nosnippet>171</a>
-<a href=#172 id=172 data-nosnippet>172</a><span class="kw">impl </span>Default <span class="kw">for </span>DirTable {
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="self">Self</span>::new()
-<a href=#175 id=175 data-nosnippet>175</a>    }
-<a href=#176 id=176 data-nosnippet>176</a>}
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span>next = <span class="self">self</span>.next.checked_add(<span class="number">1</span>);
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">let </span>state = <span class="self">self</span>.state_mut(owner).ok_or(DirError::UnknownHandle)<span class="question-mark">?</span>;
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">if </span>state.handles &gt;= MAX_HANDLES_PER_CELL {
+<a href=#156 id=156 data-nosnippet>156</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(DirError::TooManyHandles);
+<a href=#157 id=157 data-nosnippet>157</a>        }
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">let </span>next = next.ok_or(DirError::TooManyHandles)<span class="question-mark">?</span>;
+<a href=#159 id=159 data-nosnippet>159</a>        state.handles += <span class="number">1</span>;
+<a href=#160 id=160 data-nosnippet>160</a>        <span class="kw">let </span>id = <span class="self">self</span>.next;
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="self">self</span>.next = next;
+<a href=#162 id=162 data-nosnippet>162</a>        <span class="self">self</span>.entries.insert(
+<a href=#163 id=163 data-nosnippet>163</a>            id,
+<a href=#164 id=164 data-nosnippet>164</a>            DirEntry {
+<a href=#165 id=165 data-nosnippet>165</a>                owner,
+<a href=#166 id=166 data-nosnippet>166</a>                path,
+<a href=#167 id=167 data-nosnippet>167</a>                parent,
+<a href=#168 id=168 data-nosnippet>168</a>            },
+<a href=#169 id=169 data-nosnippet>169</a>        );
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="prelude-val">Ok</span>(ViDirHandle(id))
+<a href=#171 id=171 data-nosnippet>171</a>    }
+<a href=#172 id=172 data-nosnippet>172</a>}
+<a href=#173 id=173 data-nosnippet>173</a>
+<a href=#174 id=174 data-nosnippet>174</a><span class="kw">impl </span>Default <span class="kw">for </span>DirTable {
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+<a href=#176 id=176 data-nosnippet>176</a>        <span class="self">Self</span>::new()
+<a href=#177 id=177 data-nosnippet>177</a>    }
+<a href=#178 id=178 data-nosnippet>178</a>}
+<a href=#179 id=179 data-nosnippet>179</a>
+<a href=#180 id=180 data-nosnippet>180</a><span class="attr">#[cfg(test)]
+<a href=#181 id=181 data-nosnippet>181</a></span><span class="kw">mod </span>tests {
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">use </span>api::dir_attestation::ViDirHandleAttestation;
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">use </span>api::dir_handles::{DirHandleSet, ViSpawnDirHandles};
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">use </span>types::CellId;
+<a href=#186 id=186 data-nosnippet>186</a>
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="attr">#[test]
+<a href=#188 id=188 data-nosnippet>188</a>    </span><span class="kw">fn </span>exhausted_directory_ids_preserve_existing_owner_and_counts() {
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span>owner = Caller::principal(CellId(<span class="number">11</span>), <span class="number">1</span>);
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let </span>peer = Caller::principal(CellId(<span class="number">12</span>), <span class="number">1</span>);
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span><span class="kw-2">mut </span>table = DirTable::new();
+<a href=#192 id=192 data-nosnippet>192</a>        table.on_contact(owner);
+<a href=#193 id=193 data-nosnippet>193</a>        table.on_contact(peer);
+<a href=#194 id=194 data-nosnippet>194</a>        table.next = u64::MAX - <span class="number">1</span>;
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">let </span>live = table.open_root(owner, <span class="string">"/data/owner"</span>).unwrap();
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="macro">assert_eq!</span>(table.open_root(peer, <span class="string">"/data/peer"</span>), <span class="prelude-val">Err</span>(DirError::TooManyHandles));
+<a href=#197 id=197 data-nosnippet>197</a>        <span class="macro">assert_eq!</span>(table.dir_path(owner, live), <span class="prelude-val">Some</span>(<span class="string">"/data/owner"</span>));
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="macro">assert_eq!</span>(table.dir_path(peer, live), <span class="prelude-val">None</span>);
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="macro">assert_eq!</span>(table.held_by(owner), <span class="number">1</span>);
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="macro">assert_eq!</span>(table.held_by(peer), <span class="number">0</span>);
+<a href=#201 id=201 data-nosnippet>201</a>        table.revoke(owner, live).unwrap();
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="macro">assert_eq!</span>(table.open_root(peer, <span class="string">"/data/again"</span>), <span class="prelude-val">Err</span>(DirError::TooManyHandles));
+<a href=#203 id=203 data-nosnippet>203</a>        <span class="macro">assert_eq!</span>(table.held_by(peer), <span class="number">0</span>);
+<a href=#204 id=204 data-nosnippet>204</a>    }
+<a href=#205 id=205 data-nosnippet>205</a>
+<a href=#206 id=206 data-nosnippet>206</a>    <span class="attr">#[test]
+<a href=#207 id=207 data-nosnippet>207</a>    </span><span class="kw">fn </span>inherited_set_rolls_back_if_ticket_space_exhausts_mid_bind() {
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span>owner = Caller::principal(CellId(<span class="number">21</span>), <span class="number">1</span>);
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">let </span>child = Caller::principal(CellId(<span class="number">22</span>), <span class="number">1</span>);
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">let </span><span class="kw-2">mut </span>table = DirTable::new();
+<a href=#211 id=211 data-nosnippet>211</a>        table.on_contact(owner);
+<a href=#212 id=212 data-nosnippet>212</a>        table.on_contact(child);
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">let </span>first = table.open_root(owner, <span class="string">"/data/first"</span>).unwrap();
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">let </span>second = table.open_root(owner, <span class="string">"/data/second"</span>).unwrap();
+<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">let </span>record = ViDirHandleAttestation {
+<a href=#216 id=216 data-nosnippet>216</a>            cell_id: child.cell.<span class="number">0</span>,
+<a href=#217 id=217 data-nosnippet>217</a>            generation: child.generation,
+<a href=#218 id=218 data-nosnippet>218</a>            spawner_cell_id: owner.cell.<span class="number">0</span>,
+<a href=#219 id=219 data-nosnippet>219</a>            spawner_generation: owner.generation,
+<a href=#220 id=220 data-nosnippet>220</a>            set: DirHandleSet::from_carrier(
+<a href=#221 id=221 data-nosnippet>221</a>                <span class="kw-2">&amp;</span>ViSpawnDirHandles::new(<span class="kw-2">&amp;</span>[first, second]).unwrap()).unwrap(),
+<a href=#222 id=222 data-nosnippet>222</a>        };
+<a href=#223 id=223 data-nosnippet>223</a>        table.next = u64::MAX - <span class="number">1</span>;
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="macro">assert_eq!</span>(table.bind_inherited(child, <span class="kw-2">&amp;</span>record), bind::BindOutcome::Refused);
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="macro">assert_eq!</span>(table.held_by(child), <span class="number">0</span>);
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="macro">assert_eq!</span>(table.entries.len(), <span class="number">2</span>);
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="macro">assert_eq!</span>(table.dir_path(owner, first), <span class="prelude-val">Some</span>(<span class="string">"/data/first"</span>));
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="macro">assert_eq!</span>(table.dir_path(owner, second), <span class="prelude-val">Some</span>(<span class="string">"/data/second"</span>));
+<a href=#229 id=229 data-nosnippet>229</a>    }
+<a href=#230 id=230 data-nosnippet>230</a>}
 </code></pre></div></section></main></body></html>

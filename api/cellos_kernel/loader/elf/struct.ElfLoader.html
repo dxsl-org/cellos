@@ -20,7 +20,10 @@ outside the ELF buffer, arithmetic overflow).</li>
 owned by another live cell or kernel MMIO, or a PT_LOAD declaring W+X.</li>
 <li><code>ViError::OutOfMemory</code> — no frame available, or the mapping failed.</li>
 </ul>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.unwind" class="method"><a class="src rightside" href="../../../src/cellos_kernel/loader/elf.rs.html#349-362">Source</a><h4 class="code-header">fn <a href="#method.unwind" class="fn">unwind</a>(mapped: &amp;[<a class="struct" href="struct.LoadedPage.html" title="struct cellos_kernel::loader::elf::LoadedPage">LoadedPage</a>], frame_allocator: &amp;mut <a class="struct" href="../../memory/frame/struct.FrameAllocator.html" title="struct cellos_kernel::memory::frame::FrameAllocator">FrameAllocator</a>)</h4></section></summary><div class="docblock"><p>Undo a partially loaded image: unmap every page recorded so far and
+</div></details><details class="toggle method-toggle" open><summary><section id="method.unwind" class="method"><a class="src rightside" href="../../../src/cellos_kernel/loader/elf.rs.html#349-362">Source</a><h4 class="code-header">pub(crate) fn <a href="#method.unwind" class="fn">unwind</a>(
+    mapped: &amp;[<a class="struct" href="struct.LoadedPage.html" title="struct cellos_kernel::loader::elf::LoadedPage">LoadedPage</a>],
+    frame_allocator: &amp;mut <a class="struct" href="../../memory/frame/struct.FrameAllocator.html" title="struct cellos_kernel::memory::frame::FrameAllocator">FrameAllocator</a>,
+)</h4></section></summary><div class="docblock"><p>Undo a partially loaded image: unmap every page recorded so far and
 return its frame to the allocator.</p>
 <p>Every early return inside <code>load_segments</code> must call this. Without it a
 rejected ELF leaves its already-mapped pages resident, which both leaks

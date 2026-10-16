@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CapResource"],"static":["CAP_TABLE"],"struct":["CapEntry","CapId","CapTable"]};
+window.SIDEBAR_ITEMS = {"enum":["CapResource"],"fn":["attach_file_to_ticket","park_ticket_file","remove_ticket_file","unpark_ticket_file"],"static":["CAP_TABLE","CSPACE_FILES"],"struct":["CapEntry","CapId","CapTable"]};

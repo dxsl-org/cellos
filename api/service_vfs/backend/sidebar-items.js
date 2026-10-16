@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"trait":["FsBackend"]};
+window.SIDEBAR_ITEMS = {"enum":["BackendHealth"],"trait":["FsBackend"]};

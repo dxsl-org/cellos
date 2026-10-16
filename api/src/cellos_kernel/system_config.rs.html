@@ -58,19 +58,27 @@
 <a href=#58 id=58 data-nosnippet>58</a>        <span class="kw">if </span>stat.size == <span class="number">0 </span>{ <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"configuration is empty"</span>); }
 <a href=#59 id=59 data-nosnippet>59</a>        <span class="kw">if </span>stat.size &gt; MAX_CONFIG_BYTES <span class="kw">as </span>u64 { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"configuration exceeds 16384 bytes"</span>); }
 <a href=#60 id=60 data-nosnippet>60</a>        <span class="kw">let </span>size = usize::try_from(stat.size).map_err(|<span class="kw">_</span>| <span class="string">"configuration size is not representable"</span>)<span class="question-mark">?</span>;
-<a href=#61 id=61 data-nosnippet>61</a>        <span class="kw">let </span>file = fs.open(SYSTEM_PATH, OpenMode::Read).map_err(|<span class="kw">_</span>| <span class="string">"cannot open embedded configuration"</span>)<span class="question-mark">?</span>;
-<a href=#62 id=62 data-nosnippet>62</a>        (file, size)
-<a href=#63 id=63 data-nosnippet>63</a>    };
-<a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new();
-<a href=#65 id=65 data-nosnippet>65</a>    bytes.try_reserve_exact(size).map_err(|<span class="kw">_</span>| <span class="string">"cannot allocate configuration buffer"</span>)<span class="question-mark">?</span>;
-<a href=#66 id=66 data-nosnippet>66</a>    bytes.resize(size, <span class="number">0</span>);
-<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">let </span><span class="kw-2">mut </span>offset = <span class="number">0</span>;
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">while </span>offset &lt; size {
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">let </span>end = (offset + <span class="number">4096</span>).min(size);
-<a href=#70 id=70 data-nosnippet>70</a>        <span class="kw">let </span>count = file.read(<span class="kw-2">&amp;mut </span>bytes[offset..end]).map_err(|<span class="kw">_</span>| <span class="string">"cannot read embedded configuration"</span>)<span class="question-mark">?</span>;
-<a href=#71 id=71 data-nosnippet>71</a>        <span class="kw">if </span>count == <span class="number">0 </span>|| count &gt; end - offset { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"configuration is truncated or inconsistent"</span>); }
-<a href=#72 id=72 data-nosnippet>72</a>        offset += count;
-<a href=#73 id=73 data-nosnippet>73</a>    }
-<a href=#74 id=74 data-nosnippet>74</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(bytes))
-<a href=#75 id=75 data-nosnippet>75</a>}
+<a href=#61 id=61 data-nosnippet>61</a>        <span class="attr">#[cfg(cellos_p01_trace)]
+<a href=#62 id=62 data-nosnippet>62</a>        </span><span class="kw">let </span>_scratch = <span class="kw">crate</span>::memory::heap::p01_owner::creation(<span class="prelude-val">None</span>,
+<a href=#63 id=63 data-nosnippet>63</a>            <span class="kw">crate</span>::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED);
+<a href=#64 id=64 data-nosnippet>64</a>        <span class="kw">let </span>file = fs.open(SYSTEM_PATH, OpenMode::Read).map_err(|<span class="kw">_</span>| <span class="string">"cannot open embedded configuration"</span>)<span class="question-mark">?</span>;
+<a href=#65 id=65 data-nosnippet>65</a>        (file, size)
+<a href=#66 id=66 data-nosnippet>66</a>    };
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new();
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="attr">#[cfg(cellos_p01_trace)]
+<a href=#69 id=69 data-nosnippet>69</a>    </span><span class="kw">let </span>scratch = <span class="kw">crate</span>::memory::heap::p01_owner::creation(<span class="prelude-val">None</span>,
+<a href=#70 id=70 data-nosnippet>70</a>        <span class="kw">crate</span>::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED);
+<a href=#71 id=71 data-nosnippet>71</a>    bytes.try_reserve_exact(size).map_err(|<span class="kw">_</span>| <span class="string">"cannot allocate configuration buffer"</span>)<span class="question-mark">?</span>;
+<a href=#72 id=72 data-nosnippet>72</a>    <span class="attr">#[cfg(cellos_p01_trace)]
+<a href=#73 id=73 data-nosnippet>73</a>    </span>drop(scratch);
+<a href=#74 id=74 data-nosnippet>74</a>    bytes.resize(size, <span class="number">0</span>);
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">let </span><span class="kw-2">mut </span>offset = <span class="number">0</span>;
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">while </span>offset &lt; size {
+<a href=#77 id=77 data-nosnippet>77</a>        <span class="kw">let </span>end = (offset + <span class="number">4096</span>).min(size);
+<a href=#78 id=78 data-nosnippet>78</a>        <span class="kw">let </span>count = file.read(<span class="kw-2">&amp;mut </span>bytes[offset..end]).map_err(|<span class="kw">_</span>| <span class="string">"cannot read embedded configuration"</span>)<span class="question-mark">?</span>;
+<a href=#79 id=79 data-nosnippet>79</a>        <span class="kw">if </span>count == <span class="number">0 </span>|| count &gt; end - offset { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"configuration is truncated or inconsistent"</span>); }
+<a href=#80 id=80 data-nosnippet>80</a>        offset += count;
+<a href=#81 id=81 data-nosnippet>81</a>    }
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(bytes))
+<a href=#83 id=83 data-nosnippet>83</a>}
 </code></pre></div></section></main></body></html>
