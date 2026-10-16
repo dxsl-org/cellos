@@ -413,12 +413,12 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "221ff6f93cb30e11ef562b4fc10910113785bd27d81f37edb67a6e78b0d77fdd",
+  "source_census_sha256": "012d8646961741418f5b593a9c31fa23c7c7d456c8d51ff872a17aa8f9110658",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "6fb181138bed9733627213085288c80892035aaf58dcfdae24c04e57eaeb22b6"
+      "sha256": "29e158f86fbbf1dfb802bd6f314c516e9d5485f3fdd82363cc4b4d076d458f80"
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -430,7 +430,7 @@
     },
     {
       "path": "Cargo.toml",
-      "sha256": "68d7b770a90d42019040ac01efe9ad052290c0300b9453dec6cb5990876ec13b"
+      "sha256": "7511c0280e07db67f34f44b2ea5755756a668db30a445a86da038f8233a2e4a4"
     },
     {
       "path": "LICENSING.md",
@@ -8325,6 +8325,42 @@
       "sha256": "51e8fdad9e2956c9c23b42c2c6a75e1c8f719dbd778769b752d40a17c09155e0"
     },
     {
+      "path": "cells/services/workload-router/Cargo.toml",
+      "sha256": "4262d286aee5b82749478bf9f2c371e78ac6ca5f04c7b328d2dd975c9ec39d40"
+    },
+    {
+      "path": "cells/services/workload-router/build.rs",
+      "sha256": "309c7f94ddf64d2c2d1fce2f9472d674869c6feb2218ebcadbf4bab5626d5f90"
+    },
+    {
+      "path": "cells/services/workload-router/src/admission.rs",
+      "sha256": "4dd4accd76ce10ac5dcae217e35ddc7facbef432df04f864c18c86acaf5485ad"
+    },
+    {
+      "path": "cells/services/workload-router/src/endpoint.rs",
+      "sha256": "652e6591da3a8db64ade88223bd45d7db746d459ad2d71269b3f0c17b593f627"
+    },
+    {
+      "path": "cells/services/workload-router/src/lib.rs",
+      "sha256": "25d2e968e40576b8c03a4d81c079309f14c80b13aeca37124e3421a4476ec052"
+    },
+    {
+      "path": "cells/services/workload-router/src/main.rs",
+      "sha256": "255f35058461909d4c1e36651bad22dac29929596ee76b459628242c69516f88"
+    },
+    {
+      "path": "cells/services/workload-router/src/queue.rs",
+      "sha256": "a69d78e1a42406e9a9712f84188c9850a7c53f1c8494efff2a6d28c24d31ad42"
+    },
+    {
+      "path": "cells/services/workload-router/src/routing.rs",
+      "sha256": "d91fef36fa371012bfb0903c1f160040537268cc98b7a8ea418fc9c99ca2d1af"
+    },
+    {
+      "path": "cells/services/workload-router/src/telemetry.rs",
+      "sha256": "d7f420737dc5c9e20eadb04c71584f2b5ff89d403ecbbef3e4ea3424237fa209"
+    },
+    {
       "path": "cells/tests/ai-test/Cargo.toml",
       "sha256": "3d775317440259b1e7aecef92f8ced4844a2ce7f2d6ec322cd8401465b72b203"
     },
@@ -14514,7 +14550,7 @@
     },
     {
       "path": "tests/unit_cspace_smoke.rs",
-      "sha256": "dbe608d31b3248cb66a037c966afb82204fb9ee28b4f1007e0b515674aae872b"
+      "sha256": "d81f4fb281978be07b87019251417c5d9a15397198eefbf54f10218cc53b1b86"
     },
     {
       "path": "third_party/mlibc/sysdeps/vicell/crt-aarch64/crt1.S",

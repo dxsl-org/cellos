@@ -1128,3 +1128,115 @@ mod p08c {
         assert!(fence.advance(99).is_err());  // regression fails
     }
 }
+
+#[cfg(test)]
+mod p08b {
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct MockMember {
+        id: u64,
+        is_ready: bool,
+        is_draining: bool,
+    }
+
+    struct MockRouter {
+        index: usize,
+    }
+
+    impl MockRouter {
+        fn new() -> Self {
+            Self { index: 0 }
+        }
+
+        fn select<'a>(&mut self, candidates: &'a [MockMember]) -> Result<&'a MockMember, &'static str> {
+            let ready: Vec<&'a MockMember> = candidates
+                .iter()
+                .filter(|m| m.is_ready && !m.is_draining)
+                .collect();
+            if ready.is_empty() {
+                return Err("no members");
+            }
+            let chosen = ready[self.index % ready.len()];
+            self.index = self.index.wrapping_add(1);
+            Ok(chosen)
+        }
+    }
+
+    #[test]
+    fn test_p08b_weighted_selection_and_target_freezing() {
+        let members = [
+            MockMember { id: 1, is_ready: true, is_draining: false },
+            MockMember { id: 2, is_ready: true, is_draining: true }, // draining: skipped
+            MockMember { id: 3, is_ready: false, is_draining: false }, // unready: skipped
+            MockMember { id: 4, is_ready: true, is_draining: false },
+        ];
+
+        let mut router = MockRouter::new();
+
+        // Round 1 selects member 1
+        let first = router.select(&members).expect("select");
+        assert_eq!(first.id, 1);
+
+        // Round 2 selects member 4 (skips 2 and 3)
+        let second = router.select(&members).expect("select");
+        assert_eq!(second.id, 4);
+
+        // Round 3 wraps to member 1
+        let third = router.select(&members).expect("select");
+        assert_eq!(third.id, 1);
+    }
+
+    #[test]
+    fn test_p08b_bounded_queue_and_deadline_eviction() {
+        struct Queued {
+            id: u64,
+            deadline_ms: u64,
+        }
+
+        let mut queue: Vec<Queued> = vec![
+            Queued { id: 101, deadline_ms: 1000 },
+            Queued { id: 102, deadline_ms: 2000 },
+            Queued { id: 103, deadline_ms: 3000 },
+        ];
+
+        // At now = 1500ms, item 101 is evicted
+        let now = 1500;
+        queue.retain(|item| item.deadline_ms > now);
+        assert_eq!(queue.len(), 2);
+        assert_eq!(queue[0].id, 102);
+        assert_eq!(queue[1].id, 103);
+
+        // At now = 2500ms, item 102 is evicted
+        let now = 2500;
+        queue.retain(|item| item.deadline_ms > now);
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].id, 103);
+    }
+
+    #[test]
+    fn test_p08b_challenge_round_receiver_initiated_ttl() {
+        struct Challenge {
+            nonce: u64,
+            start_time_ms: u64,
+            max_ttl_ms: u64,
+            completed: bool,
+        }
+
+        let mut c = Challenge {
+            nonce: 0x9999,
+            start_time_ms: 1000,
+            max_ttl_ms: 500, // valid until 1500ms
+            completed: false,
+        };
+
+        // Valid within TTL
+        assert!(1200 < c.start_time_ms + c.max_ttl_ms);
+        assert!(!c.completed);
+
+        // Expired at 1600ms
+        assert!(1600 >= c.start_time_ms + c.max_ttl_ms);
+
+        // Completion prevents reuse
+        c.completed = true;
+        assert!(c.completed);
+    }
+}

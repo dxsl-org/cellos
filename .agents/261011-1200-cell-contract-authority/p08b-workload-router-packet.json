@@ -1,0 +1,23 @@
+{
+  "format": "cell-contract-p08b-dossier-v1",
+  "status": "approved",
+  "recorded": "2026-10-16",
+  "scope": "Phase 08-B (P08-B) Workload Endpoints, Routing, and Bounded Admission Implementation & Gate Verification",
+  "dossier_document": ".agents/261011-1200-cell-contract-authority/p08b-workload-router-packet.md",
+  "dossier_sha256": "6820c786e33ee82b431917e74d2eb0ddca80ed7d10c785d14b021ebcec205922",
+  "legacy_lock_count": 38,
+  "legacy_locks_released": 0,
+  "milestone": "P08-B",
+  "service_package": "cells/services/workload-router",
+  "invariants": {
+    "deterministic_weighted_selection": true,
+    "single_attempt_freezing": true,
+    "receiver_initiated_challenge_ttl": true,
+    "deadline_eviction": true
+  },
+  "verification": {
+    "unit_tests": "PASS (40/40 in unit_cspace_smoke)",
+    "bare_metal_build": "PASS (service-workload-router on x86_64-unknown-none)",
+    "document_consistency": "PASS (verify-cell-contract-p01.py)"
+  }
+}

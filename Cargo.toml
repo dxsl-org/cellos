@@ -121,6 +121,7 @@ members = [
     "cells/services/ocel-quickjs",
     "cells/services/ocel-pdf",
     "cells/services/budget-authority",
+    "cells/services/workload-router",
 
     # Cells - Tools (system + CLI)
     "cells/tools/init",

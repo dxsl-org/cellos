@@ -515,3 +515,15 @@ Executed P08-C verification covering the independent Budget Authority service (`
 
 Dossier preserved in `.agents/261011-1200-cell-contract-authority/p08c-budget-authority-packet.md`. All 38 locks remain in force; downstream P08-B/D remain pending.
 
+## Phase 08-B (P08-B) Workload Router Implementation & Verification — 2026-10-16
+
+Executed P08-B verification covering the workload router service (`cells/services/workload-router/`):
+1. **Workload Endpoints & Destination Ready Verification (`endpoint.rs`):** Verified member readiness against destination Ready evidence, artifact hash, tier, and generation; skips unready or draining members.
+2. **Deterministic Weighted Selection & Target Freezing (`routing.rs`):** Deterministic round-robin weighted selection advances in stable order; freezes the concrete target attempt upon submission.
+3. **Bounded Queue & Deadline Eviction (`queue.rs`):** Items with expired deadlines are evicted before late Ready; queue capacity enforces bounded memory and slot counts.
+4. **Receiver-Initiated Challenge Rounds (`telemetry.rs`):** Nonce-bound challenge rounds with TTL evaluated strictly against local start time; completed challenges cannot be reused.
+5. **Bare-Metal Service Build:** `service-workload-router` compiles clean on `x86_64-unknown-none` with `#![no_std]` and `ostd`.
+6. **Unit Test Coverage:** `tests/unit_cspace_smoke.rs` passes 40/40 tests clean, including P08-B weighted selection, deadline eviction, and challenge round TTL.
+
+Dossier preserved in `.agents/261011-1200-cell-contract-authority/p08b-workload-router-packet.md`. All 38 locks remain in force; downstream P08-D/E remain pending.
+

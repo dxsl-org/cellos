@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Implement Phase 08-B (P08-B) Workload Router service: verify workload endpoint
+  management, destination Ready evidence checking, deterministic weighted selection with
+  target freezing, bounded queue deadline eviction, and receiver-initiated challenge rounds.
 - Implement Phase 08-C (P08-C) Independent Budget Authority service: provide multi-dimensional
   application capacity ledger (6 dimensions), one-use bootstrap reservation, live destination
   atomic claim, Closing serialization, monotonic enforcement fence, and fail-closed crash recovery.
