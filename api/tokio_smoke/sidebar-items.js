@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HTTP_PORT","SERVER_TOKEN","WAKER_TOKEN"],"fn":["cell_main","init_custom_heap","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

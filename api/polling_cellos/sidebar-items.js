@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PollerError"],"struct":["Event","Events","Poller"]};
