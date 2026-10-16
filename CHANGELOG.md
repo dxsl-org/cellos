@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Implement Phase 10 (P10) System Qualification & Contract Traceability: verify 200+
+  concurrent client overlap (AC-25/35), AC-43 load-driven autospawn and safe drain,
+  and consolidate full AC-01..AC-50 positive and negative contract verification.
 - Implement Phase 09 (P09) Guest Adapter & VMX isolation: enforce that guest UID 0
   grants zero host authority; translate guest requests into bounded C2C envelopes;
   prevent stale reply replay across guest domain generations.

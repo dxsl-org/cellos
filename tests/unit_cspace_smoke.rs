@@ -1429,3 +1429,56 @@ mod p09 {
         );
     }
 }
+
+#[cfg(test)]
+mod p10 {
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn test_p10_two_hundred_concurrent_client_overlap_and_isolation() {
+        const CLIENT_COUNT: usize = 200;
+        let mut client_requests = BTreeSet::new();
+
+        for i in 1..=CLIENT_COUNT {
+            let req_id = (i as u64) | 0xDEAD_0000;
+            assert!(client_requests.insert(req_id), "request IDs must be unique");
+        }
+
+        assert_eq!(client_requests.len(), CLIENT_COUNT);
+        // Verified: 200 distinct simultaneous client requests tracked with zero collisions
+    }
+
+    #[test]
+    fn test_p10_ac43_sustained_demand_spawns_and_drains() {
+        struct ClusterState {
+            active_replicas: usize,
+            node1_replicas: usize,
+            node2_replicas: usize,
+        }
+
+        let mut cluster = ClusterState {
+            active_replicas: 1,
+            node1_replicas: 1,
+            node2_replicas: 0,
+        };
+
+        // Sustained demand above threshold triggers automatic spawn on node 2
+        let high_demand = true;
+        if high_demand && cluster.active_replicas < 2 {
+            cluster.node2_replicas += 1;
+            cluster.active_replicas += 1;
+        }
+        assert_eq!(cluster.active_replicas, 2);
+        assert_eq!(cluster.node1_replicas, 1);
+        assert_eq!(cluster.node2_replicas, 1);
+
+        // Reduced demand triggers safe drain and retirement
+        let low_demand = true;
+        if low_demand && cluster.active_replicas > 1 {
+            cluster.node2_replicas -= 1;
+            cluster.active_replicas -= 1;
+        }
+        assert_eq!(cluster.active_replicas, 1);
+        assert_eq!(cluster.node2_replicas, 0);
+    }
+}

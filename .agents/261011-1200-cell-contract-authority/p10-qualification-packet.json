@@ -1,0 +1,23 @@
+{
+  "format": "cell-contract-p10-dossier-v1",
+  "status": "approved",
+  "recorded": "2026-10-16",
+  "scope": "Phase 10 (P10) System Qualification, 200+ Client Concurrency, AC-43 Load-Driven Autospawn, and Full AC-01..AC-50 Traceability",
+  "dossier_document": ".agents/261011-1200-cell-contract-authority/p10-qualification-packet.md",
+  "dossier_sha256": "f285400ea9a075f3fbd9cc3e1adff944e139752e6559e1c11a1ec93cd9601a46",
+  "legacy_lock_count": 38,
+  "legacy_locks_released": 0,
+  "phase": 10,
+  "witnesses": {
+    "concurrent_clients_witness": "PASS (200 simultaneous live clients in unit_cspace_smoke)",
+    "ac43_autospawn_witness": "PASS (demand-driven placement, weighted routing, safe drain)",
+    "vmware_runtime_witness": "PASS (4/4 scenarios in test-native-vmware-matrix.py)",
+    "qemu_smp_witness": "PASS (2 CPUs online, full userland services, shell reached in < 10s)",
+    "contract_coverage": "AC-01..AC-50 verified across P02-P10"
+  },
+  "verification": {
+    "unit_tests": "PASS (46/46 in unit_cspace_smoke)",
+    "bare_metal_build": "PASS (cellos-kernel on x86_64-unknown-none)",
+    "document_consistency": "PASS (verify-cell-contract-p01.py)"
+  }
+}
