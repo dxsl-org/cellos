@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Establish Controlled Lock Retirement & Subordinate Rebase Plan: partition 38 execution
+  locks into 4 functional tranches (VFS/Storage, Kernel Authority, Native SDK/Runtime,
+  and Distributed/Hardware) with concrete rebase criteria against ratified CP1/CP2.
 - Complete Cell Contract & Authority Architecture Plan (CELL-CONTRACT-0024): mark all
   10 phases (P01..P10) complete in plan portfolio and sign off Architecture Handoff Dossier
   following dual-checkpoint ratification (Law-1 CP1 & CP2).
