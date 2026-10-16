@@ -468,3 +468,18 @@ Observed verification:
 
 All 38 locks, complete-package CP1/CP2 gates, and external prerequisites remain in force.
 
+## Approved Law-1 Checkpoint 1 (CP1) — Wire ABI specification verification
+
+The user explicitly approved “Phê duyệt CP1 Wire ABI theo hồ sơ trên và hai digest”. The approved Wire ABI candidate dossier and companion JSON hashes match:
+- Dossier Markdown SHA-256: `76b7820482d2413bbf34ba1b6fb8d9a32b6265512b4c8774f0ccb2cda58ed880`
+- Companion JSON SHA-256: `647365c22f004b3c679d9d438d5353e2ec9673e3a78a454ce93953f33db9880f`
+
+Scope and ratified components:
+1. **D01:** Standard 32-byte Little-Endian Control Result Header (`version=1`, `status 0..14`, opaque 64-bit tickets, `required_len`, `progress_len`).
+2. **D04:** Bounded Submit (48 bytes LE), Operation Control (16 bytes LE), Transfer extension (40 bytes LE), Reply extension (32 bytes LE), Scoped Wait header and filter array ($16 + 16 \times N$ bytes LE).
+3. **D05:** 112-byte Little-Endian `ViDirHandleAttestation` record ("VIDA", up to 8 handles) and typed Postcard v1 VFS/NET service messages.
+4. **D07:** 56-byte Lifecycle Request and 152-byte Event/Evidence diagnostic record (184 bytes with D01 header) with validity bitmask and ReadEvidence redaction.
+5. **D12:** 112-byte Little-Endian `C2cEnvelope` header with 32-byte Ed25519 node identities, boot/server epochs, FNV-1a cluster ID, and framed payload ($\le 65536$ B).
+
+All 38 locks, complete-package CP2 gates, and external prerequisites remain in force.
+

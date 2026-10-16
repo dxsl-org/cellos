@@ -1,0 +1,71 @@
+{
+  "format": "cell-contract-wire-abi-cp1-dossier-v1",
+  "status": "approved",
+  "recorded": "2026-10-16",
+  "scope": "Law-1 Checkpoint 1 (CP1) formal approved specification for CellOS Wire ABI (D01, D04, D05, D07, D12)",
+  "dossier_document": ".agents/261011-1200-cell-contract-authority/wire-abi-cp1-qualification-packet.md",
+  "dossier_sha256": "76b7820482d2413bbf34ba1b6fb8d9a32b6265512b4c8774f0ccb2cda58ed880",
+  "legacy_lock_count": 38,
+  "legacy_locks_released": 0,
+  "cp1_candidate_deltas": [
+    {
+      "delta": "D01",
+      "title": "Control Result Header and Linearized Carrier",
+      "wire_records": [
+        "ControlResultHeader (32 B LE)"
+      ],
+      "status": "approved-checkpoint1"
+    },
+    {
+      "delta": "D04",
+      "title": "Operations, Handoffs, and Scoped Multiwait",
+      "wire_records": [
+        "BoundSubmitRequest (48 B LE)",
+        "OperationControlBase (16 B LE)",
+        "TransferExtension (40 B LE)",
+        "ReplyExtension (32 B LE)",
+        "ScopedWaitHeader (16 B LE + 16*N B)"
+      ],
+      "status": "approved-checkpoint1"
+    },
+    {
+      "delta": "D05",
+      "title": "Service-Owned Handles and Post-Start Receipt",
+      "wire_records": [
+        "ViDirHandleAttestation (112 B LE)",
+        "VfsRequest/VfsResponse (Postcard v1)"
+      ],
+      "status": "approved-checkpoint1"
+    },
+    {
+      "delta": "D07",
+      "title": "Lifecycle and Diagnostic Event Records",
+      "wire_records": [
+        "LifecycleRequest (56 B LE)",
+        "EventEvidence (152 B LE, 184 B total)"
+      ],
+      "status": "approved-checkpoint1"
+    },
+    {
+      "delta": "D12",
+      "title": "C2C Cluster and Remote Transport Envelope",
+      "wire_records": [
+        "C2cEnvelope (112 B LE + framed payload)"
+      ],
+      "status": "approved-checkpoint1"
+    }
+  ],
+  "invariants": {
+    "endianness": "Little-Endian exclusively across all fields",
+    "ticket_semantics": "Opaque monotonic 64-bit tickets; no direct table slot index encoding",
+    "small_output_preservation": "Buffer overflow returns Small7 and exact required bytes; retains terminal",
+    "redaction_policy": "Diagnostic PC and fault address require explicit ReadEvidence grant",
+    "acyclic_dependency": "Native stream and bootstrap reading operate independently of POSIX"
+  },
+  "governance": {
+    "law1_checkpoint1": "approved",
+    "checkpoint2_status": "blocked-pending-cp2-qualification",
+    "release_status": "blocked"
+  },
+  "decision_source": "User: Ph\u00ea duy\u1ec7t CP1 Wire ABI theo h\u1ed3 s\u01a1 tr\u00ean v\u00e0 hai digest"
+}

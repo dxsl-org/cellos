@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Ratify Law-1 Checkpoint 1 (CP1) formal Wire ABI specification for D01, D04, D05,
+  D07, and D12: approve 32-byte Control Result Header, 48-byte Bound Submit and scoped
+  multiwait records, 112-byte ViDirHandleAttestation, 152-byte lifecycle event records,
+  and 112-byte C2C cluster transport envelopes.
 - Implement N07 native and compatibility invariants: enforce neutral pipe stream
   capacity clamping (64..65536 bytes); preserve client-local fd, errno, and TLS base
   isolation; preserve bootstrap acyclicity without POSIX linkage in native core.
