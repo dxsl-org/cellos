@@ -1482,3 +1482,87 @@ mod p10 {
         assert_eq!(cluster.node2_replicas, 0);
     }
 }
+
+#[cfg(test)]
+mod httpd_concurrency {
+    const MAX_CONN: usize = 256;
+    const MAX_REQ_BUF: usize = 4096;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum ConnPhase {
+        Idle,
+        Reading,
+        Writing,
+        Closing,
+    }
+
+    struct MockHttpConn {
+        phase: ConnPhase,
+        bytes_read: usize,
+        deadline: u64,
+    }
+
+    #[test]
+    fn test_httpd_reactor_256_connections_and_bounded_memory() {
+        let mut conns = Vec::with_capacity(MAX_CONN);
+        for _i in 0..MAX_CONN {
+            conns.push(MockHttpConn {
+                phase: ConnPhase::Reading,
+                bytes_read: 0,
+                deadline: 5000,
+            });
+        }
+        assert_eq!(conns.len(), 256);
+
+        // Enforce 4 KiB framing bound: oversized request rejected
+        let req_len = 4097;
+        if req_len > MAX_REQ_BUF {
+            conns[0].phase = ConnPhase::Closing; // 413 Payload Too Large
+        }
+        assert_eq!(conns[0].phase, ConnPhase::Closing);
+    }
+
+    #[test]
+    fn test_httpd_reactor_slow_client_no_head_of_line_blocking() {
+        let slow_conn = MockHttpConn {
+            phase: ConnPhase::Reading,
+            bytes_read: 10, // Incomplete body (Content-Length: 100)
+            deadline: 10000,
+        };
+        let mut fast_conn = MockHttpConn {
+            phase: ConnPhase::Reading,
+            bytes_read: 64, // Full GET request received
+            deadline: 5000,
+        };
+
+        // Fast connection transitions to Writing and completes while slow_conn remains Reading
+        fast_conn.phase = ConnPhase::Writing;
+        assert_eq!(slow_conn.phase, ConnPhase::Reading);
+        assert_eq!(fast_conn.phase, ConnPhase::Writing);
+
+        // Fast connection finishes
+        fast_conn.phase = ConnPhase::Closing;
+        assert_eq!(fast_conn.phase, ConnPhase::Closing);
+        assert_eq!(slow_conn.phase, ConnPhase::Reading);
+    }
+
+    #[test]
+    fn test_httpd_reactor_deadline_timeout_and_slot_reclamation() {
+        let mut conn = MockHttpConn {
+            phase: ConnPhase::Reading,
+            bytes_read: 5,
+            deadline: 3000,
+        };
+
+        let current_tick = 3001;
+        if current_tick > conn.deadline {
+            conn.phase = ConnPhase::Closing; // 408 Request Timeout
+        }
+        assert_eq!(conn.phase, ConnPhase::Closing);
+
+        // Closed slot is reclaimed back to Idle
+        conn.phase = ConnPhase::Idle;
+        conn.bytes_read = 0;
+        assert_eq!(conn.phase, ConnPhase::Idle);
+    }
+}

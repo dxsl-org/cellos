@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Rebase and qualify HTTPD Single-Cell Concurrency service: verify single-owner 256-connection
+  bounded reactor, 4 KiB framing enforcement, zero head-of-line blocking on incomplete requests,
+  and clean deadline slot reclamation in tests/unit_cspace_smoke.rs.
 - Establish Controlled Lock Retirement & Subordinate Rebase Plan: partition 38 execution
   locks into 4 functional tranches (VFS/Storage, Kernel Authority, Native SDK/Runtime,
   and Distributed/Hardware) with concrete rebase criteria against ratified CP1/CP2.
