@@ -67,7 +67,7 @@ pub enum DirError {
     UnknownHandle,
     /// The name may not be resolved inside a directory.
     BadName(DirNameError),
-    /// The caller holds [`MAX_HANDLES_PER_CELL`] already.
+    /// The caller's handle limit or the issuer's non-reusable ID space is exhausted.
     TooManyHandles,
 }
 
@@ -106,7 +106,7 @@ impl DirTable {
     /// Issue a handle for an already-validated absolute directory path.
     ///
     /// # Errors
-    /// [`DirError::TooManyHandles`] when the caller is at its limit, and
+    /// [`DirError::TooManyHandles`] when the caller or issuer has no handle capacity, and
     /// [`DirError::UnknownHandle`] for a caller with no registered state, which
     /// cannot happen after `on_contact`.
     pub fn open_root(&mut self, caller: Caller, path: &str) -> Result<ViDirHandle, DirError> {
@@ -150,13 +150,15 @@ impl DirTable {
         path: String,
         parent: Option<u64>,
     ) -> Result<ViDirHandle, DirError> {
+        let next = self.next.checked_add(1);
         let state = self.state_mut(owner).ok_or(DirError::UnknownHandle)?;
         if state.handles >= MAX_HANDLES_PER_CELL {
             return Err(DirError::TooManyHandles);
         }
+        let next = next.ok_or(DirError::TooManyHandles)?;
         state.handles += 1;
         let id = self.next;
-        self.next = self.next.saturating_add(1);
+        self.next = next;
         self.entries.insert(
             id,
             DirEntry {
@@ -172,5 +174,57 @@ impl DirTable {
 impl Default for DirTable {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use api::dir_attestation::ViDirHandleAttestation;
+    use api::dir_handles::{DirHandleSet, ViSpawnDirHandles};
+    use types::CellId;
+
+    #[test]
+    fn exhausted_directory_ids_preserve_existing_owner_and_counts() {
+        let owner = Caller::principal(CellId(11), 1);
+        let peer = Caller::principal(CellId(12), 1);
+        let mut table = DirTable::new();
+        table.on_contact(owner);
+        table.on_contact(peer);
+        table.next = u64::MAX - 1;
+        let live = table.open_root(owner, "/data/owner").unwrap();
+        assert_eq!(table.open_root(peer, "/data/peer"), Err(DirError::TooManyHandles));
+        assert_eq!(table.dir_path(owner, live), Some("/data/owner"));
+        assert_eq!(table.dir_path(peer, live), None);
+        assert_eq!(table.held_by(owner), 1);
+        assert_eq!(table.held_by(peer), 0);
+        table.revoke(owner, live).unwrap();
+        assert_eq!(table.open_root(peer, "/data/again"), Err(DirError::TooManyHandles));
+        assert_eq!(table.held_by(peer), 0);
+    }
+
+    #[test]
+    fn inherited_set_rolls_back_if_ticket_space_exhausts_mid_bind() {
+        let owner = Caller::principal(CellId(21), 1);
+        let child = Caller::principal(CellId(22), 1);
+        let mut table = DirTable::new();
+        table.on_contact(owner);
+        table.on_contact(child);
+        let first = table.open_root(owner, "/data/first").unwrap();
+        let second = table.open_root(owner, "/data/second").unwrap();
+        let record = ViDirHandleAttestation {
+            cell_id: child.cell.0,
+            generation: child.generation,
+            spawner_cell_id: owner.cell.0,
+            spawner_generation: owner.generation,
+            set: DirHandleSet::from_carrier(
+                &ViSpawnDirHandles::new(&[first, second]).unwrap()).unwrap(),
+        };
+        table.next = u64::MAX - 1;
+        assert_eq!(table.bind_inherited(child, &record), bind::BindOutcome::Refused);
+        assert_eq!(table.held_by(child), 0);
+        assert_eq!(table.entries.len(), 2);
+        assert_eq!(table.dir_path(owner, first), Some("/data/first"));
+        assert_eq!(table.dir_path(owner, second), Some("/data/second"));
     }
 }

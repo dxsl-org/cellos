@@ -86,10 +86,8 @@ impl DirTable {
         for (parent, path) in resolved {
             match self.insert(child, path, Some(parent)) {
                 Ok(handle) => issued.push(handle.0),
-                // Unreachable given the limit check above, but unwound anyway:
-                // a partial bind is the one outcome this function exists to
-                // prevent, and "cannot happen" is not a reason to leave the
-                // half-bound state reachable.
+                // ID exhaustion can occur after an earlier entry was issued.
+                // Roll the whole set back; consumed IDs are never reused.
                 Err(_) => {
                     let _ = self.revoke_ids(&issued);
                     return BindOutcome::Refused;

@@ -159,8 +159,7 @@ pub fn publish_prepared(
     }
     crate::loader::atomic_checkpoint("AP-07")?;
     crate::loader::atomic_checkpoint("AP-08")?;
-    let accounting_cell = super::hart_local::current_cell_id();
-    super::hart_local::set_current_cell_id(0);
+    let _kernel_alloc = super::scheduler::KernelAllocationContext::enter();
 
     let inherited_dirs = super::dir_inherit::take_for_launch(sched, state.inherit_from);
     // InheritedDirHandles is bounded inline state, not an independently
@@ -319,7 +318,6 @@ pub fn publish_prepared(
         crate::audit::AuditEvent::CellSpawn,
         &crate::audit::encode_u32x2(tid as u32, 0),
     );
-    super::hart_local::set_current_cell_id(accounting_cell);
     crate::loader::observe_pre_ready(sched, tid);
     sched.push_ready(tid);
     Ok((tid, load_base))

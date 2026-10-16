@@ -23,6 +23,8 @@ pub struct Operation {
     id: usize,
     owner_cell: u64,
     owner_generation: u64,
+    pub(crate) owner_tid: usize,
+    pub(crate) consumer_tid: usize,
     peer_tid: usize,
     peer_cell: u64,
     peer_generation: u64,
@@ -36,6 +38,10 @@ pub struct Operation {
 impl Operation {
     fn owned_by(&self, task: &Task) -> bool {
         self.owner_cell == task.cell_id.0 && self.owner_generation == task.cell_generation
+    }
+
+    pub(crate) fn can_consume(&self, task: &Task) -> bool {
+        self.owned_by(task) && (self.consumer_tid == task.id || self.owner_tid == task.id)
     }
 }
 
@@ -175,6 +181,7 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
         crate::memory::heap::p01_owner::OPERATIONS);
     let pushed = sched.tasks.get_mut(&owner).ok_or(Failure::Invalid)?.async_operations.push(Operation {
         id: token, owner_cell: binding.0, owner_generation: binding.1,
+        owner_tid: owner, consumer_tid: owner,
         peer_tid: peer, peer_cell: peer_binding.0, peer_generation: peer_binding.1,
         deadline: (super::system_ticks() as u64).saturating_add(OPERATION_TIMEOUT_TICKS),
         phase: Phase::Queued, reply,
@@ -346,17 +353,24 @@ fn cancel_in_sched(sched: &mut Scheduler, owner: usize, token: usize) -> Result<
     Ok(())
 }
 
-pub fn take(owner: usize, token: usize, reply_ptr: usize, reply_len: usize,
+pub fn take(consumer: usize, token: usize, reply_ptr: usize, reply_len: usize,
             status_ptr: usize) -> Result<bool, Failure> {
     let mut guard = SCHEDULER.lock();
     let sched = guard.as_mut().ok_or(Failure::Invalid)?;
-    let task = sched.tasks.get(&owner).filter(|task| live(task)).ok_or(Failure::Invalid)?;
-    let op = task.async_operations.find(token).ok_or(Failure::Invalid)?;
-    if !op.owned_by(task) { return Err(Failure::Invalid); }
-    let Phase::Terminal { kind, len } = &op.phase else { return Ok(false); };
-    let data = &op.reply.as_slice()[..*len];
+    let caller = sched.tasks.get(&consumer).filter(|task| live(task)).ok_or(Failure::Invalid)?;
+    let caller_cell = (caller.cell_id.0, caller.cell_generation);
+
+    let (owner_tid, op_ref) = sched
+        .tasks
+        .iter()
+        .filter(|(_, t)| (t.cell_id.0, t.cell_generation) == caller_cell)
+        .find_map(|(&id, t)| t.async_operations.find(token).map(|op| (id, op)))
+        .ok_or(Failure::Invalid)?;
+    if !op_ref.can_consume(caller) { return Err(Failure::Invalid); }
+    let Phase::Terminal { kind, len } = &op_ref.phase else { return Ok(false); };
+    let data = &op_ref.reply.as_slice()[..*len];
     if data.len() > reply_len { return Err(Failure::TooSmall); }
-    let view = TaskCopyView::of(task);
+    let view = TaskCopyView::of(caller);
     view.validate_writable(status_ptr, api::syscall::IPC_STATUS_LEN).map_err(|_| Failure::Invalid)?;
     if !data.is_empty() {
         view.validate_writable(reply_ptr, data.len()).map_err(|_| Failure::Invalid)?;
@@ -367,8 +381,72 @@ pub fn take(owner: usize, token: usize, reply_ptr: usize, reply_len: usize,
     status[4..8].copy_from_slice(&kind.to_le_bytes());
     status[8..12].copy_from_slice(&(data.len() as u32).to_le_bytes());
     view.write_bytes(status_ptr, &status).map_err(|_| Failure::Invalid)?;
-    sched.tasks.get_mut(&owner).unwrap().async_operations.remove(token);
+    sched.tasks.get_mut(&owner_tid).unwrap().async_operations.remove(token);
     Ok(true)
+}
+
+pub fn transfer_consumption(caller_tid: usize, token: usize, target_tid: usize) -> Result<(), Failure> {
+    let mut guard = SCHEDULER.lock();
+    let sched = guard.as_mut().ok_or(Failure::Invalid)?;
+    let caller = sched.tasks.get(&caller_tid).filter(|t| live(t)).ok_or(Failure::Invalid)?;
+    let target = sched.tasks.get(&target_tid).filter(|t| live(t)).ok_or(Failure::Invalid)?;
+    if (caller.cell_id, caller.cell_generation) != (target.cell_id, target.cell_generation) {
+        return Err(Failure::Invalid);
+    }
+    let caller_cell = (caller.cell_id.0, caller.cell_generation);
+    let op = sched
+        .tasks
+        .values_mut()
+        .filter(|t| (t.cell_id.0, t.cell_generation) == caller_cell)
+        .find_map(|t| t.async_operations.find_mut(token))
+        .ok_or(Failure::Invalid)?;
+    if op.consumer_tid != caller_tid && op.owner_tid != caller_tid {
+        return Err(Failure::Invalid);
+    }
+    op.consumer_tid = target_tid;
+    Ok(())
+}
+
+/// Drop or indeterminate all operations owned by an exiting thread.
+/// If take won before exit, the operation was already removed, ensuring
+/// single-winner serialization against take.
+pub fn on_owner_exits(sched: &mut Scheduler, owner_tid: usize) {
+    let to_cancel: alloc::vec::Vec<(usize, usize, bool)> = match sched.tasks.get(&owner_tid) {
+        Some(task) => task.async_operations.0.iter().filter_map(|op| {
+            if op.owner_tid == owner_tid {
+                match op.phase {
+                    Phase::Queued => Some((op.id, op.peer_tid, true)),
+                    Phase::Dispatched => Some((op.id, op.peer_tid, false)),
+                    Phase::Terminal { .. } => None,
+                }
+            } else {
+                None
+            }
+        }).collect(),
+        None => return,
+    };
+
+    for &(token, peer, queued) in &to_cancel {
+        if queued {
+            if let Some(receiver) = sched.tasks.get_mut(&peer) {
+                if let Some(pos) = receiver.pending_msgs.iter().position(|msg|
+                    msg.wire_header().is_some_and(|header| header.async_op == token)) {
+                    receiver.pending_msgs.remove(pos);
+                }
+            }
+        }
+    }
+
+    if let Some(task) = sched.tasks.get_mut(&owner_tid) {
+        for (token, _, queued) in to_cancel {
+            if let Some(op) = task.async_operations.find_mut(token) {
+                op.phase = Phase::Terminal {
+                    kind: if queued { api::syscall::ipc_status::CANCELLED } else { api::syscall::ipc_status::INDETERMINATE },
+                    len: 0,
+                };
+            }
+        }
+    }
 }
 
 pub fn wait(owner: usize, ticks: u64) -> Result<bool, Failure> {
@@ -498,6 +576,7 @@ mod tests {
         }
         let overflow = || Operation {
             id: MAX_OPERATIONS + 1, owner_cell: 1_002, owner_generation: 3,
+            owner_tid: OWNER, consumer_tid: OWNER,
             peer_tid: PROVIDER, peer_cell: 1_003, peer_generation: 7,
             deadline: 10, phase: Phase::Queued, reply: test_reply(),
             #[cfg(cellos_p01_trace)]
@@ -616,6 +695,7 @@ mod tests {
         let task = sched.tasks.get_mut(&owner).unwrap();
         task.async_operations.push(Operation {
             id, owner_cell: task.cell_id.0, owner_generation: task.cell_generation,
+            owner_tid: owner, consumer_tid: owner,
             peer_tid: peer, peer_cell, peer_generation, deadline: 10,
             phase, reply: test_reply(),
             #[cfg(cellos_p01_trace)]

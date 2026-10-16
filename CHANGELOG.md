@@ -7,6 +7,50 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Implement N07 native and compatibility invariants: enforce neutral pipe stream
+  capacity clamping (64..65536 bytes); preserve client-local fd, errno, and TLS base
+  isolation; preserve bootstrap acyclicity without POSIX linkage in native core.
+- Implement N06 replacement and recovery invariants: enforce monotonic epoch fencing
+  on state stash writes to reject stale writers; support versioned state restoration
+  with commit watermark; prepare replacement services unpublished.
+- Implement N05 resource ownership invariants: enforce immutable receiver namespace
+  ceilings; preserve all-or-nothing directory bind rollback on ID exhaustion; quarantine
+  pinned grant frames before confirmed quiescence without early reuse.
+- Implement N04 operation and completion lifecycle invariants: track immutable
+  original-owner TID alongside active consumption TID; support explicit same-Cell
+  consumption transfer; serialize owner-thread exit against consuming take to enforce
+  single-winner termination; preserve terminal and reservations on undersized take.
+- Implement N03 execution and lifetime boundaries: converge unhandled trap-proven
+  user faults from worker or root threads to the exact live CellOwner and retire
+  the whole Cell incarnation via the scheduler funnel; isolate clean worker Exit
+  as strictly thread-local; enforce SMP participant retention and futex waiter cleanup
+  on Cell teardown without public wire/carrier changes.
+- Implement N02-B shared CSpace authority cutover: replace legacy CapTable with CSpace
+  BootFS file slots across all eight file syscalls; transactionalize launch publication
+  to fail closed on invalid CellId; restore RAII allocation attribution on launch failure;
+  converge CapRevoke to synchronize CSpace authority ceilings.
+- Refuse legacy kernel CapTable allocation after ID exhaustion instead of wrapping
+  to ID 1 in release builds. Preserve existing owner entries and callers; retain
+  the generic failure encoding for OpenCap without public ABI change.
+- Enforce approved N02-A internal CSpace arena invariants: reject retired
+  allocation and rights/expiry widening before mutation; reject unsupported
+  MMIO/block-region subgrants rather than discard them. Preserve duplicate
+  incarnation registrations and retired closed-ticket query metadata without
+  falsely acknowledging quiescence. No syscall/SDK or production activation.
+- Refuse VFS directory-ID exhaustion before changing handle counts or entries,
+  preventing saturation from reissuing a live ID. Preserve atomic inherited-set
+  rollback and existing ERR_QUOTA wire projection; no D05 V2/profile activation.
+- Retain closed CSpace ancestors until their last child reference is released;
+  use checked recipient-local u64 tickets instead of truncated slot-generation
+  bitfields. Reject exhaustion before publishing a slot or changing parent counts.
+- Make the native VMware storage runner reject failed starts/cleanup, incomplete
+  boots and implicit formatting. Corrupt both P5 roots, require positive refusal
+  and compare guest-visible disk bytes after shutdown.
+- Withdraw unsupported P02–P10/CP2 acceptance claims and remove detached model
+  tests used as runtime evidence. Preserve user consent, historical captures and
+  all execution locks; no native distributed, SMP, VMX or production qualification.
+
 ### 🚀 Improvements
 - Implement the authorized default-off, host-only private G2-J CoW experiment.
   Validate both recoverable roots, reconstruct allocation independently of the

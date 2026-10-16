@@ -3,32 +3,39 @@
 //! Confirms that capabilities created via OpenCap only possess FILE_READ permissions
 //! and that WriteCap is denied.
 
-use crate::cell::cap_registry::{CapResource, CAP_TABLE};
+use crate::cell::cspace::{register_cell_authority, ControlStatus, Principal, ResourceKind, CELL_AUTHORITIES};
+use crate::task::cap::CapSet;
 use api::cap::CapPerms;
-use types::{CellId, ViError};
+use types::CellId;
 
 pub fn run() {
-    let mut table = CAP_TABLE.lock();
-    let cell = CellId(999);
-    let cap = table.alloc(
-        cell,
-        CapResource::File { file: None },
+    let cell = CellId(63);
+    let gen = 1u64;
+    register_cell_authority(cell, gen, CapSet::EMPTY);
+    let mut auths = CELL_AUTHORITIES.lock();
+    let auth = auths.get_mut(&(cell.0, gen)).expect("authority registered");
+    let ticket = auth.allocate_slot(
+        Principal::Cell { id: cell, generation: gen },
+        Principal::Kernel,
+        ResourceKind::BootFSFile,
         CapPerms::FILE_READ.0,
-    );
+        None,
+        None,
+    ).expect("file capability slot allocated");
 
     // Read and Seek should pass permission check
-    let entry = table.get_if_owner(cap, cell).expect("cap entry exists");
-    assert!(CapPerms(entry.perms).has(CapPerms::READ));
-    assert!(CapPerms(entry.perms).has(CapPerms::SEEK));
+    let slot = auth.verify_ticket(ticket).expect("ticket verified");
+    assert!(CapPerms(slot.rights).has(CapPerms::READ));
+    assert!(CapPerms(slot.rights).has(CapPerms::SEEK));
 
     // Write permission must be denied
-    assert!(!CapPerms(entry.perms).has(CapPerms::WRITE));
+    assert!(!CapPerms(slot.rights).has(CapPerms::WRITE));
 
-    // park_file with WRITE must fail with PermissionDenied
+    // park_file with WRITE must fail with Denied
     assert_eq!(
-        table.park_file(cap, cell, CapPerms::WRITE).err(),
-        Some(ViError::PermissionDenied)
+        auth.park_file(ticket, CapPerms::WRITE.0).err(),
+        Some(ControlStatus::Denied)
     );
 
-    table.revoke(cap);
+    auth.close_ticket(ticket).expect("ticket closed");
 }

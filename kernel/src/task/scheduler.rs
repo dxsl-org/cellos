@@ -98,12 +98,12 @@ static DEATH_SUBSCRIBERS: crate::sync::Spinlock<BTreeMap<usize, Vec<usize>>> =
 /// Callers must not yield or context-switch while this guard is live. Scheduler
 /// and subscriber mutations run under spinlocks with interrupts excluded, so
 /// the current hart cannot publish this temporary accounting identity.
-struct KernelAllocationContext {
+pub(crate) struct KernelAllocationContext {
     previous_cell: usize,
 }
 
 impl KernelAllocationContext {
-    fn enter() -> Self {
+    pub(crate) fn enter() -> Self {
         let previous_cell = super::hart_local::current_cell_id();
         super::hart_local::set_current_cell_id(0);
         Self { previous_cell }
@@ -390,6 +390,14 @@ impl Scheduler {
         if !owner.is_live() || !matches!(slot, CellOwnerSlot::Empty) {
             return false;
         }
+        let caps = self
+            .tasks
+            .get(&(owner.root_tid as usize))
+            .map(|t| super::cap::CapSet::from_task(t))
+            .unwrap_or(super::cap::CapSet::EMPTY);
+        if !crate::cell::cspace::register_cell_authority(CellId(owner.cell_id), owner.generation, caps) {
+            return false;
+        }
         *slot = CellOwnerSlot::Live(owner);
         true
     }
@@ -453,6 +461,7 @@ impl Scheduler {
         };
         if matches!(slot, CellOwnerSlot::Retiring(current) if *current == owner) {
             *slot = CellOwnerSlot::Empty;
+            crate::cell::cspace::retire_cell_authority(CellId(owner.cell_id), owner.generation);
             true
         } else {
             false
@@ -1108,6 +1117,14 @@ impl Scheduler {
             crate::audit::AuditEvent::CellFault,
             &crate::audit::encode_u32x2(fault.cell_id as u32, fault.cause as u32),
         );
+        // D07 / N03: Unhandled user fault from ANY thread (worker or root) routes to
+        // the exact live owner and triggers whole-generation retirement.
+        let live_owner = self.tasks.get(&fault.tid).and_then(|task| {
+            self.resolve_live_cell_owner(task.cell_id, task.cell_generation)
+        });
+        if let Some(owner) = live_owner {
+            self.retire_cell_incarnation_participants(owner, fault.tid, usize::MAX);
+        }
         self.exit_task(fault.tid, usize::MAX);
     }
 
@@ -1166,6 +1183,59 @@ impl Scheduler {
         self.exit_task(exit.tid, exit.code);
     }
 
+    /// Retire all participants of a Cell incarnation upon whole-Cell retirement
+    /// (triggered by clean root exit, unhandled user fault on root or worker, or authorized stop).
+    pub(crate) fn retire_cell_incarnation_participants(
+        &mut self,
+        owner: api::cell_owner::CellOwner,
+        trigger_tid: usize,
+        exit_reason: usize,
+    ) {
+        // A root or unhandled worker fault terminates the whole generation. Mark it retiring
+        // before selecting members so neither thread creation nor owner
+        // attestation can race the teardown.
+        self.begin_root_retirement(owner);
+        let live_members: Vec<usize> = self
+            .tasks
+            .iter()
+            .filter_map(|(&member_tid, task)| {
+                (member_tid != trigger_tid
+                    && task.cell_id.0 == owner.cell_id
+                    && task.cell_generation == owner.generation
+                    && task.root_tid as u64 == owner.root_tid)
+                    .then_some(member_tid)
+            })
+            .collect();
+        for member_tid in live_members {
+            self.exit_task(member_tid, exit_reason);
+        }
+        // A worker can already be a zombie while its saved context remains
+        // current on a remote hart. Snapshot both tables after every live
+        // member has entered the same retirement funnel so its resources,
+        // owner slot, and CellId all share one post-switch release point.
+        let members = self.root_generation_member_tids(owner);
+        // A member that exited before its root may still have task-local
+        // cleanup queued. Transfer it to the generation funnel so no
+        // remaining grant, pin, IOMMU mapping, BDF, VM, or VFS lease is
+        // released ahead of this retirement's switch completion.
+        self.pending_grant_reap
+            .retain(|pending_tid| !members.contains(pending_tid));
+        self.pending_vfs_holder_release
+            .retain(|pending_tid| !members.contains(pending_tid));
+        {
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+            self.pending_root_retirements.push(RootRetirement {
+                owner,
+                member_tids: members,
+                zombies: Vec::new(),
+                waiter_wakes: Vec::new(),
+                requested_switch_completion: [0; super::smp::MAX_HARTS],
+            });
+        }
+    }
+
     /// Retire a task: move it to the zombie list, purge ready queues, unblock
     /// senders stuck on it, and defer `Wait`-er wakeup until the saved context
     /// is no longer selected or executing on any hart.
@@ -1210,6 +1280,8 @@ impl Scheduler {
         // A dying waiter must not leave a queue entry behind: a later wake on the
         // same key would otherwise spend a wake slot on a task that no longer waits.
         super::futex::on_task_leaves_wait(tid);
+        // A dying owner must cancel or indeterminate its queued/dispatched operations.
+        super::async_ipc::on_owner_exits(self, tid);
         // A dying pipe owner must not leave an endpoint behind either: closing its
         // ends is what turns a faulted writer into an EOF for its readers.
         let owned: alloc::vec::Vec<super::pipe::PipeHandle> = self
@@ -1238,49 +1310,7 @@ impl Scheduler {
                 .then(|| self.resolve_live_cell_owner(task.cell_id, task.cell_generation))?
         });
         if let Some(owner) = root_owner {
-            // A root's exit terminates its whole generation. Mark it retiring
-            // before selecting members so neither thread creation nor owner
-            // attestation can race the teardown.
-            self.begin_root_retirement(owner);
-            let live_members: Vec<usize> = self
-                .tasks
-                .iter()
-                .filter_map(|(&member_tid, task)| {
-                    (member_tid != tid
-                        && task.cell_id.0 == owner.cell_id
-                        && task.cell_generation == owner.generation
-                        && task.root_tid as u64 == owner.root_tid)
-                        .then_some(member_tid)
-                })
-                .collect();
-            for member_tid in live_members {
-                self.exit_task(member_tid, exit_reason);
-            }
-            // A worker can already be a zombie while its saved context remains
-            // current on a remote hart. Snapshot both tables after every live
-            // member has entered the same retirement funnel so its resources,
-            // owner slot, and CellId all share one post-switch release point.
-            let members = self.root_generation_member_tids(owner);
-            // A member that exited before its root may still have task-local
-            // cleanup queued. Transfer it to the generation funnel so no
-            // remaining grant, pin, IOMMU mapping, BDF, VM, or VFS lease is
-            // released ahead of this retirement's switch completion.
-            self.pending_grant_reap
-                .retain(|pending_tid| !members.contains(pending_tid));
-            self.pending_vfs_holder_release
-                .retain(|pending_tid| !members.contains(pending_tid));
-            {
-                #[cfg(cellos_p01_trace)]
-                let _semantic = crate::memory::heap::p01_owner::creation(None,
-                    crate::memory::heap::p01_owner::SCHEDULER_SHARED);
-                self.pending_root_retirements.push(RootRetirement {
-                    owner,
-                    member_tids: members,
-                    zombies: Vec::new(),
-                    waiter_wakes: Vec::new(),
-                    requested_switch_completion: [0; super::smp::MAX_HARTS],
-                });
-            }
+            self.retire_cell_incarnation_participants(owner, tid, exit_reason);
         }
         let (dead_caller, retiring_member) = self
             .tasks

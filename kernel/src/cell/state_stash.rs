@@ -146,6 +146,74 @@ pub fn remove(key: u64) {
     STASH.lock().remove(&key);
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StashError {
+    Full,
+    StaleEpoch,
+    InvalidKey,
+    OutOfMemory,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VersionedStashEntry {
+    pub epoch: u64,
+    pub cell_id: u64,
+    pub generation: u64,
+    pub data: Vec<u8>,
+}
+
+static VERSIONED_STASH: Spinlock<BTreeMap<u64, VersionedStashEntry>> = Spinlock::new(BTreeMap::new());
+
+/// Store `bytes` with monotonic epoch checking, preventing stale writers from overwriting
+/// a newer replacement instance's committed watermark.
+pub fn stash_versioned(
+    key: u64,
+    cell_id: u64,
+    generation: u64,
+    epoch: u64,
+    bytes: &[u8],
+) -> Result<usize, StashError> {
+    if key == 0 {
+        return Err(StashError::InvalidKey);
+    }
+    let mut map = VERSIONED_STASH.lock();
+    if let Some(existing) = map.get(&key) {
+        if existing.epoch >= epoch {
+            return Err(StashError::StaleEpoch);
+        }
+    } else if map.len() >= MAX_ENTRIES {
+        return Err(StashError::Full);
+    }
+    let n = bytes.len().min(MAX_STASH_LEN);
+    let mut data = Vec::new();
+    data.try_reserve_exact(n).map_err(|_| StashError::OutOfMemory)?;
+    data.extend_from_slice(&bytes[..n]);
+    map.insert(
+        key,
+        VersionedStashEntry {
+            epoch,
+            cell_id,
+            generation,
+            data,
+        },
+    );
+    Ok(n)
+}
+
+/// Restore stashed bytes along with their committed epoch watermark.
+pub fn restore_versioned(key: u64, buf: &mut [u8]) -> Option<(u64, usize)> {
+    let guard = VERSIONED_STASH.lock();
+    let entry = guard.get(&key)?;
+    let n = entry.data.len().min(buf.len());
+    buf[..n].copy_from_slice(&entry.data[..n]);
+    Some((entry.epoch, n))
+}
+
+/// Remove versioned entry for `key`.
+pub fn remove_versioned(key: u64) {
+    VERSIONED_STASH.lock().remove(&key);
+}
+
 #[cfg(feature = "test-hooks")]
 pub(crate) fn snapshot() -> alloc::vec::Vec<(u64, Vec<u8>)> {
     STASH

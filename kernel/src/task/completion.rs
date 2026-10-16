@@ -43,6 +43,9 @@ use types::CellId;
 /// at submission rather than served, so the failure is visible, attributable and
 /// confined to the cell that caused it.
 pub const QUEUE_CAPACITY: usize = 32;
+/// Maximum number of concurrent registered waiters per cell completion queue.
+pub const MAX_WAITERS: usize = 32;
+
 
 /// Names one submission within the cell that reserved it.
 ///
@@ -109,6 +112,10 @@ pub struct CompletionQueue {
     ring: Spinlock<Ring>,
     /// Task to make runnable when a completion arrives; 0 means nobody is
     /// waiting. See [`CompletionQueue::register_waiter`] for the contract.
+    /// Registered waiters in this Cell.
+    waiters: Spinlock<Vec<usize>>,
+    /// Task to make runnable when a completion arrives; 0 means nobody is
+    /// waiting. Kept for atomic single-waiter fast path.
     waiter: AtomicUsize,
     wake_requested: AtomicBool,
     #[cfg(cellos_p01_trace)]
@@ -127,6 +134,7 @@ impl CompletionQueue {
                 #[cfg(cellos_p01_trace)]
                 p01_obligations: [None; QUEUE_CAPACITY],
             }),
+            waiters: Spinlock::new(Vec::new()),
             waiter: AtomicUsize::new(0),
             wake_requested: AtomicBool::new(false),
             #[cfg(cellos_p01_trace)]
@@ -338,6 +346,10 @@ impl CompletionQueue {
     /// TIMER waiters remain deadline-only.
     pub fn register_waiter(&self, tid: usize) {
         self.waiter.store(tid, Ordering::Release);
+        let mut list = self.waiters.lock();
+        if !list.contains(&tid) && list.len() < MAX_WAITERS {
+            list.push(tid);
+        }
     }
 
     /// Stop waking `tid` for this queue if it still owns the registration.
@@ -345,19 +357,41 @@ impl CompletionQueue {
     /// Returns `false` when another waiter replaced `tid`; the older wait must
     /// not erase the newer waiter's registration while unwinding.
     pub fn clear_waiter(&self, tid: usize) -> bool {
-        self.waiter
-            .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Acquire)
-            .is_ok()
+        let _ = self.waiter.compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Acquire);
+        let mut list = self.waiters.lock();
+        if let Some(pos) = list.iter().position(|&x| x == tid) {
+            list.swap_remove(pos);
+            true
+        } else {
+            false
+        }
     }
 
     /// Consume a pending wake request, yielding the task to make runnable.
-    fn take_wake_request(&self) -> Option<usize> {
+    pub fn take_wake_request(&self) -> Option<usize> {
         if !self.wake_requested.swap(false, Ordering::AcqRel) {
             return None;
         }
         match self.waiter.load(Ordering::Acquire) {
             0 => None,
             tid => Some(tid),
+        }
+    }
+
+    /// Consume pending wake requests, yielding all registered tasks to make runnable.
+    pub fn drain_wake_requests(&self, out: &mut Vec<usize>) {
+        if !self.wake_requested.swap(false, Ordering::AcqRel) {
+            return;
+        }
+        let list = self.waiters.lock();
+        for &tid in list.iter() {
+            if tid != 0 && !out.contains(&tid) {
+                out.push(tid);
+            }
+        }
+        let w = self.waiter.load(Ordering::Acquire);
+        if w != 0 && !out.contains(&w) {
+            out.push(w);
         }
     }
 }
@@ -448,9 +482,7 @@ pub fn deliver_pending_wakes(sched: &mut Scheduler) {
     let mut requested: Vec<usize> = Vec::new();
     for task in sched.tasks.values() {
         if let Some(queue) = task.completion.as_ref() {
-            if let Some(tid) = queue.take_wake_request() {
-                requested.push(tid);
-            }
+            queue.drain_wake_requests(&mut requested);
         }
     }
 

@@ -472,6 +472,23 @@ impl CapSet {
         // `platform_cap` is transferred only from `PlatformCapReservation`.
         // Applying a plain capability snapshot must never bypass the singleton.
     }
+
+    /// Extract a plain-data CapSet snapshot from a Task's live TCB fields.
+    pub fn from_task(t: &super::tcb::Task) -> Self {
+        Self {
+            block_io: t.block_io_cap.is_some(),
+            network: t.network_cap.is_some(),
+            spawn: t.spawn_cap.is_some(),
+            hypervisor: t.hypervisor_cap.is_some(),
+            mmio_devices: t.mmio_devices,
+            block_regions: t.block_regions,
+            pcie_driver: t.pcie_driver_cap.is_some(),
+            platform: t.platform_cap.is_some(),
+            supervisor: t.supervisor_cap.is_some(),
+            usb_driver: t.usb_driver_cap.is_some(),
+            serial_port: t.serial_port_cap.is_some(),
+        }
+    }
 }
 
 /// Compute the granted x86 PKU protection class from the granted caps and the

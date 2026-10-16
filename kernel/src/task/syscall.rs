@@ -5580,7 +5580,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             // `live_task_binding` and the notify reaches `ipc_post_nonblock`, and
             // this spinlock is not reentrant. Both passes re-run the gates, so
             // nothing is revoked on authority withdrawn while it ran.
-            let target_cell = {
+            let (target_cell, target_gen) = {
                 let mut sched_opt = super::SCHEDULER.lock();
                 let sched = match sched_opt.as_mut() {
                     Some(s) => s,
@@ -5588,7 +5588,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 };
                 cap_revoke_gate(sched, caller_id, target_tid, cap_mask)?;
                 match sched.tasks.get(&target_tid) {
-                    Some(t) => t.cell_id,
+                    Some(t) => (t.cell_id, t.cell_generation),
                     None => return Err(SyscallError::InvalidCommand),
                 }
             };
@@ -5678,6 +5678,15 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     // Its exit path cleared every capability, so the revoke holds.
                     None => target_present = false,
                 }
+            }
+
+            // Synchronize CSpace authority ceiling with the revoked TCB state
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(target_cell.0, target_gen)) {
+                let new_caps = super::SCHEDULER.lock().as_ref()
+                    .and_then(|sched| sched.tasks.get(&target_tid))
+                    .map(|t| super::cap::CapSet::from_task(t))
+                    .unwrap_or(super::cap::CapSet::EMPTY);
+                auth.ceiling = auth.ceiling.intersect(new_caps);
             }
 
             crate::audit::log_event(
@@ -6458,21 +6467,23 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     .open(&path_str, api::fs::OpenMode::Read)
                     .map_err(|_| SyscallError::FileNotFound)?
             };
-            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+            let (cell_id, cell_gen) = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
                     .get(&caller_id)
-                    .map(|t| t.cell_id)
-                    .unwrap_or(types::CellId(0))
+                    .map(|t| (t.cell_id, t.cell_generation))
+                    .unwrap_or((types::CellId(0), 0))
             } else {
-                types::CellId(0)
+                (types::CellId(0), 0)
             };
-            let cap_id = crate::cell::cap_registry::CAP_TABLE.lock().alloc(
-                cell_id,
-                crate::cell::cap_registry::CapResource::File { file: Some(file) },
+            let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
+            let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+            let ticket = auth.allocate_file_slot(
+                crate::cell::cspace::Principal::Cell { id: cell_id, generation: cell_gen },
+                file,
                 api::cap::CapPerms::FILE_READ.0,
-            );
-            Ok(cap_id.0 as usize)
+            ).map_err(|_| SyscallError::OutOfMemory)?;
+            Ok(ticket as usize)
         }
 
         Syscall::ReadCap {
@@ -6484,31 +6495,29 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 return Ok(0);
             }
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
-            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+            let (cell_id, cell_gen) = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
                     .get(&caller_id)
-                    .map(|t| t.cell_id)
-                    .unwrap_or(types::CellId(0))
+                    .map(|t| (t.cell_id, t.cell_generation))
+                    .unwrap_or((types::CellId(0), 0))
             } else {
-                types::CellId(0)
+                (types::CellId(0), 0)
             };
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .park_file(
-                    crate::cell::cap_registry::CapId(cap_id as u64),
-                    cell_id,
-                    api::cap::CapPerms::READ,
-                )
-                .map_err(|_| SyscallError::PermissionDenied)?;
+            let mut boxed_file = {
+                let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
+                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                auth.park_file(cap_id as u64, api::cap::CapPerms::READ.0)
+                    .map_err(|_| SyscallError::PermissionDenied)?
+            };
             let mut kbuf = alloc::vec::Vec::new();
             kbuf.try_reserve_exact(buf_len)
                 .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
             let read_result = boxed_file.read(&mut kbuf);
-            crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+                auth.unpark_file(cap_id as u64, boxed_file);
+            }
             match read_result {
                 Ok(n) => {
                     if n > 0 {
@@ -6531,27 +6540,25 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 2 => api::fs::SeekFrom::End(offset as isize as i64),
                 _ => return Err(SyscallError::InvalidInput),
             };
-            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+            let (cell_id, cell_gen) = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
                     .get(&caller_id)
-                    .map(|t| t.cell_id)
-                    .unwrap_or(types::CellId(0))
+                    .map(|t| (t.cell_id, t.cell_generation))
+                    .unwrap_or((types::CellId(0), 0))
             } else {
-                types::CellId(0)
+                (types::CellId(0), 0)
             };
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .park_file(
-                    crate::cell::cap_registry::CapId(cap_id as u64),
-                    cell_id,
-                    api::cap::CapPerms::READ,
-                )
-                .map_err(|_| SyscallError::PermissionDenied)?;
+            let mut boxed_file = {
+                let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
+                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                auth.park_file(cap_id as u64, api::cap::CapPerms::READ.0)
+                    .map_err(|_| SyscallError::PermissionDenied)?
+            };
             let seek_result = boxed_file.seek(pos);
-            crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+                auth.unpark_file(cap_id as u64, boxed_file);
+            }
             match seek_result {
                 Ok(new_pos) => Ok(new_pos as usize),
                 Err(_) => Err(SyscallError::Unknown),
@@ -6567,27 +6574,25 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 return Ok(0);
             }
             let bytes = read_user_slice(caller_id, buf_ptr, buf_len, MAX_USER_BUF)?;
-            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+            let (cell_id, cell_gen) = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
                     .get(&caller_id)
-                    .map(|t| t.cell_id)
-                    .unwrap_or(types::CellId(0))
+                    .map(|t| (t.cell_id, t.cell_generation))
+                    .unwrap_or((types::CellId(0), 0))
             } else {
-                types::CellId(0)
+                (types::CellId(0), 0)
             };
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .park_file(
-                    crate::cell::cap_registry::CapId(cap_id as u64),
-                    cell_id,
-                    api::cap::CapPerms::WRITE,
-                )
-                .map_err(|_| SyscallError::PermissionDenied)?;
+            let mut boxed_file = {
+                let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
+                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                auth.park_file(cap_id as u64, api::cap::CapPerms::WRITE.0)
+                    .map_err(|_| SyscallError::PermissionDenied)?
+            };
             let write_result = boxed_file.write(&bytes);
-            crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+                auth.unpark_file(cap_id as u64, boxed_file);
+            }
             match write_result {
                 Ok(n) => Ok(n),
                 Err(_) => Err(SyscallError::Unknown),
@@ -6595,79 +6600,73 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
         }
 
         Syscall::StatCap { cap_id } => {
-            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+            let (cell_id, cell_gen) = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
                     .get(&caller_id)
-                    .map(|t| t.cell_id)
-                    .unwrap_or(types::CellId(0))
+                    .map(|t| (t.cell_id, t.cell_generation))
+                    .unwrap_or((types::CellId(0), 0))
             } else {
-                types::CellId(0)
+                (types::CellId(0), 0)
             };
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .park_file(
-                    crate::cell::cap_registry::CapId(cap_id as u64),
-                    cell_id,
-                    api::cap::CapPerms::READ,
-                )
-                .map_err(|_| SyscallError::PermissionDenied)?;
+            let mut boxed_file = {
+                let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
+                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                auth.park_file(cap_id as u64, api::cap::CapPerms::READ.0)
+                    .map_err(|_| SyscallError::PermissionDenied)?
+            };
             let result = boxed_file.size();
-            crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+                auth.unpark_file(cap_id as u64, boxed_file);
+            }
             result
                 .map(|s| s as usize)
                 .map_err(|_| SyscallError::Unknown)
         }
 
         Syscall::TruncateCap { cap_id, len } => {
-            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+            let (cell_id, cell_gen) = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
                     .get(&caller_id)
-                    .map(|t| t.cell_id)
-                    .unwrap_or(types::CellId(0))
+                    .map(|t| (t.cell_id, t.cell_generation))
+                    .unwrap_or((types::CellId(0), 0))
             } else {
-                types::CellId(0)
+                (types::CellId(0), 0)
             };
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .park_file(
-                    crate::cell::cap_registry::CapId(cap_id as u64),
-                    cell_id,
-                    api::cap::CapPerms::WRITE,
-                )
-                .map_err(|_| SyscallError::PermissionDenied)?;
+            let mut boxed_file = {
+                let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
+                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                auth.park_file(cap_id as u64, api::cap::CapPerms::WRITE.0)
+                    .map_err(|_| SyscallError::PermissionDenied)?
+            };
             let result = boxed_file.truncate(len as u64);
-            crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+                auth.unpark_file(cap_id as u64, boxed_file);
+            }
             result.map(|_| 0usize).map_err(|_| SyscallError::Unknown)
         }
 
         Syscall::SyncCap { cap_id } => {
-            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+            let (cell_id, cell_gen) = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
                     .get(&caller_id)
-                    .map(|t| t.cell_id)
-                    .unwrap_or(types::CellId(0))
+                    .map(|t| (t.cell_id, t.cell_generation))
+                    .unwrap_or((types::CellId(0), 0))
             } else {
-                types::CellId(0)
+                (types::CellId(0), 0)
             };
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .park_file(
-                    crate::cell::cap_registry::CapId(cap_id as u64),
-                    cell_id,
-                    api::cap::CapPerms::WRITE,
-                )
-                .map_err(|_| SyscallError::PermissionDenied)?;
+            let mut boxed_file = {
+                let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
+                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                auth.park_file(cap_id as u64, api::cap::CapPerms::WRITE.0)
+                    .map_err(|_| SyscallError::PermissionDenied)?
+            };
             let result = boxed_file.sync();
-            crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+                auth.unpark_file(cap_id as u64, boxed_file);
+            }
             result.map(|_| 0usize).map_err(|_| SyscallError::Unknown)
         }
 
@@ -6772,20 +6771,18 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
         }
 
         Syscall::CloseCap { cap_id } => {
-            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+            let (cell_id, cell_gen) = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
                     .get(&caller_id)
-                    .map(|t| t.cell_id)
-                    .unwrap_or(types::CellId(0))
+                    .map(|t| (t.cell_id, t.cell_generation))
+                    .unwrap_or((types::CellId(0), 0))
             } else {
-                types::CellId(0)
+                (types::CellId(0), 0)
             };
-            let mut table = crate::cell::cap_registry::CAP_TABLE.lock();
-            table
-                .verify(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
-                .map_err(|_| SyscallError::PermissionDenied)?;
-            table.revoke(crate::cell::cap_registry::CapId(cap_id as u64));
+            let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
+            let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+            auth.close_ticket(cap_id as u64).map_err(|_| SyscallError::PermissionDenied)?;
             Ok(0)
         }
 

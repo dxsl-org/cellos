@@ -68,13 +68,12 @@ impl CapTable {
 
     /// Allocate a new capability for `owner` over `resource`.
     ///
-    /// Returns the new `CapId` (always > 0 for the first 2^64-1 calls).
-    /// Panics in debug builds if `next_id` wraps to 0 (effectively unreachable).
-    pub fn alloc(&mut self, owner: CellId, resource: CapResource, perms: u32) -> CapId {
+    /// Refuses exhausted ID space without changing existing entries. IDs are
+    /// never wrapped or reused, including after a capability is revoked.
+    pub fn alloc(&mut self, owner: CellId, resource: CapResource, perms: u32) -> ViResult<CapId> {
+        let next = self.next_id.checked_add(1).ok_or(ViError::OutOfMemory)?;
         let id = CapId(self.next_id);
-        let next = self.next_id.wrapping_add(1);
-        debug_assert!(next != 0, "CapId counter wrapped to 0");
-        self.next_id = if next == 0 { 1 } else { next };
+        self.next_id = next;
         #[cfg(cellos_p01_trace)]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None, crate::memory::heap::p01_owner::SERVICE_SHARED);
@@ -87,7 +86,7 @@ impl CapTable {
                 expires_at: None,
             },
         );
-        id
+        Ok(id)
     }
 
     /// Allocate a capability with an automatic lease expiry.
@@ -100,12 +99,12 @@ impl CapTable {
         resource: CapResource,
         perms: u32,
         expires_at: u64,
-    ) -> CapId {
-        let id = self.alloc(owner, resource, perms);
+    ) -> ViResult<CapId> {
+        let id = self.alloc(owner, resource, perms)?;
         if let Some(e) = self.entries.get_mut(&id) {
             e.expires_at = Some(expires_at);
         }
-        id
+        Ok(id)
     }
 
     /// Verify that `caller` owns `cap_id` and the lease has not expired.
@@ -199,3 +198,77 @@ impl CapTable {
 
 /// Global kernel capability table.
 pub static CAP_TABLE: Spinlock<CapTable> = Spinlock::new(CapTable::new());
+
+/// Exact backing storage for CSpace-managed BootFS files indexed by (cell_id, generation, ticket).
+static CSPACE_FILES: Spinlock<BTreeMap<(u64, u64, u64), Option<alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>>>> =
+    Spinlock::new(BTreeMap::new());
+
+pub fn attach_file_to_ticket(
+    key: (u64, u64, u64),
+    file: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>,
+) {
+    CSPACE_FILES.lock().insert(key, Some(file));
+}
+
+pub fn park_ticket_file(
+    key: (u64, u64, u64),
+) -> Option<alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>> {
+    CSPACE_FILES.lock().get_mut(&key).and_then(|opt| opt.take())
+}
+
+pub fn unpark_ticket_file(
+    key: (u64, u64, u64),
+    file: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>,
+) {
+    if let Some(opt) = CSPACE_FILES.lock().get_mut(&key) {
+        *opt = Some(file);
+    }
+}
+
+pub fn remove_ticket_file(key: (u64, u64, u64)) {
+    CSPACE_FILES.lock().remove(&key);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exhausted_ids_preserve_foreign_owners_and_never_reissue_after_close() {
+        let mut table = CapTable::new();
+        let owner = CellId(1);
+        let peer = CellId(2);
+        let original = table.alloc(owner, CapResource::File { file: None }, 1).unwrap();
+        table.next_id = u64::MAX - 1;
+        let last = table.alloc(peer, CapResource::File { file: None }, 2).unwrap();
+        assert_eq!(last.0, u64::MAX - 1);
+        for _ in 0..2 {
+            assert_eq!(table.alloc(peer, CapResource::File { file: None }, 4),
+                Err(ViError::OutOfMemory));
+            assert_eq!(table.get_if_owner(original, owner).unwrap().perms, 1);
+            assert!(table.get_if_owner(original, peer).is_none());
+            assert_eq!(table.get_if_owner(last, peer).unwrap().perms, 2);
+            assert_eq!(table.entries.len(), 2);
+            assert_eq!(table.next_id, u64::MAX);
+        }
+        table.revoke(original);
+        table.revoke(last);
+        assert_eq!(table.alloc(owner, CapResource::File { file: None }, 1),
+            Err(ViError::OutOfMemory));
+        assert!(table.entries.is_empty());
+    }
+
+    #[test]
+    fn failed_leased_allocation_cannot_change_a_live_entry_or_lease() {
+        let mut table = CapTable::new();
+        let owner = CellId(3);
+        table.next_id = u64::MAX - 1;
+        let live = table.alloc_with_lease(owner, CapResource::File { file: None }, 1, 100).unwrap();
+        assert_eq!(table.alloc_with_lease(CellId(4), CapResource::File { file: None }, 7, 999),
+            Err(ViError::OutOfMemory));
+        let entry = table.get_if_owner(live, owner).unwrap();
+        assert_eq!((entry.perms, entry.expires_at), (1, Some(100)));
+        assert_eq!(table.entries.len(), 1);
+        assert_eq!(table.next_id, u64::MAX);
+    }
+}
