@@ -5,9 +5,9 @@
   "user_decision": "Prepare native development handoff r3; not implementation approval",
   "candidate": {
     "path": ".agents/261011-1200-cell-contract-authority/native-development-handoff-r3.md",
-    "sha256": "5f3145124d04970a4df10c7385a12eaaa0c6b9bfbd6d02cbc8d2b6e6e433dcb5"
+    "sha256": "abefd4367abde51ae39929746a84cb9e3178f7f1e7bd23119abf5e937d968514"
   },
-  "requested_tranche": "N03 execution and lifetime: multithreading, SMP lifetime, aggregate budgets, and D07 fault retirement",
+  "requested_tranche": "N03 execution, lifetime authority, scheduler participant fence, and D07 fault funnel",
   "authorized_tranches": [],
   "successor_tranches_separately_gated": [
     "N04",
@@ -21,132 +21,97 @@
   "release": "blocked",
   "lock_relations": 38,
   "source_edit_allowlist": [
+    "kernel/src/task.rs",
     "kernel/src/task/scheduler.rs",
-    "kernel/src/task/tcb.rs",
-    "kernel/src/task/hart_local.rs",
-    "kernel/src/task/smp.rs",
-    "kernel/src/task/futex.rs",
+    "kernel/src/task/syscall.rs",
+    "kernel/src/task/completion.rs",
     "kernel/src/task/cpu_accounting.rs",
-    "kernel/src/task/retirement_selftest.rs",
+    "kernel/src/task/launch.rs",
     "tests/unit_cspace_smoke.rs",
     "CHANGELOG.md",
     ".agents/261011-1200-cell-contract-authority/validation.md"
   ],
   "read_only_source_consumers": [
     "kernel/src/cell/cspace.rs",
-    "kernel/src/cell/cap_registry.rs",
-    "kernel/src/task/launch.rs",
-    "kernel/src/task/cap.rs",
-    "kernel/src/task/syscall.rs",
-    "kernel/src/memory/cell_quota.rs",
-    "hal/arch/x86/src/x86_64/context.rs",
-    "libs/api/src/abi/syscall.rs",
-    "libs/api/src/abi/cell_owner.rs",
+    "kernel/src/task/tcb.rs",
+    "kernel/src/policy.rs",
     "kernel/src/loader.rs",
-    "kernel/src/policy.rs"
+    "libs/api/src/abi.rs"
   ],
   "source_inputs": [
     {
+      "path": "kernel/src/task.rs",
+      "sha256": "09f574dcb3b6ad23045848e592e6f8c2a6b28b038f5fe47f95b9175022c18632"
+    },
+    {
       "path": "kernel/src/task/scheduler.rs",
-      "sha256": "034f6fbaf9edf7cff12807c2cc74340a07557b7b42140f01a41be2c2b3acdab9"
+      "sha256": "a709e5124addff7ce7f689fac2ded9506da50dd0c4d0fbe98230801d79330aeb"
     },
     {
-      "path": "kernel/src/task/tcb.rs",
-      "sha256": "046677f8da00afa1f6db275cfdb28a70935dc7dcb981e7b701f0ab1a793e3181"
+      "path": "kernel/src/task/syscall.rs",
+      "sha256": "5fca403662a0e47938b5f31bef68ce77078d7c0c7656bbe8ac40095945d93c2a"
     },
     {
-      "path": "kernel/src/task/hart_local.rs",
-      "sha256": "594dbdb022318189985ac1c2775fcb83bf3fbf2a8ef5c5b72b7bdbf2ef5f856b"
-    },
-    {
-      "path": "kernel/src/task/smp.rs",
-      "sha256": "478943ae5f8a592ce1f76219770ecb73db8a7b339111ee3da0157aa05b33eec1"
-    },
-    {
-      "path": "kernel/src/task/futex.rs",
-      "sha256": "c4b53d55fed1f6d9472717c7d58bddc218cfe961d4ff2ec2664cfe285a379a19"
+      "path": "kernel/src/task/completion.rs",
+      "sha256": "79b07aef24170a82c40555f7ff7ac750ab08812b809c8ee80f3518c8d87d6af1"
     },
     {
       "path": "kernel/src/task/cpu_accounting.rs",
       "sha256": "3426effd3bdaffd037d8dde28ba516f23cddd261ed329a7ec4ca9570ecb8b21e"
     },
     {
-      "path": "kernel/src/task/retirement_selftest.rs",
-      "sha256": "519cc68ebd7da89d96cd6e795d8d1e45831ef9cc9de8f718d5e55540f5832a5f"
+      "path": "kernel/src/task/launch.rs",
+      "sha256": "29eb4b51b1497bc3c8d1a8d85b63b274e617b27839da7e05e76b48f07022e943"
     },
     {
       "path": "tests/unit_cspace_smoke.rs",
-      "sha256": "80b2d73622f4834124cbbc8bbdcd97d7b58112074d0b39ce58d0e2293c5ef760"
+      "sha256": "d66c39ad58f324f6bdbab15c291a8f746623ad0fd9f8c75f633412fcd77c8de5"
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "cb532d296f3c812c1d83b19aa3820c697b026de5f4c1a8b6dc813512bd440b19"
+      "sha256": "09aabf4dbaa25be848f9d6c1524ef90255ce6d170451ac1d1e0b71dde3050eda"
     },
     {
       "path": ".agents/261011-1200-cell-contract-authority/validation.md",
-      "sha256": "65db541efa7c386a627f420e2a842faae618605e8709878a63d020e0666573fa"
+      "sha256": "89025ee6dfb3a27b421c7b788e257338b43f2a66802f320b7d749b9dc7f4887f"
     },
     {
       "path": "kernel/src/cell/cspace.rs",
       "sha256": "82dbad9359a4d2d8356965bb0a368857b327c8bbcefe7b00bf815b989a1b73c1"
     },
     {
-      "path": "kernel/src/cell/cap_registry.rs",
-      "sha256": "dd4b03978745bc1da7d254474204d070a7f0542dacbdd60ca61d2cd1209964ae"
+      "path": "kernel/src/task/tcb.rs",
+      "sha256": "046677f8da00afa1f6db275cfdb28a70935dc7dcb981e7b701f0ab1a793e3181"
     },
     {
-      "path": "kernel/src/task/launch.rs",
-      "sha256": "29eb4b51b1497bc3c8d1a8d85b63b274e617b27839da7e05e76b48f07022e943"
-    },
-    {
-      "path": "kernel/src/task/cap.rs",
-      "sha256": "768003d621513c20dcbfb631dbd025ad00f23e06bad6709f62dbbedf9470ef6e"
-    },
-    {
-      "path": "kernel/src/task/syscall.rs",
-      "sha256": "e5813ef539724af4d52b53e49f18664aeee6e1ebf637e7f45315bb7f0cead2e9"
-    },
-    {
-      "path": "kernel/src/memory/cell_quota.rs",
-      "sha256": "feab58aca5d6fbdcf2dd5c82aa70295773746473f594783f4e220568926cffdd"
-    },
-    {
-      "path": "hal/arch/x86/src/x86_64/context.rs",
-      "sha256": "de32b45d66f0fd97cef6c2e9aa8c52b69a1383e74a396f43e16f9fe5f24aaf80"
-    },
-    {
-      "path": "libs/api/src/abi/syscall.rs",
-      "sha256": "7cb9c3ff34f9b354821014caba499b133c1a3118683154858fe0ae7593fea856"
-    },
-    {
-      "path": "libs/api/src/abi/cell_owner.rs",
-      "sha256": "d6d14a5c115858262cb6b2961c96c6afe0a2a037e8ec1f53044ee272f3779e22"
+      "path": "kernel/src/policy.rs",
+      "sha256": "87e330041c4bbf9b5c570aed725b9af73c3dfdf63947f11457b718f8583d4fb4"
     },
     {
       "path": "kernel/src/loader.rs",
       "sha256": "97e6af3ebe67a2aec3bc7b0d46c37a3b2507f52af230635ebdd33eef536bb8f7"
     },
     {
-      "path": "kernel/src/policy.rs",
-      "sha256": "87e330041c4bbf9b5c570aed725b9af73c3dfdf63947f11457b718f8583d4fb4"
+      "path": "libs/api/src/abi.rs",
+      "sha256": "6ba9984caf39263bbf36199fe8e7a3b506ed18a1f0f6ab826c399dad51e36c51"
     }
   ],
   "contract_inputs": [
     {
       "path": ".agents/261011-1200-cell-contract-authority/plan.md",
-      "sha256": "216c66ae38b3f3215de6f5f8f38058a93b43e0bdbc9564f4f2c7c6be5fe78adb"
+      "sha256": "50ea42a5c68d3eeff2609600e1c34b955485c2f30b3b9fb7054e68b3485f7707"
     },
     {
       "path": ".agents/261011-1200-cell-contract-authority/phase-01-contract-gates.md",
-      "sha256": "516b96245d9e222cfb48e1e0574d44ee654c377d4fbde5296068e082d06d1873"
+      "sha256": "0a8b730400d1c6c84d41b35b7f54bdbdb0bfc4e38c45f89219449e1a40adcd16"
     },
     {
       "path": ".agents/261011-1200-cell-contract-authority/phase-02-kernel-authority.md",
-      "sha256": "c07343b747c74ca03e5c32e9453fbe1c37ba34642627677a0cdc2e50be77fc4d"
+      "sha256": "2dc7c9a726bf6bd5b4c54431ee031a6f78cb9e991377cabc9b228c232cff85bb"
     },
     {
       "path": ".agents/261011-1200-cell-contract-authority/phase-03-thread-smp.md",
-      "sha256": "b57621d3552ca21ae41c2d451307e23f8eaae4e16bcc118e7b6a29c88fba553a"
+      "sha256": "d095a3b53a0359f896daac99c54f71520266f3dea8162e87e01f4c35de6cb48f"
     },
     {
       "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D07.md",
@@ -162,7 +127,7 @@
     },
     {
       "path": ".agents/plan-portfolio.md",
-      "sha256": "29c94f8980815667d7cbc9c7b22788582abb21b3ee211681fe661c3fec239f3f"
+      "sha256": "fee68d4406621a09e2ba6e2d11197b1588e9fc70983c28021d1d319551f2bc9c"
     },
     {
       "path": "libs/api/src/abi.rs",
@@ -171,7 +136,7 @@
   ],
   "census": {
     "path": ".agents/261011-1200-cell-contract-authority/consumer-census-source.json",
-    "sha256": "9efa8c0ee64e88582a2355401ce0313c8da2178056f82c5537b3daa122a56f08"
+    "sha256": "9987090ca74a7d52bf15b91a8293682eb04a91a5be80ca031819ad00ca275552"
   },
   "activation": "Explicit user approval and append-only decision record must bind BOTH Markdown SHA-256 and JSON companion SHA-256. No current approval.",
   "whole_system_metadata_bound": false,
