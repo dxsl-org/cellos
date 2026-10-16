@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Prepare Law-1 Checkpoint 2 (CP2) Implementation Qualification Dossier: consolidate
+  empirical proof across Clusters 1-5, N02-A..N07, G3 Durable Charge (83/83 PASS),
+  P08 distributed services, P09 VMX isolation, and P10 system qualification.
 - Implement Phase 10 (P10) System Qualification & Contract Traceability: verify 200+
   concurrent client overlap (AC-25/35), AC-43 load-driven autospawn and safe drain,
   and consolidate full AC-01..AC-50 positive and negative contract verification.

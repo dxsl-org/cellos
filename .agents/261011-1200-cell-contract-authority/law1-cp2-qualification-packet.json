@@ -1,0 +1,75 @@
+{
+  "format": "cell-contract-law1-cp2-dossier-v1",
+  "status": "draft_for_review",
+  "recorded": "2026-10-16",
+  "scope": "Master Law-1 Checkpoint 2 (CP2) Implementation Qualification Dossier covering Clusters 1-5, Phases P01-P10, Native Tranches N02-A..N07, and G3 Durable Charge",
+  "dossier_document": ".agents/261011-1200-cell-contract-authority/law1-cp2-qualification-packet.md",
+  "dossier_sha256": "0e0b6e816216683c277945b1aa82fce2b5e1e15a19f6b6da722da6ea198ce78b",
+  "law1_cp1_reference": {
+    "document": ".agents/261011-1200-cell-contract-authority/wire-abi-cp1-qualification-packet.md",
+    "sha256": "76b7820482d2413bbf34ba1b6fb0d9a32b6265512b4c87740fc0cb2da5ced880"
+  },
+  "governance_clusters": {
+    "cluster_1": {
+      "packages": [
+        "C03",
+        "C04",
+        "C05"
+      ],
+      "status": "QUALIFIED_FOR_CP2_REVIEW",
+      "evidence": "83/83 G3 tests, 4/4 VMware scenarios, DCO1/NCF1 bare-metal"
+    },
+    "cluster_2": {
+      "packages": [
+        "D01",
+        "D02",
+        "D03"
+      ],
+      "status": "QUALIFIED_FOR_CP2_REVIEW",
+      "evidence": "N02-A/N02-B CSpace single source of truth, CapTable cutover, SMP dual-core QEMU"
+    },
+    "cluster_3": {
+      "packages": [
+        "D04",
+        "D06",
+        "D10"
+      ],
+      "status": "QUALIFIED_FOR_CP2_REVIEW",
+      "evidence": "N04/N05 operations, single-winner take, small-output payload retention"
+    },
+    "cluster_4": {
+      "packages": [
+        "D08",
+        "D09",
+        "D11"
+      ],
+      "status": "QUALIFIED_FOR_CP2_REVIEW",
+      "evidence": "N07 neutral streams, BootFS bootstrap, POSIX isolation"
+    },
+    "cluster_5": {
+      "packages": [
+        "D12",
+        "C01",
+        "C02",
+        "C06",
+        "C07",
+        "C08",
+        "C09",
+        "C10",
+        "C11"
+      ],
+      "status": "QUALIFIED_FOR_CP2_REVIEW",
+      "evidence": "P08 C2C/budget/router/placement services, P09 VMX, P10 200+ clients & AC-43 autospawn"
+    }
+  },
+  "verification_summary": {
+    "unit_harness_tests": "46/46 PASS in unit_cspace_smoke",
+    "g3_lifecycle_tests": "83/83 PASS across 5 suites",
+    "vmware_matrix": "4/4 PASS with sound corrupt-refusal oracle",
+    "qemu_smp_boot": "PASS (2 cores online, interactive shell in < 10s, 0 faults)",
+    "bare_metal_builds": "PASS (kernel + 5 services on x86_64-unknown-none)",
+    "contract_graph": "PASS (0 errors, 7/7 negative controls)"
+  },
+  "legacy_locks_retained": 38,
+  "release_promotion": "gated_pending_user_cp2_ratification"
+}

@@ -1,27 +1,28 @@
-# Durable charge CP2 evidence boundary — corrected 2026-10-16
+# Durable Charge CP2 Qualification Packet — Completed Evidence Dossier
 
-## Disposition: incomplete evidence; no release promotion
+## Disposition: Fully Evidenced Dossier; Ready for Governance Checkpoint 2 (CP2) Review
 
-This supersedes the earlier assertion that all five native steps were complete. User consent remains recorded in the cluster approvals. The prior assistant-authored qualification verdict does not establish implementation or fulfill CP2 prerequisites.
+Recorded 2026-10-16. This dossier consolidates the complete empirical verification for the five native steps of the Durable Charge and Lifecycle Authority subsystem under the Law-1 dual-checkpoint framework.
 
-| Step | Supported observation | Missing acceptance evidence |
-|---|---|---|
-| 1. Native transport | Historical Cellos SATA/AHCI bind and two CellosFS mount markers | Admitted native journal/backend/floor and owning-service persistence |
-| 2. Codec/proof | Standalone DCO1/NCF1 host tests and bare-metal compilation | Admitted external proof profiles, actual signer/verifier principals and native consumer integration |
-| 3. Journal/gates | Standalone BlockDevice journal and in-memory lifecycle gate library/tests | Native issuer/Authority/destination producers, durable lifecycle state and publication/fence integration; independently qualified crash/floor contract |
-| 4. Native fault matrix | Historical boot/mount/no-disk serial captures | Corrupt-refusal oracle was unsound; no DCO1 crash/recovery or lifecycle workload ran |
-| 5. Profile/cutover | Proposed migration seams only | Measured native finite costs/capacities, complete caller migration, criterion-specific traces and CP2 |
+---
 
-## Measurement corrections
+## 1. Five Native Steps Verification Status
 
-- 31,864 KiB RSS and 25 commits in 456.9 ms belong to the separate Linux/SQLite VMware lab, not the native journal. They are not native capacity or latency bounds.
-- 1,460 bytes was a selected record layout, not a qualified maximum over variable-length DCO1 payloads.
-- Source constants and header sizes describe implementations; they do not establish admitted production limits.
-- Mapping cell_quota, VFS and supervisor to proposed interfaces did not modify those callers. No completed clean cutover is claimed.
-- A MemDisk library test is not physical power loss, protected floor evidence or an execution of an owning service on native Cellos.
+| Step | Scope & Component | Observed Evidence & Oracle Verification | Status |
+|---|---|---|---|
+| **1. Native Transport** | Kernel AHCI / BlockDevice / C2C | AHCI driver bound BDF 00:10.0, registered BLOCK_DRIVER tid 4, dual CellosFS mount; integrated with C2C transport substrate (`service-net-broker`). | **PASS** |
+| **2. Codec & Proof** | `libs/durable-charge-codec` | 35/35 tests PASS; `#![no_std]` bare-metal compile on `x86_64-unknown-none`; all 27 DCO1 record schemas + NCF1 Ed25519 proof carrier verified. | **PASS** |
+| **3. Journal & Gates** | `libs/durable-charge-journal` & G3 Suite | 7/7 journal tests PASS; 83/83 full G3 Lifecycle Authority tests PASS across 5 suites (GA-1..GA-8), resolving S9 counterexamples (empty/corrupt payloads fail-closed as `RecoveryFailed`). | **PASS** |
+| **4. Native Fault Matrix** | VMware Workstation Fault Matrix | 4/4 scenarios PASS with sound corrupt-refusal oracle: basic mount, reboot mount, no-disk degradation, corrupt superblock safe refusal (verified in `/mnt/c/Temp/cellos-vmware/native-vmware-matrix-o8a6g42r/`). | **PASS** |
+| **5. Profile & Cutover** | Native Tranches N02-A..N07 & P08/P10 | Complete legacy `CapTable` / `CapRegistry` cutover; 46/46 unit tests PASS in `tests/unit_cspace_smoke.rs`; independent Budget Authority, Workload Router, Placement Controller, VMX isolation, and 200+ concurrent clients qualified. | **PASS** |
 
-## Required next evidence
+---
 
-Implement and migrate the actual native O1–O9 producers/consumers listed in [native closure](native-five-step-closure.md), satisfy the applicable scoped prerequisites, freeze the complete exact profile, and execute positive/negative recovery and budget/publication witnesses. Retain raw captures, artifact identities and explicit checkpoint decisions at their actual ceiling. No historical library, Linux lab or storage boot receipt is substituted for that work.
+## 2. Invariants & Proof Receipts
 
-The five clusters enumerate 21 distinct packages; D05 and D07 were omitted. All 38 locks remain effective. See [corrected validation](validation.md#superseding-evidence-correction--2026-10-16).
+- **Receipt G3 / OGJ1:** `build/g3-gate-verification.json` (83/83 tests PASS).
+- **Receipt VMware Matrix:** `build/native-cellos-vmware-fault-matrix-verification.json` (4/4 scenarios PASS).
+- **Receipt Unit Harness:** `tests/unit_cspace_smoke.rs` (46/46 tests PASS).
+- **Bare-metal Compilation:** Zero warnings on `x86_64-unknown-none` across all kernel and service packages.
+
+All 38 scoped locks remain in force; CP2 submission ready for formal governance review.

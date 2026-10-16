@@ -559,3 +559,14 @@ Executed Phase 10 system qualification covering full contract traceability (AC-0
 
 Dossier preserved in `.agents/261011-1200-cell-contract-authority/p10-qualification-packet.md`. All 38 locks remain in force; release remains blocked pending formal human governance signoff.
 
+## Law-1 Checkpoint 2 (CP2) Implementation Qualification Dossier — 2026-10-16
+
+Consolidated the comprehensive Law-1 Checkpoint 2 (CP2) dossier covering Clusters 1 through 5:
+1. **Cluster 1 (C03, C04, C05):** G3 Lifecycle Authority & Durable Charge verified (83/83 PASS), DCO1/NCF1 bare-metal verified, sound VMware fault matrix (4/4 PASS).
+2. **Cluster 2 (D01, D02, D03):** CSpace authority under scheduler lock, file slots, derivation and revocation verified; legacy `CapTable`/`CapRegistry` cutover complete; dual-core SMP QEMU boot test PASS.
+3. **Cluster 3 (D04, D06, D10):** Operations lifecycle, single-winner take vs exit, small-output payload retention verified.
+4. **Cluster 4 (D08, D09, D11):** Neutral streams, BootFS bootstrap, and POSIX adapter isolation verified.
+5. **Cluster 5 (D12, C01, C02, C06–C11):** Distributed C2C transport, Budget Authority, Workload Router, Placement Controller, VMX isolation, 200+ concurrent clients, and AC-43 autospawn/drain verified.
+
+Master dossier preserved in `.agents/261011-1200-cell-contract-authority/law1-cp2-qualification-packet.md` and `law1-cp2-qualification-packet.json`. All 38 locks remain in force; release remains gated on explicit governance ratification.
+

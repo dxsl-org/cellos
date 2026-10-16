@@ -413,12 +413,12 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "adfbbcf938e5835095240ea76b2e020fb9d659b192b3e4bdb63ed97ddf36cc9d",
+  "source_census_sha256": "5acdf10277e8373e9ca9c1eba61f7bbc9f24de5afa3ca9362e8c85bf812369b1",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "d161439d5295b185fdb836e2cfd7d91d73e3e8ffd09881fe7847795379492690"
+      "sha256": "51370e3f2d252b1926f90f69abd9dbc517cb18adf65e11fbe36df3f51b52fd29"
     },
     {
       "path": "CODE_OF_CONDUCT.md",
