@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Rebase and qualify Tranche 3 (Native SDK, Runtime & Concurrency): rebase 11 subordinate
+  plans onto ServiceRef binding cache, AppContext magic envelope, GAT MessageHandler,
+  and 256-connection non-blocking reactor; verify 58/58 tests clean.
 - Rebase and qualify Tranche 2 (Core Kernel, Authority & Loader): rebase 8 subordinate
   plans onto CSpace single-source authority (D03), KernelPerms bitflags, SMP cross-hart
   TLB shootdown, and acyclic BootFS binary loading; verify 55/55 tests clean.

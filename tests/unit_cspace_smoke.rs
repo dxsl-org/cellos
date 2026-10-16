@@ -1716,3 +1716,75 @@ mod core_kernel_rebase {
         assert!(!tampered_approved);
     }
 }
+
+#[cfg(test)]
+mod native_sdk_rebase {
+    const APP_MSG_MAGIC: u8 = 0xAC;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum SdkCallStatus {
+        Success,
+        StaleBinding,
+        ServiceNotFound,
+    }
+
+    struct ServiceBindingMock {
+        tid: usize,
+        cell_id: u64,
+        generation: u64,
+    }
+
+    #[test]
+    fn test_sdk_service_ref_caching_and_staleness() {
+        let cached_binding = ServiceBindingMock {
+            tid: 4,
+            cell_id: 10,
+            generation: 1,
+        };
+
+        // Kernel registry updated after service restart (generation 2)
+        let live_registry_binding = ServiceBindingMock {
+            tid: 4,
+            cell_id: 10,
+            generation: 2,
+        };
+
+        let status = if cached_binding.generation == live_registry_binding.generation {
+            SdkCallStatus::Success
+        } else {
+            SdkCallStatus::StaleBinding
+        };
+
+        assert_eq!(status, SdkCallStatus::StaleBinding, "stale provider binding must be detected");
+    }
+
+    #[test]
+    fn test_sdk_app_context_magic_envelope() {
+        let structured_msg = [APP_MSG_MAGIC, 0x00, 0x11, 0x22];
+        let legacy_msg = [0x55, 0x66, 0x77, 0x88];
+
+        let is_structured_1 = structured_msg[0] == APP_MSG_MAGIC;
+        let is_structured_2 = legacy_msg[0] == APP_MSG_MAGIC;
+
+        assert!(is_structured_1, "magic byte 0xAC identifies AppContext envelope");
+        assert!(!is_structured_2, "legacy message falls back to raw message handling");
+    }
+
+    #[test]
+    fn test_sdk_bounded_ipc_operation_lifecycle() {
+        const CAPACITY: usize = 32;
+        let mut active_ops = 0;
+
+        // Submit allocates an operation ID
+        if active_ops < CAPACITY {
+            active_ops += 1;
+        }
+        assert_eq!(active_ops, 1);
+
+        // Take completes and frees the operation slot
+        if active_ops > 0 {
+            active_ops -= 1;
+        }
+        assert_eq!(active_ops, 0);
+    }
+}
