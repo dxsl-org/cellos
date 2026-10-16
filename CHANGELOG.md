@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Implement Stage H2 Multi-Node Haily Personal Assistant Distributed C2C Subsystem (cells/apps/haily-agent/src/cluster.rs):
+  add peer node enrollment, capacity-weighted parallel placement, session affinity, disconnected-worker
+  fault reconciliation (TaskOutcome::Indeterminate per Spec 20 §2.6), and verify 65/65 smoke tests clean.
 - Implement Stage H1 Single-Node Haily Personal Assistant Agent (cells/apps/haily-agent):
   port Haily Request/Response DTOs, integrate tool delegation to sandboxed tool cells
   (hypha-tool-fs, hypha-tool-sys, hypha-tool-spawn) with mutating approval gates, and

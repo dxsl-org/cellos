@@ -413,12 +413,12 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "babca7aae3359247ced45ba773b89d3396c9ad0d1eda98467b158eb52f85e234",
+  "source_census_sha256": "b5a6e9f883650c111a0fb539aa1e3d46eb468db02b30be26e411e1b5f5a52109",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "8076420d5dc725908be7cb8866f9a90ff8c5def1ec42d1d7196f1c2acd2026b3"
+      "sha256": "09aabf4dbaa25be848f9d6c1524ef90255ce6d170451ac1d1e0b71dde3050eda"
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -525,12 +525,16 @@
       "sha256": "309c7f94ddf64d2c2d1fce2f9472d674869c6feb2218ebcadbf4bab5626d5f90"
     },
     {
+      "path": "cells/apps/haily-agent/src/cluster.rs",
+      "sha256": "285c74a4f704a5f0f32f8f69418c3269f3b95c1df70c4007bd303b7fa0ecc3aa"
+    },
+    {
       "path": "cells/apps/haily-agent/src/dto.rs",
       "sha256": "838661d8036ab966c203bac6a15ca23ace858ea2e0e04eaa0f1658019ee88d41"
     },
     {
       "path": "cells/apps/haily-agent/src/main.rs",
-      "sha256": "30de07d9f10a597d9e983fe37bea00b9759a94c172b1d1b839788ffa3ecaf7cf"
+      "sha256": "4af61706ef3359a63b7e4cd2bcf36dccda859a63a92e9d29388b5213166c97f6"
     },
     {
       "path": "cells/apps/haily-agent/src/tools.rs",
@@ -14650,7 +14654,7 @@
     },
     {
       "path": "tests/unit_cspace_smoke.rs",
-      "sha256": "c0d03a9e27029e9371a7a7b5e9111d29caef8b00df3964f813278c32be0fef42"
+      "sha256": "d66c39ad58f324f6bdbab15c291a8f746623ad0fd9f8c75f633412fcd77c8de5"
     },
     {
       "path": "third_party/mlibc/sysdeps/vicell/crt-aarch64/crt1.S",

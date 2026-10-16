@@ -12,6 +12,8 @@ extern crate ostd;
 
 mod dto;
 mod tools;
+mod cluster;
+
 
 use alloc::format;
 use alloc::string::String;
@@ -23,6 +25,7 @@ use mio_cellos::{Events, Selector};
 
 use dto::{HailyRequest, HailyResponse};
 use tools::ToolRouter;
+use cluster::{HailyClusterCoordinator, HailyNode, NodeRole, NodeState, TaskKind};
 
 api::declare_manifest!(block_io = false, network = true, spawn = true);
 api::declare_syscalls![
@@ -50,7 +53,7 @@ const TOOL_SPAWN_PATH: &str = "/bin/hypha-tool-spawn";
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
-    println("[haily-agent] Initializing Haily Personal Assistant on CellOS (Stage H1)...");
+    println("[haily-agent] Initializing Haily Personal Assistant on CellOS (Stage H1/H2)...");
 
     // 1. Discover or spawn sandboxed tool cells
     let mut router = ToolRouter::default();
@@ -74,6 +77,23 @@ fn cell_main() {
         println(&format!("[haily-agent] C2C Net Broker discovered at tid: {}", broker_tid));
     } else {
         println("[haily-agent] Net Broker offline; running in single-node autonomous mode.");
+    }
+
+    // 2b. Initialize C2C Cluster Coordinator (Stage H2 Distributed Workload Placement)
+    println("[haily-agent] Initializing Haily C2C Cluster Coordinator...");
+    let mut cluster = HailyClusterCoordinator::new(1001);
+
+    // Enroll second compatible worker node
+    let worker_node = HailyNode {
+        id: 2002,
+        name: String::from("Node-02-RemoteWorker"),
+        role: NodeRole::Worker,
+        state: NodeState::Active,
+        capacity_weight: 20,
+        active_tasks: 0,
+    };
+    if cluster.enroll_node(worker_node).is_ok() {
+        println("[haily-agent] Enrolled peer Node-02-RemoteWorker (id=2002, weight=20) into C2C cluster.");
     }
 
     // 3. Initialize Mio Async Selector
@@ -103,11 +123,31 @@ fn cell_main() {
     println(&format!("[haily-agent] Task completed! status='{}' reply='{}' tool_calls={}",
         response.status, response.reply, response.tool_invocations));
 
+
+    // 4b. Exercise Stage H2: Distributed task dispatch across cluster nodes
+    println("[haily-agent] Exercising Stage H2 distributed workload placement...");
+    let (task1, status1) = cluster.dispatch_task("sess-research-01", TaskKind::ResearchSynthesis, "synthesize papers on SAS concurrency");
+    println(&format!("[haily-agent] Dispatched Task {}: {:?} -> assigned_node={:?}",
+        task1.task_id, status1, task1.assigned_node));
+
+    let (task2, status2) = cluster.dispatch_task("sess-code-02", TaskKind::CodeAnalysis, "parallel compile check for worker slices");
+    println(&format!("[haily-agent] Dispatched Task {}: {:?} -> assigned_node={:?}",
+        task2.task_id, status2, task2.assigned_node));
+
+    // Exercise Stage H2 fault reconciliation: simulate Node-02 disconnect
+    println("[haily-agent] Exercising Stage H2 node failure reconciliation (Node 2002 disconnect)...");
+    let mut active_cluster_tasks = alloc::vec![task1, task2];
+    let reconciled = cluster.reconcile_disconnection(2002, &mut active_cluster_tasks);
+    println(&format!("[haily-agent] Reconciled {} unacknowledged tasks -> transitioned to Indeterminate (zero double-execution).", reconciled));
+    for t in &active_cluster_tasks {
+        println(&format!("[haily-agent]   Task {} state={:?}", t.task_id, t.outcome));
+    }
+
     // 5. Short event loop listener turn
     let mut events = Events::with_capacity(8);
     selector.select(&mut events, Some(Duration::from_millis(50))).ok();
 
-    println("[haily-agent] PASS: Haily Personal Assistant Stage H1 verification succeeded!");
+    println("[haily-agent] PASS: Haily Personal Assistant Stage H1/H2 verification succeeded!");
     sys_exit(0);
 }
 

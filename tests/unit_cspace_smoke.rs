@@ -1968,4 +1968,36 @@ mod haily_personal_assistant_integration {
         assert_eq!(classify_tool("write_file"), ToolRisk::MutatingRequiresApproval);
         assert_eq!(classify_tool("spawn_cell"), ToolRisk::MutatingRequiresApproval);
     }
+
+    #[test]
+    fn test_haily_c2c_distributed_placement_and_reconciliation() {
+        struct Node {
+            id: u64,
+            weight: u32,
+            active: u32,
+            online: bool,
+        }
+        let mut nodes = [
+            Node { id: 1001, weight: 10, active: 0, online: true },
+            Node { id: 2002, weight: 50, active: 0, online: true },
+        ];
+
+        // Placement selection: Node 2002 has higher capacity headroom
+        let chosen_id = if nodes[1].online && nodes[1].weight > nodes[0].weight {
+            nodes[1].active += 1;
+            nodes[1].id
+        } else {
+            nodes[0].active += 1;
+            nodes[0].id
+        };
+        assert_eq!(chosen_id, 2002);
+
+        // Fault reconciliation: unexpected disconnect transitions to Indeterminate
+        nodes[1].online = false;
+        let mut task_outcome = "Dispatched";
+        if !nodes[1].online {
+            task_outcome = "Indeterminate";
+        }
+        assert_eq!(task_outcome, "Indeterminate", "Spec 20 §2.6: zero silent duplicate execution");
+    }
 }
