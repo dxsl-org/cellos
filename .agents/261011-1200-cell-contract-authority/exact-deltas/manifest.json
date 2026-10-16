@@ -413,7 +413,7 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "b1cd995dbebab1541507cd36d53f83639e20992189c230f72ed9cadde2fba803",
+  "source_census_sha256": "5d63fdf8cefdbe886693e4cdcde843595eabb84db09a25d7868dda6f68c7ace3",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
@@ -11010,7 +11010,7 @@
     },
     {
       "path": "kernel/src/memory/pin_tests.rs",
-      "sha256": "1fb720813b737ea03df5f1acbaa6fcb05d6a6f12f9c3091a2e837a99f5fb18b9"
+      "sha256": "c3312953a6108be037ee88b6be5c0fd230e4a469ae633abceb87aaa7d51609a7"
     },
     {
       "path": "kernel/src/memory/rt_heap.rs",
@@ -11442,7 +11442,7 @@
     },
     {
       "path": "kernel/src/task/syscall.rs",
-      "sha256": "3b28ffb34e7785e2897c6e2365fab3c7c8158bdb5aa31e9148907d744f0f96d3"
+      "sha256": "5fca403662a0e47938b5f31bef68ce77078d7c0c7656bbe8ac40095945d93c2a"
     },
     {
       "path": "kernel/src/task/task_id_selftest.rs",

@@ -229,11 +229,11 @@ fn vfs_release_is_exact_to_the_request_and_target() {
     let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(12);
     assert_eq!(pin_vfs_lease(base, PAGE_SIZE, 912, 301, 7, 1), Ok(()));
-    assert_eq!(release_vfs_lease(301, 913, 1), alloc::vec![]);
+    assert!(release_vfs_lease(301, 913, 1).is_empty());
     assert!(holder_of(base, PAGE_SIZE).is_some());
-    assert_eq!(release_vfs_lease(301, 912, 2), alloc::vec![]);
+    assert!(release_vfs_lease(301, 912, 2).is_empty());
     assert!(holder_of(base, PAGE_SIZE).is_some());
-    assert_eq!(release_vfs_lease(301, 912, 1), alloc::vec![]);
+    assert!(release_vfs_lease(301, 912, 1).is_empty());
     assert!(holder_of(base, PAGE_SIZE).is_none());
 }
 
@@ -249,7 +249,7 @@ fn owner_death_pending_revokes_until_the_matching_vfs_release() {
     assert_eq!(quarantined_pages(), before + 1);
     let held = holder_of(base, PAGE_SIZE).expect("lease stays tracked while quarantined");
     assert!(held.quarantined && held.pending_revoke);
-    assert_eq!(release_vfs_lease(302, 913, 8), alloc::vec![]);
+    assert!(release_vfs_lease(302, 913, 8).is_empty());
     assert_eq!(quarantined_pages(), before + 1);
     assert_eq!(release_vfs_lease(302, 913, 9), alloc::vec![(base, 1)]);
     assert_eq!(quarantined_pages(), before);
@@ -266,7 +266,7 @@ fn smp_vfs_holder_release_before_reaper_transfer_leaves_no_orphan() {
     let before = quarantined_pages();
     assert_eq!(pin_vfs_lease(base, PAGE_SIZE, 918, 306, 13, 3), Ok(()));
     assert!(mark_vfs_lease_pending_revoke(306, 918, 3));
-    assert_eq!(release_vfs_lease(306, 918, 3), alloc::vec![]);
+    assert!(release_vfs_lease(306, 918, 3).is_empty());
 
     assert!(!withhold_vfs_frames(base, 1, 306, 918, 3));
     assert_eq!(quarantined_pages(), before);
@@ -305,6 +305,6 @@ fn vfs_owner_query_filters_by_overlapping_owner() {
     assert_eq!(held.holder_tid, 304);
     assert!(vfs_holder_of_owner(first, PAGE_SIZE, 917).is_none());
     assert!(vfs_holder_of_owner(second, PAGE_SIZE, 916).is_none());
-    assert_eq!(release_vfs_lease(304, 916, 1), alloc::vec![]);
-    assert_eq!(release_vfs_lease(305, 917, 2), alloc::vec![]);
+    assert!(release_vfs_lease(304, 916, 1).is_empty());
+    assert!(release_vfs_lease(305, 917, 2).is_empty());
 }

@@ -9872,10 +9872,7 @@ mod tests {
         assert!(crate::memory::pin::mark_vfs_lease_pending_revoke(
             HOLDER, OWNER, GENERATION
         ));
-        assert_eq!(
-            crate::memory::pin::release_vfs_lease(HOLDER, OWNER, GENERATION),
-            alloc::vec![]
-        );
+        assert!(crate::memory::pin::release_vfs_lease(HOLDER, OWNER, GENERATION).is_empty());
 
         assert!(!withhold_or_free(BASE, 1));
         assert_eq!(crate::memory::pin::quarantined_pages(), before);
