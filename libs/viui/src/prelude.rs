@@ -10,3 +10,4 @@ pub use crate::response::Response;
 pub use crate::state_store::{FocusManager, WidgetFlags, WidgetState, WidgetStateStore};
 pub use crate::theme::{DarkTheme, KioskTheme, LightTheme, ViTheme};
 pub use crate::widget::{PaintCx, ViWidget, WidgetId, WidgetTree};
+pub use crate::widgets::{MarkdownBlock, MarkdownView, RichTextView, TextSpan};

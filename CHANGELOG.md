@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Implement ViUI Native MarkdownView and RichTextView Widgets (libs/viui/src/widgets/markdown.rs, libs/viui/src/widgets/rich_text.rs):
+  provide native multi-span inline text formatting (bold, italic, code pills, accent links), automatic
+  word wrapping, heading hierarchies (H1..H4), syntax-highlighted code block containers, blockquotes with
+  accent bars, lists, and horizontal rules for Haily assistant native GUI; verify 61/61 viui unit tests clean.
 - Implement Stage H2 Multi-Node Haily Personal Assistant Distributed C2C Subsystem (cells/apps/haily-agent/src/cluster.rs):
   add peer node enrollment, capacity-weighted parallel placement, session affinity, disconnected-worker
   fault reconciliation (TaskOutcome::Indeterminate per Spec 20 §2.6), and verify 65/65 smoke tests clean.

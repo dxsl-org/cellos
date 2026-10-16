@@ -9,6 +9,8 @@ pub mod row;
 pub mod scroll_area;
 pub mod space;
 pub mod text_edit;
+pub mod markdown;
+pub mod rich_text;
 
 pub use button::Button;
 pub use checkbox::Checkbox;
@@ -19,3 +21,5 @@ pub use row::Row;
 pub use scroll_area::ScrollArea;
 pub use space::Space;
 pub use text_edit::TextEdit;
+pub use markdown::{MarkdownBlock, MarkdownView};
+pub use rich_text::{RichTextView, TextSpan};

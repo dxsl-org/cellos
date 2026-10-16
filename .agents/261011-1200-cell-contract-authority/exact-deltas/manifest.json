@@ -413,12 +413,12 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "9987090ca74a7d52bf15b91a8293682eb04a91a5be80ca031819ad00ca275552",
+  "source_census_sha256": "11dba9ea08ee72dfa41b67270fc251dd474dfa99e123ec39242468f146f05acd",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "09aabf4dbaa25be848f9d6c1524ef90255ce6d170451ac1d1e0b71dde3050eda"
+      "sha256": "7a3a7619e70ee56a767ff52b7b52e8b19a47eace8ff0a453ef0729653e3af9e4"
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -13194,7 +13194,7 @@
     },
     {
       "path": "libs/viui/src/prelude.rs",
-      "sha256": "228341c8251f0505d5483e4c596efa637d852f5b3fde1d054d1aa0eee8422c94"
+      "sha256": "de8b851461de04c2ed916ccb545a84483c08266996ea5599664eec3b068beddc"
     },
     {
       "path": "libs/viui/src/render_ctx.rs",
@@ -13230,7 +13230,7 @@
     },
     {
       "path": "libs/viui/src/widgets.rs",
-      "sha256": "da76e8dbb535e7891b3563df64a397c3344c378fc695d4c17b9e3d1aaf331602"
+      "sha256": "aca7cd0ec4ca858857a327c003a80ae3ef1ef42f7af26414a691960bf78a8457"
     },
     {
       "path": "libs/viui/src/widgets/button.rs",
@@ -13251,6 +13251,14 @@
     {
       "path": "libs/viui/src/widgets/label.rs",
       "sha256": "2d005dfd7481bd969ebd56887676ece6bbaa9fe3365825b5c87a40bbd36d9ec0"
+    },
+    {
+      "path": "libs/viui/src/widgets/markdown.rs",
+      "sha256": "7cd5174811d4b218d0f3034cd35dd4b139fd271f9cdd2aeb7c9b43447c09afa8"
+    },
+    {
+      "path": "libs/viui/src/widgets/rich_text.rs",
+      "sha256": "3ea5b8feccdde4a7185a9e9d4e481aaef7e05e0901b602b4487987de261991bd"
     },
     {
       "path": "libs/viui/src/widgets/row.rs",
