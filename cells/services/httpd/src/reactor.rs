@@ -638,6 +638,9 @@ impl Reactor<'_> {
             Ok(Route::Status) => Some(handlers::status_page()),
             Ok(Route::ApiStatus) => Some(handlers::api_status(self.active() + 1, self.accepted_peak, self.refused)),
             Ok(Route::ApiCells) => Some(handlers::api_cells()),
+            Ok(Route::ApiCluster) => Some(handlers::api_cluster()),
+            Ok(Route::ApiGatewayStats) => Some(handlers::api_gateway_stats(self.active() + 1, self.accepted_peak, self.refused)),
+            Ok(Route::ApiC2cDispatch { body }) => Some(handlers::api_c2c_dispatch(body)),
             Ok(Route::NotFound) => Some(handlers::not_found()),
             Ok(Route::Restart) => Some(handlers::api_restart()),
             Ok(Route::Files(path)) => {

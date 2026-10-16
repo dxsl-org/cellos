@@ -6,6 +6,9 @@ pub(crate) enum Route<'a> {
     Status,
     ApiStatus,
     ApiCells,
+    ApiCluster,
+    ApiGatewayStats,
+    ApiC2cDispatch { body: &'a [u8] },
     File(&'a str),
     Files(&'a str),
     #[cfg(target_os = "none")]
@@ -33,6 +36,11 @@ pub(crate) fn classify<'a>(raw: &'a [u8], file_to_serve: Option<&'a str>) -> Res
         ("GET", path) if path.starts_with("/files/") => Route::File(&path["/files".len()..]),
         ("GET", "/api/status") | ("GET", "/api/system") => Route::ApiStatus,
         ("GET", "/api/cells") => Route::ApiCells,
+        ("GET", "/api/cluster") | ("GET", "/api/cluster/status") => Route::ApiCluster,
+        ("GET", "/api/gateway") | ("GET", "/api/gateway/stats") => Route::ApiGatewayStats,
+        ("POST", "/api/c2c/dispatch") => Route::ApiC2cDispatch {
+            body: &raw[header_end..len],
+        },
         ("GET", "/api/files") => Route::Files(extract_query_param(path, "path").unwrap_or("/")),
         #[cfg(target_os = "none")]
         ("POST", "/api/infer") => Route::Infer {
@@ -53,4 +61,29 @@ pub fn extract_query_param<'a>(url: &'a str, key: &str) -> Option<&'a str> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_classify_cluster_and_gateway_routes() {
+        let req = b"GET /api/cluster HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        assert!(matches!(classify(req, None), Ok(Route::ApiCluster)));
+
+        let req_stats = b"GET /api/gateway/stats HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        assert!(matches!(classify(req_stats, None), Ok(Route::ApiGatewayStats)));
+    }
+
+    #[test]
+    fn test_classify_c2c_dispatch_payload() {
+        let req = b"POST /api/c2c/dispatch HTTP/1.1\r\nContent-Length: 9\r\n\r\nhello-c2c";
+        match classify(req, None) {
+            Ok(Route::ApiC2cDispatch { body }) => {
+                assert_eq!(body, b"hello-c2c");
+            }
+            other => panic!("expected ApiC2cDispatch, got {:?}", other.err()),
+        }
+    }
 }

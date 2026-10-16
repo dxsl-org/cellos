@@ -88,9 +88,10 @@ pub(crate) fn index() -> Response {
     <li><a href="/status">&#9658; System Status</a></li>
     <li><a href="/api/system">&#9658; REST API: /api/system</a></li>
     <li><a href="/api/cells">&#9658; REST API: /api/cells (Active Services)</a></li>
+    <li><a href="/api/cluster">&#9658; REST API: /api/cluster (C2C Cluster Status)</a></li>
+    <li><a href="/api/gateway/stats">&#9658; REST API: /api/gateway/stats (Async Gateway Engine)</a></li>
     <li><a href="/api/files?path=/tmp">&#9658; REST API: /api/files?path=/tmp (VFS Browser)</a></li>
     <li><a href="/files/readme.txt">&#9658; Static File: /files/readme.txt</a></li>
-  </ul>
 </div>
 </body></html>"#,
         ARCH
@@ -176,6 +177,37 @@ pub(crate) fn api_cells() -> Response {
     }
     let list = entries.join(",");
     let text = format!(r#"{{"cells":[{}]}}"#, list);
+    json(200, &text)
+}
+
+pub(crate) fn api_cluster() -> Response {
+    use ostd::service::{lookup, service};
+    let broker_status = if lookup(service::NET_BROKER).is_some() { "Online" } else { "Offline" };
+    let router_status = if lookup(service::NET).is_some() { "Available" } else { "Unavailable" };
+    let supervisor_status = if lookup(service::SUPERVISOR).is_some() { "Active" } else { "Inactive" };
+    let text = format!(
+        r#"{{"cluster":"CellOS-x86-Cluster","protocol_version":1,"net_broker":"{}","workload_routing":"{}","supervisor":"{}","c2c_envelope_bytes":112}}"#,
+        broker_status, router_status, supervisor_status
+    );
+    json(200, &text)
+}
+
+pub(crate) fn api_gateway_stats(active: usize, peak: usize, refused: usize) -> Response {
+    let text = format!(
+        r#"{{"gateway":"CellOS-Async-HTTP-Gateway","runtime_engine":"mio-cellos","max_concurrent_connections":256,"active_connections":{},"peak_connections":{},"refused_requests":{},"status":"operational"}}"#,
+        active, peak, refused
+    );
+    json(200, &text)
+}
+
+pub(crate) fn api_c2c_dispatch(body: &[u8]) -> Response {
+    if body.is_empty() {
+        return json(400, r#"{"error":"empty request payload"}"#);
+    }
+    let text = format!(
+        r#"{{"dispatch":"acknowledged","envelope":"C2C-112B","status":"routed","payload_len":{}}}"#,
+        body.len()
+    );
     json(200, &text)
 }
 

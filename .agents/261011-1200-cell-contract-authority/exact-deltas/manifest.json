@@ -413,7 +413,7 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "53544fed135b33fa5e0d5b257747c078cd1c125edb94dc678ab88ccbe6fa8fbe",
+  "source_census_sha256": "78d0728a8edb0d23793fb1e44306f1a36cd7ce857eebf47ef3c5d085b1b6336b",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
@@ -2242,7 +2242,7 @@
     },
     {
       "path": "cells/services/httpd/src/handlers.rs",
-      "sha256": "824f8f83d32125c04bb04f341afd039f4dcd290eb56637c5008584faeb98443b"
+      "sha256": "4a87da4b60c84e4caedb1dd869471bf3e1d6b9bee68bb5dd5c6b7ec86ca1e1c9"
     },
     {
       "path": "cells/services/httpd/src/main.rs",
@@ -2254,11 +2254,11 @@
     },
     {
       "path": "cells/services/httpd/src/reactor.rs",
-      "sha256": "bdee2931a0f9defa04c530add47205d934f42363a909584261af77c18acd6a55"
+      "sha256": "b0410e0fa451c9e4fb2d95639662617db9d7f80c01d68a735aa6e8be4aaa557f"
     },
     {
       "path": "cells/services/httpd/src/router.rs",
-      "sha256": "dbe18edacff1c8aace2a3adc3ad409882ab91cd3ba64456a957393c2e0bf183e"
+      "sha256": "d4b0cac00a57765ddf8c298f464626a8d4bc6f6b6f25435ac135749d766abdab"
     },
     {
       "path": "cells/services/hypervisor/Cargo.toml",
