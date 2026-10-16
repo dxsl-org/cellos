@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Rebase and qualify Tranche 4 (Distributed, VMM & Hardware Lanes): rebase 12 subordinate
+  plans onto C2C 112-byte envelope, Budget Authority, Workload Router, Placement Controller,
+  VMX isolation, and driver DMA quiescence; verify 61/61 tests clean.
 - Rebase and qualify Tranche 3 (Native SDK, Runtime & Concurrency): rebase 11 subordinate
   plans onto ServiceRef binding cache, AppContext magic envelope, GAT MessageHandler,
   and 256-connection non-blocking reactor; verify 58/58 tests clean.

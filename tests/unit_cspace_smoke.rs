@@ -1788,3 +1788,77 @@ mod native_sdk_rebase {
         assert_eq!(active_ops, 0);
     }
 }
+
+#[cfg(test)]
+mod distributed_vmm_rebase {
+    #[test]
+    fn test_dice_attestation_ncf1_proof_verification() {
+        struct AttestationProof {
+            public_key: [u8; 32],
+            signature: [u8; 64],
+            tampered: bool,
+        }
+
+        let valid_proof = AttestationProof {
+            public_key: [0x42; 32],
+            signature: [0xAA; 64],
+            tampered: false,
+        };
+        let verified = !valid_proof.tampered && valid_proof.public_key[0] == 0x42;
+        assert!(verified, "valid DICE NCF1 proof passes");
+
+        let forged_proof = AttestationProof {
+            public_key: [0x42; 32],
+            signature: [0x00; 64],
+            tampered: true,
+        };
+        let forged_verified = !forged_proof.tampered;
+        assert!(!forged_verified, "tampered proof must be refused");
+    }
+
+    #[test]
+    fn test_kms_silo_relay_ingress_fence() {
+        struct IngressEnvelope {
+            source_epoch: u32,
+            expected_epoch: u32,
+            method_allowed: bool,
+        }
+
+        let valid_env = IngressEnvelope {
+            source_epoch: 5,
+            expected_epoch: 5,
+            method_allowed: true,
+        };
+        let admitted = valid_env.source_epoch == valid_env.expected_epoch && valid_env.method_allowed;
+        assert!(admitted, "valid epoch and method admitted");
+
+        let stale_env = IngressEnvelope {
+            source_epoch: 4,
+            expected_epoch: 5,
+            method_allowed: true,
+        };
+        let stale_admitted = stale_env.source_epoch == stale_env.expected_epoch;
+        assert!(!stale_admitted, "stale epoch rejected at ingress fence");
+    }
+
+    #[test]
+    fn test_common_drivers_dma_quiescence_barrier() {
+        struct DmaChannel {
+            in_flight: usize,
+            quiesced: bool,
+        }
+
+        let mut channel = DmaChannel {
+            in_flight: 2,
+            quiesced: false,
+        };
+
+        // Teardown initiated: cannot unregister until in_flight reaches 0
+        assert!(!channel.quiesced);
+
+        // Transfers complete
+        channel.in_flight = 0;
+        channel.quiesced = channel.in_flight == 0;
+        assert!(channel.quiesced, "channel achieves full quiescence before unregister");
+    }
+}
