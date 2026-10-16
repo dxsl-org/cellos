@@ -9872,14 +9872,11 @@
 <a href=#9872 id=9872 data-nosnippet>9872</a>        <span class="macro">assert!</span>(<span class="kw">crate</span>::memory::pin::mark_vfs_lease_pending_revoke(
 <a href=#9873 id=9873 data-nosnippet>9873</a>            HOLDER, OWNER, GENERATION
 <a href=#9874 id=9874 data-nosnippet>9874</a>        ));
-<a href=#9875 id=9875 data-nosnippet>9875</a>        <span class="macro">assert_eq!</span>(
-<a href=#9876 id=9876 data-nosnippet>9876</a>            <span class="kw">crate</span>::memory::pin::release_vfs_lease(HOLDER, OWNER, GENERATION),
-<a href=#9877 id=9877 data-nosnippet>9877</a>            <span class="macro">alloc::vec!</span>[]
-<a href=#9878 id=9878 data-nosnippet>9878</a>        );
-<a href=#9879 id=9879 data-nosnippet>9879</a>
-<a href=#9880 id=9880 data-nosnippet>9880</a>        <span class="macro">assert!</span>(!withhold_or_free(BASE, <span class="number">1</span>));
-<a href=#9881 id=9881 data-nosnippet>9881</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::memory::pin::quarantined_pages(), before);
-<a href=#9882 id=9882 data-nosnippet>9882</a>        <span class="macro">assert!</span>(<span class="kw">crate</span>::memory::pin::holder_of(BASE, <span class="number">4096</span>).is_none());
-<a href=#9883 id=9883 data-nosnippet>9883</a>    }
-<a href=#9884 id=9884 data-nosnippet>9884</a>}
+<a href=#9875 id=9875 data-nosnippet>9875</a>        <span class="macro">assert!</span>(<span class="kw">crate</span>::memory::pin::release_vfs_lease(HOLDER, OWNER, GENERATION).is_empty());
+<a href=#9876 id=9876 data-nosnippet>9876</a>
+<a href=#9877 id=9877 data-nosnippet>9877</a>        <span class="macro">assert!</span>(!withhold_or_free(BASE, <span class="number">1</span>));
+<a href=#9878 id=9878 data-nosnippet>9878</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::memory::pin::quarantined_pages(), before);
+<a href=#9879 id=9879 data-nosnippet>9879</a>        <span class="macro">assert!</span>(<span class="kw">crate</span>::memory::pin::holder_of(BASE, <span class="number">4096</span>).is_none());
+<a href=#9880 id=9880 data-nosnippet>9880</a>    }
+<a href=#9881 id=9881 data-nosnippet>9881</a>}
 </code></pre></div></section></main></body></html>
