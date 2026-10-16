@@ -1,7 +1,7 @@
 ---
 title: "Serval: khả thi port WPE WebKit vào Tier 2"
 description: "Kiểm tra điều kiện dừng sớm trên Linux host, đối chiếu với runtime Tier 2, chạy hai spike rủi ro cao nhất trên AArch64, rồi quyết định go/no-go bằng ADR"
-status: in-progress
+status: cancelled
 priority: P2
 tier: thinking
 tags: [browser, porting, feasibility, tier2, adr]
@@ -11,17 +11,16 @@ blockedBy: []
 
 # Kế hoạch Serval — giai đoạn khả thi
 
-## Quyết định
-Serval là trình duyệt đầy đủ dùng **WPE WebKit 2.54.x** (WPEPlatform, Skia CPU), chạy trong **Tier 2**. Kế hoạch này chỉ cover giai đoạn khả thi. Chưa port engine, chưa tạo cell `serval`, chưa đổi ABI khi chưa có approval.
+## Quyết định & Trạng thái: HỦY BỎ VÀ BÁC BỎ HOÀN TOÀN (No-Go, 2026-10-16)
 
-Câu hỏi duy nhất của giai đoạn này: **các điều kiện để port WPE có đáp ứng được không, hay phải dừng sớm?** Trả lời theo hai tầng:
-1. **Điều kiện dừng sớm (D1–D5)**: kiểm tra trên Linux host và đọc mã Cellos, không sửa core. Chỉ cần **một** điều kiện trượt mà không có lối thoát chấp nhận được thì dừng.
-2. **Gap xây được**: những thứ Cellos chưa có nhưng làm được. Chúng không phải lý do dừng, chỉ là chi phí. Hai gap rủi ro nhất được kiểm bằng spike.
-
-**Đã duyệt 2026-10-07:** người dùng chốt hướng “thử WPE trên Linux trước, rồi mới bổ sung các điều kiện để port (font, GPU, thư viện…)”, và chấp nhận các ngưỡng đề xuất:
-- D1b: ≥30 fps khi cuộn trang và khi chạy animation `transform` ở 1080p, chế độ chỉ dùng CPU;
-- D3: trang 3 và 6 tương tác được trong ≤3 s (quy đổi sang i7-8565U), và điểm Speedometer khi tắt JIT ≥25% điểm khi bật JIT.
-
+**QUYẾT ĐỊNH CUỐI CÙNG:** Kế hoạch nghiên cứu khả thi port WPE WebKit vào Tier 2 chính thức bị **HỦY BỎ và BÁC BỎ HOÀN TOÀN (No-Go)** theo quyết định kiến trúc của người dùng:
+1. **CellOS sẽ chỉ có duy nhất 1 trình duyệt native là `Ocel`** (`cells/apps/ocel/`, Tier 2 Native Domain Cell).
+2. **Xóa bỏ vĩnh viễn kế hoạch phát triển trình duyệt mạnh hơn dùng WebKit/Serval native vì không khả thi:**
+   - Vi phạm chính sách W^X và thiếu JIT sandbox.
+   - Thiếu driver phần cứng GPU/EGL và pipeline DMA-BUF trên CellOS.
+   - Mâu thuẫn với ADR-0018 (CellOS từ chối dynamic linking / dlopen).
+   - Độ phức tạp đa tiến trình (UIProcess, WebProcess, NetworkProcess) và chi phí bảo trì khổng lồ.
+3. **Mọi nhu cầu duyệt web đầy đủ (full browsers: Chrome, Firefox) bắt buộc phải chạy trong Tier 3 (MicroVM guest Linux)** theo đúng [ADR-0017](../../docs/decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md).
 ## Phần cứng mục tiêu
 - **RPi5** (BCM2712, Cortex-A76, AArch64) hoặc **x86 Intel i7-8565U** (Whiskey Lake, 4C/8T). Dùng cho cả Serval lẫn Tier 3. RPi3 bị loại khỏi mục tiêu Serval.
 - Hiện trạng repo cho hai máy này. Đây là điều kiện tiên quyết để chạy trên phần cứng thật, **không** phải điều kiện của giai đoạn khả thi (spike chạy QEMU):

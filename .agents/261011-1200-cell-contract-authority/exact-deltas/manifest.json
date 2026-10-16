@@ -413,7 +413,7 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "11dba9ea08ee72dfa41b67270fc251dd474dfa99e123ec39242468f146f05acd",
+  "source_census_sha256": "c39e1bf381296b906a0cc683fd40ffc63c6619281db6db70f7a46dfabc7dda2c",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
@@ -9550,7 +9550,7 @@
     },
     {
       "path": "docs/decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md",
-      "sha256": "7193ae139b37c1f2a454dd492d903e762a0f6d218c10ee65235f59adcd7f0d88"
+      "sha256": "75b0acf3757ca8f732bffcce95ee896143e0ab51434a5d479d0643bdb93fec9f"
     },
     {
       "path": "docs/decisions/0018-cell-native-portability-and-runtime-profiles.md",

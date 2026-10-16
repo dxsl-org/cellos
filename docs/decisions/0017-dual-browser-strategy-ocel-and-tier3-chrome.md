@@ -174,6 +174,12 @@ any JavaScript-heavy SPA or complex web application.
 - **Port tiny-skia into ViUI** — adds external dependency, different pixel
   format (RGBA premultiplied vs BGRA8888), couples ViUI to tiny-skia API.
   Referencing algorithms and implementing directly in ViCanvas is cleaner.
+- **Porting WPE WebKit into Tier 2 ("Serval" study) — formally rejected (2026-10-16)**:
+  WebKit 2.54 requires GPU/EGL or DMA-BUF pipelines, complex multi-process IPC,
+  JIT violating W^X, and POSIX/dynamic linking capabilities incompatible with ADR-0018,
+  with prohibitive ongoing maintenance costs. Cellos maintains exactly **one** native
+  viewer/browser (`Ocel`). All full-featured web browsing workloads are permanently
+  relegated to Tier 3 Linux guest MicroVMs.
 
 ## 4. Consequences
 

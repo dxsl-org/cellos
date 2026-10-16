@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Gate G2 và ADR Serval"
-status: pending
+status: closed-rejected
 priority: P1
 effort: "2–3 ngày"
 dependencies: [3, 4]
@@ -13,16 +13,8 @@ tier: thinking
 > **Required — deviation-log:** ghi mọi Decision/Deviation/Surprise vào § Deviation Log ngay khi xảy ra.
 
 ## Overview
-Tổng hợp evidence của Phase 01–04 (hoặc chỉ 01–02 nếu G1 = no-go) thành một quyết định kiến trúc chính thức: Serval chạy ở tier nào, theo chiến lược substrate nào, và còn những gate nào trước khi port engine. Kết quả là ADR-0022 cùng các cập nhật tham chiếu đi kèm.
-
-## Requirements
-- Functional:
-  - ADR-0022 “Serval — tier và engine của trình duyệt đầy đủ” ở trạng thái **Accepted** hoặc **Rejected**.
-  - ADR phải nêu rõ quan hệ với ADR-0017 (§2.2–§4, §5c) và ADR-0018 (JIT, mmap, signal, dynamic linking): thay thế, bổ sung, hay giữ nguyên.
-- Non-functional:
-  - Mỗi lập luận trỏ về file evidence.
-  - Không tuyên bố tương thích web hay hiệu năng vượt quá những gì spike đã đo.
-
+**QUYẾT ĐỊNH CHÍNH THỨC (2026-10-16): G2 REJECTED (NO-GO).**
+Kế hoạch port WebKit vào Tier 2 bị bác bỏ hoàn toàn. Giữ nguyên [ADR-0017](../../docs/decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md): CellOS chỉ duy trì duy nhất một trình duyệt native là Ocel. Toàn bộ trình duyệt web đầy đủ (full browser) chạy trong Tier 3 MicroVM.
 ## Architecture
 Nội dung ADR-0022:
 1. Bối cảnh: yêu cầu Serval, mâu thuẫn với ADR-0017/0018, và định vị trong README (Tier 3 cho trình duyệt).
