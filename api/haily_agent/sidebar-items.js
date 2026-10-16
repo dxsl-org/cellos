@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["TOOL_FS_PATH","TOOL_SPAWN_PATH","TOOL_SYS_PATH"],"fn":["cell_main","init_custom_heap","main","process_haily_task"],"mod":["dto","tools"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};
+window.SIDEBAR_ITEMS = {"constant":["TOOL_FS_PATH","TOOL_SPAWN_PATH","TOOL_SYS_PATH"],"fn":["cell_main","init_custom_heap","main","process_haily_task"],"mod":["cluster","dto","tools"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

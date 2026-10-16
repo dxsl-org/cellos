@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DispatchStatus","NodeRole","NodeState","TaskKind","TaskOutcome"],"struct":["DistributedTask","HailyClusterCoordinator","HailyNode"],"type":["NodeId","TaskId"]};
