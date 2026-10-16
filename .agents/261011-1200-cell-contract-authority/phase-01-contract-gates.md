@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Exact contract deltas and legacy-work adoption"
-status: pending
+status: complete
 priority: P1
 tier: thinking
 dependencies: []

@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Kernel Cell and shared object-capability authority"
-status: pending
+status: complete
 priority: P1
 tier: thinking
 dependencies: [1]

@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Qualified Intel VMX and explicit guest C2C adapter"
-status: pending
+status: complete
 priority: P1
 tier: thinking
 dependencies: [4, 5, 7, 8]

@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Complete Cell Contract & Authority Architecture Plan (CELL-CONTRACT-0024): mark all
+  10 phases (P01..P10) complete in plan portfolio and sign off Architecture Handoff Dossier
+  following dual-checkpoint ratification (Law-1 CP1 & CP2).
 - Ratify Law-1 Checkpoint 2 (CP2) Implementation Qualification Dossier: formally record
   governance approval for Clusters 1-5, N02-A..N07, G3 Durable Charge (83/83 PASS),
   P08 distributed services, P09 VMX isolation, and P10 system qualification under CP2 digests.

@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Unified bounded operation lifecycle and multi-waiter completion"
-status: pending
+status: complete
 priority: P1
 tier: thinking
 dependencies: [2, 3]

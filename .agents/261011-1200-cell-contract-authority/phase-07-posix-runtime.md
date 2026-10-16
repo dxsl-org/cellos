@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Optional POSIX personality and native C/C++ runtime"
-status: pending
+status: complete
 priority: P1
 tier: thinking
 dependencies: [4, 5]

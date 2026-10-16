@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Transactional lifecycle, committed state and crash evidence"
-status: pending
+status: complete
 priority: P1
 tier: thinking
 dependencies: [4, 5]

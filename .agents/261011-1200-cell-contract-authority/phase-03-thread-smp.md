@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Multithreading, SMP lifetime and aggregate budgets"
-status: pending
+status: complete
 priority: P1
 tier: thinking
 dependencies: [2]

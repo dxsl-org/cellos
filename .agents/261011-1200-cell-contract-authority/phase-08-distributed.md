@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Protected distribution, lifecycle and placement/autoscaling"
-status: pending
+status: complete
 priority: P1
 tier: thinking
 dependencies: [4, 5, 6]

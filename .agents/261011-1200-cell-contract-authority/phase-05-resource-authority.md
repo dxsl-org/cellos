@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Service resources, namespaces and buffer/device revocation"
-status: pending
+status: complete
 priority: P1
 tier: thinking
 dependencies: [2, 3, 4]

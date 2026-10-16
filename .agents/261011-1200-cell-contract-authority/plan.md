@@ -1,7 +1,8 @@
 ---
 title: "Cell / Kernel Cell / authority contract cutover"
 description: "Single execution owner for the Cell-centric Intel C2C cutover, including node-local execution, resource authority, recovery, placement/autoscaling, optional POSIX and distribution."
-status: pending
+status: complete
+completed: 2026-10-16
 priority: P1
 tier: thinking
 created: 2026-10-11
@@ -74,16 +75,16 @@ Authority/controller/router envelopes and ingress/workload shares consume the sa
 
 | Phase | Deliverable | Dependencies | Contract proof | State |
 |---|---|---|---|---|
-| P01 | [Exact contract/ABI deltas and adoption gates](phase-01-contract-gates.md) | none | AC-26; approval ledger and migration census | pending; documentation/evidence preparation admitted |
-| P02 | [Kernel Cell, shared CSpace and bounded delegation](phase-02-kernel-authority.md) | P01 | AC-01..AC-05 | pending; exact authority ABI approval required |
-| P03 | [Threads, SMP retirement and aggregate budgets](phase-03-thread-smp.md) | P02 | AC-06..AC-09; local AC-30; shared AC-48 | pending |
-| P04 | [Unified operation ownership and multi-wait completion](phase-04-operations.md) | P02, P03 | AC-10..AC-12; AC-06/09 | pending; wait/completion ABI gate |
-| P05 | [Service resources, namespaces and device/buffer revoke](phase-05-resource-authority.md) | P02, P03, P04 | AC-02/04/05/13 | pending; service protocol gates |
-| P06 | [Recoverable lifecycle, state and crash evidence](phase-06-recovery.md) | P04, P05 | AC-14..AC-18, AC-27, local AC-29 | pending |
-| P07 | [Optional POSIX and native runtime cutover](phase-07-posix-runtime.md) | P04, P05 | AC-19 | pending |
-| P08 | [Protected transport, workload routing, placement and scaling](phase-08-distributed.md) | P04, P05, P06; independent protected gates | AC-20..AC-23, AC-28/29; AC-30..AC-34; AC-36..AC-42; AC-44..AC-50, shared AC-48 | pending; remote off |
-| P09 | [Intel VMX prerequisite and explicit guest adapters](phase-09-guest-adapter.md) | P04, P05, P07, P08 | AC-24 | pending; VMX qualification required |
-| P10 | [Profile qualification and Linux comparison](phase-10-qualification.md) | P02..P09 | AC-25, AC-35/43 and qualification of all AC-01..AC-50 | pending; hardware/production rows separately gated |
+| P01 | [Exact contract/ABI deltas and adoption gates](phase-01-contract-gates.md) | none | AC-26; approval ledger and migration census | complete; D01-D12/C01-C11 indexed, Wire ABI CP1 approved |
+| P02 | [Kernel Cell, shared CSpace and bounded delegation](phase-02-kernel-authority.md) | P01 | AC-01..AC-05 | complete; N02-A arena & N02-B shared authority, CapTable cutover |
+| P03 | [Threads, SMP retirement and aggregate budgets](phase-03-thread-smp.md) | P02 | AC-06..AC-09; local AC-30; shared AC-48 | complete; N03 SMP lifetime, D07 whole-Cell fault funnel |
+| P04 | [Unified operation ownership and multi-wait completion](phase-04-operations.md) | P02, P03 | AC-10..AC-12; AC-06/09 | complete; N04 operations lifecycle, small-output payload retention |
+| P05 | [Service resources, namespaces and device/buffer revoke](phase-05-resource-authority.md) | P02, P03, P04 | AC-02/04/05/13 | complete; N05 receiver ceilings, all-or-nothing rollback |
+| P06 | [Recoverable lifecycle, state and crash evidence](phase-06-recovery.md) | P04, P05 | AC-14..AC-18, AC-27, local AC-29 | complete; N06 replacement/recovery, epoch-fenced state stash |
+| P07 | [Optional POSIX and native runtime cutover](phase-07-posix-runtime.md) | P04, P05 | AC-19 | complete; N07 neutral streams, POSIX isolation, BootFS bootstrap |
+| P08 | [Protected transport, workload routing, placement and scaling](phase-08-distributed.md) | P04, P05, P06; independent protected gates | AC-20..AC-23, AC-28/29; AC-30..AC-34; AC-36..AC-42; AC-44..AC-50, shared AC-48 | complete; P08-A transport, P08-C budget, P08-B router, P08-D placement |
+| P09 | [Intel VMX prerequisite and explicit guest adapters](phase-09-guest-adapter.md) | P04, P05, P07, P08 | AC-24 | complete; P09 VMX root operation & guest bridge isolation |
+| P10 | [Profile qualification and Linux comparison](phase-10-qualification.md) | P02..P09 | AC-25, AC-35/43 and qualification of all AC-01..AC-50 | complete; 200+ clients witness, AC-43 autospawn/drain, CP2 ratified |
 
 P07 and P08 have independent prerequisites but WIP still serializes implementation. P09 may prepare VMX prerequisite design after P01; bridge implementation waits for listed dependencies. A local milestone may ship with P08/P09 explicitly disabled and pending; **the complete requested program is not done until all applicable phases pass**. Missing external evidence blocks only its named promotion, not local contract work.
 
