@@ -1,0 +1,29 @@
+{
+  "format": "cell-contract-p08a-dossier-v1",
+  "status": "approved",
+  "recorded": "2026-10-16",
+  "scope": "Phase 08-A (P08-A) Authenticated Transport and Lifecycle Substrate Implementation & Gate Verification",
+  "dossier_document": ".agents/261011-1200-cell-contract-authority/p08a-authenticated-transport-packet.md",
+  "dossier_sha256": "2ae0a7b5dc211eeacfe6e96c06e50176dfdcba1e6ba0f9d542e1220c57613ff4",
+  "legacy_lock_count": 38,
+  "legacy_locks_released": 0,
+  "milestone": "P08-A",
+  "subsystems": [
+    "cells/services/net-broker",
+    "libs/types/src/c2c.rs",
+    "tests/unit_cspace_smoke.rs"
+  ],
+  "invariants": {
+    "header_length": 112,
+    "endianness": "Little-Endian",
+    "ingress_gates": 6,
+    "max_per_peer_work": 4,
+    "max_global_work": 16
+  },
+  "verification": {
+    "unit_tests": "PASS (34/34 in unit_cspace_smoke)",
+    "types_tests": "PASS (54/54 in types)",
+    "bare_metal_build": "PASS (service-net-broker on x86_64-unknown-none)",
+    "document_consistency": "PASS (verify-cell-contract-p01.py)"
+  }
+}

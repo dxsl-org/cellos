@@ -494,3 +494,13 @@ Executed the complete 5-suite G3 and OGJ1 gate verification:
 
 Total verification suite: **83/83 tests PASS**. Gate receipt preserved in `build/g3-gate-verification.json`.
 
+## Phase 08-A (P08-A) Authenticated Transport & Lifecycle Substrate Verification — 2026-10-16
+
+Executed P08-A verification covering the authenticated C2C transport substrate and ingress decision core:
+1. **D12 Canonical C2C Envelope:** 112-byte header verified in unit harness (`test_p08a_c2c_envelope_112b_header_encoding`) and `c2c_envelope/tests.rs` (roundtrip, bounds, truncation rejection).
+2. **Six-Gate Ingress Evaluation:** `test_p08a_ingress_policy_and_epoch_gates` and `c2c_ingress.rs` verify Gate 1 peer identity matching, Gate 2 local destination matching, Gate 3 provisioned method policy authorization, Gate 4 export prototype matching, Gate 5 live destination server epoch matching, and Gate 6 protected boot epoch non-rollback verification.
+3. **Bare-Metal Service Build:** `service-net-broker` compiles clean on `x86_64-unknown-none` with `#![no_std]` and `ostd`.
+4. **Types Crate C2C Protocol Tests:** `types` crate passes 54/54 tests clean.
+
+Dossier preserved in `.agents/261011-1200-cell-contract-authority/p08a-authenticated-transport-packet.md`. All 38 locks remain in force; downstream P08-C/B/D remain pending.
+

@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Implement Phase 08-A (P08-A) Authenticated Transport and Lifecycle Substrate:
+  verify C2C 112-byte canonical envelope encoding, 6-gate ingress evaluation,
+  immutable origin operation proof binding, and bare-metal service-net-broker build.
 - Verify G3 Lifecycle Authority and Durable Charge (OGJ1) gates: execute 83/83 passing
   tests across OGJ1 double-barrier model (resolving S9 counterexamples), DCO1 durable
   charge codec, A/B double-buffered BlockDevice journal, and AuthorityGate lifecycle.

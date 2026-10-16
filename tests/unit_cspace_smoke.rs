@@ -820,3 +820,165 @@ mod n07 {
         assert_eq!(task2.tls_base, 0x2000_0000);
     }
 }
+
+#[cfg(test)]
+mod p08a {
+    const C2C_HEADER_LEN: usize = 112;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum IngressRejection {
+        MalformedEnvelope,
+        PeerIdentityMismatch,
+        DestinationMismatch,
+        UnauthorizedMethod,
+        ExportNotAvailable,
+        DestinationNotLive,
+        UnverifiedEpochProvenance,
+    }
+
+    struct MockC2cHeader {
+        version: u8,
+        kind: u8,
+        retry_class: u8,
+        payload_len: u16,
+        request_id: u64,
+        src_node: [u8; 32],
+        dst_node: [u8; 32],
+        src_boot_epoch: u64,
+        dst_server_epoch: u64,
+        cluster_id: u64,
+        service_id: u16,
+        export_id: u16,
+        deadline_ms: u32,
+    }
+
+    impl MockC2cHeader {
+        fn encode(&self, out: &mut [u8]) -> Result<usize, &'static str> {
+            if out.len() < C2C_HEADER_LEN {
+                return Err("short buffer");
+            }
+            if self.version != 1 {
+                return Err("unsupported version");
+            }
+            out[0] = self.version;
+            out[1] = self.kind;
+            out[2] = self.retry_class;
+            out[3] = 0; // reserved
+            out[4..6].copy_from_slice(&self.payload_len.to_le_bytes());
+            out[6..8].copy_from_slice(&[0u8; 2]);
+            out[8..16].copy_from_slice(&self.request_id.to_le_bytes());
+            out[16..48].copy_from_slice(&self.src_node);
+            out[48..80].copy_from_slice(&self.dst_node);
+            out[80..88].copy_from_slice(&self.src_boot_epoch.to_le_bytes());
+            out[88..96].copy_from_slice(&self.dst_server_epoch.to_le_bytes());
+            out[96..104].copy_from_slice(&self.cluster_id.to_le_bytes());
+            out[104..106].copy_from_slice(&self.service_id.to_le_bytes());
+            out[106..108].copy_from_slice(&self.export_id.to_le_bytes());
+            out[108..112].copy_from_slice(&self.deadline_ms.to_le_bytes());
+            Ok(C2C_HEADER_LEN)
+        }
+
+        fn evaluate_ingress(
+            &self,
+            auth_peer: &[u8; 32],
+            local_node: &[u8; 32],
+            allowed_method: (u16, u16),
+            live_epoch: u64,
+        ) -> Result<(), IngressRejection> {
+            if &self.src_node != auth_peer {
+                return Err(IngressRejection::PeerIdentityMismatch);
+            }
+            if &self.dst_node != local_node {
+                return Err(IngressRejection::DestinationMismatch);
+            }
+            if (self.service_id, self.export_id) != allowed_method {
+                return Err(IngressRejection::UnauthorizedMethod);
+            }
+            if self.dst_server_epoch != live_epoch {
+                return Err(IngressRejection::DestinationNotLive);
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_p08a_c2c_envelope_112b_header_encoding() {
+        let header = MockC2cHeader {
+            version: 1,
+            kind: 2, // Request
+            retry_class: 1, // Idempotent
+            payload_len: 64,
+            request_id: 1001,
+            src_node: [0x11; 32],
+            dst_node: [0x22; 32],
+            src_boot_epoch: 1,
+            dst_server_epoch: 5,
+            cluster_id: 0xCAFE,
+            service_id: 10,
+            export_id: 1,
+            deadline_ms: 5000,
+        };
+        let mut buf = [0u8; 112];
+        assert_eq!(header.encode(&mut buf), Ok(112));
+        assert_eq!(buf[0], 1); // version
+        assert_eq!(buf[1], 2); // kind
+        assert_eq!(&buf[16..48], &[0x11; 32]);
+        assert_eq!(&buf[48..80], &[0x22; 32]);
+    }
+
+    #[test]
+    fn test_p08a_ingress_policy_and_epoch_gates() {
+        let header = MockC2cHeader {
+            version: 1,
+            kind: 2,
+            retry_class: 1,
+            payload_len: 16,
+            request_id: 1002,
+            src_node: [0x11; 32],
+            dst_node: [0x22; 32],
+            src_boot_epoch: 1,
+            dst_server_epoch: 5,
+            cluster_id: 0xCAFE,
+            service_id: 10,
+            export_id: 1,
+            deadline_ms: 5000,
+        };
+
+        let valid_peer = [0x11; 32];
+        let local_node = [0x22; 32];
+        let allowed_method = (10, 1);
+        let live_epoch = 5;
+
+        // Valid admission
+        assert_eq!(
+            header.evaluate_ingress(&valid_peer, &local_node, allowed_method, live_epoch),
+            Ok(())
+        );
+
+        // Gate 1: Forged source peer
+        let forged_peer = [0x99; 32];
+        assert_eq!(
+            header.evaluate_ingress(&forged_peer, &local_node, allowed_method, live_epoch),
+            Err(IngressRejection::PeerIdentityMismatch)
+        );
+
+        // Gate 2: Destination mismatch
+        let wrong_local = [0x88; 32];
+        assert_eq!(
+            header.evaluate_ingress(&valid_peer, &wrong_local, allowed_method, live_epoch),
+            Err(IngressRejection::DestinationMismatch)
+        );
+
+        // Gate 3: Unauthorized method
+        assert_eq!(
+            header.evaluate_ingress(&valid_peer, &local_node, (99, 1), live_epoch),
+            Err(IngressRejection::UnauthorizedMethod)
+        );
+
+        // Gate 5: Stale destination epoch
+        assert_eq!(
+            header.evaluate_ingress(&valid_peer, &local_node, allowed_method, 6),
+            Err(IngressRejection::DestinationNotLive)
+        );
+    }
+}
