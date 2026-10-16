@@ -413,7 +413,7 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "5d63fdf8cefdbe886693e4cdcde843595eabb84db09a25d7868dda6f68c7ace3",
+  "source_census_sha256": "53544fed135b33fa5e0d5b257747c078cd1c125edb94dc678ab88ccbe6fa8fbe",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
@@ -1134,7 +1134,7 @@
     },
     {
       "path": "cells/demos/tetris-lua/build.rs",
-      "sha256": "153b6bed0ca0ed65a11cee3c63d20ab27ee01e7636ae28b8d7378a5d7ccb57f9"
+      "sha256": "0e3dba7a9e99d7e560da4827bca75523962573f33bd07b815b1a4f36c563d7e3"
     },
     {
       "path": "cells/demos/tetris-lua/src/c/lua_game_stubs.c",
@@ -1146,7 +1146,7 @@
     },
     {
       "path": "cells/demos/tetris-lua/src/main.rs",
-      "sha256": "6cb59b6bd6be45f2498d19ab0ecf3544849c74f954d2a245d883e1e20740cc8c"
+      "sha256": "dae3796f86a4197b8265868851a7e2919b7d5e73e1beae5c5aa3543e450c005d"
     },
     {
       "path": "cells/demos/tetris/Cargo.toml",
@@ -1754,7 +1754,7 @@
     },
     {
       "path": "cells/runtimes/lua/build.rs",
-      "sha256": "34906d15889a9b291b417d3624c37e0dfe8d2db542f046c1dd4a5007c8c6c53e"
+      "sha256": "1a4ce27f0e2405b76851b2a8fb6ebd2263e68e21246be1fea6819f2095840cf9"
     },
     {
       "path": "cells/runtimes/lua/glue/lua_stdlib_stubs.c",
@@ -1762,11 +1762,11 @@
     },
     {
       "path": "cells/runtimes/lua/glue/lua_vios_config.h",
-      "sha256": "99d095bc3f30e96fe05fef003fa126d77ae0d9cd24383a9f6a3025dd33b4aebc"
+      "sha256": "d44421c789800af2fb66372e6f01a87de3d83f702bfd33dfd8d6ea6faee499ba"
     },
     {
       "path": "cells/runtimes/lua/glue/lua_vios_glue.c",
-      "sha256": "cef5dc407dbc23c07a62f15ff34bf2372563ab03191565e4f7038c4f7f98712d"
+      "sha256": "e3d35a6cc17781d2c78dc875a1eedc7b96c5b329b50e83079f89453687bb78b6"
     },
     {
       "path": "cells/runtimes/lua/src/bindings_io.rs",

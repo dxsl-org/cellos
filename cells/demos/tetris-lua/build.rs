@@ -1,8 +1,22 @@
-// Build script for the Tetris-Lua cell.
-//
-// Compiles Lua 5.4 C sources from cells/runtimes/lua/src/c/src/ (shared sources,
-// no duplication of actual game code).  The same ELF-compiler detection and
-// picolibc linking logic used by the Lua runtime cell applies here.
+use std::path::{Path, PathBuf};
+
+fn repo_wrapper(name: &str) -> Option<PathBuf> {
+    let manifest = std::env::var("CARGO_MANIFEST_DIR").ok()?;
+    let path = Path::new(&manifest).join("../../../tools").join(name);
+    if path.exists() && have(path.to_str().unwrap_or_default()) {
+        path.canonicalize().ok()
+    } else {
+        None
+    }
+}
+
+fn have(cmd: &str) -> bool {
+    std::process::Command::new(cmd)
+        .arg("--version")
+        .output()
+        .map(|out| out.status.success())
+        .unwrap_or(false)
+}
 
 fn main() {
     println!("cargo::rustc-check-cfg=cfg(lua_c_unavailable)");
@@ -70,7 +84,18 @@ fn compile_lua(target: &str, manifest: &str) {
 
     let mut build = cc::Build::new();
 
-    if target.contains("riscv") {
+    let use_zig = std::env::var("CELLOS_USE_ZIG").map(|v| v != "0").unwrap_or(false);
+    let zig_cc = repo_wrapper("cellos-zig-cc");
+    let zig_ar = repo_wrapper("cellos-zig-ar");
+
+    if (use_zig || true) && zig_cc.is_some() {
+        if let Some(wrapper) = &zig_cc {
+            build.compiler(wrapper);
+            if let Some(ar) = &zig_ar {
+                build.archiver(ar);
+            }
+        }
+    } else if target.contains("riscv") {
         if std::env::var("CC_riscv64gc_unknown_none_elf").is_err() {
             build.compiler("riscv-none-elf-gcc");
         }
@@ -82,7 +107,9 @@ fn compile_lua(target: &str, manifest: &str) {
     }
 
     build.warnings(false);
+    build.pic(true);
     build.flag_if_supported("-std=c99");
+    build.flag("-include").flag(format!("{glue_dir}/lua_vios_config.h"));
     build.include(&src_dir);
     build.include(&glue_dir);
     for inc in [
@@ -111,6 +138,9 @@ fn compile_lua(target: &str, manifest: &str) {
 }
 
 fn has_elf_compiler(target: &str) -> bool {
+    if repo_wrapper("cellos-zig-cc").is_some() {
+        return true;
+    }
     let env_key = target.replace('-', "_");
     if std::env::var(format!("CC_{env_key}")).is_ok() {
         return true;

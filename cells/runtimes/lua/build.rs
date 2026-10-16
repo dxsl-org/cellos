@@ -1,3 +1,23 @@
+use std::path::{Path, PathBuf};
+
+fn repo_wrapper(name: &str) -> Option<PathBuf> {
+    let manifest = std::env::var("CARGO_MANIFEST_DIR").ok()?;
+    let path = Path::new(&manifest).join("../../../tools").join(name);
+    if path.exists() && have(path.to_str().unwrap_or_default()) {
+        path.canonicalize().ok()
+    } else {
+        None
+    }
+}
+
+fn have(cmd: &str) -> bool {
+    std::process::Command::new(cmd)
+        .arg("--version")
+        .output()
+        .map(|out| out.status.success())
+        .unwrap_or(false)
+}
+
 fn main() {
     // Declare the cfg so rustc's check-cfg lint doesn't warn about it.
     println!("cargo::rustc-check-cfg=cfg(lua_c_unavailable)");
@@ -81,17 +101,18 @@ fn compile_lua_c(target: &str) {
 
     let mut build = cc::Build::new();
 
-    // On RISC-V bare-metal the canonical ViOS toolchain is riscv-none-elf-gcc
-    // (xpack release). The cc crate's auto-detection looks for
-    // riscv64-unknown-elf-gcc which is not available; set it explicitly unless
-    // the caller has already set CC_<target> in the environment.
-    if target.contains("riscv") {
-        // Compiler selection is conditional (CC_<target> in .cargo/config.toml
-        // wins), but the arch+ABI flags MUST apply unconditionally: without them
-        // a CC-env-provided riscv-none-elf-gcc inherits its soft-float default
-        // (rv64imac/lp64), and rust-lld rejects the float-ABI mismatch against
-        // the Rust target's lp64d hard-float objects ("different floating-point
-        // ABI"). Match riscv64gc-unknown-none-elf exactly: rv64gc + lp64d.
+    let use_zig = std::env::var("CELLOS_USE_ZIG").map(|v| v != "0").unwrap_or(false);
+    let zig_cc = repo_wrapper("cellos-zig-cc");
+    let zig_ar = repo_wrapper("cellos-zig-ar");
+
+    if (use_zig || true) && zig_cc.is_some() {
+        if let Some(wrapper) = &zig_cc {
+            build.compiler(wrapper);
+            if let Some(ar) = &zig_ar {
+                build.archiver(ar);
+            }
+        }
+    } else if target.contains("riscv") {
         if std::env::var("CC_riscv64gc_unknown_none_elf").is_err() {
             build.compiler("riscv-none-elf-gcc");
         }
@@ -157,6 +178,9 @@ fn compile_lua_c(target: &str) {
 /// produce ELF. On Windows + MSVC the cc crate picks cl.exe (COFF), so we
 /// must explicitly find a cross-compiler.
 fn has_elf_compiler(target: &str) -> bool {
+    if repo_wrapper("cellos-zig-cc").is_some() {
+        return true;
+    }
     // If the caller set CC_<target> explicitly, trust them.
     let env_key = target.replace('-', "_");
     if std::env::var(format!("CC_{env_key}")).is_ok() {

@@ -20,3 +20,7 @@ void vios_write(const char *s, size_t n);
 #define lua_writestring(s, l)       vios_write((s), (size_t)(l))
 #define lua_writeline()             vios_write("\n", 1)
 #define lua_writestringerror(s, p)  vios_write((s), __builtin_strlen(s))
+char *strpbrk(const char *s, const char *accept);
+#define strcoll(s1, s2) __builtin_strcmp((s1), (s2))
+char *strerror(int errnum);
+size_t strspn(const char *s, const char *accept);

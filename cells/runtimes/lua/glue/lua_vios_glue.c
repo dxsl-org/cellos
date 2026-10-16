@@ -85,3 +85,39 @@ char *tmpnam(char *s) { (void)s; return (char *)0; }
 
 /* FILE is defined in lua's own include path; avoid pulling in stdio.h */
 void *tmpfile(void) { return (void *)0; }
+
+char *strpbrk(const char *s, const char *accept) {
+    if (!s || !accept) return (char *)0;
+    while (*s) {
+        const char *a = accept;
+        while (*a) {
+            if (*a++ == *s) return (char *)s;
+        }
+        s++;
+    }
+    return (char *)0;
+}
+
+char *strerror(int errnum) {
+    (void)errnum;
+    return "I/O error";
+}
+
+size_t strspn(const char *s, const char *accept) {
+    if (!s || !accept) return 0;
+    size_t count = 0;
+    while (*s) {
+        const char *a = accept;
+        int found = 0;
+        while (*a) {
+            if (*a++ == *s) {
+                found = 1;
+                break;
+            }
+        }
+        if (!found) break;
+        count++;
+        s++;
+    }
+    return count;
+}
