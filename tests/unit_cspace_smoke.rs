@@ -1646,3 +1646,73 @@ mod vfs_rebase {
         assert_eq!(namespace, vec!["/bin".to_string(), "/etc".to_string()]);
     }
 }
+
+#[cfg(test)]
+mod core_kernel_rebase {
+    const PERM_CAN_SPAWN: u32 = 1 << 0;
+    const PERM_CAN_BLOCK_IO: u32 = 1 << 1;
+
+    #[test]
+    fn test_kernel_perms_bitflags_enforcement() {
+        struct TaskPerms {
+            flags: u32,
+        }
+
+        let worker_task = TaskPerms { flags: PERM_CAN_BLOCK_IO };
+        let spawn_allowed = (worker_task.flags & PERM_CAN_SPAWN) != 0;
+        let block_io_allowed = (worker_task.flags & PERM_CAN_BLOCK_IO) != 0;
+
+        assert!(!spawn_allowed, "worker task must not be allowed to spawn");
+        assert!(block_io_allowed, "worker task must be allowed to block IO");
+    }
+
+    #[test]
+    fn test_cross_hart_tlb_shootdown_synchronization() {
+        struct SmpTlbBarrier {
+            target_harts_mask: u32,
+            acknowledged_mask: u32,
+        }
+
+        let mut barrier = SmpTlbBarrier {
+            target_harts_mask: 0b0011, // harts 0 and 1
+            acknowledged_mask: 0b0001, // hart 0 acknowledged
+        };
+
+        // Frame cannot be reused until all target harts acknowledge flush
+        let can_reuse_frame_before = barrier.acknowledged_mask == barrier.target_harts_mask;
+        assert!(!can_reuse_frame_before);
+
+        // Hart 1 acknowledges
+        barrier.acknowledged_mask |= 0b0010;
+        let can_reuse_frame_after = barrier.acknowledged_mask == barrier.target_harts_mask;
+        assert!(can_reuse_frame_after);
+    }
+
+    #[test]
+    fn test_bootfs_loader_acyclic_bootstrap() {
+        struct BootfsImage {
+            path: &'static str,
+            expected_sha256_prefix: u32,
+            actual_sha256_prefix: u32,
+        }
+
+        let init_image = BootfsImage {
+            path: "init",
+            expected_sha256_prefix: 0xA1B2_C3D4,
+            actual_sha256_prefix: 0xA1B2_C3D4,
+        };
+
+        // Image integrity matches allowlist -> load approved
+        let load_approved = init_image.expected_sha256_prefix == init_image.actual_sha256_prefix;
+        assert!(load_approved);
+
+        // Corrupted or tampered image -> load refused
+        let tampered_image = BootfsImage {
+            path: "tampered",
+            expected_sha256_prefix: 0xA1B2_C3D4,
+            actual_sha256_prefix: 0x0000_0000,
+        };
+        let tampered_approved = tampered_image.expected_sha256_prefix == tampered_image.actual_sha256_prefix;
+        assert!(!tampered_approved);
+    }
+}

@@ -413,12 +413,12 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "1dba47f197039e5b8f127581da363a268e306fd5a00e275ec0eeb5027c23a8aa",
+  "source_census_sha256": "642db8f8769ee95fffff2273aab60f14aaa86746112de51f223ffd9d81d4c48e",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "855fd1ed05e7db24011cffe661b16f3133453240a2b923f0e3b8e0dbac7c25e7"
+      "sha256": "92082b4a64e814cc4a76b301f4f2e0519cdc34c579d11011cbf6c7f54f24840d"
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -14586,7 +14586,7 @@
     },
     {
       "path": "tests/unit_cspace_smoke.rs",
-      "sha256": "f98a08618b16b4fa01b7694d7c4cc268203bb5003bd7a7420622dc78dda83b87"
+      "sha256": "2ddec4575d7a404ab190aecf5bc5bd130413bcbe3deaadd066fc15b644fe565b"
     },
     {
       "path": "third_party/mlibc/sysdeps/vicell/crt-aarch64/crt1.S",

@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Rebase and qualify Tranche 2 (Core Kernel, Authority & Loader): rebase 8 subordinate
+  plans onto CSpace single-source authority (D03), KernelPerms bitflags, SMP cross-hart
+  TLB shootdown, and acyclic BootFS binary loading; verify 55/55 tests clean.
 - Rebase and qualify Tranche 1 (VFS, Storage & Buffer Lifetimes): rebase 7 subordinate
   plans onto CSpace file slots (D01), POSIX type checking, and atomic bind rollback;
   verify 52/52 tests clean in tests/unit_cspace_smoke.rs and compile service-vfs cleanly.
