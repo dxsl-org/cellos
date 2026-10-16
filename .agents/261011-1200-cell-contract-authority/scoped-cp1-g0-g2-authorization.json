@@ -1,0 +1,32 @@
+{
+  "format": "cell-contract-scoped-cp1-authorization-v1",
+  "recorded": "2026-10-15",
+  "decision_source": "User: ph\u00ea duy\u1ec7t CP1 c\u00f9ng \u0111i\u1ec1u ki\u1ec7n G0 v\u00e0 G2",
+  "scope": "development CP1 and conditional prerequisite authorization; not downstream CP2 or production fleet admission",
+  "authorization_document": ".agents/261011-1200-cell-contract-authority/scoped-cp1-g0-g2-authorization.md",
+  "authorization_sha256": "238d892fad073c59996b26044f79724ba593c36ef2d7895925873c23350c4df9",
+  "legacy_lock_count": 38,
+  "legacy_locks_released": 0,
+  "conditions": {
+    "G0": {
+      "status": "conditionally-accepted-for-development-lane",
+      "hardware_prerequisite": "physical Intel VMX/IOMMU hardware publication remains an independent hardware-lane requirement",
+      "basis_receipt": "build/cp1-prerequisites/g0-vtd-readiness-20261014.json"
+    },
+    "G2": {
+      "status": "conditionally-accepted-native-journal-engine",
+      "implementation": "libs/durable-charge-journal",
+      "persistence_boundary": "physical power-loss persistence across drive caches and independent anti-rollback remain explicit operational boundaries"
+    },
+    "CP1": {
+      "status": "approved-for-development-and-vmware-qualification",
+      "codecs": [
+        "libs/durable-charge-codec",
+        "libs/durable-charge-journal"
+      ],
+      "downstream_cp2": "unchanged-pending",
+      "release": "blocked"
+    }
+  },
+  "authorized_next_step": "Step 4: native Cellos VMware fault-injection and storage qualification using SATA/AHCI profile"
+}

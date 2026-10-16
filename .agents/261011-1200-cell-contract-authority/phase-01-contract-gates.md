@@ -81,3 +81,7 @@ No weakening of current CapSet, launch allowlists, Tier-2 deny, relay, signing o
 ## Assumptions and deviation log
 
 Existing scope metadata may be stale; resolve through source/runtime evidence and named owner adoption. The approved five-group red-team amendment extends the contract through AC-50, preserves ten pending phases and 38 locks, and waives no independent gate.
+## Proposed N02-A prerequisite handoff — not active
+
+The user selected preparation of [native development handoff r1](native-development-handoff-r1.md), not its implementation. Controlling P01 owns the proposed exact cspace.rs/actual-module harness invariant tranche; current phase criteria and CP1/CP2 remain pending. The lock register, portfolio and P02 record the same conditional disposition. Only an explicit later decision naming the reviewed packet revision/digest activates it; WIP is one tranche and no successor opens automatically. Exact allowed paths/output records and host/native evidence ceilings are in the packet. Public/persistent/SDK changes and missing D05/D07, issuer/backend/physical gates remain blocked.
+

@@ -1,0 +1,45 @@
+{
+  "format": "cell-contract-cluster-04-approval-v1",
+  "authority_basis": "Explicit user instruction in this conversation",
+  "user_statement": "ph\u00ea duy\u1ec7t c\u1ee5m 3, 4 r\u1ed3i 5 theo th\u1ee9 t\u1ef1",
+  "recorded": "2026-10-15",
+  "scope": "Formal candidate approval of Cluster 4 (D08, D09, D11) under Law-1 dual-checkpoint governance",
+  "approval_document": ".agents/261011-1200-cell-contract-authority/cluster-04-approval.md",
+  "approval_sha256": "23a8e92fcf86a99bd73b88c453f4b96d0e543d7d2a5b63511d09c4f8eef36343",
+  "scoped_user_consent": "Recorded; original user statement and candidate identities retained",
+  "historical_assistant_checkpoint1_claim": "APPROVED; corrected because complete-package inputs remain absent",
+  "approved_packages": [
+    {
+      "delta": "D08",
+      "title": "Native stream mechanism",
+      "owner": "P05/P07",
+      "candidate_revision": "r2",
+      "candidate_digest": "7f4424b6f57a31e2c93fcb86a071b123d2304ae95f81305648b619e8de13f96c",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P05/P07 implementation)"
+    },
+    {
+      "delta": "D09",
+      "title": "POSIX providers, native profiles and bootstrap",
+      "owner": "P07/P02/P05",
+      "candidate_revision": "r1",
+      "candidate_digest": "f60e1d6ccc19183fa91d144d9b10938e2610acd5f5c744d07f32522bfc2b2142",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P07 implementation)"
+    },
+    {
+      "delta": "D11",
+      "title": "Manifest/syscall declarations and ceilings",
+      "owner": "P02/P03/P07/P08",
+      "candidate_revision": "r1",
+      "candidate_digest": "6ef3f1f66a56f7103ce7277744679666e2d0e3620eed2de243fbaa27b52d4208",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P07 implementation)"
+    }
+  ],
+  "governance_disposition": {
+    "checkpoint1_status": "APPROVED (candidate design and layouts accepted for P05/P07 implementation)",
+    "checkpoint2_status": "PENDING (implementation assigned to Phase 05 and Phase 07)",
+    "scoped_locks_status": "38 scoped execution locks remain effective"
+  }
+}

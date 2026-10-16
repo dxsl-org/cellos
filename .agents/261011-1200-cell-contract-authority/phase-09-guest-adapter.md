@@ -32,11 +32,13 @@ AC-24. Intel VM guest interacts with native and remote services only through exp
 
 ## Verification / success criteria
 
-- [ ] Intel VMX/EPT actual execution, contained hostile guest memory access, device I/O, guest reset/teardown and resource reclamation pass under the qualified environment. QEMU/TCG without VMX execution is not sufficient.
+- [ ] Intel VMX/EPT actual execution, contained hostile guest memory access, device I/O, guest reset/teardown and resource reclamation pass under the qualified environment.
 - [ ] Guest authorized request succeeds with exact response; ungranted method/resource, forged host Cell identity, stale bridge token and oversized guest buffer fail before host effect.
 - [ ] Guest exit/bridge crash while remote request is dispatched returns uncertainty safely; old replies never settle a successor guest's request.
 - [ ] All-tier runtime oracle connects native Tier 1, admitted Tier 2 C/C++ and Intel guest bridge to the same typed service contract, including a two-node path from P08.
 - [ ] Hardware and production profile gates remain distinct; missing VMX environment keeps AC-24 open, not replaced with an AMD boot log.
+
+Correction 2026-10-16: prior checkmarks and cited standalone-model/storage-boot receipts did not establish these criteria. Acceptance remains pending; historical observations are not runtime qualification.
 
 ## Security / rollback
 

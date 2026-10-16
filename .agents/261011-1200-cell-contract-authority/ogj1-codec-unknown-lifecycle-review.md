@@ -1,109 +1,88 @@
 # Standalone Proposal Review: OGJ1 Codec and Unknown/Lifecycle Protocol
 
-**Review Date:** 2026-10-14  
-**Target Proposal:** [ogj1-codec-unknown-lifecycle-design.md](ogj1-codec-unknown-lifecycle-design.md)  
-**Verification Harness:** [scripts/verify-ogj1-codec.py](../../scripts/verify-ogj1-codec.py)  
-**Verification Receipt:** [build/ogj1-codec-verification.json](../../build/ogj1-codec-verification.json)  
-**Review Type:** Standalone adversarial proposal review (P01 / G2 persistence prerequisites).  
-**Review Disposition:** **APPROVED FOR SPECIFICATION & TEST MODEL; RUNTIME PROMOTION GATED.**
+**Historical Review Date:** 2026-10-14; disposition correction recorded 2026-10-15.
+**Target Proposal:** [ogj1-codec-unknown-lifecycle-design.md](ogj1-codec-unknown-lifecycle-design.md)
+**Verification Harness:** [scripts/verify-ogj1-codec.py](../../scripts/verify-ogj1-codec.py)
+**Historical Verification Receipt:** [build/ogj1-codec-verification.json](../../build/ogj1-codec-verification.json)
+**Review Type:** Correction of an author-written standalone proposal review; not independent approval or a maintainer decision.
+**Review Disposition:** **SUPERSEDED — NOT APPROVED; G2/OGJ1 lifecycle qualification and G3 admission BLOCKED.** The historical 18/18 result did not establish the advertised prerequisites. Parent-observed empty and corrupt-payload-only storage both recovered as `WRITABLE`; see [historical counterexamples](../../build/g3-prerequisite-counterexamples.json) and [independent upstream audit §9](g3-lifecycle-authority-gates.md#9-independent-upstream-audit--2026-10-15). Subsequent [model regressions](../../build/ogj1-corrected-model-verification.json) and [direct smoke](../../build/ogj1-corrected-model-smoke.json) correct bounded model behavior only, not authority, native durability, durable charge recovery or checkpoint implementation.
 
 ---
 
-## 1. Executive Summary and Scope Boundaries
+## 1. Scope and Evidence Ceiling
 
-This standalone review evaluates the proposed Ordinary Generic Journal v1 (`OGJ1`) binary codec and the associated `Unknown` prospective-charge lifecycle protocol for Cellos persistence.
+The standalone Python model covers an OGJ1 envelope and simulated transaction/recovery logic. Its historical receipt is software-model evidence only: no real issuer authorization, initialized genesis, admitted storage/floor, durable charge-vector ownership, native D1/D2 persistence, checkpoint recovery or execution proof follows. A digest can establish integrity/chain linkage, not issuer authentication or successful execution.
 
-### Invariant Boundaries Confirmed
-- **No public wire opcode or ABI delta:** `libs/api/src/abi/` and VFS wire protocols remain frozen.
-- **No VFS runtime activation:** `cells/services/vfs/src/**` is not modified; no native mount is switched to journal mode.
-- **No KMS or protected storage modification:** 186-byte KMS records, two-slot storage, CAS, signed time, and TLS relay remain strictly untouched.
-- **No synthetic issuer minting:** Cryptographic signers, production pins, and genesis authorities are not fabricated.
-- **No CP1 / CP2 promotion:** All 23 downstream checkpoint pairs and 38 legacy locks retain their pending/locked status.
+This documentation correction grants no public wire opcode/ABI delta, VFS/kernel/runtime integration, persistent-byte cutover, KMS/protected persistence change, synthetic signer or backend admission. Ten pending phases, 38 legacy locks and all 23 downstream CP1/CP2 pairs remain unchanged. Runtime and authority gates remain closed.
 
----
+The controlling upstream [G2 candidate §5](g2-ordinary-persistence-candidate.md#5-bounded-journal-and-filesystem-prerequisites--proposed) and [G3 gates §§5,9](g3-lifecycle-authority-gates.md#5-unknown-ownership-and-journal-evidence-gate) require more than passing codec fixtures. These documents are proposals/evidence requests, not owner assignments or approval records.
 
-## 2. Invariant Verification
+## 2. Historical 18-Case Receipt — Not a Qualification Verdict
 
-The proposal and executable test harness were reviewed against the 10 governing EARS criteria ([ogj1-codec-unknown-lifecycle-design.md §6](ogj1-codec-unknown-lifecycle-design.md#6-ears-acceptance-criteria)). All invariants were confirmed via formal negative controls and simulation:
+The retained JSON receipt records `status: PASS`, `total_tests: 18`, `passed: 18`, `failed: 0`. That is an honest description of the historical script's own assertions, **not** confirmation that all governing invariants held. The earlier review's universal PASS narrative and recommendation to accept the specification are withdrawn.
 
-| Invariant | Specification | Verification Result |
-|---|---|---|
-| **Fixed Header Geometry** | Exactly 112 bytes, little-endian, fixed offsets, magic `b"OGJ1"`, version `1`, reserved `0`. | **PASS** — Enforced by `struct.pack("<4s H B B I 32s 16s Q Q 32s I")`; corrupt magic, version 2, and non-zero reserved reject (TC01–TC04). |
-| **Domain Separation** | Trailer is 32-byte SHA-256 over domain prefix `cellos/ordinary-journal/v1\0` + header + body. | **PASS** — Bit flips in body or header tampering immediately trigger digest verification failure (TC05, TC06). |
-| **Commit Body Constraint** | Commit and Switch bodies are strictly 40 bytes: slot (u32), ref_len (u32), ref_digest (32 B). | **PASS** — Length != 40 bytes rejected (TC09). |
-| **Payload Bound** | Canonical payload bodies $\le 256$ bytes in development experiment model. | **PASS** — Oversized bodies ($>256$ B) rejected (TC08). |
-| **Finite CellosFS Storage** | 9 directories, $\le 12$ files, 21 inodes under `/srv/cellos/journal/{tx,cp}`. Write-once slots. | **PASS** — Inode limits fit inline inode storage (428 B payload); slot re-use rejected (TC10, TC12). |
-| **D1 / D2 Double Barrier** | D1 proves Payload durability; D2 proves Commit durability; client Ack only after D2. | **PASS** — Verified order; D1 alone acknowledges no transaction (TC10). |
-| **Prospective Charge Retention** | Any failure/ambiguity transitions to `Unknown(same T)` with full charge retained. | **PASS** — Simulated D1 failure, pre-D2 crash, D2 failure, and reply loss retain 100% of charge vector (TC11, TC13). |
-| **Conflicting Mutation Gate** | No mutation permitted while in `Unknown` state. | **PASS** — Mutations during `Unknown` rejected (TC12). |
-| **Recovery Chain Replay** | Linear contiguous Commit chain validation from Genesis/Checkpoint. | **PASS** — Contiguous chain successfully recovers `WRITABLE` state (TC14). |
-| **Orphan Payload Handling** | Uncommitted Payload retained under `Unknown(T)`; never deleted or refunded. | **PASS** — Recovery flags orphan payload, sets `UNKNOWN`, retains prospective charge (TC15). |
-| **Fail-Closed on Tamper/Fork** | Torn commit, revision gap, conflicting fork, or fence regression $\to$ `RecoveryFailed`. | **PASS** — Broken chain, revision jump, and fence regression fail closed (TC16–TC18). |
+The historical review recorded this command:
 
----
-
-## 3. Adversarial Risk Analysis & Resolution
-
-### Risk 1: Silent Charge Dropping on In-Flight Ambiguity
-- **Hazard:** A network timeout, host kill, or short write after I/O dispatch might cause the system to drop the prospective charge or return a generic error, allowing double-spending or resource exhaustion.
-- **Resolution:** The protocol mandates pre-allocation of the full prospective vector *before* issuing barrier D1. Any unobserved or failing barrier transition sets `active_unknown = T` and preserves `retained_charges[T]`. The charge remains held until authoritative supervisor reconciliation. Verified in TC11 and TC13.
-
-### Risk 2: Domain Prefix and Preimage Substitution Attacks
-- **Hazard:** A raw payload body could be crafted to mirror a valid header/trailer, or an unauthenticated record from another subsystem could be injected.
-- **Resolution:** A 27-byte domain separator prefix `b"cellos/ordinary-journal/v1\0"` is strictly prepended to the hash preimage. Furthermore, total record length and internal body length are redundantly declared in the header and cross-checked against on-disk file size. Verified in TC05, TC06, and TC07.
-
-### Risk 3: CellosFS Inode Exhaustion via Hexadecimal Filenames
-- **Hazard:** Naive journal designs store transaction IDs as directory entries (e.g. `tx/0123456789abcdef...`). In CellosFS, directory blocks hold at most 7 entries with `MAX_NAME_LEN=46`. Long or unbounded filenames rapidly exhaust inode blocks.
-- **Resolution:** The proposal selects a fixed, finite 4-way slot directory tree (`tx/{0..3}` and `cp/{0..1}`) using fixed short names (`payload`, `commit`, `checkpoint`, `switch`). The entire journal uses exactly 21 inodes and fits within inline inode storage limits. Verified in layout design §3.
-
-### Risk 4: Torn Commit Misinterpretation
-- **Hazard:** A power-loss crash mid-commit write could leave a partial file on disk. If treated as valid, state corrupts; if treated as empty, an acknowledged commit is lost.
-- **Resolution:** The codec requires Commit records to be exactly 184 bytes with a valid cryptographic trailer. A torn commit fails trailer validation, is treated as uncommitted, and causes recovery to transition to `Unknown(T)` (rather than advancing revision or deleting the file). Verified in TC16.
-
-### Risk 5: Forking or Revision Gaps Across Reboots
-- **Hazard:** If two distinct commits exist at the same revision, or a commit skips a revision number, linear ledger invariants are violated.
-- **Resolution:** Recovery strictly enforces $r = \text{current} + 1$ and `prev_commit_digest == current_digest`. Any gap or fork immediately halts recovery and enters `RecoveryFailed`. Verified in TC17.
-
-### Risk 6: Authority Fence Regression
-- **Hazard:** An outdated image or replayed commit could attempt to install an authority fence lower than the local node's boot floor.
-- **Resolution:** The state machine and recovery algorithm verify $\text{fence} \ge \text{boot\_floor}$ at every record. Any regression immediately transitions to `RecoveryFailed`. Verified in TC18.
-
----
-
-## 4. Verification Evidence
-
-The standalone verification script was executed:
 ```bash
 python3 scripts/verify-ogj1-codec.py --out build/ogj1-codec-verification.json
 ```
 
-**Output:**
-```
-OGJ1 Codec Verification: 18/18 tests passed.
-  [PASS] TC01_roundtrip_all_kinds: All 4 kinds encoded and decoded cleanly
-  [PASS] TC02_reject_invalid_magic: Corrupt magic rejected
-  [PASS] TC03_reject_unsupported_version: Version 2 rejected
-  [PASS] TC04_reject_nonzero_reserved: Nonzero reserved rejected
-  [PASS] TC05_reject_tampered_body: Bit flip in body triggers digest verification failure
-  [PASS] TC06_reject_tampered_header: Modified revision detected by trailer digest
-  [PASS] TC07_reject_truncated_record: Truncated record rejected
-  [PASS] TC08_reject_oversized_payload: Canonical payload > 256 bytes rejected
-  [PASS] TC09_reject_invalid_commit_body_len: Commit body != 40 bytes rejected
-  [PASS] TC10_successful_double_barrier: D1 then D2 advances revision and confirms
-  [PASS] TC11_d1_failure_unknown_charge_retained: D1 barrier fail transitions to UNKNOWN, charge retained
-  [PASS] TC12_refuse_mutation_during_unknown: Conflicting mutation refused while Unknown active
-  [PASS] TC13_post_d1_pre_d2_crash_charge_retained: Post-D1 crash creates orphan payload, retains charge
-  [PASS] TC14_recover_contiguous_chain: Contiguous commits recovered into WRITABLE state
-  [PASS] TC15_recover_orphan_payload_unknown: Orphan payload recovered into UNKNOWN state, not deleted
-  [PASS] TC16_recover_torn_commit_unknown: Torn commit detected, does not commit, yields UNKNOWN
-  [PASS] TC17_recover_revision_gap_fails: Revision gap triggers RECOVERY_FAILED
-  [PASS] TC18_recover_fence_regression_fails: Fence regression triggers RECOVERY_FAILED
-```
+No test, build, lint, formatter, model execution or counterexample rerun was performed for this documentation correction. The old receipt and original test names below are preserved as history, not corrected-run evidence.
 
----
+| Historical cases | Recorded result | Evidence ceiling / independent audit disposition |
+|---|---|---|
+| TC01 `roundtrip_all_kinds` | All four kinds encoded/decoded. | Generic Payload/Commit/Checkpoint/Switch roundtrip only; no checkpoint selection, complete snapshot, switch recovery, compaction or retirement qualification. |
+| TC02–TC04 `reject_invalid_magic`, `reject_unsupported_version`, `reject_nonzero_reserved` | Corrupt magic, version 2 and nonzero reserved rejected. | Narrow envelope controls; no initialized ledger, issuer or authority proof. |
+| TC05–TC07 `reject_tampered_body`, `reject_tampered_header`, `reject_truncated_record` | Body/header tampering and truncation rejected by codec. | Does not prove recovery rejects every corrupt present record; corrupt-payload-only recovery later returned `WRITABLE`. Hashes are recomputable and do not authenticate issuers. |
+| TC08 `reject_oversized_payload` | Canonical Payload above 256 bytes rejected. | Experiment codec bound only. No complete lifecycle snapshot-fit or finite filesystem/profile certificate. |
+| TC09 `reject_invalid_commit_body_len` | Commit body not 40 bytes rejected. | Body-length control only; no complete cross-record binding qualification. |
+| TC10 `successful_double_barrier` | Simulated D1 then D2 advanced/confirmed revision. | No native barrier/failure-tuple evidence. Physical durable commit is possible despite lost D2 acknowledgement; observed D2 is required for the original reply, not the definition of physical commit. |
+| TC11 `d1_failure_unknown_charge_retained` | Simulated D1 failure entered Unknown with local charge retained. | Exercises D1 failure, not D2 failure or post-D2 reply loss. Process-local charge retention does not survive owner death. |
+| TC12 `refuse_mutation_during_unknown` | Conflicting mutation refused while Unknown active. | Model gate only, not durable owner handoff or filesystem admission. |
+| TC13 `post_d1_pre_d2_crash_charge_retained` | Simulated pre-D2 crash left an orphan Payload with charge retained. | Pre-D2 crash only; neither D2 failure nor post-D2 reply loss was exercised by TC11/TC13. No authenticated durable adoption/reconstruction. |
+| TC14 `recover_contiguous_chain` | Contiguous fixtures recovered `WRITABLE`. | Historical model had no required initialized-context input; this is not admitted genesis/checkpoint/floor recovery evidence. |
+| TC15 `recover_orphan_payload_unknown` | Orphan fixture recovered Unknown without deletion. | Correct proposed distinction is **valid** Payload with **absent** Commit; a corrupt present record must not be downgraded to an orphan. |
+| TC16 `recover_torn_commit_unknown` | Torn Commit yielded Unknown. | Historical assertion encoded the wrong rule. Present torn/corrupt Commit requires `RecoveryFailed`, not treatment as absent or a passing Unknown result. |
+| TC17 `recover_revision_gap_fails` | Fixture yielded `RECOVERY_FAILED`. | Independent audit found the fixture also had a mismatched referenced Payload digest; that result alone does not isolate revision-gap enforcement. |
+| TC18 `recover_fence_regression_fails` | Fixture yielded `RECOVERY_FAILED`. | A boot-floor comparison alone does not qualify fence nonregression across a chain or an admitted/protected floor. |
 
-## 5. Reviewer Recommendation and Next Steps
+No inode-inline-fit, storage admission, durable lifecycle ownership or independent approval conclusion is supported by these 18 cases.
 
-1. **Accept Specification:** The OGJ1 binary layout, double-barrier sequence, finite CellosFS layout, and Unknown lifecycle invariants in [ogj1-codec-unknown-lifecycle-design.md](ogj1-codec-unknown-lifecycle-design.md) are structurally complete and validated.
-2. **Preserve Runtime Gates:** Do NOT integrate this into `cells/services/vfs/src/**` or expose wire opcodes until formal maintainer approval of Checkpoint-1 (CP1) is authorized.
-3. **Downstream Handoff:** Provide this design and verification evidence to P05 (Resource Authority), P06 (Recovery), and P08-C (Distributed Authority) as the concrete foundation for durable lifecycle transactions.
+## 3. Recorded Counterexamples and Independent Audit
+
+The parent recorded the following historical observations in [build/g3-prerequisite-counterexamples.json](../../build/g3-prerequisite-counterexamples.json); they were not rerun here:
+
+| Scenario | Observed historical state | Required disposition |
+|---|---|---|
+| `recover(ledger_id=b'A'*32, boot_floor=100, on_disk_slots={})` | `WRITABLE` | Without explicit initialized context, fail closed; empty storage is not authorized genesis. |
+| `recover(ledger_id=b'A'*32, boot_floor=100, on_disk_slots={0: {'payload': b'corrupt'}})` | `WRITABLE` | A present corrupt Payload must yield `RecoveryFailed`, never be silently omitted. |
+
+The read-only independent reviewer `OGJGateAudit` ran no runtime tests and did not approve the proposal. Its [G3 audit §9](g3-lifecycle-authority-gates.md#9-independent-upstream-audit--2026-10-15) blocks GA-5 and requires:
+
+1. Explicit initialized genesis/checkpoint identity and full recovery binding checks: ledger, kinds/slots, same transaction/revision/fence/predecessor, referenced length/digest, contiguous revisions and chain fence nonregression. A model-only initialized context may exercise these rules, but is not authentic genesis, authority or floor evidence.
+2. Present torn/corrupt/foreign records → `RecoveryFailed`; a valid orphan Payload with absent Commit → retained `Unknown(same T)`. Missing required initialized state may not become genesis or an older plausible balance.
+3. Exact-byte resolution of the reference-digest ambiguity: model references use the validated domain/header/body trailer, while upstream says “referenced entire-record SHA-256.” The corrected design **proposes** the trailer convention; upstream ambiguity remains blocked for explicit owner/maintainer review. No persistent bytes are approved or silently migrated.
+4. Correct finite storage geometry: directory payload428 / entry56 means seven entries, not eight directory blocks per inode. Indexed inode capacity is 32 × 8 = 256. Journal subtree21 inodes excludes surrounding parents and other volume users. Maximum record436 exceeds inline428; canonical bodies249..256 require extents, while bodies up to248 fit inline. No complete capacity/profile claim follows.
+5. Canonical durable prospective-charge ownership and authenticated fenced adoption/recovery across owner death. Model dictionaries do not reconstruct charge vectors or transfer ownership; a supervisor cannot automatically assume them. These remain unmet, unimplemented runtime prerequisites.
+6. Complete checkpoint schemas, independently finite snapshot capacity and real durable switch/replay-retirement witnesses preserving all Unknown/outcome/closed-key obligations and prior acknowledged roots. A 256-byte codec bound does not establish full snapshot fit.
+7. Isolated negative controls and honest branch coverage. Historical TC11/TC13 do not cover D2 failure or post-D2 reply loss; TC17 did not isolate a gap.
+
+## 4. Corrected Proposal Semantics — No Execution Claim
+
+The design now separates observed D2 acknowledgement from physical commit: D1 alone acknowledges nothing; only observed successful D2 permits the original confirmed-state advancement and success reply. If a durable Commit exists but the D2 acknowledgement/reply is lost, the operation remains `Unknown(same T)` until authoritative lookup reports the existing committed result; no re-execution, fresh identity or duplicate credit is allowed.
+
+Recovery must be explicit and non-formatting. The standalone model must require a model-only initialized recovery context rather than default genesis, reject corrupt present records, and validate the whole chain/bindings. Such fixtures still do not authenticate issuer/genesis/floor or authorize production mutation. Real recovery must reconstruct charged retained obligations under qualified ownership before reopening mutation.
+
+The corrected model keeps mutation closed even after valid replay: `RECOVERED_MUTATION_CLOSED` for a valid initialized chain/base, `UNKNOWN` for valid orphan ambiguity and `RECOVERY_FAILED` for invalid/uninitialized input, with `mutation_admission=False`, `charge_recovery=UNIMPLEMENTED` and `accounting_recovered=False`. Parent execution receipts linked above exercise these model outcomes, not durable accounting.
+
+Durable charge adoption, lifecycle-vector codec, actual owner transfer, checkpoint selection/compaction and replay-safe retirement remain blocked and unimplemented. No “automatic supervisor” assumption, digest-based execution proof, complete 256-byte snapshot claim or native persistence claim survives this correction.
+
+This section records corrected proposal semantics. Subsequent parent-produced model regression receipts and direct smoke linked above are separate model execution evidence. Neither those runs, historical18 nor this text supplies an owner/maintainer approval or G2/G3 qualification.
+
+## 5. Review Disposition and Remaining Gates
+
+**Do not accept or promote this package on the historical receipt.** Preserve both historical receipts and counterexamples; retain the failed/contradictory evidence denominator.
+
+Future qualification requires corrected scoped model receipts with isolated regressions, independent review, exact reference-byte/schema decisions, actual admitted initialization/issuer/floor/storage facts, durable lifecycle ownership/reconstruction, finite complete checkpoint/capacity/retirement design, real failure receipts and explicit owner/maintainer checkpoint decisions. Model corrections alone cannot discharge those gates.
+
+This documentation is review preparation only. It grants no runtime/persistent implementation handoff, independent approval, CP1/CP2 promotion, G3 admission or lock release.

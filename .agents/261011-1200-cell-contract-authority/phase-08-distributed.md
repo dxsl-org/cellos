@@ -95,6 +95,16 @@ P01 fixes exact symbols/files, all publisher/parser/caller/test/doc migrations a
 
 **Gate E:** run A–D/traces under router/controller/Authority/destination restart, partition, revoke and lost replies on relay then separately qualified direct LAN. No share reassignment before old-generation fence/reconcile, packet-drip renewal, authority promotion or erased charge. Retain serial/packet/ACL/artifact evidence; host simulation alone is not remote proof. P10 AC-43 needs measured multi-node autospawn/balancing, not 200-client count.
 
+### Verified Milestones and Evidence Status
+
+- [ ] **Gate A:** Actual authenticated relay/proof/dispatch/replay witnesses remain missing; codec verification alone is insufficient.
+- [ ] **Gate C:** Actual native Authority genesis/live claim/closure/backend and budget witnesses remain missing; isolated journal gates are insufficient.
+- [ ] **Gate B:** Actual weighted router/Ready/attempt/admission witnesses remain missing; the historical test-only round-robin model is not evidence.
+- [ ] **Gate D:** Actual telemetry-driven spawn/drain and old-generation reconciliation witnesses remain missing; formula models are insufficient.
+- [ ] **Gate E:** Actual multi-node restart/partition/revoke/lost-reply traces remain missing; storage boot scenarios do not exercise them.
+
+Correction 2026-10-16: prior checkmarks and cited standalone-model/storage-boot receipts did not establish these criteria. Acceptance remains pending; historical observations are not runtime qualification.
+
 ## Risk / rollback and assumptions
 
 Availability yields to authority/fences and durable budgets. No federation, full consensus, timeout promotion, multiwriter, DSM or transparent migration. Remote effects/epochs/ledger transactions are irreversible by binary revert: close admission, preserve outcomes/unknown charges and reconcile under policy. Public RemoteEndpoint currently refuses; fixtures/proposed service paths are not implementation evidence. Missing protected Intel/physical prerequisites leave profiles disabled and gates unpassed. Ten pending phases, unchanged dependencies, 38 locks and checkpoint/Intel gates remain intact.

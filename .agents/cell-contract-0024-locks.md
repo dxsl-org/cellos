@@ -79,6 +79,13 @@ The lock set remains the same 38 relations; no broader unrelated work is frozen.
 
 The 2026-10-14 scoped exception is a controlling-owner prerequisite handoff, not removal of any `blocks`/`blockedBy` relation. Its exact candidate/path/baseline manifest is authoritative for that exception; scope drift requires amendment. No subordinate old plan may claim it as permission to execute.
 
+### Proposed N02-A internal prerequisite disposition — NOT ACTIVE
+
+The user selected preparation of [native development handoff r1](261011-1200-cell-contract-authority/native-development-handoff-r1.md), not implementation authority. Its companion pins exact bytes. N02-A is a proposed controlling-P01-owner exception solely for per-authority arena invariants in `kernel/src/cell/cspace.rs` and its actual-module `tests/unit_cspace_smoke.rs`; exact documentation/output paths are enumerated in that packet. Scheduler/cap/cell consumers remain read-only; WIP is one tranche, before separately gated N02-B→N03→N04→N05→N06/N07. No public/persistent bytes, opcode, SDK, operational authority or production activation changes.
+
+This scheduling disposition is conditional: **only a later explicit approval naming the reviewed packet revision/digest and an appended decision record activates N02-A**. Until then, implementation remains blocked. Even after that scoped approval, all 38 `blocks`/`blockedBy` relations and legacy scopes remain effective; no subordinate plan resumes. Evidence is actual-module host transitions plus compile/link/boot-only native observations, not whole-system bounded fit, Gone/device quiescence, full P02 or downstream CP1/CP2. G1/G2 grants remain unchanged; D05/D07, protected/physical/backend and successor gates are not waived.
+
+
 Unrelated work is not suspended merely because it mentions a Cell, capability, driver, thread, IPC or Rust. Ordinary consumers and baseline repairs that do not change these contracts have no new lock here; they still need a concrete Intel C2C connection and portfolio admission under ADR-0022. Non-Intel hardware, GUI/browser, AI, robot and general ecosystem programs stay parked under that older direction decision.
 
 ## Replacement areas and dependency direction

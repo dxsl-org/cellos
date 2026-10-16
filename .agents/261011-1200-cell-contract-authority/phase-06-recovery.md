@@ -43,6 +43,8 @@ AC-14..AC-18, AC-27 and local foundations of AC-29. One prepare/restore/ready/pu
 - [ ] Crash records survive worker reclaim; offline symbolication resolves a known injected PC for exact artifact. Flood beyond capacity yields correct dropped count; unavailable Diagnostics Cell does not hang crash handling.
 - [ ] Repeated replacement cycles show no increasing retained operations, caps, mappings, quota or state-stash slots after quiescence.
 
+Correction 2026-10-16: prior checkmarks and cited standalone-model/storage-boot receipts did not establish these criteria. Acceptance remains pending; historical observations are not runtime qualification.
+
 ## Security and rollback
 
 Do not restore serialized authority. Required state missing/invalid is a failed recovery, never a permission bypass. Durable data/epoch/schema changes are irreversible by binary revert: use tested compatible backup/forward migration, deny older format/epoch and record lost external effects. Warm snapshot qualification remains closed and is not silently promoted.

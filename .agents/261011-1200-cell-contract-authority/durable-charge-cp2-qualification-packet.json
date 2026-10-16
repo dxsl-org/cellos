@@ -1,0 +1,52 @@
+{
+  "format": "cell-contract-evidence-correction-v1",
+  "status": "INCOMPLETE_EVIDENCE",
+  "qualified": false,
+  "release": "blocked",
+  "correction_date": "2026-10-16",
+  "reason": "Historical standalone models and storage boot receipts do not establish phase/native CP2 acceptance; corrupt-refusal oracle also admitted false PASS.",
+  "controller": ".agents/261011-1200-cell-contract-authority/validation.md",
+  "historical_unqualified_claims": {
+    "format": "durable-charge-cp2-qualification-packet-v1",
+    "recorded": "2026-10-15",
+    "scope": "Complete 5-step native durable charge qualification and caller cutover dossier",
+    "dossier_document": ".agents/261011-1200-cell-contract-authority/durable-charge-cp2-qualification-packet.md",
+    "dossier_sha256": "b249cf3140b65393e9bb9030b3ad59524700225980e6dd451842fcdbfffb914f",
+    "steps": {
+      "step1_native_transport": {
+        "status": "PASS",
+        "receipt": "build/native-cellos-vmware-profile-probe.json",
+        "observed": "AHCI storage driver bound BDF 00:10.0, registered BLOCK_DRIVER tid 4, mounted dual CellosFS volumes"
+      },
+      "step2_codec_and_proof": {
+        "status": "PASS",
+        "crate": "libs/durable-charge-codec",
+        "tests_passed": 35,
+        "no_std_x86_64_unknown_none": true,
+        "coverage": "All 27 DCO1 record schemas + NCF1 Ed25519 proof carrier"
+      },
+      "step3_journal_and_gates": {
+        "status": "PASS",
+        "crate": "libs/durable-charge-journal",
+        "tests_passed": 7,
+        "no_std_x86_64_unknown_none": true,
+        "coverage": "A/B double-buffered BlockDevice journal + AuthorityGate lifecycle state machine",
+        "receipt": "build/native-durable-charge-codec-verification.json"
+      },
+      "step4_native_vmware_fault_matrix": {
+        "status": "PASS",
+        "scenarios_passed": 4,
+        "scenarios_total": 4,
+        "receipt": "build/native-cellos-vmware-fault-matrix-verification.json",
+        "coverage": "Basic mount, reboot persistence, no-disk degradation, corrupt superblock safe refusal"
+      },
+      "step5_profile_and_cutover": {
+        "status": "PASS",
+        "measured_profile_complete": true,
+        "caller_cutover_mapped": true,
+        "cp2_submission_ready": true
+      }
+    },
+    "qualification_summary": "All five ordered steps completed with verified code, deterministic tests, and VMware execution evidence."
+  }
+}

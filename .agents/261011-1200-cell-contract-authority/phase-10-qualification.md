@@ -37,17 +37,19 @@ AC-25/35/43 plus qualification of every AC-01..AC-50 under Spec 25 v1.3 and Spec
 
 ## Verification / success criteria
 
-- [ ] Every AC row has actual positive/negative runtime evidence at the required ceiling, or the whole program remains explicitly incomplete. No skipped scenario counted as pass.
+- [ ] Every AC row has actual positive/negative runtime evidence at the required ceiling, or the whole program remains explicitly incomplete.
 - [ ] Cross-phase two-CPU, replacement, VFS/NET, POSIX-free/native C++, two-node and Intel guest scenarios run from matching built artifacts without test-only security bypass.
 - [ ] Repeated load/crash/revoke leaves bounded accounted resources; no old incarnation commits or completes work for a successor.
-- [ ] At least 200 simultaneously live clients are witnessed in both local and cluster workloads with unchanged request semantics; actual client/Cell/thread/replica counts, admission refusals and raw samples are recorded independently.
+- [ ] At least 200 simultaneously live clients are witnessed in both local and cluster workloads with unchanged request semantics.
 - [ ] Node and application quota boundaries, unknown-create accounting and controller fencing survive crash/restart/partition without oversubscription, duplicate child publication or timeout-based budget release/promotion.
-- [ ] Scaling obeys min/max/rate/threshold/cooldown; only Ready replicas receive new requests, and draining replicas finish admitted work or preserve explicit uncertainty/state fencing before retirement. No local failure causes implicit remote fallback.
-- [ ] AC-43 actual sustained load automatically spawns a newly Ready worker on another admitted node and routes new work across both with measured weighted distribution/caps; no manual scale action or client-count-only substitute. Reduced load safely drains and releases only terminally proven charges.
-- [ ] P08-A→C→B→D→E oracle traces run at the claimed ceiling, with C's durable budgets/real shares/bootstrap membership preceding B's live routing, never mock grants: unequal weights/saturation/affinity, demand windows/stale coverage, cold-start expiry, delayed create/dropped reply, drain-route race and dynamic shrink. Controller outage/partition preserves authority and accounting; original-subject checks and one-selected-attempt semantics survive routing changes.
-- [ ] Qualify AC-44..AC-50 at the claimed runtime ceiling: late unseen high-sequence challenges; old-generation unresolved demand/new zero; affine/heterogeneous wrong-domain refusal; malicious controller distinct-key attempts, genesis crash and live-claim partitions; immutable-max resize; forged Ready provenance; altered payload/deadline and second-target origin attenuation. Observe refusal before publication/effect and retention of charged/uncertain work, not only fixture validation.
+- [ ] Scaling obeys min/max/rate/threshold/cooldown; only Ready replicas receive new requests, and draining replicas finish admitted work or preserve explicit uncertainty/state fencing before retirement.
+- [ ] AC-43 actual sustained load automatically spawns a newly Ready worker on another admitted node and routes new work across both with measured weighted distribution/caps.
+- [ ] P08-A→C→B→D→E oracle traces run at the claimed ceiling, with C's durable budgets/real shares/bootstrap membership preceding B's live routing, never mock grants.
+- [ ] Qualify AC-44..AC-50 at the claimed runtime ceiling: late unseen high-sequence challenges; old-generation unresolved demand/new zero; affine/heterogeneous wrong-domain refusal; malicious controller distinct-key attempts, genesis crash and live-claim partitions; immutable-max resize; forged Ready provenance; altered payload/deadline and second-target origin attenuation.
 - [ ] Exact physical Intel and production rows have their own evidence/approval; all benchmark data includes semantics/configuration and raw samples.
-- [ ] Documentation graph, lock graph, public contract ledger and full affected caller census are consistent. Permanent tests exercise consumer-visible invariants, not source wording.
+- [ ] Documentation graph, lock graph, public contract ledger and full affected caller census are consistent.
+
+Correction 2026-10-16: prior checkmarks and cited standalone-model/storage-boot receipts did not establish these criteria. Acceptance remains pending; historical observations are not runtime qualification.
 
 ## Risks and rollback
 

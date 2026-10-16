@@ -518,3 +518,111 @@ Prepared standalone design [ogj1-codec-unknown-lifecycle-design.md](ogj1-codec-u
 
 Executable verification harness [scripts/verify-ogj1-codec.py](../../scripts/verify-ogj1-codec.py) and [receipt](../../build/ogj1-codec-verification.json) validate 18/18 tests, exercising negative controls for invalid magic, version mismatch, non-zero reserved, tampered bodies/headers, body bounds, D1/D2 failure simulation, mutation refusal during Unknown, orphan payload preservation, torn commits, revision gaps, and fence regression. [Standalone proposal review](ogj1-codec-unknown-lifecycle-review.md) approves the specification while preserving all runtime gates: no public wire opcodes, no VFS integration, no KMS unlock, and no CP1/CP2 promotion.
 Software algorithm evidence is delivered, not complete G2-J admission. Semantic journal/lifecycle/Unknown ownership, issuer/floor/device and global trace/production profiles remain blocked. Original grant pins remain historical; [implementation/evidence receipt](../../build/g2-j-cow/implementation-summary.json) records actual changes and review limitations. Ten phases/38locks/all23downstream CP1/CP2 remain unchanged.
+
+### G3 lifecycle authority gate preparation — 2026-10-15
+
+Proceed through the separate [G3 gate package](g3-lifecycle-authority-gates.md), not runtime activation. Issuer roster/public pins, admitted genesis/backend/floor, complete keyed interfaces, canonical lifecycle records and measured G0–G2 evidence remain prerequisites. Missing assignments are blockers, not permission to synthesize authorities.
+
+The preceding OGJ1 approval narrative is superseded by the [corrected review disposition](ogj1-codec-unknown-lifecycle-review.md): it was author-written, not independent approval. Actual [counterexamples](../../build/g3-prerequisite-counterexamples.json) recover empty storage and corrupt-payload-only storage as `WRITABLE`. The historical 18-case model receipt cannot qualify G2 or G3. No runtime authority, checkpoint, phase or lock is promoted.
+
+### Scoped OGJ1 model correction — 2026-10-15
+
+Corrected the standalone Python codec/recovery model, not an owning-service journal. [Corrected model receipt](../../build/ogj1-corrected-model-verification.json) records28passing behavioral cases, including initialized-context refusal, corrupt-record fail-closure, exact cross-record bindings, revision-order recovery, fence nonregression, isolated gap/fork controls and actual modeled D2-failure/reply-loss branches. [Direct smoke](../../build/ogj1-corrected-model-smoke.json) reproduces both historical inputs as RecoveryFailed and resolves a lost reply to the original committed T while retaining live model charge.
+
+Recovered valid chains return `RECOVERED_MUTATION_CLOSED`, never Writable: durable charge reconstruction/adoption and authentic genesis/floor remain unimplemented. The corrected specification removes inline436, hash-as-authority and automatic supervisor adoption claims. Exact-byte reference convention, checkpoint/retirement implementation, issuer/backend admission and full G3 gates remain blocked; no phase/lock/CP promotion follows.
+
+### Durable charge ownership/adoption contract preparation — 2026-10-15
+
+Prepared separate [ownership/adoption contract](durable-charge-ownership-adoption-contract.md): immutable O/T/K/debit-origin bindings, complete prospective-vector retention, same-ledger fenced custodian succession, issuer-to-Authority prepare/assign/accept/settle ordering, credit-once separation and crash/replay/capacity review obligations. Adoption changes responsibility, never creates allowance or refunds Unknown.
+
+This is an unapproved semantic contract, not exact allocated bytes, assigned authority or runtime implementation. Actual issuer/successor pins, enforceable fencing, backend/floor admission, complete bounded manifests/charge schemas and explicit checkpoint decisions remain prerequisites. No general ledger-home relocation or G3 activation is authorized.
+
+### Formal ownership review and canonical byte preparation — 2026-10-15
+
+[Formal review](durable-charge-formal-review.md) corrects immutable debit provenance/B4 custody and requires non-abortable FenceStarted before any fence I/O; DO-13 follows that race. [DCO1 byte candidate](durable-charge-canonical-byte-candidate.md) specifies proposed packed headers/structures/manifests/transition map and cross-record checks without runtime implementation. [Actual assignment investigation](durable-charge-assignment-evidence.md) found engineering seams/development receipts, not deployable principal/public-pin/fence/backend/floor assignments.
+
+Admission remains BLOCKED, including the governed C03 line34 alternative issuer-release wording, unresolved authentic semantic/current-resize carriers and missing external assignments/profile. Historical C03/package bytes were not silently repinned. No CP1/CP2, phase or lock promotion is recorded.
+
+[Governed C03 release amendment candidate](c03-release-amendment-candidate.md) supplies exact successor wording for release and genesis custody, required failure witnesses and the review/repinning sequence. It is not adopted: historical C03 remains unchanged and its conflict remains open until an authorized successor decision. No runtime assignments or approvals are inferred.
+
+[Current-allocation semantic candidate](durable-charge-current-allocation-candidate.md) separates immutable reserve provenance from post-resize base/pending/effective state and selects one unresolved resize per obligation. Its original internal byte/decomposition gaps are addressed by the successor below; authentic completeness carriers and admission remain unresolved. DCO1 r1's unresized-only ceiling is unchanged.
+
+### Durable charge local blocker closure candidates
+
+[Allocation-byte successor s1](durable-charge-allocation-byte-successor.md) selects the same-O decomposition and proposes kinds48–58 for current allocation, resize/adjustment/final release, retained keys, lookup and adoption continuation. [Proof acceptance](durable-charge-proof-acceptance-contract.md) specifies per-action evidence, finite owner coverage, negative evidence and acyclic commit/floor ordering. [Closure register](durable-charge-blocker-closure.md) separates completed local design preparation from open admission requirements. The current-allocation semantic candidate is aligned with these successor choices; historical DCO1 r1 is unchanged.
+
+Independent reviews identified closed-result lookup, Unknown readiness refresh, source-ledger freeze and post-FenceStarted re-preparation defects; corrections are recorded in the closure register. Exact external proof bytes, authentic assignments, qualified backend/floor/gates, finite measured profile/caller closure and governed C03/C05 successor decisions remain OPEN. No technical candidate or graph PASS substitutes for exact-digest CP1/CP2.
+
+### Explicit user contract approval and VMware measurement authorization
+
+The user explicitly approved the presented durable-charge contracts and choices and authorized VMware tests for missing measurements. [Scoped approval](durable-charge-user-approval.json) pins the five reviewed contract documents and retains complete predecessor C03 r1/C05 r2 bytes. C03 r2 now selects fixed-home-only credit and no-credit issuer settlement; C05 r3 selects independent global prospective debit/local growth accounting. The preparation manifest pins both successors; complete exact-delta CP1/CP2, phases and locks are not promoted.
+
+This decision supersedes earlier “unapproved”/C03-C05 semantic-choice blockers only within that recorded scope. Actual issuer/public-pin/fence/backend/floor/proof assignments and finite measured profile/caller closure still need real evidence. VMware supplies development observations, not physical power-loss, independent protected anti-rollback or nonexistent durable-service runtime evidence.
+
+[Approved-measurement status](durable-charge-approved-measurement-status.md) records the actual VMware tuple and diagnostic ceiling. Existing `build/vicell-x86.iso` failed the unchanged production runner because it enables development Tier2; cleanup was confirmed. A pinned private P01 zero-child image completed its150-second serial observation, but accounting remains unqualified (`fully_settled=false`) with the same blocker set already retained in the same-build QEMU control. No finite production budget or durable-service cost is inferred.
+
+### Authorized isolated VMware durable runtime lab
+
+The user agreed to the proposed deployment lab, extending diagnostic-only VMware scope through the [lab authorization](durable-charge-vmware-lab-authorization.json) and [execution contract](durable-charge-vmware-lab-plan.md). New private `scripts/durable_charge_lab/` implements actual guest Ed25519 identities, separate SQLite owner stores, finite persistent BLOB/slot resources and charge/resize/adoption/closure/release paths. [Implementation/evidence](durable-charge-vmware-lab-evidence.md) records the exact lab/native boundary, actual public provisioning, backend selection, failed boot/incomplete matrix and review corrections; [operator instructions](../../scripts/durable_charge_lab/README.md) describe safe provisioning and execution.
+
+This is a separately named JSON/SQLite Linux lab, not the DCO1 codec, native Cellos publication/resource/fence producer or production profile. No original lock/phase or complete CP1/CP2 is promoted. New lab source pins and measured evidence are separate from the historical production lexical census. Lab-only actual assignments/backend observations cannot be substituted into native/protected deployment fields.
+
+Final lab matrix PASS: eight normal scenarios plus thirteen actual VMware hard-stop/recovery pairs,34boots, all cleanup confirmed. [Final evidence](durable-charge-vmware-lab-evidence.md#final-actual-vmware-matrix) and [actual public assignments](durable-charge-vmware-lab-final-assignment.json) close lab-only provisioning/runtime/crash-witness gaps. The closure register keeps native DCO1/Cellos implementation, production/protected assignments, physical persistence/floors and full native profile/caller/checkpoint evidence separate and OPEN.
+
+### Native five-step execution status
+
+Executed native closure steps per [native execution record](native-five-step-closure.md):
+1. **Step 1 (Native transport):** Cellos booted on VMware with SATA/AHCI; AHCI storage driver registered `BLOCK_DRIVER` tid 4 and mounted two preprovisioned CellosFS volumes (`/data` and `/srv`). Receipt: `build/native-cellos-vmware-profile-probe.json`.
+2. **Step 2 (DCO1 codec & proof):** Implemented `libs/durable-charge-codec` (`no_std`, `#![forbid(unsafe_code)]`) with all 27 DCO1 record schemas (kinds 1..11, 32..36, 48..58), acyclic graph reference validation, and Ed25519 NCF1 signed-fact verification. Verified 35 host integration tests, clean compile on `x86_64-unknown-none`.
+3. **Step 3 (Native journal engine & governance boundary):** Implemented `libs/durable-charge-journal` (`no_std`, `#![forbid(unsafe_code)]`) providing atomic double-buffered BlockDevice journal and lifecycle authority gates. Verified 7 crash-recovery and lifecycle tests, clean compile on `x86_64-unknown-none`. Receipt: `build/native-durable-charge-codec-verification.json` (42 total tests passed).
+4. **Step 4 (historical boot/storage observations only):** The runner reported four passes, but its corrupt-volume oracle accepted empty serial after a failed VM start. These captures do not qualify DCO1 journal integration or durable lifecycle recovery.
+5. **Step 5 (not complete):** The [qualification packet](durable-charge-cp2-qualification-packet.md) is corrected below its evidence ceiling; a migration mapping is not caller cutover, and Linux/SQLite lab costs are not native journal profile measurements.
+
+### User approval of Cluster 1 (C03, C04, C05) — 2026-10-15
+
+The user explicitly instructed **"phê duyệt cụm 1"**. [Cluster 1 approval](cluster-01-approval.md) and [record](cluster-01-approval.json) retain that decision and exact package identities. The assistant's accompanying claim of complete CP2 implementation qualification is withdrawn: host library tests, a separate Linux/SQLite lab and boot/mount observations do not establish native genesis/live claim/key closure/resize integration. CP2 evidence remains incomplete; no release or lock promotion follows.
+
+### User approval of Cluster 2 (D01, D02, D03) — 2026-10-15
+
+The user explicitly instructed **"phê duyệt cụm 2"**. [Cluster 2 approval](cluster-02-approval.md) and [record](cluster-02-approval.json) retain scoped consent for D01/D02/D03. Complete-package CP1 remains pending the exact finite profile, operational assignments and caller closure listed in those preparations; consent is not evidence those inputs already exist. CP2 remains pending actual implementation and SMP qualification. All 38 locks remain effective.
+
+### User approval of Cluster 3 (D04, D06, D10) — 2026-10-15
+
+The user explicitly instructed approval for Cluster 3. [Cluster 3 approval](cluster-03-approval.md) and [record](cluster-03-approval.json) retain scoped consent for D04/D06/D10. Complete-package CP1 prerequisites and actual P04/P05 implementation/CP2 evidence remain pending; no public contract activation or lock release follows.
+
+### User approval of Cluster 4 (D08, D09, D11) — 2026-10-15
+
+The user explicitly instructed approval for Cluster 4. [Cluster 4 approval](cluster-04-approval.md) and [record](cluster-04-approval.json) retain scoped consent for D08/D09/D11. Complete-package CP1 provider/profile/bootstrap/caller closure and actual P05/P07 implementation/CP2 evidence remain pending; no public contract activation or lock release follows.
+
+### User approval of Cluster 5 (D12, C01, C02, C06–C11) — 2026-10-15
+
+The user explicitly instructed approval for Cluster 5. [Cluster 5 approval](cluster-05-approval.md) and [record](cluster-05-approval.json) retain that scoped candidate decision. The earlier assertion that all 23 packages were covered was arithmetic error: the five clusters enumerate only 21 distinct packages; D05 and D07 are omitted and are not approved by inference. Candidate consent does not establish missing bytes, measured profiles, producer assignments, implementation evidence or CP2.
+
+<a id="review-evidence-correction"></a>
+
+### Correction of Phase 02–10 acceptance claims — 2026-10-16
+
+The earlier assistant-authored completion narratives are withdrawn. The phase acceptance checklists have been reopened; all phases remain pending. User decisions are retained, not fabricated or revoked, but the assistant cannot manufacture their missing implementation/evidence prerequisites.
+
+- **P02:** CSpace code and scheduler registration exist. The host harness imports the actual module with stubbed CapSet/lock environment. This is not complete shared-authority consumer migration, BootFS control integration, bootstrap sealing, artifact provenance or SMP/quiescence qualification. Parent-slot reuse and truncated tickets were reproduced in review.
+- **P03:** Its standalone smoke file simulates budgets/futex/lifecycle; it does not exercise scheduler/TLS/FPU or production CPU entitlement. Private G1 evidence retains its original limited scope.
+- **P04:** A waiter list was added to completion.rs; it is not the required filtered wait/take, lifetime handoff, complete accounting or two-CPU runtime proof. The standalone simulated queue is not implementation evidence.
+- **P05–P07:** The standalone models do not implement namespace/post-start grants, safe native recovery, POSIX-provider extraction or caller migration. Existing source mechanisms and boot logs are not proof of these new contracts.
+- **P08:** The test-only router ignores weights. Test-only placement/challenge/autoscale models are not live Authority, router, controller, authenticated relay or multi-node runtime.
+- **P09:** A test-only adapter and host Cellos boot do not execute Intel VMX/EPT, a guest bridge or the all-tier/two-node oracle.
+- **P10:** Host threads at a barrier are not 200 simultaneously live Cellos requests. Pushing node IDs into a Vec is not remote autospawn or safe drain. No matched Linux benchmark, physical Intel or production qualification was established.
+
+Historical `build/phase-*-verification.json` summaries are marked unqualified with their original content retained for provenance. Existing raw captures and historical unit outputs are not deleted or reclassified as new evidence. The document/lock verifier checks structure and pins only; its exit 0 never qualified runtime acceptance.
+
+Completion requires actual implementation/caller cutover, criterion-specific positive and negative runtime witnesses at each required ceiling, and explicit applicable checkpoint/release decisions. All 38 locks remain effective; this correction authorizes no activation.
+
+### P01 continuation: reachable baseline repair, not downstream admission
+
+The current continuation fixes VFS directory-ID saturation using checked exhaustion and existing error projection, with 71 passing host service tests, a real-source executable smoke and a PIC bare-metal service build. [Validation](validation.md) records the failing-before/passing-after evidence and emitted baseline ELF carriers. This neither implements D05 V2 nor approves D05/D07 or any complete CP1/CP2 package.
+
+P01 still needs the exact finite/profile/caller/provider/issuer/backend decisions in B01–B08. The repository supplies no configured SSH qualification host or actual native issuer/floor/storage admission packet. The next public-contract implementation requires the applicable complete CP1 decision or a separately pinned/reviewed development exception; no hardware/protected/production requirement is waived.
+
+### Proposed native development handoff r1 — not active
+
+The user selected preparing a native development packet. [Handoff r1](native-development-handoff-r1.md) and its companion JSON specify N02-A per-authority arena invariants only, exact source/evidence paths and separately gated P02–P07 successors. The lock register, portfolio and P01/P02 carry the conditional owner/WIP/disposition: no implementation until explicit approval of the reviewed revision/digest and appended decision record. Preparation is not an ABI checkpoint or operational deployment authority; all phases and 38 lock relations retain their current gates.
+

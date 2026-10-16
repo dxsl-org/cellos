@@ -1,0 +1,195 @@
+{
+  "format": "cell-contract-native-development-handoff-v1",
+  "revision": "r1",
+  "status": "draft-not-authorized",
+  "user_decision": "Prepare native development handoff; not implementation approval",
+  "candidate": {
+    "path": ".agents/261011-1200-cell-contract-authority/native-development-handoff-r1.md",
+    "sha256": "f938bab6b1767e01e965b71ced29ae48377e5ea5881e0ce0ae5d70c6d2efbfb6"
+  },
+  "requested_first_tranche": "N02-A per-authority arena invariants only",
+  "authorized_tranches": [],
+  "successor_tranches_separately_gated": [
+    "N02-B",
+    "N03",
+    "N04",
+    "N05",
+    "N06",
+    "N07"
+  ],
+  "public_or_persistent_byte_changes": false,
+  "cp1": "pending",
+  "cp2": "pending",
+  "release": "blocked",
+  "lock_relations": 38,
+  "source_edit_allowlist": [
+    "kernel/src/cell/cspace.rs",
+    "tests/unit_cspace_smoke.rs",
+    "CHANGELOG.md"
+  ],
+  "read_only_source_consumers": [
+    "kernel/src/task/scheduler.rs",
+    "kernel/src/task/cap.rs",
+    "kernel/src/cell.rs"
+  ],
+  "source_inputs": [
+    {
+      "path": "kernel/src/cell/cspace.rs",
+      "sha256": "c481571a83e55f78e6a7e449e17d6f791d6d576257df4c6f40c0d2a4175e57ca"
+    },
+    {
+      "path": "tests/unit_cspace_smoke.rs",
+      "sha256": "e81fa2a2e01ed374b12f47ced066b596a9c7d058251d06b677cff04e71ff8d3e"
+    },
+    {
+      "path": "kernel/src/task/scheduler.rs",
+      "sha256": "7603e0643ce09a23dca355cb503c174dc54d059010360098a13550df54d499ab"
+    },
+    {
+      "path": "kernel/src/task/cap.rs",
+      "sha256": "768003d621513c20dcbfb631dbd025ad00f23e06bad6709f62dbbedf9470ef6e"
+    },
+    {
+      "path": "kernel/src/cell.rs",
+      "sha256": "3ed837633e070d4f939da70542cc47772c9ab391c972d4c4d552e79658a87eaa"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "ec315bb93e894d94a9c53e3d29a1831a0bcaef630cf846dc89e975c1fb4a6f5b"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/validation.md",
+      "sha256": "8e8f06150be9e1cd4340d4183e56babf8391354a089e0e45a400704307b174e6"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/consumer-census-source.json",
+      "sha256": "bcd5b4270af43a9cff28013330fa5e801f5a7961d0c0d4c660312646803c3dca"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/manifest.json",
+      "sha256": "af5f357482b1c68b6424957742fd76d24adced39f924f058976dca72cfa6b57c"
+    }
+  ],
+  "contract_inputs": [
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-02-kernel-authority.md",
+      "sha256": "c07343b747c74ca03e5c32e9453fbe1c37ba34642627677a0cdc2e50be77fc4d"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-03-thread-smp.md",
+      "sha256": "b57621d3552ca21ae41c2d451307e23f8eaae4e16bcc118e7b6a29c88fba553a"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-04-operations.md",
+      "sha256": "a5d9f6f51009145f4e5b03e3e6a72a1e8bad94eff666927a02f037eff3458734"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-05-resource-authority.md",
+      "sha256": "69ddb718708c86ab8dea397ce17b397fbe9fb8d72cf46774aefee402b0dd9f8b"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-06-recovery.md",
+      "sha256": "c57ce0bc2ab05303d5455b5b01e58fc68c4cbf0f5caac6fcb4cd1eb23e1db24a"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-07-posix-runtime.md",
+      "sha256": "4fa3ef7ca2dde4de0489ebfad6afd539c3b64650c7819081301b6be74ee52c4c"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D01.md",
+      "sha256": "8cda9469ca2bd4d36abfaf96b4ba93d38a35fd3ec929e71d1203a88926a938cd"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D02.md",
+      "sha256": "5ad7af93f8b0c5fca665e717c4e648da475e0c844f88224b36ff86fcb9bfb72d"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D03.md",
+      "sha256": "ca10b9a9933e478ec457242e3f9dae82bf99b797643c77d0f2963710edb6b939"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D04.md",
+      "sha256": "d0d8f527d6e4b691252efb1359f62d0c942c197572a521ccc3e96d021e416d2d"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D05.md",
+      "sha256": "73e303c4cf878ec05aab17acb5bb01d7a8a24ad10dd4f804bdccb2f63438705d"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D06.md",
+      "sha256": "2a979b42804a22fc799046b7923157748cf97d4d94874e82462fef4e42140f6b"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D07.md",
+      "sha256": "b55fa1974fe8d70d6beee9616053a1e9eb5d8289af371b3ee037d9caf7a83f0b"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D08.md",
+      "sha256": "7f4424b6f57a31e2c93fcb86a071b123d2304ae95f81305648b619e8de13f96c"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D09.md",
+      "sha256": "f60e1d6ccc19183fa91d144d9b10938e2610acd5f5c744d07f32522bfc2b2142"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D10.md",
+      "sha256": "c0d8dc8a7a2077d6a60bc5edda34ed8cf4439e2de8b965f493023134ea413de1"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D11.md",
+      "sha256": "6ef3f1f66a56f7103ce7277744679666e2d0e3620eed2de243fbaa27b52d4208"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D12.md",
+      "sha256": "5782ff15d4f243d9dc5ffe0ab69ad7593759bdfdda9ce6064b4a05f2e4f436bd"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/dependency-checkpoint-amendment.md",
+      "sha256": "2005e35720aab335030468e92ad94a84c393a95d96fe6cdfc33d32da58091d48"
+    },
+    {
+      "path": "libs/api/src/abi.rs",
+      "sha256": "6ba9984caf39263bbf36199fe8e7a3b506ed18a1f0f6ab826c399dad51e36c51"
+    }
+  ],
+  "census": {
+    "path": ".agents/261011-1200-cell-contract-authority/consumer-census-source.json",
+    "sha256": "bcd5b4270af43a9cff28013330fa5e801f5a7961d0c0d4c660312646803c3dca"
+  },
+  "missing_external_inputs_waived": false,
+  "physical_or_production_qualification": false,
+  "review": "Scope and arena reviews performed; findings addressed in candidate, final dual-hash binding amendment applied. Implementation remains unauthorized.",
+  "evidence_edit_allowlist": [
+    ".agents/261011-1200-cell-contract-authority/validation.md",
+    ".agents/261011-1200-cell-contract-authority/consumer-census-source.json",
+    ".agents/261011-1200-cell-contract-authority/exact-deltas/manifest.json"
+  ],
+  "append_only_decision_output": ".agents/261011-1200-cell-contract-authority/native-development-handoff-decisions.jsonl",
+  "new_output_allowlist": [
+    "build/native-development-n02a/pre-implementation-manifest.json",
+    "build/native-development-n02a/pre-implementation-census.json",
+    "build/native-development-n02a/verification.json",
+    "build/native-development-n02a/review.json"
+  ],
+  "conditional_scheduling_inputs": [
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/plan.md",
+      "sha256": "216c66ae38b3f3215de6f5f8f38058a93b43e0bdbc9564f4f2c7c6be5fe78adb"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-01-contract-gates.md",
+      "sha256": "516b96245d9e222cfb48e1e0574d44ee654c377d4fbde5296068e082d06d1873"
+    },
+    {
+      "path": ".agents/plan-portfolio.md",
+      "sha256": "29c94f8980815667d7cbc9c7b22788582abb21b3ee211681fe661c3fec239f3f"
+    },
+    {
+      "path": ".agents/cell-contract-0024-locks.md",
+      "sha256": "79328ed86a59dca7c0926344f22b2f197ea53de47d9f40bb42dfb1cf88c0b00a"
+    }
+  ],
+  "activation": "Explicit user approval and append-only decision record must bind BOTH Markdown SHA-256 and JSON companion SHA-256; verify both immutable files, then embedded input pins. No current approval.",
+  "whole_system_metadata_bound": false,
+  "native_transition_runtime_evidence": false
+}

@@ -1,0 +1,179 @@
+{
+  "format": "cell-contract-native-development-handoff-v1",
+  "revision": "r3",
+  "status": "draft-not-authorized",
+  "user_decision": "Prepare native development handoff r3; not implementation approval",
+  "candidate": {
+    "path": ".agents/261011-1200-cell-contract-authority/native-development-handoff-r3.md",
+    "sha256": "5f3145124d04970a4df10c7385a12eaaa0c6b9bfbd6d02cbc8d2b6e6e433dcb5"
+  },
+  "requested_tranche": "N03 execution and lifetime: multithreading, SMP lifetime, aggregate budgets, and D07 fault retirement",
+  "authorized_tranches": [],
+  "successor_tranches_separately_gated": [
+    "N04",
+    "N05",
+    "N06",
+    "N07"
+  ],
+  "public_or_persistent_byte_changes": false,
+  "cp1": "pending",
+  "cp2": "pending",
+  "release": "blocked",
+  "lock_relations": 38,
+  "source_edit_allowlist": [
+    "kernel/src/task/scheduler.rs",
+    "kernel/src/task/tcb.rs",
+    "kernel/src/task/hart_local.rs",
+    "kernel/src/task/smp.rs",
+    "kernel/src/task/futex.rs",
+    "kernel/src/task/cpu_accounting.rs",
+    "kernel/src/task/retirement_selftest.rs",
+    "tests/unit_cspace_smoke.rs",
+    "CHANGELOG.md",
+    ".agents/261011-1200-cell-contract-authority/validation.md"
+  ],
+  "read_only_source_consumers": [
+    "kernel/src/cell/cspace.rs",
+    "kernel/src/cell/cap_registry.rs",
+    "kernel/src/task/launch.rs",
+    "kernel/src/task/cap.rs",
+    "kernel/src/task/syscall.rs",
+    "kernel/src/memory/cell_quota.rs",
+    "hal/arch/x86/src/x86_64/context.rs",
+    "libs/api/src/abi/syscall.rs",
+    "libs/api/src/abi/cell_owner.rs",
+    "kernel/src/loader.rs",
+    "kernel/src/policy.rs"
+  ],
+  "source_inputs": [
+    {
+      "path": "kernel/src/task/scheduler.rs",
+      "sha256": "034f6fbaf9edf7cff12807c2cc74340a07557b7b42140f01a41be2c2b3acdab9"
+    },
+    {
+      "path": "kernel/src/task/tcb.rs",
+      "sha256": "046677f8da00afa1f6db275cfdb28a70935dc7dcb981e7b701f0ab1a793e3181"
+    },
+    {
+      "path": "kernel/src/task/hart_local.rs",
+      "sha256": "594dbdb022318189985ac1c2775fcb83bf3fbf2a8ef5c5b72b7bdbf2ef5f856b"
+    },
+    {
+      "path": "kernel/src/task/smp.rs",
+      "sha256": "478943ae5f8a592ce1f76219770ecb73db8a7b339111ee3da0157aa05b33eec1"
+    },
+    {
+      "path": "kernel/src/task/futex.rs",
+      "sha256": "c4b53d55fed1f6d9472717c7d58bddc218cfe961d4ff2ec2664cfe285a379a19"
+    },
+    {
+      "path": "kernel/src/task/cpu_accounting.rs",
+      "sha256": "3426effd3bdaffd037d8dde28ba516f23cddd261ed329a7ec4ca9570ecb8b21e"
+    },
+    {
+      "path": "kernel/src/task/retirement_selftest.rs",
+      "sha256": "519cc68ebd7da89d96cd6e795d8d1e45831ef9cc9de8f718d5e55540f5832a5f"
+    },
+    {
+      "path": "tests/unit_cspace_smoke.rs",
+      "sha256": "80b2d73622f4834124cbbc8bbdcd97d7b58112074d0b39ce58d0e2293c5ef760"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "cb532d296f3c812c1d83b19aa3820c697b026de5f4c1a8b6dc813512bd440b19"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/validation.md",
+      "sha256": "65db541efa7c386a627f420e2a842faae618605e8709878a63d020e0666573fa"
+    },
+    {
+      "path": "kernel/src/cell/cspace.rs",
+      "sha256": "82dbad9359a4d2d8356965bb0a368857b327c8bbcefe7b00bf815b989a1b73c1"
+    },
+    {
+      "path": "kernel/src/cell/cap_registry.rs",
+      "sha256": "dd4b03978745bc1da7d254474204d070a7f0542dacbdd60ca61d2cd1209964ae"
+    },
+    {
+      "path": "kernel/src/task/launch.rs",
+      "sha256": "29eb4b51b1497bc3c8d1a8d85b63b274e617b27839da7e05e76b48f07022e943"
+    },
+    {
+      "path": "kernel/src/task/cap.rs",
+      "sha256": "768003d621513c20dcbfb631dbd025ad00f23e06bad6709f62dbbedf9470ef6e"
+    },
+    {
+      "path": "kernel/src/task/syscall.rs",
+      "sha256": "e5813ef539724af4d52b53e49f18664aeee6e1ebf637e7f45315bb7f0cead2e9"
+    },
+    {
+      "path": "kernel/src/memory/cell_quota.rs",
+      "sha256": "feab58aca5d6fbdcf2dd5c82aa70295773746473f594783f4e220568926cffdd"
+    },
+    {
+      "path": "hal/arch/x86/src/x86_64/context.rs",
+      "sha256": "de32b45d66f0fd97cef6c2e9aa8c52b69a1383e74a396f43e16f9fe5f24aaf80"
+    },
+    {
+      "path": "libs/api/src/abi/syscall.rs",
+      "sha256": "7cb9c3ff34f9b354821014caba499b133c1a3118683154858fe0ae7593fea856"
+    },
+    {
+      "path": "libs/api/src/abi/cell_owner.rs",
+      "sha256": "d6d14a5c115858262cb6b2961c96c6afe0a2a037e8ec1f53044ee272f3779e22"
+    },
+    {
+      "path": "kernel/src/loader.rs",
+      "sha256": "97e6af3ebe67a2aec3bc7b0d46c37a3b2507f52af230635ebdd33eef536bb8f7"
+    },
+    {
+      "path": "kernel/src/policy.rs",
+      "sha256": "87e330041c4bbf9b5c570aed725b9af73c3dfdf63947f11457b718f8583d4fb4"
+    }
+  ],
+  "contract_inputs": [
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/plan.md",
+      "sha256": "216c66ae38b3f3215de6f5f8f38058a93b43e0bdbc9564f4f2c7c6be5fe78adb"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-01-contract-gates.md",
+      "sha256": "516b96245d9e222cfb48e1e0574d44ee654c377d4fbde5296068e082d06d1873"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-02-kernel-authority.md",
+      "sha256": "c07343b747c74ca03e5c32e9453fbe1c37ba34642627677a0cdc2e50be77fc4d"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-03-thread-smp.md",
+      "sha256": "b57621d3552ca21ae41c2d451307e23f8eaae4e16bcc118e7b6a29c88fba553a"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/D07.md",
+      "sha256": "b55fa1974fe8d70d6beee9616053a1e9eb5d8289af371b3ee037d9caf7a83f0b"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/dependency-checkpoint-amendment.md",
+      "sha256": "2005e35720aab335030468e92ad94a84c393a95d96fe6cdfc33d32da58091d48"
+    },
+    {
+      "path": ".agents/cell-contract-0024-locks.md",
+      "sha256": "79328ed86a59dca7c0926344f22b2f197ea53de47d9f40bb42dfb1cf88c0b00a"
+    },
+    {
+      "path": ".agents/plan-portfolio.md",
+      "sha256": "29c94f8980815667d7cbc9c7b22788582abb21b3ee211681fe661c3fec239f3f"
+    },
+    {
+      "path": "libs/api/src/abi.rs",
+      "sha256": "6ba9984caf39263bbf36199fe8e7a3b506ed18a1f0f6ab826c399dad51e36c51"
+    }
+  ],
+  "census": {
+    "path": ".agents/261011-1200-cell-contract-authority/consumer-census-source.json",
+    "sha256": "9efa8c0ee64e88582a2355401ce0313c8da2178056f82c5537b3daa122a56f08"
+  },
+  "activation": "Explicit user approval and append-only decision record must bind BOTH Markdown SHA-256 and JSON companion SHA-256. No current approval.",
+  "whole_system_metadata_bound": false,
+  "native_transition_runtime_evidence": false
+}

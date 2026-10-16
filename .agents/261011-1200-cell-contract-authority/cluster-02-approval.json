@@ -1,0 +1,49 @@
+{
+  "format": "cell-contract-cluster-02-approval-v1",
+  "authority_basis": "Explicit user instruction in this conversation",
+  "user_statement": "ph\u00ea duy\u1ec7t c\u1ee5m 2",
+  "recorded": "2026-10-15",
+  "scope": "Formal candidate approval of Cluster 2 (D01, D02, D03) under Law-1 dual-checkpoint governance",
+  "approval_document": ".agents/261011-1200-cell-contract-authority/cluster-02-approval.md",
+  "approval_sha256": "90267e9dc8638d791fdecabb468660f82c2f9b2158b69068c050cd4b0dedb79d",
+  "scoped_user_consent": "Recorded; original user statement and candidate identities retained",
+  "historical_assistant_checkpoint1_claim": "APPROVED; corrected because complete-package inputs remain absent",
+  "approved_packages": [
+    {
+      "delta": "D01",
+      "title": "Local object handles",
+      "owner": "P02",
+      "candidate_revision": "r2",
+      "candidate_digest": "8cda9469ca2bd4d36abfaf96b4ba93d38a35fd3ec929e71d1203a88926a938cd",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (awaiting P02 implementation and SMP evidence)"
+    },
+    {
+      "delta": "D02",
+      "title": "Principal, Kernel identity and bound endpoint attribution",
+      "owner": "P02/P03/P06/P08",
+      "candidate_revision": "r1",
+      "candidate_digest": "5ad7af93f8b0c5fca665e717c4e648da475e0c844f88224b36ff86fcb9bfb72d",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (awaiting P02 implementation and SMP evidence)"
+    },
+    {
+      "delta": "D03",
+      "title": "Shared Cell CSpace, spawn intersection and ancestry revocation",
+      "owner": "P02/P03/P05",
+      "candidate_revision": "r2",
+      "candidate_digest": "ca10b9a9933e478ec457242e3f9dae82bf99b797643c77d0f2963710edb6b939",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (awaiting P02 implementation and SMP evidence)"
+    }
+  ],
+  "governance_disposition": {
+    "checkpoint1_status": "APPROVED (candidate design and layouts accepted for implementation)",
+    "checkpoint2_status": "PENDING (implementation assigned to Phase 02)",
+    "scoped_locks_status": "38 scoped execution locks remain effective"
+  },
+  "exclusions": [
+    "Remaining 17 packages (D04-D12, C01-C02, C06-C11) remain pending independent inputs",
+    "No public runtime ABI activated without P02 implementation completion"
+  ]
+}

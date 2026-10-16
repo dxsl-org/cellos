@@ -1,4 +1,4 @@
-# Exact-delta package set — preparation r2
+# Exact-delta package set — preparation with scoped semantic successors
 
 Recorded 2026-10-13. Scope: D01–D12 and C01–C11 under [P01](../phase-01-contract-gates.md), [Spec 25 v1.3](../../../docs/specs/25-cell-kernel-authority-contract.md) and [Spec 26 v1.1](../../../docs/specs/26-workload-placement-scaling-contract.md). These are review preparation packages, not implemented interfaces or approved exact CP1 candidates. All ten phases remain pending, all 38 scoped locks remain effective, both checkpoints remain pending, and release remains blocked.
 
@@ -6,7 +6,7 @@ Recorded 2026-10-13. Scope: D01–D12 and C01–C11 under [P01](../phase-01-cont
 
 Observed Git HEAD: `57a2bbdb0606461ce442ef1c67d02208053a9d3f`; committed tree: `54f7dcc6e2fd96bc1b42fa0ccd83db5bc5f98591`. This does not assert a clean working tree. [The manifest](manifest.json) separately pins actual working-source bytes and each preparation document's SHA-256. It covers the selected source denominator, not ignored archives, external SDKs, expanded macros or a resolved semantic call graph. A digest authenticates preparation bytes only; it is not consent or runtime proof.
 
-Each package's preparation revision (`r1` or reviewed `r2`) is separate from the **candidate revision/digest** in [the approval ledger](../abi-deltas.md#per-delta-approval-records). Those exact-candidate fields remain `pending` because measured finite parameters, trust/persistence inputs or complete migration/governance are not closed. Eight packages—D01/D03/D04/D05/D06/D07/D08/C05—supersede their initial r1 preparation after review; the manifest pins their current r2 bytes and the other15r1 packages. A carrier section naming r1 retains the original design-series anchor for cross-package links; current record/revision constraints supersede its earlier draft. Changing package bytes requires a reviewed preparation revision and regenerated manifest, never inferred CP1/CP2 consent.
+Each package's preparation revision is separate from the **complete candidate revision/digest** in [the approval ledger](../abi-deltas.md#per-delta-approval-records). Those exact-candidate fields remain `pending` because measured finite parameters, trust/persistence inputs or complete migration are not closed. D01/D03/D04/D05/D06/D07/D08 retain reviewed r2 preparations; C03 is now r2 and C05 r3 under the [scoped user contract approval](../durable-charge-user-approval.json). That record pins approved presented contracts and retains full predecessor C03 r1/C05 r2 bytes. The manifest pins current package bytes; no checkpoint or release field is promoted. Other packages remain r1. Earlier carrier-series anchors retain their historical meaning; current explicitly revised constraints supersede earlier draft wording. Changing package bytes requires a governed preparation revision and updated manifest, never inferred CP1/CP2 consent.
 
 ## Package routing
 

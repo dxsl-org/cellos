@@ -262,8 +262,8 @@
       "owner": "P08-C/P06",
       "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/C03.md",
       "release": "blocked",
-      "revision": "r1",
-      "sha256": "3a67b36bd18546a9cd2333692a5f5f6eb2e2ff59a1429927c84d78d36c1105a5"
+      "revision": "r2",
+      "sha256": "ff938e515847de684d975d4edf7bd9ac86a884f2ca516bf7b517a1ab76844cb4"
     },
     {
       "blockers": [
@@ -300,8 +300,8 @@
       "owner": "P03/P08-C/P06",
       "path": ".agents/261011-1200-cell-contract-authority/exact-deltas/C05.md",
       "release": "blocked",
-      "revision": "r2",
-      "sha256": "da6c0a102b499e9ec403cf025b6f43654c8e5971b67f28faaa592b99fe703623"
+      "revision": "r3",
+      "sha256": "819150994c582069e1d640ba836028c4f449dc0665317aabf891be3c085b0e00"
     },
     {
       "blockers": [
@@ -413,12 +413,12 @@
     }
   ],
   "scope": "preparation-only; not CP1 candidate approval",
-  "source_census_sha256": "b9872accea6551d2f8269812aa59ac203d12321746e66638850f13edba6065f8",
+  "source_census_sha256": "fdb34a08ab25287f47a6d3be6aa34d2931592aeb9de1e6c724edeb806edf9bbc",
   "source_head": "57a2bbdb0606461ce442ef1c67d02208053a9d3f",
   "source_inputs": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "9b8950e49a09936c3b5e006f72045f752515aa2a45f8cb7e6e9810ef08ae4e00"
+      "sha256": "2110f8d9bb4db0e54f9934411e94b106e2f81f5ee47701027f635f0db06642ef"
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -4665,12 +4665,10 @@
       "sha256": "ab652531b2c4984a12629252408dba8237f0a0432af759817285c4661f6422d5"
     },
     {
-      "decoding": "lossless Latin-1 byte view; actual source encoding not asserted",
       "path": "cells/services/ocel-pdf/vendor/mupdf/thirdparty/freetype/builds/amiga/include/config/ftconfig.h",
       "sha256": "da3acdd4eddf8f772f6be41a3fecbe91359b0b9885009b3e1e92468db22b18b1"
     },
     {
-      "decoding": "lossless Latin-1 byte view; actual source encoding not asserted",
       "path": "cells/services/ocel-pdf/vendor/mupdf/thirdparty/freetype/builds/amiga/include/config/ftmodule.h",
       "sha256": "85d19c247edb27547f28d442c19f0122bf9720650018f65be8c5ab93b543e528"
     },
@@ -4679,7 +4677,6 @@
       "sha256": "7471154c66b93310b1e479b63f6389d252ac8f7e7aebc9525a52c9d99f321176"
     },
     {
-      "decoding": "lossless Latin-1 byte view; actual source encoding not asserted",
       "path": "cells/services/ocel-pdf/vendor/mupdf/thirdparty/freetype/builds/amiga/src/base/ftsystem.c",
       "sha256": "ae52f10dd97d5f2994f50cf61119b321791de4a09a14ee529fa751e24c6912ec"
     },
@@ -8161,11 +8158,11 @@
     },
     {
       "path": "cells/services/vfs/src/dirs.rs",
-      "sha256": "bd13309e874b79b9e344d49b054f7e1f1cd814898d51b267bb7709fad13cd5fd"
+      "sha256": "8735fae8f1d6cc890ed0f2d3d53f040ba6ee230ef57e315f037c1d37bf7f307e"
     },
     {
       "path": "cells/services/vfs/src/dirs/bind.rs",
-      "sha256": "b63f70e6e022e8cfa0994f02cb03bf83c9727e66ba11547c0a9c196777392e08"
+      "sha256": "c5d57900562894bdf99c600a2609902e55ec72d61df15f5158b2e51991bcdd7f"
     },
     {
       "path": "cells/services/vfs/src/dirs/lifecycle.rs",
@@ -10605,11 +10602,15 @@
     },
     {
       "path": "kernel/src/cell.rs",
-      "sha256": "e521f0314e9deff23120c0dc4ca57fefba9600358de4e0a36ae604cb6aee155b"
+      "sha256": "3ed837633e070d4f939da70542cc47772c9ab391c972d4c4d552e79658a87eaa"
     },
     {
       "path": "kernel/src/cell/cap_registry.rs",
-      "sha256": "ee820a769690dfa3d186708a41f0a20bb6bee146f4eaf059f27c8912555c6e9f"
+      "sha256": "dd4b03978745bc1da7d254474204d070a7f0542dacbdd60ca61d2cd1209964ae"
+    },
+    {
+      "path": "kernel/src/cell/cspace.rs",
+      "sha256": "82dbad9359a4d2d8356965bb0a368857b327c8bbcefe7b00bf815b989a1b73c1"
     },
     {
       "path": "kernel/src/cell/hotswap.rs",
@@ -10629,7 +10630,7 @@
     },
     {
       "path": "kernel/src/cell/state_stash.rs",
-      "sha256": "33ac388ee7a7f051b9c02721e2ca6d9bbeb6e05255d6ffd580780ac5c92ccf9c"
+      "sha256": "f661e083156f62a76d0dbebc9ebcd7f903a1a83822234fb411d80686969df43e"
     },
     {
       "path": "kernel/src/cpu_features.rs",
@@ -10981,19 +10982,19 @@
     },
     {
       "path": "kernel/src/task/async_ipc.rs",
-      "sha256": "9d0686043effb5833072a0f5ca1a42bc1420fe2c7d8032be3c8d0d13810eb9dc"
+      "sha256": "55a63ee5535a0ab7e170c117adaa14663d0d278661ec7ef86c25165f541f038a"
     },
     {
       "path": "kernel/src/task/cap.rs",
-      "sha256": "48cbd8944e7128ca9f121c44c94dc1fd3e69bc330dfdda454a88f1e7545f2c49"
+      "sha256": "768003d621513c20dcbfb631dbd025ad00f23e06bad6709f62dbbedf9470ef6e"
     },
     {
       "path": "kernel/src/task/cap_file_selftest.rs",
-      "sha256": "89e3bd900742e417a095e83d272c1217068b534b34de0a32a662b8cd692906f5"
+      "sha256": "3c335c629060755b6c99f1c897ac1fc2ad5dd3fba83ec763e9b9c94732b47e34"
     },
     {
       "path": "kernel/src/task/completion.rs",
-      "sha256": "5dd1e9eab45b8181c935121d9f8acd481c39b6db9458ce594421d724c1a463b2"
+      "sha256": "79b07aef24170a82c40555f7ff7ac750ab08812b809c8ee80f3518c8d87d6af1"
     },
     {
       "path": "kernel/src/task/completion_selftest.rs",
@@ -11245,7 +11246,7 @@
     },
     {
       "path": "kernel/src/task/launch.rs",
-      "sha256": "31433f3802819b3dd64d00dbdaeb7e261c19880afaf35fe0ba11d093762e876a"
+      "sha256": "29eb4b51b1497bc3c8d1a8d85b63b274e617b27839da7e05e76b48f07022e943"
     },
     {
       "path": "kernel/src/task/manifest_v2_selftest.rs",
@@ -11289,7 +11290,7 @@
     },
     {
       "path": "kernel/src/task/scheduler.rs",
-      "sha256": "3069522242f6f431fda16f473c682707e02f8b9dca0b2643f98f12152ca3ef9b"
+      "sha256": "a709e5124addff7ce7f689fac2ded9506da50dd0c4d0fbe98230801d79330aeb"
     },
     {
       "path": "kernel/src/task/smp.rs",
@@ -11305,7 +11306,7 @@
     },
     {
       "path": "kernel/src/task/syscall.rs",
-      "sha256": "c201a33ec08efdb7fb77a0f5dcda1f6bd73489f4368f5c4c43dd1ed68fc9c372"
+      "sha256": "e5813ef539724af4d52b53e49f18664aeee6e1ebf637e7f45315bb7f0cead2e9"
     },
     {
       "path": "kernel/src/task/task_id_selftest.rs",
@@ -12154,6 +12155,70 @@
     {
       "path": "libs/dom-arena/src/lib.rs",
       "sha256": "c6bf14ff8bfa78b3ea39e58cd51c7c7165e5a3b70a3b6420d0823b9855a62d2f"
+    },
+    {
+      "path": "libs/durable-charge-codec/Cargo.toml",
+      "sha256": "6ced4c666d0c3b6483ea6c76e46fa8df27775f054d5e0e62604dc70f626dcf24"
+    },
+    {
+      "path": "libs/durable-charge-codec/examples/smoke.rs",
+      "sha256": "12f130aa0f933d3cac78ac07eef2286cdbbaecb315e6d98705ba2f4e7641d96e"
+    },
+    {
+      "path": "libs/durable-charge-codec/examples/support/proof_fixture.rs",
+      "sha256": "a308c66b02e25c1ad5cdb73c12d36414b348b7faa77e5b00a31e40111751276c"
+    },
+    {
+      "path": "libs/durable-charge-codec/src/lib.rs",
+      "sha256": "d3012c49e073f4df69f972c27399aab4079826429fa099d430c37f7064d4cc46"
+    },
+    {
+      "path": "libs/durable-charge-codec/src/proof.rs",
+      "sha256": "2cc97c84c20b39b2f86388d8af1f8758e4bdcebb40100a01ca1f74a0116f2589"
+    },
+    {
+      "path": "libs/durable-charge-codec/src/record.rs",
+      "sha256": "3ff73cff6a369c3bcf6dbb40fd142e7b263de8d90a5e8688432d14dcd3d1c952"
+    },
+    {
+      "path": "libs/durable-charge-codec/src/references.rs",
+      "sha256": "0ab9e3c0554f35b3f98a17a8525c1d661910804668c626152a5a719a49c52fa8"
+    },
+    {
+      "path": "libs/durable-charge-codec/tests/codec.rs",
+      "sha256": "a45de3bcca7b1e84c714e1f67a332e917617026b740015027458b0a91f702e2e"
+    },
+    {
+      "path": "libs/durable-charge-codec/tests/proof.rs",
+      "sha256": "de2ea28f0dcbfd4b02224d2b1bd57a3cbce0d6ce544023ac75f30739a63befd1"
+    },
+    {
+      "path": "libs/durable-charge-journal/Cargo.toml",
+      "sha256": "18d867d5b896edf2e35a3c08e4abf747e73d9ec1781106d8c332b1c3f0ed52f2"
+    },
+    {
+      "path": "libs/durable-charge-journal/src/gates.rs",
+      "sha256": "ff6169e0c2f17ae391bc9d677d6170fc3e492b79ccb95e515854f8b92c47e114"
+    },
+    {
+      "path": "libs/durable-charge-journal/src/journal.rs",
+      "sha256": "167de0172766205e976c3d6e07b92e02bedd29f3e38cac32aa86ef9565540101"
+    },
+    {
+      "path": "libs/durable-charge-journal/src/lib.rs",
+      "sha256": "9aaa37098cab6449191779797b92b5cfae2ef14e4a5e91cbf3f0a6697bfaad54"
+    },
+    {
+      "path": "libs/durable-charge-journal/src/superblock.rs",
+      "sha256": "8ac566d0f615b57b75d36cf41f88d9402009226dc5519db66c8b9eb846ece33d"
+    },
+    {
+      "path": "libs/durable-charge-journal/tests/gates_lifecycle.rs",
+      "sha256": "18a01e490a9cd45d0130dcd6fff36d3c4e2c8cac034ef94187e978bf6bf5d849"
+    },
+    {
+      "path": "libs/durable-charge-journal/tests/journal_crash.rs",
+      "sha256": "a9f545f70ce31176bf6a6ad945158b3e8e66dc038e7377dc7cf14c322b19622e"
     },
     {
       "path": "libs/gguf-rs/Cargo.toml",
@@ -13340,6 +13405,30 @@
       "sha256": "e817a9a145e5d1bb4e9de8cbc17181e5f44cdfcfe69c2f576caa2002bb50ce30"
     },
     {
+      "path": "scripts/durable_charge_lab/README.md",
+      "sha256": "c075abaccb081ca8eb47ccfb0b8bd0e9855d68e2b097d9d25eb77aa4e5fcb46d"
+    },
+    {
+      "path": "scripts/durable_charge_lab/auth.py",
+      "sha256": "66b6f0b8239bc39cc1c1b21ed3342176ee98954533c6c5d863af2a20e19a5860"
+    },
+    {
+      "path": "scripts/durable_charge_lab/runtime.py",
+      "sha256": "219792663b5a5d28cfbff592e3d2c767d0d24454dceec4d30dac001326066477"
+    },
+    {
+      "path": "scripts/durable_charge_lab/scenarios.py",
+      "sha256": "07d9530fbab386570843cf06c83af0ec809fbfe5a8fa5dde2330b292db98cac8"
+    },
+    {
+      "path": "scripts/durable_charge_lab/test_auth.py",
+      "sha256": "c06b64b8fb20e8060bbf5b89a029a4f591feba59d6fc57abd53c74212dc79d30"
+    },
+    {
+      "path": "scripts/durable_charge_lab/vmware_lab.py",
+      "sha256": "ea8157bad4f66f1e6e9c48366548ae6f3af3cbffff7265dc210a9551adf2f794"
+    },
+    {
       "path": "scripts/evidence_sequence_store.py",
       "sha256": "656e5bc89a19e211a230836749310163c7a821a88c4eae3ca55ec1a7b325b7e9"
     },
@@ -13764,6 +13853,10 @@
       "sha256": "f6ac253c6f4a62bd4e2ed240e32ecc1dceee96100dd4a6e4682aaea7b1d3b7b7"
     },
     {
+      "path": "scripts/verify-ogj1-codec.py",
+      "sha256": "94fc97ec47d8ad96dea1452a5020fa630dcb4f797fddd705b82c4fcfc5c5367c"
+    },
+    {
       "path": "scripts/vf2-build.ps1",
       "sha256": "6d1faaa1685a13e7243d75cf5ed44aa0d866a0f2b1f3df333983b16c105ef04a"
     },
@@ -13850,6 +13943,14 @@
     {
       "path": "scripts/x86/run-c2c-render-smoke.py",
       "sha256": "41ac6ab45f5ecf46483586ecf450956c508d872df4e8313325a5d9d6ffa9ca6b"
+    },
+    {
+      "path": "scripts/x86/test-native-vmware-matrix.py",
+      "sha256": "f183f33f40daab20dd6a0407a42c6f2bf92aab70fa43821525a069b3ba3eb72a"
+    },
+    {
+      "path": "scripts/x86/test_native_vmware_matrix.py",
+      "sha256": "f2f3e6a4c2185cd9a94cbcf1f59bb4a612f9e6abe048e8a0b96da965ceddf2fa"
     },
     {
       "path": "scripts/x86/test_p01_elf_bounds.py",
@@ -14370,6 +14471,10 @@
     {
       "path": "tests/rust-std-promotion/test_validator_rejections.py",
       "sha256": "dc3f156c6c87a6368cc39812a58c4064a1f7612fd9f4c19895337bf96c25c673"
+    },
+    {
+      "path": "tests/unit_cspace_smoke.rs",
+      "sha256": "1fa45c0e55d1dfe85e41c1cbc5fe5cb167619dc9c22ebe67653eb377a07a60e6"
     },
     {
       "path": "third_party/mlibc/sysdeps/vicell/crt-aarch64/crt1.S",
@@ -15333,6 +15438,57 @@
     }
   ],
   "source_tree": "54f7dcc6e2fd96bc1b42fa0ccd83db5bc5f98591",
+  "n02b_preparation_continuation": {
+    "scope": "n02b preparation and legacy cap allocator repair only; no public ABI change or approval promotion",
+    "changed_source_paths": [
+      "CHANGELOG.md",
+      "kernel/src/cell/cap_registry.rs",
+      "kernel/src/task/cap_file_selftest.rs",
+      "kernel/src/task/syscall.rs"
+    ],
+    "user_consent_unchanged": true
+  },
+  "n02a_implementation_continuation": {
+    "scope": "approved N02-A per-authority internal invariants only; no public/persistent wire or CP1/CP2/release promotion",
+    "decision": ".agents/261011-1200-cell-contract-authority/native-development-handoff-decisions.jsonl",
+    "approved_markdown_sha256": "f938bab6b1767e01e965b71ced29ae48377e5ea5881e0ce0ae5d70c6d2efbfb6",
+    "approved_json_sha256": "41e30eb17226456bfbea018acdf0e3b340642394058e0e1ffcf79d2ec36761f8",
+    "previous_manifest": "build/native-development-n02a/pre-implementation-manifest.json",
+    "previous_manifest_sha256": "af5f357482b1c68b6424957742fd76d24adced39f924f058976dca72cfa6b57c",
+    "previous_census": "build/native-development-n02a/pre-implementation-census.json",
+    "previous_census_sha256": "bcd5b4270af43a9cff28013330fa5e801f5a7961d0c0d4c660312646803c3dca",
+    "changed_source_paths": [
+      "CHANGELOG.md",
+      "kernel/src/cell/cspace.rs",
+      "tests/unit_cspace_smoke.rs"
+    ],
+    "approved_packet_immutable": true
+  },
+  "vfs_directory_exhaustion_continuation": {
+    "scope": "baseline VFS correctness repair only; no D05 semantic/wire, CP1/CP2, profile or lock promotion",
+    "previous_manifest": "build/p01-continuation/pre-fix-manifest.json",
+    "previous_manifest_sha256": "fc67f4d03c4b62e9e2ddd1b76e0fb4c7b5418a47ec18987459c0fe07ccd54632",
+    "previous_census": "build/p01-continuation/pre-fix-census.json",
+    "previous_census_sha256": "bf387da14b81636b301d5048f9f95d55b63b82a6fc7f40e9edd5cc3b07727172",
+    "changed_source_paths": [
+      "CHANGELOG.md",
+      "cells/services/vfs/src/dirs.rs",
+      "cells/services/vfs/src/dirs/bind.rs"
+    ],
+    "user_consent_unchanged": true,
+    "complete_package_gate": "pending"
+  },
+  "review_evidence_correction": {
+    "date": "2026-10-16",
+    "scope": "preparation inventory refresh only; not CP1/CP2, runtime acceptance or release",
+    "previous_manifest": "build/review-correction/pre-fix-manifest.json",
+    "previous_manifest_sha256": "d4841997952ba02a4bb23dd663af53eba8d0b09e566994de39ebdc34097e3709",
+    "previous_census": "build/review-correction/pre-fix-census.json",
+    "previous_census_sha256": "76e9795d7c29475815db000270fb57b7aa608228ba8aded63025e091cbf268f6",
+    "reason": "Correct unsupported acceptance; retained CSpace lineage and opaque u64 tickets; fail-closed native storage runner; remove detached model tests",
+    "approval_change": false,
+    "semantic_reference_closure": false
+  },
   "preparation_document_reconciliation": {
     "date": "2026-10-14",
     "reason": "Record independently changed Haily roadmap/changelog bytes observed during P01 evidence reconciliation; preserve content without assigning implementation or approval consent",
@@ -15408,5 +15564,11 @@
     "previous_manifest": "build/g2-j-cow/pre-implementation-manifest.json",
     "source_delta": "build/g2-j-cow/implementation-summary.json",
     "original_grant_unchanged": true
+  },
+  "n02b_implementation_continuation": {
+    "scope": "approved N02-B shared authority and caller cutover execution; no public wire change or approval promotion",
+    "approved_markdown_sha256": "f1fce8e27b11d4bad5b36523609423f621879b9cbe6da85efd1b646556c7eb90",
+    "approved_json_sha256": "d881ec9f9c1dc92591b8cd2a95d3b8213b0bdc8ad9bcd1acd31a7591389261d6",
+    "user_consent_unchanged": true
   }
 }

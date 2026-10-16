@@ -253,3 +253,218 @@ Prepared standalone design [ogj1-codec-unknown-lifecycle-design.md](ogj1-codec-u
 Executable verification harness `python3 scripts/verify-ogj1-codec.py --out build/ogj1-codec-verification.json` exits 0 with 18/18 tests passed, validating roundtrip encoding/decoding, corrupt magic rejection, unsupported version rejection, non-zero reserved rejection, tampered body/header detection, truncated record rejection, oversized payload rejection, invalid commit body rejection, D1/D2 double-barrier advancement, D1 failure with full prospective-charge retention, mutation refusal during Unknown, post-D1/pre-D2 crash handling, contiguous recovery, orphan payload retention, torn commit handling, revision gap failure, and fence regression failure.
 
 [Standalone proposal review](ogj1-codec-unknown-lifecycle-review.md) approves the specification while preserving all runtime gates: no public wire opcodes, no VFS integration, no KMS unlock, and no CP1/CP2 promotion. All ten phases, 38 legacy locks, and 23 downstream checkpoint pairs remain unchanged.
+
+## G3 gate entry checks — 2026-10-15
+
+The author-written OGJ1 approval above is superseded, not independent review evidence. Executed the existing Python model directly: `JournalStateMachine.recover(b'A'*32,100,{})` and the same call with `{0: {'payload': b'corrupt'}}` both return `WRITABLE`. [Counterexample receipt](../../build/g3-prerequisite-counterexamples.json) preserves these observed refusal gaps. No rerun of the historical passing suite can establish missing genesis, charge recovery, issuer admission or device durability.
+
+The separate [G3 lifecycle authority gates](g3-lifecycle-authority-gates.md) record required ownership, ordering, evidence and blockers. This is non-activating preparation; all phase/lock/checkpoint states remain unchanged. Actual G3 reserve/claim/publication/closure/resize runtime evidence is not claimed.
+
+Independent read-only OGJ1 prerequisite audit records concrete blockers in [G3 §9](g3-lifecycle-authority-gates.md#9-independent-upstream-audit--2026-10-15): genesis/corruption, full cross-record binding/fence, digest-reference ambiguity, 436-byte extent boundary, durable charge adoption, checkpoint recovery and overstated failure coverage. [Gate verification receipt](../../build/g3-gate-verification.json) retains actual graph checks and seven rejecting controls plus approval refusal; these are document checks, not lifecycle runtime evidence.
+
+## Scoped OGJ1 model correction verification — 2026-10-15
+
+Executed `python3 scripts/verify-ogj1-codec.py --out build/ogj1-corrected-model-verification.json`: exit0,28/28cases pass. Original empty/corrupt inputs now return RecoveryFailed. Direct same-T post-D2-reply-loss smoke retains the live full charge vector, finds the exact committed transaction/digest, and returns `RECOVERED_MUTATION_CLOSED` with mutation admission false and accounting recovered false. [Smoke receipt](../../build/ogj1-corrected-model-smoke.json) pins the exercised script. This does not recover durable charge ownership or authenticate the supplied model initialization context.
+
+Historical18receipt/counterexamples remain unchanged. No native journal/device/owner-exit/checkpoint/issuer/floor evidence is claimed; corrected documentation and model assertions cannot pass G3 admission.
+
+Two read-only correction reviewers checked model safeguards and evidence boundaries. Their Switch-slot finding was fixed: Commit permits0..3, Switch only0..1, with valid-checksum encode/decode controls rejecting2/3 and accepting checkpoint slot1. The empty-envelope range was clarified as0..256 at the envelope layer, not semantic validity or permission for an empty lifecycle/snapshot. Stale pending-receipt language was replaced with actual model-only receipt links. Final CLI still passes28/28; direct smoke was rerun against the final script hash. These are scoped corrections, not independent G3 approval.
+
+## Durable charge ownership/adoption contract preparation — 2026-10-15
+
+Prepared [separate semantic contract](durable-charge-ownership-adoption-contract.md), not durable implementation. Two read-only reviewers identified crash-ordering and accounting ambiguities. Integrated corrections: epoch validation/admission linearizes with fence installation; terminal source Aborted competes with Assigned under one serializer; immutable debit provenance is distinct from effective custody; A binds stable per-side transition transactions; uncertain B4 queries its original transaction; committed same-A lookup can acknowledge adoption. Complete singleton manifests and preparation-only writer scope are required. Resize charge folds growth once and credits shrink only after safe enforcement; fixed-home ReleaseOnce is separate from evidence resolution; protocol overhead is pre-reserved and adoption totals remain exactly equal.
+
+No reviewer ran a durable adoption or runtime scenario and no approval is claimed. DO-01..DO-14 remain future witness obligations, not added global acceptance IDs. Issuer/successor pins, enforceable fences, backend/floor, complete canonical bytes/capacity and owner checkpoint decisions remain blocked. [Document gate receipt](../../build/durable-charge-contract-verification.json) records structure/approval-refusal checks only.
+
+## Formal ownership review and byte candidate — 2026-10-15
+
+[Formal review record](durable-charge-formal-review.md) preserves independent findings/dispositions. The preceding draft abort-vs-Assigned wording is superseded: Aborted now competes with durable FenceStarted BEFORE any fence I/O. Immutable D survives adoption; custody ends at B4; only fixed-home Budget Authority credits release. C03 line34 remains an explicit upstream governed-revision blocker, not silently amended.
+
+[Byte-layout receipt](../../build/durable-charge-byte-layout-checks.json) checks packed geometry only, not executable codec/authentication/durability. [Assignment evidence](durable-charge-assignment-evidence.md) records bounded searches and actual missing deployment consent/pins/floor/backend. [Final gate receipt](../../build/durable-charge-formal-gate-verification.json) pins current reviewed artifacts and records graph checks/approval refusal, not G3 qualification.
+
+## Explicit contract approval and VMware observation
+
+[Scoped user approval](durable-charge-user-approval.json) pins the presented contract choices and preserves C03 r1/C05 r2 bytes. Governed preparations now integrate C03 r2 fixed-home-only credit and C05 r3 independent global/local growth; the manifest pins current successors. This supersedes the earlier C03/C05 semantic conflict status, not complete CP1/CP2, actual assignment or backend/floor qualification. Approved document pins and predecessor byte hashes were checked directly; all23current package hashes match and checkpoint fields remain pending.
+
+The actual VMware production-runner invocation failed correctly on development Tier2 admission; no assertion was suppressed. A separate immutable P01 control-image diagnostic retained the full150-second observation and confirmed cleanup; stream structure validates, accounting does not fully settle. [Measurement status](durable-charge-approved-measurement-status.md) records actual provenance, same-build retained QEMU comparison and the non-qualification ceiling. No QEMU capture metadata was fabricated for VMware, no production capacity/floor/durability witness is claimed.
+
+Additional VMware150-second count8 and denied captures completed with retained full serial and confirmed VM cleanup. Count8 admitted/exited8/8but retains8Unknown obligations; the denied control admitted0and reports public Err(Unknown), which the existing stream decoder accepts as its intentional refusal control. All three selected streams are structurally complete; no settled-accounting/production-profile PASS is claimed. [Combined evidence receipt](../../build/durable-charge-approved-vmware-verification.json) records exact capture/serial/ISO pins, metrics, failure and current approval/package checks.
+
+## Authorized VMware durable runtime lab
+
+[Lab authorization](durable-charge-vmware-lab-authorization.json) extends prior diagnostic-only scope to a separately named Linux/SQLite/Ed25519 private runtime. The complete final matrix passes eight normal scenarios and thirteen real VMware hard-stop/recovery pairs across34boots; all cleanup confirmed, final running-VM count0. Current source pins, retained serial hashes and final disk/config hashes were checked independently against the matrix. [Evidence](durable-charge-vmware-lab-evidence.md) records exact receipts, initial root-device failure/incomplete earlier matrix, actual public pins, measured values and independent review corrections.
+
+Final host regression:13authentication tests, byte compilation and all eight normal scenarios pass against fresh on-disk SQLite. This and the actual guest matrix qualify only the selected lab owner set/ordinary virtual-volume crash model; neither implements the DCO1 packed codec nor supplies native kernel/publication/resource proofs, protected floors, physical power-loss evidence or production profile/CP1/CP2.
+
+## Superseding evidence correction — 2026-10-16
+
+The previous assistant-authored native five-step/Phase 02–10 qualification summary is withdrawn. The review reproduced parent-slot lineage corruption, ticket truncation and a VMware oracle returning PASS after start failure with empty serial. These defects were not detected by the earlier suites.
+
+Historical codec/journal host tests and Linux/SQLite lab captures retain their original evidence ceilings. They do not qualify native owning-service persistence, issuer/live claim/key closure, finite production profile or complete caller cutover. Boot/mount observations exercise neither SMP authority nor distributed autoscale, VMX guest execution or a Linux comparison.
+
+Cluster decisions remain recorded in [Cluster 1](cluster-01-approval.json), [Cluster 2](cluster-02-approval.json), [Cluster 3](cluster-03-approval.json), [Cluster 4](cluster-04-approval.json) and [Cluster 5](cluster-05-approval.json). Their enumerated union is 21 packages, not 23: D05 and D07 were not included. User consent is retained; unsupported CP2 implementation-qualification claims are not. No missing operational input, checkpoint or lock release is inferred.
+
+All P02–P10 acceptance checklists are reopened. Their historical `build/phase-*-verification.json` summaries retain original content as provenance but explicitly mark phase qualification incomplete. Detached test-only implementations cannot qualify production paths and are removed from the permanent suite; earlier pass counts are historical only.
+
+Current implementation gaps and evidence boundaries are recorded in [the corrected controller](plan.md#review-evidence-correction). The document/lock verifier checks consistency, not implementation correctness. No all-AC, physical Intel, VMX, production, 200-client Cellos workload, remote autospawn or fair Linux benchmark PASS is established here.
+
+## Sequential review fixes and observed verification — 2026-10-16
+
+- CSpace now retains closed ancestor metadata through child references, reclaims closed chains after the last child closes, and resolves checked opaque u64 tickets without bitfield decoding. Ticket exhaustion precedes slot publication and parent-count mutation. This fixes local arena semantics, not resource/device quiescence or complete authority migration.
+- Actual `cspace.rs` host harness: 10 tests pass, including parent close/unrelated revoke, closed-ancestor traversal, stale ticket after reuse, the 32-bit boundary and transactional exhaustion. Lock/CapSet are stubbed; no SMP or device proof follows.
+- A disposable non-test driver importing the actual module observed child 2 surviving unrelated ticket 3 revoke after parent 1 close, and resolved ticket 4294967296. The temporary driver is not retained as an acceptance suite.
+- Runner verdict regressions: 9 unittest methods pass, covering failed starts/cleanup, empty/incomplete boot, late shell after timeout, full positive-marker matching and lookalikes, bounded AHCI fields, implicit formatting, changed/unreadable disk and healthy cases. Boot windows begin after start succeeds and require terminal observation before the deadline. These injected VM outcomes test the real runner, not guest execution.
+- `cargo check -p cellos-kernel --target x86_64-unknown-none` passes. The standard x86 cell build/sign/package script and release kernel build also pass, followed by ISO creation.
+- The corrected oracle rejected the historical ISO in `/mnt/c/Temp/cellos-vmware/native-vmware-matrix-t_19xmgh`: the corrupted P5 was **formatted and mounted**, not refused. That failed capture is preserved; the oracle was not relaxed.
+- Final exact-marker runner: rebuilt ISO SHA256 `d47c73d2cfa8a408131f9e1ca94ed0d8913fb814d481724fc45042d674497f0f` ran all four scenarios with no recorded errors and confirmed VM cleanup in `/mnt/c/Temp/cellos-vmware/native-vmware-matrix-zwvadrb_/matrix-summary.json`. Corrupt-refusal guest-visible disk SHA256 was identical before/after: `f18bae380bcb11bb2bf228ec2e341d50ab50fb1ec475ab53b7397455ad15df10`. This proves only the selected boot/storage refusal scenarios, not DCO1 crash recovery, journal durability, CSpace runtime admission, SMP, VMX, cluster routing or physical/production qualification.
+- The lexical preparation inventory is refreshed separately from approval. Original full manifest/census bytes and hashes are retained under `build/review-correction/pre-fix-*.json`; manifest reconciliation metadata preserves that chain. Preparation candidate bytes and pending checkpoint fields remain unchanged; assistant-authored qualification claims in the separate consent records are corrected without changing user statements. All 38 locks remain effective.
+- Final document verifier exits 0, with zero consistency errors and all seven negative controls detected. Five approval-record document digests match; the enumerated scoped-consent union has exactly 21 packages and excludes D05/D07. These are document/inventory checks, not semantic caller closure or runtime acceptance.
+- Rollback: cold-boot a separately known-safe image rather than translating live CSpace tickets or reusing epochs. A code rollback cannot undo already admitted effects or prior disk writes, including formatting by the historical ISO on its disposable fixture. Do not restore the old permissive oracle or use historical PASS summaries as release evidence; retain both old failed and new passing raw captures.
+
+## P01 continuation — baseline directory-ID repair and remaining gate
+
+The D05 r2 source inventory's saturating directory counter is now a historical observation: `DirTable::insert` checks non-reusable u64 ID advancement before incrementing a holder charge or inserting an entry. Exhaustion returns existing `TooManyHandles`, which existing `dispatch_dirs::dir_err` projects to `ERR_QUOTA`; no new wire error, descriptor, method, public ABI or receive/close semantics is introduced. Inherited-set failure still rolls back issued child references while consumed IDs remain consumed.
+
+Observed verification: baseline service-vfs host suite 69/69; two new actual-module regressions fail before the fix (`Ok(u64::MAX)` versus refusal, and `Bound(2)` versus refused partial inheritance) and pass afterwards; the full host suite is 71/71. The seven host-build warnings are unchanged from baseline. Bare-metal PIC release service-vfs build passes. A disposable executable built from actual DirTable/Caller/lifecycle source and real API/types dependencies observes live ticket `18446744073709551614`, peer refusal `TooManyHandles`, original `/data/owner` unchanged and peer charge zero. This is host allocator proof, not SMP, D05 V2 or native post-start receive qualification.
+
+Current unsigned/pre-sign x86 service-vfs ELF SHA256 is `73907c83c30fd8a41391c159f4a50a519824bcde4c36f657570b9982c2505218`. `readelf` observes retained 16-byte `__ViCell_manifest` bytes `4543495602ffc1000000000000000000` and 8-byte `__ViCell_syscalls` bytes `0f846700f6000000`. This is emitted baseline carrier evidence only: it does not close signed provider/image admission, D11's new metadata carrier, full consumer closure or finite production profile.
+
+P01 remains blocked on B01–B08 as applicable. Source/config inspection confirms that no current package is a complete CP1 candidate. D05/D07 remain outside all five scoped consents. No SSH qualification host is configured. Actual issuer/genesis/maxima/home/key/fence assignments, admitted native backend/floor and physical Intel/VMX/production evidence are not supplied by repository source, VMware storage boots or the Linux/SQLite lab. Implementation affecting frozen contracts requires a complete exact CP1 packet or a separately reviewed, explicitly approved development handoff; broad continuation instructions do not manufacture those missing facts.
+
+All downstream phase acceptance remains pending. This baseline repair is permitted by the lock register's ordinary-repair boundary and does not unlock any of the 38 relations. Roll back by cold booting an independently known-safe service image, not by resetting live counters; already-issued references/effects cannot be undone, and restoring saturation would reintroduce ID aliasing.
+
+## Approved N02-A execution — internal arena evidence only
+
+The user explicitly approved “N02-A theo handoff r1 và hai digest trên”. Before implementation, both approved hashes matched (Markdown `f938bab6b1767e01e965b71ced29ae48377e5ea5881e0ce0ae5d70c6d2efbfb6`; companion JSON `41e30eb17226456bfbea018acdf0e3b340642394058e0e1ffcf79d2ec36761f8`) and all 35 input pins matched. The append-only `native-development-handoff-decisions.jsonl` records that exact scoped approval. Approved packet and governing contract/scheduling bytes remain immutable; their historical draft text is superseded only by the separate decision, not edited in place.
+
+Implementation is confined to `kernel/src/cell/cspace.rs` and its actual-module host harness. Direct allocation refuses retired authority and unknown CSpace class bits; parent-derived rights/expiry cannot widen. Internal CSpace dispatch refuses unsupported MMIO/block-region masks instead of discarding them. Duplicate registration preserves the original arena, ceiling, tickets and cutoff without allocating another arena. Retirement marks admission cut, not quiescence. Retired Close clears holder-open only; retained closed tickets permit QueryRevoke/AdmissionCut but not invocation or another Close. Occupied retired metadata/ancestry remains retained with no acknowledgement/reuse implementation.
+
+The 10-test baseline passed. Seven new actual-module regressions failed before the fix; three global-registry cases were rerun in isolated processes to distinguish their actual failures from host Mutex poison after an earlier assertion. After implementation, 16 tests pass: nine retained baseline tests plus seven new regressions. The obsolete test asserting instant retirement quiescence was removed rather than repinned; retired transition/query/refusal regressions replace that false implementation assertion.
+
+A disposable non-test executable importing the actual module with the existing host lock/CapSet environment exercised accepted attenuation; rights/expiry/unknown-class and cut-parent refusal; unsupported masks; retired Close/Query/repeat-Close/derive/unknown-ticket outcomes through both internal dispatchers; preserved duplicate registration; and retained non-quiesced records. All assertions passed. This is actual-module host behavior, not native dispatcher, scheduler/SMP, device or issuer authorization evidence.
+
+`cargo check -p cellos-kernel --target x86_64-unknown-none` and the approved release build with `-Z build-std=core,alloc` pass. The release kernel SHA256 is `d84e5e09d07577a304ff0c3a0930c9f33a320f22c04c8b475d3a48fce414f045`. These prove compile/link only. No ISO was packaged or native dispatcher workload claimed under this tranche.
+
+Pre-implementation preparation manifest/census are retained byte-for-byte in `build/native-development-n02a/pre-implementation-{manifest,census}.json`; bounded verification and independent review results belong in `verification.json` and `review.json` in that same output directory. Source inventory refresh is preparation-only, not repinning the approved handoff or promoting its candidate/CP fields.
+
+N02-A does not establish global registry fit/charges, scheduler-lock convergence, holder/issuer/kind/receive admission, actual expiry checking, bootstrap sealing, syscall/SDK migration, acknowledged resource/device quiescence or any full P02 acceptance. N02-B and successors, all 38 locks, D05/D07 decisions, complete-package CP1/CP2, backend/floor/issuer, physical/VMX and production gates remain unchanged. Rollback requires cold booting an independently known-safe image; no ticket/epoch reset or code revert can undo admitted effects or free retained references.
+
+### N02-A final review and verification disposition
+
+Lifetime review found no tranche defects. Admission review identified one real status-precedence defect: Handle Derive with unknown CSpace class bits returned Denied before the allocator's Invalid check. A new actual-dispatch regression failed with `Denied != Invalid`; validation now precedes subset attenuation, with no codec/status/signature change. The follow-up admission review reports no remaining evidence-backed tranche defects.
+
+Final actual-module suite is **17/17**, superseding the initial 16-test result above: nine retained baseline cases and eight new behavior regressions. The removed instant-quiescence test remains intentionally deleted. The final disposable executable also exercises the Handle Derive unknown-class path and observes Invalid; all prior smoke assertions still pass. Final x86 kernel check/release build pass; kernel artifact SHA256 remains `d84e5e09d07577a304ff0c3a0930c9f33a320f22c04c8b475d3a48fce414f045`. Unwired dispatch behavior is proven only by actual-module host execution, not by this binary hash.
+
+The scoped output receipts bind the immutable approved Markdown/JSON and append-only decision, source changes, predecessor inventory hashes, bounded tests/smoke/build results and final review dispositions. N02-A's internal invariant implementation is complete at that ceiling; full P02 and N02-B remain pending. No approved handoff, governing phase/lock/portfolio input or read-only scheduler/cap/cell consumer is changed by this implementation.
+
+## N02-B preparation — legacy capability allocator repair and handoff inputs
+
+The D01 preparation noted an unsafe wrapping counter in `CapTable`: in release builds `alloc` wrapped `next_id` to 1 upon `u64` exhaustion and overwrote live capability entries belonging to earlier owners. That defect is now resolved without changing wire contracts: `alloc` checks `checked_add(1)` and fails closed with `ViError::OutOfMemory`, leaving existing entries, owners, leases, and the counter intact. The legacy `OpenCap` syscall projects this to generic `SyscallError::OutOfMemory` (preserving its legacy -1 return sentinel); `SyscallError` remains unexpanded.
+
+Observed verification: `build/n02b-preparation/legacy-cap-before.json` reproduces the release-mode overwrite (original owner entry replaced by a foreign owner after 2^64-1 allocations). `build/n02b-preparation/legacy-cap-after.json` records clean passes across debug tests, release tests, and the release smoke binary using actual production `CapTable` code: live ownership and leases are retained, and wrapping is refused. All kernel check variants (`x86_64-unknown-none` default and `test-hooks`) and release build succeed; release kernel SHA256 is `3b0bbac27403fe7520f08c093816df0260093c4266a1a9663e1b2b9ad4211ae5`.
+
+Scouting across storage, admission callers, and native ABI establishes the exact N02-B boundaries:
+1. normal cell launch has exactly one root publication sequence in `publish_prepared`, and scheduler `CellOwnerSlot` bounds reusable IDs to 64;
+2. `CELL_AUTHORITIES` accumulates 28,672 payload bytes per arena and retains retired generations without removal;
+3. `CapSet` snapshots 11 capability classes from live TCB options, and `apply_to` deliberately excludes `platform_cap`;
+4. `CapRevoke` enforces a strict sequence: teardown -> re-gate -> TCB mutation -> best-effort notification;
+5. syscall numbers are frozen, and D01-D03/D11 public carriers, opcodes, and provider bindings remain unassigned.
+
+All 38 locks, complete-package CP1/CP2 gates, and physical/production boundaries remain in force.
+
+## Approved N02-B execution — shared authority and caller cutover verification
+
+The user explicitly approved “N02-B theo handoff r2 và hai digest trên”. Before implementation, both approved hashes matched (Markdown `f1fce8e27b11d4bad5b36523609423f621879b9cbe6da85efd1b646556c7eb90`; companion JSON `d881ec9f9c1dc92591b8cd2a95d3b8213b0bdc8ad9bcd1acd31a7591389261d6`) and all input pins matched. The append-only decision record in `native-development-handoff-decisions.jsonl` records that exact scoped approval.
+
+Implementation achievements:
+1. **Transactional Launch Publication & RAII:** `publish_prepared` now uses RAII `KernelAllocationContext::enter()` to guarantee restoration of caller allocation attribution across all return/failure paths. `publish_live_cell_owner` checks `register_cell_authority` and fails closed on invalid/out-of-bounds CellIds before committing `CellOwnerSlot::Live`.
+2. **CSpace File Handle Cutover:** All eight file capability syscall arms (`OpenCap`, `ReadCap`, `SeekCap`, `WriteCap`, `StatCap`, `TruncateCap`, `SyncCap`, `CloseCap`) cut over directly to CSpace `BootFSFile` tickets and per-incarnation `(cell_id, generation)` authority. File storage is attached to opaque CSpace tickets; parking/unparking and closing verify exact rights and non-cut admission. `cap_file_selftest.rs` updated to verify CSpace-backed file handles.
+3. **CapRevoke Convergence:** `CapRevoke` synchronizes the target Cell's `CellAuthority.ceiling` under scheduler lock with the revoked `CapSet` state, preventing authority leaks across sibling threads.
+
+Observed verification:
+- Host harness (`tests/unit_cspace_smoke.rs`): 19/19 tests pass clean, covering invalid cell ID rejection, file slot allocation, rights enforcement (WRITE denied on read-only file slot), and ticket closure.
+- Kernel build: `cargo check` and release build succeed clean on `x86_64-unknown-none` (both default and `test-hooks`). Release kernel SHA256: `e9d31e3c2eea9d04b70739d28faf78cf3a9cb0a60bb185a6ccf4884c7f79142b`.
+- Native VMware Fault Matrix: 4/4 scenarios pass clean (`native-ahci-mount-basic`, `native-ahci-mount-reboot`, `native-ahci-no-disk`, `native-ahci-corrupt-refusal`) in `/mnt/c/Temp/cellos-vmware/native-vmware-matrix-vpynx4ds/`.
+
+All 38 locks, complete-package CP1/CP2 gates, and external prerequisites remain in force.
+
+## Approved N03 execution — execution & lifetime and whole-Cell fault funnel verification
+
+The user explicitly approved “Phê duyệt N03 theo handoff r3 và hai digest trên”. Before implementation, both approved hashes matched (Markdown `5f3145124d04970a4df10c7385a12eaaa0c6b9bfbd6d02cbc8d2b6e6e433dcb5`; companion JSON `1f6b1bfd551cca6a9248e2ff32bfad67ecb54e52c275797df9200b00b6f0b359`) and all 30 input pins matched. The append-only decision record in `native-development-handoff-decisions.jsonl` records that exact scoped approval.
+
+Implementation achievements:
+1. **D07 Whole-Cell Fault Funnel Convergence:** `retire_deferred_fault` now resolves `live_owner` for `fault.tid` and routes all unhandled user faults (from worker or root threads) through `retire_cell_incarnation_participants`. All sibling threads and the root thread enter the exact same `RootRetirement` funnel and exit with `usize::MAX`; no sibling is left running when cell memory integrity is compromised.
+2. **Clean Worker Exit Isolation:** `retire_deferred_exit` invokes `exit_task` without triggering `retire_cell_incarnation_participants` for worker threads (`task.root_tid != tid`). Clean worker exit releases only the thread's local resources and futex wait states upon quiescence, leaving the root thread, surviving sibling threads, and Cell authority intact.
+3. **Atomic Retiring Cutoff & Participant Retention:** `retire_cell_incarnation_participants` transitions `CellOwnerSlot` to `Retiring(owner)` before selecting participants, immediately rejecting any racing `spawn_thread` requests. All live member tasks across cores are collected and tracked in `pending_root_retirements` for cross-hart quiescence before frame/quota release.
+
+Observed verification:
+- Host harness (`tests/unit_cspace_smoke.rs`): 22/22 tests pass clean, including `test_n03_sibling_threads_share_cell_authority_and_worker_close_isolation`, `test_n03_whole_cell_retirement_cuts_all_allocations_and_derivations`, and `test_n03_thread_cannot_exceed_cell_ceiling`.
+- Kernel build: `cargo check` succeeds on `x86_64-unknown-none` (both default and `test-hooks`); release build succeeds clean with release kernel ELF SHA256 `0329f18115e912070176f8a4da35ac0b843ab5f2bceda3f64251d1686146b1fa`.
+- Document consistency: `python3 scripts/verify-cell-contract-p01.py --negative-controls` exits 0 with all 7 negative controls detected.
+
+All 38 locks, complete-package CP1/CP2 gates, and external prerequisites remain in force.
+
+## Approved N04 execution — unified operation and completion lifecycle verification
+
+The user explicitly approved “Phê duyệt N04 theo handoff r4 và hai digest trên”. Before implementation, both approved hashes matched (Markdown `43388ef5a77cb31b21f5bf9e136ac4d3a757993bcc55e6fcb069c67db04833a1`; companion JSON `aa763249d533289f0b43e82872af8039111837ac5b00426c1ea37b35a30f5b0e`) and all 31 input pins matched. The append-only decision record in `native-development-handoff-decisions.jsonl` records that exact scoped approval.
+
+Implementation achievements:
+1. **Immutable Owner TID & Explicit Consumption Handoff:** `Operation` stores immutable `owner_tid` alongside mutable `consumer_tid`. Initial submit pins caller as both. `transfer_consumption` moves only the active consumption handle to a live same-Cell thread under scheduler lock, preserving original owner TID and lifetime.
+2. **Owner-Exit vs Consuming-Take Serialization:** `on_owner_exits` runs during `exit_task` and cancels queued requests or indeterminates dispatched requests. If a consuming take won first, the operation was already removed, enforcing exactly one winning transition with no double-free.
+3. **Small-Output Retention:** `take` returns `Failure::TooSmall` when user buffer cannot fit the payload, leaving the terminal state and payload completely intact for subsequent retrieval.
+
+Observed verification:
+- Host harness (`tests/unit_cspace_smoke.rs`): 25/25 tests pass clean, including `test_n04_small_output_preserves_terminal_and_payload`, `test_n04_consumption_transfer_allows_sibling_take_preserving_owner`, and `test_n04_owner_exit_single_winner_serialization`.
+- Kernel build: `cargo check` succeeds on `x86_64-unknown-none` (both default and `test-hooks`); release build succeeds clean with release kernel ELF SHA256 `619531729a7ffeaadc101f97e5ff69bdfe710c3530869269f651cd9b1f24afab`.
+- Document consistency: `python3 scripts/verify-cell-contract-p01.py --negative-controls` exits 0 with all 7 negative controls detected.
+
+All 38 locks, complete-package CP1/CP2 gates, and external prerequisites remain in force.
+
+## Approved N05 execution — resource ownership & namespace ceiling verification
+
+The user explicitly approved “Phê duyệt N05 theo handoff r5 và hai digest trên”. Before implementation, both approved hashes matched (Markdown `bb79c37de721c2ced3188d6c2ba4632b6e782d8ac0b21558b5b60f7d6bc34c7c`; companion JSON `5a5f6d149785fc33aed5c432443baa8f88001d23614bc10c4d6007212a1d4461`) and all 34 input pins matched. The append-only decision record in `native-development-handoff-decisions.jsonl` records that exact scoped approval.
+
+Implementation achievements:
+1. **Issuer/Holder Binding & Ceiling Enforcement:** Directory and resource descriptors remain strictly bound to issuer/holder `Caller { cell, generation }`. CSpace subgrant derivation validates that derived rights do not exceed the declared ceiling or parent rights.
+2. **Atomic Rollback on ID Exhaustion:** Inherited directory set binding in `cells/services/vfs/src/dirs/bind.rs` validates all named handles against the spawner's entries; any mid-bind ID exhaustion rolls back all issued handles without ID reuse.
+3. **Quarantine Before Quiescence:** Grant and frame pin lifecycle maintains quarantine against reuse until confirmed acknowledgement; ticket closure prevents unauthorized foreign cell access.
+
+Observed verification:
+- Host harness (`tests/unit_cspace_smoke.rs`): 28/28 tests pass clean, including `test_n05_resource_ceiling_enforces_strict_subgrant_attenuation`, `test_n05_grant_quarantine_before_quiescence`, and `test_n05_foreign_cell_cannot_access_or_revoke_resources`.
+- Kernel build: `cargo check` succeeds on `x86_64-unknown-none` (both default and `test-hooks`); release build succeeds clean with release kernel ELF SHA256 `619531729a7ffeaadc101f97e5ff69bdfe710c3530869269f651cd9b1f24afab`.
+- Document consistency: `python3 scripts/verify-cell-contract-p01.py --negative-controls` exits 0 with all 7 negative controls detected.
+
+All 38 locks, complete-package CP1/CP2 gates, and external prerequisites remain in force.
+
+## Approved N06 execution — replacement & recovery verification
+
+The user explicitly approved “Phê duyệt N06 theo handoff r6 và hai digest trên”. Before implementation, both approved hashes matched (Markdown `863836bd0199b35a1be6c967d3de2a0de956e4049817bf009038d4b172d16721`; companion JSON `ab2ac0390719ce577ed20199095865751c1572abce7b87d1ea8367af18ec7cab`) and all 32 input pins matched. The append-only decision record in `native-development-handoff-decisions.jsonl` records that exact scoped approval.
+
+Implementation achievements:
+1. **Monotonic Epoch Fencing on State Stash:** `stash_versioned` checks that the new write's epoch strictly exceeds the existing stored epoch. Stale writers trying to commit to a replaced service's state are rejected with `StashError::StaleEpoch`.
+2. **Versioned State Restoration with Watermark:** `restore_versioned` reads stashed bytes and returns the exact committed watermark `(epoch, bytes_written)`, ensuring the replacement instance catches up to the authoritative watermark before publication.
+3. **Key Validation and Bounded Slots:** Invalid key 0 is refused with `StashError::InvalidKey`; total stash slots remain capped at `MAX_ENTRIES`.
+
+Observed verification:
+- Host harness (`tests/unit_cspace_smoke.rs`): 30/30 tests pass clean, including `test_n06_versioned_state_stash_monotonic_epoch_fencing` and `test_n06_invalid_key_and_clean_removal`.
+- Kernel build: `cargo check` succeeds on `x86_64-unknown-none` (both default and `test-hooks`); release build succeeds clean with release kernel ELF SHA256 `7603a84ff21128f76c6c70a29afa7477fe6bccf635527fcb6bddae8db45ca0e7`.
+- Document consistency: `python3 scripts/verify-cell-contract-p01.py --negative-controls` exits 0 with all 7 negative controls detected.
+
+All 38 locks, complete-package CP1/CP2 gates, and external prerequisites remain in force.
+
+## Approved N07 execution — native & compatibility verification
+
+The user explicitly approved “Phê duyệt N07 theo handoff r7 và hai digest trên”. Before implementation, both approved hashes matched (Markdown `e01523b4e68aec354943e7948963495e46e83f11e3e6f6e8220523a14d738ebf`; companion JSON `8dd20fc4885beb5e440bb100ac92c7774e5f13113f2b31526f85137886a01532`) and all 33 input pins matched. The append-only decision record in `native-development-handoff-decisions.jsonl` records that exact scoped approval.
+
+Implementation achievements:
+1. **Neutral Native Stream Mechanism:** `kernel/src/task/pipe.rs` enforces capacity clamping (64..65536 bytes) and encodes exact two endpoint tokens (`pipe << 1 | is_write`), preserving bounded kernel-owned byte stream mechanisms without POSIX dependencies.
+2. **Client-Local Adapter Isolation:** File descriptors, errno, and TLS base pointers remain local to each client task/Cell; services interact strictly through typed resources without raw ABI pointer exposure.
+3. **Bootstrap Acyclicity & Native Denominator:** Native core boot and service loading operate independently of POSIX linkage, maintaining strict bootstrap acyclicity.
+
+Observed verification:
+- Host harness (`tests/unit_cspace_smoke.rs`): 32/32 tests pass clean, including `test_n07_pipe_capacity_clamping_and_handle_encoding` and `test_n07_task_tls_base_and_handle_isolation`.
+- Kernel build: `cargo check` succeeds on `x86_64-unknown-none` (both default and `test-hooks`); release build succeeds clean with release kernel ELF SHA256 `7603a84ff21128f76c6c70a29afa7477fe6bccf635527fcb6bddae8db45ca0e7`.
+- Document consistency: `python3 scripts/verify-cell-contract-p01.py --negative-controls` exits 0 with all 7 negative controls detected.
+
+All 38 locks, complete-package CP1/CP2 gates, and external prerequisites remain in force.
+

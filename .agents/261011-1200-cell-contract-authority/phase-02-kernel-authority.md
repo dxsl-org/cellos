@@ -45,6 +45,8 @@ device/memory revocation path.
 - [ ] Validate artifact provenance on every migrated launch route including caller-supplied ELF bytes; arbitrary bytes cannot borrow a privileged path label.
 - [ ] P01 migration ledger covers every replaced consumer and removal; Law-1 checkpoint 2 freezes only observed exact delta/evidence.
 
+Correction 2026-10-16: prior checkmarks and cited standalone-model/storage-boot receipts did not establish these criteria. Acceptance remains pending; historical observations are not runtime qualification.
+
 ## Security and rollback
 
 Kernel root is nontransferable, not a capability apps can acquire. Opaque handles must be protected by actual execution-tier admission; SAS unsafe code remains TCB. Refuse new profile on failure and cold-boot a known-safe image with old valid enforcement, never mixed live CSpaces. Revoke cannot undo effects already admitted; do not reuse handles/epochs on binary rollback.
@@ -52,3 +54,7 @@ Kernel root is nontransferable, not a capability apps can acquire. Opaque handle
 ## Assumptions and deviation log
 
 Existing registry/cap state is uneven (CellId-only cap ownership versus generation-aware CellOwner). Treat migration atomicity as a proof obligation, not a cast. Exact kernel identity encoding and table sizes come from P01 approved revision. Deviation log: none.
+## Proposed N02-A prerequisite handoff — not active
+
+P02 hands only the internal per-authority arena invariant prerequisite to controlling P01 under [native development handoff r1](native-development-handoff-r1.md), conditional on later explicit reviewed revision/digest approval and decision record. Allowed implementation is limited to the existing cspace.rs module/actual-module harness; scheduler/cap/cell consumers are read-only. No public byte/API cutover, global registry bound, native dispatcher execution, device/Gone qualification or full P02 acceptance follows. WIP is one tranche; N02-B and all later successors require separate exact handoffs. All 38 legacy locks stay effective.
+

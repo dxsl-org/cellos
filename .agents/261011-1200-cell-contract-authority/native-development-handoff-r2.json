@@ -1,0 +1,132 @@
+{
+  "format": "cell-contract-native-development-handoff-v1",
+  "revision": "r2",
+  "status": "draft-not-authorized",
+  "user_decision": "Prepare native development handoff r2; not implementation approval",
+  "candidate": {
+    "path": ".agents/261011-1200-cell-contract-authority/native-development-handoff-r2.md",
+    "sha256": "f1fce8e27b11d4bad5b36523609423f621879b9cbe6da85efd1b646556c7eb90"
+  },
+  "requested_tranche": "N02-B shared authority, scheduler publication convergence, and legacy caller cutover",
+  "authorized_tranches": [],
+  "successor_tranches_separately_gated": [
+    "N03",
+    "N04",
+    "N05",
+    "N06",
+    "N07"
+  ],
+  "public_or_persistent_byte_changes": false,
+  "cp1": "pending",
+  "cp2": "pending",
+  "release": "blocked",
+  "lock_relations": 38,
+  "source_edit_allowlist": [
+    "kernel/src/cell/cspace.rs",
+    "kernel/src/cell/cap_registry.rs",
+    "kernel/src/task/scheduler.rs",
+    "kernel/src/task/launch.rs",
+    "kernel/src/task/cap.rs",
+    "kernel/src/task/syscall.rs",
+    "kernel/src/task/cap_file_selftest.rs",
+    "tests/unit_cspace_smoke.rs",
+    "CHANGELOG.md",
+    ".agents/261011-1200-cell-contract-authority/validation.md"
+  ],
+  "read_only_source_consumers": [
+    "kernel/src/loader.rs",
+    "kernel/src/task/tcb.rs",
+    "kernel/src/policy.rs"
+  ],
+  "source_inputs": [
+    {
+      "path": "kernel/src/cell/cspace.rs",
+      "sha256": "1b2fb1673ba9d60aced8fff5bf00587d2b672bcfdbdb4a11eac42f9c1de00e38"
+    },
+    {
+      "path": "kernel/src/cell/cap_registry.rs",
+      "sha256": "54027255f378004e9abbba365c32804f063e3af5061938465f714a09940760e5"
+    },
+    {
+      "path": "kernel/src/task/scheduler.rs",
+      "sha256": "7603e0643ce09a23dca355cb503c174dc54d059010360098a13550df54d499ab"
+    },
+    {
+      "path": "kernel/src/task/launch.rs",
+      "sha256": "31433f3802819b3dd64d00dbdaeb7e261c19880afaf35fe0ba11d093762e876a"
+    },
+    {
+      "path": "kernel/src/task/cap.rs",
+      "sha256": "768003d621513c20dcbfb631dbd025ad00f23e06bad6709f62dbbedf9470ef6e"
+    },
+    {
+      "path": "kernel/src/task/syscall.rs",
+      "sha256": "fb1fa014a187e207717c0dba0710874c2b0da71c128aced69891d2bcd4149ccf"
+    },
+    {
+      "path": "kernel/src/task/cap_file_selftest.rs",
+      "sha256": "e1ce645e868b37bcadd7c1bca1419fea80654e89c6339813175b4dbcf711402f"
+    },
+    {
+      "path": "tests/unit_cspace_smoke.rs",
+      "sha256": "f47f283140847e593a60760f022889a0cc2e61dfd3530c0e10fec85d6f617c91"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "67a5b577add93c53c22a95a046d7ffd884f117eea2e8e2f06e32f56e15d40eb9"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/validation.md",
+      "sha256": "c7d1321c8f209acdd5426a33a52df4dc1003fe1df08bd224cb960aa001033292"
+    },
+    {
+      "path": "kernel/src/loader.rs",
+      "sha256": "97e6af3ebe67a2aec3bc7b0d46c37a3b2507f52af230635ebdd33eef536bb8f7"
+    },
+    {
+      "path": "kernel/src/task/tcb.rs",
+      "sha256": "046677f8da00afa1f6db275cfdb28a70935dc7dcb981e7b701f0ab1a793e3181"
+    },
+    {
+      "path": "kernel/src/policy.rs",
+      "sha256": "87e330041c4bbf9b5c570aed725b9af73c3dfdf63947f11457b718f8583d4fb4"
+    }
+  ],
+  "contract_inputs": [
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/plan.md",
+      "sha256": "216c66ae38b3f3215de6f5f8f38058a93b43e0bdbc9564f4f2c7c6be5fe78adb"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-01-contract-gates.md",
+      "sha256": "516b96245d9e222cfb48e1e0574d44ee654c377d4fbde5296068e082d06d1873"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/phase-02-kernel-authority.md",
+      "sha256": "c07343b747c74ca03e5c32e9453fbe1c37ba34642627677a0cdc2e50be77fc4d"
+    },
+    {
+      "path": ".agents/261011-1200-cell-contract-authority/dependency-checkpoint-amendment.md",
+      "sha256": "2005e35720aab335030468e92ad94a84c393a95d96fe6cdfc33d32da58091d48"
+    },
+    {
+      "path": ".agents/cell-contract-0024-locks.md",
+      "sha256": "79328ed86a59dca7c0926344f22b2f197ea53de47d9f40bb42dfb1cf88c0b00a"
+    },
+    {
+      "path": ".agents/plan-portfolio.md",
+      "sha256": "29c94f8980815667d7cbc9c7b22788582abb21b3ee211681fe661c3fec239f3f"
+    },
+    {
+      "path": "libs/api/src/abi.rs",
+      "sha256": "6ba9984caf39263bbf36199fe8e7a3b506ed18a1f0f6ab826c399dad51e36c51"
+    }
+  ],
+  "census": {
+    "path": ".agents/261011-1200-cell-contract-authority/consumer-census-source.json",
+    "sha256": "574f5f5e03b279d9d74451ac3dba4b51790fe4c9a4cb6f17b1aecee86978fc47"
+  },
+  "activation": "Explicit user approval and append-only decision record must bind BOTH Markdown SHA-256 and JSON companion SHA-256. No current approval.",
+  "whole_system_metadata_bound": false,
+  "native_transition_runtime_evidence": false
+}

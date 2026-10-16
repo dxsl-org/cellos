@@ -1,0 +1,28 @@
+{
+  "format": "durable-charge-vmware-lab-development-grant-v1",
+  "authority_basis": "User agreed to the immediately preceding proposal to provision a VMware lab profile, lab identities and persistent disk, then implement/measure actual durable end-to-end paths",
+  "user_statement": "đồng ý",
+  "scope": "Isolated Linux/SQLite/Ed25519 development lab only; extends earlier diagnostic-only scope",
+  "plan": {
+    "path": ".agents/261011-1200-cell-contract-authority/durable-charge-vmware-lab-plan.md",
+    "sha256": "dc00779aa933f918ea39afcf1a14379d6dc5f94f0801a2a06af819bc32b0ccbe"
+  },
+  "allowed": [
+    "Generate actual distinct Ed25519 lab role identities inside guest; report public pins only",
+    "Create uniquely owned boot and ext4 data VMDK; no discovered/user disk formatting",
+    "Implement lab-specific canonical JSON proofs and SQLite runtime for reserve/resize/adoption/closure/release",
+    "Hard-stop/restart only the uniquely owned lab VM and verify original persistent state",
+    "Select explicit experimental finite caps; record actual measured lab costs without production extrapolation"
+  ],
+  "lab_workspace": "/mnt/c/Temp/cellos-vmware/durable-charge-lab-0xuyu4_c",
+  "data_uuid": "5906f6b5-9cec-40b6-a614-5c43029c1f7b",
+  "image_sha256": "2f119f50bf29fe40e73b69ae2a736e8210d8146796f036e0324315b6b3a777df",
+  "excluded": [
+    "Native Cellos G3/kernel/VFS/DCO1 codec cutover",
+    "Production identities, protected authority, independent antirollback",
+    "Physical power-loss persistence qualification",
+    "Blanket CP1/CP2, production activation, phase/lock release",
+    "Private keys in repository or evidence logs"
+  ],
+  "actual_public_pins_source": "Only the guest-issued public_roster captured from actual provisioning and verified stable across scenario recovery; no invented keys are asserted here"
+}

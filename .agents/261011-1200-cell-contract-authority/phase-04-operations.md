@@ -37,8 +37,10 @@ AC-10..AC-12, aggregate-budget AC-06 and worker-death AC-09. Unify RPC/wait/even
 - [ ] Model deterministic reply/cancel/death/take and two-waiter races; one terminal, one consuming take, no foreign wake, no leaked reservation.
 - [ ] Run x86 lifecycle suite and independent serial smoke: sync/async PeerGone, nested reply, duplicate quarantine, oversized reply cleanup, 64-slot saturation, pre/post-dispatch deadline and replacement rejection remain correct.
 - [ ] New two-CPU multi-waiter runtime scenario waits on RPC + timer + event while another worker exits; each exact result reaches its eligible owner, no blocked thread remains after finite deadline.
-- [ ] Finite competing producers complete with exact correlations, no Busy request delivered, bounded accounting and documented progress assumptions. Do not claim starvation freedom from a finite stress run.
-- [ ] Hot completion/IRQ append does not allocate; reserve refusal leaves no accepted work. All affected SDK/provider consumers compile and run under the same contract, no permanent compatibility bridge for retired semantics.
+- [ ] Finite competing producers complete with exact correlations, no Busy request delivered, bounded accounting and documented progress assumptions.
+- [ ] Hot completion/IRQ append does not allocate; reserve refusal leaves no accepted work. All affected SDK/provider consumers compile and run under the same contract.
+
+Correction 2026-10-16: prior checkmarks and cited standalone-model/storage-boot receipts did not establish these criteria. Acceptance remains pending; historical observations are not runtime qualification.
 
 ## Security and rollback
 

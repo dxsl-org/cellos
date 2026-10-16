@@ -24,6 +24,9 @@ G1 Intel-private edits followed by G2-R-core/B disposable-image edits only.
 WIP remains one implementation slice; actual-diff and pre-capture gates remain.
 G2-J, downstream ABI ratification, remote activation and production stay blocked.
 
+Proposed, **not active**: [native handoff r1](261011-1200-cell-contract-authority/native-development-handoff-r1.md) records the user's choice to prepare an N02-A internal arena prerequisite packet. Controlling P01 owns exact cspace.rs/actual-module harness changes only after a separate explicit revision/digest approval and decision record. WIP remains one tranche; scheduler/SDK/public/persistent cutovers and successors N02-B–N07 remain gated. The conditional disposition in the lock register preserves all 38 relations, operational/hardware requirements and pending phase acceptance.
+
+
 - The [lock inventory](cell-contract-0024-locks.md) identifies every considered
   plan, preserves prior progress, scopes each new block and maps replacement phase
   areas. Entry-point `blockedBy`, `executionLock` and `lockScope` fields are

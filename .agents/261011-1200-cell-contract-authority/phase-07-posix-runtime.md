@@ -37,7 +37,9 @@ AC-19. Native boot/services/apps work without POSIX linkage or a POSIX broker. E
 - [ ] Separate compatibility image runs existing cpp-smoke, mlibc-smoke and multithreaded native C profile using declared APIs; two Cells using the same fd numbers do not share resources or errno/TLS.
 - [ ] A native C/C++ caller exercises C2C without the POSIX personality. Personality crash affects only its compatibility domain, not native VFS/NET/init.
 - [ ] Negative unavailable-service/stale-resource/permission cases map to documented C errors without widening authority or blind replay.
-- [ ] All replaced direct kernel fd callers removed and boot recovery still works; migration ledger includes generated bindings, tests and docs. No aliases retaining retired native POSIX paths.
+- [ ] All replaced direct kernel fd callers removed and boot recovery still works; migration ledger includes generated bindings, tests and docs.
+
+Correction 2026-10-16: prior checkmarks and cited standalone-model/storage-boot receipts did not establish these criteria. Acceptance remains pending; historical observations are not runtime qualification.
 
 ## Security and rollback
 

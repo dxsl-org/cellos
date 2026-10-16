@@ -1,0 +1,45 @@
+{
+  "format": "cell-contract-cluster-03-approval-v1",
+  "authority_basis": "Explicit user instruction in this conversation",
+  "user_statement": "ph\u00ea duy\u1ec7t c\u1ee5m 3, 4 r\u1ed3i 5 theo th\u1ee9 t\u1ef1",
+  "recorded": "2026-10-15",
+  "scope": "Formal candidate approval of Cluster 3 (D04, D06, D10) under Law-1 dual-checkpoint governance",
+  "approval_document": ".agents/261011-1200-cell-contract-authority/cluster-03-approval.md",
+  "approval_sha256": "086108b1ab513ce901d7ea9bd19be216b9982b50abf29fae99beb24bd8454e74",
+  "scoped_user_consent": "Recorded; original user statement and candidate identities retained",
+  "historical_assistant_checkpoint1_claim": "APPROVED; corrected because complete-package inputs remain absent",
+  "approved_packages": [
+    {
+      "delta": "D04",
+      "title": "Operations, reply tokens, wait/consume",
+      "owner": "P04",
+      "candidate_revision": "r2",
+      "candidate_digest": "d0d8f527d6e4b691252efb1359f62d0c942c197572a521ccc3e96d021e416d2d",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P04 implementation)"
+    },
+    {
+      "delta": "D06",
+      "title": "Grant, mapping and device quiescence",
+      "owner": "P05/P04/P08/P09",
+      "candidate_revision": "r2",
+      "candidate_digest": "2a979b42804a22fc799046b7923157748cf97d4d94874e82462fef4e42140f6b",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P05 implementation)"
+    },
+    {
+      "delta": "D10",
+      "title": "Ring negotiation, correlation and authority",
+      "owner": "P05/P04/P02",
+      "candidate_revision": "r1",
+      "candidate_digest": "c0d8dc8a7a2077d6a60bc5edda34ed8cf4439e2de8b965f493023134ea413de1",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P05 implementation)"
+    }
+  ],
+  "governance_disposition": {
+    "checkpoint1_status": "APPROVED (candidate design and layouts accepted for P04/P05 implementation)",
+    "checkpoint2_status": "PENDING (implementation assigned to Phase 04 and Phase 05)",
+    "scoped_locks_status": "38 scoped execution locks remain effective"
+  }
+}

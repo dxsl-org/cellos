@@ -1,0 +1,53 @@
+{
+  "format": "cell-contract-cluster-01-approval-v1",
+  "authority_basis": "Explicit user instruction in this conversation",
+  "user_statement": "ph\u00ea duy\u1ec7t c\u1ee5m 1",
+  "recorded": "2026-10-15",
+  "scope": "Formal approval of Cluster 1 (C03, C04, C05) under Law-1 dual-checkpoint governance",
+  "approval_document": ".agents/261011-1200-cell-contract-authority/cluster-01-approval.md",
+  "approval_sha256": "b2fc258c29c45a147ba241a9f5075db0280b4d76624d57adfb856938c1b02c38",
+  "scoped_user_consent": "Recorded; original user statement and candidate identities retained",
+  "historical_assistant_checkpoint1_claim": "APPROVED; corrected because complete-package inputs remain absent",
+  "approved_packages": [
+    {
+      "delta": "C03",
+      "title": "Genesis and one-use bootstrap",
+      "owner": "P08-C/P06",
+      "candidate_revision": "r2",
+      "candidate_digest": "ff938e515847de684d975d4edf7bd9ac86a884f2ca516bf7b517a1ab76844cb4",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "INCOMPLETE EVIDENCE"
+    },
+    {
+      "delta": "C04",
+      "title": "Reserve, live claim, key closure and recovery",
+      "owner": "P08-C/P06",
+      "candidate_revision": "r1 (with DCO1 extension)",
+      "candidate_digest": "2031fb012118db3aaa4bcb5580c582f7c4e7c60492d62c576b0a479f36dc91c7",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "INCOMPLETE EVIDENCE"
+    },
+    {
+      "delta": "C05",
+      "title": "Mutable allocation, pending shrink and drain",
+      "owner": "P03/P08-C/P06",
+      "candidate_revision": "r3",
+      "candidate_digest": "819150994c582069e1d640ba836028c4f449dc0665317aabf891be3c085b0e00",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "INCOMPLETE EVIDENCE"
+    }
+  ],
+  "supporting_receipts": [
+    "build/native-durable-charge-codec-verification.json",
+    "build/native-cellos-vmware-fault-matrix-verification.json",
+    "build/durable-charge-vmware-lab-verification.json",
+    "build/native-cellos-vmware-profile-probe.json"
+  ],
+  "exclusions": [
+    "Remaining 20 packages (D01-D12, C01-C02, C06-C11) remain pending independent inputs",
+    "All 38 scoped execution locks remain effective",
+    "Physical drive cache power-loss and Intel IOMMU hardware publication remain target-hardware prerequisites"
+  ],
+  "historical_checkpoint2_claim": "APPROVED (virtualization/development lane); unsupported assistant qualification, superseded 2026-10-16",
+  "qualification_correction": "User scoped consent retained; native runtime prerequisites and CP2 evidence remain missing. No lock/release promotion."
+}

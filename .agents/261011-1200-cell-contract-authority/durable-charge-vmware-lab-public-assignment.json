@@ -1,0 +1,39 @@
+{
+  "format": "durable-charge-actual-vmware-lab-assignment-v1",
+  "scope": "Actual first guest-generated assignments for sequential scenario only; no production assignment or root-independent trust",
+  "authorization": ".agents/261011-1200-cell-contract-authority/durable-charge-vmware-lab-authorization.json",
+  "source_capture": "/mnt/c/Temp/cellos-vmware/durable-charge-lab-0xuyu4_c/run-sequential-run-f58dafc2",
+  "source_receipt_sha256": "3970b653503dd74d496d611305a0d7b00317b4d3d948a7773173ba061dbb18f5",
+  "data_uuid": "5906f6b5-9cec-40b6-a614-5c43029c1f7b",
+  "public_roster": {
+    "lane": "isolated-vmware-lab",
+    "protocol": "cellos-durable-charge-lab-json-ed25519",
+    "roles": {
+      "authority": "1f2effb350f38730af4cb3db05f5e6c59b1df66b6629e236b72c220d4fd12b9d",
+      "destination": "1d66570e4bb1a840467e07c249e7c226f36484b0b7e6c25500ca78a140d4875a",
+      "issuer": "6c81a19a9dc8ce718356104c6526b80637761616515cb71f8bce386b6e3f4b33",
+      "recovery": "a0076530563d2d231b7b50afb2be649c246c55841336753f4358d966abe0d59c",
+      "successor": "ee12e4a8676364235fb5a7ab107a9fa7a4ce77b51b86e5e286b712c48a44b84b"
+    },
+    "roster_id": "08d5d19d6c6fb19b531a14de41fe940831a8b077adddd4c30d2551692be7da70",
+    "scope": "vmware-durable-charge-lab/sequential",
+    "version": 1
+  },
+  "backend": [
+    {
+      "bootstrap_hashes": {
+        "bootstrap": "c7be0146bce4a14738fa5ce0b5af4613f0f8eee9375f951121d8ae3fd9dac63a",
+        "launcher": "4d4dd716cabcb23e3757c53cde17a5ed2d18d64890e61334867f54a663fcd24f",
+        "service": "b9ada20c6b9ed3cc51e20d84ac6fb1ba16656a542178bca9ba40e848f6bd3317"
+      },
+      "cryptography": "41.0.7",
+      "data_uuid": "5906f6b5-9cec-40b6-a614-5c43029c1f7b",
+      "kernel": "6.8.0-146-generic",
+      "mount": "/dev/sdb ext4   rw,noatime",
+      "openssl": "OpenSSL 3.0.13 30 Jan 2024",
+      "python": "3.12.3",
+      "sqlite": "3.45.1"
+    }
+  ],
+  "status": "Public provisioning evidence only; initial runtime smoke preceded additional review corrections and is not final qualification"
+}

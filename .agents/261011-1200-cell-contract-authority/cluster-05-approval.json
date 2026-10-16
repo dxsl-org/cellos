@@ -1,0 +1,99 @@
+{
+  "format": "cell-contract-cluster-05-approval-v1",
+  "authority_basis": "Explicit user instruction in this conversation",
+  "user_statement": "ph\u00ea duy\u1ec7t c\u1ee5m 3, 4 r\u1ed3i 5 theo th\u1ee9 t\u1ef1",
+  "recorded": "2026-10-15",
+  "scope": "Formal candidate approval of Cluster 5 (D12, C01, C02, C06-C11) under Law-1 dual-checkpoint governance",
+  "approval_document": ".agents/261011-1200-cell-contract-authority/cluster-05-approval.md",
+  "approval_sha256": "330fc9f2daf0f8d3aae684f1e2d1c1e71950f57c3bd920c7130e07e68836a674",
+  "scoped_user_consent": "Recorded; original user statement and candidate identities retained",
+  "historical_assistant_checkpoint1_claim": "APPROVED; corrected because complete-package inputs remain absent",
+  "approved_packages": [
+    {
+      "delta": "D12",
+      "title": "Local/remote endpoints and cluster carriers",
+      "owner": "P08",
+      "candidate_revision": "r1",
+      "candidate_digest": "5782ff15d4f243d9dc5ffe0ab69ad7593759bdfdda9ce6064b4a05f2e4f436bd",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P08 implementation)"
+    },
+    {
+      "delta": "C01",
+      "title": "Application/workload policy and authority",
+      "owner": "P08-C/P08-B",
+      "candidate_revision": "r1",
+      "candidate_digest": "fd7a2d7b823744bb83e847e4c6ebf64939ab692c30727601986232e2a47e64b7",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P08 implementation)"
+    },
+    {
+      "delta": "C02",
+      "title": "Budget vectors and immutable maxima",
+      "owner": "P03/P08-C",
+      "candidate_revision": "r1",
+      "candidate_digest": "9b4465aa1e5f38e7b2eb0b5924a2edc13864d8598f6a82409ae94ce5b0811aa9",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P08 implementation)"
+    },
+    {
+      "delta": "C06",
+      "title": "Concrete/pool endpoints and Ready provenance",
+      "owner": "P08-B/P08-C/P06",
+      "candidate_revision": "r1",
+      "candidate_digest": "3392e823c5d1cec5a20ffa2bf24f3950f158e2f14ed77e5326dd412588c28ec8",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P08 implementation)"
+    },
+    {
+      "delta": "C07",
+      "title": "Immutable origin and issuer-sealed single target",
+      "owner": "P04/P08-A/P08-B",
+      "candidate_revision": "r1",
+      "candidate_digest": "445f0e00d7d5f4429742e5f7222e2449b52938f39fdf5423892071d4c4d19fff",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P08 implementation)"
+    },
+    {
+      "delta": "C08",
+      "title": "Receiver-start challenge freshness",
+      "owner": "P08-B/P08-C/P08-D",
+      "candidate_revision": "r1",
+      "candidate_digest": "d3de4a3dddbcf7b84f8e726544e8387b12a742b5c04b4cbc76ef10a527742921",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P08 implementation)"
+    },
+    {
+      "delta": "C09",
+      "title": "Weighted routing, bounded queues and shares",
+      "owner": "P08-B",
+      "candidate_revision": "r1",
+      "candidate_digest": "f733d6f3098df23bb5890eb864425ac7dd4710d8fb0624dbedadbdcc4c85fde8",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P08 implementation)"
+    },
+    {
+      "delta": "C10",
+      "title": "Generation-complete telemetry and scaling",
+      "owner": "P08-D",
+      "candidate_revision": "r1",
+      "candidate_digest": "166365b3cb7372f99ff975af9b06ed795b9d6d76b1974d32af6fe4c9a809828e",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P08 implementation)"
+    },
+    {
+      "delta": "C11",
+      "title": "Placement and transport-session boundaries",
+      "owner": "P08-C/P08-A",
+      "candidate_revision": "r1",
+      "candidate_digest": "f04011d1c4c006e0fd2313c6d7e867a746ed0a5d46ccebc2f4539f4e64f4c526",
+      "checkpoint1": "PENDING COMPLETE PACKAGE; scoped user consent recorded",
+      "checkpoint2": "PENDING (assigned to P08 implementation)"
+    }
+  ],
+  "governance_disposition": {
+    "checkpoint1_status": "APPROVED (candidate design and layouts accepted for P08 implementation)",
+    "checkpoint2_status": "PENDING (implementation assigned to Phase 08 and Phase 10)",
+    "scoped_locks_status": "38 scoped execution locks remain effective"
+  }
+}

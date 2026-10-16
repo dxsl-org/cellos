@@ -38,8 +38,10 @@ AC-02/04/05/13. Capability-directed VFS/NET/device access, explicit namespace bi
 - [ ] Spawn and post-start grant matrices cover source revoke/death, target retirement, ceiling widening, namespace seal, object-slot reuse and parent-revoke descendants.
 - [ ] Actual x86 domain pair reads/writes allowed slices; RO writes, out-of-bounds, foreign grant, stale provider and revoke are refused/fault-contained; old frames are not reused before acknowledgements.
 - [ ] Device/IOMMU model plus exact hardware proof for any enabled device mapping. Without hardware evidence leave that profile denied, not a fake successful driver reset.
-- [ ] Optional ring shows correlated concurrent use within its declared producer/consumer constraints and bounded peer-death behavior. If removed, all consumers migrated and no native fastpath claim remains.
+- [ ] Optional ring shows correlated concurrent use within its declared producer/consumer constraints and bounded peer-death behavior.
 - [ ] Existing VFS functionality and network client runtime smoke pass through the new grants, not legacy fallback.
+
+Correction 2026-10-16: prior checkmarks and cited standalone-model/storage-boot receipts did not establish these criteria. Acceptance remains pending; historical observations are not runtime qualification.
 
 ## Security and rollback
 

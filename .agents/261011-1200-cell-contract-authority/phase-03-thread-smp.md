@@ -40,12 +40,14 @@ AC-40 local ownership is limited to immutable-max/current-limit, aggregate accou
 ## Verification / success criteria
 
 - [ ] Barrier-controlled spawn-versus-retire, context-save-versus-steal and wake-versus-park interleavings prove inclusion/refusal, no duplicate execution and no stale wake.
-- [ ] x86 QEMU `X86_CPUS=2` domain lane positively shows CPU 1 executing, migration and remote acknowledgements. One-CPU fallback is test failure for this claim.
+- [ ] x86 QEMU `X86_CPUS=2` domain lane positively shows CPU 1 executing, migration and remote acknowledgements.
 - [ ] Two native C/C++ workers repeatedly check distinct TLS/errno and FPU values through preemption; exact mutex/condition counters and timeout/mismatch cases pass. Rust worker pool submits independent work without increasing Cell authority.
 - [ ] Flood thread creation and parallel CPU work; total memory/cap/CPU budget stays within documented bound, unrelated Cell makes progress, priority cannot be raised beyond ceiling.
-- [ ] Clean worker exit leaves sibling live; worker unhandled fault and root exit retire all members; no execution/frame reuse after retirement acknowledgement. Real runtime smoke plus isolated invariant tests retained.
+- [ ] Clean worker exit leaves sibling live; worker unhandled fault and root exit retire all members; no execution/frame reuse after retirement acknowledgement.
 - [ ] AC-30 local saturation: several Cells below individual ceilings collectively reach node bounds; subsequent Cell/thread admission refuses before publication, accounting stays exact across failure/retirement, and released capacity becomes available only after confirmed reclamation.
-- [ ] AC-48 local portion: immutable maxima cannot widen, above-max/missing local reservation growth refuses before use and below-use shrink stays pending until safe drain. P08-C must separately show real Authority-reserved/live-claimed within-max growth and independently charged replacement; no fixture-backed activation or claim that P03 alone closes AC-48.
+- [ ] AC-48 local portion: immutable maxima cannot widen, above-max/missing local reservation growth refuses before use and below-use shrink stays pending until safe drain.
+
+Correction 2026-10-16: prior checkmarks and cited standalone-model/storage-boot receipts did not establish these criteria. Acceptance remains pending; historical observations are not runtime qualification.
 
 ## Security, risk and rollback
 
