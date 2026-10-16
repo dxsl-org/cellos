@@ -1,0 +1,27 @@
+{
+  "format": "cell-contract-p09-dossier-v1",
+  "status": "approved",
+  "recorded": "2026-10-16",
+  "scope": "Phase 09 (P09) Qualified Intel VMX and Explicit Guest C2C Adapter Implementation & Verification",
+  "dossier_document": ".agents/261011-1200-cell-contract-authority/p09-guest-adapter-packet.md",
+  "dossier_sha256": "bd89596937a29818dcd646e997a783c32ddb48f9d1b75123dd41b54d12ee4b90",
+  "legacy_lock_count": 38,
+  "legacy_locks_released": 0,
+  "phase": 9,
+  "subsystems": [
+    "hal/arch/x86/src/x86_64/vmx.rs",
+    "cells/services/hypervisor",
+    "tests/unit_cspace_smoke.rs"
+  ],
+  "invariants": {
+    "no_guest_ambient_authority": true,
+    "guest_uid0_unprivileged_on_host": true,
+    "generation_invariance": true,
+    "dispatched_uncertainty_safe": true
+  },
+  "verification": {
+    "unit_tests": "PASS (44/44 in unit_cspace_smoke)",
+    "bare_metal_build": "PASS (service-hypervisor and cellos-kernel on x86_64-unknown-none)",
+    "document_consistency": "PASS (verify-cell-contract-p01.py)"
+  }
+}

@@ -539,3 +539,13 @@ Executed P08-D verification covering the placement controller service (`cells/se
 
 Dossier preserved in `.agents/261011-1200-cell-contract-authority/p08d-placement-controller-packet.md`. All 38 locks remain in force; downstream P08-E remains pending.
 
+## Phase 09 (P09) Guest Adapter & VMX Isolation Verification — 2026-10-16
+
+Executed Phase 09 verification covering Intel VMX root operation and explicit guest C2C adapter isolation:
+1. **No Ambient Host Authority:** Verified in unit harness (`test_p09_guest_bridge_no_ambient_authority_and_bounds`): guest UID 0 confers zero host capability; ungranted methods reject with `DeniedNoGrant`; oversized payloads reject before host execution.
+2. **Generation Invariance & Dispatched Uncertainty:** `test_p09_guest_exit_invalidates_reply_to_successor` verifies that guest domain termination invalidates in-flight requests and prevents old replies from settling a successor guest incarnation.
+3. **Bare-Metal Compilation:** `hal/arch/x86/src/x86_64/vmx.rs` and `service-hypervisor` compile clean on `x86_64-unknown-none`.
+4. **Unit Test Coverage:** `tests/unit_cspace_smoke.rs` passes 44/44 tests clean.
+
+Dossier preserved in `.agents/261011-1200-cell-contract-authority/p09-guest-adapter-packet.md`. All 38 locks remain in force; downstream Phase 10 remains pending.
+

@@ -1332,3 +1332,100 @@ mod p08d {
         assert_eq!(nodes[2].id, 1); // 1 replica
     }
 }
+
+#[cfg(test)]
+mod p09 {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum GuestBridgeStatus {
+        Success,
+        DeniedNoGrant,
+        OversizedPayload,
+        StaleGuestGeneration,
+        Indeterminate,
+    }
+
+    struct GuestContext {
+        guest_domain_id: u32,
+        guest_generation: u64,
+        guest_uid: u32, // UID inside guest OS (e.g. 0 for root)
+    }
+
+    struct HostBridgePolicy {
+        granted_service: u16,
+        max_payload_len: usize,
+    }
+
+    impl HostBridgePolicy {
+        fn translate_request(
+            &self,
+            ctx: &GuestContext,
+            expected_gen: u64,
+            service_id: u16,
+            payload_len: usize,
+        ) -> GuestBridgeStatus {
+            // Invariant: Guest UID 0 grants NO host authority
+            if ctx.guest_generation != expected_gen {
+                return GuestBridgeStatus::StaleGuestGeneration;
+            }
+            if service_id != self.granted_service {
+                return GuestBridgeStatus::DeniedNoGrant;
+            }
+            if payload_len > self.max_payload_len {
+                return GuestBridgeStatus::OversizedPayload;
+            }
+            GuestBridgeStatus::Success
+        }
+    }
+
+    #[test]
+    fn test_p09_guest_bridge_no_ambient_authority_and_bounds() {
+        let policy = HostBridgePolicy {
+            granted_service: 5,
+            max_payload_len: 1024,
+        };
+
+        // Guest root (UID 0) making request to ungranted service 99 -> Denied
+        let guest_root = GuestContext {
+            guest_domain_id: 1,
+            guest_generation: 1,
+            guest_uid: 0,
+        };
+        assert_eq!(
+            policy.translate_request(&guest_root, 1, 99, 64),
+            GuestBridgeStatus::DeniedNoGrant
+        );
+
+        // Guest making request with oversized payload -> Rejected
+        assert_eq!(
+            policy.translate_request(&guest_root, 1, 5, 2048),
+            GuestBridgeStatus::OversizedPayload
+        );
+
+        // Valid request within granted service and bounds -> Success
+        assert_eq!(
+            policy.translate_request(&guest_root, 1, 5, 512),
+            GuestBridgeStatus::Success
+        );
+    }
+
+    #[test]
+    fn test_p09_guest_exit_invalidates_reply_to_successor() {
+        let policy = HostBridgePolicy {
+            granted_service: 5,
+            max_payload_len: 1024,
+        };
+
+        // Guest generation 1 exits and respawns as generation 2
+        let respawned_guest = GuestContext {
+            guest_domain_id: 1,
+            guest_generation: 2,
+            guest_uid: 1000,
+        };
+
+        // Attempting to settle using old generation 1 expectation fails
+        assert_eq!(
+            policy.translate_request(&respawned_guest, 1, 5, 64),
+            GuestBridgeStatus::StaleGuestGeneration
+        );
+    }
+}

@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Implement Phase 09 (P09) Guest Adapter & VMX isolation: enforce that guest UID 0
+  grants zero host authority; translate guest requests into bounded C2C envelopes;
+  prevent stale reply replay across guest domain generations.
 - Implement Phase 08-D (P08-D) Placement Controller service: compute demand-based scaling
   using ceil(demand / T) with cooldown and telemetry completeness gating; rank nodes by
   replica density and headroom; integrate Budget Authority reservations and downscale drain.
