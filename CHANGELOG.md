@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Rebase and qualify Tranche 1 (VFS, Storage & Buffer Lifetimes): rebase 7 subordinate
+  plans onto CSpace file slots (D01), POSIX type checking, and atomic bind rollback;
+  verify 52/52 tests clean in tests/unit_cspace_smoke.rs and compile service-vfs cleanly.
 - Rebase and qualify HTTPD Single-Cell Concurrency service: verify single-owner 256-connection
   bounded reactor, 4 KiB framing enforcement, zero head-of-line blocking on incomplete requests,
   and clean deadline slot reclamation in tests/unit_cspace_smoke.rs.

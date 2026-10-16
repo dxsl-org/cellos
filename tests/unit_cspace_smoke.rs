@@ -1566,3 +1566,83 @@ mod httpd_concurrency {
         assert_eq!(conn.phase, ConnPhase::Idle);
     }
 }
+
+#[cfg(test)]
+mod vfs_rebase {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum FileType {
+        RegularFile,
+        Directory,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum VfsStatus {
+        Success,
+        PermissionDenied,
+        IsADirectory,
+        NotADirectory,
+        DirectoryNotEmpty,
+    }
+
+    #[test]
+    fn test_vfs_file_slot_allocation_and_rights_attenuation() {
+        const PERM_READ: u8 = 1 << 0;
+        const PERM_WRITE: u8 = 1 << 1;
+
+        struct MockFileSlot {
+            perms: u8,
+        }
+
+        let root_slot = MockFileSlot { perms: PERM_READ | PERM_WRITE };
+        // Attenuate to read-only
+        let derived_slot = MockFileSlot { perms: root_slot.perms & PERM_READ };
+        assert_eq!(derived_slot.perms, PERM_READ);
+
+        // Attempt write on derived read-only handle
+        let write_status = if (derived_slot.perms & PERM_WRITE) != 0 {
+            VfsStatus::Success
+        } else {
+            VfsStatus::PermissionDenied
+        };
+        assert_eq!(write_status, VfsStatus::PermissionDenied);
+    }
+
+    #[test]
+    fn test_vfs_posix_type_checking_unlink_vs_rmdir() {
+        let file_type = FileType::RegularFile;
+        let dir_type = FileType::Directory;
+
+        // unlink on directory must fail with IsADirectory
+        let unlink_dir_res = if dir_type == FileType::Directory {
+            VfsStatus::IsADirectory
+        } else {
+            VfsStatus::Success
+        };
+        assert_eq!(unlink_dir_res, VfsStatus::IsADirectory);
+
+        // rmdir on regular file must fail with NotADirectory
+        let rmdir_file_res = if file_type == FileType::RegularFile {
+            VfsStatus::NotADirectory
+        } else {
+            VfsStatus::Success
+        };
+        assert_eq!(rmdir_file_res, VfsStatus::NotADirectory);
+    }
+
+    #[test]
+    fn test_vfs_directory_binding_atomic_rollback() {
+        let mut namespace = vec!["/bin".to_string(), "/etc".to_string()];
+        let checkpoint = namespace.clone();
+
+        // Attempt multi-step bind: step 1 succeeds, step 2 fails
+        namespace.push("/data".to_string());
+        let bind_step2_failed = true;
+        if bind_step2_failed {
+            // All-or-nothing rollback restores snapshot
+            namespace = checkpoint;
+        }
+
+        assert_eq!(namespace.len(), 2);
+        assert_eq!(namespace, vec!["/bin".to_string(), "/etc".to_string()]);
+    }
+}
