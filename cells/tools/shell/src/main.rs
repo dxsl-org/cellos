@@ -106,16 +106,15 @@ pub fn main() {
     #[cfg(not(feature = "shell_test"))]
     {
         let _ = ostd::syscall::sys_log("DEBUG: Shell Started (Async Mode)\n");
-        // Claim keyboard focus so VirtIO keyboard events are routed here via
-        // the input service (fb_console keyboard relay).  Spin-wait for the
-        // input service to come online — it races with shell at boot.
-        // Don't spin indefinitely — attempt up to 50 times (~25 seconds),
-        // then proceed without focus (UART fallback still works).
-        for _ in 0..50 {
-            if ostd::input::request_focus() {
-                break;
+        // If the graphical compositor is running, it manages window focus;
+        // shell must not steal global keyboard focus away from graphical apps.
+        if ostd::syscall::sys_lookup_service(api::syscall::service::COMPOSITOR).is_none() {
+            for _ in 0..50 {
+                if ostd::input::request_focus() {
+                    break;
+                }
+                ostd::task::yield_now();
             }
-            ostd::task::yield_now();
         }
         let _ = ostd::syscall::sys_log("DEBUG: Shell focus acquired (or timed out)\n");
         let mut shell = ViShell::new();

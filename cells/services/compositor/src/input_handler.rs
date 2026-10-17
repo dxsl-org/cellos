@@ -62,6 +62,9 @@ impl InputState {
     pub fn deactivate_surface(&mut self, cap: u64) {
         self.pointer.disable(cap);
     }
+    pub fn set_focus(&mut self, owner: usize, cap: Option<u64>) {
+        self.pointer.set_focus(owner, cap);
+    }
 }
 
 /// Look up a service, yielding until it becomes available.

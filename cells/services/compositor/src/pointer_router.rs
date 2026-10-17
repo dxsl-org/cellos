@@ -76,6 +76,10 @@ impl PointerRouter {
     pub const fn focused_owner(&self) -> usize {
         self.focused_owner
     }
+    pub fn set_focus(&mut self, owner: usize, cap: Option<u64>) {
+        self.focused_owner = owner;
+        self.selected_cap = cap;
+    }
 
     pub const fn selected_cap(&self) -> Option<u64> {
         self.selected_cap

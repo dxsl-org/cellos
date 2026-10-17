@@ -161,6 +161,26 @@ impl viConsole {
             };
             route_byte!(c);
         }
+        // 1f. Poll standard PC PS/2 mouse on x86_64.
+        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+        if input_tid != 0 {
+            while let Some(event) = crate::task::drivers::ps2_keyboard::poll_mouse() {
+                match event {
+                    crate::task::drivers::ps2_keyboard::Ps2MouseEvent::Button { button, pressed } => {
+                        relay_evdev_to_input(input_tid, 0, button, pressed as i32);
+                    }
+                    crate::task::drivers::ps2_keyboard::Ps2MouseEvent::Move { dx, dy } => {
+                        if dx != 0 {
+                            relay_evdev_to_input(input_tid, 1, 0, dx);
+                        }
+                        if dy != 0 {
+                            relay_evdev_to_input(input_tid, 1, 1, dy);
+                        }
+                    }
+                }
+                received = true;
+            }
+        }
 
         // NOTE: the SBI DBCN console-read fallback was removed — on this QEMU /
         // OpenSBI build it returns phantom bytes on every call, which (combined
@@ -220,6 +240,16 @@ fn relay_ascii_to_input(input_tid: usize, byte: u8) -> bool {
     msg[5..9].copy_from_slice(&1u32.to_le_bytes()); // press
     crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]).is_ok()
 }
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+fn relay_evdev_to_input(input_tid: usize, opcode: u8, code: u32, value: i32) -> bool {
+    const KERNEL_SENDER: usize = isize::MAX as usize;
+    let mut msg = [0u8; 9];
+    msg[0] = opcode;
+    msg[1..5].copy_from_slice(&code.to_le_bytes());
+    msg[5..9].copy_from_slice(&(value as u32).to_le_bytes());
+    crate::task::ipc_post_nonblock(KERNEL_SENDER, input_tid, &msg[..9]).is_ok()
+}
+
 
 pub static CONSOLE: Spinlock<viConsole> = Spinlock::new(viConsole {
     buffer: VecDeque::new(),

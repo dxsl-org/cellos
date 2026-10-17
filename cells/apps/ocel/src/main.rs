@@ -1211,21 +1211,24 @@ impl OcelViewer {
             self.render();
             return;
         }
+        let is_ctrl = |target: char, ascii_ctrl: char| {
+            (ch == Some(target) && modifiers.contains(Modifiers::CTRL)) || ch == Some(ascii_ctrl)
+        };
         // Global Ctrl+T: New Tab
-        if ch == Some('t') && modifiers.contains(Modifiers::CTRL) {
+        if is_ctrl('t', '\x14') {
             self.new_tab("file:///welcome.md");
             self.render();
             return;
         }
 
         // Global Ctrl+W: Close Tab
-        if ch == Some('w') && modifiers.contains(Modifiers::CTRL) {
+        if is_ctrl('w', '\x17') {
             self.close_tab(self.active_tab);
             self.render();
             return;
         }
         // Global Ctrl+R: Toggle Reader Mode
-        if ch == Some('r') && modifiers.contains(Modifiers::CTRL) {
+        if is_ctrl('r', '\x12') {
             self.toggle_reader_mode();
             return;
         }
@@ -1252,21 +1255,21 @@ impl OcelViewer {
         }
 
         // Global Ctrl+B: Open Bookmarks
-        if ch == Some('b') && modifiers.contains(Modifiers::CTRL) {
+        if is_ctrl('b', '\x02') {
             self.navigate_to("ocel://bookmarks");
             self.render();
             return;
         }
 
         // Global Ctrl+D: Bookmark Current Page
-        if ch == Some('d') && modifiers.contains(Modifiers::CTRL) {
+        if is_ctrl('d', '\x04') {
             self.status_text = String::from("Bookmarks are read from /data/bookmarks.md; saving from the viewer is not supported.");
             self.render_chrome();
             return;
         }
 
 
-        if sym == KeySym::F3 || (ch == Some('f') && modifiers.contains(Modifiers::CTRL)) {
+        if sym == KeySym::F3 || is_ctrl('f', '\x06') {
             if sym == KeySym::F3 && self.search_open {
                 self.next_search_match(modifiers.contains(Modifiers::SHIFT));
             } else {
@@ -1423,6 +1426,7 @@ fn cell_main() {
     let win_x = (screen_w as i32 - win_w as i32) / 2;
     let win_y = (screen_h as i32 - win_h as i32) / 2;
     viewer.surface.move_to(win_x.max(0), win_y.max(0));
+    viewer.surface.raise();
 
     while !ostd::input::request_focus() {
         sys_yield();

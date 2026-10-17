@@ -26,6 +26,9 @@ pub(super) fn handle(
             match table.create(0, 0, sw, sh, sender, role) {
                 Ok(cap) => {
                     z_order.push(cap);
+                    if role == SurfaceRole::Interactive {
+                        input.set_focus(sender, Some(cap));
+                    }
                     sys_send(sender, &cap.to_le_bytes());
                 }
                 Err(_) => {
@@ -64,7 +67,7 @@ pub(super) fn handle(
             }
         }
         compositor_ops::MOVE_SURFACE => move_surface(buf, sender, table, pending_dirty),
-        compositor_ops::RAISE_SURFACE => raise_surface(buf, sender, table, z_order, pending_dirty),
+        compositor_ops::RAISE_SURFACE => raise_surface(buf, sender, input, table, z_order, pending_dirty),
         compositor_ops::DESTROY_SURFACE => {
             destroy_surface(buf, sender, input, table, z_order, pending_dirty)
         }
@@ -106,6 +109,7 @@ fn move_surface(
 fn raise_surface(
     buf: &[u8; 512],
     sender: usize,
+    input: &mut InputState,
     table: &mut SurfaceTable,
     z_order: &mut ZOrder,
     dirty: &mut Option<Rect>,
@@ -121,6 +125,7 @@ fn raise_surface(
         return;
     }
     z_order.raise(cap);
+    input.set_focus(sender, Some(cap));
     if let Some(surface) = table.get_mut(cap) {
         let full = Rect {
             x: 0,
