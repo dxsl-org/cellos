@@ -686,8 +686,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // 4. Heap Allocator (Global) - MUST be after paging but before any allocations
     // 4 MiB = 1024 frames (reduced from 32 MiB / 8192 frames under Phase 01 memory footprint reduction).
-    // Sized to hold kernel structures, scheduler state, and IPC buffers.
-    const HEAP_FRAMES: usize = 1_024;
+    // Sized to hold kernel structures, scheduler state, IPC buffers, and cell signing scratch.
+    #[cfg(target_pointer_width = "64")]
+    const HEAP_FRAMES: usize = 8_192; // 32 MiB
+    #[cfg(target_pointer_width = "32")]
+    const HEAP_FRAMES: usize = 1_024; // 4 MiB
     let heap_start = {
         let mut allocator_guard = memory::frame::FRAME_ALLOCATOR.lock();
         let allocator = allocator_guard
@@ -698,7 +701,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // allocation would write over frames this kernel does not own. Refusing
         // here is the only safe outcome — never a smaller or fragmented heap.
         memory::frame::reserve_contiguous_run(allocator, HEAP_FRAMES).expect(
-            "OOM: no contiguous 4 MiB run for the boot heap — refusing to boot with a \
+            "OOM: no contiguous run for the boot heap — refusing to boot with a \
              fragmented heap",
         )
     };
