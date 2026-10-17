@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DocNode"],"fn":["lines_for","lines_height"],"struct":["Document","FormInputLayout","LayoutBox","StyledSpan","TableCellLayout","TableRowLayout"]};
+window.SIDEBAR_ITEMS = {"enum":["DocNode"],"fn":["decode_fragment","encode_form","fold_text","form_owner","input_bytes","lines_bytes","lines_for","lines_height","scale_box","scale_lines","slug","span_bytes","validate_arena"],"struct":["Document","FormInputLayout","LayoutBox","StyledSpan","TableCellLayout","TableRowLayout","TocEntry"]};

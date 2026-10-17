@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_GEMINI_PAYLOAD"],"fn":["fetch_gemini","parse_gemini_url","parse_gemtext"],"struct":["GeminiResponse"]};
+window.SIDEBAR_ITEMS = {"fn":["parse_gemtext"]};

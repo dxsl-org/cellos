@@ -88,8 +88,8 @@
 <a href=#88 id=88 data-nosnippet>88</a>
 <a href=#89 id=89 data-nosnippet>89</a><span class="kw">fn </span>failed(request: <span class="kw-2">&amp;</span>Request) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[u8] {
 <a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">match </span>request {
-<a href=#91 id=91 data-nosnippet>91</a>        Request::Send(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>],
-<a href=#92 id=92 data-nosnippet>92</a>        Request::Recv(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">0</span>],
+<a href=#91 id=91 data-nosnippet>91</a>        Request::Send(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0xff</span>; <span class="number">4</span>],
+<a href=#92 id=92 data-nosnippet>92</a>        Request::Recv(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0xff</span>; <span class="number">2</span>],
 <a href=#93 id=93 data-nosnippet>93</a>    }
 <a href=#94 id=94 data-nosnippet>94</a>}
 <a href=#95 id=95 data-nosnippet>95</a>
@@ -200,8 +200,8 @@
 <a href=#200 id=200 data-nosnippet>200</a>            <span class="kw">let </span>Pending { reply, owner, state, queue, .. } = op;
 <a href=#201 id=201 data-nosnippet>201</a>            <span class="kw">let </span>response: <span class="kw-2">&amp;</span>[u8] = <span class="kw">match </span><span class="kw-2">&amp;</span>state {
 <a href=#202 id=202 data-nosnippet>202</a>                State::Connecting(<span class="kw">_</span>) | State::Handshake(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0</span>; <span class="number">8</span>],
-<a href=#203 id=203 data-nosnippet>203</a>                State::Send(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0</span>; <span class="number">4</span>],
-<a href=#204 id=204 data-nosnippet>204</a>                State::Recv(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0</span>; <span class="number">2</span>],
+<a href=#203 id=203 data-nosnippet>203</a>                State::Send(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0xff</span>; <span class="number">4</span>],
+<a href=#204 id=204 data-nosnippet>204</a>                State::Recv(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0xff</span>; <span class="number">2</span>],
 <a href=#205 id=205 data-nosnippet>205</a>                State::Vacant =&gt; <span class="kw-2">&amp;</span>[],
 <a href=#206 id=206 data-nosnippet>206</a>            };
 <a href=#207 id=207 data-nosnippet>207</a>            drop(state);
@@ -284,7 +284,7 @@
 <a href=#284 id=284 data-nosnippet>284</a>                }
 <a href=#285 id=285 data-nosnippet>285</a>                Step::Sent(entry, result) =&gt; {
 <a href=#286 id=286 data-nosnippet>286</a>                    op.state = State::Vacant;
-<a href=#287 id=287 data-nosnippet>287</a>                    <span class="kw">let </span>count = result.unwrap_or(<span class="number">0</span>) <span class="kw">as </span>u32;
+<a href=#287 id=287 data-nosnippet>287</a>                    <span class="kw">let </span>count = result.map(|n| n <span class="kw">as </span>u32).unwrap_or(u32::MAX);
 <a href=#288 id=288 data-nosnippet>288</a>                    <span class="kw">if </span><span class="self">self</span>.answer(op.reply, op.owner, <span class="prelude-val">Some</span>(cap), <span class="kw-2">&amp;</span>count.to_le_bytes()) {
 <a href=#289 id=289 data-nosnippet>289</a>                        tls_table.insert(cap, entry);
 <a href=#290 id=290 data-nosnippet>290</a>                        <span class="self">self</span>.start_queued(cap, op, tls_table);
@@ -298,7 +298,7 @@
 <a href=#298 id=298 data-nosnippet>298</a>                    op.state = State::Vacant;
 <a href=#299 id=299 data-nosnippet>299</a>                    <span class="kw">let </span>response = <span class="kw">match </span>result {
 <a href=#300 id=300 data-nosnippet>300</a>                        <span class="prelude-val">Ok</span>(len) =&gt; encode_tls_recv_reply(<span class="kw-2">&amp;</span>data[..len]),
-<a href=#301 id=301 data-nosnippet>301</a>                        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="macro">alloc::vec!</span>[<span class="number">0</span>; <span class="number">2</span>],
+<a href=#301 id=301 data-nosnippet>301</a>                        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="macro">alloc::vec!</span>[<span class="number">0xff</span>; <span class="number">2</span>],
 <a href=#302 id=302 data-nosnippet>302</a>                    };
 <a href=#303 id=303 data-nosnippet>303</a>                    <span class="kw">if </span><span class="self">self</span>.answer(op.reply, op.owner, <span class="prelude-val">Some</span>(cap), <span class="kw-2">&amp;</span>response) {
 <a href=#304 id=304 data-nosnippet>304</a>                        tls_table.insert(cap, entry);
@@ -329,8 +329,8 @@
 <a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">let </span>Pending { reply, owner, state, queue, .. } = op;
 <a href=#330 id=330 data-nosnippet>330</a>        <span class="kw">let </span>response: <span class="kw-2">&amp;</span>[u8] = <span class="kw">match </span><span class="kw-2">&amp;</span>state {
 <a href=#331 id=331 data-nosnippet>331</a>            State::Connecting(<span class="kw">_</span>) | State::Handshake(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0</span>; <span class="number">8</span>],
-<a href=#332 id=332 data-nosnippet>332</a>            State::Send(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0</span>; <span class="number">4</span>],
-<a href=#333 id=333 data-nosnippet>333</a>            State::Recv(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0</span>; <span class="number">2</span>],
+<a href=#332 id=332 data-nosnippet>332</a>            State::Send(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0xff</span>; <span class="number">4</span>],
+<a href=#333 id=333 data-nosnippet>333</a>            State::Recv(<span class="kw">_</span>) =&gt; <span class="kw-2">&amp;</span>[<span class="number">0xff</span>; <span class="number">2</span>],
 <a href=#334 id=334 data-nosnippet>334</a>            State::Vacant =&gt; <span class="kw-2">&amp;</span>[],
 <a href=#335 id=335 data-nosnippet>335</a>        };
 <a href=#336 id=336 data-nosnippet>336</a>        <span class="comment">// The suspended future owns TLS keys and record buffers: destroy it

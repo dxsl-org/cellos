@@ -126,7 +126,7 @@
 <a href=#126 id=126 data-nosnippet>126</a>        }
 <a href=#127 id=127 data-nosnippet>127</a>        RawTlsRequest::Send { cap, data } =&gt; {
 <a href=#128 id=128 data-nosnippet>128</a>            <span class="kw">if </span>!table.is_owner(cap, owner) {
-<a href=#129 id=129 data-nosnippet>129</a>                sys_send(sender, <span class="kw-2">&amp;</span><span class="number">0u32</span>.to_le_bytes());
+<a href=#129 id=129 data-nosnippet>129</a>                sys_send(sender, <span class="kw-2">&amp;</span>u32::MAX.to_le_bytes());
 <a href=#130 id=130 data-nosnippet>130</a>                <span class="kw">return</span>;
 <a href=#131 id=131 data-nosnippet>131</a>            }
 <a href=#132 id=132 data-nosnippet>132</a>            pending.enqueue(cap, owner, ReplyTo::capture(sender),
@@ -134,7 +134,7 @@
 <a href=#134 id=134 data-nosnippet>134</a>        }
 <a href=#135 id=135 data-nosnippet>135</a>        RawTlsRequest::Recv { cap, buf_len } =&gt; {
 <a href=#136 id=136 data-nosnippet>136</a>            <span class="kw">if </span>!table.is_owner(cap, owner) {
-<a href=#137 id=137 data-nosnippet>137</a>                sys_send(sender, <span class="kw-2">&amp;</span>[<span class="number">0u8</span>; <span class="number">2</span>]);
+<a href=#137 id=137 data-nosnippet>137</a>                sys_send(sender, <span class="kw-2">&amp;</span>u16::MAX.to_le_bytes());
 <a href=#138 id=138 data-nosnippet>138</a>                <span class="kw">return</span>;
 <a href=#139 id=139 data-nosnippet>139</a>            }
 <a href=#140 id=140 data-nosnippet>140</a>            pending.enqueue(cap, owner, ReplyTo::capture(sender),

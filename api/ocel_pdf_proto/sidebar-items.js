@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["IPC_BYTES","MAX_DOCUMENT_BYTES","MAX_PAGE_PIXELS","PIXEL_CHUNK_BYTES"],"enum":["Request","Response"]};
+window.SIDEBAR_ITEMS = {"constant":["DOCUMENT_IDLE_TICKS","IPC_BYTES","MAX_DOCUMENT_BYTES","MAX_PAGE_PIXELS","PIXEL_CHUNK_BYTES"],"enum":["Request","Response"],"struct":["DocumentOwner"]};

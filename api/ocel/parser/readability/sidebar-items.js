@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["extract_article","render_clean_subtree"],"struct":["ArticleExtract"]};
+window.SIDEBAR_ITEMS = {"fn":["append_cached_images","extract_article_cached","render_clean_subtree"],"struct":["ArticleExtract"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_IMAGE_BYTES","MAX_RESOURCE_BYTES"],"fn":["load_binary","load_text","resolve"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_IMAGE_BYTES","MAX_REFERENCES","MAX_RESOURCE_BYTES"],"fn":["cached","load_binary","load_text","local_path","push_reference","read_local","references","replace","resolve"],"static":["ACTIVE"],"struct":["Reference","ResourceBundle","ResourceEntry"]};

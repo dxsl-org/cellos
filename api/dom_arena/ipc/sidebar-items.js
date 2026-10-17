@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["JsServiceSession"]};
+window.SIDEBAR_ITEMS = {"fn":["encode_bounded","serialized_len_bounded"],"struct":["JsServiceSession"]};
