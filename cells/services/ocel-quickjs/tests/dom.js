@@ -15,6 +15,10 @@
         ];
     }
     __vios_sync(snapshot(), "Initial");
+    assert(typeof globalThis.fetch === "undefined", "Unsupported fetch must not report fake HTTP success");
+    for (const name of ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "__vios_fireTimer"])
+        assert(typeof globalThis[name] === "undefined", "Unsupported timer absent: " + name);
+    assert(!("innerHTML" in document.body), "Unsupported HTML parsing must not alias textContent");
     const first = document.getElementById("first"), second = document.getElementById("second");
     assert(document.getElementById("3") === null, "IDs must be attributes, not numeric NodeIds");
     assert(typeof node_255 === "undefined", "Absent nodes must not be fabricated");
@@ -60,4 +64,25 @@
     large[2][6] = 300; large[300][5] = 2;
     __vios_sync(large, "Large");
     assert(document.getElementById("n300") === node_300, "Nodes above old fixed 256 window");
+    __vios_takeMutations();
+    for (let i = 0; i < 1024; ++i) document.title = "title" + i;
+    rejected = false;
+    try { document.title = "must not publish"; } catch (e) { rejected = e instanceof RangeError; }
+    assert(rejected && document.title === "title1023", "Mutation count rejection precedes DOM changes");
+    assert(__vios_takeMutations().split("\n").length === 1024, "Bounded mutation batch retained");
+    document.title = "recovered";
+    assert(__vios_takeMutations().includes("recovered"), "Mutation budget resets on drain");
+    rejected = false;
+    try { first.textContent = "x".repeat(131073); } catch (e) { rejected = e instanceof RangeError; }
+    assert(rejected && first.textContent === "hello", "Oversized text rejected before native divergence");
+    assert(__vios_takeMutations() === "", "Rejected mutation consumes no wire allocation");
+    for (let i = 0; i < 64; ++i) console.log(i);
+    rejected = false;
+    try { console.log("excess"); } catch (e) { rejected = e instanceof RangeError; }
+    assert(rejected && __vios_takeLogs().split("\n").length === 64, "Log count bounded");
+    rejected = false;
+    try { console.log("x".repeat(8193)); } catch (e) { rejected = e instanceof RangeError; }
+    assert(rejected && __vios_takeLogs() === "", "Log byte budget rejects before join");
+    console.log("recovered");
+    assert(__vios_takeLogs().includes("recovered"), "Log budget recovers after rejection");
 })();

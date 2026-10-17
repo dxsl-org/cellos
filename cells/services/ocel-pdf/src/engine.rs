@@ -12,6 +12,7 @@ extern "C" {
         width: *mut u32, height: *mut u32, bytes: *mut u32,
         error: *mut c_char, capacity: usize) -> c_int;
     fn ocel_pdf_read_pixels(document: *mut c_void, offset: usize, output: *mut u8, length: usize) -> c_int;
+    fn ocel_pdf_set_clock(clock: extern "C" fn() -> u64);
 }
 
 pub struct Document {
@@ -29,6 +30,13 @@ fn message(error: &[u8]) -> String {
 }
 
 impl Document {
+    pub fn init_deadline_clock() {
+        extern "C" fn ticks() -> u64 {
+            ostd::syscall::sys_get_scheduler_ticks().unwrap_or(u64::MAX)
+        }
+        // SAFETY: the static nonthrowing callback never outlives its code.
+        unsafe { ocel_pdf_set_clock(ticks); }
+    }
     pub fn open(input: Vec<u8>) -> Result<Self, String> {
         if input.is_empty() || input.len() > MAX_DOCUMENT_BYTES {
             return Err(String::from("Invalid PDF document size"));

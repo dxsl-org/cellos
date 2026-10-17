@@ -8,8 +8,8 @@ footprint review; its presence is not a lightweight-profile requirement.
 The product priorities are small footprint, low memory use and fast viewing,
 not general browser compatibility. Controlled HTML content must stay within
 the supported subset; an internal URL does not guarantee compatibility.
-A full native browser is a separate future app, with no name selected.
-See [ADR-0017 §5c](../decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md#5c-ocel-viewer-scope-decision).
+Full web browsers belong in Tier 3 Linux guests; Ocel does not grow a second
+native browser engine. See [ADR-0017](../decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md).
 
 ## Pieces
 
@@ -120,10 +120,13 @@ Child collections are snapshot arrays, not live browser collections.
 
 Snapshots, scripts and replies use ordered chunks over 4 KiB copied IPC;
 serialized transfers are bounded to 512 KiB. Caller/context tokens prevent
-one viewer from silently executing against another viewer's DOM. There is
-one active script context: loading another tab invalidates the earlier tab's
-execution context; that tab must be reloaded to execute scripts again.
-QuickJS uses a 3 MiB accounted heap and bounded interrupt/job processing.
+one viewer from silently executing against another viewer's DOM. A different
+live caller receives Busy rather than evicting the owner. Reset/close explicitly
+releases the context before its engine lease. Switching tabs invalidates the
+earlier execution context; F5 reloads it. Owner traffic renews a 6,000 scheduler
+tick idle lease (60 seconds); expired contexts require synchronization again.
+QuickJS uses a 3 MiB accounted heap, bounded interrupt/job processing, mutation
+and log budgets, and a size-counting pass before response allocation.
 
 Native CSS now applies selector matching, importance/specificity/source-order
 cascade, inheritance, inline styles, width media queries, and Taffy block,
@@ -131,11 +134,11 @@ flex and grid layout. External classic scripts and stylesheets load in
 document order from the same origin (UTF-8, at most 256 KiB per resource).
 `tests/fixtures/ocel-native-web.{html,css,js}` exercises these paths.
 
-This is **not full browser compatibility**. The HTML tree builder and CSS
-parser remain subsets; modules, `fetch`/XHR, timers, workers, complete Web
-APIs, browser font shaping, positioned/float/table layout, and replaced
-HTML image elements are not implemented. General public-web compatibility
-belongs to the separate future browser, not Ocel viewer.
+This is **not full browser compatibility**. The HTML tree builder and CSS parser
+remain subsets. Native images and a bounded GET form subset use the active
+Taffy renderer. Modules, fetch/XHR, timers, workers, innerHTML and complete Web
+APIs are not implemented; unsupported APIs are absent rather than successful
+stubs. OpenType shaping and positioned/float/table HTML layout remain unsupported.
 
 ## Typography
 
@@ -183,12 +186,68 @@ ocel                                  # built-in welcome page
 ocel file:///data/ocel-js-demo.html   # open a document by argument (argv)
 ```
 
-Keys and pointer: `Ctrl+T` new tab, `Ctrl+W` close, `Ctrl+Tab` next,
-`Ctrl+F`/`F3` search with `Enter` cycling matches, `Esc` closes search,
-`Enter` navigates, `Backspace` edits the address bar, arrows/`PageUp`/`PageDown`/
-`Home`/`End` scroll, clicking `[+]`/`[x]`/tab bodies/`[<]`/`[>]`/`[Go]` works,
-links navigate, and clicks on text nodes dispatch DOM events to the Tier 2
-service.
+| Action | Controls |
+|---|---|
+| Tabs/history | Ctrl+T, Ctrl+W, Ctrl+Tab; Alt+Left/Right or toolbar arrows |
+| Navigate/reload/cancel | Enter or Go; F5 reload; Esc cancels pending loading |
+| Find | Ctrl+F opens; Enter/F3 next, Shift+Enter/Shift+F3 previous; Esc closes |
+| Reader | Ctrl+R or Reader; Alt+[ / Alt+] changes the reading column |
+| Zoom | Ctrl++ / Ctrl+- in 10% steps, Ctrl+0 resets; range 50–200% |
+| Contents | Ctrl+M; click heading or arrows/Enter; wheel scrolls the heading list |
+| Scripts | Ctrl+J toggles the current tab's policy; F5 explicitly reloads |
+| Scroll | Arrows, PageUp/PageDown, Home/End, wheel or scrollbar |
+
+Reader state belongs to each document; changing tabs cannot restore another
+tab's content. Native control focus clears on tab changes/navigation. Text,
+checkbox and submit controls support owning-form GET actions with UTF-8 query
+encoding; POST and unsupported controls report explicit errors. Ordinary
+buttons do not submit. Selection/clipboard integration is not implemented.
+
+Search is NFC-normalized and Unicode-lowercased, including Vietnamese. Matching
+layout regions are highlighted; the active region has a distinct color. This
+is region-based navigation, not an occurrence counter for every word on a line.
+Heading contents and fragments work for Markdown and HTML.
+
+## Loading and resource budgets
+
+Navigation polls exact IPC operations from the input loop. It does not block
+on network receive. Esc, a newer navigation, closing a tab or switching tabs
+cancels the old load; a late result cannot replace the new document. The old
+document/history remains until a completed candidate is accepted. Local file
+reads and PDF work remain bounded synchronous operations.
+
+HTTP validates status, bounded headers, Content-Length/chunk framing and EOF;
+short or malformed responses are errors. Redirects are bounded to five hops
+with loop/protocol checks; resource redirects cannot escape the original
+origin. HTTP(S)/Gemini operations use a 45-second deadline; the complete
+document/resource acquisition has a 60-second deadline, using monotonic time.
+TLS still requires the network service's authenticated time/certificate policy.
+
+HTML resources are discovered from active tokenized syntax; Markdown fenced
+examples do not fetch images. Same-origin scripts/styles/images are prefetched
+cooperatively, then parsing reads only the current tab's resource bundle.
+Image bytes are shared, and relayout/Reader do not decode them again.
+
+| Limit | Value |
+|---|---|
+| Open tabs / history entries per tab | 4 / 128 |
+| Shared document/resource/loading residency budget | 8 MiB |
+| Viewer heap | 16 MiB, including fonts and temporary working space |
+| Text bytes / DOM nodes / nesting | 1 MiB / 16,384 / 64 |
+| CSS rules / selectors / selector bytes | 1,024 / 4,096 / 512 |
+| Resource references / total encoded resource bytes | 64 / 4 MiB |
+| Script or stylesheet bytes | 256 KiB each |
+| Images / decoded image bytes per document | 16 / 4 MiB |
+
+Layout and mutation staging reserve conservative working memory before growth,
+then check residency before publication. These limits are ceilings, not promises
+that every smaller document fits: a 214 KiB, 4,000-node Markdown stress input is
+rejected by the layout reservation. Closing tabs or using smaller documents
+can be necessary. Font caches remain separately bounded by the typography SDK.
+
+Chrome-only edits repaint/damage the toolbar, tab bar and status, leaving
+document pixels intact. Scroll repaints the viewport and status, not navigation
+chrome. No unbounded document/layout cache is introduced.
 
 ### Native syntax highlighting
 
@@ -220,25 +279,16 @@ host renderer evidence, not a QEMU compositor or physical-display claim.
 
 ## Observable behaviour
 
-The viewer and the service print one line per notable event, which is what the
-lane asserts on:
-
-```text
-[domain] admitted cell 'ocel-js' to Tier 2 Paged Domain (SATP isolation)
-Init: ocel-js Tier 2 JS service registered.
-[ocel-js] Ready to process scripts and DOM events.
-[ocel] loaded file:///data/ocel-js-demo.html (HTML, 3 items)
-[ocel] dom title: Tier 2 script ran
-[ocel] search "cellos": 1 match(es)
-[ocel] search next: 1/1
-[ocel] tab 2 active: file:///welcome.md
-```
+The viewer logs completed loads, searches and DOM titles. The engine identifies
+itself with `[ocel-quickjs] quickjs 2026-06-04 engine ready (Tier 2)`. Error paths
+report unavailable/busy engines; no matcher or in-process fallback executes
+document scripts.
 
 ## Running the lane
 
 ```bash
 # Build the cells and (re)assemble VIFS1 + kernel + disk_v3.img from target/
-cargo build --release -p ocel -p ocel-js -p ocel-quickjs --target riscv64gc-unknown-none-elf
+cargo build --release -p ocel -p ocel-quickjs -p ocel-pdf --target riscv64gc-unknown-none-elf
 bash scripts/gen-disk-ci.sh --no-cells
 
 cd tests/integration
@@ -251,6 +301,40 @@ CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu \
 Raw evidence for the last passing runs: `docs/evidence/ocel-browser-qemu.log`
 (viewer, serial), `docs/evidence/ocel-quickjs-qemu.log` (engine, serial) and the
 matching `.txt` runner outputs.
+
+### Upgrade verification — 2026-10-17
+
+```sh
+cargo test --offline --target x86_64-unknown-linux-gnu \
+  -p ocel -p dom-arena -p ocel-service-proto -p ocel-pdf-proto -p ostd -p service-net
+cargo build --offline --release --target riscv64gc-unknown-none-elf \
+  -p ocel -p ocel-quickjs -p ocel-pdf -p service-net
+python3 cells/services/ocel-pdf/smoke/host.py tests/fixtures/ocel-pdf-demo.pdf
+```
+
+The hosted Rust run passed 216 tests, with two existing SDK doctests ignored.
+The vendored QuickJS C core executed `tests/host_dom.c` with the real prelude
+and `tests/dom.js`, including mutation/log budget rejection and recovery.
+MuPDF rendered both fixture pages, recovered from malformed input and rejected
+an injected expired native deadline before a successful fresh open/render.
+
+A disposable host adapter replaced only display/system boundaries; it ran the
+actual viewer controller, keyboard/pointer handlers, parser, fonts, layout and
+pixel painter. It exercised Reader/tab isolation and restore, form editing,
+owning-form UTF-8 GET encoding, zoom, contents/anchors, Vietnamese search and
+highlights, per-tab script policy, pre-submit cancellation, embedded HTML image
+paint, and source/layout memory rejection preserving the old document/history.
+Framebuffer captures were inspected. This is not live guest networking, a
+compositor/grant test or physical-display qualification.
+
+At a 1024×680 surface, chrome-only address editing damaged 393,216 bytes versus
+2,785,280 for a full repaint, and the viewport pixels were unchanged. One warm
+host sample measured roughly 0.09 ms for chrome paint and 0.71 ms for full paint;
+these are scenario measurements, not hardware performance guarantees.
+A 21,400-byte/400-node Markdown input used approximately 599 KiB of estimated
+document residency and about 1.9 ms for layout; the larger stress input described
+above was rejected before layout allocation, not timed as successful rendering.
+
 
 ## Image prerequisite: a display-capable `init`
 
@@ -286,8 +370,8 @@ EXIF orientation transform or ICC color management is applied.
 Decoding is bounded to 4096 pixels per dimension and 1,048,576 pixels total.
 Encoded local images are limited to 2 MiB. Ocel initializes a 16 MiB custom
 heap before any allocation; the previous default 1 MiB arena is insufficient
-for ordinary decoded images. These per-image limits are not a guarantee that
-an unlimited number of image tabs fits in that heap.
+for ordinary decoded images. Aggregate document/tab admission can reject an
+image before these per-image maxima.
 Corrupt, truncated and oversized images produce a decode error rather than
 being interpreted as text. Layout shares the pixel allocation with the
 document, fits wide images to the viewport without upscaling, and preserves
@@ -298,9 +382,9 @@ Host smoke verification exercises the actual loader, codecs, layout and paint
 with filesystem/surface adapters: RGB/RGBA/grayscale/grayscale-alpha/palette
 PNG, baseline/progressive JPEG, BMP, truncation, the pixel budget and alpha
 composition. The RV64 release build succeeds. This is not guest/compositor
-or physical-device evidence. GIF, WebP and SVG decoding are not implemented;
-network and embedded HTML/Markdown images are not loaded by this local-file
-path.
+or physical-device evidence. GIF, WebP and SVG decoding are not implemented.
+Same-origin embedded HTML/Markdown images use prefetched shared resource bytes.
+BMP supports BI_RGB only; BI_BITFIELDS is rejected instead of misreading masks.
 
 ## Native PDF viewing
 
@@ -313,6 +397,11 @@ links stay within the document's page range.
 Documents are limited to 2 MiB. Each page fits within 1024 × 1024 pixels;
 opaque BGRA pixels are transferred in bounded copied-IPC chunks. The viewer
 closes its document handle after each load, including failure paths.
+JS and PDF service ownership expires after 60 idle seconds. PDF native work has
+a four-second cooperative deadline checked at allocation and result checkpoints.
+Cancelling client IPC abandons its reply, not the running MuPDF invocation:
+there is no hard preemption bound between checkpoints. Failed/undeliverable
+results clear only the matching owner's document, and subsequent opens recover.
 Encrypted documents requiring a password are rejected; password UI, text
 selection, search and annotations are not implemented. Base14 fallback fonts
 are embedded; CJK requires document-embedded fonts, not a bundled system
@@ -336,11 +425,11 @@ introduced.
 |---|---|
 | QuickJS integration | Real document-backed DOM; missing/incompatible engines fail explicitly |
 | CSS | Native subset cascade and Taffy block/flex/grid; not standards-complete |
-| PNG/JPEG/BMP | Local image viewing implemented; network/embedded images, GIF/WebP and animation remain unsupported |
+| PNG/JPEG/BMP | Local and same-origin embedded images; GIF/WebP/SVG and animation unsupported |
 | PDF (MuPDF) | Native local-page path implemented; guest surface verification blocked as described above |
 | EPUB, SVG | Not implemented |
 | Syntax highlighting for text/code files | Native Rust, C/C++, JSON and TOML source files and labelled Markdown fences; other languages remain unhighlighted |
 | Engine failure | Explicit errors; no in-process script fallback |
 | Tier 3 Chromium browser launcher | Guest input bridge exists (`cells/services/hypervisor/src/virtio_input.rs`); launcher cell, clipboard, and file sharing do not |
-| QuickJS on x86_64 | The Tier-A C ABI the engine links against exists only on riscv64/aarch64 (`libs/api/src/services/posix.rs`), so x86_64 builds the cell as a stub that says so |
+| QuickJS architectures | Build predicate includes RV64, AArch64 and x86_64 when the C compiler is available; this upgrade verified RV64 release and host QuickJS, not an x86 guest |
 | Multiple live JS tabs | One active context; inactive tabs require reload before event execution |

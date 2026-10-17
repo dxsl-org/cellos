@@ -8,13 +8,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
-- Expand Ocel Native Browser Capabilities Across 6 Strategic Tracks (cells/apps/ocel, cells/services/ocel-quickjs):
-  1. Embedded Media: add binary HTTP/HTTPS fetch, HTML <img> tag and Markdown ![alt](url) image loading and decode.
-  2. Browser Chrome: add Smart Omnibox URL classification (search via DuckDuckGo Lite / domains), Back/Forward navigation buttons & Alt+Left/Right shortcuts, and ocel://bookmarks.
-  3. Forms & Inputs: add <input type="text/checkbox/submit"> and <textarea> interactive canvas editing, and form submission.
-  4. Reader Mode: add DOM Readability content extraction (Ctrl+R / [Reader] button) for distraction-free article reading.
-  5. Gemini Protocol: add native gemini:// client with TLS 1.3 port 1965 and Gemtext parser.
-  6. QuickJS Web APIs: add timers (setTimeout/setInterval), async fetch stub, innerHTML, and querySelector/querySelectorAll; verify 65/65 unit tests clean.
+- Complete the bounded Ocel viewer upgrade (`cells/apps/ocel`, DOM protocol,
+  QuickJS/PDF services and NET TLS replies):
+  - Restore Reader content correctly per document; clear transient focus/search
+    on tab changes; normalize format suffixes and Vietnamese Unicode search.
+  - Integrate image and GET-form controls into active HTML layout/paint/hit-test;
+    encode owning-form submissions, preserve input edits, reject unsupported methods.
+  - Add 50–200% zoom, reader column controls, heading contents/anchors,
+    previous/next highlighted search, per-tab script policy and explicit engine state.
+  - Replace network receive loops with deadline-bound cooperative exact IPC,
+    HTTP framing/status validation, safe bounded redirects, cancellation and cap cleanup.
+  - Bound text/DOM/CSS/images, resource discovery, pending loads and document residency;
+    share resource/image storage, preserve original documents on rejected loads.
+  - Prevent cross-owner JS eviction, bound mutation/log/serialization allocations,
+    and recover PDF ownership after cooperative deadline or abandoned results.
+  - Remove successful fake fetch/timer/innerHTML APIs and false bookmark-saving feedback.
+  - Limit repaint/damage to affected regions; chrome edits preserve viewport pixels.
+    Host regressions, real engine execution and viewer-controller/pixel smoke are
+    exercised; RV64 viewer/services release-build. No new guest/physical qualification.
 - Implement ViUI Native MarkdownView and RichTextView Widgets (libs/viui/src/widgets/markdown.rs, libs/viui/src/widgets/rich_text.rs):
   provide native multi-span inline text formatting (bold, italic, code pills, accent links), automatic
   word wrapping, heading hierarchies (H1..H4), syntax-highlighted code block containers, blockquotes with

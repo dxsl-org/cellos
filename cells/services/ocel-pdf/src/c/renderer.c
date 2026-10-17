@@ -9,6 +9,21 @@
 #define PAGE_PIXELS (1024u * 1024u)
 #define ALLOCATION_BYTES (10u * 1024u * 1024u)
 
+/* No asynchronous claim: cancellation of caller IPC cannot interrupt MuPDF.
+ * Allocation checkpoints enforce this cooperative deadline. Work between
+ * checkpoints may finish later; the caller result is then discarded below.
+ * A NULL clock is reserved for the hosted native harness. */
+static uint64_t (*runtime_ticks)(void);
+static uint64_t work_started;
+static int work_active;
+void ocel_pdf_set_clock(uint64_t (*clock)(void)) { runtime_ticks = clock; }
+static void begin_work(void) { work_started = runtime_ticks ? runtime_ticks() : 0; work_active = 1; }
+static int work_expired(void) {
+    return work_active && runtime_ticks &&
+        (work_started == UINT64_MAX || runtime_ticks() - work_started >= 400);
+}
+static void end_work(void) { work_active = 0; }
+
 typedef union { size_t size; max_align_t align; } allocation_header;
 /* Include our header, POSIX malloc metadata and worst-case 16-byte rounding. */
 #define ALLOCATION_OVERHEAD (sizeof(allocation_header) + 32u)
@@ -25,6 +40,7 @@ typedef struct {
 static void *bounded_malloc(void *user, size_t size)
 {
     cell_pdf *pdf = user;
+    if (work_expired()) return NULL;
     if (size > SIZE_MAX - ALLOCATION_OVERHEAD) return NULL;
     size_t charged = size + ALLOCATION_OVERHEAD;
     if (charged > ALLOCATION_BYTES - pdf->allocated) return NULL;
@@ -47,6 +63,7 @@ static void *bounded_realloc(void *user, void *ptr, size_t size)
     if (!ptr) return bounded_malloc(user, size);
     if (!size) { bounded_free(user, ptr); return NULL; }
     cell_pdf *pdf = user;
+    if (work_expired()) return NULL;
     allocation_header *h = (allocation_header *)ptr - 1;
     size_t old = h->size;
     if (size > SIZE_MAX - ALLOCATION_OVERHEAD) return NULL;
@@ -84,9 +101,10 @@ cell_pdf *ocel_pdf_open(const unsigned char *bytes, size_t length,
     }
     cell_pdf *pdf = calloc(1, sizeof(*pdf));
     if (!pdf) { error_text(error, capacity, "PDF allocation failed"); return NULL; }
+    begin_work();
     fz_alloc_context allocator = {pdf, bounded_malloc, bounded_realloc, bounded_free};
     pdf->ctx = fz_new_context(&allocator, NULL, 2u * 1024u * 1024u);
-    if (!pdf->ctx) { free(pdf); error_text(error, capacity, "MuPDF context allocation failed"); return NULL; }
+    if (!pdf->ctx) { end_work(); free(pdf); error_text(error, capacity, "MuPDF context allocation failed or deadline expired"); return NULL; }
     fz_stream *stream = NULL;
     int failed = 0;
     fz_var(stream);
@@ -99,9 +117,11 @@ cell_pdf *ocel_pdf_open(const unsigned char *bytes, size_t length,
         int count = pdf_count_pages(pdf->ctx, pdf->doc);
         if (count <= 0) fz_throw(pdf->ctx, FZ_ERROR_ARGUMENT, "PDF has no pages");
         pdf->pages = (unsigned int)count;
+        if (work_expired()) fz_throw(pdf->ctx, FZ_ERROR_LIMIT, "PDF work deadline exceeded; result abandoned");
     }
     fz_always(pdf->ctx) { fz_drop_stream(pdf->ctx, stream); }
     fz_catch(pdf->ctx) { error_text(error, capacity, fz_caught_message(pdf->ctx)); failed = 1; }
+    end_work();
     if (failed) { ocel_pdf_close(pdf); return NULL; }
     *pages = pdf->pages;
     return pdf;
@@ -119,6 +139,7 @@ int ocel_pdf_render(cell_pdf *pdf, unsigned int number, unsigned int max_width,
     fz_drop_pixmap(pdf->ctx, pdf->raster);
     pdf->raster = NULL;
     pdf->pixels = NULL; pdf->pixel_bytes = 0; pdf->width = pdf->height = 0;
+    begin_work();
     pdf_page *page = NULL;
     fz_pixmap *pixmap = NULL;
     fz_device *device = NULL;
@@ -153,6 +174,7 @@ int ocel_pdf_render(cell_pdf *pdf, unsigned int number, unsigned int max_width,
         fz_clear_pixmap_with_value(pdf->ctx, pixmap, 255);
         device = fz_new_draw_device(pdf->ctx, matrix, pixmap);
         fz_run_page(pdf->ctx, (fz_page *)page, device, fz_identity, NULL);
+        if (work_expired()) fz_throw(pdf->ctx, FZ_ERROR_LIMIT, "PDF work deadline exceeded; result abandoned");
         fz_close_device(pdf->ctx, device);
         fz_drop_device(pdf->ctx, device);
         device = NULL;
@@ -172,6 +194,7 @@ int ocel_pdf_render(cell_pdf *pdf, unsigned int number, unsigned int max_width,
             rgba[i] = rgba[i + 2];
             rgba[i + 2] = red;
         }
+        if (work_expired()) fz_throw(pdf->ctx, FZ_ERROR_LIMIT, "PDF work deadline exceeded; result abandoned");
         pdf->raster = pixmap; pixmap = NULL;
         pdf->pixels = rgba;
         pdf->pixel_bytes = size; pdf->width = pw; pdf->height = ph;
@@ -182,6 +205,7 @@ int ocel_pdf_render(cell_pdf *pdf, unsigned int number, unsigned int max_width,
         fz_drop_page(pdf->ctx, (fz_page *)page);
     }
     fz_catch(pdf->ctx) { error_text(error, capacity, fz_caught_message(pdf->ctx)); failed = 1; }
+    end_work();
     if (failed) return -1;
     *width = pdf->width; *height = pdf->height; *bytes = (unsigned int)pdf->pixel_bytes;
     return 0;

@@ -168,6 +168,14 @@ pub fn parse_markdown_with_base(input: &str, base_url: Option<&str>) -> Vec<DocN
             });
             continue;
         }
+        let digits = trimmed.bytes().take_while(u8::is_ascii_digit).count();
+        if digits > 0 && (trimmed[digits..].starts_with(". ") || trimmed[digits..].starts_with(") ")) {
+            nodes.push(DocNode::ListItem {
+                bullet: '\0', indent,
+                spans: parse_inlines(trimmed),
+            });
+            continue;
+        }
 
         // 7. Standard Paragraph
         nodes.push(DocNode::Paragraph {
@@ -200,81 +208,33 @@ fn split_table_cells(line: &str) -> Vec<String> {
 /// Parse inline markdown: `code`, **bold**, [link](url)
 pub fn parse_inlines(text: &str) -> Vec<StyledSpan> {
     let mut spans = Vec::new();
-    let mut chars = text.chars().peekable();
-    let mut buf = String::new();
-
-    while let Some(c) = chars.next() {
-        match c {
-            '`' => {
-                if !buf.is_empty() {
-                    spans.push(StyledSpan::plain(&buf));
-                    buf.clear();
-                }
-                let mut code_buf = String::new();
-                for inner in chars.by_ref() {
-                    if inner == '`' {
-                        break;
-                    }
-                    code_buf.push(inner);
-                }
-                spans.push(StyledSpan::code(&code_buf));
-            }
-            '*' if chars.peek() == Some(&'*') => {
-                chars.next(); // consume second '*'
-                if !buf.is_empty() {
-                    spans.push(StyledSpan::plain(&buf));
-                    buf.clear();
-                }
-                let mut bold_buf = String::new();
-                while let Some(inner) = chars.next() {
-                    if inner == '*' && chars.peek() == Some(&'*') {
-                        chars.next(); // consume closing '*'
-                        break;
-                    }
-                    bold_buf.push(inner);
-                }
-                let mut s = StyledSpan::plain(&bold_buf);
-                s.bold = true;
-                spans.push(s);
-            }
-            '[' => {
-                if !buf.is_empty() {
-                    spans.push(StyledSpan::plain(&buf));
-                    buf.clear();
-                }
-                let mut link_text = String::new();
-                for inner in chars.by_ref() {
-                    if inner == ']' {
-                        break;
-                    }
-                    link_text.push(inner);
-                }
-
-                let mut link_url = String::new();
-                if chars.peek() == Some(&'(') {
-                    chars.next(); // consume '('
-                    for inner in chars.by_ref() {
-                        if inner == ')' {
-                            break;
-                        }
-                        link_url.push(inner);
-                    }
-                }
-
-                let mut s = StyledSpan::plain(&link_text);
-                s.link = Some(link_url);
-                s.color = Some(crate::draw::theme::ACCENT_BLUE);
-                spans.push(s);
-            }
-            _ => {
-                buf.push(c);
+    let mut plain = String::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        let delimiter = if rest.starts_with("**") { Some(("**", 2u8)) }
+            else if rest.starts_with('`') { Some(("`", 1u8)) } else { None };
+        if let Some((marker, kind)) = delimiter {
+            if let Some(end) = rest[marker.len()..].find(marker) {
+                if !plain.is_empty() { spans.push(StyledSpan::plain(&plain)); plain.clear(); }
+                let end = marker.len() + end;
+                let mut span = StyledSpan::plain(&rest[marker.len()..end]);
+                span.code = kind == 1; span.bold = kind == 2;
+                spans.push(span); rest = &rest[end + marker.len()..]; continue;
             }
         }
+        if let Some(after) = rest.strip_prefix('[') {
+            if let Some(close) = after.find("](") {
+                if let Some(end) = after[close + 2..].find(')') {
+                    if !plain.is_empty() { spans.push(StyledSpan::plain(&plain)); plain.clear(); }
+                    let mut span = StyledSpan::plain(&after[..close]);
+                    span.link = Some(String::from(&after[close + 2..close + 2 + end]));
+                    span.color = Some(crate::draw::theme::ACCENT_BLUE);
+                    spans.push(span); rest = &after[close + 3 + end..]; continue;
+                }
+            }
+        }
+        let c = rest.chars().next().unwrap(); plain.push(c); rest = &rest[c.len_utf8()..];
     }
-
-    if !buf.is_empty() {
-        spans.push(StyledSpan::plain(&buf));
-    }
-
+    if !plain.is_empty() { spans.push(StyledSpan::plain(&plain)); }
     spans
 }

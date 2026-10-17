@@ -102,14 +102,25 @@ fn cell_main() {
         match sys_recv(0, &mut recv_buf) {
             SyscallResult::Ok(caller_tid) if caller_tid > 0 => {
                 let operation = ostd::ipc::current();
+                let mut context = None;
                 let response = match postcard::from_bytes::<OcelJsRequest>(&recv_buf) {
-                    Ok(request) => session.handle(caller_tid, request, &mut ctx),
+                    Ok(request) => {
+                        context = match &request {
+                            OcelJsRequest::OpenContext { context } | OcelJsRequest::CloseContext { context }
+                            | OcelJsRequest::Begin { context, .. } | OcelJsRequest::Chunk { context, .. }
+                            | OcelJsRequest::Commit { context } | OcelJsRequest::ReadResponse { context, .. } => Some(*context),
+                            OcelJsRequest::Ping => None,
+                        };
+                        session.handle_at(caller_tid, request, &mut ctx, ostd::syscall::sys_get_scheduler_ticks())
+                    }
                     Err(_) => JsServiceSession::error("Malformed OcelJsRequest IPC payload"),
                 };
 
                 if let Ok(encoded) = postcard::to_slice(&response, &mut send_buf) {
                     if let Some(operation) = operation {
-                        let _ = ostd::ipc::reply(operation, encoded);
+                        if ostd::ipc::reply(operation, encoded).is_err() {
+                            if let Some(context) = context { session.abandon(caller_tid, context, &mut ctx); }
+                        }
                     } else {
                         let _ = sys_send(caller_tid, encoded);
                     }

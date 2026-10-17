@@ -489,26 +489,31 @@ pub trait ViDriver: Send + Sync {
 
 | Opcode | Name | Payload | Reply |
 |--------|------|---------|-------|
-| `0x30` | TLS_CONNECT | [addr:4 LE][port:2 LE][hostname:*] | [cap_id:8 LE] or [0;8] |
-| `0x31` | TLS_SEND | [plaintext_data:*] | [bytes_written:4 LE] |
-| `0x32` | TLS_RECV | [max_len:4 LE] | [decrypted_data:*] |
+| `0x30` | TLS_CONNECT | `[cap=0:u64][IPv4:4][port:u16][hostname_len:u16][hostname]` | `cap:u64`, zero on failure |
+| `0x31` | TLS_SEND | `[cap:u64][len:u16][plaintext]` (≤501 bytes) | accepted bytes `u32`; `u32::MAX` is an error |
+| `0x32` | TLS_RECV | `[cap:u64][max_len:u32]` | `[len:u16][plaintext]` (≤4094 bytes); zero length is EOF, `u16::MAX` is an error |
+
+All integers are little-endian; each payload follows its opcode byte. TLS
+receive stays pending while transport data is unavailable; it does not encode
+NotReady as EOF. Timeout, cancellation and ownership failures use the error
+sentinels, not successful zero progress. Exact-operation clients must preserve
+this distinction. The blocking read helper also returns an error-bearing result;
+it never conflates a service failure with clean EOF. Ocel uses its cooperative client.
 
 **Convenience Functions** (Rust):
 ```rust
 use ostd::tls;
 
-/// Establish TLS 1.3 connection to host:port via SNI.
-/// Returns session capability handle.
-pub fn tls_connect(host: &str, port: u16) -> ViResult<u64>;
+/// Connect via the NET service endpoint; returns zero on failure.
+pub fn tls_connect(net_tid: usize, addr: [u8; 4], port: u16, hostname: &str) -> u64;
 
-/// Send plaintext; receives encrypted bytes back.
-pub fn tls_write(cap_id: u64, data: &[u8]) -> ViResult<usize>;
+/// Accepted bytes, possibly partial; zero on failure.
+pub fn tls_write(net_tid: usize, cap_id: u64, data: &[u8]) -> usize;
 
-/// Receive and decrypt data from session.
-pub fn tls_read(cap_id: u64, buf: &mut [u8]) -> ViResult<usize>;
+/// Decrypted bytes; Ok(0) is EOF, Err reports service/IPC/framing failure.
+pub fn tls_read(net_tid: usize, cap_id: u64, buf: &mut [u8]) -> ViResult<usize>;
 
-/// Close session and free TLS state.
-pub fn tls_close(cap_id: u64) -> ViResult<()>;
+pub fn tls_close(net_tid: usize, cap_id: u64);
 ```
 
 **Requirements**:

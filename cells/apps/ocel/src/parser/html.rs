@@ -38,6 +38,7 @@ fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<ScriptSource>) {
     let mut tokens = Vec::new();
     let mut scripts = Vec::new();
     let mut chars = input.chars().peekable();
+    let mut template_depth=0usize;
 
     while let Some(c) = chars.next() {
         if c == '<' {
@@ -75,6 +76,7 @@ fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<ScriptSource>) {
             let trimmed_tag = tag_content.trim();
             if let Some(rest) = trimmed_tag.strip_prefix('/') {
                 let name = rest.trim().to_ascii_lowercase();
+                if name=="template"{template_depth=template_depth.saturating_sub(1);}
                 tokens.push(HtmlToken::EndTag { name });
             } else {
                 let self_closing = trimmed_tag.ends_with('/');
@@ -87,27 +89,22 @@ fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<ScriptSource>) {
                 let name_end = tag_body.find(char::is_whitespace).unwrap_or(tag_body.len());
                 let name = tag_body[..name_end].to_ascii_lowercase();
                 let attributes = parse_attributes(&tag_body[name_end..]);
+                if name=="template"&&!self_closing{template_depth+=1;}
 
                 // If this is a <script> tag, capture the script body directly
                 if name == "script" && !self_closing {
                     let mut script_body = String::new();
                     while let Some(sc) = chars.next() {
-                        if sc == '<'
-                            && chars
-                                .clone()
-                                .take(8)
-                                .collect::<String>()
-                                .eq_ignore_ascii_case("/script>")
-                        {
-                            for _ in 0..8 {
-                                chars.next();
+                        if sc=='<' {
+                            if let Some(count)=crate::budget::rawtext_close_chars(chars.clone(),"script") {
+                                for _ in 0..count{chars.next();}
+                                break;
                             }
-                            break;
                         }
                         script_body.push(sc);
                     }
                     let kind = attributes.iter().find(|(key, _)| key == "type").map(|(_, value)| value.as_str()).unwrap_or("");
-                    if matches!(kind, "" | "text/javascript" | "application/javascript") {
+                    if template_depth==0&&matches!(kind, "" | "text/javascript" | "application/javascript") {
                         if let Some((_, src)) = attributes.iter().find(|(key, _)| key == "src") {
                             scripts.push(ScriptSource::External(src.clone()));
                         } else {
@@ -120,15 +117,30 @@ fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<ScriptSource>) {
                     tokens.push(HtmlToken::StartTag { name: name.clone(), attributes, self_closing });
                     let mut body = String::new();
                     while let Some(ch) = chars.next() {
-                        if ch == '<' && chars.clone().take(7).collect::<String>().eq_ignore_ascii_case("/style>") {
-                            for _ in 0..7 { chars.next(); }
-                            break;
+                        if ch=='<' {
+                            if let Some(count)=crate::budget::rawtext_close_chars(chars.clone(),"style") {
+                                for _ in 0..count{chars.next();}
+                                break;
+                            }
                         }
                         body.push(ch);
                     }
                     tokens.push(HtmlToken::Text(body));
                     tokens.push(HtmlToken::EndTag { name });
                     continue;
+                }
+                if matches!(name.as_str(),"textarea"|"title"|"xmp"|"iframe"|"noembed"|"noframes")&&!self_closing {
+                    tokens.push(HtmlToken::StartTag{name:name.clone(),attributes,self_closing});
+                    let mut body=String::new();
+                    while let Some(c)=chars.next() {
+                        if c=='<' {
+                            if let Some(count)=crate::budget::rawtext_close_chars(chars.clone(),&name) {
+                                for _ in 0..count{chars.next();}break;
+                            }
+                        }
+                        body.push(c);
+                    }
+                    tokens.push(HtmlToken::Text(decode_entities(&body)));tokens.push(HtmlToken::EndTag{name});continue;
                 }
 
                 tokens.push(HtmlToken::StartTag {
@@ -199,17 +211,24 @@ pub fn parse_html(input: &str) -> HtmlOutput {
 }
 
 pub fn parse_html_with_base(input: &str, base_url: Option<&str>) -> HtmlOutput {
+    parse_html_with_base_checked(input, base_url).expect("HTML document budget")
+}
+
+pub fn parse_html_with_base_checked(input: &str, base_url: Option<&str>) -> Result<HtmlOutput, String> {
+    crate::budget::validate_html(input)?;
     let (tokens, scripts) = tokenize_html(input);
     let mut arena = DocumentArena::new();
     let mut tag_stack: Vec<(String, NodeId)> = alloc::vec![(String::from("root"), arena.root)];
 
     for tok in tokens {
+        if arena.nodes.len()>=crate::budget::MAX_DOM_NODES {return Err(String::from("HTML exceeds DOM node budget"));}
         match tok {
             HtmlToken::StartTag {
                 name,
                 attributes,
                 self_closing,
             } => {
+                if !self_closing && tag_stack.len()>crate::budget::MAX_DOM_DEPTH {return Err(String::from("HTML exceeds DOM depth budget"));}
                 let parent_id = tag_stack.last().map(|(_, id)| *id).unwrap_or(arena.root);
                 let node_id = arena.alloc_node(NodeData::Element {
                     tag: name.clone(),
@@ -240,22 +259,36 @@ pub fn parse_html_with_base(input: &str, base_url: Option<&str>) -> HtmlOutput {
         }
     }
 
+    let mut images = Vec::new();
+    let mut css = String::new();
+    for node in &arena.nodes {
+        if node.tag() == Some("img") { if let Some(src) = node.get_attribute("src") { images.push(src); } }
+        if node.tag() == Some("style") {
+            css.push_str(&arena.get_text_content(node.id));
+        }
+        if let Some(style) = node.get_attribute("style") { css.push_str("x{"); css.push_str(style); css.push('}'); }
+    }
+    crate::budget::validate_css(&css)?;
+    super::validate_images(base_url, images.into_iter())?;
     let nodes = arena_to_doc_nodes_with_base(&arena, base_url);
-    HtmlOutput {
+    Ok(HtmlOutput {
         nodes,
         scripts,
         arena,
-    }
-}
-
-/// Converts a `DocumentArena` DOM tree into renderable `DocNode`s for the layout engine.
-pub fn arena_to_doc_nodes(arena: &DocumentArena) -> Vec<DocNode> {
-    arena_to_doc_nodes_with_base(arena, None)
+    })
 }
 
 pub fn arena_to_doc_nodes_with_base(arena: &DocumentArena, base_url: Option<&str>) -> Vec<DocNode> {
     let mut doc_nodes = Vec::new();
     render_children(arena, arena.root, &mut doc_nodes, base_url);
+    for node in &arena.nodes {
+        if node.tag()!=Some("img")||doc_nodes.iter().any(|asset|matches!(asset,DocNode::DomImage{node_id,..} if *node_id==node.id)){continue;}
+        if let (Some(base),Some(src))=(base_url,node.get_attribute("src")) {
+            if let Ok(bytes)=crate::resources::load_binary(base,src) {
+                if let Some(image)=crate::image::decode(&bytes) {doc_nodes.push(DocNode::DomImage{node_id:node.id,width:image.width,height:image.height,pixels:alloc::rc::Rc::new(image.pixels)});}
+            }
+        }
+    }
     doc_nodes
 }
 
@@ -362,7 +395,8 @@ fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNo
                                 if !base.is_empty() {
                                     if let Ok(bytes) = crate::resources::load_binary(base, src_val) {
                                         if let Some(img) = crate::image::decode(&bytes) {
-                                            out.push(DocNode::Image {
+                                            out.push(DocNode::DomImage {
+                                                node_id: child_id,
                                                 width: img.width,
                                                 height: img.height,
                                                 pixels: alloc::rc::Rc::new(img.pixels),
@@ -609,4 +643,31 @@ mod tokenizer_tests {
         assert!(matches!(&parsed.scripts[1], ScriptSource::Inline(src) if src == "second()"));
         assert_eq!(parsed.scripts.len(), 2);
     }
+}
+
+/// Resource discovery shares tokenization with the actual document parser.
+pub fn resource_references_checked(input:&str)->Result<Vec<(String,bool)>,String> {
+    crate::budget::validate_html(input)?;
+    let (tokens,scripts)=tokenize_html(input);
+    let mut refs=Vec::new();let mut images=0usize;let mut inert=0usize;
+    let mut add=|url:String,image:bool|->Result<(),String>{
+        if url.len()>2048{return Err(String::from("Resource URL exceeds byte budget"));}
+        if image{images+=1;if images>crate::budget::MAX_IMAGES{return Err(String::from("Document exceeds image count budget"));}}
+        if refs.len()>=64{return Err(String::from("Document exceeds resource count budget"));}
+        refs.push((url,image));Ok(())
+    };
+    for token in tokens {match token {
+        HtmlToken::StartTag{name,attributes,self_closing}=>{
+            if name=="template" {if !self_closing{inert+=1;}continue;}
+            if inert>0{continue;}
+            if name=="img" {if let Some((_,url))=attributes.iter().find(|(name,_)|name=="src"){add(url.clone(),true)?;}}
+            if name=="link"&&attributes.iter().any(|(name,value)|name=="rel"&&value.split_whitespace().any(|word|word.eq_ignore_ascii_case("stylesheet"))) {
+                if let Some((_,url))=attributes.iter().find(|(name,_)|name=="href"){add(url.clone(),false)?;}
+            }
+        },
+        HtmlToken::EndTag{name}=>{if name=="template"{inert=inert.saturating_sub(1);}},
+        _=>{}
+    }}
+    for script in scripts {if let ScriptSource::External(url)=script{add(url,false)?;}}
+    Ok(refs)
 }

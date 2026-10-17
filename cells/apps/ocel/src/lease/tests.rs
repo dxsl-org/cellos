@@ -11,6 +11,8 @@ pub(crate) struct State {
     pub requests: Vec<Request>,
     pub commands: Vec<OcelJsCommand>,
     pub opens: usize,
+    pub closes: usize,
+    pub active_context: Option<u64>,
     pub failure: Option<Failure>,
     pub missing_broker: bool,
     pub stale_provider: bool,
@@ -62,7 +64,15 @@ impl Transport for MockTransport {
             assert_eq!(peer, 20);
             let request: OcelJsRequest = postcard::from_bytes(request).unwrap();
             let response = match request {
-                OcelJsRequest::OpenContext { .. } => { state.opens += 1; OcelJsReply::Ack }
+                OcelJsRequest::OpenContext { context } => {
+                    if state.active_context.is_some_and(|active| active != context) { OcelJsReply::Busy }
+                    else { state.active_context = Some(context); state.opens += 1; OcelJsReply::Ack }
+                }
+                OcelJsRequest::CloseContext { context } => {
+                    if state.active_context == Some(context) {
+                        state.active_context = None; state.closes += 1; OcelJsReply::Ack
+                    } else { OcelJsReply::Error { message: String::from("Unknown test context") } }
+                }
                 OcelJsRequest::Begin { .. } => { state.incoming.clear(); OcelJsReply::Ack }
                 OcelJsRequest::Chunk { offset, data, .. } => {
                     assert_eq!(offset, state.incoming.len());

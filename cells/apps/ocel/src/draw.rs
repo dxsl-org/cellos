@@ -39,12 +39,6 @@ pub mod theme {
     pub const BORDER: Color = Color::rgb(69, 71, 90);
 }
 
-pub fn clear(surf: &mut ViSurface, color: Color) {
-    let w = surf.width();
-    let h = surf.height();
-    fill_rect(surf, 0, 0, w, h, color);
-}
-
 pub fn fill_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: Color) {
     let sw = surf.width() as i32;
     let sh = surf.height() as i32;
@@ -60,6 +54,18 @@ pub fn fill_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: Co
     }
 
     let [b, g, r, a] = color.as_bgra_bytes();
+    if a == 0 { return; }
+    if a == 255 {
+        let color = [b, g, r, a];
+        for py in y0..y1 {
+            let start = py as usize * stride + x0 as usize * 4;
+            let end = py as usize * stride + x1 as usize * 4;
+            for pixel in pixels[start..end].chunks_exact_mut(4) {
+                pixel.copy_from_slice(&color);
+            }
+        }
+        return;
+    }
     for py in y0..y1 {
         let row_start = py as usize * stride;
         for px in x0..x1 {

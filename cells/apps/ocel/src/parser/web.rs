@@ -36,13 +36,17 @@ pub struct WebBox {
     pub x:i32,pub y:i32,pub width:u32,pub height:u32,
     pub background:Option<Color>,pub border_color:Color,
     pub border:[u32;4],pub lines:Vec<TextLine>,
+    pub input_data: Option<crate::doc::FormInputLayout>,
+    pub image: Option<(u32,u32,Rc<Vec<u8>>)>,
+    highlights:Vec<(i32,u32,bool)>,
+    control_px:f32,
 }
 #[derive(Clone, Debug, Default)]
 pub struct WebLayout { pub boxes:Vec<WebBox>,pub height:i32 }
 #[derive(Clone)]
 struct TextContext { runs:Vec<TextRun>,line_height:u32,pre:bool,wrap_pre:bool,align:u8 }
-struct Entry { taffy:taffy::NodeId, parent:Option<usize>, node_id:Option<NodeId>, hidden:bool,background:Option<Color>,border_color:Color,text:Option<Rc<TextContext>> }
-struct Builder<'a> {arena:&'a DocumentArena,sheet:Stylesheet,viewport:(u32,u32),tree:TaffyTree<Rc<TextContext>>,entries:Vec<Entry>}
+struct Entry { taffy:taffy::NodeId, parent:Option<usize>, node_id:Option<NodeId>, hidden:bool,background:Option<Color>,border_color:Color,text:Option<Rc<TextContext>>,input_data:Option<crate::doc::FormInputLayout>,image:Option<(u32,u32,Rc<Vec<u8>>)> }
+struct Builder<'a> {arena:&'a DocumentArena,sheet:Stylesheet,viewport:(u32,u32),tree:TaffyTree<Rc<TextContext>>,entries:Vec<Entry>,assets:&'a [crate::doc::DocNode],max_font:f32}
 
 fn collect_styles(arena:&DocumentArena,id:NodeId,external:&[(NodeId,String)],sheet:&mut Stylesheet,viewport:(u32,u32)) {
     let Some(node)=arena.get(id) else{return;};
@@ -55,12 +59,43 @@ impl<'a> Builder<'a> {
         let context=Rc::new(TextContext {runs:core::mem::take(runs),line_height:pixel(style.line_height.max(1.0)),pre:style.pre,wrap_pre:style.wrap_pre,align:style.text_align});
         let leaf_style=Style{display:Display::Block,..Style::default()};
         let id=self.tree.new_leaf_with_context(leaf_style,context.clone())?;
-        self.entries.push(Entry{taffy:id,parent:Some(parent),node_id:None,hidden:false,background:None,border_color:style.border_color,text:Some(context)});Ok(id)
+        self.entries.push(Entry{taffy:id,parent:Some(parent),node_id:None,hidden:false,background:None,border_color:style.border_color,text:Some(context),input_data:None,image:None});Ok(id)
     }
-    fn element(&mut self,id:NodeId,parent:Option<usize>,style:ComputedStyle)->Result<taffy::NodeId,taffy::TaffyError> {
+    fn element(&mut self,id:NodeId,parent:Option<usize>,mut style:ComputedStyle)->Result<taffy::NodeId,taffy::TaffyError> {
+        style.font_size=style.font_size.min(self.max_font);
+        style.line_height=style.line_height.clamp(1.0,self.max_font*4.0);
         let tid=self.tree.new_leaf(Style::default())?;let index=self.entries.len();
-        self.entries.push(Entry{taffy:tid,parent,node_id:Some(id),hidden:style.layout.display==Display::None,background:style.background,border_color:style.border_color,text:None});
+        self.entries.push(Entry{taffy:tid,parent,node_id:Some(id),hidden:style.layout.display==Display::None,background:style.background,border_color:style.border_color,text:None,input_data:None,image:None});
         if style.layout.display==Display::None{self.tree.set_style(tid,style.layout)?;return Ok(tid);}
+        if let Some(node)=self.arena.get(id) {
+            if matches!(node.tag(),Some("input"|"textarea"|"button"|"select")) {
+                let kind=if node.tag()==Some("input"){node.get_attribute("type").unwrap_or("text").to_ascii_lowercase()}
+                    else if node.tag()==Some("button"){node.get_attribute("type").unwrap_or("submit").to_ascii_lowercase()}
+                    else if node.tag()==Some("select"){String::from("select")}else{String::from("textarea")};
+                if kind=="hidden" {style.layout.display=Display::None;self.entries[index].hidden=true;}
+                let value=if node.tag()==Some("input"){String::from(node.get_attribute("value").unwrap_or(""))}
+                    else{node.get_attribute("value").map(String::from).unwrap_or_else(||self.arena.get_text_content(id))};
+                let checkbox=kind=="checkbox";
+                style.layout.size.width=length(if checkbox{20.0}else if kind=="submit"||kind=="button"{160.0}else{300.0f32.min(self.viewport.0 as f32)});
+                style.layout.size.height=length(if checkbox{20.0}else if kind=="textarea"{80.0}else{30.0});
+                self.entries[index].input_data=Some(crate::doc::FormInputLayout{input_type:kind,name:String::from(node.get_attribute("name").unwrap_or("")),value,placeholder:String::from(node.get_attribute("placeholder").unwrap_or("")),checked:node.get_attribute("checked").is_some(),is_focused:false});
+                self.tree.set_style(tid,style.layout)?;return Ok(tid);
+            }
+            if node.tag()==Some("img") {
+                if let Some((w,h,pixels))=self.assets.iter().find_map(|asset|match asset {
+                    crate::doc::DocNode::DomImage{node_id,width,height,pixels} if *node_id==id=>Some((*width,*height,pixels.clone())),_=>None}) {
+                    let width=(w as f32).min(self.viewport.0 as f32).max(1.0);
+                    style.layout.size.width=length(width);style.layout.size.height=length(h as f32*width/w.max(1) as f32);
+                    self.entries[index].image=Some((w,h,pixels));
+                } else {
+                    let alt=node.get_attribute("alt").unwrap_or("[Image unavailable]");
+                    let mut runs=Vec::new();append_text(&mut runs,alt,&style,None,id);
+                    let context=Rc::new(TextContext{runs,line_height:pixel(style.line_height),pre:false,wrap_pre:true,align:0});
+                    self.tree.set_node_context(tid,Some(context.clone()))?;self.entries[index].text=Some(context);
+                }
+                self.tree.set_style(tid,style.layout)?;return Ok(tid);
+            }
+        }
         let mut children=Vec::new();let mut runs=Vec::new();
         let arena=self.arena;
         let mut child=arena.get(id).and_then(|n|n.first_child);
@@ -69,9 +104,11 @@ impl<'a> Builder<'a> {
             match &node.data {
                 NodeData::Text(text)=>append_text(&mut runs,text,&style,None,id),
                 NodeData::Element{..}=>{
-                    let child_style=self.sheet.compute(self.arena,cid,Some(&style),self.viewport);
+                    let mut child_style=self.sheet.compute(self.arena,cid,Some(&style),self.viewport);
+                    child_style.font_size=child_style.font_size.min(self.max_font);
+                    child_style.line_height=child_style.line_height.clamp(1.0,self.max_font*4.0);
                     if child_style.layout.display!=Display::None {
-                        if child_style.inline {self.inline(cid,&child_style,None,&mut runs);}
+                        if child_style.inline && !contains_replaced(self.arena,cid) {self.inline(cid,&child_style,None,&mut runs);}
                         else {if !runs.is_empty(){children.push(self.text_leaf(&mut runs,&style,index)?);}children.push(self.element(cid,Some(index),child_style)?);}
                     }
                 },_=>{}
@@ -87,7 +124,7 @@ impl<'a> Builder<'a> {
         if node.tag()==Some("br") {append_text(runs,"\u{2028}",style,link,id);return;}
         let mut child=node.first_child;while let Some(cid)=child {let Some(n)=self.arena.get(cid) else{break;};match &n.data{
             NodeData::Text(text)=>append_text(runs,text,style,link,id),
-            NodeData::Element{..}=>{let s=self.sheet.compute(self.arena,cid,Some(style),self.viewport);if s.layout.display!=Display::None{self.inline(cid,&s,link,runs);}},_=>{}
+            NodeData::Element{..}=>{let mut s=self.sheet.compute(self.arena,cid,Some(style),self.viewport);s.font_size=s.font_size.min(self.max_font);s.line_height=s.line_height.clamp(1.0,self.max_font*4.0);if s.layout.display!=Display::None{self.inline(cid,&s,link,runs);}},_=>{}
         }child=n.next_sibling;}
     }
 }
@@ -271,9 +308,14 @@ pub fn ceil_pixel(value:f32)->u32 {
     whole+u32::from(value>whole as f32)
 }
 
+#[cfg(test)]
 pub fn layout(fonts:&mut TextFonts,arena:&DocumentArena,external:&[(NodeId,String)],width:u32,height:u32)->Result<WebLayout,taffy::TaffyError> {
+    layout_with_nodes_zoom(fonts,arena,external,width,height,&[],1.0)
+}
+
+pub fn layout_with_nodes_zoom(fonts:&mut TextFonts,arena:&DocumentArena,external:&[(NodeId,String)],width:u32,height:u32,assets:&[crate::doc::DocNode],zoom:f32)->Result<WebLayout,taffy::TaffyError> {
     let viewport=(width.max(1),height.max(1));let mut sheet=Stylesheet::default();collect_styles(arena,arena.root,external,&mut sheet,viewport);
-    let mut builder=Builder{arena,sheet,viewport,tree:TaffyTree::new(),entries:Vec::new()};
+    let mut builder=Builder{arena,sheet,viewport,tree:TaffyTree::new(),entries:Vec::new(),assets,max_font:super::css::MAX_FONT_SIZE/zoom.max(1.0)};
     let mut root_style=builder.sheet.compute(arena,arena.root,None,viewport);
     root_style.layout.size.width=length(viewport.0 as f32);
     let root=builder.element(arena.root,None,root_style)?;
@@ -287,7 +329,7 @@ pub fn layout(fonts:&mut TextFonts,arena:&DocumentArena,external:&[(NodeId,Strin
         let border=[pixel(l.border.left),pixel(l.border.right),pixel(l.border.top),pixel(l.border.bottom)];
         let (bx,by,bw,bh,lines)=if let Some(text)=&entry.text {(x,y,pixel(l.size.width),pixel(l.size.height),wrap(fonts,text,l.size.width))}else{(x,y,pixel(l.size.width),pixel(l.size.height),Vec::new())};
         result.height=result.height.max(by.saturating_add(bh as i32));
-        result.boxes.push(WebBox{node_id:entry.node_id,x:bx,y:by,width:bw,height:bh,background:entry.background,border_color:entry.border_color,border,lines});
+        result.boxes.push(WebBox{node_id:entry.node_id,x:bx,y:by,width:bw,height:bh,background:entry.background,border_color:entry.border_color,border,lines,input_data:entry.input_data.clone(),image:entry.image.clone(),highlights:Vec::new(),control_px:14.0});
     }
     // White default canvas is a web default, independent of the viewer chrome theme.
     if let Some(root)=result.boxes.first_mut(){if root.background.is_none(){root.background=Some(Color::rgb(255,255,255));}root.height=root.height.max(height);}
@@ -295,6 +337,12 @@ pub fn layout(fonts:&mut TextFonts,arena:&DocumentArena,external:&[(NodeId,Strin
 }
 
 impl WebLayout {
+    pub fn scale(&mut self,scale:f32) {
+        self.height=(self.height as f32*scale) as i32;
+        for b in &mut self.boxes { b.x=(b.x as f32*scale) as i32;b.y=(b.y as f32*scale) as i32;b.width=(b.width as f32*scale) as u32;b.height=(b.height as f32*scale) as u32;
+            for width in &mut b.border {*width=(*width as f32*scale) as u32;} crate::doc::scale_lines(&mut b.lines,scale); }
+        for b in &mut self.boxes {b.control_px*=scale;}
+    }
     pub fn render(&self,fonts:&mut TextFonts,surf:&mut ostd::display::ViSurface,view:(i32,i32,u32,u32),scroll:i32) {
         let (vx,vy,vw,vh)=view;let clip=(vx,vy,vx.saturating_add(vw as i32),vy.saturating_add(vh as i32));
         fn rect(surf:&mut ostd::display::ViSurface,x:i32,y:i32,w:u32,h:u32,color:Color,clip:(i32,i32,i32,i32)) {
@@ -310,14 +358,40 @@ impl WebLayout {
             rect(surf,x.saturating_add(b.width.saturating_sub(right) as i32),y,right,b.height,b.border_color,clip);
             rect(surf,x,y,b.width,top,b.border_color,clip);
             rect(surf,x,y.saturating_add(b.height.saturating_sub(bottom) as i32),b.width,bottom,b.border_color,clip);
+            if let Some((iw,ih,pixels))=&b.image {
+                crate::draw::draw_image_clipped(surf,x,y,b.width,b.height,pixels,(*iw*4) as usize,*ih,clip);continue;
+            }
+            if let Some(input)=&b.input_data {
+                let color=if input.is_focused{crate::draw::theme::ACCENT_CYAN}else{b.border_color};
+                rect(surf,x,y,b.width,b.height,crate::draw::theme::BG_INPUT,clip);
+                rect(surf,x,y,b.width,1,color,clip);rect(surf,x,y,1,b.height,color,clip);
+                rect(surf,x,y+b.height.saturating_sub(1) as i32,b.width,1,color,clip);
+                rect(surf,x+b.width.saturating_sub(1) as i32,y,1,b.height,color,clip);
+                if input.input_type=="checkbox" {
+                    if input.checked {rect(surf,x+4,y+4,b.width.saturating_sub(8),b.height.saturating_sub(8),crate::draw::theme::ACCENT_CYAN,clip);}
+                } else {
+                    let text=if !matches!(input.input_type.as_str(),"text"|"textarea"|"password"|"email"|"search"|"url"|"tel"|"submit"|"button") {
+                        "Unsupported control (read-only)"
+                    }else if input.value.is_empty(){if input.input_type=="submit"{"Submit"}else{&input.placeholder}}else{&input.value};
+                    let text_clip=(clip.0.max(x),clip.1.max(y),clip.2.min(x+b.width as i32),clip.3.min(y+b.height as i32));
+                    if input.input_type=="password" {
+                        let advance=fonts.measure(FontFace::UiRegular,"•",b.control_px);
+                        for index in 0..input.value.chars().count() {crate::draw::text(fonts,surf,x as f32+6.0+index as f32*advance,(y+4) as f32,"•",FontFace::UiRegular,b.control_px,crate::draw::theme::TEXT_PRIMARY,text_clip);}
+                    }else{crate::draw::text(fonts,surf,(x+6) as f32,(y+4) as f32,text,FontFace::UiRegular,b.control_px,crate::draw::theme::TEXT_PRIMARY,text_clip);}
+                }
+                continue;
+            }
+            for &(offset,height,active) in &b.highlights {
+                rect(surf,x,y+offset,b.lines.iter().map(|line|line.width as u32).max().unwrap_or(1),height,if active{Color::rgb(255,185,70)}else{Color::rgb(255,240,140)},clip);
+            }
             paint_lines(fonts,surf,&b.lines,x as f32,y as f32,Color::rgb(32,32,32),clip);
         }
     }
     pub fn search(&self,query:&str)->Vec<i32> {
-        let query:String=normalized_chars(query.trim()).map(|c|c.to_ascii_lowercase()).collect();
+        let query=crate::doc::fold_text(query.trim());
         if query.is_empty(){return Vec::new();}
         let mut result=Vec::new();let mut text=String::new();
-        for b in &self.boxes {for line in &b.lines {text.clear();for run in &line.runs {text.push_str(&run.span.text);}text.make_ascii_lowercase();if text.contains(&query){result.push(b.y);break;}}}result
+        for b in &self.boxes {for line in &b.lines {text.clear();for run in &line.runs {text.push_str(&run.span.text);}if crate::doc::fold_text(&text).contains(&query){result.push(b.y);break;}}}result
     }
     pub fn hit_link(&self,x:i32,y:i32)->Option<String> {
         for b in self.boxes.iter().rev() {
@@ -357,3 +431,27 @@ impl WebLayout {
 #[cfg(test)]
 #[path="web_tests.rs"]
 mod tests;
+
+impl WebLayout {
+    pub fn set_search_highlight(&mut self,query:&str,active:Option<usize>) {
+        let mut index=0usize;
+        for b in &mut self.boxes {
+            b.highlights.clear();if query.is_empty(){continue;}
+            let mut found=false;let mut y=0;
+            for line in &b.lines {
+                let text:String=line.runs.iter().map(|run|run.span.text.as_str()).collect();
+                if crate::doc::fold_text(&text).contains(query){b.highlights.push((y,line.height,active==Some(index)));found=true;}
+                y+=line.height as i32;
+            }
+            if found{index+=1;}
+        }
+    }
+}
+
+fn contains_replaced(arena:&DocumentArena,id:NodeId)->bool {
+    let Some(node)=arena.get(id)else{return false;};
+    if matches!(node.tag(),Some("input"|"textarea"|"button"|"img"|"select")){return true;}
+    let mut child=node.first_child;
+    while let Some(id)=child {if contains_replaced(arena,id){return true;}child=arena.get(id).and_then(|node|node.next_sibling);}
+    false
+}

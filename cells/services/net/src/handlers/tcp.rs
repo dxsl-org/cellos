@@ -45,7 +45,21 @@ pub(crate) fn handle_tcp_request(
                 return true;
             }
             table.set_state(cap, SocketState::Connecting);
-            send_typed(sender, R::CapId(cap as u32));
+            // A cancelled exact call cannot retain a socket capability the
+            // client never received. Legacy callers still get their reply.
+            let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
+            let delivered = api::ipc::encode(&R::CapId(cap as u32), &mut response)
+                .ok().is_some_and(|bytes| {
+                    if let Some(token) = ostd::ipc::current() {
+                        ostd::ipc::reply(token, bytes).is_ok()
+                    } else {
+                        matches!(ostd::syscall::sys_send(sender, bytes), ostd::syscall::SyscallResult::Ok(_))
+                    }
+                });
+            if !delivered {
+                table.remove_internal(cap);
+                sockets.remove(handle);
+            }
             true
         }
         NetRequest::TcpSend { cap_id, data } => {

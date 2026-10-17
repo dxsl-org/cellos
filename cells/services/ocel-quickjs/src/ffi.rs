@@ -65,12 +65,6 @@ extern "C" {
 
     pub fn JS_ToBool(ctx: *mut JSContext, v: JSValue) -> c_int;
     pub fn JS_ToFloat64(ctx: *mut JSContext, out: *mut f64, v: JSValue) -> c_int;
-    pub fn JS_ToCStringLen2(
-        ctx: *mut JSContext,
-        plen: *mut usize,
-        v: JSValue,
-        cesu8: c_int,
-    ) -> *const c_char;
     pub fn JS_FreeCString(ctx: *mut JSContext, ptr: *const c_char);
     pub fn JS_GetException(ctx: *mut JSContext) -> JSValue;
 
@@ -84,6 +78,8 @@ extern "C" {
     pub fn vios_js_is_float(v: JSValue) -> c_int;
     pub fn vios_js_as_float(v: JSValue) -> f64;
     pub fn vios_js_free(ctx: *mut JSContext, v: JSValue);
+    pub fn vios_js_to_bounded_string(ctx: *mut JSContext, value: JSValue,
+        limit: usize, length: *mut usize) -> *const c_char;
 }
 
 /// `lrint` — round to nearest, ties to even — which the Tier-A math set does

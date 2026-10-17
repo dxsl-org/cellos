@@ -5,11 +5,47 @@
 (function () {
     "use strict";
     let nodes = new Map(), records = new WeakMap(), nextId = 0;
-    let mutations = [], logs = [], title = "";
+    let mutations = [], logs = [], title = "", mutationBytes = 0, logBytes = 0;
+    const MAX_MUTATIONS = 1024, MAX_MUTATION_BYTES = 131072, MAX_LOG_LINES = 64, MAX_LOG_BYTES = 8192;
     // Arena strings are Unicode scalar UTF-8, so lone JS surrogates become U+FFFD.
     const str = value => String(value).toWellFormed();
     const enc = value => encodeURIComponent(str(value));
-    function emit(kind, ...fields) { mutations.push([kind, ...fields.map(enc)].join("\t")); }
+    function encodedLength(text, remaining) {
+        if (text.length > remaining) throw new RangeError("JavaScript mutation byte limit exceeded");
+        let size = 0;
+        for (let i = 0; i < text.length; ++i) {
+            const c = text.charCodeAt(i);
+            if (c < 128) size += /[A-Za-z0-9_.!~*'()-]/.test(text[i]) ? 1 : 3;
+            else if (c < 2048) size += 6;
+            else if (c >= 0xd800 && c <= 0xdbff && i + 1 < text.length &&
+                text.charCodeAt(i + 1) >= 0xdc00 && text.charCodeAt(i + 1) <= 0xdfff) { size += 12; ++i; }
+            else size += 9;
+            if (size > remaining) throw new RangeError("JavaScript mutation byte limit exceeded");
+        }
+        return size;
+    }
+    function emit(kind, ...fields) {
+        if (mutations.length >= MAX_MUTATIONS) throw new RangeError("JavaScript mutation count limit exceeded");
+        let size = kind.length + fields.length + 1;
+        const strings = fields.map(String);
+        for (const text of strings) size += encodedLength(text, MAX_MUTATION_BYTES - mutationBytes - size);
+        mutations.push([kind, ...strings.map(enc)].join("\t"));
+        mutationBytes += size;
+    }
+    function log(prefix, args) {
+        if (logs.length >= MAX_LOG_LINES) throw new RangeError("JavaScript log count limit exceeded");
+        let text = prefix;
+        for (let i = 0; i < args.length; ++i) {
+            const part = String(args[i]);
+            // UTF-16 scalar rendering uses at most three UTF-8 bytes per unit.
+            if (part.length > (MAX_LOG_BYTES - logBytes - text.length * 3 - 1) / 3)
+                throw new RangeError("JavaScript log byte limit exceeded");
+            text += (i ? " " : "") + part;
+        }
+        const bytes = text.length * 3 + 1;
+        if (bytes > MAX_LOG_BYTES - logBytes) throw new RangeError("JavaScript log byte limit exceeded");
+        logs.push(text); logBytes += bytes;
+    }
     function record(node) {
         const r = records.get(node);
         if (!r || nodes.get(r.id) !== node) throw new TypeError("Node belongs to a different document");
@@ -23,12 +59,13 @@
             r.parent = null;
         }
     }
-    function append(parent, child) {
+    function append(parent, child, notify = false) {
         const p = record(parent), c = record(child);
         if ((p.type !== 1 && p.type !== 9) || c.type === 9) throw new Error("HierarchyRequestError");
         for (let cursor = parent; cursor; cursor = record(cursor).parent) {
             if (cursor === child) throw new Error("HierarchyRequestError");
         }
+        if (notify) emit("P", p.id, c.id);
         detach(child);
         p.children.push(child);
         c.parent = parent;
@@ -53,9 +90,10 @@
         return node;
     }
     function create(type, tag, text, notify = true) {
-        const id = nextId++;
-        const node = makeNode(id, type, tag, text, []);
+        const id = nextId;
         if (notify) emit("C", id, type, tag, text);
+        ++nextId;
+        const node = makeNode(id, type, tag, text, []);
         return node;
     }
     function Node() { throw new TypeError("Use document.createElement/createTextNode/createComment"); }
@@ -74,6 +112,7 @@
             set(value) {
                 const r = record(this), text = value == null ? "" : str(value);
                 if (r.type === 9) return;
+                emit("X", r.id, text);
                 if (r.type === 3 || r.type === 8) r.text = text;
                 else {
                     for (const child of r.children) record(child).parent = null;
@@ -81,17 +120,15 @@
                     // Arena SetText allocates exactly this ID; no duplicate CreateNode.
                     if (text) append(this, create(3, "", text, false));
                 }
-                emit("X", r.id, text);
             }
         },
         id: { get() { return this.getAttribute("id") || ""; }, set(v) { this.setAttribute("id", v); } },
         className: { get() { return this.getAttribute("class") || ""; }, set(v) { this.setAttribute("class", v); } },
-        innerHTML: { get() { return this.textContent; }, set(v) { this.textContent = v; }, configurable: true }
     });
-    Node.prototype.appendChild = function (child) { append(this, child); emit("P", record(this).id, record(child).id); return child; };
+    Node.prototype.appendChild = function (child) { append(this, child, true); return child; };
     Node.prototype.removeChild = function (child) {
         if (record(child).parent !== this) throw new Error("NotFoundError");
-        detach(child); emit("D", record(this).id, record(child).id); return child;
+        emit("D", record(this).id, record(child).id); detach(child); return child;
     };
     Node.prototype.remove = function () { const p = this.parentNode; if (p) p.removeChild(this); };
     Node.prototype.setAttribute = function (key, value) {
@@ -99,7 +136,7 @@
         if (r.type !== 1) throw new TypeError("Attributes require an element");
         key = str(key).toLowerCase(); value = str(value);
         if (!key || /[\s\0"'>/=]/.test(key)) throw new Error("InvalidCharacterError");
-        r.attrs[key] = value; emit("A", r.id, key, value);
+        emit("A", r.id, key, value); r.attrs[key] = value;
     };
     Node.prototype.getAttribute = function (key) {
         const r = record(this); key = String(key).toLowerCase();
@@ -109,7 +146,7 @@
     Node.prototype.removeAttribute = function (key) {
         const r = record(this);
         if (r.type !== 1) throw new TypeError("Attributes require an element");
-        key = String(key).toLowerCase(); delete r.attrs[key]; emit("R", r.id, key);
+        key = String(key).toLowerCase(); emit("R", r.id, key); delete r.attrs[key];
     };
     Node.prototype.addEventListener = function (kind, handler) {
         if (typeof handler !== "function") throw new TypeError("Listener must be a function");
@@ -145,7 +182,7 @@
     Node.prototype.querySelectorAll = function (selector) { return descendants(this, n => matchesSelector(n, selector)); };
     function configureDocument(doc) {
         Object.defineProperties(doc, {
-            title: { get() { return title; }, set(v) { title = str(v); emit("T", title); }, configurable: true },
+            title: { get() { return title; }, set(v) { const text = str(v); emit("T", text); title = text; }, configurable: true },
             documentElement: { get() { return record(doc).children.find(n => record(n).type === 1) || null; }, configurable: true },
             body: { get() { return doc.getElementsByTagName("body")[0] || null; }, configurable: true },
             head: { get() { return doc.getElementsByTagName("head")[0] || null; }, configurable: true }
@@ -187,8 +224,12 @@
         globalThis.document = nodes.get(0);
         configureDocument(globalThis.document);
     };
-    globalThis.__vios_takeMutations = function () { const out = mutations.join("\n"); mutations = []; return out; };
-    globalThis.__vios_takeLogs = function () { const out = logs.join("\n"); logs = []; return out; };
+    Object.defineProperty(globalThis, "__vios_takeMutations", { value: function () {
+        const out = mutations.join("\n"); mutations = []; mutationBytes = 0; return out;
+    } });
+    Object.defineProperty(globalThis, "__vios_takeLogs", { value: function () {
+        const out = logs.join("\n"); logs = []; logBytes = 0; return out;
+    } });
     globalThis.__vios_dispatch = function (id, kind, x, y, key) {
         const target = nodes.get(id);
         if (!target) throw new Error("Event target does not exist");
@@ -199,51 +240,16 @@
         for (let cursor = target; cursor; cursor = record(cursor).parent) {
             event.currentTarget = cursor;
             for (const l of record(cursor).listeners.slice()) if (l.kind === kind) {
-                try { l.handler.call(cursor, event); } catch (e) { logs.push("[script] listener error: " + String(e)); }
+                l.handler.call(cursor, event);
             }
             if (stopped) break;
         }
         event.currentTarget = null;
     };
-    let nextTimerId = 1;
-    const timers = new Map();
-    globalThis.setTimeout = function (callback, delay, ...args) {
-        if (typeof callback !== "function") throw new TypeError("Callback must be a function");
-        const id = nextTimerId++;
-        timers.set(id, { callback, args, interval: false });
-        return id;
-    };
-    globalThis.clearTimeout = function (id) { timers.delete(id); };
-    globalThis.setInterval = function (callback, delay, ...args) {
-        if (typeof callback !== "function") throw new TypeError("Callback must be a function");
-        const id = nextTimerId++;
-        timers.set(id, { callback, args, interval: true });
-        return id;
-    };
-    globalThis.clearInterval = function (id) { timers.delete(id); };
-    globalThis.__vios_fireTimer = function (id) {
-        const t = timers.get(id);
-        if (!t) return;
-        try { t.callback.apply(null, t.args); } catch (e) { logs.push("[timer] error: " + String(e)); }
-        if (!t.interval) timers.delete(id);
-    };
-
-    globalThis.fetch = function (url, options) {
-        return new Promise((resolve) => {
-            resolve({
-                ok: true,
-                status: 200,
-                statusText: "OK",
-                text() { return Promise.resolve(""); },
-                json() { return Promise.resolve({}); }
-            });
-        });
-    };
-
     globalThis.console = {
-        log(...args) { logs.push("[script] " + args.map(String).join(" ")); },
-        warn(...args) { logs.push("[warn] " + args.map(String).join(" ")); },
-        error(...args) { logs.push("[error] " + args.map(String).join(" ")); },
-        info(...args) { logs.push("[info] " + args.map(String).join(" ")); }
+        log(...args) { log("[script] ", args); },
+        warn(...args) { log("[warn] ", args); },
+        error(...args) { log("[error] ", args); },
+        info(...args) { log("[info] ", args); }
     };
 })();

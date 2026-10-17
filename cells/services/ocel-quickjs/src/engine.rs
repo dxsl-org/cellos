@@ -90,6 +90,8 @@ pub struct QuickJsContext {
     /// Non-fatal engine diagnostics (script `console.log`, runtime warnings)
     /// surfaced to the cell log rather than into the mutation stream.
     logs: Vec<String>,
+    output_limited: bool,
+    usable: bool,
 }
 
 impl Drop for QuickJsContext {
@@ -112,6 +114,8 @@ impl QuickJsContext {
             ctx: core::ptr::null_mut(),
             mutations: Vec::new(),
             logs: Vec::new(),
+            output_limited: false,
+            usable: true,
         };
         unsafe {
             let rt = ffi::JS_NewRuntime();
@@ -187,6 +191,7 @@ impl QuickJsContext {
                 return Err(JsError { message, line: 0 });
             }
             let repr = self.value_to_string(value);
+            let result_limited = core::mem::take(&mut self.output_limited);
             ffi::vios_js_free(self.ctx, value);
             let mut job_error = None;
             for index in 0..=MAX_PENDING_JOBS {
@@ -205,6 +210,7 @@ impl QuickJsContext {
             drop(guard);
             self.collect_mutations();
             match job_error {
+                _ if result_limited => Err(JsError { message: String::from("JavaScript result byte limit exceeded"), line: 0 }),
                 Some(message) => Err(JsError { message, line: 0 }),
                 None => Ok(repr),
             }
@@ -225,6 +231,10 @@ impl QuickJsContext {
     /// `String(value)`-style rendering, using the engine's own conversion so
     /// numbers keep the engine's formatting.
     unsafe fn value_to_string(&mut self, value: ffi::JSValue) -> String {
+        self.value_to_string_bounded(value, dom_arena::OCEL_JS_MAX_RESULT_BYTES)
+    }
+
+    unsafe fn value_to_string_bounded(&mut self, value: ffi::JSValue, limit: usize) -> String {
         if ffi::vios_js_is_undefined(value) != 0 {
             return String::from("undefined");
         }
@@ -248,9 +258,10 @@ impl QuickJsContext {
             };
         }
         let mut len = 0usize;
-        let ptr = ffi::JS_ToCStringLen2(self.ctx, &mut len, value, 0);
+        let ptr = ffi::vios_js_to_bounded_string(self.ctx, value, limit, &mut len);
         if ptr.is_null() {
-            return String::from("[unprintable]");
+            if len > limit { self.output_limited = true; }
+            return String::from("JavaScript output string limit exceeded or conversion failed");
         }
         // `.cast()` rather than `as *const u8`: `c_char` is `u8` on
         // riscv64/aarch64 and `i8` on x86_64.
@@ -264,13 +275,19 @@ impl QuickJsContext {
     /// Drain the prelude's queues into Rust-side mutations and logs.
     fn collect_mutations(&mut self) {
         let drained = self.eval_queue("__vios_takeMutations()");
+        let mut records = 0;
         for record in drained.lines() {
+            records += 1;
+            if records > dom_arena::OCEL_JS_MAX_MUTATIONS || self.mutations.len() >= dom_arena::OCEL_JS_MAX_MUTATIONS {
+                self.usable = false;
+                break;
+            }
             if record.is_empty() {
                 continue;
             }
-            let Some(decoded) = record.split('\t').map(decode_field).collect::<Option<Vec<_>>>() else {
-                self.logs.push(String::from("[ocel-quickjs] malformed DOM mutation record"));
-                continue;
+            let Some(decoded) = record.split('\t').take(6).map(decode_field).collect::<Option<Vec<_>>>() else {
+                self.usable = false;
+                break;
             };
             let mut fields = decoded.iter().map(String::as_str);
             let kind = fields.next().unwrap_or("");
@@ -359,6 +376,11 @@ impl QuickJsContext {
         let logged = self.eval_queue("__vios_takeLogs()");
         for line in logged.lines() {
             if !line.is_empty() {
+                if self.logs.len() >= dom_arena::OCEL_JS_MAX_LOG_LINES ||
+                    self.logs.iter().map(String::len).sum::<usize>().saturating_add(line.len()) > dom_arena::OCEL_JS_MAX_LOG_BYTES {
+                    self.usable = false;
+                    break;
+                }
                 self.logs.push(line.to_string());
             }
         }
@@ -385,14 +407,18 @@ impl QuickJsContext {
                 ffi::JS_EVAL_TYPE_GLOBAL,
             );
             if ffi::vios_js_is_exception(value) != 0 {
-                let message = self.take_exception_message();
-                self.logs.push(alloc::format!(
-                    "[ocel-quickjs] queue eval failed: {message}"
-                ));
+                let _ = self.take_exception_message();
+                self.usable = false;
                 ffi::vios_js_free(self.ctx, value);
                 return String::new();
             }
-            let out = self.value_to_string(value);
+            // The prelude already bounds joined UTF-16 queues; allow three UTF-8
+            // bytes per unit at the C boundary, then independently validate wire.
+            let limit = if expr == "__vios_takeLogs()" { dom_arena::OCEL_JS_MAX_LOG_BYTES }
+                else { dom_arena::OCEL_JS_MAX_MUTATION_BYTES };
+            self.output_limited = false;
+            let out = self.value_to_string_bounded(value, limit * 3);
+            if core::mem::take(&mut self.output_limited) { self.usable = false; }
             ffi::vios_js_free(self.ctx, value);
             out
         }
@@ -400,6 +426,7 @@ impl QuickJsContext {
 }
 
 impl JsContext for QuickJsContext {
+    fn is_usable(&self) -> bool { self.usable }
     fn sync_document(&mut self, arena: &DocumentArena, title: &str) -> Result<(), JsError> {
         if !arena.validate() || !self.mutations.is_empty() {
             return Err(JsError { message: String::from("Invalid snapshot or unapplied DOM mutations"), line: 0 });

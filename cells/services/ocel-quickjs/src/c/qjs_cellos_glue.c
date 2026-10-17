@@ -29,4 +29,25 @@ double vios_js_as_float(JSValue v) { return JS_VALUE_GET_FLOAT64(v); }
 
 void vios_js_free(JSContext *ctx, JSValue v) { JS_FreeValue(ctx, v); }
 
+/* Bound UTF-8 conversion BEFORE QuickJS allocates a C string. A UTF-16 code
+ * unit needs at most three UTF-8 bytes (surrogate pairs use four for two).
+ * This deliberately conservative bound also covers lone surrogate repair. */
+const char *vios_js_to_bounded_string(JSContext *ctx, JSValue value, size_t limit, size_t *length)
+{
+    JSValue text = JS_ToString(ctx, value);
+    if (JS_IsException(text)) return NULL;
+    JSValue size = JS_GetPropertyStr(ctx, text, "length");
+    int64_t units = 0;
+    int status = JS_ToInt64(ctx, &units, size);
+    JS_FreeValue(ctx, size);
+    if (status < 0 || units < 0 || (uint64_t)units > limit / 3) {
+        JS_FreeValue(ctx, text);
+        *length = limit + 1;
+        return NULL;
+    }
+    const char *result = JS_ToCStringLen2(ctx, length, text, 0);
+    JS_FreeValue(ctx, text);
+    return result;
+}
+
 int abs(int v) { return v < 0 ? -v : v; }

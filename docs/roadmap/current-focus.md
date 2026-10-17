@@ -401,34 +401,24 @@ This remains `qemu`-ceiling work.
 
 ## Native viewer (Ocel) and its Tier 2 script service
 
-- Status: executable and regression-gated. The `ocel-browser` lane runs inside
-  the `Network Data-Path Integration (riscv64)` CI job; raw evidence for the
-  first passing run is `docs/evidence/ocel-browser-qemu.log` (serial) and
-  `.txt` (runner).
-- What is true today: `init` spawns `/bin/ocel-js` at boot and registers
-  `service::OCEL_JS` (16) on its behalf; the kernel admits that cell to Tier 2
-  with private page tables (`[domain] admitted cell 'ocel-js' to Tier 2 Paged
-  Domain (SATP isolation)`); the viewer loads a document by argument or through
-  its address bar, renders Markdown / an HTML subset / plain text / images, and
-  sends the `<script>` blocks it extracts to that domain over 4 KiB IPC. The
-  lane witnesses the round trip, in-document search, and tab-bar input.
-- The engine is an **opt-in choice**: `cells/services/ocel-quickjs/` vendors
-  QuickJS `2026-06-04` (MIT) and runs as a Tier 2 domain cell behind the
-  `JsEngine` trait, and `/bin/ocel-js` remains the statement matcher for images
-  that do not package it. `init` prefers QuickJS and says which cell it
-  registered; the `ocel-quickjs` lane asserts the engine's own start-up
-  self-check and a document script that only a real engine can compute.
-- Local PNG/JPEG/BMP viewing now has host loader/codec/layout/paint smoke and an
-  RV64 release build. PNG alpha, grayscale/palette and 16-bit input, progressive
-  JPEG, bounded errors and viewport-fit scaling are exercised; no new guest
-  image-viewing evidence is claimed.
-- Native public-web compatibility is now the target, not a shipped claim.
-  CSS cascade, browser DOM and `fetch`/modules/workers are still missing;
-  PDF/EPUB/SVG remain unimplemented. The exact gap table lives in
-  [the Ocel guide](../guides/ocel-viewer.md).
-- Reopening / next events: add a lane that kills the engine cell mid-session to
-  witness the viewer's fallback to the in-process engine; decide whether the
-  Tier 3 Chromium launcher cell belongs to G2.
+- Scheduling: the Intel C2C focus remains unchanged. The maintainer explicitly
+  approved this bounded Ocel repair/upgrade; it does not reopen a general
+  native-browser or multi-platform GUI program.
+- Ocel remains a lightweight viewer with native Markdown/text/source/images,
+  a bounded HTML/CSS renderer, and optional demand-activated isolated QuickJS
+  and MuPDF services. Static documents never require a script engine; missing
+  engines fail explicitly, without a matcher or in-process fallback.
+- The viewer now has per-document Reader/zoom, Unicode search highlights,
+  heading navigation, active HTML form/image layout, cooperative cancellable
+  network acquisition and document/resource memory admission.
+- Existing QEMU evidence is retained in `docs/evidence/ocel-browser-qemu.*`
+  and `ocel-quickjs-qemu.*`; it is not fresh evidence for these changes.
+  Upgrade verification uses host regressions, real QuickJS/MuPDF execution,
+  actual viewer-controller/pixel smoke with host boundary adapters, and RV64
+  release builds. No new guest/compositor or physical-display claim is made.
+- Full web-platform compatibility, EPUB/SVG, clipboard/file-sharing bridges
+  and a Tier 3 browser launcher remain outside this viewer upgrade.
+  Limits and executable commands: [Ocel guide](../guides/ocel-viewer.md).
 
 ## Current executable work
 

@@ -54,17 +54,21 @@ pub fn decode_bmp(data: &[u8]) -> Option<DecodedImage> {
     }
 
     let compression = u32::from_le_bytes([data[30], data[31], data[32], data[33]]);
-    if compression != 0 && compression != 3 {
-        // Only uncompressed BI_RGB (0) or BI_BITFIELDS (3)
+    if compression != 0 {
+        // BI_BITFIELDS needs mask-aware channel extraction; reject it rather
+        // than interpreting arbitrary masks as byte-aligned BGRA.
         return None;
     }
 
-    if pixel_offset >= data.len() {
+    if pixel_offset < 14 + header_size || pixel_offset >= data.len() {
         return None;
     }
 
     // 4. Decode scanlines
     let stride = ((width * bpp as u32).div_ceil(32) * 4) as usize;
+    if pixel_offset.checked_add(stride.checked_mul(height as usize)?)? > data.len() {
+        return None;
+    }
     let mut pixels = alloc::vec![0u8; (width * height * 4) as usize];
 
     let bytes_per_pixel = (bpp / 8) as usize;

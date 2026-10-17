@@ -126,7 +126,7 @@ pub fn handle_tls_raw(
         }
         RawTlsRequest::Send { cap, data } => {
             if !table.is_owner(cap, owner) {
-                sys_send(sender, &0u32.to_le_bytes());
+                sys_send(sender, &u32::MAX.to_le_bytes());
                 return;
             }
             pending.enqueue(cap, owner, ReplyTo::capture(sender),
@@ -134,7 +134,7 @@ pub fn handle_tls_raw(
         }
         RawTlsRequest::Recv { cap, buf_len } => {
             if !table.is_owner(cap, owner) {
-                sys_send(sender, &[0u8; 2]);
+                sys_send(sender, &u16::MAX.to_le_bytes());
                 return;
             }
             pending.enqueue(cap, owner, ReplyTo::capture(sender),

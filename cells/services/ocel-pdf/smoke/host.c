@@ -12,6 +12,9 @@ void ocel_pdf_close(cell_pdf *);
 int ocel_pdf_render(cell_pdf *, unsigned int, unsigned int, unsigned int,
     unsigned int *, unsigned int *, unsigned int *, char *, size_t);
 int ocel_pdf_read_pixels(cell_pdf *, size_t, unsigned char *, size_t);
+void ocel_pdf_set_clock(uint64_t (*)(void));
+static uint64_t fake_ticks;
+static uint64_t expiring_clock(void) { fake_ticks += 401; return fake_ticks; }
 int main(int argc, char **argv)
 {
     assert(argc == 2);
@@ -60,6 +63,17 @@ int main(int argc, char **argv)
         assert(ocel_pdf_read_pixels(doc,bytes,chunk,1) == -1);
         printf("page %u: %ux%u, black=%u red=%u blue=%u opaque BGRA\n",page,width,height,black,red,blue);
     }
+    /* Deadline failure clears the old raster and unwinds native allocations.
+     * This is a cooperative checkpoint test, not a fake asynchronous cancel. */
+    fake_ticks = 0; ocel_pdf_set_clock(expiring_clock);
+    assert(ocel_pdf_render(doc,0,320,240,&width,&height,&bytes,error,sizeof(error)) == -1);
+    assert(ocel_pdf_read_pixels(doc,0,chunk,4) == -1);
+    ocel_pdf_close(doc);
+    fake_ticks = 0;
+    assert(ocel_pdf_open(input,(size_t)size,&pages,error,sizeof(error)) == NULL);
+    ocel_pdf_set_clock(NULL);
+    doc = ocel_pdf_open(input,(size_t)size,&pages,error,sizeof(error)); assert(doc);
+    assert(ocel_pdf_render(doc,0,320,240,&width,&height,&bytes,error,sizeof(error)) == 0);
     ocel_pdf_close(doc); free(input);
     puts("MuPDF host PDF raster and C exception smoke passed");
     return 0;

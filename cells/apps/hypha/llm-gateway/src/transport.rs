@@ -114,18 +114,15 @@ fn tls(host: &str, ip: [u8; 4], port: u16, request: &[u8]) -> Result<Vec<u8>, St
 
     let mut resp = Vec::new();
     let mut chunk = [0u8; 512];
-    let mut idle = 0u32;
     loop {
-        let n = tls_read(net, cap, &mut chunk);
-        if n == 0 {
-            idle += 1;
-            if idle > MAX_IDLE {
-                break;
+        let n = match tls_read(net, cap, &mut chunk) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(error) => {
+                tls_close(net, cap);
+                return Err(alloc::format!("TLS receive failed: {:?}", error));
             }
-            ostd::task::yield_now();
-            continue;
-        }
-        idle = 0;
+        };
         resp.extend_from_slice(&chunk[..n]);
         if resp.len() > MAX_RESPONSE {
             break;

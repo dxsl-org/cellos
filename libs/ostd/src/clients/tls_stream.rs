@@ -15,14 +15,9 @@
 //! - [`Write::write`] loops over the 503-byte-per-call cap of [`tls_write`]
 //!   until every byte of `buf` is accepted (write-all semantics), because a
 //!   single TLS record write may be partially accepted by the net cell.
-//! - [`Read::read`] spin-yields while [`tls_read`] returns 0. A 0-read over TLS
-//!   is ambiguous: it means EITHER "no application data buffered yet" OR
-//!   "peer closed" (net `handlers.rs:462`) — there is no EOF signal. Body
-//!   completion is therefore decided by HTTP framing in
-//!   [`BodyReader`][crate::http::BodyReader], NOT by a 0-read here. To stop a
-//!   genuinely dead connection from hanging forever, the spin is bounded by a
-//!   retry budget; exhausting it surfaces as [`ViError::WouldBlock`] (mapped to
-//!   `embedded_io::ErrorKind::Other`) rather than an unbounded loop.
+//! - [`Read::read`] returns zero only for EOF (or an empty destination). TLS
+//!   service errors propagate immediately instead of being retried as no-data.
+//!   The service retains reads while transport data is unavailable.
 //!
 //! # Security posture
 //! `TlsStream` inherits service-net's selected TLS build profile. The default
@@ -43,14 +38,8 @@ use crate::{ViError, ViResult};
 /// `tls.rs`: 512-byte IPC buffer minus the 11-byte `[op][cap][len]` header).
 const MAX_TLS_WRITE: usize = 501;
 
-/// Number of consecutive 0-byte reads tolerated before [`Read::read`] gives up.
-///
-/// Each miss yields the scheduler, so this is a "no progress for N scheduler
-/// turns" budget, not a wall-clock timeout (ostd has no per-read timer here).
-/// Sized generously so a slow-but-live LLM response never trips it, while a
-/// mid-body peer drop still terminates instead of hanging. A caller that wants
-/// a stricter bound layers its own timeout above the stream.
-const READ_RETRY_BUDGET: u32 = 100_000;
+/// Bound write-side zero-progress retries; receive never retries EOF or errors.
+const WRITE_RETRY_BUDGET: u32 = 100_000;
 
 /// A TLS 1.3 connection handle implementing [`embedded_io::Read`] +
 /// [`embedded_io::Write`].
@@ -89,29 +78,12 @@ impl embedded_io::ErrorType for TlsStream {
 }
 
 impl embedded_io::Read for TlsStream {
-    /// Block (with cooperative yields) until at least one byte is available.
-    ///
-    /// A 0-read from the net cell is treated as "not ready yet" and retried, up
-    /// to [`READ_RETRY_BUDGET`] times. The HTTP layer never relies on a 0-read
-    /// to mean EOF — see the module doc.
+    /// Block until data, EOF or a service error is available.
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, crate::io::OstdError> {
         if buf.is_empty() {
             return Ok(0);
         }
-        let mut misses: u32 = 0;
-        loop {
-            let n = tls_read(self.net_tid, self.cap_id, buf);
-            if n > 0 {
-                return Ok(n);
-            }
-            misses += 1;
-            if misses >= READ_RETRY_BUDGET {
-                // Dead connection or stalled peer — surface as WouldBlock rather
-                // than spinning forever (EOF-less TLS guard, plan risk #2).
-                return Err(crate::io::OstdError(ViError::WouldBlock));
-            }
-            crate::task::yield_now();
-        }
+        tls_read(self.net_tid, self.cap_id, buf).map_err(crate::io::OstdError)
     }
 }
 
@@ -133,7 +105,7 @@ impl embedded_io::Write for TlsStream {
             let n = tls_write(self.net_tid, self.cap_id, &buf[sent..chunk_end]);
             if n == 0 {
                 stalls += 1;
-                if stalls >= READ_RETRY_BUDGET {
+                if stalls >= WRITE_RETRY_BUDGET {
                     return Err(crate::io::OstdError(ViError::WouldBlock));
                 }
                 crate::task::yield_now();

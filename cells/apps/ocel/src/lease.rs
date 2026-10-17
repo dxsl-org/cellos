@@ -13,11 +13,13 @@ const RELEASE_TICKS: u64 = 100;
 pub(crate) trait Transport {
     fn lookup(&mut self, service: u16) -> Option<usize>;
     fn call(&mut self, peer: usize, request: &[u8], reply: &mut [u8], ticks: u64) -> Result<usize, String>;
+    fn now(&self) -> Option<u64> { None }
 }
 
 #[derive(Default)]
 pub(crate) struct KernelTransport;
 impl Transport for KernelTransport {
+    fn now(&self) -> Option<u64> { sys_get_scheduler_ticks() }
     fn lookup(&mut self, service: u16) -> Option<usize> { sys_lookup_service(service) }
     fn call(&mut self, peer: usize, request: &[u8], reply: &mut [u8], ticks: u64) -> Result<usize, String> {
         bounded_call(&mut KernelOperations, peer, request, reply, ticks)
@@ -61,11 +63,13 @@ fn bounded_call(ops: &mut impl Operations, peer: usize, request: &[u8], reply: &
             Ok(IpcTakeResult::Pending) => {}
         }
         let left = remaining(ops.now());
-        if left == 0 { break Err(String::from("Engine IPC response timed out.")); }
+        if left == 0 { break Err(String::from("Engine IPC response timed out; result abandoned (provider work may still finish).")); }
         ops.wait(left);
     };
-    // Cancellation isolates late replies from subsequent calls. Take the retained
-    // cancellation terminal even on decode/buffer errors to free the operation slot.
+    // Cancellation isolates late replies from subsequent calls; it does NOT
+    // interrupt a provider executing native code. Services discard abandoned
+    // results and close only the matching owner/session after returning.
+    // Take the retained cancellation terminal to free the operation slot.
     ops.cancel(op);
     let mut discard = [0u8; 4096];
     let _ = ops.take(op, &mut discard);
@@ -87,6 +91,7 @@ pub(crate) struct Lease<T: Transport = KernelTransport> {
     provider: usize,
 }
 impl<T: Transport> Lease<T> {
+    pub(crate) fn now(&self) -> Option<u64> { self.transport.now() }
     pub(crate) fn acquire_with(engine: Engine, mut transport: T) -> Result<Self, String> {
         let broker = transport.lookup(api::syscall::service::OCEL_ACTIVATOR)
             .ok_or_else(|| format!("{} engine is unavailable: activation service is not registered. No fallback engine is available.", name(engine)))?;

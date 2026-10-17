@@ -280,3 +280,115 @@ fn test_html_form_input_and_submit_parsing() {
         _ => false,
     }));
 }
+
+#[test]
+fn document_reader_restores_dom_and_uses_cached_images_without_title_duplication() {
+    use crate::doc::{Document,DocNode};
+    let output=crate::parser::html::parse_html("<nav>unwanted navigation</nav><article><h1 id='article'>Tiếng Việt</h1><p>Article body with enough useful words to distinguish the article from surrounding navigation.</p><img src='cached'></article>");
+    let image=output.arena.nodes.iter().find(|node|node.tag()==Some("img")).unwrap().id;
+    let mut doc=Document::new();doc.nodes=output.nodes;doc.arena=Some(output.arena);
+    let pixels=Rc::new(alloc::vec![0;16]);doc.nodes.push(DocNode::DomImage{node_id:image,width:2,height:2,pixels:pixels.clone()});
+    let original=doc.arena.as_ref().unwrap().clone();
+    let mut fonts=TextFonts::new();assert!(doc.relayout_from_arena(&mut fonts,600,400));
+    assert!(doc.web_layout.as_ref().unwrap().boxes.iter().any(|b|b.image.is_some()));
+    assert!(doc.toggle_reader(&mut fonts,600,400,"https://example.test","Fallback").unwrap());
+    assert!(doc.web_layout.is_none());assert!(doc.search("unwanted navigation").is_empty());
+    assert_eq!(doc.toc().iter().filter(|entry|entry.title=="Tiếng Việt").count(),1);
+    assert_eq!(doc.anchor_y("article"),Some(doc.toc()[0].y));
+    let cached=doc.layout_boxes.iter().find_map(|b|b.image.as_ref()).unwrap();
+    assert!(Rc::ptr_eq(&cached.2,&pixels));
+    assert!(!doc.toggle_reader(&mut fonts,600,400,"https://example.test","Fallback").unwrap());
+    assert!(doc.web_layout.is_some());assert_eq!(doc.arena.as_ref().unwrap().nodes,original.nodes);
+}
+
+#[test]
+fn active_html_controls_are_hit_editable_stable_and_owner_correct() {
+    let output=crate::parser::html::parse_html("<form id='a' action='/search?old=discard'><label>Query <input name='q' value='Tiếng Việt'></label><input TYPE='CHECKBOX' name='ok' checked><button name='go' value='yes'>Go</button><button type='button' name='bad'>Not submit</button></form><form id='b' method='post'><input name='leak' value='no'><input type='submit'></form><input form='a' name='outside' value='a&b'>");
+    let mut doc=crate::doc::Document::new();doc.nodes=output.nodes;doc.arena=Some(output.arena);
+    let arena=doc.arena.as_ref().unwrap();
+    let input=arena.nodes.iter().find(|node|node.get_attribute("name")==Some("q")).unwrap().id;
+    let checkbox=arena.nodes.iter().find(|node|node.get_attribute("name")==Some("ok")).unwrap().id;
+    let submit=arena.nodes.iter().find(|node|node.get_attribute("name")==Some("go")).unwrap().id;
+    let post=arena.nodes.iter().find(|node|node.get_attribute("type")==Some("submit")).unwrap().id;
+    let mut fonts=TextFonts::new();assert!(doc.relayout_from_arena(&mut fonts,600,400));
+    let b=box_for(doc.web_layout.as_ref().unwrap(),input);
+    assert_eq!(doc.hit_test_input_node(b.x+2,b.y+2,0,0,0),Some(input));
+    doc.focus_input(Some(input));assert!(doc.edit_input(input,'!'));assert!(doc.toggle_input(checkbox));
+    assert!(doc.relayout_from_arena(&mut fonts,400,400));
+    assert_eq!(doc.input(input).unwrap().value,"Tiếng Việt!");assert!(doc.input(input).unwrap().is_focused);
+    let url=doc.form_url(submit,"https://example.test/start").unwrap();
+    assert_eq!(url,"https://example.test/search?q=Ti%E1%BA%BFng+Vi%E1%BB%87t%21&go=yes&outside=a%26b");
+    assert!(doc.form_url(post,"https://example.test/start").unwrap_err().contains("method"));
+}
+
+#[test]
+fn unicode_search_highlights_toc_anchors_and_zoom_share_active_geometry() {
+    let output=crate::parser::html::parse_html("<h1 id='tiếng'>TIẾNG VIỆT</h1><p><a href='#tiếng'>Tiếng Việt</a></p><p>Tiếng Việt</p>");
+    let mut doc=crate::doc::Document::new();doc.nodes=output.nodes;doc.arena=Some(output.arena);
+    let mut fonts=TextFonts::new();assert!(doc.relayout_from_arena(&mut fonts,600,400));
+    let query="tie\u{302}\u{301}ng vie\u{323}\u{302}t";
+    assert_eq!(doc.search(query).len(),3);
+    doc.set_search_highlight(query,Some(1));
+    let web=doc.web_layout.as_ref().unwrap();
+    assert_eq!(web.boxes.iter().flat_map(|b|&b.highlights).filter(|highlight|highlight.2).count(),1);
+    assert_eq!(doc.anchor_y("#ti%E1%BA%BFng"),Some(doc.toc()[0].y));
+    doc.set_zoom(200,&mut fonts,600,400);assert_eq!(doc.zoom_percent(),200);
+    let text=doc.web_layout.as_ref().unwrap().boxes.iter().find(|b|b.lines.iter().any(|line|line.runs.iter().any(|run|run.span.link.is_some()))).unwrap();
+    let link=text.lines[0].runs.iter().find(|run|run.span.link.is_some()).unwrap();
+    assert_eq!(doc.hit_test_link(text.x+link.x as i32+1,text.y+1,0,0,0),Some(String::from("#tiếng")));
+}
+
+#[test]
+fn zoom_large_css_font_stays_inside_glyph_atlas_limit() {
+    let output=crate::parser::html::parse_html("<p style='font-size:128px'><span style='font-size:128px'>Large</span></p>");
+    let mut doc=crate::doc::Document::new();doc.nodes=output.nodes;doc.arena=Some(output.arena);
+    doc.set_zoom(200,&mut TextFonts::new(),600,400);
+    assert!(doc.last_error.is_none());
+    assert!(doc.web_layout.as_ref().unwrap().boxes.iter().flat_map(|b|&b.lines).flat_map(|line|&line.runs).all(|run|run.px<=128.0));
+}
+
+#[test]
+fn checked_parsing_rejects_bogus_close_depth_and_css_growth_before_layout() {
+    let html="<div></bogus>".repeat(crate::budget::MAX_DOM_DEPTH+1);
+    assert!(crate::parser::html::parse_html_with_base_checked(&html,None).is_err());
+    let css="p{x:0}".repeat(crate::budget::MAX_CSS_RULES+1);
+    assert!(crate::budget::validate_css(&css).is_err());
+    assert!(crate::budget::validate_css(&"@media all{".repeat(crate::budget::MAX_DOM_DEPTH+1)).is_err());
+    let mut doc=crate::doc::Document::new();doc.nodes=alloc::vec![crate::doc::DocNode::Heading{level:1,text:String::from("Budget")}];
+    let mut fonts=TextFonts::new();doc.compute_layout(&mut fonts,600);let original=doc.total_height;
+    doc.set_memory_budget(1);doc.set_zoom(200,&mut fonts,600,400);
+    assert_eq!(doc.zoom_percent(),100);assert_eq!(doc.total_height,original);assert!(doc.last_error.is_some());
+    doc.clear();doc.compute_layout(&mut fonts,600);assert!(doc.last_error.is_some());
+}
+
+#[test]
+fn checked_dom_mutations_are_atomic_and_count_disconnected_nodes() {
+    use dom_arena::DomMutation;
+    let output=crate::parser::html::parse_html("<p>Original</p>");
+    let mut doc=crate::doc::Document::new();doc.nodes=output.nodes;doc.arena=Some(output.arena);
+    let original=doc.arena.as_ref().unwrap().clone();
+    let text=original.nodes.iter().find(|node|matches!(node.data,NodeData::Text(_))).unwrap().id;
+    let mutations=[DomMutation::SetText{node:text,text:String::from("Changed")},DomMutation::AppendChild{parent:NodeId(99999),child:text}];
+    assert!(doc.apply_mutations_checked(&mutations).is_err());assert_eq!(doc.arena.as_ref().unwrap().nodes,original.nodes);
+    let oversized=DomMutation::CreateNode{node:NodeId(original.nodes.len() as u32),data:NodeData::Text("x".repeat(dom_arena::OCEL_JS_MAX_MUTATION_BYTES+1))};
+    assert!(doc.apply_mutations_checked(&[oversized]).is_err());assert_eq!(doc.arena.as_ref().unwrap().nodes,original.nodes);
+}
+
+#[test]
+fn markdown_preserves_ordered_labels_unmatched_delimiters_and_unicode_search() {
+    use crate::doc::DocNode;
+    let nodes=crate::parser::markdown::parse_markdown("# Tiếng Việt\n\n12. Ordered\n13) Next\n\nliteral **bold and `code and [link");
+    assert!(matches!(&nodes[1],DocNode::ListItem{bullet:'\0',spans,..} if spans[0].text=="12. Ordered"));
+    let spans=crate::parser::markdown::parse_inlines("literal **bold and `code and [link");
+    assert_eq!(spans.iter().map(|span|span.text.as_str()).collect::<String>(),"literal **bold and `code and [link");
+    assert!(spans.iter().all(|span|!span.bold&&!span.code&&span.link.is_none()));
+    let mut doc=crate::doc::Document::new();doc.nodes=nodes;doc.compute_layout(&mut TextFonts::new(),600);
+    assert_eq!(doc.search("TIẾNG VIỆT").len(),1);assert_eq!(doc.anchor_y("tiếng-việt"),Some(doc.toc()[0].y));
+    assert_eq!(crate::parser::DocFormat::detect_from_url_or_content("https://example.test/file.md?raw=1#section","plain"),crate::parser::DocFormat::Markdown);
+}
+
+#[test]
+fn html_resource_discovery_ignores_comments_rawtext_and_inert_templates() {
+    let refs=crate::parser::html::resource_references_checked("<!-- <img src='comment'> --><textarea><img src='text'></textarea><title><img src='title'></title><template><img src='inert'><script src='inert.js'></script></template><script>const x='<img src=\"script\">'</script><style>x{content:'<img src=\"style\">'}</style><img src='real'><link rel='stylesheet' href='real.css'><script src='real.js'></script>").unwrap();
+    assert_eq!(refs,alloc::vec![(String::from("real"),true),(String::from("real.css"),false),(String::from("real.js"),false)]);
+}

@@ -16,7 +16,12 @@ pub struct ArticleExtract {
 }
 
 /// Extract main article content from DOM tree.
+#[cfg(test)]
 pub fn extract_article(arena: &DocumentArena, base_url: &str, fallback_title: &str) -> ArticleExtract {
+    extract_article_cached(arena, base_url, fallback_title, &[])
+}
+
+pub fn extract_article_cached(arena: &DocumentArena, _base_url: &str, fallback_title: &str, assets: &[DocNode]) -> ArticleExtract {
     let mut best_node = None;
     let mut highest_score = -1000i32;
 
@@ -115,18 +120,13 @@ pub fn extract_article(arena: &DocumentArena, base_url: &str, fallback_title: &s
     // Render clean article nodes
     let mut nodes = Vec::new();
 
-    // Add prominent title banner
-    nodes.push(DocNode::Heading {
-        level: 1,
-        text: article_title.clone(),
-    });
-    nodes.push(DocNode::Paragraph {
-        spans: alloc::vec![StyledSpan::plain(&format!("📖 Reader Mode — {}", base_url))],
-    });
-    nodes.push(DocNode::Rule);
-
-    // Extract clean child elements from the best container
-    render_clean_subtree(arena, target_node, &mut nodes, base_url);
+    // Extract first, then add a fallback title only when it is absent.
+    render_clean_subtree(arena, target_node, &mut nodes, assets);
+    if let Some(title)=nodes.iter().find_map(|node|if let DocNode::Heading{level:1,text}=node{Some(text)}else{None}) {
+        article_title=title.clone();
+    }else{
+        nodes.insert(0, DocNode::Heading { level:1, text:article_title.clone() });
+    }
 
     ArticleExtract {
         title: format!("{} [Reader]", article_title),
@@ -138,7 +138,7 @@ fn render_clean_subtree(
     arena: &DocumentArena,
     parent_id: NodeId,
     out: &mut Vec<DocNode>,
-    base_url: &str,
+    assets: &[DocNode],
 ) {
     let Some(parent) = arena.get(parent_id) else {
         return;
@@ -178,6 +178,7 @@ fn render_clean_subtree(
                                     spans: alloc::vec![StyledSpan::plain(&text)],
                                 });
                             }
+                            append_cached_images(arena,child_id,out,assets);
                         }
                         "pre" | "code" => {
                             let text = arena.get_text_content(child_id);
@@ -194,18 +195,9 @@ fn render_clean_subtree(
                         }
                         "img" => {
                             let alt = attributes.iter().find(|(k, _)| k == "alt").map(|(_, v)| v.as_str()).unwrap_or("Image");
-                            if let Some((_, src)) = attributes.iter().find(|(k, _)| k == "src") {
-                                if let Ok(bytes) = crate::resources::load_binary(base_url, src) {
-                                    if let Some(img) = crate::image::decode(&bytes) {
-                                        out.push(DocNode::Image {
-                                            width: img.width,
-                                            height: img.height,
-                                            pixels: alloc::rc::Rc::new(img.pixels),
-                                        });
-                                        cur = child.next_sibling;
-                                        continue;
-                                    }
-                                }
+                            if let Some(image)=assets.iter().find(|node|matches!(node,DocNode::DomImage{node_id,..} if *node_id==child_id)) {
+                                out.push(image.clone());
+                                cur=child.next_sibling;continue;
                             }
                             let mut span = StyledSpan::plain(&format!("[🖼 {}]", alt));
                             span.color = Some(crate::draw::theme::TEXT_MUTED);
@@ -229,7 +221,7 @@ fn render_clean_subtree(
                         }
                         _ => {
                             // Recursively extract from div, section, etc.
-                            render_clean_subtree(arena, child_id, out, base_url);
+                            render_clean_subtree(arena, child_id, out, assets);
                         }
                     }
                 }
@@ -283,4 +275,14 @@ mod tests {
             _ => false,
         }));
     }
+}
+
+fn append_cached_images(arena:&DocumentArena,id:NodeId,out:&mut Vec<DocNode>,assets:&[DocNode]) {
+    let Some(node)=arena.get(id)else{return;};
+    if node.tag()==Some("img") {
+        if let Some(image)=assets.iter().find(|asset|matches!(asset,DocNode::DomImage{node_id,..} if *node_id==id)){out.push(image.clone());}
+        return;
+    }
+    let mut child=node.first_child;
+    while let Some(id)=child {append_cached_images(arena,id,out,assets);child=arena.get(id).and_then(|node|node.next_sibling);}
 }

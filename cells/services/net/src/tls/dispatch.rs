@@ -88,8 +88,8 @@ pub struct TlsPending {
 
 fn failed(request: &Request) -> &'static [u8] {
     match request {
-        Request::Send(_) => &[0, 0, 0, 0],
-        Request::Recv(_) => &[0, 0],
+        Request::Send(_) => &[0xff; 4],
+        Request::Recv(_) => &[0xff; 2],
     }
 }
 
@@ -200,8 +200,8 @@ impl TlsPending {
             let Pending { reply, owner, state, queue, .. } = op;
             let response: &[u8] = match &state {
                 State::Connecting(_) | State::Handshake(_) => &[0; 8],
-                State::Send(_) => &[0; 4],
-                State::Recv(_) => &[0; 2],
+                State::Send(_) => &[0xff; 4],
+                State::Recv(_) => &[0xff; 2],
                 State::Vacant => &[],
             };
             drop(state);
@@ -284,7 +284,7 @@ impl TlsPending {
                 }
                 Step::Sent(entry, result) => {
                     op.state = State::Vacant;
-                    let count = result.unwrap_or(0) as u32;
+                    let count = result.map(|n| n as u32).unwrap_or(u32::MAX);
                     if self.answer(op.reply, op.owner, Some(cap), &count.to_le_bytes()) {
                         tls_table.insert(cap, entry);
                         self.start_queued(cap, op, tls_table);
@@ -298,7 +298,7 @@ impl TlsPending {
                     op.state = State::Vacant;
                     let response = match result {
                         Ok(len) => encode_tls_recv_reply(&data[..len]),
-                        Err(_) => alloc::vec![0; 2],
+                        Err(_) => alloc::vec![0xff; 2],
                     };
                     if self.answer(op.reply, op.owner, Some(cap), &response) {
                         tls_table.insert(cap, entry);
@@ -329,8 +329,8 @@ impl TlsPending {
         let Pending { reply, owner, state, queue, .. } = op;
         let response: &[u8] = match &state {
             State::Connecting(_) | State::Handshake(_) => &[0; 8],
-            State::Send(_) => &[0; 4],
-            State::Recv(_) => &[0; 2],
+            State::Send(_) => &[0xff; 4],
+            State::Recv(_) => &[0xff; 2],
             State::Vacant => &[],
         };
         // The suspended future owns TLS keys and record buffers: destroy it

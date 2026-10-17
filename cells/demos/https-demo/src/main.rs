@@ -56,12 +56,15 @@ fn cell_main() {
     let mut status_printed = false;
 
     for _ in 0..200 {
-        let n = tls_read(net_tid, cap, &mut buf[total..]);
-        if n == 0 {
-            // No data yet — yield and retry.
-            ostd::task::yield_now();
-            continue;
-        }
+        let n = match tls_read(net_tid, cap, &mut buf[total..]) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(_) => {
+                println("[https-demo] ERROR: TLS receive failed");
+                tls_close(net_tid, cap);
+                return;
+            }
+        };
         total += n;
 
         // Once we have the status line, print it and stop.

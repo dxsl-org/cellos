@@ -38,6 +38,7 @@ fn script_document_holds_one_lease_and_navigation_releases_it() {
     assert_eq!(state.borrow().commands.len(), 2);
     assert!(!bridge.sync_script_document(Some(&html.arena), false, "static").unwrap());
     assert_ne!(bridge.context_id(), old_context);
+    assert_eq!(state.borrow().closes, 1);
     assert_eq!(state.borrow().requests[1], LeaseRequest::Release { engine: Engine::JavaScript, lease: 7 });
     assert!(bridge.dispatch_event(&DomEvent { target: html.arena.root, kind: dom_arena::EventKind::Click, client_x: 0, client_y: 0, key: None }).is_err());
     assert_eq!(state.borrow().opens, 1);
@@ -72,6 +73,7 @@ fn dropped_context_releases_and_stale_provider_does_not_reactivate() {
     let mut bridge = Bridge::new();
     bridge.sync_script_document(Some(&DocumentArena::new()), true, "script").unwrap();
     drop(bridge);
+    assert_eq!(state.borrow().closes, 1);
     assert_eq!(state.borrow().requests.len(), 2);
 }
 
@@ -85,4 +87,27 @@ fn missing_optional_engine_is_an_error_not_matcher_execution() {
     assert!(bridge.eval("document.title = 'must not match'").is_err());
     assert_eq!(state.borrow().opens, 0);
     assert!(state.borrow().commands.is_empty());
+}
+
+#[test]
+fn busy_bridge_does_not_evict_and_navigation_can_reacquire() {
+    let state = fresh_state();
+    let arena = DocumentArena::new();
+    let mut owner = Bridge::new();
+    let mut contender = Bridge::new();
+    owner.sync_script_document(Some(&arena), true, "owner").unwrap();
+    let token = owner.context_id();
+    let error = contender.sync_script_document(Some(&arena), true, "other").unwrap_err();
+    assert!(error.message.contains("busy"));
+    assert!(owner.is_active());
+    assert!(!contender.is_active());
+    assert_eq!(state.borrow().active_context, Some(token));
+    owner.eval("still active").unwrap();
+    owner.reset();
+    assert!(state.borrow().active_context.is_none());
+    contender.sync_script_document(Some(&arena), true, "now available").unwrap();
+    assert!(contender.is_active());
+    contender.reset();
+    owner.sync_script_document(Some(&arena), true, "next navigation").unwrap();
+    assert!(owner.is_active());
 }

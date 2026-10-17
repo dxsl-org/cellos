@@ -7,7 +7,7 @@ extern crate api;
 extern crate ostd;
 
 use alloc::{string::String, vec::Vec};
-use ocel_pdf_proto::{Request, Response, IPC_BYTES, MAX_DOCUMENT_BYTES};
+use ocel_pdf_proto::{DocumentOwner, Request, Response, IPC_BYTES, MAX_DOCUMENT_BYTES};
 use ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
 
 mod engine;
@@ -18,13 +18,12 @@ api::declare_manifest!(
     spawn = false,
     tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
 );
-api::declare_syscalls![Log, Recv, Send, Yield, Exit, LookupService, OpenCap, ReadCap, CloseCap];
+api::declare_syscalls![Log, Recv, Send, Yield, Exit, LookupService, OpenCap, ReadCap, CloseCap, GetTime];
 ostd::declare_custom_heap!(16 * 1024 * 1024);
 ostd::cell_main!(cell_main);
 
 struct OwnedDocument {
-    owner: usize,
-    handle: u32,
+    lease: DocumentOwner,
     document: engine::Document,
 }
 
@@ -55,6 +54,8 @@ fn read_document(path: &str) -> Result<Vec<u8>, String> {
 }
 
 fn handle(request: Request, owner: usize, active: &mut Option<OwnedDocument>, next: &mut u32) -> Result<Response, String> {
+    let now = ostd::syscall::sys_get_scheduler_ticks().ok_or_else(|| String::from("PDF session clock unavailable"))?;
+    if active.as_ref().is_some_and(|d| d.lease.expired(now)) { *active = None; }
     match request {
         Request::Ping => Ok(Response::Ready),
         Request::Open { path } => {
@@ -64,23 +65,31 @@ fn handle(request: Request, owner: usize, active: &mut Option<OwnedDocument>, ne
             let pages = document.pages;
             let handle = *next;
             *next = next.checked_add(1).unwrap_or(0);
-            *active = Some(OwnedDocument { owner, handle, document });
+            *active = Some(OwnedDocument { lease: DocumentOwner::new(owner, handle, now), document });
             Ok(Response::Opened { document: handle, pages })
         }
         Request::RenderPage { document, page, max_width, max_height } => {
-            let live = active.as_mut().filter(|d| d.owner == owner && d.handle == document)
+            let live = active.as_mut().filter(|d| d.lease.matches(owner, document))
                 .ok_or_else(|| String::from("Unknown PDF document handle"))?;
-            let (width, height, bytes) = live.document.render(page, max_width, max_height)?;
+            live.lease.renew(owner, document, now);
+            let result = live.document.render(page, max_width, max_height);
+            // Any native failure discards this owner's document and cache. Never
+            // let an abandoned or partially failed render stay busy indefinitely.
+            let (width, height, bytes) = match result {
+                Ok(result) => result,
+                Err(error) => { *active = None; return Err(error); }
+            };
             Ok(Response::Rendered { width, height, bytes })
         }
         Request::ReadPixels { document, offset, length } => {
-            let live = active.as_ref().filter(|d| d.owner == owner && d.handle == document)
+            let live = active.as_mut().filter(|d| d.lease.matches(owner, document))
                 .ok_or_else(|| String::from("Unknown PDF document handle"))?;
+            live.lease.renew(owner, document, now);
             let bytes = live.document.read_pixels(offset as usize, length as usize)?;
             Ok(Response::Pixels { offset, bytes })
         }
         Request::Close { document } => {
-            if !active.as_ref().is_some_and(|d| d.owner == owner && d.handle == document) {
+            if !active.as_ref().is_some_and(|d| d.lease.matches(owner, document)) {
                 return Err(String::from("Unknown PDF document handle"));
             }
             *active = None;
@@ -91,6 +100,7 @@ fn handle(request: Request, owner: usize, active: &mut Option<OwnedDocument>, ne
 
 fn cell_main() {
     init_custom_heap();
+    engine::Document::init_deadline_clock();
     ostd::io::println("[ocel-pdf] MuPDF 1.26.1 native PDF renderer ready (AGPL-3.0-or-later)");
     // Registered by init. This service never spawns cells or self-registers.
     let mut active = None;
@@ -102,14 +112,28 @@ fn cell_main() {
         match sys_recv(0, &mut receive) {
             SyscallResult::Ok(owner) if owner > 0 => {
                 let operation = ostd::ipc::current();
+                let mut requested_document = None;
                 let response = match postcard::from_bytes::<Request>(&receive) {
-                    Ok(request) => handle(request, owner, &mut active, &mut next_handle)
-                        .unwrap_or_else(|message| Response::Error { message }),
+                    Ok(request) => {
+                        requested_document = match &request {
+                            Request::RenderPage { document, .. } | Request::ReadPixels { document, .. }
+                            | Request::Close { document } => Some(*document),
+                            Request::Open { .. } | Request::Ping => None,
+                        };
+                        handle(request, owner, &mut active, &mut next_handle)
+                            .unwrap_or_else(|message| Response::Error { message })
+                    }
                     Err(_) => Response::Error { message: String::from("Malformed PDF request") },
                 };
+                if let Response::Opened { document, .. } = &response { requested_document = Some(*document); }
                 if let Ok(encoded) = postcard::to_slice(&response, &mut send) {
                     if let Some(operation) = operation {
-                        let _ = ostd::ipc::reply(operation, encoded);
+                        if ostd::ipc::reply(operation, encoded).is_err()
+                            && active.as_ref().is_some_and(|d| requested_document.is_some_and(|handle| d.lease.matches(owner, handle))) {
+                            // Exact IPC cancellation abandons the result, not the
+                            // native stack. Cleanup occurs after C returned.
+                            active = None;
+                        }
                     } else {
                         let _ = sys_send(owner, encoded);
                     }

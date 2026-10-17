@@ -406,10 +406,19 @@ pub enum OcelJsCommand {
 
 pub const OCEL_JS_CHUNK_SIZE: usize = 3072;
 pub const OCEL_JS_MAX_TRANSFER: usize = 512 * 1024;
+/// Per-command budgets, independently enforced by the engine and wire layer.
+pub const OCEL_JS_MAX_MUTATIONS: usize = 1024;
+pub const OCEL_JS_MAX_MUTATION_BYTES: usize = 128 * 1024;
+pub const OCEL_JS_MAX_RESULT_BYTES: usize = 4096;
+pub const OCEL_JS_MAX_LOG_BYTES: usize = 8192;
+pub const OCEL_JS_MAX_LOG_LINES: usize = 64;
+/// An idle context lease expires after 60 seconds (10 ms scheduler ticks).
+/// Only authenticated owner traffic renews it; a stale token must synchronize anew.
+pub const OCEL_JS_IDLE_TICKS: u64 = 6000;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OcelJsRequest {
-    /// Explicitly replaces the one active context; old tokens become invalid.
+    /// Claim a vacant session, or acknowledge an already-open identical owner/token.
     OpenContext { context: u64 },
     Begin { context: u64, total: usize },
     Chunk { context: u64, offset: usize, data: Vec<u8> },
@@ -417,6 +426,8 @@ pub enum OcelJsRequest {
     ReadResponse { context: u64, offset: usize },
     /// Readiness probe; never replaces or mutates the active document context.
     Ping,
+    /// Owner-only close; must precede releasing the engine activation lease.
+    CloseContext { context: u64 },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -425,6 +436,8 @@ pub enum OcelJsReply {
     ResponseChunk { offset: usize, total: usize, data: Vec<u8> },
     Error { message: String },
     Ready,
+    /// Another nonexpired session owns the service. Does not change its state.
+    Busy,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -455,6 +468,8 @@ pub trait JsEngine {
 
 /// Context in which JavaScript code executes and interacts with DOM Proxies.
 pub trait JsContext {
+    /// False if engine output could not be delivered without state divergence.
+    fn is_usable(&self) -> bool { true }
     /// Synchronize a validated arena without clearing same-document JS globals.
     fn sync_document(&mut self, _arena: &DocumentArena, _title: &str) -> Result<(), JsError> {
         Err(JsError { message: String::from("engine has no document-backed DOM"), line: 0 })

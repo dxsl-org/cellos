@@ -52,6 +52,25 @@ fn bitmap_minimum_signed_height_does_not_panic() {
 }
 
 #[test]
+fn bitmap_rejects_unimplemented_masks_and_pixels_overlapping_header() {
+    let mut bmp = alloc::vec![0u8; 58];
+    bmp[..2].copy_from_slice(b"BM");
+    bmp[10..14].copy_from_slice(&54u32.to_le_bytes());
+    bmp[14..18].copy_from_slice(&40u32.to_le_bytes());
+    bmp[18..22].copy_from_slice(&1i32.to_le_bytes());
+    bmp[22..26].copy_from_slice(&1i32.to_le_bytes());
+    bmp[26..28].copy_from_slice(&1u16.to_le_bytes());
+    bmp[28..30].copy_from_slice(&32u16.to_le_bytes());
+    bmp[54..58].copy_from_slice(&[12, 34, 56, 255]);
+    assert_eq!(decode(&bmp).unwrap().pixels, [12, 34, 56, 255]);
+    bmp[30..34].copy_from_slice(&3u32.to_le_bytes());
+    assert!(decode(&bmp).is_none(), "bitfields must not silently use BGRA byte order");
+    bmp[30..34].copy_from_slice(&0u32.to_le_bytes());
+    bmp[10..14].copy_from_slice(&20u32.to_le_bytes());
+    assert!(decode(&bmp).is_none(), "DIB bytes are not pixels");
+}
+
+#[test]
 fn successive_images_advance_layout_and_share_pixel_storage() {
     use crate::doc::{DocNode, Document};
     use alloc::rc::Rc;

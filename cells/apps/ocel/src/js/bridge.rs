@@ -21,6 +21,7 @@ pub struct Tier2JsBridge<T: Transport = KernelTransport> {
     document_ready: bool,
     mutations: Vec<DomMutation>,
     backend_named: bool,
+    last_activity: Option<u64>,
 }
 
 impl<T: Transport + Default> Default for Tier2JsBridge<T> { fn default() -> Self { Self::new() } }
@@ -28,12 +29,18 @@ impl<T: Transport + Default> Default for Tier2JsBridge<T> { fn default() -> Self
 impl<T: Transport + Default> Tier2JsBridge<T> {
     pub fn new() -> Self {
         Self { lease: None, context: NEXT_CONTEXT.fetch_add(1, Ordering::Relaxed) as u64,
-            opened: false, document_ready: false, mutations: Vec::new(), backend_named: false }
+            opened: false, document_ready: false, mutations: Vec::new(), backend_named: false, last_activity: None }
     }
 
     /// Bind this token to the current document/tab. A reset invalidates old tokens.
     /// Never sync a different document into an existing token: reset it first.
     pub fn context_id(&self) -> u64 { self.context }
+    /// False after navigation, scripts-off, or any terminal service error.
+    pub fn is_active(&self) -> bool {
+        self.opened && self.document_ready && !self.last_activity.is_some_and(|last| {
+            self.lease.as_ref().and_then(Lease::now).is_some_and(|now| now.wrapping_sub(last) >= dom_arena::OCEL_JS_IDLE_TICKS)
+        })
+    }
 
     /// Call before scripts, and after native edits only once JS mutations have
     /// been drained AND applied. Same-document wrapper identity/listeners survive.
@@ -56,6 +63,7 @@ impl<T: Transport + Default> Tier2JsBridge<T> {
         if !arena.validate() || !self.mutations.is_empty() {
             return Err(Self::error("Invalid DOM snapshot or undrained JavaScript mutations"));
         }
+        if self.opened && !self.is_active() { self.close_context(); self.document_ready = false; }
         if self.lease.is_none() {
             self.lease = Some(Lease::acquire_with(Engine::JavaScript, T::default())
                 .map_err(|message| JsError { message, line: 0 })?);
@@ -70,8 +78,10 @@ impl<T: Transport + Default> Tier2JsBridge<T> {
     }
 
     fn invalidate(&mut self) {
+        self.close_context();
         self.opened = false;
         self.document_ready = false;
+        self.last_activity = None;
         self.lease = None;
     }
 
@@ -87,11 +97,16 @@ impl<T: Transport + Default> Tier2JsBridge<T> {
         let mut recv_buf = [0u8; OCEL_JS_IPC_BUF_SIZE];
         let encoded = postcard::to_slice(request, &mut send_buf)
             .map_err(|_| Self::error("JavaScript IPC frame exceeds 4 KiB"))?;
+        let activity = self.lease.as_ref().and_then(Lease::now);
         let reply = self.active_lease()?.exchange(encoded, &mut recv_buf)
             .map_err(|message| JsError { message, line: 0 })
             .and_then(|len| postcard::from_bytes::<OcelJsReply>(&recv_buf[..len])
                 .map_err(|_| Self::error("Malformed JavaScript service response")));
         match reply {
+            Ok(OcelJsReply::Busy) => {
+                self.invalidate();
+                Err(Self::error("JavaScript engine busy: another live document owns the context"))
+            }
             Ok(OcelJsReply::Error { message }) => {
                 self.invalidate();
                 Err(JsError { message, line: 0 })
@@ -100,7 +115,10 @@ impl<T: Transport + Default> Tier2JsBridge<T> {
                 self.invalidate();
                 Err(error)
             }
-            Ok(reply) => Ok(reply),
+            Ok(reply) => {
+                self.last_activity = activity;
+                Ok(reply)
+            }
         }
     }
 
@@ -115,8 +133,11 @@ impl<T: Transport + Default> Tier2JsBridge<T> {
     }
 
     fn execute(&mut self, command: OcelJsCommand) -> Result<String, JsError> {
-        let payload = postcard::to_allocvec(&command).map_err(|_| Self::error("Unable to encode JavaScript command"))?;
-        if payload.len() > OCEL_JS_MAX_TRANSFER { return Err(Self::error("JavaScript request exceeds 512 KiB transfer limit")); }
+        if !self.mutations.is_empty() {
+            return Err(Self::error("Apply pending JavaScript mutations before executing another command"));
+        }
+        let payload = dom_arena::ipc::encode_bounded(&command, OCEL_JS_MAX_TRANSFER)
+            .map_err(|_| Self::error("JavaScript request exceeds 512 KiB transfer limit"))?;
         self.expect_ack(&OcelJsRequest::Begin { context: self.context, total: payload.len() })?;
         for (index, chunk) in payload.chunks(OCEL_JS_CHUNK_SIZE).enumerate() {
             self.expect_ack(&OcelJsRequest::Chunk { context: self.context,
@@ -144,6 +165,15 @@ impl<T: Transport + Default> Tier2JsBridge<T> {
         }
         let response = postcard::from_bytes::<OcelJsResponse>(&bytes)
             .map_err(|_| { self.invalidate(); Self::error("Malformed JavaScript mutation response") })?;
+        let (mutations, text) = match &response {
+            OcelJsResponse::Success { mutations, result_repr } => (mutations, result_repr),
+            OcelJsResponse::Error { mutations, message, .. } => (mutations, message),
+        };
+        if mutations.len() > dom_arena::OCEL_JS_MAX_MUTATIONS || text.len() > dom_arena::OCEL_JS_MAX_RESULT_BYTES
+            || dom_arena::ipc::serialized_len_bounded(mutations, dom_arena::OCEL_JS_MAX_MUTATION_BYTES).is_err() {
+            self.invalidate();
+            return Err(Self::error("JavaScript service exceeded output budgets; context closed"));
+        }
         if !self.backend_named {
             ostd::io::println("[ocel] js backend: Tier 2 domain service (document-backed DOM required)");
             self.backend_named = true;
@@ -174,9 +204,31 @@ impl<T: Transport + Default> JsContext for Tier2JsBridge<T> {
     }
     fn take_mutations(&mut self) -> Vec<DomMutation> { core::mem::take(&mut self.mutations) }
     fn reset(&mut self) {
-        self.context = NEXT_CONTEXT.fetch_add(1, Ordering::Relaxed) as u64;
         self.invalidate();
+        self.context = NEXT_CONTEXT.fetch_add(1, Ordering::Relaxed) as u64;
         self.mutations.clear();
+    }
+}
+
+impl<T: Transport> Tier2JsBridge<T> {
+    fn close_context(&mut self) {
+        if self.opened {
+            self.opened = false;
+            if let Some(lease) = self.lease.as_mut() {
+                let mut send = [0u8; OCEL_JS_IPC_BUF_SIZE];
+                let mut receive = [0u8; OCEL_JS_IPC_BUF_SIZE];
+                if let Ok(bytes) = postcard::to_slice(&OcelJsRequest::CloseContext { context: self.context }, &mut send) {
+                    let _ = lease.exchange(bytes, &mut receive);
+                }
+            }
+        }
+    }
+}
+
+impl<T: Transport> Drop for Tier2JsBridge<T> {
+    fn drop(&mut self) {
+        // Close before Lease::drop releases activation demand.
+        self.close_context();
     }
 }
 
