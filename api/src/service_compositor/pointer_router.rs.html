@@ -76,46 +76,50 @@
 <a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">pub const fn </span>focused_owner(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
 <a href=#77 id=77 data-nosnippet>77</a>        <span class="self">self</span>.focused_owner
 <a href=#78 id=78 data-nosnippet>78</a>    }
-<a href=#79 id=79 data-nosnippet>79</a>
-<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">pub const fn </span>selected_cap(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
-<a href=#81 id=81 data-nosnippet>81</a>        <span class="self">self</span>.selected_cap
+<a href=#79 id=79 data-nosnippet>79</a>    <span class="kw">pub fn </span>set_focus(<span class="kw-2">&amp;mut </span><span class="self">self</span>, owner: usize, cap: <span class="prelude-ty">Option</span>&lt;u64&gt;) {
+<a href=#80 id=80 data-nosnippet>80</a>        <span class="self">self</span>.focused_owner = owner;
+<a href=#81 id=81 data-nosnippet>81</a>        <span class="self">self</span>.selected_cap = cap;
 <a href=#82 id=82 data-nosnippet>82</a>    }
 <a href=#83 id=83 data-nosnippet>83</a>
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">pub fn </span>forget(<span class="kw-2">&amp;mut </span><span class="self">self</span>, cap: u64) {
-<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">if </span><span class="self">self</span>.selected_cap == <span class="prelude-val">Some</span>(cap) {
-<a href=#86 id=86 data-nosnippet>86</a>            <span class="self">self</span>.selected_cap = <span class="prelude-val">None</span>;
-<a href=#87 id=87 data-nosnippet>87</a>            <span class="self">self</span>.focused_owner = <span class="number">0</span>;
-<a href=#88 id=88 data-nosnippet>88</a>        }
-<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">if </span>capture_cap(<span class="self">self</span>.capture) == <span class="prelude-val">Some</span>(cap) {
-<a href=#90 id=90 data-nosnippet>90</a>            <span class="self">self</span>.capture = <span class="prelude-val">None</span>;
-<a href=#91 id=91 data-nosnippet>91</a>        }
-<a href=#92 id=92 data-nosnippet>92</a>    }
-<a href=#93 id=93 data-nosnippet>93</a>
-<a href=#94 id=94 data-nosnippet>94</a>    <span class="kw">pub fn </span>disable(<span class="kw-2">&amp;mut </span><span class="self">self</span>, cap: u64) {
-<a href=#95 id=95 data-nosnippet>95</a>        <span class="self">self</span>.forget(cap);
-<a href=#96 id=96 data-nosnippet>96</a>        <span class="self">self</span>.focused_owner = <span class="number">0</span>;
-<a href=#97 id=97 data-nosnippet>97</a>    }
-<a href=#98 id=98 data-nosnippet>98</a>
-<a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>route&lt;F&gt;(
-<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#101 id=101 data-nosnippet>101</a>        event: InputEvent,
-<a href=#102 id=102 data-nosnippet>102</a>        x: i32,
-<a href=#103 id=103 data-nosnippet>103</a>        y: i32,
-<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw-2">mut </span>context: RouteContext&lt;<span class="lifetime">'_</span>, F&gt;,
-<a href=#105 id=105 data-nosnippet>105</a>    ) <span class="kw">where
-<a href=#106 id=106 data-nosnippet>106</a>        </span>F: FnMut(Rect),
-<a href=#107 id=107 data-nosnippet>107</a>    {
-<a href=#108 id=108 data-nosnippet>108</a>        input::route(<span class="self">self</span>, event, x, y, <span class="kw-2">&amp;mut </span>context);
-<a href=#109 id=109 data-nosnippet>109</a>    }
-<a href=#110 id=110 data-nosnippet>110</a>}
-<a href=#111 id=111 data-nosnippet>111</a>
-<a href=#112 id=112 data-nosnippet>112</a><span class="kw">fn </span>capture_cap(capture: <span class="prelude-ty">Option</span>&lt;Capture&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">match </span>capture {
-<a href=#114 id=114 data-nosnippet>114</a>        <span class="prelude-val">Some</span>(Capture::Client(cap))
-<a href=#115 id=115 data-nosnippet>115</a>        | <span class="prelude-val">Some</span>(Capture::Drag { cap, .. })
-<a href=#116 id=116 data-nosnippet>116</a>        | <span class="prelude-val">Some</span>(Capture::Resize { cap, .. })
-<a href=#117 id=117 data-nosnippet>117</a>        | <span class="prelude-val">Some</span>(Capture::Control { cap, .. }) =&gt; <span class="prelude-val">Some</span>(cap),
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#119 id=119 data-nosnippet>119</a>    }
-<a href=#120 id=120 data-nosnippet>120</a>}
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">pub const fn </span>selected_cap(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="self">self</span>.selected_cap
+<a href=#86 id=86 data-nosnippet>86</a>    }
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">pub fn </span>forget(<span class="kw-2">&amp;mut </span><span class="self">self</span>, cap: u64) {
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">if </span><span class="self">self</span>.selected_cap == <span class="prelude-val">Some</span>(cap) {
+<a href=#90 id=90 data-nosnippet>90</a>            <span class="self">self</span>.selected_cap = <span class="prelude-val">None</span>;
+<a href=#91 id=91 data-nosnippet>91</a>            <span class="self">self</span>.focused_owner = <span class="number">0</span>;
+<a href=#92 id=92 data-nosnippet>92</a>        }
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">if </span>capture_cap(<span class="self">self</span>.capture) == <span class="prelude-val">Some</span>(cap) {
+<a href=#94 id=94 data-nosnippet>94</a>            <span class="self">self</span>.capture = <span class="prelude-val">None</span>;
+<a href=#95 id=95 data-nosnippet>95</a>        }
+<a href=#96 id=96 data-nosnippet>96</a>    }
+<a href=#97 id=97 data-nosnippet>97</a>
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">pub fn </span>disable(<span class="kw-2">&amp;mut </span><span class="self">self</span>, cap: u64) {
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="self">self</span>.forget(cap);
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="self">self</span>.focused_owner = <span class="number">0</span>;
+<a href=#101 id=101 data-nosnippet>101</a>    }
+<a href=#102 id=102 data-nosnippet>102</a>
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>route&lt;F&gt;(
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#105 id=105 data-nosnippet>105</a>        event: InputEvent,
+<a href=#106 id=106 data-nosnippet>106</a>        x: i32,
+<a href=#107 id=107 data-nosnippet>107</a>        y: i32,
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw-2">mut </span>context: RouteContext&lt;<span class="lifetime">'_</span>, F&gt;,
+<a href=#109 id=109 data-nosnippet>109</a>    ) <span class="kw">where
+<a href=#110 id=110 data-nosnippet>110</a>        </span>F: FnMut(Rect),
+<a href=#111 id=111 data-nosnippet>111</a>    {
+<a href=#112 id=112 data-nosnippet>112</a>        input::route(<span class="self">self</span>, event, x, y, <span class="kw-2">&amp;mut </span>context);
+<a href=#113 id=113 data-nosnippet>113</a>    }
+<a href=#114 id=114 data-nosnippet>114</a>}
+<a href=#115 id=115 data-nosnippet>115</a>
+<a href=#116 id=116 data-nosnippet>116</a><span class="kw">fn </span>capture_cap(capture: <span class="prelude-ty">Option</span>&lt;Capture&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
+<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">match </span>capture {
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="prelude-val">Some</span>(Capture::Client(cap))
+<a href=#119 id=119 data-nosnippet>119</a>        | <span class="prelude-val">Some</span>(Capture::Drag { cap, .. })
+<a href=#120 id=120 data-nosnippet>120</a>        | <span class="prelude-val">Some</span>(Capture::Resize { cap, .. })
+<a href=#121 id=121 data-nosnippet>121</a>        | <span class="prelude-val">Some</span>(Capture::Control { cap, .. }) =&gt; <span class="prelude-val">Some</span>(cap),
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>}
 </code></pre></div></section></main></body></html>

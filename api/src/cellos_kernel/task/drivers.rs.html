@@ -56,42 +56,44 @@
 <a href=#56 id=56 data-nosnippet>56</a>    <span class="comment">// Init specific drivers
 <a href=#57 id=57 data-nosnippet>57</a>    </span>input_irq_ack::init_driver(); <span class="comment">// ACK-only shim; event routing is in input service Cell
 <a href=#58 id=58 data-nosnippet>58</a>    </span>console_drv::init();
-<a href=#59 id=59 data-nosnippet>59</a>    ramdisk::init_driver(); <span class="comment">// RAM disk for embedded FAT32 (kernel self-hosted FS)
-<a href=#60 id=60 data-nosnippet>60</a>                            // Disable global interrupts during VirtIO init to prevent IRQ deadlocks.
-<a href=#61 id=61 data-nosnippet>61</a>                            // VirtIO block raises an IRQ on init; if the PLIC is enabled and the trap
-<a href=#62 id=62 data-nosnippet>62</a>                            // handler tries to re-acquire a Spinlock held by this thread, it will spin
-<a href=#63 id=63 data-nosnippet>63</a>                            // forever.  We re-enable SIE after all drivers are initialised.
-<a href=#64 id=64 data-nosnippet>64</a>                            // G2 loader redesign (phases 05/06): the kernel drives NO block hardware. The
-<a href=#65 id=65 data-nosnippet>65</a>                            // virtio-blk Driver Cell (/bin/block) owns the VirtIO block device (MMIO + DMA)
-<a href=#66 id=66 data-nosnippet>66</a>                            // and registers service::BLOCK_DRIVER; VFS routes all sector I/O to it. Kernel
-<a href=#67 id=67 data-nosnippet>67</a>                            // boot-time block reads (snapshot restore, verify_mbr, EarlyLoader::probe) degrade
-<a href=#68 id=68 data-nosnippet>68</a>                            // gracefully (block::read_sector → Err on the null device). MMC (SDHCI) still
-<a href=#69 id=69 data-nosnippet>69</a>                            // initialises for real boards.
-<a href=#70 id=70 data-nosnippet>70</a>    </span><span class="attr">#[cfg(any(target_arch = <span class="string">"riscv64"</span>, target_arch = <span class="string">"aarch64"</span>))]
-<a href=#71 id=71 data-nosnippet>71</a>    </span>{
-<a href=#72 id=72 data-nosnippet>72</a>        <span class="kw">let </span>board = <span class="kw">crate</span>::board::active();
-<a href=#73 id=73 data-nosnippet>73</a>        <span class="attr">#[cfg(all(target_arch = <span class="string">"aarch64"</span>, feature = <span class="string">"board-rpi3"</span>))]
-<a href=#74 id=74 data-nosnippet>74</a>        </span>bcm_pinmux::apply(hal_soc_bcm27xx::BCM2837.mmio.gpio_base, board.wiring);
-<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">if </span>board.has_driver(cellos_boards::DriverId::SdhciArasan)
-<a href=#76 id=76 data-nosnippet>76</a>            || board.has_driver(cellos_boards::DriverId::SdhciDwCqe)
-<a href=#77 id=77 data-nosnippet>77</a>        {
-<a href=#78 id=78 data-nosnippet>78</a>            mmc::init_driver();
-<a href=#79 id=79 data-nosnippet>79</a>        }
-<a href=#80 id=80 data-nosnippet>80</a>        <span class="comment">// Pre-populate PCIE_BARS with VirtIO MMIO slot addresses so Driver Cells
-<a href=#81 id=81 data-nosnippet>81</a>        // can request only slots enabled by the active board contract.
-<a href=#82 id=82 data-nosnippet>82</a>        </span><span class="kw">if </span>board.has_driver(cellos_boards::DriverId::VirtioMmio) {
-<a href=#83 id=83 data-nosnippet>83</a>            <span class="kw">for </span>slot <span class="kw">in </span>virtio_common::virtio_slots() {
-<a href=#84 id=84 data-nosnippet>84</a>                <span class="kw">crate</span>::resource_registry::register_pcie_bar(slot.base, <span class="number">0x200</span>);
-<a href=#85 id=85 data-nosnippet>85</a>            }
-<a href=#86 id=86 data-nosnippet>86</a>        }
-<a href=#87 id=87 data-nosnippet>87</a>    }
-<a href=#88 id=88 data-nosnippet>88</a>    <span class="comment">// VirtIO NIC is now served by the virtio-net Driver Cell (P06 complete).
-<a href=#89 id=89 data-nosnippet>89</a>    // VirtIO RNG init deferred: full MMIO probe hangs on RISC-V when probing
-<a href=#90 id=90 data-nosnippet>90</a>    // already-claimed slots (block/net). The no-op stub is sufficient until a
-<a href=#91 id=91 data-nosnippet>91</a>    // safe probe strategy is implemented (skip slots claimed by other drivers).
-<a href=#92 id=92 data-nosnippet>92</a>
-<a href=#93 id=93 data-nosnippet>93</a>    // PCIe ECAM scan (pcie_ecam::init() + IOMMU init) is called from main.rs
-<a href=#94 id=94 data-nosnippet>94</a>    // separately on PCIe arches. NVMe and e1000 are now Driver Cells — no
-<a href=#95 id=95 data-nosnippet>95</a>    // kernel-side init_driver() calls needed for those devices.
-<a href=#96 id=96 data-nosnippet>96</a></span>}
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="attr">#[cfg(any(target_arch = <span class="string">"x86_64"</span>, target_arch = <span class="string">"x86"</span>))]
+<a href=#60 id=60 data-nosnippet>60</a>    </span>ps2_keyboard::init();
+<a href=#61 id=61 data-nosnippet>61</a>    ramdisk::init_driver(); <span class="comment">// RAM disk for embedded FAT32 (kernel self-hosted FS)
+<a href=#62 id=62 data-nosnippet>62</a>                            // Disable global interrupts during VirtIO init to prevent IRQ deadlocks.
+<a href=#63 id=63 data-nosnippet>63</a>                            // VirtIO block raises an IRQ on init; if the PLIC is enabled and the trap
+<a href=#64 id=64 data-nosnippet>64</a>                            // handler tries to re-acquire a Spinlock held by this thread, it will spin
+<a href=#65 id=65 data-nosnippet>65</a>                            // forever.  We re-enable SIE after all drivers are initialised.
+<a href=#66 id=66 data-nosnippet>66</a>                            // G2 loader redesign (phases 05/06): the kernel drives NO block hardware. The
+<a href=#67 id=67 data-nosnippet>67</a>                            // virtio-blk Driver Cell (/bin/block) owns the VirtIO block device (MMIO + DMA)
+<a href=#68 id=68 data-nosnippet>68</a>                            // and registers service::BLOCK_DRIVER; VFS routes all sector I/O to it. Kernel
+<a href=#69 id=69 data-nosnippet>69</a>                            // boot-time block reads (snapshot restore, verify_mbr, EarlyLoader::probe) degrade
+<a href=#70 id=70 data-nosnippet>70</a>                            // gracefully (block::read_sector → Err on the null device). MMC (SDHCI) still
+<a href=#71 id=71 data-nosnippet>71</a>                            // initialises for real boards.
+<a href=#72 id=72 data-nosnippet>72</a>    </span><span class="attr">#[cfg(any(target_arch = <span class="string">"riscv64"</span>, target_arch = <span class="string">"aarch64"</span>))]
+<a href=#73 id=73 data-nosnippet>73</a>    </span>{
+<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">let </span>board = <span class="kw">crate</span>::board::active();
+<a href=#75 id=75 data-nosnippet>75</a>        <span class="attr">#[cfg(all(target_arch = <span class="string">"aarch64"</span>, feature = <span class="string">"board-rpi3"</span>))]
+<a href=#76 id=76 data-nosnippet>76</a>        </span>bcm_pinmux::apply(hal_soc_bcm27xx::BCM2837.mmio.gpio_base, board.wiring);
+<a href=#77 id=77 data-nosnippet>77</a>        <span class="kw">if </span>board.has_driver(cellos_boards::DriverId::SdhciArasan)
+<a href=#78 id=78 data-nosnippet>78</a>            || board.has_driver(cellos_boards::DriverId::SdhciDwCqe)
+<a href=#79 id=79 data-nosnippet>79</a>        {
+<a href=#80 id=80 data-nosnippet>80</a>            mmc::init_driver();
+<a href=#81 id=81 data-nosnippet>81</a>        }
+<a href=#82 id=82 data-nosnippet>82</a>        <span class="comment">// Pre-populate PCIE_BARS with VirtIO MMIO slot addresses so Driver Cells
+<a href=#83 id=83 data-nosnippet>83</a>        // can request only slots enabled by the active board contract.
+<a href=#84 id=84 data-nosnippet>84</a>        </span><span class="kw">if </span>board.has_driver(cellos_boards::DriverId::VirtioMmio) {
+<a href=#85 id=85 data-nosnippet>85</a>            <span class="kw">for </span>slot <span class="kw">in </span>virtio_common::virtio_slots() {
+<a href=#86 id=86 data-nosnippet>86</a>                <span class="kw">crate</span>::resource_registry::register_pcie_bar(slot.base, <span class="number">0x200</span>);
+<a href=#87 id=87 data-nosnippet>87</a>            }
+<a href=#88 id=88 data-nosnippet>88</a>        }
+<a href=#89 id=89 data-nosnippet>89</a>    }
+<a href=#90 id=90 data-nosnippet>90</a>    <span class="comment">// VirtIO NIC is now served by the virtio-net Driver Cell (P06 complete).
+<a href=#91 id=91 data-nosnippet>91</a>    // VirtIO RNG init deferred: full MMIO probe hangs on RISC-V when probing
+<a href=#92 id=92 data-nosnippet>92</a>    // already-claimed slots (block/net). The no-op stub is sufficient until a
+<a href=#93 id=93 data-nosnippet>93</a>    // safe probe strategy is implemented (skip slots claimed by other drivers).
+<a href=#94 id=94 data-nosnippet>94</a>
+<a href=#95 id=95 data-nosnippet>95</a>    // PCIe ECAM scan (pcie_ecam::init() + IOMMU init) is called from main.rs
+<a href=#96 id=96 data-nosnippet>96</a>    // separately on PCIe arches. NVMe and e1000 are now Driver Cells — no
+<a href=#97 id=97 data-nosnippet>97</a>    // kernel-side init_driver() calls needed for those devices.
+<a href=#98 id=98 data-nosnippet>98</a></span>}
 </code></pre></div></section></main></body></html>
