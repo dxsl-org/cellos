@@ -1,0 +1,37 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: cellos-node
+  labels:
+    app: cellos
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: cellos-node
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        resources:
+          requests:
+            memory: 512Mi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+          autoattachGraphicsDevice: true
+          autoattachSerialConsole: true
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          containerDisk:
+            image: cellos-containerdisk:latest
+            path: /disk/cellos-x86_64.qcow2

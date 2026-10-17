@@ -2845,6 +2845,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "service-sshd"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "chacha20",
+ "chacha20poly1305",
+ "ed25519-compact",
+ "ostd",
+ "poly1305",
+ "serde",
+ "sha2",
+ "types",
+ "x25519-dalek",
+]
+
+[[package]]
 name = "service-vfs"
 version = "0.1.0"
 dependencies = [

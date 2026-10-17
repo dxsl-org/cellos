@@ -709,6 +709,20 @@ pub fn display_framebuffer_resolution() -> Option<(u16, u16)> {
     }
 }
 
+/// Return the active firmware scanout geometry and base, if registered.
+pub fn display_framebuffer_info() -> Option<(usize, usize, u16, u16, usize)> {
+    match *DISPLAY_FRAMEBUFFER.lock() {
+        DisplayFramebufferState::Active(framebuffer) => Some((
+            framebuffer.base,
+            framebuffer.size,
+            framebuffer.width,
+            framebuffer.height,
+            framebuffer.pitch,
+        )),
+        DisplayFramebufferState::Empty | DisplayFramebufferState::Pending(_) => None,
+    }
+}
+
 /// Current number of registered regions (diagnostics).
 pub fn region_count() -> usize {
     REGISTRY.lock().len()

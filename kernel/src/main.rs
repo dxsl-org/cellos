@@ -1429,6 +1429,50 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("X86-MMIO-SMOKE: SKIP (no SVM/VMX root)");
         }
+        #[cfg(target_arch = "x86_64")]
+        if let Some(fb) = boot_info.framebuffer() {
+            let hhdm = boot_info.hhdm_offset();
+            let phys_addr = if fb.addr >= hhdm && hhdm > 0 {
+                fb.addr - hhdm
+            } else {
+                fb.addr
+            };
+            let width = fb.width as u16;
+            let height = fb.height as u16;
+            let pitch = fb.pitch as usize;
+            let size = pitch.wrapping_mul(height as usize);
+            let pages = (size + 4095) / 4096;
+            let owner = types::CellId(0);
+            match crate::memory::paging::map_display_framebuffer_user(phys_addr, pages) {
+                Ok(_) => {
+                    let _ = crate::resource_registry::reserve_display_framebuffer(
+                        owner, phys_addr, size, width, height, pitch,
+                    );
+                    let _ = crate::resource_registry::activate_display_framebuffer(
+                        owner, phys_addr, size, width, height, pitch,
+                    );
+                    log_info("[boot] x86_64 Limine linear framebuffer mapped and registered");
+                    unsafe {
+                        let ptr = fb.addr as *mut u32;
+                        let stride = pitch / 4;
+                        let total = stride * (height as usize);
+                        // Dark slate background (0xFF1E1E2E)
+                        for i in 0..total {
+                            *ptr.add(i) = 0xFF1E1E2E;
+                        }
+                        // Top banner bar (40px height, Cyan 0xFF00A8E8)
+                        for y in 0..40usize {
+                            for x in 0..(width as usize) {
+                                *ptr.add(y * stride + x) = 0xFF00A8E8;
+                            }
+                        }
+                    }
+                }
+                Err(_) => {
+                    log_info("[boot] failed to map linear framebuffer");
+                }
+            }
+        }
 
         // Spawn the Platform Cell before init (PCIe ECAM scanner).
         // RISC-V uses the compile-time GPEX window (0x3000_0000).

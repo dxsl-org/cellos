@@ -150,7 +150,7 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         // report can distinguish "needs nothing" from "row missing".
         "/bin/ocel" | "/bin/ocel-js" | "/bin/ocel-quickjs" | "/bin/ocel-pdf" => CapSet::EMPTY,
         "/bin/config" | "/bin/compositor" | "/bin/fb-console" | "/bin/kms" | "/bin/silo-test"
-        | "/bin/vfs-test" | "/bin/srv-test" | "/bin/std-smoke" | "/bin/desktop"
+        | "/bin/vfs-test" | "/bin/srv-test" | "/bin/std-smoke" | "/bin/desktop" | "/bin/sshd"
         | "/bin/tier2-exploit" | "/bin/tier2-smoke" | "/bin/cpp-smoke"
         | "/bin/tier2-rpc-provider" | "/bin/tier2-rpc-driver" => CapSet::EMPTY,
         _ => return None,

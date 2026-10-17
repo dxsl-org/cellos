@@ -153,6 +153,14 @@ impl viConsole {
             };
             route_byte!(c);
         }
+        // 1e. Poll standard PC PS/2 keyboard on x86_64.
+        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+        while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
+            let Some(c) = crate::task::drivers::ps2_keyboard::poll() else {
+                break;
+            };
+            route_byte!(c);
+        }
 
         // NOTE: the SBI DBCN console-read fallback was removed — on this QEMU /
         // OpenSBI build it returns phantom bytes on every call, which (combined

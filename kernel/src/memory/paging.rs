@@ -1349,7 +1349,63 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
     Ok(())
 }
 
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
+#[cfg(target_arch = "x86_64")]
+pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResult<()> {
+    use crate::memory::frame::phys_to_virt;
+    use hal::paging::{pte_flags_user_rw, walk_read, PTE_PRESENT};
+
+    if pages == 0 || start & (PAGE_SIZE - 1) != 0 {
+        return Err(PageTableError::InvalidAddress);
+    }
+
+    let mut allocator_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
+    let Some(allocator) = allocator_guard.as_mut() else {
+        return Err(PageTableError::NotSupported);
+    };
+
+    let root_phys = {
+        let root = KERNEL_ROOT.lock();
+        match *root {
+            Some(r) => r,
+            None => return Err(PageTableError::NotSupported),
+        }
+    };
+
+    let pml4_virt_const = phys_to_virt(root_phys) as *const u64;
+
+    for index in 0..pages {
+        let address = start
+            .checked_add(
+                index
+                    .checked_mul(PAGE_SIZE)
+                    .ok_or(PageTableError::InvalidAddress)?,
+            )
+            .ok_or(PageTableError::InvalidAddress)?;
+        if let Some(pte) = unsafe { walk_read(pml4_virt_const, address) } {
+            if pte & PTE_PRESENT != 0 {
+                return Err(PageTableError::InvalidAddress);
+            }
+        }
+    }
+
+    let flags = pte_flags_user_rw();
+    for index in 0..pages {
+        let address = start + index * PAGE_SIZE;
+        let result = map_page_x86(allocator, address, address, flags);
+        if result.is_err() {
+            for rollback in 0..index {
+                let rollback_addr = start + rollback * PAGE_SIZE;
+                let _ = unmap_page_x86(rollback_addr);
+            }
+            tlb_flush_all();
+            return Err(PageTableError::OutOfMemory);
+        }
+    }
+    tlb_flush_all();
+    Ok(())
+}
+
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
 pub fn map_display_framebuffer_user(_start: PhysAddr, _pages: usize) -> PagingResult<()> {
     Err(PageTableError::NotSupported)
 }

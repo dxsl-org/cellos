@@ -73,30 +73,31 @@ pub fn tls_write(net_tid: usize, cap_id: u64, data: &[u8]) -> usize {
     sys_send(net_tid, &msg);
     let mut reply = [0u8; 4];
     match recv_from(net_tid, &mut reply) {
-        Ok(_) => u32::from_le_bytes(reply) as usize,
+        Ok(_) => {
+            let count = u32::from_le_bytes(reply) as usize;
+            // The service reserves u32::MAX for errors, never byte progress.
+            if count <= payload_len { count } else { 0 }
+        }
         _ => 0,
     }
 }
 
 /// Read decrypted data from an established TLS connection.
 ///
-/// Returns the number of bytes written into `buf`.  Returns 0 if no data is
-/// available yet (non-blocking on the server side; the TLS transport itself
-/// blocks until the next TLS record arrives, so the call may take a while).
-pub(crate) fn parse_tls_read_reply(reply: &[u8], buf: &mut [u8]) -> usize {
-    if reply.len() < 2 {
-        return 0;
-    }
+/// Returns `Ok(0)` only for clean EOF. Service errors and malformed frames
+/// remain errors; unavailable transport data stays pending in the NET service.
+pub(crate) fn parse_tls_read_reply(reply: &[u8], buf: &mut [u8]) -> crate::ViResult<usize> {
+    if reply.len() < 2 { return Err(crate::ViError::IO); }
     let declared_len = u16::from_le_bytes([reply[0], reply[1]]) as usize;
+    if declared_len == u16::MAX as usize { return Err(crate::ViError::IO); }
     let available = reply.len() - 2;
-    if declared_len > buf.len() || declared_len > available {
-        return 0;
-    }
+    if declared_len > buf.len() || declared_len > available { return Err(crate::ViError::IO); }
     buf[..declared_len].copy_from_slice(&reply[2..2 + declared_len]);
-    declared_len
+    Ok(declared_len)
 }
 
-pub fn tls_read(net_tid: usize, cap_id: u64, buf: &mut [u8]) -> usize {
+pub fn tls_read(net_tid: usize, cap_id: u64, buf: &mut [u8]) -> crate::ViResult<usize> {
+    if buf.is_empty() { return Ok(0); }
     // Wire format: [0x32][cap:8 LE][buf_len:4 LE]
     let mut msg = [0u8; 13];
     msg[0] = TLS_RECV;
@@ -106,11 +107,13 @@ pub fn tls_read(net_tid: usize, cap_id: u64, buf: &mut [u8]) -> usize {
     let want = (want_len as u32).to_le_bytes();
     msg[9..13].copy_from_slice(&want);
 
-    sys_send(net_tid, &msg);
+    if let crate::syscall::SyscallResult::Err(_) = sys_send(net_tid, &msg) {
+        return Err(crate::ViError::IO);
+    }
     let mut tmp = alloc::vec![0u8; 2 + want_len];
     match recv_from(net_tid, &mut tmp) {
-        Ok(_) => parse_tls_read_reply(&tmp, buf),
-        _ => 0,
+        Ok(slice) => parse_tls_read_reply(slice, buf),
+        Err(_) => Err(crate::ViError::IO),
     }
 }
 
@@ -136,7 +139,7 @@ mod tests {
         reply[2..].copy_from_slice(binary);
 
         let mut out = [0u8; 32];
-        let n = parse_tls_read_reply(&reply, &mut out);
+        let n = parse_tls_read_reply(&reply, &mut out).unwrap();
         assert_eq!(n, 8);
         assert_eq!(&out[..8], binary);
     }
@@ -146,20 +149,23 @@ mod tests {
         let mut out = [0u8; 32];
 
         // Truncated header (< 2 bytes)
-        assert_eq!(parse_tls_read_reply(&[], &mut out), 0);
-        assert_eq!(parse_tls_read_reply(&[0x05], &mut out), 0);
+        assert!(parse_tls_read_reply(&[], &mut out).is_err());
+        assert!(parse_tls_read_reply(&[0x05], &mut out).is_err());
 
         // Empty payload (0 bytes)
-        assert_eq!(parse_tls_read_reply(&[0x00, 0x00], &mut out), 0);
+        assert_eq!(parse_tls_read_reply(&[0x00, 0x00], &mut out).unwrap(), 0);
+        assert!(parse_tls_read_reply(&u16::MAX.to_le_bytes(), &mut out).is_err());
 
-        // Declared length exceeds available buffer -> fail closed (0)
+        // A short body is not EOF and must leave the output untouched.
         let mut bad_reply = [0u8; 6];
         bad_reply[0..2].copy_from_slice(&100u16.to_le_bytes()); // says 100, only 4 follow
         bad_reply[2..].copy_from_slice(b"test");
-        assert_eq!(parse_tls_read_reply(&bad_reply, &mut out), 0);
+        assert!(parse_tls_read_reply(&bad_reply, &mut out).is_err());
+        assert_eq!(out, [0; 32]);
 
-        // Declared length exceeds destination buffer -> fail closed (0)
-        let mut small_out = [0u8; 2];
-        assert_eq!(parse_tls_read_reply(&bad_reply, &mut small_out), 0);
+        // A valid frame larger than the destination must not be partially copied.
+        let mut small_out = [7u8; 2];
+        assert!(parse_tls_read_reply(&[3, 0, 1, 2, 3], &mut small_out).is_err());
+        assert_eq!(small_out, [7; 2]);
     }
 }

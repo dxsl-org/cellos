@@ -21,6 +21,9 @@ Cargo.lock
 # Local virtualization measurements and disposable VMware machines
 /build/x86-backend-evidence/
 /build/durable-charge-vmware-lab/
+/build/*.qcow2
+/build/*.vmdk
+/build/*.iso
 
 # Scratch QEMU capture dumps
 qemu_*.txt

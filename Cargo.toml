@@ -207,6 +207,7 @@ members = [
 
     # Cells - Runtimes
     "cells/runtimes/lua",
+    "cells/services/sshd",
 
 ]
 

@@ -20,7 +20,7 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
         | "/bin/kms" | "/bin/net" | "/bin/net-broker" | "/bin/nvme" | "/bin/serial" | "/bin/shell"
         | "/bin/silo" | "/bin/ai-test" | "/bin/silo-test" | "/bin/srv-test" | "/bin/supervisor"
         | "/bin/vfs" | "/bin/vfs-test" | "/bin/virtio-gpu" | "/bin/virtio-net"
-        | "/bin/std-smoke" | "/bin/desktop"
+        | "/bin/std-smoke" | "/bin/desktop" | "/bin/sshd"
         // Ocel's Tier 2 JavaScript engine. `init` spawns and registers it at boot
         // (boot.rs `spawn_optional_services`); the boot ceiling already gives it
         // `CapSet::EMPTY`, so this edge grants init nothing but the ability to

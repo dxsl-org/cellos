@@ -44,6 +44,8 @@ pub mod irq_wait; // IRQ wait/pending tables for Driver Cell sys_wait_irq
                   // blk_nvme and nic_e1000 have been migrated to Driver Cells:
                   //   cells/drivers/nvme/   ← NVMe PCIe block driver
                   //   cells/drivers/e1000/  ← Intel e1000 PCIe NIC driver
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+pub mod ps2_keyboard;
 
 /// Initialize drivers subsystem
 ///

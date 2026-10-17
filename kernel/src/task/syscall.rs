@@ -7070,6 +7070,38 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     return Ok(0);
                 }
             }
+            if let Some((fb_base, fb_size, _fb_w, _fb_h, fb_pitch)) =
+                crate::resource_registry::display_framebuffer_info()
+            {
+                let x = (xy >> 16) as usize;
+                let y = (xy & 0xffff) as usize;
+                let w = (wh >> 16) as usize;
+                let h = (wh & 0xffff) as usize;
+                let src_stride = w.checked_mul(4).unwrap_or(usize::MAX);
+                let needed_bytes = src_stride.checked_mul(h).unwrap_or(usize::MAX);
+                if data_ptr != 0 && data_len >= needed_bytes && src_stride > 0 {
+                    // SAFETY: In SAS, data_ptr is the compositor staging buffer.
+                    // fb_base is the firmware linear framebuffer identity-mapped at boot.
+                    let src = unsafe { core::slice::from_raw_parts(data_ptr as *const u8, data_len) };
+                    #[cfg(target_arch = "x86_64")]
+                    let dst_ptr = crate::memory::frame::phys_to_virt(fb_base) as *mut u8;
+                    #[cfg(not(target_arch = "x86_64"))]
+                    let dst_ptr = fb_base as *mut u8;
+                    let dst = unsafe { core::slice::from_raw_parts_mut(dst_ptr, fb_size) };
+                    for row in 0..h {
+                        let dst_offset = (y + row).wrapping_mul(fb_pitch).wrapping_add(x * 4);
+                        let src_offset = row.wrapping_mul(src_stride);
+                        let line_bytes = w * 4;
+                        if dst_offset.checked_add(line_bytes).map_or(false, |end| end <= fb_size)
+                            && src_offset.checked_add(line_bytes).map_or(false, |end| end <= data_len)
+                        {
+                            dst[dst_offset..dst_offset + line_bytes]
+                                .copy_from_slice(&src[src_offset..src_offset + line_bytes]);
+                        }
+                    }
+                    return Ok(0);
+                }
+            }
             // Warn only once — compositor calls this every frame tick.
             {
                 use core::sync::atomic::{AtomicBool, Ordering};
@@ -8171,20 +8203,23 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             packed_dimensions,
             pitch,
         } => {
-            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            #[cfg(any(all(target_arch = "aarch64", feature = "board-rpi3"), target_arch = "x86_64"))]
             {
                 const MAX_DIMENSION: usize = 8192;
                 const PAGE_SIZE: usize = 4096;
                 if !caller_has_mmio_device(caller_id, crate::resource_registry::DEV_DISPLAY) {
                     return Err(SyscallError::PermissionDenied);
                 }
-                let mmio = hal_soc_bcm27xx::BCM2837.mmio;
-                if !crate::resource_registry::owns_exact_mmio(
-                    types::CellId(caller_id as u64),
-                    mmio.mailbox_base,
-                    mmio.mailbox_grant_size,
-                ) {
-                    return Err(SyscallError::PermissionDenied);
+                #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+                {
+                    let mmio = hal_soc_bcm27xx::BCM2837.mmio;
+                    if !crate::resource_registry::owns_exact_mmio(
+                        types::CellId(caller_id as u64),
+                        mmio.mailbox_base,
+                        mmio.mailbox_grant_size,
+                    ) {
+                        return Err(SyscallError::PermissionDenied);
+                    }
                 }
                 if base == 0
                     || size == 0
@@ -8206,8 +8241,18 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     .checked_mul(height)
                     .ok_or(SyscallError::InvalidInput)?;
                 let end = base.checked_add(size).ok_or(SyscallError::InvalidInput)?;
-                if covered > size || end > mmio.peripheral_base {
-                    return Err(SyscallError::InvalidInput);
+                #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+                {
+                    let mmio = hal_soc_bcm27xx::BCM2837.mmio;
+                    if covered > size || end > mmio.peripheral_base {
+                        return Err(SyscallError::InvalidInput);
+                    }
+                }
+                #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+                {
+                    if covered > size {
+                        return Err(SyscallError::InvalidInput);
+                    }
                 }
                 // The framebuffer is MMIO: it must not overlap *any* managed frame,
                 // not merely sit above one end of the allocator's memory.
@@ -8276,7 +8321,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     Err(SyscallError::Unknown)
                 }
             }
-            #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+            #[cfg(not(any(all(target_arch = "aarch64", feature = "board-rpi3"), target_arch = "x86_64")))]
             {
                 let _ = (base, size, packed_dimensions, pitch);
                 Err(SyscallError::Unknown)
