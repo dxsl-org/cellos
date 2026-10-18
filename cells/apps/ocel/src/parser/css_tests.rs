@@ -80,3 +80,60 @@ fn gradient_and_rgba_backgrounds_extract_colors_correctly() {
     assert_eq!(card_style.background, Some(Color::rgba(231, 239, 250, 127)));
 }
 
+#[test]
+fn nth_child_selectors_match_element_indices() {
+    let mut arena = DocumentArena::new();
+    let root = arena.root;
+    let list = element(&mut arena, root, "ul", &[]);
+    let li1 = element(&mut arena, list, "li", &[("class", "item")]);
+    let li2 = element(&mut arena, list, "li", &[("class", "item")]);
+    let li3 = element(&mut arena, list, "li", &[("class", "item")]);
+    let li4 = element(&mut arena, list, "li", &[("class", "item")]);
+
+    assert!(selector_specificity(&arena, li1, "li:nth-child(1)").is_some());
+    assert!(selector_specificity(&arena, li2, "li:nth-child(1)").is_none());
+    assert!(selector_specificity(&arena, li2, "li:nth-child(2)").is_some());
+    assert!(selector_specificity(&arena, li2, "li:nth-child(2n)").is_some());
+    assert!(selector_specificity(&arena, li4, "li:nth-child(2n)").is_some());
+    assert!(selector_specificity(&arena, li3, "li:nth-child(2n)").is_none());
+    assert!(selector_specificity(&arena, li3, "li:nth-child(n+3)").is_some());
+    assert!(selector_specificity(&arena, li4, "li:nth-child(n+3)").is_some());
+    assert!(selector_specificity(&arena, li2, "li:nth-child(n+3)").is_none());
+    assert!(selector_specificity(&arena, li1, "li:nth-child(odd)").is_some());
+    assert!(selector_specificity(&arena, li2, "li:nth-child(even)").is_some());
+}
+
+#[test]
+fn calc_and_var_fallback_compute_proper_dimensions() {
+    let mut arena = DocumentArena::new();
+    let root = arena.root;
+    let el = element(&mut arena, root, "div", &[("class", "box")]);
+    let mut sheet = Stylesheet::default();
+    sheet.append(
+        ".box { \
+            width: calc(100% - 331px); \
+            height: calc(100vh - 90px); \
+            margin-right: var(--bullet-gap, 8px); \
+            font-weight: 500; \
+            overflow: hidden; \
+            display: inline-block; \
+            border-bottom: 2px solid #ed1c24; \
+            border-top: 0; \
+        }",
+        (1280, 800),
+    );
+    let s = sheet.compute(&arena, el, None, (1280, 800));
+    assert_eq!(s.layout.size.width, length(949.0));
+    assert_eq!(s.layout.size.height, length(710.0));
+    assert_eq!(s.layout.margin.right, length(8.0));
+    assert_eq!(s.bold, true);
+    assert_eq!(s.layout.overflow.x, Overflow::Hidden);
+    assert_eq!(s.layout.overflow.y, Overflow::Hidden);
+    assert_eq!(s.inline, true);
+    assert_eq!(s.layout.border.bottom, length(2.0));
+    assert_eq!(s.layout.border.top, length(0.0));
+    assert_eq!(s.border_color, Color::rgb(0xed, 0x1c, 0x24));
+}
+
+
+

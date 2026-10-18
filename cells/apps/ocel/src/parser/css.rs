@@ -4,8 +4,8 @@
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use dom_arena::{DocumentArena, NodeId};
 use taffy::prelude::*;
+use taffy::style::Overflow;
 use crate::draw::Color;
-/// Keep glyph rasterization bounded even for untrusted CSS sizes.
 pub const MAX_FONT_SIZE: f32 = 128.0;
 
 #[derive(Clone, Debug)]
@@ -73,12 +73,38 @@ fn split_top(input:&str, delimiter:char) -> Vec<&str> {
     }
     out.push(input[start..].trim());out
 }
+fn strip_var(value: &str) -> String {
+    let mut s = String::from(value);
+    while let Some(start) = s.find("var(") {
+        let mut depth = 0usize;
+        let mut close = None;
+        for (i, c) in s[start..].char_indices() {
+            if c == '(' { depth += 1; }
+            else if c == ')' {
+                depth = depth.saturating_sub(1);
+                if depth == 0 { close = Some(start + i); break; }
+            }
+        }
+        let Some(end) = close else { break; };
+        let inner = &s[start + 4..end];
+        if let Some((_, fallback)) = inner.split_once(',') {
+            let fb = String::from(fallback.trim());
+            s.replace_range(start..=end, &fb);
+        } else {
+            s.replace_range(start..=end, "");
+        }
+    }
+    s
+}
 fn declarations(input:&str)->Vec<Declaration> {
     let mut out=Vec::new();
     for part in split_top(input,';') {
         let Some((name,value))=part.split_once(':') else {continue;};
-        let name=name.trim().to_ascii_lowercase(); let mut value=value.trim(); let mut important=false;
-        if let Some(i)=value.rfind('!') { if value[i+1..].trim().eq_ignore_ascii_case("important") { important=true;value=value[..i].trim(); } }
+        let name=name.trim().to_ascii_lowercase(); let mut raw_val=value.trim(); let mut important=false;
+        if let Some(i)=raw_val.rfind('!') { if raw_val[i+1..].trim().eq_ignore_ascii_case("important") { important=true;raw_val=raw_val[..i].trim(); } }
+        let stripped=strip_var(raw_val);
+        let value=stripped.trim();
+        if value.is_empty() { continue; }
         // Expand spacing shorthands before cascading, so shorthand/longhand compete correctly.
         if matches!(name.as_str(),"margin"|"padding"|"border-width") {
             let words:Vec<_>=value.split_whitespace().collect(); if words.is_empty()||words.len()>4 {continue;}
@@ -87,15 +113,38 @@ fn declarations(input:&str)->Vec<Declaration> {
                 let key=if name=="border-width" {alloc::format!("border-{}-width",side)} else {alloc::format!("{}-{}",name,side)};
                 out.push(Declaration{name:key,value:String::from(val),important});
             }
+        } else if matches!(name.as_str(),"border-top"|"border-bottom"|"border-left"|"border-right") {
+            let side=name.strip_prefix("border-").unwrap();
+            if value=="0" || value=="none" {
+                out.push(Declaration{name:alloc::format!("border-{}-width",side),value:String::from("0px"),important});
+            } else {
+                let words:Vec<_>=value.split_whitespace().collect();
+                if let Some(w)=words.first() {
+                    out.push(Declaration{name:alloc::format!("border-{}-width",side),value:String::from(*w),important});
+                }
+                if let Some(c)=words.iter().find(|w| color(w).is_some()) {
+                    out.push(Declaration{name:String::from("border-color"),value:String::from(*c),important});
+                }
+            }
         } else if name=="background" {
             if let Some(col) = extract_background_color(value) {
                 out.push(Declaration{name:String::from("background-color"),value:col,important});
             }
         } else if name=="border" {
-            let words:Vec<_>=value.split_whitespace().collect();
-            if words.len()==3 && words[1]=="solid" && color(words[2]).is_some() {
-                for side in ["left","right","top","bottom"] {out.push(Declaration{name:alloc::format!("border-{}-width",side),value:String::from(words[0]),important});}
-                out.push(Declaration{name:String::from("border-color"),value:String::from(words[2]),important});
+            if value=="0" || value=="none" {
+                for side in ["left","right","top","bottom"] {
+                    out.push(Declaration{name:alloc::format!("border-{}-width",side),value:String::from("0px"),important});
+                }
+            } else {
+                let words:Vec<_>=value.split_whitespace().collect();
+                if let Some(w)=words.first() {
+                    for side in ["left","right","top","bottom"] {
+                        out.push(Declaration{name:alloc::format!("border-{}-width",side),value:String::from(*w),important});
+                    }
+                }
+                if let Some(c)=words.iter().find(|w| color(w).is_some()) {
+                    out.push(Declaration{name:String::from("border-color"),value:String::from(*c),important});
+                }
             }
         } else if name=="gap" {
             let p:Vec<_>=value.split_whitespace().collect();
@@ -216,6 +265,23 @@ fn selector_parts(selector:&str)->Option<(Vec<&str>,Vec<Relation>)> {
     if parts.is_empty(){None}else{Some((parts,relations))}
 }
 fn previous_element(arena:&DocumentArena,id:NodeId)->Option<NodeId> {let mut p=arena.get(id)?.prev_sibling;while let Some(id)=p{let n=arena.get(id)?;if n.is_element(){return Some(id);}p=n.prev_sibling;}None}
+fn child_element_index(arena:&DocumentArena,id:NodeId)->usize {
+    let mut count=1;let mut prev=arena.get(id).and_then(|n|n.prev_sibling);
+    while let Some(pid)=prev { if let Some(pn)=arena.get(pid){if pn.is_element(){count+=1;}prev=pn.prev_sibling;}else{break;} }
+    count
+}
+fn matches_nth(index:usize,arg:&str)->bool {
+    let arg=arg.trim();
+    if arg=="odd"{return index%2==1;}
+    if arg=="even"{return index%2==0;}
+    if let Ok(n)=arg.parse::<usize>(){return index==n;}
+    let Some((a_str,b_str))=arg.split_once('n') else {return false;};
+    let a_str=a_str.trim();
+    let a:i64=if a_str.is_empty()||a_str=="+"{1} else if a_str=="-"{-1} else {a_str.parse().unwrap_or(0)};
+    let b:i64=if b_str.trim().is_empty(){0} else {b_str.chars().filter(|c|!c.is_ascii_whitespace()).collect::<String>().parse().unwrap_or(0)};
+    let idx=index as i64;
+    if a==0{idx==b}else{let diff=idx-b;(diff%a==0)&&(diff/a>=0)}
+}
 fn compound(arena:&DocumentArena,id:NodeId,selector:&str)->Option<(u32,u32,u32)> {
     let node=arena.get(id)?;let tag=node.tag()?;let mut s=selector;let mut spec=(0,0,0);
     if let Some(rest)=s.strip_prefix('*'){s=rest;}else{let n=ident_end(s);if n>0{if !tag.eq_ignore_ascii_case(&s[..n]){return None;}spec.2+=1;s=&s[n..];}}
@@ -227,12 +293,18 @@ fn compound(arena:&DocumentArena,id:NodeId,selector:&str)->Option<(u32,u32,u32)>
                 if let Some((key,value))=inner.split_once('='){let key=key.trim();let value=value.trim().trim_matches(['\'','"']);if let Some(key)=key.strip_suffix('~'){matched=node.get_attribute(key.trim()).is_some_and(|v|v.split_whitespace().any(|v|v==value));}else{matched=node.get_attribute(key)==Some(value);}}
                 else if ident_end(inner)==inner.len(){matched=node.get_attribute(inner).is_some();}
                 if !matched{return None;}spec.1+=1;s=&s[n+1..];},
-            ':'=>{let n=ident_end(s);let pseudo=&s[..n];s=&s[n..];
+            ':'=>{
+                if s.starts_with(':') { return None; }
+                let n=ident_end(s);let pseudo=&s[..n];s=&s[n..];
                 let matched=match pseudo {
                     "root"=>node.parent.is_some_and(|p|p==arena.root),
                     "first-child"=>previous_element(arena,id).is_none(),
                     "last-child"=>{let mut next=node.next_sibling;let mut last=true;while let Some(i)=next{let n=arena.get(i)?;if n.is_element(){last=false;break;}next=n.next_sibling;}last},
-                    "not"|"is"|"where"=>{let rest=s.strip_prefix('(')?;let close=rest.find(')')?;let inner=&rest[..close];s=&rest[close+1..];let result=compound(arena,id,inner);if pseudo=="not"{if result.is_some(){return None;} // Validate unsupported syntax even when it does not match.
+                    "nth-child"=>{
+                        let rest=s.strip_prefix('(')?;let close=rest.find(')')?;let arg=&rest[..close];s=&rest[close+1..];
+                        let idx=child_element_index(arena,id);matches_nth(idx,arg)
+                    },
+                    "not"|"is"|"where"=>{let rest=s.strip_prefix('(')?;let close=rest.find(')')?;let inner=&rest[..close];s=&rest[close+1..];let result=compound(arena,id,inner);if pseudo=="not"{if result.is_some(){return None;}
                             if !simple_selector_valid(inner){return None;}
                         }else if result.is_none(){return None;}
                         if pseudo!="where"{let specificity=syntactic_specificity(inner)?;spec.0+=specificity.0;spec.1+=specificity.1;spec.2+=specificity.2;}continue;},
@@ -245,7 +317,17 @@ fn compound(arena:&DocumentArena,id:NodeId,selector:&str)->Option<(u32,u32,u32)>
 fn simple_selector_valid(s:&str)->bool {syntactic_specificity(s).is_some()}
 fn syntactic_specificity(mut s:&str)->Option<(u32,u32,u32)> {
     let mut spec=(0,0,0);if let Some(rest)=s.strip_prefix('*'){s=rest;}else{let n=ident_end(s);if n>0{spec.2+=1;s=&s[n..];}}
-    while !s.is_empty(){let c=s.chars().next()?;s=&s[c.len_utf8()..];match c {'#'|'.'=>{let n=ident_end(s);if n==0{return None;}if c=='#'{spec.0+=1;}else{spec.1+=1;}s=&s[n..];},'['=>{let n=s.find(']')?;spec.1+=1;s=&s[n+1..];},':'=>{let n=ident_end(s);if !matches!(&s[..n],"root"|"first-child"|"last-child"){return None;}spec.1+=1;s=&s[n..];},_=>return None}}Some(spec)
+    while !s.is_empty(){let c=s.chars().next()?;s=&s[c.len_utf8()..];match c {
+        '#'|'.'=>{let n=ident_end(s);if n==0{return None;}if c=='#'{spec.0+=1;}else{spec.1+=1;}s=&s[n..];},
+        '['=>{let n=s.find(']')?;spec.1+=1;s=&s[n+1..];},
+        ':'=>{
+            if s.starts_with(':') { return None; }
+            let n=ident_end(s);let pseudo=&s[..n];s=&s[n..];
+            if pseudo=="nth-child"{let rest=s.strip_prefix('(')?;let close=rest.find(')')?;s=&rest[close+1..];}
+            else if !matches!(pseudo,"root"|"first-child"|"last-child"){return None;}
+            spec.1+=1;
+        },_=>return None
+    }}Some(spec)
 }
 pub fn selector_specificity(arena:&DocumentArena,id:NodeId,selector:&str)->Option<(u32,u32,u32)> {
     let (parts,relations)=selector_parts(selector.trim())?;
@@ -259,8 +341,42 @@ pub fn selector_specificity(arena:&DocumentArena,id:NodeId,selector:&str)->Optio
 }
 
 fn number(s:&str)->Option<f32>{let n=s.trim().parse::<f32>().ok()?;n.is_finite().then_some(n)}
+fn eval_calc(expr:&str,font:f32,viewport:(u32,u32))->Option<f32> {
+    let mut total=0.0f32;let mut sign=1.0f32;let mut pos=0usize;let bytes=expr.as_bytes();let len=bytes.len();
+    while pos<len {
+        while pos<len&&bytes[pos].is_ascii_whitespace(){pos+=1;}
+        if pos>=len{break;}
+        if bytes[pos]==b'+'{sign=1.0;pos+=1;continue;}
+        else if bytes[pos]==b'-'{sign=-1.0;pos+=1;continue;}
+        let start=pos;
+        while pos<len {
+            if bytes[pos]==b'+'||bytes[pos]==b'-' {
+                if pos>start {
+                    let prev=bytes[pos-1];
+                    if prev.is_ascii_whitespace()||matches!(prev,b'%'|b'x'|b'm'|b'h'|b'w'){break;}
+                }
+            }
+            pos+=1;
+        }
+        let token=expr[start..pos].trim();if token.is_empty(){continue;}
+        let val=if let Some(n)=token.strip_suffix("px"){number(n)?}
+            else if let Some(n)=token.strip_suffix('%'){number(n)?*(viewport.0 as f32)/100.0}
+            else if let Some(n)=token.strip_suffix("vw"){number(n)?*(viewport.0 as f32)/100.0}
+            else if let Some(n)=token.strip_suffix("vh"){number(n)?*(viewport.1 as f32)/100.0}
+            else if let Some(n)=token.strip_suffix("rem"){number(n)?*16.0}
+            else if let Some(n)=token.strip_suffix("em"){number(n)?*font}
+            else if token=="0"{0.0}
+            else{return None;};
+        total+=sign*val;
+    }
+    Some(total.max(0.0))
+}
 pub fn resolve_length(s:&str,font:f32,viewport:(u32,u32))->Option<f32>{
-    let s=s.trim();for (unit,factor) in [("rem",16.0),("px",1.0),("em",font),("vw",viewport.0 as f32/100.0),("vh",viewport.1 as f32/100.0)] {if let Some(v)=s.strip_suffix(unit){return number(v).map(|n|n*factor);}}(s=="0").then_some(0.0)
+    let s=s.trim();
+    if let Some(inner)=s.strip_prefix("calc(").and_then(|s|s.strip_suffix(')')) {
+        return eval_calc(inner,font,viewport);
+    }
+    for (unit,factor) in [("rem",16.0),("px",1.0),("em",font),("vw",viewport.0 as f32/100.0),("vh",viewport.1 as f32/100.0)] {if let Some(v)=s.strip_suffix(unit){return number(v).map(|n|n*factor);}}(s=="0").then_some(0.0)
 }
 fn dimension<T:FromLength+FromPercent+TaffyAuto>(v:&str,font:f32,viewport:(u32,u32))->Option<T>{if v=="auto" {Some(auto())}else if let Some(n)=v.strip_suffix('%'){number(n).map(|n|percent(n/100.0))}else{resolve_length(v,font,viewport).map(length)}}
 fn spacing(v:&str,font:f32,viewport:(u32,u32))->Option<LengthPercentage>{if let Some(n)=v.strip_suffix('%'){number(n).map(|n|percent(n/100.0))}else{resolve_length(v,font,viewport).filter(|n|*n>=0.0).map(length)}}
@@ -282,16 +398,17 @@ fn valid_value(name:&str,value:&str,font:f32,viewport:(u32,u32))->bool {
     let lower=value.to_ascii_lowercase();let v=lower.as_str();
     match name {
         "color"|"background-color"|"border-color"=>color(v).is_some(),
-        "display"=>matches!(v,"block"|"inline"|"flex"|"grid"|"none"),
+        "display"=>matches!(v,"block"|"inline"|"inline-block"|"flex"|"inline-flex"|"grid"|"none"),
         "font-size"=>resolve_length(v,font,viewport).is_some_and(|n|n>0.0),
         "line-height"=>number(v).or_else(||resolve_length(v,font,viewport)).is_some_and(|n|n>0.0),
-        "font-weight"=>matches!(v,"bold"|"normal"|"400"|"600"|"700"|"800"|"900"),
+        "font-weight"=>matches!(v,"bold"|"normal"|"100"|"200"|"300"|"400"|"500"|"600"|"700"|"800"|"900"),
         "font-style"=>matches!(v,"normal"|"italic"|"oblique"),
-        "font-family"=>matches!(v,"monospace"|"jetbrains mono"|"\"jetbrains mono\""|"sans-serif"|"inter"|"\"inter\""),
+        "font-family"=>!v.trim().is_empty(),
         "text-align"=>matches!(v,"left"|"start"|"center"|"right"|"end"),
         "white-space"=>matches!(v,"normal"|"pre"|"pre-wrap"),
         "width"|"height"|"min-width"|"max-width"|"min-height"|"max-height"|"flex-basis"=>v=="auto"||spacing(v,font,viewport).is_some(),
         "box-sizing"=>matches!(v,"border-box"|"content-box"),
+        "overflow"|"overflow-x"|"overflow-y"=>matches!(v,"hidden"|"auto"|"scroll"|"visible"|"clip"),
         "flex-direction"=>matches!(v,"row"|"row-reverse"|"column"|"column-reverse"),
         "flex-wrap"=>matches!(v,"wrap"|"nowrap"|"wrap-reverse"),
         "flex-grow"|"flex-shrink"=>number(v).is_some_and(|n|n>=0.0),
@@ -313,16 +430,40 @@ fn tracks(v:&str,font:f32,viewport:(u32,u32))->Option<Vec<GridTemplateComponent<
 fn apply(s:&mut ComputedStyle,name:&str,value:&str,viewport:(u32,u32)) {
     let v=value.trim().to_ascii_lowercase();let v=v.as_str();let font=s.font_size;
     match name {
-        "display"=>match v {"none"=>s.layout.display=Display::None,"block"=>{s.layout.display=Display::Block;s.inline=false;},"inline"=>{s.layout.display=Display::Block;s.inline=true;},"flex"=>{s.layout.display=Display::Flex;s.inline=false;},"grid"=>{s.layout.display=Display::Grid;s.inline=false;},_=>{}},
+        "display"=>match v {
+            "none"=>s.layout.display=Display::None,
+            "block"=>{s.layout.display=Display::Block;s.inline=false;},
+            "inline"=>{s.layout.display=Display::Block;s.inline=true;},
+            "inline-block"=>{s.layout.display=Display::Block;s.inline=true;},
+            "flex"=>{s.layout.display=Display::Flex;s.inline=false;},
+            "inline-flex"=>{s.layout.display=Display::Flex;s.inline=true;},
+            "grid"=>{s.layout.display=Display::Grid;s.inline=false;},
+            _=>{}
+        },
         "color"=>{if let Some(c)=color(v){s.color=c;}},"background-color"=>{if let Some(c)=color(v){s.background=Some(c);}},"border-color"=>{if let Some(c)=color(v){s.border_color=c;}},
-        "font-size"=>{},"font-weight"=>match v{"bold"|"600"|"700"|"800"|"900"=>s.bold=true,"normal"|"400"=>s.bold=false,_=>{}},"font-style"=>match v{"italic"|"oblique"=>s.italic=true,"normal"=>s.italic=false,_=>{}},
-        "font-family"=>s.mono=matches!(v,"monospace"|"jetbrains mono"|"\"jetbrains mono\""),
+        "font-size"=>{},
+        "font-weight"=>match v{
+            "bold"|"500"|"600"|"700"|"800"|"900"=>s.bold=true,
+            "normal"|"100"|"200"|"300"|"400"=>s.bold=false,
+            _=>{}
+        },
+        "font-style"=>match v{"italic"|"oblique"=>s.italic=true,"normal"=>s.italic=false,_=>{}},
+        "font-family"=>s.mono=v.contains("mono"),
         "text-align"=>s.text_align=match v {"center"=>1,"right"|"end"=>2,_=>0},
         "line-height"=>{if let Some(n)=number(v).map(|n|n*font).or_else(||resolve_length(v,font,viewport)){if n>0.0{s.line_height=n;}}},
         "white-space"=>match v{"pre"=>{s.pre=true;s.wrap_pre=false;},"pre-wrap"=>{s.pre=true;s.wrap_pre=true;},"normal"=>{s.pre=false;s.wrap_pre=false;},_=>{}},
-        "width"=>{if let Some(n)=dimension(v,font,viewport){s.layout.size.width=n;}},"height"=>{if let Some(n)=dimension(v,font,viewport){s.layout.size.height=n;}},
-        "min-width"=>{if let Some(n)=dimension(v,font,viewport){s.layout.min_size.width=n;}},"max-width"=>{if let Some(n)=dimension(v,font,viewport){s.layout.max_size.width=n;}},
-        "min-height"=>{if let Some(n)=dimension(v,font,viewport){s.layout.min_size.height=n;}},"max-height"=>{if let Some(n)=dimension(v,font,viewport){s.layout.max_size.height=n;}},
+        "width"=>{if let Some(n)=dimension(v,font,viewport){s.layout.size.width=n;}},
+        "height"=>{if let Some(n)=dimension(v,font,viewport){s.layout.size.height=n;}},
+        "min-width"=>{if let Some(n)=dimension(v,font,viewport){s.layout.min_size.width=n;}},
+        "max-width"=>{if let Some(n)=dimension(v,font,viewport){s.layout.max_size.width=n;}},
+        "min-height"=>{if let Some(n)=dimension(v,font,viewport){s.layout.min_size.height=n;}},
+        "max-height"=>{if let Some(n)=dimension(v,font,viewport){s.layout.max_size.height=n;}},
+        "overflow"|"overflow-x"|"overflow-y"=>{
+            let o=match v {"hidden"|"clip"=>Overflow::Hidden,"scroll"|"auto"=>Overflow::Scroll,_=>Overflow::Visible};
+            if name=="overflow-y" { s.layout.overflow.y=o; }
+            else if name=="overflow-x" { s.layout.overflow.x=o; }
+            else { s.layout.overflow.x=o; s.layout.overflow.y=o; }
+        },
         "box-sizing"=>match v{"border-box"=>s.layout.box_sizing=BoxSizing::BorderBox,"content-box"=>s.layout.box_sizing=BoxSizing::ContentBox,_=>{}},
         "flex-direction"=>match v{"row"=>s.layout.flex_direction=FlexDirection::Row,"column"=>s.layout.flex_direction=FlexDirection::Column,"row-reverse"=>s.layout.flex_direction=FlexDirection::RowReverse,"column-reverse"=>s.layout.flex_direction=FlexDirection::ColumnReverse,_=>{}},
         "flex-wrap"=>match v{"wrap"=>s.layout.flex_wrap=FlexWrap::Wrap,"nowrap"=>s.layout.flex_wrap=FlexWrap::NoWrap,"wrap-reverse"=>s.layout.flex_wrap=FlexWrap::WrapReverse,_=>{}},
@@ -342,7 +483,6 @@ fn apply(s:&mut ComputedStyle,name:&str,value:&str,viewport:(u32,u32)) {
         }
     }
 }
-
 #[cfg(test)]
 #[path="css_tests.rs"]
 mod tests;

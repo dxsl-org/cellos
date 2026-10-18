@@ -8,6 +8,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Enhance Ocel CSS engine in `cells/apps/ocel/src/parser/css.rs`:
+  - Parse linear dimension expressions in `calc(...)` (e.g. `calc(100% - 331px)`, `calc(50% - 12px)`, `calc(100vh - 90px)`), resolving them to bounded viewport pixels.
+  - Extract default fallbacks from CSS variables `var(--name, fallback)` (e.g. Swiper bullet widths, inactive background colors).
+  - Expand individual side border shorthands (`border-top`, `border-bottom`, `border-left`, `border-right`) and `border: none` / `border: 0` resets.
+  - Implement `:nth-child(An+B)`, `:nth-child(N)`, `:nth-child(odd)`, and `:nth-child(even)` pseudo-class matching in the DOM tree.
+  - Support `overflow: hidden/auto/scroll/visible` mapped to Taffy's `Overflow` enum.
+  - Support `display: inline-block` and `inline-flex` with inline text flow.
+  - Expand `font-weight` to accept numeric weights (e.g. `500` Medium, `300` Light, `100`-`900`), and allow font family fallback lists.
+  - Increases Tuoi Tre CSS declaration acceptance rate from 76.0% to 90.7% (+749 valid declarations).
 - High-throughput parallel asynchronous resource downloader in `cells/apps/ocel/src/loader.rs`:
   scales concurrent worker streams by profile (up to 24 parallel streams on desktop,
   4 on embedded). Integrates in-memory DNS caching (`DNS_CACHE`, 5-minute TTL) in
