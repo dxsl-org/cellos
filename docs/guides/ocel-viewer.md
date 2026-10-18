@@ -1,7 +1,7 @@
 # Ocel viewer — lightweight native document viewing
 
 Ocel viewer is the native document viewer for Cellos. Its scope is Markdown,
-source code, text, PNG/JPEG/BMP and a bounded HTML/CSS subset, with optional
+source code, text, PNG/JPEG/BMP/WebP and a bounded HTML/CSS subset, with optional
 JavaScript in a separate Tier 2 engine. The existing PDF service is under
 footprint review; its presence is not a lightweight-profile requirement.
 
@@ -78,6 +78,127 @@ That self-check is a loop summing 1..10, a closure mapping `[1,2,3]`, a Unicode
 regexp over precomposed accents, and `(0.1 + 0.2).toFixed(2)` — the
 `tests/integration/tests/ocel-quickjs.rs` lane asserts the exact string.
 
+### Explicit x86 browser-engine boot profile
+
+The normal `policy-required` fleet posture still denies all native domains.
+After preparing the embedded filesystem with signed QuickJS and init artifacts,
+`bash scripts/build-cloud-images.sh --javascript` explicitly selects the browser
+profile. Without `--javascript`, that builder retains its closed fleet posture.
+The kernel feature is `browser-engine-profile`; it implies
+`native-domains,policy-required,signing-required` and is not a default feature.
+For a direct PC kernel build, use `--target x86_64-unknown-none
+--features board-x86-pc,browser-engine-profile`.
+
+The existing development signing and policy keys remain development-only.
+A provisioned fleet build must instead use `--no-default-features
+--features board-x86-pc,browser-engine-profile` and real kernel trust anchors;
+the in-tree production key placeholders cannot verify an image and this profile
+does not bypass that provisioning requirement.
+
+Build init with `--target x86_64-unknown-none --features input,ui` for the graphical
+image. There is no QuickJS init feature or eager-start switch: activation is
+always demand-driven. Package signed `/bin/init`, `/bin/ocel`, and the real
+signed `/bin/ocel-quickjs` in VIFS1, plus the normal signed service stack. Package
+the generated `/etc/cellos/services.toml` and `/etc/cellos/autoload.toml` where VFS
+serves them. Do **not** list QuickJS in either boot plan; its path and service
+identity are reserved for init's fixed-target activator. A script-bearing HTML
+document (for example `/data/ocel-js-demo.html`) provides activation demand.
+
+VIFS1 must also contain `/POLICY.BIN`, signed by the configured policy root,
+with an explicit `/bin/ocel-quickjs` entry whose **every capability byte is zero**.
+`scripts/sign-policy.py --out POLICY.BIN` already emits that row for development
+images. Retain the normal init lifecycle/spawn and platform/service/driver rows;
+the empty QuickJS row does not replace them. Missing, malformed, invalidly signed
+policy, an absent row, or a nonempty QuickJS row leaves browser admission closed.
+No maintenance policy flag or maintenance-mode build feature is needed.
+
+Enablement still requires the live kernel CR3 and this boot's qualified x86
+substrate (including bidirectional IPI/local-invalidation proof on SMP).
+Publication is additionally restricted to exact `/bin/ocel-quickjs` with an empty
+capability set: signed `/bin/tier2-*` fixtures, the statement matcher, and PDF
+remain denied in this profile. Unsigned artifacts are refused; present signatures
+must verify. Existing manifest/owner authorization, launch-edge ceiling,
+resource quota, copied IPC, live-domain-grant containment, admission lease and
+drain checks remain in force. Denial never falls back to SAS or another engine.
+
+The x86 QEMU/KVM image was exercised with `/data/ocel-native-web.html` and its
+external script: the first card becomes “Script updated the real document”,
+a new paragraph reads “Created by JavaScript”, and clicking **Update DOM**
+changes “Waiting” to “Click updated the document”. The guest logs CR3-isolated
+Tier 2 admission, demand readiness, and the real QuickJS self-check
+`55:2,4,6:accent:0.30`. Script click handlers run before native form/link actions;
+a submit button without a form has no native submission action.
+
+### QEMU DEV HTTPS profile
+
+For local testing only, the separately approved `qemu-dev-https` profile trusts
+the host OS and host state directory, but still obtains fresh signed time from
+approved draft-11 sources: primary `time.txryan.com:2002`, secondary `time.teax.dev:2002`,
+and tertiary `rough.time.nl:2002`. It accommodates server radius up to 5 seconds
+(uncertainty span up to 10 seconds), preventing false TLS rejections on network jitter.
+The host companion commits a nondecreasing time floor and advancing sequence to
+`~/.local/state/cellos/qemu-dev-time.sqlite3` before replying. Keep this database,
+its WAL and its directory outside all guest-image/snapshot restore sets; never
+delete/reset it to work around a refused time sample.
+
+Guest/host communication is an unsigned fixed binary exchange to SLIRP's trusted
+host at `10.0.2.2:18443`. The companion binds only `127.0.0.1`; do not expose it
+to an untrusted host/network. Local host users are within this DEV trust boundary.
+This does **not** protect whole-host rollback, compromised host software, restored
+host state, or an already restored live TLS session. Every new TLS handshake
+requires a new nonce-bound host exchange; a cached guest clock alone cannot
+authorize it. No stale-time or alternate-source fallback exists.
+
+Build NET as an explicit alternative to the default fleet CA flavor:
+
+```sh
+RUSTFLAGS="-C relocation-model=pic" cargo build --release -p service-net \
+  --target x86_64-unknown-none --no-default-features \
+  --features qemu-dev-https -Z build-std=core,alloc
+python3 scripts/cellos-sign --sign target/x86_64-unknown-none/release/service-net
+```
+
+Package that signed artifact as `/bin/net` in the embedded filesystem alongside
+the signed Ocel/QuickJS stack, then build and launch:
+
+```sh
+bash scripts/build-cloud-images.sh --javascript --qemu-dev-https
+python3 scripts/qemu-dev-time.py
+# Separate terminal:
+qemu-system-x86_64 -enable-kvm -cpu host -machine q35 -m 1024M \
+  -drive file=build/cellos-x86_64.qcow2,format=qcow2,if=virtio \
+  -netdev user,id=net0 -device e1000,netdev=net0 \
+  -vga std -display gtk,gl=off -serial file:/tmp/cellos-ocel-https.log
+```
+
+The image builder consumes the **prepared embedded filesystem**; its flag does
+not rebuild/sign/package NET automatically. Both the NET and kernel opt-ins are
+required. The kernel profile disables weak RNG fallback; x86 entropy uses
+CPUID-gated RDSEED/RDRAND with bounded retries. Expose these CPU capabilities;
+without secure entropy the profile must fail, not substitute a software seed.
+NET normalizes architecture-specific monotonic ticks before applying network,
+TLS and clock deadlines.
+
+HTTPS remains end-to-end inside the guest. Public PKI uses the pinned
+`webpki-roots 1.0.3` Mozilla/CCADB snapshot, WebPKI path/hostname/EKU constraints,
+RustCrypto signature verification and both endpoints of the authenticated time
+window. TLS 1.3 only; no online revocation checking. The default fleet/private-CA
+build remains fail-closed without its own protected authenticated time.
+
+Actual QEMU/KVM smoke rendered `https://example.com/` with JavaScript active.
+`https://tuoitre.vn` passed network/TLS fetching. Its initial image-count refusal
+was removed by the larger viewer limits; mutation-layout residency still rejects
+the observed page, so this is not full-site rendering support.
+An invalid-host BadSSL navigation failed and preserved the prior document; the
+UI's generic TLS failure does not distinguish certificate versus protocol errors.
+Stopping the companion made a new HTTPS navigation fail closed; restarting it
+with the same host database restored successful HTTPS without resetting state.
+Hosted regressions separately reject wrong names, leaf/intermediate validity
+failures at either time bound, missing trust/chain and tampered signatures.
+See [ADR-0026](../decisions/0026-use-txryan-roughtime-for-dev-signed-time.md).
+
+
+
 ### The QuickJS engine cell
 
 `cells/services/ocel-quickjs/` vendors upstream QuickJS `2026-06-04`
@@ -131,7 +252,7 @@ and log budgets, and a size-counting pass before response allocation.
 Native CSS now applies selector matching, importance/specificity/source-order
 cascade, inheritance, inline styles, width media queries, and Taffy block,
 flex and grid layout. External classic scripts and stylesheets load in
-document order from the same origin (UTF-8, at most 256 KiB per resource).
+document order from the same origin (UTF-8, at most 1 MiB per resource).
 `tests/fixtures/ocel-native-web.{html,css,js}` exercises these paths.
 
 This is **not full browser compatibility**. The HTML tree builder and CSS parser
@@ -224,26 +345,38 @@ document/resource acquisition has a 60-second deadline, using monotonic time.
 TLS still requires the network service's authenticated time/certificate policy.
 
 HTML resources are discovered from active tokenized syntax; Markdown fenced
-examples do not fetch images. Same-origin scripts/styles/images are prefetched
-cooperatively, then parsing reads only the current tab's resource bundle.
+examples do not fetch images. Same-site scripts/styles/images are prefetched
+cooperatively (supporting same-origin and same-site subdomains such as `*.tuoitre.vn`
+for `tuoitre.vn`), then parsing reads only the current tab's resource bundle.
+Cross-site resources and insecure mixed content (HTTP on HTTPS) remain blocked.
 Image bytes are shared, and relayout/Reader do not decode them again.
 
 | Limit | Value |
 |---|---|
 | Open tabs / history entries per tab | 4 / 128 |
-| Shared document/resource/loading residency budget | 8 MiB |
-| Viewer heap | 16 MiB, including fonts and temporary working space |
-| Text bytes / DOM nodes / nesting | 1 MiB / 16,384 / 64 |
-| CSS rules / selectors / selector bytes | 1,024 / 4,096 / 512 |
-| Resource references / total encoded resource bytes | 64 / 4 MiB |
-| Script or stylesheet bytes | 256 KiB each |
-| Images / decoded image bytes per document | 16 / 4 MiB |
+| Shared document/resource/loading residency budget | 16 MiB |
+| Viewer heap | 24 MiB, including fonts and temporary working space |
+| Text bytes / DOM nodes / nesting | 2 MiB / 16,384 / 64 |
+| CSS rules / selectors / selector bytes | 8,192 / 32,768 / 1,024 |
+| Resource references / total encoded resource bytes | 256 / 8 MiB |
+| Script or stylesheet bytes | 1 MiB each |
+| Images / decoded image bytes per document | 128 / 8 MiB |
+| Encoded bytes / pixels per image | 4 MiB / 2,097,152 |
 
 Layout and mutation staging reserve conservative working memory before growth,
 then check residency before publication. These limits are ceilings, not promises
-that every smaller document fits: a 214 KiB, 4,000-node Markdown stress input is
-rejected by the layout reservation. Closing tabs or using smaller documents
-can be necessary. Font caches remain separately bounded by the typography SDK.
+that every smaller document fits. Closing tabs or using smaller documents can
+be necessary. Font caches remain separately bounded by the typography SDK.
+The 24 MiB heap leaves room for code/data/stack inside the kernel's 32 MiB PIE
+slot; raising the heap beyond that requires a loader/address-space change.
+
+The ordinary-site limits admit IANA's observed 1,211-rule, 121,482-byte stylesheet;
+QEMU/KVM rendered `https://www.iana.org/` (23 document items). Under the desktop
+profile, `https://tuoitre.vn/` prefetches 23 same-site resources from `*.tuoitre.vn`
+(e.g. `static-tuoitre.tuoitre.vn` and `cdn2.tuoitre.vn`) and renders 363 items.
+The desktop profile includes a compact `no_std` flat-path SVG rasterizer supporting
+viewBox, `path` (M/L/H/V/C/Z with cubic Bézier flattening), `rect`, and `circle`;
+the embedded profile keeps SVG disabled to conserve memory.
 
 Chrome-only edits repaint/damage the toolbar, tab bar and status, leaving
 document pixels intact. Scroll repaints the viewport and status, not navigation
@@ -380,9 +513,9 @@ the viewer background. Consecutive image nodes advance the document height.
 
 Host smoke verification exercises the actual loader, codecs, layout and paint
 with filesystem/surface adapters: RGB/RGBA/grayscale/grayscale-alpha/palette
-PNG, baseline/progressive JPEG, BMP, truncation, the pixel budget and alpha
-composition. The RV64 release build succeeds. This is not guest/compositor
-or physical-device evidence. GIF, WebP and SVG decoding are not implemented.
+PNG, baseline/progressive JPEG, BMP, WebP (VP8/VP8L/VP8X), desktop SVG, truncation,
+the pixel budget and alpha composition. The RV64/x86_64 release builds succeed.
+GIF and animated playback are not implemented.
 Same-origin embedded HTML/Markdown images use prefetched shared resource bytes.
 BMP supports BI_RGB only; BI_BITFIELDS is rejected instead of misreading masks.
 
@@ -424,12 +557,12 @@ introduced.
 | Gap | Status |
 |---|---|
 | QuickJS integration | Real document-backed DOM; missing/incompatible engines fail explicitly |
-| CSS | Native subset cascade and Taffy block/flex/grid; not standards-complete |
-| PNG/JPEG/BMP | Local and same-origin embedded images; GIF/WebP/SVG and animation unsupported |
+| CSS | Native subset cascade with gradient background fallback and Taffy block/flex/grid; not standards-complete |
+| PNG/JPEG/BMP/WebP | Local and same-site embedded images; WebP (VP8 lossy, VP8L lossless, VP8X extended) decoded into BGRA |
 | PDF (MuPDF) | Native local-page path implemented; guest surface verification blocked as described above |
-| EPUB, SVG | Not implemented |
+| SVG | Compact desktop-profile flat-path vector rasterizer; renders vector logos |
 | Syntax highlighting for text/code files | Native Rust, C/C++, JSON and TOML source files and labelled Markdown fences; other languages remain unhighlighted |
 | Engine failure | Explicit errors; no in-process script fallback |
 | Tier 3 Chromium browser launcher | Guest input bridge exists (`cells/services/hypervisor/src/virtio_input.rs`); launcher cell, clipboard, and file sharing do not |
-| QuickJS architectures | Build predicate includes RV64, AArch64 and x86_64 when the C compiler is available; this upgrade verified RV64 release and host QuickJS, not an x86 guest |
+| QuickJS architectures | Build predicate includes RV64, AArch64 and x86_64 when the C compiler is available; RV64 release, host QuickJS and x86 QEMU/KVM DOM/script/click execution verified |
 | Multiple live JS tabs | One active context; inactive tabs require reload before event execution |

@@ -221,12 +221,12 @@ fn validate_arena(arena:&dom_arena::DocumentArena,external:&[(dom_arena::NodeId,
         if let Some(style)=node.get_attribute("style") {crate::budget::validate_css(&format!("x{{{}}}",style))?;}
         if node.tag()==Some("style") {
             let text=arena.get_text_content(node.id);
-            if css.len().saturating_add(text.len())>crate::budget::MAX_TEXT_BYTES{return Err(String::from("CSS exceeds byte budget"));}
+            if css.len().saturating_add(text.len())>crate::budget::MAX_CSS_BYTES{return Err(String::from("CSS exceeds byte budget"));}
             css.push_str(&text);
         }
     }
     for (_,text) in external {
-        if css.len().saturating_add(text.len())>crate::budget::MAX_TEXT_BYTES{return Err(String::from("CSS exceeds byte budget"));}
+        if css.len().saturating_add(text.len())>crate::budget::MAX_CSS_BYTES{return Err(String::from("CSS exceeds byte budget"));}
         css.push_str(text);
     }
     crate::budget::validate_css(&css)
@@ -528,7 +528,31 @@ impl Document {
     }
 
     pub fn hit_test_link(&self,click_x:i32,click_y:i32,view_x:i32,view_y:i32,scroll_y:i32)->Option<String> {
-        if let Some(web)=&self.web_layout {return web.hit_link(click_x-view_x,click_y-view_y+scroll_y);}
+        if let Some(web)=&self.web_layout {
+            if let Some(link) = web.hit_link(click_x-view_x,click_y-view_y+scroll_y) {
+                return Some(link);
+            }
+            if let Some(arena) = &self.arena {
+                if let Some(node_id) = web.hit_node(click_x-view_x, click_y-view_y+scroll_y) {
+                    let mut curr = Some(node_id);
+                    while let Some(id) = curr {
+                        if let Some(node) = arena.get(id) {
+                            if node.tag() == Some("a") {
+                                if let Some(href) = node.get_attribute("href") {
+                                    if !href.is_empty() {
+                                        return Some(String::from(href));
+                                    }
+                                }
+                            }
+                            curr = node.parent;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            return None;
+        }
         for b in &self.layout_boxes {
             let mut y=view_y+b.y_offset-scroll_y+4;
             for line in &b.lines {
@@ -656,6 +680,9 @@ impl Document {
 }
 
 impl Document {
+    pub fn form_owner(&self, control: dom_arena::NodeId) -> Option<dom_arena::NodeId> {
+        self.arena.as_ref().and_then(|arena| form_owner(arena, control))
+    }
     pub fn form_url(&self,submit:dom_arena::NodeId,base:&str)->Result<String,String> {
         let arena=self.arena.as_ref().ok_or_else(||String::from("Document has no HTML form"))?;
         let owner=form_owner(arena,submit).ok_or_else(||String::from("Control does not belong to a form"))?;

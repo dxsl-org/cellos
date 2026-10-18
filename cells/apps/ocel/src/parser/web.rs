@@ -61,7 +61,8 @@ impl<'a> Builder<'a> {
         let id=self.tree.new_leaf_with_context(leaf_style,context.clone())?;
         self.entries.push(Entry{taffy:id,parent:Some(parent),node_id:None,hidden:false,background:None,border_color:style.border_color,text:Some(context),input_data:None,image:None});Ok(id)
     }
-    fn element(&mut self,id:NodeId,parent:Option<usize>,mut style:ComputedStyle)->Result<taffy::NodeId,taffy::TaffyError> {
+    fn element(&mut self,id:NodeId,parent:Option<usize>,mut style:ComputedStyle,link:Option<&str>)->Result<taffy::NodeId,taffy::TaffyError> {
+        let link=self.arena.get(id).and_then(|n|n.get_attribute("href")).or(link);
         style.font_size=style.font_size.min(self.max_font);
         style.line_height=style.line_height.clamp(1.0,self.max_font*4.0);
         let tid=self.tree.new_leaf(Style::default())?;let index=self.entries.len();
@@ -84,12 +85,21 @@ impl<'a> Builder<'a> {
             if node.tag()==Some("img") {
                 if let Some((w,h,pixels))=self.assets.iter().find_map(|asset|match asset {
                     crate::doc::DocNode::DomImage{node_id,width,height,pixels} if *node_id==id=>Some((*width,*height,pixels.clone())),_=>None}) {
-                    let width=(w as f32).min(self.viewport.0 as f32).max(1.0);
-                    style.layout.size.width=length(width);style.layout.size.height=length(h as f32*width/w.max(1) as f32);
+                    let attr_w = node.get_attribute("width").and_then(|v| v.parse::<f32>().ok()).filter(|v| *v > 0.0);
+                    let attr_h = node.get_attribute("height").and_then(|v| v.parse::<f32>().ok()).filter(|v| *v > 0.0);
+                    let css_w = style.layout.size.width.into_option()
+                        .filter(|px| *px > 0.0)
+                        .or(attr_w)
+                        .unwrap_or((w as f32).min(self.viewport.0 as f32).max(1.0));
+                    let css_h = style.layout.size.height.into_option()
+                        .filter(|px| *px > 0.0)
+                        .or(attr_h)
+                        .unwrap_or((h as f32 * css_w / (w.max(1) as f32)).max(1.0));
+                    style.layout.size.width=length(css_w);style.layout.size.height=length(css_h);
                     self.entries[index].image=Some((w,h,pixels));
                 } else {
                     let alt=node.get_attribute("alt").unwrap_or("[Image unavailable]");
-                    let mut runs=Vec::new();append_text(&mut runs,alt,&style,None,id);
+                    let mut runs=Vec::new();append_text(&mut runs,alt,&style,link,id);
                     let context=Rc::new(TextContext{runs,line_height:pixel(style.line_height),pre:false,wrap_pre:true,align:0});
                     self.tree.set_node_context(tid,Some(context.clone()))?;self.entries[index].text=Some(context);
                 }
@@ -102,14 +112,14 @@ impl<'a> Builder<'a> {
         while let Some(cid)=child {
             let Some(node)=arena.get(cid) else{break;};
             match &node.data {
-                NodeData::Text(text)=>append_text(&mut runs,text,&style,None,id),
+                NodeData::Text(text)=>append_text(&mut runs,text,&style,link,id),
                 NodeData::Element{..}=>{
                     let mut child_style=self.sheet.compute(self.arena,cid,Some(&style),self.viewport);
                     child_style.font_size=child_style.font_size.min(self.max_font);
                     child_style.line_height=child_style.line_height.clamp(1.0,self.max_font*4.0);
                     if child_style.layout.display!=Display::None {
-                        if child_style.inline && !contains_replaced(self.arena,cid) {self.inline(cid,&child_style,None,&mut runs);}
-                        else {if !runs.is_empty(){children.push(self.text_leaf(&mut runs,&style,index)?);}children.push(self.element(cid,Some(index),child_style)?);}
+                        if child_style.inline && !contains_replaced(self.arena,cid) {self.inline(cid,&child_style,link,&mut runs);}
+                        else {if !runs.is_empty(){children.push(self.text_leaf(&mut runs,&style,index)?);}children.push(self.element(cid,Some(index),child_style,link)?);}
                     }
                 },_=>{}
             }
@@ -130,7 +140,8 @@ impl<'a> Builder<'a> {
 }
 fn append_text(runs:&mut Vec<TextRun>,text:&str,style:&ComputedStyle,link:Option<&str>,node_id:NodeId) {
     let mut span=StyledSpan::plain(text);
-    span.color=Some(style.color);span.bold=style.bold;span.italic=style.italic;
+    span.color=if link.is_some() { Some(crate::draw::theme::ACCENT_BLUE) } else { Some(style.color) };
+    span.bold=style.bold;span.italic=style.italic;
     span.code=style.mono;span.link=link.map(String::from);
     append_run(runs,TextRun::new(span,style.font_size,Some(node_id),style.line_height));
 }
@@ -318,7 +329,7 @@ pub fn layout_with_nodes_zoom(fonts:&mut TextFonts,arena:&DocumentArena,external
     let mut builder=Builder{arena,sheet,viewport,tree:TaffyTree::new(),entries:Vec::new(),assets,max_font:super::css::MAX_FONT_SIZE/zoom.max(1.0)};
     let mut root_style=builder.sheet.compute(arena,arena.root,None,viewport);
     root_style.layout.size.width=length(viewport.0 as f32);
-    let root=builder.element(arena.root,None,root_style)?;
+    let root=builder.element(arena.root,None,root_style,None)?;
     builder.tree.compute_layout_with_measure(root,Size{width:AvailableSpace::Definite(viewport.0 as f32),height:AvailableSpace::MaxContent},|inputs,_,context,style| {
         taffy::compute_leaf_layout(inputs,style,|_,_|0.0,|known,available|context.as_ref().map_or(Size::ZERO,|ctx|measure(fonts,ctx,known,available)))
     })?;

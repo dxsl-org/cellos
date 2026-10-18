@@ -88,7 +88,9 @@ fn declarations(input:&str)->Vec<Declaration> {
                 out.push(Declaration{name:key,value:String::from(val),important});
             }
         } else if name=="background" {
-            if color(value).is_some() {out.push(Declaration{name:String::from("background-color"),value:String::from(value),important});}
+            if let Some(col) = extract_background_color(value) {
+                out.push(Declaration{name:String::from("background-color"),value:col,important});
+            }
         } else if name=="border" {
             let words:Vec<_>=value.split_whitespace().collect();
             if words.len()==3 && words[1]=="solid" && color(words[2]).is_some() {
@@ -109,6 +111,31 @@ fn declarations(input:&str)->Vec<Declaration> {
         } else {out.push(Declaration{name,value:String::from(value),important});}
     }
     out
+}
+fn extract_background_color(value: &str) -> Option<String> {
+    let v = value.trim();
+    if color(v).is_some() {
+        return Some(String::from(v));
+    }
+    for prefix in ["linear-gradient(", "radial-gradient("] {
+        if let Some(rest) = v.strip_prefix(prefix) {
+            if let Some(inner) = rest.strip_suffix(')') {
+                for part in split_top(inner, ',') {
+                    let part = part.trim();
+                    let first = part.split_whitespace().next().unwrap_or(part);
+                    if color(first).is_some() {
+                        return Some(String::from(first));
+                    }
+                }
+            }
+        }
+    }
+    for word in v.split_whitespace() {
+        if color(word).is_some() {
+            return Some(String::from(word));
+        }
+    }
+    None
 }
 fn strip_comments(input:&str)->String {
     let mut out=String::new(); let mut it=input.chars().peekable();let mut quote=None;let mut escaped=false;
@@ -238,9 +265,17 @@ pub fn resolve_length(s:&str,font:f32,viewport:(u32,u32))->Option<f32>{
 fn dimension<T:FromLength+FromPercent+TaffyAuto>(v:&str,font:f32,viewport:(u32,u32))->Option<T>{if v=="auto" {Some(auto())}else if let Some(n)=v.strip_suffix('%'){number(n).map(|n|percent(n/100.0))}else{resolve_length(v,font,viewport).map(length)}}
 fn spacing(v:&str,font:f32,viewport:(u32,u32))->Option<LengthPercentage>{if let Some(n)=v.strip_suffix('%'){number(n).map(|n|percent(n/100.0))}else{resolve_length(v,font,viewport).filter(|n|*n>=0.0).map(length)}}
 pub fn color(v:&str)->Option<Color>{
-    let v=v.trim().to_ascii_lowercase();let c=match v.as_str(){"black"=>Color::rgb(0,0,0),"white"=>Color::rgb(255,255,255),"red"=>Color::rgb(255,0,0),"green"=>Color::rgb(0,128,0),"blue"=>Color::rgb(0,0,255),"gray"|"grey"=>Color::rgb(128,128,128),"yellow"=>Color::rgb(255,255,0),"transparent"=>Color::rgba(0,0,0,0),_=>{
+    let v=v.trim().to_ascii_lowercase();let c=match v.as_str(){
+        "black"=>Color::rgb(0,0,0),"white"=>Color::rgb(255,255,255),"red"=>Color::rgb(255,0,0),
+        "green"=>Color::rgb(0,128,0),"blue"=>Color::rgb(0,0,255),"gray"|"grey"=>Color::rgb(128,128,128),
+        "yellow"=>Color::rgb(255,255,0),"orange"=>Color::rgb(255,165,0),"purple"=>Color::rgb(128,0,128),
+        "navy"=>Color::rgb(0,0,128),"teal"=>Color::rgb(0,128,128),"maroon"=>Color::rgb(128,0,0),
+        "crimson"=>Color::rgb(220,20,60),"silver"=>Color::rgb(192,192,192),"darkred"=>Color::rgb(139,0,0),
+        "transparent"=>Color::rgba(0,0,0,0),_=>{
         if let Some(hex)=v.strip_prefix('#'){let digit=|s:&str|u8::from_str_radix(s,16).ok();if !hex.is_ascii(){return None;}match hex.len(){3|4=>{let r=digit(&hex[0..1])?*17;let g=digit(&hex[1..2])?*17;let b=digit(&hex[2..3])?*17;Color::rgba(r,g,b,if hex.len()==4{digit(&hex[3..4])?*17}else{255})},6|8=>Color::rgba(digit(&hex[0..2])?,digit(&hex[2..4])?,digit(&hex[4..6])?,if hex.len()==8{digit(&hex[6..8])?}else{255}),_=>return None}}
-        else if let Some(inner)=v.strip_prefix("rgb(").and_then(|s|s.strip_suffix(')')){let p:Vec<_>=inner.split(',').collect();if p.len()!=3{return None;}Color::rgb(number(p[0])?.clamp(0.0,255.0) as u8,number(p[1])?.clamp(0.0,255.0) as u8,number(p[2])?.clamp(0.0,255.0) as u8)}else{return None;}
+        else if let Some(inner)=v.strip_prefix("rgb(").and_then(|s|s.strip_suffix(')')){let p:Vec<_>=inner.split(',').collect();if p.len()!=3{return None;}Color::rgb(number(p[0])?.clamp(0.0,255.0) as u8,number(p[1])?.clamp(0.0,255.0) as u8,number(p[2])?.clamp(0.0,255.0) as u8)}
+        else if let Some(inner)=v.strip_prefix("rgba(").and_then(|s|s.strip_suffix(')')){let p:Vec<_>=inner.split(',').collect();if p.len()!=4{return None;}let r=number(p[0])?.clamp(0.0,255.0) as u8;let g=number(p[1])?.clamp(0.0,255.0) as u8;let b=number(p[2])?.clamp(0.0,255.0) as u8;let a_str=p[3].trim();let a=if let Some(pct)=a_str.strip_suffix('%'){(number(pct)?/100.0*255.0).clamp(0.0,255.0) as u8}else{(number(a_str)?*255.0).clamp(0.0,255.0) as u8};Color::rgba(r,g,b,a)}
+        else{return None;}
     }};Some(c)
 }
 fn valid_value(name:&str,value:&str,font:f32,viewport:(u32,u32))->bool {

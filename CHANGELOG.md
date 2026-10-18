@@ -8,6 +8,115 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- High-throughput parallel asynchronous resource downloader in `cells/apps/ocel/src/loader.rs`:
+  scales concurrent worker streams by profile (up to 24 parallel streams on desktop,
+  4 on embedded). Integrates in-memory DNS caching (`DNS_CACHE`, 5-minute TTL) in
+  `cells/apps/ocel/src/net/http.rs`, skipping redundant DNS resolution across shared
+  subdomains. Expands `service-net` `DNS_QUERY_LIMIT` to 32, and Ocel desktop
+  `MAX_CONCURRENT_NET_JOBS` to 64 and `CLOSE_SLOTS` to 128. Drives `tuoitre.vn`
+  asset downloading phase to ~2.7s (total load time including typing and initial
+  HTML handshake down to 6.01s, vs >25s baseline).
+- Implement full HTML entity decoder in `cells/apps/ocel/src/parser/html.rs`:
+  decodes hex numeric (`&#xHHH;`), decimal numeric (`&#NNN;`), and standard
+  named entities into UTF-8 characters. Fixes raw entity strings (e.g. `&#xC0;`,
+  `&#x1EF8;`, `&#x110;`, `&#x1ED2;`) on Vietnamese news sites like Tuoi Tre.
+- Honor CSS and HTML `width`/`height` dimensions on `<img>` elements in `web.rs`:
+  resolves `style.layout.size` or HTML attributes before falling back to natural
+  pixel dimensions. Prevents $40\times 40$ author avatars from ballooning to $80\times 80$,
+  eliminating layout overflow and collision with adjacent article text.
+- Add `no_std` WebP decoder (VP8 lossy, VP8L lossless, and VP8X extended) to Ocel
+  using pure-Rust `ai-image-webp`. Decodes CDN-compressed article photos and
+  thumbnails (e.g. `cdn2.tuoitre.vn`) into BGRA8888 pixel buffers.
+- Enhance Ocel CSS engine: parse `linear-gradient(...)` and `radial-gradient(...)`
+  in `background` by extracting the primary color stop as `background-color`,
+  support `rgba(r, g, b, a)` with alpha transparency, and expand standard CSS
+  color names (`orange`, `purple`, `navy`, `teal`, `maroon`, `crimson`, `silver`,
+  `darkred`). Renders Tuoi Tre's red banner (`.header__top`), providing proper
+  contrast for white SVG logos and navigation text.
+- Fix `RawTlsRequest::Close` in `service-net` to reply via async IPC tokens
+  (`ReplyTo::capture(sender)`), preventing Ocel's cleanup queue from saturating
+  when closing sequential resource sockets.
+- Synchronize host and QEMU pointer coordinates via VMware/QEMU absolute
+  `vmmouse` (`-machine ...,vmport=on`), scaling device coordinates once to
+  framebuffer pixels without cumulative drift. Clamp relative fallback to
+  screen boundaries; stash and retry pointer IPC non-blockingly during queue
+  pressure without stalling keyboard dispatch.
+- Add multi-source failover and expanded radius tolerance (up to radius 5, 10 s
+  uncertainty span) to `scripts/qemu-dev-time.py` and `service-net` QEMU time
+  client: primary `time.txryan.com`, secondary `time.teax.dev`, tertiary `rough.time.nl`.
+  Resolve IPv4 explicitly for Roughtime transports to avoid IPv6 timeouts on
+  WSL2/Linux environments without IPv6 routing. Fixes "TLS connection failed"
+  when `time.txryan.com` increased its reported uncertainty radius to 4.
+- Add compact `no_std` flat-path SVG rasterizer for Ocel desktop profile:
+  parses `<svg viewBox>`, `path` (M/L/H/V/C/Z with cubic Bézier flattening),
+  `rect`, `circle` and color hex/names into BGRA8888 using scanline polygon fills.
+  Embedded profile keeps SVG disabled to conserve memory. QEMU smoke decodes and
+  renders Tuoi Tre's SVG header assets in the desktop image.
+- Fix HTML hyperlink navigation in Ocel: propagate anchor `href` through
+  `Builder::element` and `Builder::inline` so text and child runs inherit
+  their link target, and traverse DOM parent chains in `hit_test_link` so
+  clicking nested inline spans, headings, and blocks inside `<a>` resolves
+  the link. Unit tests verify nested link hit testing; QEMU smoke navigates
+  to `https://www.iana.org/about` on link click.
+- Support same-site resource prefetching for subdomains (`*.base_domain`) in Ocel,
+  allowing sites like `tuoitre.vn` to load assets from `static-tuoitre.tuoitre.vn`
+  and `cdn2.tuoitre.vn`. Block cross-site resources and insecure mixed content
+  (HTTP on HTTPS). Unit tests verify same-site subdomain resolution, protocol-relative
+  URLs, and cross-site rejection. QEMU/KVM desktop profile prefetches 23 same-site
+  resources for Tuoi Tre.
+- Fix compositor window-decoration dirty-rect calculation: `intersect` now
+  checks for disjoint rectangles and returns `None` instead of underflowing
+  to enormous `u32` spans that caused moving cursors to paint colored trails
+  across the window.
+- Provide dual compile-time memory profiles for Ocel:
+  - `embedded` (default): 16 MiB heap, 8 MiB resident budget, 16 images, 1,024
+    CSS rules, 64 references, fitting the standard 32 MiB kernel cell slot.
+  - `desktop` (`--features desktop`): 128 MiB heap, 96 MiB resident budget,
+    512 images, 16,384 CSS rules, 1,024 references, 4 MP per image, backed
+    by kernel opt-in `large-cell-va` (256 MiB slot).
+  - Preflight PIE `PT_LOAD` spans in `ElfLoader` before mapping, failing cleanly
+    with `PermissionDenied` when a desktop binary runs on an embedded slot.
+  - Add `--ocel-profile embedded|desktop` to `scripts/build-cloud-images.sh`,
+    emitting `build/cellos-x86_64-embedded.qcow2` and `build/cellos-x86_64-desktop.qcow2`.
+  - QEMU/KVM smoke proves exact button clicking, clean wrong-slot rejection, and
+    renders IANA (23 items) and Tuoi Tre (354 items) under the desktop profile.
+- Enable an explicit QEMU DEV HTTPS profile with fresh `time.txryan.com` evidence
+  and a durable trusted-host floor outside guest snapshots. Keep guest TLS
+  end-to-end with public CA path/hostname/time-window verification; require fresh
+  host evidence per handshake and hardware x86 entropy without weak fallback.
+  Normalize NET monotonic time across architectures. QEMU/KVM renders
+  `https://example.com/`; Tuoi Tre reaches Ocel's image-count limit after HTTPS.
+  Whole-host rollback protection and production qualification remain excluded.
+- Replace the DEV_REFERENCE signed-time upstream with pinned
+  `time.txryan.com:2002` under ADR-0026; retain strict draft-11 nonce, signature,
+  Merkle proof and minimum-radius checks. Record `roughtime.se` as a candidate
+  only, never automatic fallback. Real host UDP/verifier/adapter smoke succeeds;
+  deployed epoch migration and Ocel's protected-time HTTPS prerequisites remain
+  separate gates.
+- Remove legacy-provider Roughtime vector dependencies. Verify an authenticated
+  `time.txryan.com` capture without configuration bypass, reject nonce replay,
+  and retain non-empty Merkle proof coverage using an independent four-leaf tree.
+- Deploy signed QuickJS in the x86 Ocel image through an explicit
+  `browser-engine-profile` (`build-cloud-images.sh --javascript`), retaining
+  the closed fleet default. The profile admits only the capability-free signed
+  QuickJS path after verified policy and x86 private-root qualification.
+  Dispatch document click listeners before native form/link actions; buttons
+  without a form do not attempt submission. QEMU/KVM verifies real engine
+  self-check, external-script DOM edits/creation and click-driven text updates.
+- Detect extensionless HTML documents with case-insensitive doctype/root-tag
+  prefixes, without allocating a lowercase copy of the document. Preserve explicit
+  plain-text/source formats. Regression tests cover lowercase/mixed-case HTML;
+  QEMU/KVM renders example.com as HTML rather than displaying its source.
+- Match the x86 cloud-image QEMU launch example to the packaged e1000 driver
+  instead of VirtIO-net. QEMU/KVM acquires DHCP 10.0.2.15 and DNS 10.0.2.3;
+  Ocel fetches HTTP content. HTTPS remains fail-closed without authenticated
+  certificate time; changing the NIC does not remove that security prerequisite.
+- Repair x86 PS/2 input for graphical applications: initialize the controller on
+  the x86 boot path, deliver typed key press/release events with modifiers and
+  navigation keys, and enable polled mouse reporting with checked acknowledgements.
+  Retain pending input across IPC backpressure; remove Ocel's ASCII-control shortcut
+  workaround. QEMU/KVM smoke verifies mouse-created tabs, Ctrl+T, Ctrl+M, zoom,
+  search typing/F3 and PageDown, including keyboard routing after mouse activation.
 - Complete the bounded Ocel viewer upgrade (`cells/apps/ocel`, DOM protocol,
   QuickJS/PDF services and NET TLS replies):
   - Restore Reader content correctly per document; clear transient focus/search

@@ -44,11 +44,10 @@ impl DocFormat {
 
         // Content sniffing if extension is ambiguous or missing
         let trimmed = content.trim_start();
-        if trimmed.starts_with("<!DOCTYPE")
-            || trimmed.starts_with("<html")
-            || trimmed.starts_with("<head")
-            || trimmed.starts_with("<body")
-        {
+        if ["<!doctype", "<html", "<head", "<body"].iter().any(|prefix| {
+            trimmed.as_bytes().get(..prefix.len())
+                .is_some_and(|start| start.eq_ignore_ascii_case(prefix.as_bytes()))
+        }) {
             return Self::Html;
         }
 
@@ -144,4 +143,18 @@ fn validate_images<'a>(base: Option<&str>, urls: impl Iterator<Item=&'a str>) ->
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod detection_tests {
+    use super::DocFormat;
+
+    #[test]
+    fn extensionless_html_is_case_insensitive() {
+        for prefix in ["<!doctype html>", "<!DOCTYPE HTML>", "<HtMl>", "<HEAD>", "<BoDy>"] {
+            let content = alloc::format!(" \n{prefix}<p>Example Domain</p>");
+            assert_eq!(DocFormat::detect_from_url_or_content("http://example.com/", &content), DocFormat::Html);
+        }
+        assert_eq!(DocFormat::detect_from_url_or_content("file:///source.txt", "<!doctype html>"), DocFormat::PlainText);
+    }
 }

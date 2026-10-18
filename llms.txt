@@ -59,6 +59,7 @@ The index below retains technical and historical references. Older proposals, ma
 - [ADR-0009: Correlate relay packet failures without legacy framing](docs/decisions/0009-correlate-relay-packet-failures.md)
 - [ADR-0010: Use deterministic CBOR and COSE_Sign1 for VF2 root-stream manifests](docs/decisions/0010-use-canonical-cbor-cose-for-vf2-root-stream-manifests.md)
 - [ADR-0011: Use Cloudflare Roughtime for DEV_REFERENCE signed time](docs/decisions/0011-use-cloudflare-roughtime-for-dev-signed-time.md)
+- [ADR-0026: Use time.txryan.com Roughtime for DEV_REFERENCE signed time](docs/decisions/0026-use-txryan-roughtime-for-dev-signed-time.md)
 - [ADR-0012: Use an external lineage table and KMS key for signed-time epochs](docs/decisions/0012-use-external-lineage-table-and-kms-key.md)
 - [ADR-0013: Use solo-first development with independent claim promotion](docs/decisions/0013-solo-first-development-independent-promotion.md)
 - [ADR-0014: Choose lab-first workflows with gated base and assembly extensions](docs/decisions/0014-lab-first-robot-workflows.md)

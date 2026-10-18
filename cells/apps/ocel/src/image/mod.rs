@@ -3,18 +3,24 @@
 
 pub mod bmp;
 pub use bmp::decode_bmp;
+#[cfg(feature = "desktop")]
+pub mod svg;
 
 use bmp::DecodedImage;
 use zune_core::{bytestream::ZCursor, colorspace::ColorSpace, options::DecoderOptions};
 
 // Bound decoded storage before asking a codec to allocate its pixel buffer.
-const MAX_PIXELS: usize = 1024 * 1024;
+const MAX_PIXELS: usize = crate::budget::MAX_IMAGE_PIXELS;
 
 pub fn is_image_path(path: &str) -> bool {
     path.rsplit_once('.').is_some_and(|(_, extension)| {
-        ["bmp", "png", "jpg", "jpeg"]
+        #[cfg(feature = "desktop")]
+        let supported = ["bmp", "png", "jpg", "jpeg", "webp", "svg"];
+        #[cfg(not(feature = "desktop"))]
+        let supported = ["bmp", "png", "jpg", "jpeg", "webp"];
+        supported
             .iter()
-            .any(|supported| extension.eq_ignore_ascii_case(supported))
+            .any(|s| extension.eq_ignore_ascii_case(s))
     })
 }
 
@@ -44,6 +50,27 @@ pub fn decode(data: &[u8]) -> Option<DecodedImage> {
         let count = checked_pixels(width, height)?;
         let pixels = decoder.decode().ok()?;
         return convert(width, height, count, pixels, ColorSpace::RGBA);
+    }
+    if data.starts_with(b"RIFF") && data.len() >= 12 && &data[8..12] == b"WEBP" {
+        let cursor = no_std_io::io::Cursor::new(data);
+        let mut decoder = ai_image_webp::WebPDecoder::new(cursor).ok()?;
+        let (width, height) = decoder.dimensions();
+        let width = width as usize;
+        let height = height as usize;
+        let count = checked_pixels(width, height)?;
+        let has_alpha = decoder.has_alpha();
+        let channels = if has_alpha { 4 } else { 3 };
+        let mut raw = alloc::vec![0u8; count * channels];
+        decoder.read_image(&mut raw).ok()?;
+        let colorspace = if has_alpha { ColorSpace::RGBA } else { ColorSpace::RGB };
+        return convert(width, height, count, raw, colorspace);
+    }
+    #[cfg(feature = "desktop")]
+    if data.starts_with(b"<svg")
+        || data.starts_with(b"<?xml")
+        || (data.len() > 10 && data[..data.len().min(256)].windows(4).any(|w| w == b"<svg"))
+    {
+        return svg::decode_svg(data);
     }
     None
 }

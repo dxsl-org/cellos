@@ -27,12 +27,22 @@ pub fn poll_cleanup() { crate::net::http::poll_cleanup(); }
 
 /// A navigation owns its exact operations. Dropping/cancelling cannot publish a
 /// completion to another navigation, even when the provider replies late.
+struct ActiveResourceFetch {
+    url: String,
+    image: bool,
+    job: crate::net::http::FetchJob,
+}
+
+pub const MAX_CONCURRENT_RESOURCE_FETCHES: usize = crate::budget::MAX_CONCURRENT_RESOURCE_FETCHES;
+
 pub struct DocumentLoadJob {
     url: String,
     network: Option<crate::net::http::FetchJob>,
+    active_fetches: Vec<ActiveResourceFetch>,
     loaded: Option<LoadedDocument>,
     references: Vec<Reference>,
     next_resource: usize,
+    completed_resources: usize,
     deadline: u64,
     progress: String,
     finished: bool,
@@ -45,7 +55,7 @@ impl DocumentLoadJob {
         let network = if is_network(url) {
             let path = url.split(|c| c == '?' || c == '#').next().unwrap_or(url);
             if crate::pdf::is_pdf_path(path) { return Err("Network PDF viewing is unsupported; open a local PDF file".into()); }
-            let limit = if crate::image::is_image_path(path) { crate::resources::MAX_IMAGE_BYTES } else { crate::budget::MAX_TEXT_BYTES };
+            let limit = if crate::image::is_image_path(path) { crate::budget::MAX_ENCODED_IMAGE_BYTES } else { crate::budget::MAX_TEXT_BYTES };
             Some(crate::net::http::FetchJob::new(url, limit)?)
         } else {
             if url.contains("://") && !url.starts_with("file://") && !matches!(url, "ocel://welcome" | "ocel://help" | "ocel://bookmarks") {
@@ -53,7 +63,8 @@ impl DocumentLoadJob {
             }
             None
         };
-        Ok(Self { url: url.into(), network, loaded: None, references: Vec::new(), next_resource: 0,
+        Ok(Self { url: url.into(), network, active_fetches: Vec::new(), loaded: None, references: Vec::new(),
+            next_resource: 0, completed_resources: 0,
             deadline: ostd::syscall::sys_get_time_ms().ok_or("Monotonic clock unavailable")?.saturating_add(60_000),
             progress: "Opening document".into(), finished: false, memory_budget: crate::budget::MAX_RESIDENT_BYTES })
     }
@@ -63,6 +74,7 @@ impl DocumentLoadJob {
             + self.references.iter().map(|reference| reference.url.capacity()).sum::<usize>()
             + self.loaded.as_ref().map(LoadedDocument::resident_bytes).unwrap_or(0)
             + self.network.as_ref().map(crate::net::http::FetchJob::resident_bytes).unwrap_or(0)
+            + self.active_fetches.iter().map(|a| a.job.resident_bytes() + a.url.capacity()).sum::<usize>()
     }
     pub fn set_memory_budget(&mut self, bytes: usize) { self.memory_budget = bytes.min(crate::budget::MAX_RESIDENT_BYTES); }
     pub fn progress(&self) -> &str {
@@ -71,6 +83,9 @@ impl DocumentLoadJob {
     }
     pub fn cancel(&mut self) {
         if let Some(mut network) = self.network.take() { network.cancel(); }
+        for mut active in core::mem::take(&mut self.active_fetches) {
+            active.job.cancel();
+        }
         self.loaded = None; self.references.clear(); self.finished = true;
         self.progress = "Cancelled".into();
     }
@@ -106,41 +121,83 @@ impl DocumentLoadJob {
             self.loaded = Some(loaded);
             return Poll::Pending;
         }
-        if self.next_resource >= self.references.len() {
-            self.finished = true; self.progress = "Loaded".into();
-            return Poll::Ready(Ok(self.loaded.take().unwrap()));
-        }
-        let reference = &self.references[self.next_resource];
         let loaded = self.loaded.as_mut().unwrap();
-        let limit = (if reference.image { crate::resources::MAX_IMAGE_BYTES } else { crate::resources::MAX_RESOURCE_BYTES })
-            .min(loaded.resources.remaining_bytes()).min(available);
-        let resource_url = &reference.url;
-        if let Some(network) = &mut self.network {
-            let result = match network.poll() {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(result) => result.map(|result| result.body),
-            };
-            self.network = None;
-            if let Err(error) = loaded.resources.insert(resource_url.clone(), result, reference.image) { return self.fail(error); }
-            self.next_resource += 1;
-            return Poll::Pending;
-        }
-        self.progress = format!("Loading resource {}/{}", self.next_resource + 1, self.references.len());
-        if limit == 0 { return self.fail("Document resource budget exhausted".into()); }
-        if is_network(&resource_url) {
-            let origin = match crate::net::http::Url::parse(&loaded.url) { Ok(url) => url.origin(), Err(error) => return self.fail(error) };
-            match crate::net::http::FetchJob::same_origin(&resource_url, limit, &origin) {
-                Ok(network) => self.network = Some(network),
-                Err(error) => {
-                    if let Err(error) = loaded.resources.insert(resource_url.clone(), Err(error), reference.image) { return self.fail(error); }
-                    self.next_resource += 1;
+
+        // 1. Poll in-flight parallel downloads:
+        let mut idx = 0;
+        while idx < self.active_fetches.len() {
+            match self.active_fetches[idx].job.poll() {
+                Poll::Pending => {
+                    idx += 1;
+                }
+                Poll::Ready(result) => {
+                    let active = self.active_fetches.remove(idx);
+                    self.completed_resources += 1;
+                    let body_result = match result {
+                        Ok(res) => {
+                            ostd::io::println(&alloc::format!("[ocel] resource fetched: {} ({} bytes)", active.url, res.body.len()));
+                            Ok(res.body)
+                        }
+                        Err(err) => {
+                            ostd::io::println(&alloc::format!("[ocel] resource fetch failed: {} ({})", active.url, err));
+                            Err(err)
+                        }
+                    };
+                    if let Err(error) = loaded.resources.insert(active.url, body_result, active.image) {
+                        return self.fail(error);
+                    }
                 }
             }
-        } else {
-            let result = crate::resources::read_local(&resource_url, limit);
-            if let Err(error) = loaded.resources.insert(resource_url.clone(), result, reference.image) { return self.fail(error); }
-            self.next_resource += 1;
         }
+
+        // 2. Replenish worker pool up to MAX_CONCURRENT_RESOURCE_FETCHES:
+        while self.active_fetches.len() < MAX_CONCURRENT_RESOURCE_FETCHES && self.next_resource < self.references.len() {
+            let reference = &self.references[self.next_resource];
+            self.next_resource += 1;
+            let limit = (if reference.image { crate::budget::MAX_ENCODED_IMAGE_BYTES } else { crate::budget::MAX_CSS_BYTES })
+                .min(loaded.resources.remaining_bytes()).min(available);
+            let resource_url = &reference.url;
+            if limit == 0 { return self.fail("Document resource budget exhausted".into()); }
+            if is_network(resource_url) {
+                match crate::net::http::FetchJob::same_site(resource_url, limit, &loaded.url) {
+                    Ok(job) => {
+                        self.active_fetches.push(ActiveResourceFetch {
+                            url: resource_url.clone(),
+                            image: reference.image,
+                            job,
+                        });
+                    }
+                    Err(error) => {
+                        ostd::io::println(&alloc::format!("[ocel] resource same_site rejected: {} ({})", resource_url, error));
+                        if let Err(error) = loaded.resources.insert(resource_url.clone(), Err(error), reference.image) {
+                            return self.fail(error);
+                        }
+                        self.completed_resources += 1;
+                    }
+                }
+            } else {
+                let result = crate::resources::read_local(resource_url, limit);
+                if let Err(error) = loaded.resources.insert(resource_url.clone(), result, reference.image) {
+                    return self.fail(error);
+                }
+                self.completed_resources += 1;
+            }
+        }
+
+        // 3. Progress report:
+        if self.references.is_empty() {
+            self.progress = "Loaded".into();
+        } else {
+            self.progress = format!("Loading resources ({}/{})...", self.completed_resources.min(self.references.len()), self.references.len());
+        }
+
+        // 4. Check completion:
+        if self.active_fetches.is_empty() && self.next_resource >= self.references.len() {
+            self.finished = true;
+            self.progress = "Loaded".into();
+            return Poll::Ready(Ok(self.loaded.take().unwrap()));
+        }
+
         Poll::Pending
     }
 }
@@ -172,7 +229,7 @@ fn network_document(result: crate::net::http::FetchResult, memory_budget: usize)
 }
 
 fn image_document(url: &str, bytes: &[u8], memory_budget: usize) -> Result<LoadedDocument, String> {
-    if bytes.len() > crate::resources::MAX_IMAGE_BYTES { return Err("Image exceeds encoded byte budget".into()); }
+    if bytes.len() > crate::budget::MAX_ENCODED_IMAGE_BYTES { return Err("Image exceeds encoded byte budget".into()); }
     if crate::budget::image_bytes(bytes)? > memory_budget { return Err("Image decoding exceeds remaining tab memory budget".into()); }
     let image = crate::image::decode(bytes).ok_or("Unsupported, corrupt, or oversized image (PNG/JPEG/BMP only)")?;
     let mut loaded = LoadedDocument::text(url, format!("Ocel — Image ({})", url), String::new());
@@ -200,7 +257,7 @@ fn load_local(url: &str, memory_budget: usize) -> Result<LoadedDocument, String>
         loaded.direct_nodes = Some(page.into_nodes(url)); return Ok(loaded);
     }
     if crate::image::is_image_path(&path) {
-        let bytes = crate::resources::read_local(url, crate::resources::MAX_IMAGE_BYTES.min(memory_budget / 2))?;
+        let bytes = crate::resources::read_local(url, crate::budget::MAX_ENCODED_IMAGE_BYTES.min(memory_budget / 2))?;
         return image_document(url, &bytes, memory_budget.saturating_sub(bytes.capacity()));
     }
     let content = String::from_utf8(crate::resources::read_local(url, crate::budget::MAX_TEXT_BYTES.min(memory_budget / 12))?).map_err(|_| String::from("Local document is not UTF-8"))?;
@@ -215,7 +272,7 @@ pub fn load_document(url: &str) -> LoadedDocument {
 }
 
 fn get_welcome_content() -> String {
-    String::from(
+    format!(
         r#"# Welcome to Ocel
 
 **Ocel** (derived from *Ocellus* — the simple eye) is the native document and web content viewer for **CellOS**.
@@ -238,7 +295,7 @@ Hỗ trợ đầy đủ bảng chữ cái tiếng Việt có dấu:
 
 | Tiêu chí | Ocel (Tier 2) | Chrome (Tier 3) |
 | -------- | ------------- | --------------- |
-| Bộ nhớ | Viewer heap: 16 MiB; display and engine allocations are additional | Depends on guest and workload |
+| Bộ nhớ | {} profile: {} MiB heap / {} MiB shared resident budget; display and engine allocations are additional | Depends on guest and workload |
 | Định dạng | MD, HTML subset, code, PNG/JPEG/BMP, local PDF | Full Web Apps, SPA |
 | Bảo mật | Hardware MMU | Stage-2 Hypervisor |
 ---
@@ -251,18 +308,20 @@ Hỗ trợ đầy đủ bảng chữ cái tiếng Việt có dấu:
 ```rust
 // Ocel Cell Architecture
 // Running in CellOS SAS / Tier 2 Native Domain
-fn main() {
+fn main() {{
     println!("Hello from Ocel!");
-}
+}}
 ```
 
 *Built with passion for CellOS.*
 "#,
+        crate::budget::PROFILE_NAME, crate::budget::HEAP_BYTES / (1024 * 1024),
+        crate::budget::MAX_RESIDENT_BYTES / (1024 * 1024),
     )
 }
 
 fn get_help_content() -> String {
-    String::from(
+    format!(
         r#"# Ocel Keyboard & Navigation Help
 
 ### Keyboard Shortcuts
@@ -291,9 +350,13 @@ fn get_help_content() -> String {
 - **PDF availability:** Requires the registered native `ocel-pdf` service. One opaque page at a time, bounded to 1024 × 1024 pixels; the service accepts PDFs up to 2 MiB. No fallback renderer or PDF-source text view.
 - `http://`, `https://`, `gemini://` — Bounded cooperative network navigation; Escape cancels DNS, connect or reading. HTTPS/Gemini require the net service's certificate and authenticated-time policy.
 - **Resource policy:** Only same-origin static images, classic scripts and stylesheets are prefetched, within the shared resource budget. Other protocols and network PDF viewing are explicitly unsupported.
+- **Build profile:** {} — {} MiB viewer heap, {} MiB shared tab/acquisition residency, {} MiB document text and {} MiB aggregate resources. This changes bounded capacities, not browser compatibility.
 - `file:///welcome.md` — Built-in Welcome guide.
 - `file:///help.md` — This help page.
 "#,
+        crate::budget::PROFILE_NAME, crate::budget::HEAP_BYTES / (1024 * 1024),
+        crate::budget::MAX_RESIDENT_BYTES / (1024 * 1024), crate::budget::MAX_TEXT_BYTES / (1024 * 1024),
+        crate::budget::MAX_RESOURCE_BYTES / (1024 * 1024),
     )
 }
 
@@ -418,6 +481,14 @@ mod tests {
         assert!(doc.content.contains("Wikipedia Mobile"));
     }
     #[test]
+    fn help_reports_selected_profile_without_claiming_full_browser_support() {
+        let help = get_help_content();
+        assert!(help.contains(crate::budget::PROFILE_NAME));
+        assert!(help.contains(&format!("{} MiB viewer heap", crate::budget::HEAP_BYTES / (1024 * 1024))));
+        assert!(help.contains("not browser compatibility"));
+        assert!(get_welcome_content().contains("HTML subset"));
+    }
+    #[test]
     fn extensionless_mixed_case_image_content_type_is_decoded() {
         let mut bmp = alloc::vec![0u8; 58];
         bmp[..2].copy_from_slice(b"BM");
@@ -428,6 +499,12 @@ mod tests {
         bmp[22..26].copy_from_slice(&1i32.to_le_bytes());
         bmp[26..28].copy_from_slice(&1u16.to_le_bytes());
         bmp[28..30].copy_from_slice(&24u16.to_le_bytes());
+        // Encoded-byte admission uses the build profile even for extensionless images.
+        bmp.resize(crate::budget::MAX_ENCODED_IMAGE_BYTES, 0);
+        assert!(image_document("https://host/asset", &bmp, 4096).is_ok());
+        bmp.push(0);
+        assert!(matches!(image_document("https://host/asset", &bmp, 4096), Err(error) if error.contains("encoded byte budget")));
+        bmp.truncate(58);
         let result = crate::net::http::FetchResult {
             url: "https://host/asset?id=1".into(), body: bmp,
             media_type: " Image/BMP ; profile=screen".into(), gemini: false,

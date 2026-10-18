@@ -70,7 +70,7 @@ ostd::cell_main!(cell_main);
 
 // Decoding must not use ostd's 1 MiB default arena.
 #[cfg(target_os = "none")]
-ostd::declare_custom_heap!(16 * 1024 * 1024);
+ostd::declare_custom_heap!(budget::HEAP_BYTES);
 
 const TOOLBAR_HEIGHT: u32 = 44;
 const TABBAR_HEIGHT: u32 = 28;
@@ -611,6 +611,10 @@ impl OcelViewer {
     }
 
     fn submit_form(&mut self, input: dom_arena::NodeId) {
+        // A submit button without a form has no native default action.
+        if self.current_tab().doc.form_owner(input).is_none() {
+            return;
+        }
         match self.current_tab().doc.form_url(input, &self.current_tab().url) {
             Ok(url) => self.navigate_to(&url),
             Err(error) => self.status_text = format!("Form: {}", error),
@@ -1022,6 +1026,8 @@ impl OcelViewer {
             let active_tab_idx = self.active_tab;
             let active_scroll = self.tabs[active_tab_idx].scroll_y;
 
+            // Script listeners run before native form/link default actions.
+            self.dispatch_document_click(cx, cy);
             let hit_input = self.tabs[active_tab_idx].doc.hit_test_input_node(cx, cy, 0, view_y, active_scroll);
             if let Some(id) = hit_input {
                 let input_type = self.tabs[active_tab_idx].doc.input(id).map(|input| input.input_type.clone());
@@ -1066,7 +1072,14 @@ impl OcelViewer {
                 return;
             }
 
-            // Check Interactive DOM Node click -> dispatch Click event to Tier 2 JS
+        }
+    }
+
+    fn dispatch_document_click(&mut self, cx: i32, cy: i32) {
+        let active_tab_idx = self.active_tab;
+        let active_scroll = self.tabs[active_tab_idx].scroll_y;
+        let view_y = (TOOLBAR_HEIGHT + TABBAR_HEIGHT) as i32;
+        let view_h = self.viewport_height() as i32;
             let hit_node = self.tabs[active_tab_idx].doc.hit_test_node(cx, cy, 0, view_y, active_scroll);
             if let Some(node_id) = hit_node {
                 let active_tab = &self.tabs[active_tab_idx];
@@ -1133,7 +1146,6 @@ impl OcelViewer {
                     self.render();
                 }
             }
-        }
     }
 
     fn handle_key(&mut self, sym: KeySym, ch: Option<char>, modifiers: Modifiers) {
@@ -1211,24 +1223,24 @@ impl OcelViewer {
             self.render();
             return;
         }
-        let is_ctrl = |target: char, ascii_ctrl: char| {
-            (ch == Some(target) && modifiers.contains(Modifiers::CTRL)) || ch == Some(ascii_ctrl)
+        let is_ctrl = |target: char| {
+            ch == Some(target) && modifiers.contains(Modifiers::CTRL)
         };
         // Global Ctrl+T: New Tab
-        if is_ctrl('t', '\x14') {
+        if is_ctrl('t') {
             self.new_tab("file:///welcome.md");
             self.render();
             return;
         }
 
         // Global Ctrl+W: Close Tab
-        if is_ctrl('w', '\x17') {
+        if is_ctrl('w') {
             self.close_tab(self.active_tab);
             self.render();
             return;
         }
         // Global Ctrl+R: Toggle Reader Mode
-        if is_ctrl('r', '\x12') {
+        if is_ctrl('r') {
             self.toggle_reader_mode();
             return;
         }
@@ -1255,21 +1267,21 @@ impl OcelViewer {
         }
 
         // Global Ctrl+B: Open Bookmarks
-        if is_ctrl('b', '\x02') {
+        if is_ctrl('b') {
             self.navigate_to("ocel://bookmarks");
             self.render();
             return;
         }
 
         // Global Ctrl+D: Bookmark Current Page
-        if is_ctrl('d', '\x04') {
+        if is_ctrl('d') {
             self.status_text = String::from("Bookmarks are read from /data/bookmarks.md; saving from the viewer is not supported.");
             self.render_chrome();
             return;
         }
 
 
-        if sym == KeySym::F3 || is_ctrl('f', '\x06') {
+        if sym == KeySym::F3 || is_ctrl('f') {
             if sym == KeySym::F3 && self.search_open {
                 self.next_search_match(modifiers.contains(Modifiers::SHIFT));
             } else {

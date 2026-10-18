@@ -57,6 +57,24 @@ fn inline_links_keep_node_ids_and_unicode_uses_glyph_not_utf8_width() {
     assert_eq!(laid.hit_node(text_box.x+1,text_box.y+1),Some(a));
 }
 #[test]
+fn block_and_nested_links_resolve_enclosing_anchor() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let a=element(&mut arena,root,"a",&[("href","/article/123"),("style","display:block")]);
+    let h=element(&mut arena,a,"h3",&[]);
+    text(&mut arena,h,"Title");
+    let laid=laid_out(&arena,&[],300,200);
+    let (tx, ty) = {
+        let text_box = laid.boxes.iter().find(|b| !b.lines.is_empty()).unwrap();
+        (text_box.x, text_box.y)
+    };
+    assert_eq!(laid.hit_link(tx + 2, ty + 2), Some(String::from("/article/123")));
+
+    let mut doc = crate::doc::Document::new();
+    doc.arena = Some(arena);
+    doc.web_layout = Some(laid);
+    assert_eq!(doc.hit_test_link(tx + 2, ty + 2, 0, 0, 0), Some(String::from("/article/123")));
+}
+#[test]
 fn external_stylesheets_follow_dom_source_order_and_hidden_content_is_not_searched() {
     let mut arena=DocumentArena::new();let root=arena.root;
     style(&mut arena,"p{color:red}");let link=element(&mut arena,root,"link",&[("rel","stylesheet")]);style(&mut arena,"p{color:green}");

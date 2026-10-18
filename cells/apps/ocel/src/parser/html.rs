@@ -284,8 +284,14 @@ pub fn arena_to_doc_nodes_with_base(arena: &DocumentArena, base_url: Option<&str
     for node in &arena.nodes {
         if node.tag()!=Some("img")||doc_nodes.iter().any(|asset|matches!(asset,DocNode::DomImage{node_id,..} if *node_id==node.id)){continue;}
         if let (Some(base),Some(src))=(base_url,node.get_attribute("src")) {
-            if let Ok(bytes)=crate::resources::load_binary(base,src) {
-                if let Some(image)=crate::image::decode(&bytes) {doc_nodes.push(DocNode::DomImage{node_id:node.id,width:image.width,height:image.height,pixels:alloc::rc::Rc::new(image.pixels)});}
+            match crate::resources::load_binary(base,src) {
+                Ok(bytes) => {
+                    match crate::image::decode(&bytes) {
+                        Some(image) => doc_nodes.push(DocNode::DomImage{node_id:node.id,width:image.width,height:image.height,pixels:alloc::rc::Rc::new(image.pixels)}),
+                        None => ostd::io::println(&alloc::format!("[ocel] image decode failed for: {}", src)),
+                    }
+                }
+                Err(err) => ostd::io::println(&alloc::format!("[ocel] load_binary failed for {}: {}", src, err)),
             }
         }
     }
@@ -393,16 +399,22 @@ fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNo
                             let mut loaded = false;
                             if let (Some(src_val), Some(base)) = (src, base_url) {
                                 if !base.is_empty() {
-                                    if let Ok(bytes) = crate::resources::load_binary(base, src_val) {
-                                        if let Some(img) = crate::image::decode(&bytes) {
-                                            out.push(DocNode::DomImage {
-                                                node_id: child_id,
-                                                width: img.width,
-                                                height: img.height,
-                                                pixels: alloc::rc::Rc::new(img.pixels),
-                                            });
-                                            loaded = true;
+                                    match crate::resources::load_binary(base, src_val) {
+                                        Ok(bytes) => {
+                                            match crate::image::decode(&bytes) {
+                                                Some(img) => {
+                                                    out.push(DocNode::DomImage {
+                                                        node_id: child_id,
+                                                        width: img.width,
+                                                        height: img.height,
+                                                        pixels: alloc::rc::Rc::new(img.pixels),
+                                                    });
+                                                    loaded = true;
+                                                }
+                                                None => ostd::io::println(&alloc::format!("[ocel] render_children decode failed: {}", src_val)),
+                                            }
                                         }
+                                        Err(err) => ostd::io::println(&alloc::format!("[ocel] render_children load_binary failed {}: {}", src_val, err)),
                                     }
                                 }
                             }
@@ -592,16 +604,92 @@ fn parse_table_node(arena: &DocumentArena, table_id: NodeId) -> (Vec<String>, Ve
     (headers, rows)
 }
 
-/// Decode basic HTML entities into UTF-8 characters.
+/// Decode HTML entities (named, decimal numeric &#NNN;, and hex numeric &#xHHH;) into UTF-8 characters.
 pub fn decode_entities(input: &str) -> String {
-    input
-        .replace("&nbsp;", " ")
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace("&apos;", "'")
+    if !input.contains('&') {
+        return String::from(input);
+    }
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '&' {
+            let mut entity = String::with_capacity(16);
+            let mut matched_semi = false;
+            while let Some(&ch) = chars.peek() {
+                if ch == ';' {
+                    chars.next();
+                    matched_semi = true;
+                    break;
+                }
+                if ch.is_ascii_alphanumeric() || ch == '#' {
+                    entity.push(chars.next().unwrap());
+                    if entity.len() > 12 {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            if matched_semi && !entity.is_empty() {
+                if let Some(decoded_char) = decode_entity_token(&entity) {
+                    out.push(decoded_char);
+                    continue;
+                }
+            }
+            out.push('&');
+            out.push_str(&entity);
+            if matched_semi {
+                out.push(';');
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn decode_entity_token(entity: &str) -> Option<char> {
+    if let Some(hex) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
+        let code = u32::from_str_radix(hex, 16).ok()?;
+        return char::from_u32(code);
+    }
+    if let Some(dec) = entity.strip_prefix('#') {
+        let code = dec.parse::<u32>().ok()?;
+        return char::from_u32(code);
+    }
+    let ch = match entity {
+        "nbsp" => ' ',
+        "amp" => '&',
+        "lt" => '<',
+        "gt" => '>',
+        "quot" => '"',
+        "apos" => '\'',
+        "copy" => '©',
+        "reg" => '®',
+        "trade" => '™',
+        "bull" => '•',
+        "hellip" => '…',
+        "ndash" => '–',
+        "mdash" => '—',
+        "lsquo" => '‘',
+        "rsquo" => '’',
+        "ldquo" => '“',
+        "rdquo" => '”',
+        "laquo" => '«',
+        "raquo" => '»',
+        "deg" => '°',
+        "plusmn" => '±',
+        "times" => '×',
+        "divide" => '÷',
+        "cent" => '¢',
+        "pound" => '£',
+        "yen" => '¥',
+        "euro" => '€',
+        "sect" => '§',
+        "para" => '¶',
+        _ => return None,
+    };
+    Some(ch)
 }
 
 /// Strip all `<...>` tags and decode basic HTML entities (utility helper).
@@ -643,6 +731,12 @@ mod tokenizer_tests {
         assert!(matches!(&parsed.scripts[1], ScriptSource::Inline(src) if src == "second()"));
         assert_eq!(parsed.scripts.len(), 2);
     }
+    #[test]
+    fn vietnamese_numeric_and_named_entities_are_decoded() {
+        let raw = "H&#xC0; S&#x1EF8; &#x110;&#x1ED2;NG &#224; &lt;&amp;&gt; &#39;test&#39;";
+        let decoded = decode_entities(raw);
+        assert_eq!(decoded, "HÀ SỸ ĐỒNG à <&> 'test'");
+    }
 }
 
 /// Resource discovery shares tokenization with the actual document parser.
@@ -653,7 +747,7 @@ pub fn resource_references_checked(input:&str)->Result<Vec<(String,bool)>,String
     let mut add=|url:String,image:bool|->Result<(),String>{
         if url.len()>2048{return Err(String::from("Resource URL exceeds byte budget"));}
         if image{images+=1;if images>crate::budget::MAX_IMAGES{return Err(String::from("Document exceeds image count budget"));}}
-        if refs.len()>=64{return Err(String::from("Document exceeds resource count budget"));}
+        if refs.len()>=crate::budget::MAX_REFERENCES{return Err(String::from("Document exceeds resource count budget"));}
         refs.push((url,image));Ok(())
     };
     for token in tokens {match token {

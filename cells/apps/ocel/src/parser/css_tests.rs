@@ -60,3 +60,23 @@ fn flex_shorthand_and_longhand_share_the_same_cascade_properties() {
     let s=sheet.compute(&arena,id,None,(800,600));
     assert_eq!(s.layout.flex_grow,1.0);assert_eq!(s.layout.flex_shrink,0.0);assert_eq!(s.layout.flex_basis,percent(0.0));
 }
+
+#[test]
+fn gradient_and_rgba_backgrounds_extract_colors_correctly() {
+    let mut arena = DocumentArena::new();
+    let root = arena.root;
+    let header = element(&mut arena, root, "div", &[("class", "header__top")]);
+    let card = element(&mut arena, root, "div", &[("class", "card")]);
+    let mut sheet = Stylesheet::default();
+    sheet.append(
+        ".header__top { background: linear-gradient(90.13deg, #e30e16 18.76%, #c90009 96.9%); }\
+         .card { background-color: rgba(231, 239, 250, 0.5); }",
+        (1024, 768),
+    );
+    let header_style = sheet.compute(&arena, header, None, (1024, 768));
+    assert_eq!(header_style.background, Some(Color::rgba(0xe3, 0x0e, 0x16, 255)));
+
+    let card_style = sheet.compute(&arena, card, None, (1024, 768));
+    assert_eq!(card_style.background, Some(Color::rgba(231, 239, 250, 127)));
+}
+

@@ -219,7 +219,43 @@ pub trait Transport {
     fn cleanup_error(&self) -> Option<&'static str> { None }
 }
 pub struct KernelTransport { admitted: bool }
+#[cfg(feature = "desktop")]
+pub const MAX_CONCURRENT_NET_JOBS: usize = 64;
+#[cfg(not(feature = "desktop"))]
+pub const MAX_CONCURRENT_NET_JOBS: usize = 16;
+
+#[cfg(feature = "desktop")]
+const CLOSE_LIMIT: usize = 96;
+#[cfg(not(feature = "desktop"))]
+const CLOSE_LIMIT: usize = 24;
+
+#[cfg(feature = "desktop")]
+const CLEANUP_BATCH: usize = 32;
+#[cfg(not(feature = "desktop"))]
+const CLEANUP_BATCH: usize = 8;
+
 static ACTIVE_JOBS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+static DNS_CACHE: ostd::sync::Mutex<alloc::collections::BTreeMap<String, ([u8; 4], u64)>> =
+    ostd::sync::Mutex::new(alloc::collections::BTreeMap::new());
+
+fn cached_resolve(host: &str, now: u64) -> Option<[u8; 4]> {
+    let cache = DNS_CACHE.lock();
+    if let Some((addr, expiry)) = cache.get(host) {
+        if now < *expiry {
+            return Some(*addr);
+        }
+    }
+    None
+}
+
+fn cache_dns(host: String, addr: [u8; 4], now: u64) {
+    let mut cache = DNS_CACHE.lock();
+    if cache.len() >= 64 {
+        cache.clear();
+    }
+    cache.insert(host, (addr, now.saturating_add(300_000)));
+}
+
 impl KernelTransport { fn new() -> Self { Self { admitted: false } } }
 impl Drop for KernelTransport {
     fn drop(&mut self) { if self.admitted { ACTIVE_JOBS.fetch_sub(1, core::sync::atomic::Ordering::Relaxed); } }
@@ -229,10 +265,10 @@ impl Transport for KernelTransport {
     fn endpoint(&mut self) -> Option<usize> {
         sys_get_time_ms()?;
         poll_cleanup();
-        if closing_count() >= 16 { return None; }
+        if closing_count() >= CLOSE_LIMIT { return None; }
         let endpoint = sys_lookup_service(api::syscall::service::NET)?;
         if ACTIVE_JOBS.fetch_update(core::sync::atomic::Ordering::Relaxed, core::sync::atomic::Ordering::Relaxed,
-            |count| (count < crate::budget::MAX_TABS).then_some(count + 1)).is_err() { return None; }
+            |count| (count < MAX_CONCURRENT_NET_JOBS).then_some(count + 1)).is_err() { return None; }
         self.admitted = true;
         Some(endpoint)
     }
@@ -241,7 +277,7 @@ impl Transport for KernelTransport {
     fn cancel(&mut self, operation: IpcOpId) { let _ = ipc::cancel(operation); }
     fn close(&mut self, endpoint: usize, cap: u64, tls: bool) { enqueue_close(endpoint, cap, tls); }
     fn cleanup(&mut self) { poll_cleanup(); }
-    fn cleanup_busy(&self) -> bool { closing_count() >= 16 }
+    fn cleanup_busy(&self) -> bool { closing_count() >= CLOSE_LIMIT }
     fn cleanup_error(&self) -> Option<&'static str> { cleanup_error() }
 }
 
@@ -261,7 +297,19 @@ impl FetchJob<KernelTransport> {
         recover_unaccepted_cleanup();
         Self::with_transport(url, limit, None, KernelTransport::new())
     }
+    #[allow(dead_code)]
     pub fn same_origin(url: &str, limit: usize, origin: &str) -> Result<Self, String> { Self::with_transport(url, limit, Some(origin.into()), KernelTransport::new()) }
+    pub fn same_site(url: &str, limit: usize, base_url: &str) -> Result<Self, String> {
+        let base = Url::parse(base_url)?;
+        let target = Url::parse(url)?;
+        if base.scheme == "https" && target.scheme == "http" {
+            return Err("Insecure mixed-content request blocked".into());
+        }
+        if !crate::resources::is_same_site(&base.host, &target.host) {
+            return Err("Cross-site resource request blocked".into());
+        }
+        Self::new(url, limit)
+    }
 }
 impl<T: Transport> FetchJob<T> {
     fn with_transport(url: &str, limit: usize, same_origin: Option<String>, mut io: T) -> Result<Self, String> {
@@ -271,7 +319,10 @@ impl<T: Transport> FetchJob<T> {
             Some(endpoint) => endpoint,
             None => return Err(io.cleanup_error().unwrap_or("Network service unavailable or cleanup queue busy; retry navigation after cleanup drains").into()),
         };
-        let mut job = Self { decoder: ResponseDecoder::new(limit, url.scheme == "gemini"), visited: alloc::vec![url.full.clone()], url, endpoint, deadline: io.now().saturating_add(LOAD_TICKS), stage: Stage::Resolve, pending: None, cap: None, request: Vec::new(), sent: 0, sent_chunk: 0, same_origin, address: None, io };
+        let now = io.now();
+        let cached_addr = cached_resolve(&url.host, now);
+        let stage = if cached_addr.is_some() { Stage::Connect } else { Stage::Resolve };
+        let mut job = Self { decoder: ResponseDecoder::new(limit, url.scheme == "gemini"), visited: alloc::vec![url.full.clone()], url, endpoint, deadline: now.saturating_add(LOAD_TICKS), stage, pending: None, cap: None, request: Vec::new(), sent: 0, sent_chunk: 0, same_origin, address: cached_addr, io };
         job.make_request(); Ok(job)
     }
     fn make_request(&mut self) {
@@ -359,6 +410,7 @@ impl<T: Transport> FetchJob<T> {
     fn response(&mut self, bytes: &[u8]) -> Result<(), String> {
         if self.stage == Stage::Resolve {
             let addr = match api::ipc::decode::<NetResponse>(bytes) { Ok(NetResponse::Addr(addr)) => addr, _ => return Err(format!("DNS resolution failed for {}", self.url.host)) };
+            cache_dns(self.url.host.clone(), addr, self.io.now());
             self.address = Some(addr); self.stage = Stage::Connect; return Ok(());
         }
         if self.stage == Stage::Connect {
@@ -422,7 +474,10 @@ struct Closing {
     // false: terminal outcome uncertain; no accepted close is retried.
     quarantine: Option<bool>,
 }
-const CLOSE_SLOTS: usize = 16 + crate::budget::MAX_TABS;
+#[cfg(feature = "desktop")]
+const CLOSE_SLOTS: usize = 128;
+#[cfg(not(feature = "desktop"))]
+const CLOSE_SLOTS: usize = 32;
 struct CloseQueue { slots: [Option<Closing>; CLOSE_SLOTS], cursor: usize }
 static CLOSING: ostd::sync::Mutex<CloseQueue> = ostd::sync::Mutex::new(CloseQueue { slots: [const { None }; CLOSE_SLOTS], cursor: 0 });
 fn closing_count() -> usize { CLOSING.lock().slots.iter().filter(|slot| slot.is_some()).count() }
@@ -493,7 +548,7 @@ fn enqueue_close(endpoint: usize, cap: u64, tls: bool) {
 pub fn poll_cleanup() {
     let mut queue = CLOSING.lock();
     // Four slots per UI turn, fixed storage and round-robin fairness.
-    for _ in 0..4 {
+    for _ in 0..CLEANUP_BATCH {
         let index = queue.cursor; queue.cursor = (index + 1) % CLOSE_SLOTS;
         let Some(job) = queue.slots[index].as_mut() else { continue; };
         if job.advance(&mut KernelTransport::new()) { queue.slots[index] = None; }

@@ -2,18 +2,46 @@
 //! Allocation limits shared by acquisition, parsers, and tab residency.
 use alloc::string::String;
 
-pub const MAX_TEXT_BYTES: usize = 1024 * 1024;
-pub const MAX_RESOURCE_BYTES: usize = 4 * 1024 * 1024;
+// Exactly one profile is compiled in; embedded never reserves the desktop arena.
+#[cfg(not(feature = "desktop"))]
+mod profile {
+    pub const PROFILE_NAME: &str = "embedded";
+    pub const HEAP_BYTES: usize = 16 * 1024 * 1024;
+    pub const MAX_RESIDENT_BYTES: usize = 8 * 1024 * 1024;
+    pub const MAX_TEXT_BYTES: usize = 1024 * 1024;
+    pub const MAX_RESOURCE_BYTES: usize = 4 * 1024 * 1024;
+    pub const MAX_CSS_BYTES: usize = 1024 * 1024;
+    pub const MAX_ENCODED_IMAGE_BYTES: usize = 4 * 1024 * 1024;
+    pub const MAX_REFERENCES: usize = 64;
+    pub const MAX_CSS_RULES: usize = 1024;
+    pub const MAX_CSS_SELECTORS: usize = 4096;
+    pub const MAX_IMAGES: usize = 16;
+    pub const MAX_IMAGE_PIXELS: usize = 1024 * 1024;
+    pub const MAX_IMAGE_TOTAL_BYTES: usize = 4 * 1024 * 1024;
+    pub const MAX_CONCURRENT_RESOURCE_FETCHES: usize = 4;
+}
+#[cfg(feature = "desktop")]
+mod profile {
+    pub const PROFILE_NAME: &str = "desktop";
+    pub const HEAP_BYTES: usize = 128 * 1024 * 1024;
+    pub const MAX_RESIDENT_BYTES: usize = 96 * 1024 * 1024;
+    pub const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
+    pub const MAX_RESOURCE_BYTES: usize = 32 * 1024 * 1024;
+    pub const MAX_CSS_BYTES: usize = 4 * 1024 * 1024;
+    pub const MAX_ENCODED_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+    pub const MAX_REFERENCES: usize = 1024;
+    pub const MAX_CSS_RULES: usize = 16_384;
+    pub const MAX_CSS_SELECTORS: usize = 65_536;
+    pub const MAX_IMAGES: usize = 512;
+    pub const MAX_IMAGE_PIXELS: usize = 4 * 1024 * 1024;
+    pub const MAX_IMAGE_TOTAL_BYTES: usize = 32 * 1024 * 1024;
+    pub const MAX_CONCURRENT_RESOURCE_FETCHES: usize = 24;
+}
+pub use profile::*;
 pub const MAX_DOM_NODES: usize = 16_384;
 pub const MAX_DOM_DEPTH: usize = 64;
-pub const MAX_CSS_RULES: usize = 1024;
-pub const MAX_CSS_SELECTORS: usize = 4096;
-pub const MAX_SELECTOR_BYTES: usize = 512;
-pub const MAX_IMAGES: usize = 16;
-pub const MAX_IMAGE_PIXELS: usize = 1024 * 1024;
-pub const MAX_IMAGE_TOTAL_BYTES: usize = 4 * 1024 * 1024;
+pub const MAX_SELECTOR_BYTES: usize = 1024;
 pub const MAX_TABS: usize = 4;
-pub const MAX_RESIDENT_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_TABLE_ROWS: usize = 1024;
 pub const MAX_TABLE_CELLS: usize = 4096;
 
@@ -22,7 +50,7 @@ pub fn validate_text(text: &str) -> Result<(), String> {
 }
 
 pub fn validate_css(css: &str) -> Result<(), String> {
-    validate_text(css)?;
+    if css.len() > MAX_CSS_BYTES { return Err(String::from("CSS exceeds byte budget")); }
     let mut rules=0usize;let mut selectors=0usize;let mut depth=0usize;
     let mut start=0usize;let mut quote=None;let mut escaped=false;let mut comment=false;
     let bytes=css.as_bytes();let mut i=0;
@@ -109,7 +137,21 @@ pub fn image_bytes(data: &[u8]) -> Result<usize, String> {
     } else if data.starts_with(b"\xff\xd8") {
         let mut decoder = zune_jpeg::JpegDecoder::new_with_options(ZCursor::new(data), DecoderOptions::new_safe());
         decoder.decode_headers().ok().and_then(|_| decoder.dimensions())
-    } else { None };
+    } else {
+        #[cfg(feature = "desktop")]
+        {
+            if data.starts_with(b"<svg")
+                || data.starts_with(b"<?xml")
+                || (data.len() > 10 && data[..data.len().min(256)].windows(4).any(|w| w == b"<svg"))
+            {
+                crate::image::svg::svg_dimensions(data)
+            } else {
+                None
+            }
+        }
+        #[cfg(not(feature = "desktop"))]
+        None
+    };
     let (w,h) = dimensions.ok_or_else(|| String::from("Unsupported or invalid image"))?;
     let pixels = w.checked_mul(h).filter(|p| *p > 0 && *p <= MAX_IMAGE_PIXELS).ok_or_else(|| String::from("Image exceeds pixel budget"))?;
     Ok(pixels * 4)
@@ -148,4 +190,44 @@ pub fn validate_markdown(text:&str)->Result<(),String> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ordinary_site_admission_depends_on_build_profile() {
+        let css = "p{color:black}\n".repeat(1_211);
+        assert_eq!(validate_css(&css).is_ok(), cfg!(feature = "desktop"));
+        let news = alloc::format!("<html><body>{}</body></html>", "<img src='/thumb.png'>".repeat(100));
+        assert_eq!(validate_html(&news).is_ok(), cfg!(feature = "desktop"));
+    }
+
+    #[test]
+    fn css_and_image_count_boundaries_still_reject_excess() {
+        assert!(validate_css(&"p{x:0}".repeat(MAX_CSS_RULES)).is_ok());
+        assert!(validate_css(&"p{x:0}".repeat(MAX_CSS_RULES + 1)).is_err());
+        assert!(validate_html(&"<img src='x'>".repeat(MAX_IMAGES)).is_ok());
+        assert!(validate_html(&"<img src='x'>".repeat(MAX_IMAGES + 1)).is_err());
+        let selectors = alloc::format!("{}{{x:0}}", alloc::vec!["p"; MAX_CSS_SELECTORS].join(","));
+        assert!(validate_css(&selectors).is_ok());
+        let selectors = alloc::format!("{}{{x:0}}", alloc::vec!["p"; MAX_CSS_SELECTORS + 1].join(","));
+        assert!(validate_css(&selectors).is_err());
+    }
+
+    #[test]
+    fn text_css_and_image_bytes_accept_boundary_and_reject_excess() {
+        assert!(validate_text(&" ".repeat(MAX_TEXT_BYTES)).is_ok());
+        assert!(validate_text(&" ".repeat(MAX_TEXT_BYTES + 1)).is_err());
+        assert!(validate_css(&" ".repeat(MAX_CSS_BYTES)).is_ok());
+        assert!(validate_css(&" ".repeat(MAX_CSS_BYTES + 1)).is_err());
+        let mut header = alloc::vec![0; 26];
+        header[..2].copy_from_slice(b"BM");
+        header[18..22].copy_from_slice(&(MAX_IMAGE_PIXELS as i32).to_le_bytes());
+        header[22..26].copy_from_slice(&1i32.to_le_bytes());
+        assert_eq!(image_bytes(&header).unwrap(), MAX_IMAGE_PIXELS * 4);
+        header[18..22].copy_from_slice(&((MAX_IMAGE_PIXELS + 1) as i32).to_le_bytes());
+        assert!(image_bytes(&header).is_err());
+    }
 }
