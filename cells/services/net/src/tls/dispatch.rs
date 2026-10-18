@@ -19,7 +19,8 @@ use core::future::Future;
 use core::ops::Bound::{Excluded, Unbounded};
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
-use ostd::syscall::{sys_get_time, sys_try_send, SyscallResult};
+use ostd::syscall::{sys_try_send, SyscallResult};
+use crate::service_runtime::sys_get_time;
 use smoltcp::{iface::{Interface, SocketHandle, SocketSet}, socket::tcp};
 
 const TCP_TIMEOUT: u64 = 150_000_000; // 15 seconds (sys_get_time: 10 MHz)

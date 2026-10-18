@@ -18,8 +18,14 @@
 ))]
 compile_error!("service-net: verified TLS excludes insecure, raw relay, and K1 fallback paths");
 
-#[cfg(all(feature = "verified-tls", not(feature = "tls-roots-embedded")))]
-compile_error!("service-net: verified TLS requires tls-roots-embedded");
+#[cfg(all(
+    feature = "verified-tls",
+    not(any(feature = "tls-roots-embedded", feature = "qemu-dev-https"))
+))]
+compile_error!("service-net: verified TLS requires a verifying TLS flavor");
+
+#[cfg(all(feature = "qemu-dev-https", not(target_arch = "x86_64")))]
+compile_error!("QEMU DEV HTTPS is qualified only for the x86_64 test image");
 
 extern crate alloc;
 

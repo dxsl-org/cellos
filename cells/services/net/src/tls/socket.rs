@@ -12,15 +12,18 @@ use alloc::string::String;
 use embedded_tls::{Aes128GcmSha256, TlsConfig, TlsConnection, TlsContext, TlsError};
 use smoltcp::iface::SocketHandle;
 
-#[cfg(feature = "tls-roots-embedded")]
+#[cfg(any(feature = "tls-roots-embedded", feature = "qemu-dev-https"))]
 use crate::tls::provider::ViTlsProvider;
 #[cfg(feature = "tls-insecure")]
 use embedded_tls::UnsecureProvider;
 
-#[cfg(not(any(feature = "tls-roots-embedded", feature = "tls-insecure")))]
+#[cfg(not(any(
+    feature = "tls-roots-embedded",
+    feature = "qemu-dev-https",
+    feature = "tls-insecure",
+)))]
 compile_error!(
-    "service-net: select a TLS flavor — `tls-roots-embedded` (verifying) or `tls-insecure` (dev only). \
-     `tls-roots-full` is not yet implemented (see plan phase-04)."
+    "service-net: select tls-roots-embedded (fleet), qemu-dev-https (public DEV), or tls-insecure."
 );
 
 const TLS_BUF: usize = 16640;
@@ -56,6 +59,8 @@ pub struct TlsSocketEntry {
 impl TlsSocketEntry {
     /// Consumes the hostname and owns all resources across suspended polls.
     pub async fn handshake(handle: SocketHandle, hostname: String) -> Result<Self, TlsError> {
+        #[cfg(feature = "qemu-dev-https")]
+        super::qemu_time::fresh_for_handshake().await?;
         let mut buffers = prepare_handshake_buffers()?;
         // SAFETY: both allocations live at stable heap addresses. `conn` is
         // destroyed before `buffers` on every path (including future drop while
@@ -70,7 +75,7 @@ impl TlsSocketEntry {
             TlsConfig::new().with_server_name(&hostname)
         };
 
-        #[cfg(feature = "tls-roots-embedded")]
+        #[cfg(any(feature = "tls-roots-embedded", feature = "qemu-dev-https"))]
         {
             if hostname.is_empty() {
                 return Err(TlsError::InvalidCertificate);

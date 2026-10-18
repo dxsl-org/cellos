@@ -87,17 +87,23 @@ pub fn handle_tls_raw(
     };
     match req {
         RawTlsRequest::Close { cap } => {
-            if let Some(handle) = table.remove(cap, owner) {
+            let ok = if let Some(handle) = table.remove(cap, owner) {
                 pending.cancel_cap(cap);
                 tls_table.remove(&cap);
                 sockets.remove(handle);
-                sys_send(sender, &[0x00]);
+                true
             } else {
-                sys_send(sender, &[0xFF]);
+                false
+            };
+            let reply = ReplyTo::capture(sender);
+            let code = if ok { [0x00] } else { [0xFF] };
+            match reply {
+                ReplyTo::Async(token) => { let _ = ostd::ipc::reply(token, &code); }
+                ReplyTo::Legacy(sender) => { sys_send(sender, &code); }
             }
         }
         RawTlsRequest::Connect { addr, port, hostname } => {
-            if !authenticated_time_available() {
+            if !cfg!(feature = "qemu-dev-https") && !authenticated_time_available() {
                 announce_tls_refusal_once();
                 send_connect_reply(sender, 0);
                 return;

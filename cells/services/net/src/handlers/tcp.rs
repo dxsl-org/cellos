@@ -251,7 +251,7 @@ pub(crate) fn handle_tcp_request(
                     sockets.get_mut::<tcp::Socket>(h).close();
                     table.begin_graceful_close(
                         cap,
-                        ostd::syscall::sys_get_time().saturating_add(100_000_000),
+                        crate::service_runtime::sys_get_time().saturating_add(100_000_000),
                     );
                 }
                 send_typed(sender, R::Ok);

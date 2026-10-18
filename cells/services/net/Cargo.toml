@@ -8,6 +8,7 @@ license.workspace = true
 # tls-roots-embedded : single pinned CA via pki::CertVerifier (G1 default, small)
 # tls-roots-full     : rustls-webpki multi-root (G2 server/PC, deferred to P04)
 # tls-insecure       : UnsecureProvider — no cert check, dev/lab only
+# qemu-dev-https    : public Mozilla roots, authenticated host time, QEMU DEV only
 #
 # CA selector (mutually exclusive, one must be active in embedded builds):
 # tls-ca-private     : fleet's own ECDSA P-256 CA (default; replace private.der)
@@ -27,6 +28,17 @@ loop-trace = []
 tls-roots-embedded = []
 tls-roots-full     = []   # deps wired in P04
 tls-insecure       = []
+# Explicit alternative to the fleet flavor; build with --no-default-features.
+# All certificate crypto is pure Rust, including RSA, for no_std guest targets.
+qemu-dev-https = [
+    "dep:webpki",
+    "dep:pki-types",
+    "dep:webpki-roots",
+    "dep:p256",
+    "dep:p384",
+    "dep:rsa",
+    "dep:ed25519-dalek",
+]
 verified-tls       = []
 raw-relay          = []
 k1-fallback        = []
@@ -48,6 +60,15 @@ embedded-io       = { version = "0.7",  default-features = false }
 embedded-io-async = { version = "0.7",  default-features = false }
 rand_core         = { version = "0.6",  default-features = false }
 rand_chacha       = { version = "0.3",  default-features = false }
+# Versions pin the verifier API and the Mozilla/CCADB trust-store snapshot.
+# No ring/aws-lc: their platform backends are not available in bare-metal cells.
+webpki = { package = "rustls-webpki", version = "=0.103.7", default-features = false, features = ["alloc"], optional = true }
+pki-types = { package = "rustls-pki-types", version = "=1.13.0", default-features = false, features = ["alloc"], optional = true }
+webpki-roots = { version = "=1.0.3", default-features = false, optional = true }
+p256 = { version = "0.13", default-features = false, features = ["ecdsa"], optional = true }
+p384 = { version = "0.13", default-features = false, features = ["ecdsa"], optional = true }
+rsa = { version = "0.9", default-features = false, features = ["sha2"], optional = true }
+ed25519-dalek = { version = "2.2", default-features = false, optional = true }
 smoltcp = { version = "0.11", default-features = false, features = [
     "alloc",
     "socket-tcp",

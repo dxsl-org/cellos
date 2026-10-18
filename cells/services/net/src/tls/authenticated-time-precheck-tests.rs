@@ -35,6 +35,7 @@ fn interface_config() -> Config {
 }
 
 #[test]
+#[cfg(not(feature = "qemu-dev-https"))]
 fn handler_rejects_before_allocating_tcp_capability() {
     LAST_CONNECT_REPLY.store(NO_CONNECT_REPLY, Ordering::Relaxed);
     let mut device = VirtioNetDevice::new();

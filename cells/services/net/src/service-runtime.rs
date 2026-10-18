@@ -9,7 +9,7 @@ use ostd::syscall::{sys_try_recv_attested, sys_yield};
 use ostd::syscall::{sys_wait_completion_detailed, WaitCompletionResult};
 use ostd::{
     io::println,
-    syscall::{sys_get_time, SyscallResult},
+    syscall::SyscallResult,
 };
 use smoltcp::{
     iface::{Config, Interface, SocketSet, SocketStorage},
@@ -96,6 +96,10 @@ pub(crate) fn next_ephemeral_port() -> u16 {
     }
     port
 }
+/// Normalize architecture-specific raw clocks to the NET 10 MHz timebase.
+pub(crate) fn sys_get_time() -> u64 {
+    ostd::syscall::sys_get_time_ms().unwrap_or(u64::MAX / 10_000).saturating_mul(10_000)
+}
 
 pub(crate) fn now_instant() -> Instant {
     Instant::from_micros((sys_get_time() / 10) as i64)
@@ -134,7 +138,7 @@ fn consume_ipc_burst_grace(remaining: &mut u8) -> bool {
     true
 }
 
-const DNS_QUERY_LIMIT: usize = 16;
+const DNS_QUERY_LIMIT: usize = 32;
 const DNS_QUERY_DEADLINE_TICKS: u64 = 30_000_000;
 
 struct PendingDns {
@@ -410,6 +414,8 @@ pub(crate) fn run() {
     let mut table = SocketTable::new();
     let mut tls_table: BTreeMap<u64, TlsSocketEntry> = BTreeMap::new();
     let mut tls_pending = crate::tls_handler::TlsPending::default();
+    #[cfg(feature = "qemu-dev-https")]
+    let mut dev_clock = crate::tls::qemu_time::ClockClient::default();
     let mut pending_ready: BTreeMap<SocketOwner, PendingReady> = BTreeMap::new();
     let mut pending_dns = heapless::Vec::<PendingDns, DNS_QUERY_LIMIT>::new();
     // Root TID and death-watch token. Worker TID exit is not root death.
@@ -524,6 +530,8 @@ pub(crate) fn run() {
                 last_poll_ticks = now;
             }
         }
+        #[cfg(feature = "qemu-dev-https")]
+        dev_clock.poll(&mut iface, &mut sockets, local_ip != [0; 4]);
         tls_pending.poll(&mut iface, &mut device, &mut sockets, &mut table, &mut tls_table);
         poll_resolves(&resolver, &mut pending_dns, &mut sockets);
         reap_graceful_closes(&mut table, &mut sockets);

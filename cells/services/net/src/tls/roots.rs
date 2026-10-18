@@ -1,8 +1,8 @@
-//! Single trust anchor for the embedded TLS verifier.
+//! Build-selected trust anchors: one fleet CA by default, public Mozilla roots
+//! only in the explicitly opted-in QEMU DEV flavor.
 //!
-//! `ca_cert()` returns the DER-encoded CA certificate selected at build time
-//! by the active `tls-ca-*` cargo feature.  Exactly one CA selector must be
-//! active; the compiler rejects zero or multiple via `compile_error!`.
+//! Fleet `ca_cert()` returns one DER CA selected by `tls-ca-*`. Public roots are
+//! never added to the fleet trust store.
 //!
 //! The returned `Certificate` borrows `'static` bytes embedded in the binary
 //! — no heap allocation.
@@ -102,6 +102,19 @@ static CA_DER: &[u8] = include_bytes!("../../roots/rsa-ca.der");
 ))]
 pub fn ca_cert() -> Certificate<&'static [u8]> {
     Certificate::X509(CA_DER)
+}
+
+/// Mozilla's public server-authentication roots, pinned by webpki-roots 1.0.3.
+///
+/// Provenance: https://github.com/rustls/webpki-roots/tree/v/1.0.3
+/// Generated there from Mozilla's IncludedCACertificateReportPEMCSV through
+/// https://www.ccadb.org/ (CDLA-Permissive-2.0). The registry crate includes
+/// each original PEM certificate and its SHA-256 fingerprint alongside the
+/// generated immutable trust anchor. Cargo.lock authenticates the crate bytes.
+/// No host OS trust store, local proxy root, or downloaded leaf is trusted.
+#[cfg(feature = "qemu-dev-https")]
+pub fn public_roots() -> &'static [pki_types::TrustAnchor<'static>] {
+    webpki_roots::TLS_SERVER_ROOTS
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

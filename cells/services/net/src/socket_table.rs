@@ -17,9 +17,9 @@ pub const HTTP_OWNER_BUDGET: usize = 258;
 pub const OTHER_OWNER_RESERVE: usize = 32;
 pub const MAX_SOCKETS: usize = HTTP_OWNER_BUDGET + OTHER_OWNER_RESERVE;
 
-/// Socket-set storage includes management sockets (DHCP and DNS) which are
-/// driven directly, without consumer capabilities.
-pub const SOCKET_SET_STORAGE: usize = MAX_SOCKETS + 2;
+/// Management sockets (DHCP, DNS and the optional QEMU host clock) are driven
+/// directly without consumer capabilities and cannot consume client quota.
+pub const SOCKET_SET_STORAGE: usize = MAX_SOCKETS + 2 + cfg!(feature = "qemu-dev-https") as usize;
 
 /// Attested owner of a socket capability: bound to CellId and cell generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

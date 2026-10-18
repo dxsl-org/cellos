@@ -394,12 +394,12 @@ impl VirtioNetDevice {
     /// mailbox, and every queued frame died with it. A bounded offer keeps the
     /// cell alive — a busy driver costs one turn, not the service.
     fn offer(tid: usize, request: &[u8]) -> bool {
-        let started = ostd::syscall::sys_get_time();
+        let started = crate::service_runtime::sys_get_time();
         loop {
             if matches!(sys_try_send(tid, request), SyscallResult::Ok(0)) {
                 return true;
             }
-            if ostd::syscall::sys_get_time().wrapping_sub(started)
+            if crate::service_runtime::sys_get_time().wrapping_sub(started)
                 >= DRV_ACCEPT_TIMEOUT_TICKS * DRIVER_TICKS_PER_SCHEDULER_TICK
             {
                 return false;
@@ -432,7 +432,7 @@ impl VirtioNetDevice {
     /// rediscovered, instead of parking TCP dispatch indefinitely.
     fn command(tid: usize, request: &[u8], reply: &mut [u8]) -> Option<u64> {
         DRV_COMMANDS.fetch_add(1, Ordering::Relaxed);
-        let now = ostd::syscall::sys_get_time();
+        let now = crate::service_runtime::sys_get_time();
         if !Self::offer(tid, request) {
             // Not a wedged driver: it is alive and mid-transfer. Keep the cached
             // tid, release any reply it is blocked on, and retry next turn.
@@ -457,12 +457,12 @@ impl VirtioNetDevice {
     /// At most one driver request is outstanding, so an untagged reply can never
     /// be matched to another opcode. Receive frames are pumped one per turn.
     pub fn pump_rx_split(&mut self) -> usize {
-        self.flush_l2_replies(ostd::syscall::sys_get_time());
+        self.flush_l2_replies(crate::service_runtime::sys_get_time());
         let Some(tid) = nic_driver_tid() else {
             if LEGACY_LOGS.fetch_add(1, Ordering::Relaxed) < 3 {
                 println("[net] NIC driver unavailable: legacy frame path");
             }
-            let now = ostd::syscall::sys_get_time();
+            let now = crate::service_runtime::sys_get_time();
             if let Some(sent) = self.tx_queue.pop_front() {
                 let accepted = sys_net_tx(&sent.bytes);
                 if let Some(target) = sent.reply {

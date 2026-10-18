@@ -1,11 +1,9 @@
 //! ViTlsClock — authenticated-time gate for relay mTLS.
 //!
-//! The platform/QEMU RTC is not authenticated and a process-local monotonic
-//! latch would reset on restart, so neither can establish certificate time.
-//! Until a protected authenticated time and persisted floor are supplied,
-//! [`observe`] always returns `None`. Connection and handshake entry points
-//! explicitly refuse that state before embedded-tls can treat `None` as
-//! permission to skip validity checks.
+//! The platform/QEMU RTC is not authenticated. Default/fleet builds refuse TLS
+//! until protected authenticated time is integrated. The explicit QEMU DEV
+//! profile trusts a local host companion to verify the independent time source
+//! and retain its floor outside guest snapshots; it does not protect host rollback.
 
 use embedded_tls::TlsClock;
 
@@ -17,11 +15,20 @@ fn reject_untrusted_time(_raw_rtc_secs: Option<u64>) -> Option<u64> {
     None
 }
 
-/// Return authenticated certificate time when the protected source exists.
-///
-/// Phase 3 deliberately has no such source, so relay TLS remains unavailable.
+/// Return authenticated certificate time, never raw platform wall time.
 pub fn observe() -> Option<u64> {
-    reject_untrusted_time(None)
+    #[cfg(feature = "qemu-dev-https")]
+    { super::qemu_time::observe() }
+    #[cfg(not(feature = "qemu-dev-https"))]
+    { reject_untrusted_time(None) }
+}
+
+/// Conservative certificate-validity bounds for the selected time authority.
+pub fn validity_window() -> Option<(u64, u64)> {
+    #[cfg(feature = "qemu-dev-https")]
+    { super::qemu_time::validity_window() }
+    #[cfg(not(feature = "qemu-dev-https"))]
+    { observe().map(|now| (now, now)) }
 }
 
 /// A TLS clock that remains unavailable until protected time is integrated.

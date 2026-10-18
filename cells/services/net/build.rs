@@ -28,28 +28,22 @@ fn emit_min_unix() {
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
 }
 
-/// Emit compile-time feature-guard diagnostics.
+/// Enforce the mutually exclusive TLS flavors and their trust-store selectors.
 ///
-/// Cargo features unify additively — a [features] entry alone cannot enforce
-/// mutual exclusion.  We generate a small Rust source snippet that the crate
-/// includes; the compile_error! macros make the compiler surface the conflict
-/// clearly with a line reference.
-///
-/// Guards enforced:
-///   1. At most one TLS flavor (tls-roots-embedded / tls-roots-full / tls-insecure).
-///   2. At most one CA selector (private / amazon / letsencrypt / rsa).
-///   3. tls-insecure must not be combined with any CA selector (insecure+verifying is a config error).
+/// Cargo features unify additively. In particular, QEMU DEV cannot widen the
+/// default fleet trust store: it requires disabling the default features.
 fn emit_feature_guards() {
     // Detect active features via CARGO_FEATURE_* env vars.
     let roots_embedded = std::env::var("CARGO_FEATURE_TLS_ROOTS_EMBEDDED").is_ok();
     let roots_full = std::env::var("CARGO_FEATURE_TLS_ROOTS_FULL").is_ok();
     let insecure = std::env::var("CARGO_FEATURE_TLS_INSECURE").is_ok();
+    let qemu_dev = std::env::var("CARGO_FEATURE_QEMU_DEV_HTTPS").is_ok();
     let ca_private = std::env::var("CARGO_FEATURE_TLS_CA_PRIVATE").is_ok();
     let ca_amazon = std::env::var("CARGO_FEATURE_TLS_CA_AMAZON").is_ok();
     let ca_letsencrypt = std::env::var("CARGO_FEATURE_TLS_CA_LETSENCRYPT").is_ok();
     let ca_rsa = std::env::var("CARGO_FEATURE_TLS_CA_RSA").is_ok();
 
-    let flavor_count = [roots_embedded, roots_full, insecure]
+    let flavor_count = [roots_embedded, roots_full, insecure, qemu_dev]
         .iter()
         .filter(|&&x| x)
         .count();
@@ -61,19 +55,18 @@ fn emit_feature_guards() {
     if flavor_count > 1 {
         panic!(
             "service-net: multiple TLS flavor features active \
-             (tls-roots-embedded, tls-roots-full, tls-insecure are mutually exclusive). \
+             (tls-roots-embedded, tls-roots-full, tls-insecure, qemu-dev-https are mutually exclusive). \
              Specify exactly one."
         );
     }
 
-    // A flavor that actually performs (or deliberately skips) the handshake must be
-    // selected. tls-roots-full is declared but unimplemented; building it — or building
-    // with no flavor — would skip verification silently. (haily-reviewer MAJOR-1.)
-    let usable_flavor = roots_embedded || insecure;
+    // The future full/fleet flavor is still unsupported. QEMU public PKI is
+    // deliberately a separate DEV-only selection rather than a fleet cutover.
+    let usable_flavor = roots_embedded || insecure || qemu_dev;
     if !usable_flavor {
         panic!(
             "service-net: no usable TLS flavor selected. Choose `tls-roots-embedded` \
-             (verifying) or `tls-insecure` (dev only). `tls-roots-full` is not yet implemented."
+             (fleet), `qemu-dev-https` (public DEV), or `tls-insecure` (dev only)."
         );
     }
 
@@ -93,11 +86,28 @@ fn emit_feature_guards() {
         );
     }
 
+    if qemu_dev && ca_count > 0 {
+        panic!(
+            "service-net: qemu-dev-https uses the public Mozilla trust store and cannot \
+             be combined with fleet tls-ca-* selectors. Build with --no-default-features."
+        );
+    }
+
+    if qemu_dev
+        && (std::env::var("CARGO_FEATURE_RAW_RELAY").is_ok()
+            || std::env::var("CARGO_FEATURE_K1_FALLBACK").is_ok())
+    {
+        panic!("service-net: qemu-dev-https excludes raw relay and K1 fallback paths");
+    }
+
     // Rerun when any of these features change (Cargo already does this, but be explicit).
     for var in &[
         "CARGO_FEATURE_TLS_ROOTS_EMBEDDED",
         "CARGO_FEATURE_TLS_ROOTS_FULL",
         "CARGO_FEATURE_TLS_INSECURE",
+        "CARGO_FEATURE_QEMU_DEV_HTTPS",
+        "CARGO_FEATURE_RAW_RELAY",
+        "CARGO_FEATURE_K1_FALLBACK",
         "CARGO_FEATURE_TLS_CA_PRIVATE",
         "CARGO_FEATURE_TLS_CA_AMAZON",
         "CARGO_FEATURE_TLS_CA_LETSENCRYPT",

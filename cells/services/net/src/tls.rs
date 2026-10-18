@@ -15,6 +15,10 @@
 //!   dispatch — deferred IPC operation scheduler
 
 pub mod clock;
+#[cfg(feature = "qemu-dev-https")]
+pub(crate) mod qemu_time;
+#[cfg(feature = "qemu-dev-https")]
+mod public_pki;
 pub mod dispatch;
 pub mod provider;
 #[cfg(test)]

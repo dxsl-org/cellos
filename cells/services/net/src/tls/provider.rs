@@ -1,8 +1,7 @@
-//! ViTlsProvider — verifying CryptoProvider for the embedded TLS build.
+//! ViTlsProvider — verifying CryptoProvider for fleet and QEMU DEV builds.
 //!
-//! Wraps a `pki::CertVerifier` (single CA anchor) and `ViTlsClock` so that
-//! every TLS handshake in the default build verifies the server certificate
-//! chain, validity dates, and hostname.
+//! The default fleet flavor wraps a single-CA `pki::CertVerifier`. The opt-in
+//! QEMU DEV flavor uses public WebPKI and the whole authenticated time window.
 //!
 //! # Security invariant (B3)
 //! `verifier()` MUST return `Ok` unconditionally.  `connection.rs:455` in
@@ -10,18 +9,21 @@
 //! — a single fallible path = silent MITM.  The unit test `verifier_always_ok`
 //! guards this property.
 //!
-//! This module is only compiled when `tls-roots-embedded` is active (i.e. not
-//! in `tls-insecure` builds).
+//! Neither flavor can silently fall back to an insecure verifier.
 
-#![cfg(feature = "tls-roots-embedded")]
+#![cfg(any(feature = "tls-roots-embedded", feature = "qemu-dev-https"))]
 
+#[cfg(feature = "tls-roots-embedded")]
 use crate::tls::clock::ViTlsClock;
 use crate::tls::rng::ViRng;
+#[cfg(feature = "tls-roots-embedded")]
 use crate::tls::roots::ca_cert;
+#[cfg(feature = "tls-roots-embedded")]
 use embedded_tls::pki::CertVerifier;
 use embedded_tls::CryptoRngCore;
 use embedded_tls::{Aes128GcmSha256, CryptoProvider, TlsError, TlsVerifier};
 
+#[cfg(feature = "tls-roots-embedded")]
 /// Cert buffer size for the leaf certificate held in-memory during handshake.
 /// 4096 bytes covers typical ECC certificates with SAN extensions.
 const CERT_SIZE: usize = 4096;
@@ -32,22 +34,26 @@ const CERT_SIZE: usize = 4096;
 /// Never stored as a global — the verifier holds per-connection transcript state.
 pub struct ViTlsProvider {
     rng: ViRng,
+    #[cfg(feature = "tls-roots-embedded")]
     verifier: CertVerifier<'static, Aes128GcmSha256, ViTlsClock, CERT_SIZE>,
+    #[cfg(feature = "qemu-dev-https")]
+    verifier: crate::tls::public_pki::PublicVerifier,
 }
 
 impl ViTlsProvider {
-    /// Build a provider anchored to the build-selected CA, with hostname verification.
+    /// Build the flavor-selected verifier with mandatory hostname validation.
     ///
-    /// `hostname` must match the server's certificate CN or SAN.  An empty
-    /// hostname is rejected by `handshake()` before this is called, so
-    /// `set_hostname_verification` here is always called with a non-empty value.
-    ///
-    /// # Errors
-    /// Returns `TlsError::InsufficientSpace` if `hostname` exceeds 64 characters
-    /// (the `pki::CertVerifier` limit documented in spike-00-findings.md).
+    /// Hostnames above the selected verifier's capacity fail before starting
+    /// the handshake (64 bytes for fleet; 253 bytes for public DNS).
     pub fn new(rng: ViRng, hostname: &str) -> Result<Self, TlsError> {
-        let mut verifier = CertVerifier::new(ca_cert());
-        verifier.set_hostname_verification(hostname)?;
+        #[cfg(feature = "tls-roots-embedded")]
+        let verifier = {
+            let mut verifier = CertVerifier::new(ca_cert());
+            verifier.set_hostname_verification(hostname)?;
+            verifier
+        };
+        #[cfg(feature = "qemu-dev-https")]
+        let verifier = crate::tls::public_pki::PublicVerifier::new(hostname)?;
         Ok(Self { rng, verifier })
     }
 }
