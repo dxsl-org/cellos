@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BITMAP_WORDS","CELL_VA_START","CELL_VA_STRIDE","MAX_SLOTS"],"fn":["alloc_cell_va","free_cell_va"],"static":["BUMP","FREE"]};
+window.SIDEBAR_ITEMS = {"constant":["BITMAP_WORDS","CELL_VA_START","CELL_VA_STRIDE","MAX_SLOTS"],"fn":["alloc_cell_va","free_cell_va","slot_end"],"static":["BUMP","FREE"]};

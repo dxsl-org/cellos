@@ -128,56 +128,61 @@
 <a href=#128 id=128 data-nosnippet>128</a>    };
 <a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">match </span>event {
 <a href=#130 id=130 data-nosnippet>130</a>        InputEvent::Key(<span class="kw">_</span>) =&gt; forward_key(buf, state),
-<a href=#131 id=131 data-nosnippet>131</a>        InputEvent::MouseMove { x, y, .. } =&gt; {
-<a href=#132 id=132 data-nosnippet>132</a>            cursor_state::update(
-<a href=#133 id=133 data-nosnippet>133</a>                x,
-<a href=#134 id=134 data-nosnippet>134</a>                y,
-<a href=#135 id=135 data-nosnippet>135</a>                state.hw_cursor,
-<a href=#136 id=136 data-nosnippet>136</a>                <span class="kw-2">&amp;mut </span>state.mouse_x,
-<a href=#137 id=137 data-nosnippet>137</a>                <span class="kw-2">&amp;mut </span>state.mouse_y,
-<a href=#138 id=138 data-nosnippet>138</a>                pending_dirty,
-<a href=#139 id=139 data-nosnippet>139</a>            );
-<a href=#140 id=140 data-nosnippet>140</a>            route_pointer(event, state, maximum, table, z_order, pending_dirty);
-<a href=#141 id=141 data-nosnippet>141</a>        }
-<a href=#142 id=142 data-nosnippet>142</a>        InputEvent::MouseButton { .. } | InputEvent::MouseScroll { .. } =&gt; {
-<a href=#143 id=143 data-nosnippet>143</a>            route_pointer(event, state, maximum, table, z_order, pending_dirty);
-<a href=#144 id=144 data-nosnippet>144</a>        }
-<a href=#145 id=145 data-nosnippet>145</a>    }
-<a href=#146 id=146 data-nosnippet>146</a>}
-<a href=#147 id=147 data-nosnippet>147</a>
-<a href=#148 id=148 data-nosnippet>148</a><span class="kw">fn </span>route_pointer(
-<a href=#149 id=149 data-nosnippet>149</a>    event: InputEvent,
-<a href=#150 id=150 data-nosnippet>150</a>    state: <span class="kw-2">&amp;mut </span>InputState,
-<a href=#151 id=151 data-nosnippet>151</a>    maximum: Rect,
-<a href=#152 id=152 data-nosnippet>152</a>    table: <span class="kw-2">&amp;mut </span>SurfaceTable,
-<a href=#153 id=153 data-nosnippet>153</a>    z_order: <span class="kw-2">&amp;mut </span>ZOrder,
-<a href=#154 id=154 data-nosnippet>154</a>    pending_dirty: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;Rect&gt;,
-<a href=#155 id=155 data-nosnippet>155</a>) {
-<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">let </span>(input_tid, compositor_tid) = (state.input_tid, state.compositor_tid);
-<a href=#157 id=157 data-nosnippet>157</a>    <span class="kw">let </span>old_decoration = state
-<a href=#158 id=158 data-nosnippet>158</a>        .pointer
-<a href=#159 id=159 data-nosnippet>159</a>        .selected_cap()
-<a href=#160 id=160 data-nosnippet>160</a>        .and_then(|cap| table.get(cap))
-<a href=#161 id=161 data-nosnippet>161</a>        .map(|surface| <span class="kw">crate</span>::window_decoration::bounds(surface.screen_rect()));
-<a href=#162 id=162 data-nosnippet>162</a>    state.pointer.route(
-<a href=#163 id=163 data-nosnippet>163</a>        event,
-<a href=#164 id=164 data-nosnippet>164</a>        state.mouse_x,
-<a href=#165 id=165 data-nosnippet>165</a>        state.mouse_y,
-<a href=#166 id=166 data-nosnippet>166</a>        RouteContext::new(maximum, table, z_order, |decoration| {
-<a href=#167 id=167 data-nosnippet>167</a>            queue_dirty(
-<a href=#168 id=168 data-nosnippet>168</a>                pending_dirty,
-<a href=#169 id=169 data-nosnippet>169</a>                old_decoration.map_or(decoration, |old| old.union(<span class="kw-2">&amp;</span>decoration)),
-<a href=#170 id=170 data-nosnippet>170</a>            );
-<a href=#171 id=171 data-nosnippet>171</a>            set_input_focus(input_tid, compositor_tid);
-<a href=#172 id=172 data-nosnippet>172</a>        }),
-<a href=#173 id=173 data-nosnippet>173</a>    );
-<a href=#174 id=174 data-nosnippet>174</a>}
-<a href=#175 id=175 data-nosnippet>175</a>
-<a href=#176 id=176 data-nosnippet>176</a><span class="doccomment">/// Re-send the key-event frame to the focused surface owner.
-<a href=#177 id=177 data-nosnippet>177</a></span><span class="kw">fn </span>forward_key(buf: <span class="kw-2">&amp;</span>[u8; <span class="number">512</span>], state: <span class="kw-2">&amp;</span>InputState) {
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span>owner = state.pointer.focused_owner();
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">if </span>owner != <span class="number">0 </span>{
-<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">let _ </span>= sys_send(owner, <span class="kw-2">&amp;</span>buf[..INPUT_FRAME_LEN]);
-<a href=#181 id=181 data-nosnippet>181</a>    }
-<a href=#182 id=182 data-nosnippet>182</a>}
+<a href=#131 id=131 data-nosnippet>131</a>        InputEvent::MouseMove { x, y, dx, dy } =&gt; {
+<a href=#132 id=132 data-nosnippet>132</a>            <span class="comment">// Rendering, stored position and client hit-testing must all use
+<a href=#133 id=133 data-nosnippet>133</a>            // the same on-screen pixel, including relative fallback at edges.
+<a href=#134 id=134 data-nosnippet>134</a>            </span><span class="kw">let </span>x = x.clamp(<span class="number">0</span>, maximum.w.saturating_sub(<span class="number">1</span>).min(i32::MAX <span class="kw">as </span>u32) <span class="kw">as </span>i32);
+<a href=#135 id=135 data-nosnippet>135</a>            <span class="kw">let </span>y = y.clamp(<span class="number">0</span>, maximum.h.saturating_sub(<span class="number">1</span>).min(i32::MAX <span class="kw">as </span>u32) <span class="kw">as </span>i32);
+<a href=#136 id=136 data-nosnippet>136</a>            <span class="kw">let </span>event = InputEvent::MouseMove { x, y, dx, dy };
+<a href=#137 id=137 data-nosnippet>137</a>            cursor_state::update(
+<a href=#138 id=138 data-nosnippet>138</a>                x,
+<a href=#139 id=139 data-nosnippet>139</a>                y,
+<a href=#140 id=140 data-nosnippet>140</a>                state.hw_cursor,
+<a href=#141 id=141 data-nosnippet>141</a>                <span class="kw-2">&amp;mut </span>state.mouse_x,
+<a href=#142 id=142 data-nosnippet>142</a>                <span class="kw-2">&amp;mut </span>state.mouse_y,
+<a href=#143 id=143 data-nosnippet>143</a>                pending_dirty,
+<a href=#144 id=144 data-nosnippet>144</a>            );
+<a href=#145 id=145 data-nosnippet>145</a>            route_pointer(event, state, maximum, table, z_order, pending_dirty);
+<a href=#146 id=146 data-nosnippet>146</a>        }
+<a href=#147 id=147 data-nosnippet>147</a>        InputEvent::MouseButton { .. } | InputEvent::MouseScroll { .. } =&gt; {
+<a href=#148 id=148 data-nosnippet>148</a>            route_pointer(event, state, maximum, table, z_order, pending_dirty);
+<a href=#149 id=149 data-nosnippet>149</a>        }
+<a href=#150 id=150 data-nosnippet>150</a>    }
+<a href=#151 id=151 data-nosnippet>151</a>}
+<a href=#152 id=152 data-nosnippet>152</a>
+<a href=#153 id=153 data-nosnippet>153</a><span class="kw">fn </span>route_pointer(
+<a href=#154 id=154 data-nosnippet>154</a>    event: InputEvent,
+<a href=#155 id=155 data-nosnippet>155</a>    state: <span class="kw-2">&amp;mut </span>InputState,
+<a href=#156 id=156 data-nosnippet>156</a>    maximum: Rect,
+<a href=#157 id=157 data-nosnippet>157</a>    table: <span class="kw-2">&amp;mut </span>SurfaceTable,
+<a href=#158 id=158 data-nosnippet>158</a>    z_order: <span class="kw-2">&amp;mut </span>ZOrder,
+<a href=#159 id=159 data-nosnippet>159</a>    pending_dirty: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;Rect&gt;,
+<a href=#160 id=160 data-nosnippet>160</a>) {
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">let </span>(input_tid, compositor_tid) = (state.input_tid, state.compositor_tid);
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">let </span>old_decoration = state
+<a href=#163 id=163 data-nosnippet>163</a>        .pointer
+<a href=#164 id=164 data-nosnippet>164</a>        .selected_cap()
+<a href=#165 id=165 data-nosnippet>165</a>        .and_then(|cap| table.get(cap))
+<a href=#166 id=166 data-nosnippet>166</a>        .map(|surface| <span class="kw">crate</span>::window_decoration::bounds(surface.screen_rect()));
+<a href=#167 id=167 data-nosnippet>167</a>    state.pointer.route(
+<a href=#168 id=168 data-nosnippet>168</a>        event,
+<a href=#169 id=169 data-nosnippet>169</a>        state.mouse_x,
+<a href=#170 id=170 data-nosnippet>170</a>        state.mouse_y,
+<a href=#171 id=171 data-nosnippet>171</a>        RouteContext::new(maximum, table, z_order, |decoration| {
+<a href=#172 id=172 data-nosnippet>172</a>            queue_dirty(
+<a href=#173 id=173 data-nosnippet>173</a>                pending_dirty,
+<a href=#174 id=174 data-nosnippet>174</a>                old_decoration.map_or(decoration, |old| old.union(<span class="kw-2">&amp;</span>decoration)),
+<a href=#175 id=175 data-nosnippet>175</a>            );
+<a href=#176 id=176 data-nosnippet>176</a>            set_input_focus(input_tid, compositor_tid);
+<a href=#177 id=177 data-nosnippet>177</a>        }),
+<a href=#178 id=178 data-nosnippet>178</a>    );
+<a href=#179 id=179 data-nosnippet>179</a>}
+<a href=#180 id=180 data-nosnippet>180</a>
+<a href=#181 id=181 data-nosnippet>181</a><span class="doccomment">/// Re-send the key-event frame to the focused surface owner.
+<a href=#182 id=182 data-nosnippet>182</a></span><span class="kw">fn </span>forward_key(buf: <span class="kw-2">&amp;</span>[u8; <span class="number">512</span>], state: <span class="kw-2">&amp;</span>InputState) {
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">let </span>owner = state.pointer.focused_owner();
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">if </span>owner != <span class="number">0 </span>{
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">let _ </span>= sys_send(owner, <span class="kw-2">&amp;</span>buf[..INPUT_FRAME_LEN]);
+<a href=#186 id=186 data-nosnippet>186</a>    }
+<a href=#187 id=187 data-nosnippet>187</a>}
 </code></pre></div></section></main></body></html>

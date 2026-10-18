@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_IMAGE_BYTES","MAX_REFERENCES","MAX_RESOURCE_BYTES"],"fn":["cached","load_binary","load_text","local_path","push_reference","read_local","references","replace","resolve"],"static":["ACTIVE"],"struct":["Reference","ResourceBundle","ResourceEntry"]};
+window.SIDEBAR_ITEMS = {"fn":["cached","is_ip_or_single_label","is_same_site","load_binary","load_text","local_path","push_reference","read_local","references","registrable_domain","replace","resolve"],"static":["ACTIVE"],"struct":["Reference","ResourceBundle","ResourceEntry"]};

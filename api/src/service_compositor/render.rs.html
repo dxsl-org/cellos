@@ -54,17 +54,19 @@
 <a href=#54 id=54 data-nosnippet>54</a>        <span class="kw">if </span>surface.screen_rect().intersects(<span class="kw-2">&amp;</span>dirty) {
 <a href=#55 id=55 data-nosnippet>55</a>            fb.blit_surface_clipped(surface, dirty);
 <a href=#56 id=56 data-nosnippet>56</a>        }
-<a href=#57 id=57 data-nosnippet>57</a>        <span class="kw">if </span>surface.is_window_managed() {
-<a href=#58 id=58 data-nosnippet>58</a>            fb.paint_window_decoration(surface.screen_rect(), dirty, <span class="prelude-val">Some</span>(cap) == selected_cap);
-<a href=#59 id=59 data-nosnippet>59</a>        }
-<a href=#60 id=60 data-nosnippet>60</a>    }
-<a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">for </span>cap <span class="kw">in </span>z_order.iter_bottom_to_top() {
-<a href=#62 id=62 data-nosnippet>62</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(surface) = table.get_mut(cap) {
-<a href=#63 id=63 data-nosnippet>63</a>            surface.clear_damage();
-<a href=#64 id=64 data-nosnippet>64</a>        }
-<a href=#65 id=65 data-nosnippet>65</a>    }
-<a href=#66 id=66 data-nosnippet>66</a>    fb.composite_cursor(cursor_x, cursor_y, dirty);
-<a href=#67 id=67 data-nosnippet>67</a>    fb.flush_rect(dirty);
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="prelude-val">Some</span>(dirty)
-<a href=#69 id=69 data-nosnippet>69</a>}
+<a href=#57 id=57 data-nosnippet>57</a>        <span class="kw">if </span>surface.is_window_managed()
+<a href=#58 id=58 data-nosnippet>58</a>            &amp;&amp; window_decoration::bounds(surface.screen_rect()).intersects(<span class="kw-2">&amp;</span>dirty)
+<a href=#59 id=59 data-nosnippet>59</a>        {
+<a href=#60 id=60 data-nosnippet>60</a>            fb.paint_window_decoration(surface.screen_rect(), dirty, <span class="prelude-val">Some</span>(cap) == selected_cap);
+<a href=#61 id=61 data-nosnippet>61</a>        }
+<a href=#62 id=62 data-nosnippet>62</a>    }
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">for </span>cap <span class="kw">in </span>z_order.iter_bottom_to_top() {
+<a href=#64 id=64 data-nosnippet>64</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(surface) = table.get_mut(cap) {
+<a href=#65 id=65 data-nosnippet>65</a>            surface.clear_damage();
+<a href=#66 id=66 data-nosnippet>66</a>        }
+<a href=#67 id=67 data-nosnippet>67</a>    }
+<a href=#68 id=68 data-nosnippet>68</a>    fb.composite_cursor(cursor_x, cursor_y, dirty);
+<a href=#69 id=69 data-nosnippet>69</a>    fb.flush_rect(dirty);
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="prelude-val">Some</span>(dirty)
+<a href=#71 id=71 data-nosnippet>71</a>}
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["observe","reject_untrusted_time"],"struct":["ViTlsClock"]};
+window.SIDEBAR_ITEMS = {"fn":["observe","reject_untrusted_time","validity_window"],"struct":["ViTlsClock"]};

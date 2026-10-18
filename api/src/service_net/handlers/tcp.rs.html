@@ -251,7 +251,7 @@
 <a href=#251 id=251 data-nosnippet>251</a>                    sockets.get_mut::&lt;tcp::Socket&gt;(h).close();
 <a href=#252 id=252 data-nosnippet>252</a>                    table.begin_graceful_close(
 <a href=#253 id=253 data-nosnippet>253</a>                        cap,
-<a href=#254 id=254 data-nosnippet>254</a>                        ostd::syscall::sys_get_time().saturating_add(<span class="number">100_000_000</span>),
+<a href=#254 id=254 data-nosnippet>254</a>                        <span class="kw">crate</span>::service_runtime::sys_get_time().saturating_add(<span class="number">100_000_000</span>),
 <a href=#255 id=255 data-nosnippet>255</a>                    );
 <a href=#256 id=256 data-nosnippet>256</a>                }
 <a href=#257 id=257 data-nosnippet>257</a>                send_typed(sender, R::Ok);

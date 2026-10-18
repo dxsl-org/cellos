@@ -18,28 +18,23 @@
 <a href=#18 id=18 data-nosnippet>18</a>    <span class="kw">let </span>old = rect(<span class="kw-2">*</span>mouse_x, <span class="kw-2">*</span>mouse_y);
 <a href=#19 id=19 data-nosnippet>19</a>    <span class="kw-2">*</span>mouse_x = x;
 <a href=#20 id=20 data-nosnippet>20</a>    <span class="kw-2">*</span>mouse_y = y;
-<a href=#21 id=21 data-nosnippet>21</a>    ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
-<a href=#22 id=22 data-nosnippet>22</a>        <span class="string">"[compositor] cursor at {},{}"</span>,
-<a href=#23 id=23 data-nosnippet>23</a>        <span class="kw-2">*</span>mouse_x,
-<a href=#24 id=24 data-nosnippet>24</a>        <span class="kw-2">*</span>mouse_y
-<a href=#25 id=25 data-nosnippet>25</a>    ));
-<a href=#26 id=26 data-nosnippet>26</a>    <span class="kw">if </span>hw_cursor {
-<a href=#27 id=27 data-nosnippet>27</a>        <span class="kw">let _ </span>= sys_gpu_cursor(<span class="number">1</span>, core::ptr::null(), <span class="kw-2">*</span>mouse_x <span class="kw">as </span>u32, <span class="kw-2">*</span>mouse_y <span class="kw">as </span>u32, <span class="number">0</span>, <span class="number">0</span>);
-<a href=#28 id=28 data-nosnippet>28</a>        <span class="kw">return</span>;
-<a href=#29 id=29 data-nosnippet>29</a>    }
-<a href=#30 id=30 data-nosnippet>30</a>    <span class="kw">let </span>dirty = old.union(<span class="kw-2">&amp;</span>rect(<span class="kw-2">*</span>mouse_x, <span class="kw-2">*</span>mouse_y));
-<a href=#31 id=31 data-nosnippet>31</a>    <span class="kw-2">*</span>pending_dirty = <span class="prelude-val">Some</span>(<span class="kw">match </span>pending_dirty.take() {
-<a href=#32 id=32 data-nosnippet>32</a>        <span class="prelude-val">Some</span>(previous) =&gt; previous.union(<span class="kw-2">&amp;</span>dirty),
-<a href=#33 id=33 data-nosnippet>33</a>        <span class="prelude-val">None </span>=&gt; dirty,
-<a href=#34 id=34 data-nosnippet>34</a>    });
-<a href=#35 id=35 data-nosnippet>35</a>}
-<a href=#36 id=36 data-nosnippet>36</a>
-<a href=#37 id=37 data-nosnippet>37</a><span class="kw">fn </span>rect(x: i32, y: i32) -&gt; Rect {
-<a href=#38 id=38 data-nosnippet>38</a>    Rect {
-<a href=#39 id=39 data-nosnippet>39</a>        x,
-<a href=#40 id=40 data-nosnippet>40</a>        y,
-<a href=#41 id=41 data-nosnippet>41</a>        w: CURSOR_W,
-<a href=#42 id=42 data-nosnippet>42</a>        h: CURSOR_H,
-<a href=#43 id=43 data-nosnippet>43</a>    }
-<a href=#44 id=44 data-nosnippet>44</a>}
+<a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">if </span>hw_cursor {
+<a href=#22 id=22 data-nosnippet>22</a>        <span class="kw">let _ </span>= sys_gpu_cursor(<span class="number">1</span>, core::ptr::null(), <span class="kw-2">*</span>mouse_x <span class="kw">as </span>u32, <span class="kw-2">*</span>mouse_y <span class="kw">as </span>u32, <span class="number">0</span>, <span class="number">0</span>);
+<a href=#23 id=23 data-nosnippet>23</a>        <span class="kw">return</span>;
+<a href=#24 id=24 data-nosnippet>24</a>    }
+<a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">let </span>dirty = old.union(<span class="kw-2">&amp;</span>rect(<span class="kw-2">*</span>mouse_x, <span class="kw-2">*</span>mouse_y));
+<a href=#26 id=26 data-nosnippet>26</a>    <span class="kw-2">*</span>pending_dirty = <span class="prelude-val">Some</span>(<span class="kw">match </span>pending_dirty.take() {
+<a href=#27 id=27 data-nosnippet>27</a>        <span class="prelude-val">Some</span>(previous) =&gt; previous.union(<span class="kw-2">&amp;</span>dirty),
+<a href=#28 id=28 data-nosnippet>28</a>        <span class="prelude-val">None </span>=&gt; dirty,
+<a href=#29 id=29 data-nosnippet>29</a>    });
+<a href=#30 id=30 data-nosnippet>30</a>}
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a><span class="kw">fn </span>rect(x: i32, y: i32) -&gt; Rect {
+<a href=#33 id=33 data-nosnippet>33</a>    Rect {
+<a href=#34 id=34 data-nosnippet>34</a>        x,
+<a href=#35 id=35 data-nosnippet>35</a>        y,
+<a href=#36 id=36 data-nosnippet>36</a>        w: CURSOR_W,
+<a href=#37 id=37 data-nosnippet>37</a>        h: CURSOR_H,
+<a href=#38 id=38 data-nosnippet>38</a>    }
+<a href=#39 id=39 data-nosnippet>39</a>}
 </code></pre></div></section></main></body></html>
