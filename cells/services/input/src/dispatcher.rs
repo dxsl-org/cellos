@@ -12,9 +12,9 @@
 //!
 //! ## Send-failure handling
 //!
-//! Keyboard dispatch uses blocking IPC so pressure propagates upstream without
-//! dropping events. Mouse routing remains fire-and-forget through a separate
-//! cached compositor endpoint.
+//! Keyboard dispatch never blocks a slow focused consumer. Pointer dispatch
+//! stashes a full compositor queue's events, then the main loop retries before
+//! consuming more raw input. No synchronous Send/SetFocus IPC cycle is created.
 
 use api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE};
 use api::syscall::service;
@@ -43,6 +43,11 @@ pub struct Dispatcher {
     /// Cached compositor TID for mouse routing (0 = not yet resolved).
     /// Re-resolved lazily; reset to 0 when a send fails (compositor respawned).
     compositor_tid: usize,
+    // One raw input event emits one pointer event, except HID disconnect,
+    // which can release all three recognised mouse buttons in one batch.
+    pending_mouse: [Option<InputEvent>; 3],
+    mouse_head: usize,
+    mouse_len: usize,
 }
 
 impl Dispatcher {
@@ -53,6 +58,9 @@ impl Dispatcher {
             dropped: 0,
             fallback_tid: 0,
             compositor_tid: 0,
+            pending_mouse: [None; 3],
+            mouse_head: 0,
+            mouse_len: 0,
         }
     }
 
@@ -118,18 +126,60 @@ impl Dispatcher {
     /// soon as a non-GUI cell like the shell holds focus — the events land in
     /// a cell that ignores them and the cursor never moves.
     ///
-    /// The compositor TID is resolved lazily via the service registry and
-    /// re-resolved after a send failure (compositor death/respawn).
+    /// A full compositor queue must not discard movement/button/wheel events.
+    /// Stash the current raw-event batch; the main loop flushes it before reading
+    /// another batch. Retry is non-blocking, so endpoint death/restart is checked
+    /// on every scheduler turn and the outer watchdog heartbeat stays live.
     pub fn dispatch_mouse(&mut self, event: &InputEvent) {
-        if self.compositor_tid == 0 {
-            match sys_lookup_service(service::COMPOSITOR) {
-                Some(tid) => self.compositor_tid = tid,
-                None => return, // compositor not up yet — drop
+        if self.mouse_len == 0 {
+            self.compositor_tid = match sys_lookup_service(service::COMPOSITOR) {
+                Some(tid) => tid,
+                None => return, // no graphical consumer yet
+            };
+            if Self::try_send_event(self.compositor_tid, event).is_ok() {
+                return;
             }
         }
-        if Self::try_send_event(self.compositor_tid, event).is_err() {
-            self.compositor_tid = 0; // stale TID — re-resolve on next event
+        // Main stops consuming raw events as soon as this batch is stashed.
+        // The only multi-event batch is a HID disconnect (three mouse buttons).
+        assert!(self.mouse_len < self.pending_mouse.len());
+        let tail = (self.mouse_head + self.mouse_len) % self.pending_mouse.len();
+        self.pending_mouse[tail] = Some(*event);
+        self.mouse_len += 1;
+    }
+
+    pub fn has_pending_mouse(&self) -> bool {
+        self.mouse_len != 0
+    }
+
+    /// Retry in FIFO order without waiting inside the dispatcher. Returning
+    /// false applies backpressure to raw sources until the next scheduler turn.
+    pub fn flush_mouse(&mut self) -> bool {
+        if self.mouse_len == 0 {
+            return true;
         }
+        self.compositor_tid = match sys_lookup_service(service::COMPOSITOR) {
+            Some(tid) => tid,
+            None => {
+                // A dead compositor has no windows to deliver these events to.
+                // Do not prevent keyboard/console input during graphical restart.
+                self.compositor_tid = 0;
+                self.pending_mouse = [None; 3];
+                self.mouse_head = 0;
+                self.mouse_len = 0;
+                return true;
+            }
+        };
+        while self.mouse_len != 0 {
+            let event = self.pending_mouse[self.mouse_head].as_ref().unwrap();
+            if Self::try_send_event(self.compositor_tid, event).is_err() {
+                return false;
+            }
+            self.pending_mouse[self.mouse_head] = None;
+            self.mouse_head = (self.mouse_head + 1) % self.pending_mouse.len();
+            self.mouse_len -= 1;
+        }
+        true
     }
 
     /// Encode and try-send one mouse event to `target`.

@@ -139,7 +139,7 @@ fn paint_symbol(
 }
 
 fn paint_rect(pixels: &mut [u8], width: u32, height: u32, rect: Rect, dirty: Rect, color: [u8; 4]) {
-    let Some(rect) = clip_to_screen(intersect(rect, dirty), width, height) else {
+    let Some(rect) = intersect(rect, dirty).and_then(|r| clip_to_screen(r, width, height)) else {
         return;
     };
     let stride = width as usize * 4;
@@ -152,15 +152,42 @@ fn paint_rect(pixels: &mut [u8], width: u32, height: u32, rect: Rect, dirty: Rec
     }
 }
 
-fn intersect(a: Rect, b: Rect) -> Rect {
+fn intersect(a: Rect, b: Rect) -> Option<Rect> {
     let x = a.x.max(b.x);
     let y = a.y.max(b.y);
     let right = end(a.x, a.w).min(end(b.x, b.w));
     let bottom = end(a.y, a.h).min(end(b.y, b.h));
-    Rect {
-        x,
-        y,
-        w: right.saturating_sub(x) as u32,
-        h: bottom.saturating_sub(y) as u32,
+    if right <= x || bottom <= y {
+        None
+    } else {
+        Some(Rect {
+            x,
+            y,
+            w: (right - x) as u32,
+            h: (bottom - y) as u32,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disjoint_rects_never_underflow_to_bogus_decorations() {
+        let title = Rect { x: 124, y: 32, w: 1032, h: 28 };
+        let cursor_dirty = Rect { x: 200, y: 150, w: 16, h: 16 };
+        assert_eq!(intersect(title, cursor_dirty), None);
+
+        let mut pixels = alloc::vec![0u8; 1280 * 800 * 4];
+        paint_rect(&mut pixels, 1280, 800, title, cursor_dirty, TITLE_ACTIVE);
+        assert!(pixels.iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn overlapping_rects_compute_exact_intersection() {
+        let a = Rect { x: 10, y: 20, w: 100, h: 50 };
+        let b = Rect { x: 50, y: 40, w: 100, h: 50 };
+        assert_eq!(intersect(a, b), Some(Rect { x: 50, y: 40, w: 60, h: 30 }));
     }
 }

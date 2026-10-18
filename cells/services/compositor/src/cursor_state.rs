@@ -18,11 +18,6 @@ pub fn update(
     let old = rect(*mouse_x, *mouse_y);
     *mouse_x = x;
     *mouse_y = y;
-    ostd::io::println(&alloc::format!(
-        "[compositor] cursor at {},{}",
-        *mouse_x,
-        *mouse_y
-    ));
     if hw_cursor {
         let _ = sys_gpu_cursor(1, core::ptr::null(), *mouse_x as u32, *mouse_y as u32, 0, 0);
         return;

@@ -46,7 +46,8 @@ use modifier_state::ModifierState;
 use mouse_state::{btn_to_mouse_button, MouseState, BTN_LEFT};
 use ostd::io::{print, print_usize, println};
 use ostd::syscall::{
-    sys_get_time, sys_heartbeat, sys_lookup_service, sys_recv_timeout, sys_try_send, SyscallResult,
+    sys_get_resolution, sys_get_time, sys_heartbeat, sys_lookup_service, sys_recv_timeout,
+    sys_try_send, sys_yield, SyscallResult,
 };
 use virtio_device::{find_and_init_inputs, InputDevice};
 api::declare_manifest!(block_io = false, network = false, spawn = false);
@@ -62,7 +63,9 @@ api::declare_syscalls![
     RequestMmio,
     GrantAlloc,
     GrantFree,
-    LookupService
+    LookupService,
+    GpuGetResolution,
+    Yield
 ];
 
 /// Raw event type discriminant for keyboard events (kernel VirtIO push).
@@ -103,7 +106,8 @@ pub fn main() {
     println("[input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing");
 
     let mut modifiers = ModifierState::new();
-    let mut mouse = MouseState::new();
+    let (width, height) = sys_get_resolution();
+    let mut mouse = MouseState::new(width, height);
     let mut dispatcher = Dispatcher::new();
     let mut buf = [0u8; IPC_BUF_SIZE];
     // Last LED bitmap handed to the producers, so a lock key that is pressed and
@@ -131,6 +135,10 @@ pub fn main() {
 
     loop {
         sys_heartbeat(HEARTBEAT_TICKS);
+        if !dispatcher.flush_mouse() {
+            sys_yield();
+            continue;
+        }
 
         // Drain every VirtIO virtqueue before blocking.  This catches events
         // that arrived since the last iteration without waiting for the timeout.
@@ -143,6 +151,12 @@ pub fn main() {
                 &mut dispatcher,
                 &mut hid_devices,
             );
+            if dispatcher.has_pending_mouse() {
+                break;
+            }
+        }
+        if dispatcher.has_pending_mouse() {
+            continue;
         }
 
         // Block for at most one scheduler tick (≈10ms), or until a kernel/IPC
@@ -373,7 +387,10 @@ fn drain_virtio(
     dispatcher: &mut Dispatcher,
     hid_devices: &mut HidDeviceStates,
 ) {
-    while let Some(ev) = dev.try_get_event() {
+    while !dispatcher.has_pending_mouse() {
+        let Some(ev) = dev.try_get_event() else {
+            break;
+        };
         // Map Linux evdev event types → the same opcode encoding the kernel uses
         // in dispatch_pending, so handle_kernel_event processes them identically.
         let opcode: u8 = match ev.event_type {
@@ -422,7 +439,7 @@ fn handle_message(
 /// Wire format: `[opcode:1][code:4 LE][value:4 LE]`
 /// opcode 0 = EV_KEY (keyboard key or mouse button via BTN_* scancode ≥ 0x110)
 /// opcode 1 = EV_REL (relative mouse: REL_X/Y/WHEEL)
-/// opcode 2 = EV_ABS (absolute mouse: ABS_X/Y)
+/// opcode 2 = EV_ABS (absolute mouse: ABS_X/Y in guest framebuffer pixels)
 fn handle_kernel_event(
     buf: &[u8; IPC_BUF_SIZE],
     modifiers: &mut ModifierState,

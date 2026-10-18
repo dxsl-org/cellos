@@ -128,7 +128,12 @@ pub fn handle_input_event(
     };
     match event {
         InputEvent::Key(_) => forward_key(buf, state),
-        InputEvent::MouseMove { x, y, .. } => {
+        InputEvent::MouseMove { x, y, dx, dy } => {
+            // Rendering, stored position and client hit-testing must all use
+            // the same on-screen pixel, including relative fallback at edges.
+            let x = x.clamp(0, maximum.w.saturating_sub(1).min(i32::MAX as u32) as i32);
+            let y = y.clamp(0, maximum.h.saturating_sub(1).min(i32::MAX as u32) as i32);
+            let event = InputEvent::MouseMove { x, y, dx, dy };
             cursor_state::update(
                 x,
                 y,
