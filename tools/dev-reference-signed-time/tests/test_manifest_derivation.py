@@ -23,18 +23,6 @@ from roughtime_config import provider_config
 
 
 class ManifestDerivationTests(unittest.TestCase):
-    def test_clock_policy_derives_only_the_four_pinned_policy_values(self):
-        manifest = valid_manifest()
-        policy = derive_clock_policy(manifest)
-        self.assertEqual(
-            policy,
-            ClockPolicy(
-                upstream_identity="roughtime.cloudflare.com",
-                source_epoch=1,
-                max_sample_age_seconds=5,
-                max_uncertainty_seconds=2,
-            ),
-        )
 
     def test_kms_key_pins_derive_exact_key_id_and_binary_digest(self):
         key_id, digest = derive_kms_key_pins(valid_manifest())

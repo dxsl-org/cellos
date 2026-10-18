@@ -1,4 +1,4 @@
-"""Draft-11 request construction and strict Cloudflare response verification."""
+"""Draft-11 request construction and strict pinned-source response verification."""
 
 from dataclasses import dataclass
 import hashlib

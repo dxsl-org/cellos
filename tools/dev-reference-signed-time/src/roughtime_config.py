@@ -1,4 +1,4 @@
-"""Immutable Cloudflare Roughtime provider constants for draft-11."""
+"""Immutable time.txryan.com Roughtime provider constants for draft-11."""
 
 from base64 import b64decode
 from dataclasses import dataclass
@@ -6,9 +6,9 @@ from typing import Any, NoReturn
 
 PROVIDER_PROTOCOL = "roughtime-draft-11"
 PROVIDER_TRANSPORT = "udp"
-PROVIDER_HOST = "roughtime.cloudflare.com"
-PROVIDER_PORT = 2003
-PROVIDER_PUBLIC_KEY_BASE64 = "0GD7c3yP8xEc4Zl2zeuN2SlLvDVVocjsPSL8/Rl/7zg="
+PROVIDER_HOST = "time.txryan.com"
+PROVIDER_PORT = 2002
+PROVIDER_PUBLIC_KEY_BASE64 = "iBVjxg/1j7y1+kQUTBYdTabxCppesU/07D4PMDJk2WA="
 PROVIDER_PUBLIC_KEY = b64decode(PROVIDER_PUBLIC_KEY_BASE64, validate=True)
 PROVIDER_VERSION = 0x8000000B
 PROVIDER_TIMEOUT_MILLISECONDS = 2000

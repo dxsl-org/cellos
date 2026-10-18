@@ -1,6 +1,6 @@
 # ADR-0011: Use Cloudflare Roughtime for DEV_REFERENCE signed time
 
-- **Status:** Accepted — deployment blocked by provider incompatibility
+- **Status:** Superseded for upstream selection by [ADR-0026](./0026-use-txryan-roughtime-for-dev-signed-time.md); retained as historical protocol and incompatibility evidence.
 - **Date:** 2026-08-31
 
 ## Context

@@ -52,8 +52,8 @@ class RoughtimeTransportTests(unittest.TestCase):
     def test_resolves_once_selects_first_address_sends_once_and_receives_once(self):
         channel = FakeSocket()
         addresses = [
-            (socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP, "", ("192.0.2.1", 2003)),
-            (socket.AF_INET6, socket.SOCK_DGRAM, socket.IPPROTO_UDP, "", ("::1", 2003, 0, 0)),
+            (socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP, "", ("192.0.2.1", 2002)),
+            (socket.AF_INET6, socket.SOCK_DGRAM, socket.IPPROTO_UDP, "", ("::1", 2002, 0, 0)),
         ]
         with (
             patch("roughtime_adapter.socket.getaddrinfo", return_value=addresses) as resolve,
@@ -61,12 +61,12 @@ class RoughtimeTransportTests(unittest.TestCase):
         ):
             self.assertEqual(udp_exchange(provider_config(), self.request()), b"reply")
         resolve.assert_called_once_with(
-            "roughtime.cloudflare.com", 2003, family=socket.AF_UNSPEC,
+            "time.txryan.com", 2002, family=socket.AF_UNSPEC,
             type=socket.SOCK_DGRAM, proto=socket.IPPROTO_UDP,
         )
         create.assert_called_once_with(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         self.assertEqual(channel.calls[0:2], [
-            ("timeout", 2.0), ("connect", ("192.0.2.1", 2003)),
+            ("timeout", 2.0), ("connect", ("192.0.2.1", 2002)),
         ])
         self.assertEqual(sum(entry[0] == "send" for entry in channel.calls), 1)
         self.assertEqual(sum(entry[0] == "recv" for entry in channel.calls), 1)
@@ -74,8 +74,8 @@ class RoughtimeTransportTests(unittest.TestCase):
     def test_first_address_failure_never_tries_second(self):
         channel = FakeSocket(failure=OSError("secret"))
         addresses = [
-            (socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP, "", ("192.0.2.1", 2003)),
-            (socket.AF_INET6, socket.SOCK_DGRAM, socket.IPPROTO_UDP, "", ("::1", 2003, 0, 0)),
+            (socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP, "", ("192.0.2.1", 2002)),
+            (socket.AF_INET6, socket.SOCK_DGRAM, socket.IPPROTO_UDP, "", ("::1", 2002, 0, 0)),
         ]
         with (
             patch("roughtime_adapter.socket.getaddrinfo", return_value=addresses) as resolve,
@@ -98,7 +98,7 @@ class RoughtimeTransportTests(unittest.TestCase):
             (None, FakeSocket(sent=0), None),
             (None, FakeSocket(), OSError("dns secret")),
         )
-        address = [(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP, "", ("192.0.2.1", 2003))]
+        address = [(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP, "", ("192.0.2.1", 2002))]
         for resolved, channel, error in cases:
             with self.subTest(resolved=resolved, flags=channel.flags):
                 resolver = Mock(side_effect=error) if error else Mock(
@@ -115,7 +115,7 @@ class RoughtimeTransportTests(unittest.TestCase):
 
 class RoughtimeClockAdapterTests(unittest.TestCase):
     def policy(self, uncertainty=6):
-        return ClockPolicy("roughtime.cloudflare.com", 7, 2, uncertainty)
+        return ClockPolicy("time.txryan.com", 7, 2, uncertainty)
 
     def run_adapter(
         self, options=ResponseOptions(), *, policy=None, times=(10.0, 10.1),

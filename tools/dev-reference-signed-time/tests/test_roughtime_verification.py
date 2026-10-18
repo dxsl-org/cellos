@@ -1,4 +1,5 @@
 import unittest
+from base64 import b64decode
 from dataclasses import FrozenInstanceError, replace
 from unittest.mock import patch
 
@@ -8,8 +9,7 @@ from roughtime_verify import (
     RoughtimeVerificationError, VerifiedRoughtime, build_request, verify_response,
 )
 from roughtime_vector_support import (
-    BATCHED_NONCE, BATCHED_REPLY, BATCHED_REQUEST, CONFIG, NONCE,
-    OFFICIAL_CONFIG, OFFICIAL_NONCE, OFFICIAL_REPLY, OFFICIAL_REQUEST,
+    CONFIG, NONCE, SOURCE_NONCE, SOURCE_REPLY, SOURCE_REQUEST, SOURCE_VECTOR,
     ResponseOptions, exact_request, response_packet, vector,
 )
 
@@ -37,23 +37,39 @@ class RoughtimeVerificationTests(unittest.TestCase):
             result.radius = 4
         self.assertFalse(hasattr(result, "__dict__"))
 
-    def test_official_cloudflare_draft11_vector_matches_and_verifies(self):
-        with patch("roughtime_verify.validate_provider_config"):
-            request = build_request(OFFICIAL_NONCE, OFFICIAL_CONFIG)
-            result = verify_response(
-                OFFICIAL_REPLY, request, OFFICIAL_NONCE, OFFICIAL_CONFIG,
-            )
-        self.assertEqual(request, OFFICIAL_REQUEST)
-        self.assertEqual(result, VerifiedRoughtime(50, 5))
+    def test_pinned_source_capture_verifies_without_configuration_bypass(self):
+        result = verify_response(SOURCE_REPLY, SOURCE_REQUEST, SOURCE_NONCE)
+        self.assertEqual(
+            result, VerifiedRoughtime(SOURCE_VECTOR["midpoint"], SOURCE_VECTOR["radius"]),
+        )
+        changed_nonce = bytes((SOURCE_NONCE[0] ^ 1,)) + SOURCE_NONCE[1:]
+        with self.assertRaises(RoughtimeVerificationError):
+            verify_response(SOURCE_REPLY, build_request(changed_nonce), changed_nonce)
 
-    def test_official_cloudflare_batched_vector_verifies_nonempty_path(self):
-        with patch("roughtime_verify.validate_provider_config"):
-            request = build_request(BATCHED_NONCE, OFFICIAL_CONFIG)
-            result = verify_response(
-                BATCHED_REPLY, request, BATCHED_NONCE, OFFICIAL_CONFIG,
-            )
-        self.assertEqual(request, BATCHED_REQUEST)
-        self.assertEqual(result, VerifiedRoughtime(50, 5))
+    def test_four_leaf_proof_verifies_both_branch_directions(self):
+        # Fixed complete tree over NONCE, b"a"*32, b"b"*32, b"c"*32.
+        # The expected root is independent of the response fixture's path helper.
+        root = bytes.fromhex(
+            "caade35580e5c06cd4fc2134a6ca77c52a2a9880c53fab0c10d504693e34c63b"
+        )
+        cases = (
+            (NONCE, 0,
+             "046803cf80ef7feb18c4b5aa5168d6895c24ab3aa2f1b4071aa1662aa965df1fc"
+             "930e98afcc6ae47aa69cb577edcd9b8f6cca5eeb5249d494de3bfa4835d5c15"),
+            (b"b" * 32, 2,
+             "bedfbddb926658cb21ab09e4b9dbc6226bba59602d1da9e5c4a9635b597803d29"
+             "c112ac8272a6842561cf018c1de1098267707bd69e8e06f4ec64417a8ad1993"),
+        )
+        for nonce, index, path_hex in cases:
+            with self.subTest(index=index), patch("roughtime_verify.validate_provider_config"):
+                request = exact_request(nonce)
+                path = bytes.fromhex(path_hex)
+                options = ResponseOptions(nonce=nonce, index=index, path=path, root=root)
+                result = verify_response(response_packet(options), request, nonce, CONFIG)
+                self.assertEqual(result, VerifiedRoughtime(1_700_000_000, 3))
+                swapped = replace(options, path=path[32:] + path[:32])
+                with self.assertRaises(RoughtimeVerificationError):
+                    verify_response(response_packet(swapped), request, nonce, CONFIG)
 
     def test_nonce_version_and_exact_request_binding_fail_independently(self):
         self.assert_rejected(ResponseOptions(nonce=b"N" * 32))
@@ -131,6 +147,10 @@ class RoughtimeVerificationTests(unittest.TestCase):
             verify_response(b"", b"", NONCE, alternate)
         for change in (
             {"host": "example.com"}, {"transport": "tcp"},
+            {"host": "retired.invalid", "port": 2003,
+             "public_key": b"r" * 32},
+            {"host": "roughtime.se", "port": 2002,
+             "public_key": b64decode("S3AzfZJ5CjSdkJ21ZJGbxqdYP/SoE8fXKY0+aicsehI=")},
             {"protocol": "roughtime"}, {"port": 2004}, {"version": 1},
             {"timeout_milliseconds": 1}, {"request_message_bytes": 512},
             {"max_packet_bytes": 2048},

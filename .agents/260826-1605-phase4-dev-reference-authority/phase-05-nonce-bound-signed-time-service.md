@@ -21,14 +21,14 @@ tier: thinking
 
 ## Overview
 
-Build a self-contained DEV_REFERENCE signed-time deployment in one named AWS region: Regional API Gateway `POST /v1/time` → one Lambda → one DynamoDB allocator plus one external DynamoDB lineage table and separate AWS KMS P-256 response/lineage keys. Every new allocation performs one fresh nonce-bound UDP exchange with the manifest-pinned Cloudflare Roughtime draft-11 provider before policy admission. The service stops rather than signing through clock uncertainty, lineage-head mismatch, state conflict, dependency outage, or regional outage; it has no retry, second address/provider/region/table/key, holdover, host-clock, or stale-state fallback.
+Build a self-contained DEV_REFERENCE signed-time deployment in one named AWS region: Regional API Gateway `POST /v1/time` → one Lambda → one DynamoDB allocator plus one external DynamoDB lineage table and separate AWS KMS P-256 response/lineage keys. Every new allocation performs one fresh nonce-bound UDP exchange with the manifest-pinned time.txryan.com Roughtime draft-11 provider under ADR-0026 before policy admission. The service stops rather than signing through clock uncertainty, lineage-head mismatch, state conflict, dependency outage, or regional outage; it has no retry, second address/provider/region/table/key, holdover, host-clock, or stale-state fallback.
 
 ## Key Insights
 
 - AWS KMS authenticates this project-operated source; it does not prove that an unsigned Lambda host clock is correct.
 - DynamoDB serializes allocation but is not rollback-proof. The STM32 protected floors in Phase 6 must reject a freshly signed response from restored old server state.
 - A durable idempotency receipt may reproduce the identical committed payload after an ambiguous Lambda result; it is not a time cache and never extends expiry.
-- The upstream trust root is the manifest-pinned Cloudflare Roughtime long-term key, not DNS, UDP reachability, or the Lambda host clock. Runtime A/AAAA lookup only locates the one configured endpoint.
+- The upstream trust root is the manifest-pinned time.txryan.com Roughtime long-term key, not DNS, UDP reachability, or the Lambda host clock. Runtime A/AAAA lookup only locates the one configured endpoint. ADR-0026 records roughtime.se as a candidate only, never an automatic fallback; any existing Cloudflare lineage requires an explicit ADR-0012 epoch transition.
 
 ## Requirements
 
@@ -45,7 +45,7 @@ Build a self-contained DEV_REFERENCE signed-time deployment in one named AWS reg
 
 ## Architecture
 
-`STM32 signed request → Regional API Gateway → Lambda canonical verifier → external lineage-head check → one fresh Cloudflare Roughtime UDP exchange → clock-policy admission → DynamoDB allocator CAS+receipt → AWS KMS response Sign → STM32 protected verifier`.
+`STM32 signed request → Regional API Gateway → Lambda canonical verifier → external lineage-head check → one fresh time.txryan.com Roughtime UDP exchange → clock-policy admission → DynamoDB allocator CAS+receipt → AWS KMS response Sign → STM32 protected verifier`.
 
 CloudFormation owns one API, Lambda/version alias, response-signing key, allocator table, and a separate retained lineage table/key/transition role in the operator-named region. Runtime receives `DescribeTable` on both tables plus only enclosed transactional `GetItem`/`ConditionCheckItem` data access to the lineage table, `kms:GetPublicKey` for both keys, and `kms:Sign` only for the response key; it has no lineage `PutItem`/`UpdateItem`/`DeleteItem`. The transition role receives lineage-key signing, exact candidate source-epoch migration, and exact-head update only. Manifest schema 2 pins both table names/`TableId` UUIDs, both key identities/public-key digests, and the signed transition.
 
@@ -127,7 +127,7 @@ CloudFormation owns one API, Lambda/version alias, response-signing key, allocat
 - [x] Implement stateless clock-observation admission policy.
 - [x] Compose receipt-first signed-time handler orchestration with injected trusted boundaries.
 - [x] Bind every store response to the parsed request and snapshot epoch before KMS.
-- [x] Implement the configured authenticated clock gate as the strict, pinned Cloudflare Roughtime draft-11 provider-profile UDP adapter; generated-key tests plus official Apache-2.0 vectors 001 and non-empty-path 010 cover exact requests and authenticated response chains. One authenticated live response violated mandatory `NONC`/`RADI` rules, so live interoperability remains blocked.
+- [x] Implement the configured authenticated clock gate as the strict, pinned time.txryan.com Roughtime draft-11 UDP adapter under ADR-0026; generated-key tests, an authenticated selected-source capture and an independent four-leaf Merkle tree cover nonce binding and both branch directions without legacy-provider fixtures. The real verifier and adapter accepted fresh live replies from the replacement source. This does not establish deployed AWS service, protected runtime state or completed live epoch migration.
 - [x] Freeze strict canonical DEV_REFERENCE deployment-manifest schema.
 - [x] Freeze the non-deploying CloudFormation/IAM intended-resource harness.
 - [x] Review static IAM/key policies and DEV production-rejection handoff.

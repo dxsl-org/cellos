@@ -1,4 +1,4 @@
-"""Synchronous one-datagram Cloudflare Roughtime clock adapter."""
+"""Synchronous one-datagram pinned Roughtime clock adapter."""
 
 import math
 import os

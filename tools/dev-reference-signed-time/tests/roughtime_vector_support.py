@@ -131,28 +131,8 @@ def vector(options=ResponseOptions()):
     return CONFIG, request, response_packet(options)
 
 
-_fixture = Path(__file__).parents[1] / "vectors" / "cloudflare-roughtime-draft11-001.json"
-OFFICIAL_VECTOR = json.loads(_fixture.read_text(encoding="ascii"))
-OFFICIAL_REQUEST = (
-    bytes.fromhex(OFFICIAL_VECTOR["request_prefix"])
-    + b"\0" * OFFICIAL_VECTOR["request_zero_padding_bytes"]
-)
-OFFICIAL_REPLY = bytes.fromhex(OFFICIAL_VECTOR["reply"])
-OFFICIAL_NONCE = bytes.fromhex(OFFICIAL_VECTOR["nonce"])
-OFFICIAL_CONFIG = replace(
-    provider_config(),
-    public_key=public_bytes(Ed25519PrivateKey.from_private_bytes(
-        bytes.fromhex(OFFICIAL_VECTOR["root_key"]),
-    )),
-)
-
-_batched_fixture = (
-    Path(__file__).parents[1] / "vectors" / "cloudflare-roughtime-draft11-010.json"
-)
-BATCHED_VECTOR = json.loads(_batched_fixture.read_text(encoding="ascii"))
-BATCHED_REQUEST = (
-    bytes.fromhex(BATCHED_VECTOR["request_prefix"])
-    + b"\0" * BATCHED_VECTOR["request_zero_padding_bytes"]
-)
-BATCHED_REPLY = bytes.fromhex(BATCHED_VECTOR["reply"])
-BATCHED_NONCE = bytes.fromhex(BATCHED_VECTOR["nonce"])
+_fixture = Path(__file__).parents[1] / "vectors" / "txryan-roughtime-draft11.json"
+SOURCE_VECTOR = json.loads(_fixture.read_text(encoding="ascii"))
+SOURCE_REQUEST = bytes.fromhex(SOURCE_VECTOR["request"])
+SOURCE_REPLY = bytes.fromhex(SOURCE_VECTOR["reply"])
+SOURCE_NONCE = bytes.fromhex(SOURCE_VECTOR["nonce"])

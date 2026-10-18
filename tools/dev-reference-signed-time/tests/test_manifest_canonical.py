@@ -60,8 +60,8 @@ class ManifestCanonicalTests(unittest.TestCase):
         variants = (
             GOLDEN + b"x",
             GOLDEN.replace(
-                b"roughtime.cloudflare.com",
-                "roughtime.cloudflaré.com".encode("utf-8"),
+                b"time.txryan.com",
+                "time.txryán.com".encode("utf-8"),
             ),
             b"\xef\xbb\xbf" + GOLDEN,
             GOLDEN[:-1] + b"\xff",
