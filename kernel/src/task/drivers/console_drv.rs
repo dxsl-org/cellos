@@ -38,45 +38,39 @@ impl viConsole {
         }
         let mut received = false;
 
-        // Backpressure: relay any bytes that failed to post on a previous tick
-        // BEFORE reading new ones, so byte order is preserved. If the input
-        // service queue is still full, leave the backlog (and the HW FIFO)
-        // alone — QEMU's chardev applies TCP backpressure while the FIFO is
-        // full, so nothing is lost upstream either.
+        // Retain exactly the failed event and stop reading hardware until IPC
+        // accepts it. This keeps releases and packet ordering under backpressure
+        // without an allocating or unbounded kernel backlog.
         if input_tid != 0 {
             let mut pending = PENDING_ASCII.lock();
-            while let Some(&b) = pending.front() {
-                if relay_ascii_to_input(input_tid, b) {
-                    pending.pop_front();
+            if let Some(b) = *pending {
+                if !relay_ascii_to_input(input_tid, b) {
+                    return false;
+                }
+                *pending = None;
+                received = true;
+            }
+            #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+            {
+                let mut pending = PENDING_PS2.lock();
+                if let Some(event) = *pending {
+                    if !relay_evdev_to_input(input_tid, event.opcode, event.code, event.value) {
+                        return received;
+                    }
+                    *pending = None;
                     received = true;
-                } else {
-                    return received; // input queue still full — retry next tick
                 }
             }
         }
 
-        // Route rule: when the input service is online (input_tid != 0), relay
-        // bytes to it exclusively via EV_ASCII IPC — do NOT push to self.buffer.
-        // This prevents double delivery: the shell reads via input service events,
-        // and without this guard any app calling sys_read(fd=0) would also see the
-        // same bytes from self.buffer, causing duplicate input.
-        // When input service is offline (input_tid == 0), bytes go to self.buffer
-        // only, keeping the sys_read(fd=0) fallback path working for early boot.
-        //
-        // A failed relay (input service pending_msgs full during a paste-speed
-        // burst) parks the byte in PENDING_ASCII and stops draining — dropping
-        // it instead silently lost mid-line characters ("vappend /data/…" arrived
-        // as "vappend ta/…") whenever a burst outpaced the input service.
+        // Serial is text-only EV_ASCII; physical PS/2 keys use EV_KEY below.
+        // With no input service, retain the buffered sys_read(fd=0) fallback.
         macro_rules! route_byte {
             ($c:expr) => {
                 let c = $c;
                 if input_tid != 0 {
                     if !relay_ascii_to_input(input_tid, c) {
-                        let mut pending = PENDING_ASCII.lock();
-                        #[cfg(cellos_p01_trace)]
-                        let _semantic = crate::memory::heap::p01_owner::creation(None,
-                            crate::memory::heap::p01_owner::DRIVER_SHARED);
-                        pending.push_back(c);
+                        *PENDING_ASCII.lock() = Some(c);
                         return true; // stop draining; order preserved via backlog
                     }
                 } else {
@@ -153,32 +147,27 @@ impl viConsole {
             };
             route_byte!(c);
         }
-        // 1e. Poll standard PC PS/2 keyboard on x86_64.
-        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-        while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-            let Some(c) = crate::task::drivers::ps2_keyboard::poll() else {
-                break;
-            };
-            route_byte!(c);
-        }
-        // 1f. Poll standard PC PS/2 mouse on x86_64.
+        // 1e. A single PS/2 reader demultiplexes keyboard and AUX bytes. Never
+        // translate physical keys into ASCII while service-input owns input.
         #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
         if input_tid != 0 {
-            while let Some(event) = crate::task::drivers::ps2_keyboard::poll_mouse() {
-                match event {
-                    crate::task::drivers::ps2_keyboard::Ps2MouseEvent::Button { button, pressed } => {
-                        relay_evdev_to_input(input_tid, 0, button, pressed as i32);
-                    }
-                    crate::task::drivers::ps2_keyboard::Ps2MouseEvent::Move { dx, dy } => {
-                        if dx != 0 {
-                            relay_evdev_to_input(input_tid, 1, 0, dx);
-                        }
-                        if dy != 0 {
-                            relay_evdev_to_input(input_tid, 1, 1, dy);
-                        }
-                    }
+            // Bound work per tick even when the device continuously reports.
+            for _ in 0..64 {
+                let Some(event) = crate::task::drivers::ps2_keyboard::poll_event() else {
+                    break;
+                };
+                if !relay_evdev_to_input(input_tid, event.opcode, event.code, event.value) {
+                    *PENDING_PS2.lock() = Some(event);
+                    return true;
                 }
                 received = true;
+            }
+        } else {
+            while self.buffer.len() < Self::MAX_BUFFERED {
+                let Some(c) = crate::task::drivers::ps2_keyboard::poll() else {
+                    break;
+                };
+                route_byte!(c);
             }
         }
 
@@ -205,17 +194,20 @@ impl viConsole {
     }
 }
 
-/// Bytes whose EV_ASCII post failed because the input service's pending_msgs
-/// queue was full (paste-speed burst). Retried at the start of every poll()
-/// tick, in order, before any new FIFO bytes are consumed.
-static PENDING_ASCII: Spinlock<VecDeque<u8>> = Spinlock::new(VecDeque::new());
+/// One failed serial delivery. No further hardware bytes are consumed until it
+/// posts successfully; a fixed slot suffices and never allocates.
+static PENDING_ASCII: Spinlock<Option<u8>> = Spinlock::new(None);
+
+/// One failed typed delivery, including releases and individual motion axes.
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+static PENDING_PS2: Spinlock<Option<crate::task::drivers::ps2_keyboard::Ps2Event>> =
+    Spinlock::new(None);
 
 /// Relay a UART byte to the input service as one EV_ASCII press event.
 ///
-/// Uses the kernel's 64-message nonblocking post so short bursts are queued while
-/// the input service is blocked delivering a keyboard event to the focused cell.
-/// Longer bursts remain ordered in `PENDING_ASCII` and the IRQ RX ring until the
-/// input service catches up.
+/// Uses the kernel's bounded nonblocking mailbox so short bursts can be queued
+/// while the input service is delivering to the focused cell. A blocked byte
+/// remains in `PENDING_ASCII`; later bytes stay in the UART RX ring/FIFO.
 ///
 /// Returns `false` when the PRESS event could not be queued (input service
 /// pending_msgs full) — the caller must retain the byte and retry later. The

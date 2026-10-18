@@ -20,6 +20,7 @@ pub fn run_all() {
     test_spawn_path_no_leading_slash_rejected();
     test_spawn_path_too_long_rejected();
     test_spawn_path_valid_format_accepted();
+    test_pie_slot_admission_precedes_mapping();
     test_mem_label_neutralises_forged_install_path();
     test_mem_label_component_carries_no_separator();
     test_mem_label_grants_no_path_caps();
@@ -63,6 +64,48 @@ pub fn run_all() {
     #[cfg(feature = "test-hooks")]
     super::atomic_publication_tests::run_all();
     log::info!("[selftest] ELF-LOADER: PASS");
+}
+
+/// A desktop-sized BSS cannot trespass into an embedded slot, even if its
+/// neighbour has not been mapped yet. Boundary tests follow the selected slot.
+fn test_pie_slot_admission_precedes_mapping() {
+    let base = super::va_alloc::alloc_cell_va().expect("ELF selftest needs a VA slot");
+    let stride = super::va_alloc::CELL_VA_STRIDE;
+    let mut image = build_minimal_signed_elf([0; 64]);
+    image[16..18].copy_from_slice(&3u16.to_le_bytes()); // ET_DYN
+    image[80..88].copy_from_slice(&0u64.to_le_bytes());
+    image[104..112].copy_from_slice(&(stride as u64).to_le_bytes());
+    assert_eq!(super::va_alloc::slot_end(base), Some(base + stride));
+    assert!(super::va_alloc::slot_end(base + 1).is_none());
+    let elf = xmas_elf::ElfFile::new(&image).unwrap();
+    assert_eq!(super::elf::ElfLoader::preflight_pages(&elf, base).unwrap(), stride / 4096);
+
+    // An unaligned segment touching the final byte still fits exactly.
+    image[80..88].copy_from_slice(&1u64.to_le_bytes());
+    image[104..112].copy_from_slice(&((stride - 1) as u64).to_le_bytes());
+    let elf = xmas_elf::ElfFile::new(&image).unwrap();
+    assert_eq!(super::elf::ElfLoader::preflight_pages(&elf, base).unwrap(), stride / 4096);
+
+    image[104..112].copy_from_slice(&(stride as u64).to_le_bytes());
+    let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
+    let allocator = frames.as_mut().expect("ELF selftest needs frame allocator");
+    let before = allocator.used_frames();
+    assert!(matches!(super::ElfLoader.load_segments(&image, allocator, base),
+        Err(ViError::PermissionDenied)));
+    assert_eq!(allocator.used_frames(), before, "oversized PIE must not allocate frames");
+    assert!(crate::memory::paging::virt_to_phys(base).is_none());
+    drop(frames);
+
+    // The desktop arena itself is admitted only with the opt-in slot size.
+    image[80..88].copy_from_slice(&0u64.to_le_bytes());
+    image[104..112].copy_from_slice(&(128u64 * 1024 * 1024).to_le_bytes());
+    let elf = xmas_elf::ElfFile::new(&image).unwrap();
+    assert_eq!(super::elf::ElfLoader::preflight_pages(&elf, base).is_ok(), cfg!(feature = "large-cell-va"));
+    image[80..88].copy_from_slice(&u64::MAX.to_le_bytes());
+    let elf = xmas_elf::ElfFile::new(&image).unwrap();
+    assert!(matches!(super::elf::ElfLoader::preflight_pages(&elf, base), Err(ViError::InvalidInput)));
+    super::va_alloc::free_cell_va(base);
+    log::info!("  [ok] PIE slot boundaries reject oversized images before mapping");
 }
 
 // ─── spawn_from_path path validation ─────────────────────────────────────────

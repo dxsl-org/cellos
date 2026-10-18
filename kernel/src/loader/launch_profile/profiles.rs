@@ -21,11 +21,10 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
         | "/bin/silo" | "/bin/ai-test" | "/bin/silo-test" | "/bin/srv-test" | "/bin/supervisor"
         | "/bin/vfs" | "/bin/vfs-test" | "/bin/virtio-gpu" | "/bin/virtio-net"
         | "/bin/std-smoke" | "/bin/desktop" | "/bin/sshd"
-        // Ocel's Tier 2 JavaScript engine. `init` spawns and registers it at boot
-        // (boot.rs `spawn_optional_services`); the boot ceiling already gives it
-        // `CapSet::EMPTY`, so this edge grants init nothing but the ability to
-        // launch it, and the domain admission policy still decides whether it may
-        // run as a domain at all.
+        // Ocel's demand-only Tier 2 JavaScript engines. Init activates the exact
+        // fixed target on a document lease, not through the boot service plan.
+        // The empty boot ceiling grants no engine authority; domain admission
+        // independently decides whether the artifact may run in a private root.
         | "/bin/ocel-js"
         | "/bin/ocel-quickjs"
         // Isolated native PDF rasterizer; no additional capabilities.

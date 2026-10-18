@@ -1,6 +1,6 @@
 //! Virtual address allocator for PIE cells.
 //!
-//! Assigns each PIE cell a 32 MiB-aligned VA slot within the cell VA region
+//! Assigns each PIE cell one aligned VA slot within the cell VA region
 //! [CELL_VA_START, CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE).
 //!
 //! This region lives entirely below the SV39 user-half boundary (256 GiB), so
@@ -19,6 +19,11 @@ use core::sync::atomic::Ordering;
 #[cfg(target_arch = "riscv32")]
 use portable_atomic::AtomicU64;
 
+#[cfg(all(feature = "large-cell-va", target_pointer_width = "32"))]
+compile_error!("large-cell-va requires a 64-bit paged target");
+#[cfg(all(feature = "large-cell-va", feature = "cell-scale-experiment"))]
+compile_error!("large-cell-va cannot be combined with cell-scale-experiment: exceeds SV39 user half");
+
 /// Cell VA region start — 4 GiB (0x1_0000_0000).
 ///
 /// Must lie above ALL identity-mapped regions in the SAS:
@@ -29,7 +34,7 @@ use portable_atomic::AtomicU64;
 ///     4 GiB clears all of the above with room to spare and remains well inside
 ///     the SV39 user-half (256 GiB = 0x40_0000_0000).
 ///
-/// RISC-V medany: intra-cell refs are ≤32 MiB apart → always within ±2 GiB.
+/// RISC-V medany: even the 256 MiB desktop slot stays within ±2 GiB.
 ///
 /// RV32 Nano boots with SATP=0 (bare physical, no paging — see specs/04), so
 /// PIE cells never occur there and `alloc_cell_va` is never actually called;
@@ -39,12 +44,15 @@ const CELL_VA_START: usize = 0x1_0000_0000;
 #[cfg(target_arch = "riscv32")]
 const CELL_VA_START: usize = 0x2000_0000;
 
-/// Each cell slot is 32 MiB — same spacing as the old static VA assignments,
-/// large enough for code + data + stack for any current cell.
-const CELL_VA_STRIDE: usize = 0x200_0000;
+/// Embedded keeps the historical 32 MiB spacing. Desktop images opt in to a
+/// 256 MiB slot, sufficient for a 128 MiB static arena plus code and data.
+#[cfg(not(feature = "large-cell-va"))]
+pub(crate) const CELL_VA_STRIDE: usize = 32 * 1024 * 1024;
+#[cfg(feature = "large-cell-va")]
+pub(crate) const CELL_VA_STRIDE: usize = 256 * 1024 * 1024;
 
-/// Maximum simultaneous PIE cell slots — 512 × 32 MiB = 16 GiB of cell VA.
-/// Well within SV39 user half (256 GiB) and leaves room for future extensions.
+/// Maximum simultaneous PIE cell slots: normally 512 (16 GiB embedded or
+/// 128 GiB desktop). Both regions, starting at 4 GiB, fit SV39's user half.
 ///
 /// `cell-scale-experiment` raises this to 4096 slots (4096 × 32 MiB = 128 GiB of
 /// VA, still inside the user half) so the D5 scale measurement measures memory
@@ -53,6 +61,18 @@ const CELL_VA_STRIDE: usize = 0x200_0000;
 const MAX_SLOTS: usize = 4096;
 #[cfg(not(feature = "cell-scale-experiment"))]
 const MAX_SLOTS: usize = 512;
+
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE <= 0x40_0000_0000);
+
+/// Exclusive end of a valid reservation, shared by ELF admission and release.
+pub(crate) fn slot_end(base: usize) -> Option<usize> {
+    let offset = base.checked_sub(CELL_VA_START)?;
+    if !offset.is_multiple_of(CELL_VA_STRIDE) || offset / CELL_VA_STRIDE >= MAX_SLOTS {
+        return None;
+    }
+    base.checked_add(CELL_VA_STRIDE)
+}
 
 /// Number of AtomicU64 words needed to cover MAX_SLOTS bits.
 const BITMAP_WORDS: usize = MAX_SLOTS.div_ceil(64);
@@ -69,7 +89,7 @@ static BUMP: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::
 // the initialization semantics.
 static FREE: [AtomicU64; BITMAP_WORDS] = [const { AtomicU64::new(0) }; BITMAP_WORDS];
 
-/// Allocate a 32 MiB VA base for a new PIE cell.
+/// Allocate one profile-sized VA slot for a new PIE cell.
 ///
 /// Returns `None` when all slots are exhausted (unlikely in practice: 512 cells
 /// and the free list recycles dead cells' slots).
@@ -106,17 +126,10 @@ pub fn alloc_cell_va() -> Option<usize> {
 /// `base` must be a value previously returned by `alloc_cell_va`.
 /// Silently ignores invalid values (out of range or misaligned).
 pub fn free_cell_va(base: usize) {
-    if base < CELL_VA_START {
+    if slot_end(base).is_none() {
         return;
     }
-    let offset = base - CELL_VA_START;
-    if !offset.is_multiple_of(CELL_VA_STRIDE) {
-        return;
-    }
-    let slot = offset / CELL_VA_STRIDE;
-    if slot >= MAX_SLOTS {
-        return;
-    }
+    let slot = (base - CELL_VA_START) / CELL_VA_STRIDE;
     // Restore the bump cursor exactly when this is the most recently minted
     // slot. If another allocation raced ahead, publish it to the free bitmap.
     if BUMP

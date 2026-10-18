@@ -56,8 +56,6 @@ pub fn init() {
     // Init specific drivers
     input_irq_ack::init_driver(); // ACK-only shim; event routing is in input service Cell
     console_drv::init();
-    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-    ps2_keyboard::init();
     ramdisk::init_driver(); // RAM disk for embedded FAT32 (kernel self-hosted FS)
                             // Disable global interrupts during VirtIO init to prevent IRQ deadlocks.
                             // VirtIO block raises an IRQ on init; if the PLIC is enabled and the trap

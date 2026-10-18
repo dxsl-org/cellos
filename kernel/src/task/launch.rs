@@ -209,7 +209,8 @@ pub fn publish_prepared(
         // task becomes runnable, so a concurrent drain either linearizes before
         // this admission or is observed by it. A denial is final: no task, no
         // domain, and no SAS fallback.
-        let lease = crate::loader::domain_admission::admit_for_launch(state.granted)?;
+        let path = state.measurement.as_ref().map_or("", |measurement| measurement.path.as_str());
+        let lease = crate::loader::domain_admission::admit_for_launch(path, state.granted)?;
         if let (Some(ks), Some(us), Some(seg)) =
             (&task.kernel_stack, &task.user_stack, &task.segment_mem)
         {

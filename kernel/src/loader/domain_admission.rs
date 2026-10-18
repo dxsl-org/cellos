@@ -205,20 +205,42 @@ pub(crate) fn unenforceable_authority(caps: CapSet, requests_dma: bool) -> bool 
         || caps.supervisor
 }
 
+/// The browser profile is a two-factor opt-in: the image selects the feature,
+/// and a verified operator policy explicitly lists the capability-free engine.
+/// Missing, invalid or unresolved policy never authorizes this profile.
+#[cfg(all(feature = "browser-engine-profile", target_arch = "x86_64"))]
+pub(crate) fn browser_engine_policy_permitted() -> bool {
+    matches!(
+        crate::policy::lookup("/bin/ocel-quickjs"),
+        crate::policy::PolicyDecision::Permit(caps) if caps == CapSet::EMPTY
+    )
+}
+
+fn artifact_eligible(path: &str, granted: CapSet) -> bool {
+    if cfg!(feature = "browser-engine-profile") {
+        cfg!(target_arch = "x86_64") && path == "/bin/ocel-quickjs" && granted == CapSet::EMPTY
+    } else {
+        // The ordinary development profile retains its existing class gate.
+        true
+    }
+}
+
 /// Build the request for a domain-class launch from the state the loader holds.
 ///
 /// The only caller is `task::launch::publish_prepared`, the single publication
 /// point for ELF tasks; a second admission path would defeat ADR-0019 §2.1.
 pub(crate) fn evaluate_for_launch(
+    path: &str,
     granted: CapSet,
 ) -> Result<DomainAdmissionLease, DomainAdmissionDenial> {
     evaluate_domain_admission(DomainAdmissionRequest {
         // The quota reservation is taken before this call, so an unavailable
         // quota surfaces as `OutOfMemory` from the reservation itself.
         resource_quota_available: true,
-        // `is_domain` is the class decision (unsigned, FFI, UNTRUSTED) that the
-        // signature gate already made; authority is bounded below instead.
-        artifact_eligible: true,
+        // Class eligibility was established by the signature/manifest gate.
+        // The browser profile additionally allows only its exact reviewed path;
+        // other signed Tier 2 fixtures must not inherit this boot's enablement.
+        artifact_eligible: artifact_eligible(path, granted),
         copied_ipc_ready: architecture_covered(),
         requested_caps: granted,
         requests_dma: granted.pcie_driver || granted.platform || granted.usb_driver,
@@ -229,8 +251,8 @@ pub(crate) fn evaluate_for_launch(
 ///
 /// The audit record is what makes a refusal observable after the fact: a cell
 /// that never appears because admission refused it leaves no task to inspect.
-pub(crate) fn admit_for_launch(granted: CapSet) -> Result<DomainAdmissionLease, ViError> {
-    evaluate_for_launch(granted).map_err(|denial| {
+pub(crate) fn admit_for_launch(path: &str, granted: CapSet) -> Result<DomainAdmissionLease, ViError> {
+    evaluate_for_launch(path, granted).map_err(|denial| {
         crate::audit::log_event(
             crate::audit::AuditEvent::CellSpawnDenied,
             &crate::audit::encode_u32x2(0, denial.audit_code()),
@@ -593,4 +615,23 @@ fn frames_in_use() -> Option<usize> {
         .lock()
         .as_ref()
         .map(|allocator| allocator.used_frames())
+}
+
+#[cfg(test)]
+mod browser_profile_tests {
+    use super::*;
+
+    #[test]
+    fn browser_profile_admits_only_the_exact_capability_free_quickjs_path() {
+        let covered = cfg!(target_arch = "x86_64");
+        let profile = cfg!(feature = "browser-engine-profile");
+        assert_eq!(artifact_eligible("/bin/ocel-quickjs", CapSet::EMPTY), !profile || covered);
+        for path in ["", "/bin/ocel-js", "/bin/ocel-pdf", "/bin/tier2-smoke",
+            "/bin/tier2-exploit", "/bin/OCEL-QUICKJS", "/mem/ocel-quickjs"] {
+            assert_eq!(artifact_eligible(path, CapSet::EMPTY), !profile, "{path}");
+        }
+        let mut caps = CapSet::EMPTY;
+        caps.spawn = true;
+        assert_eq!(artifact_eligible("/bin/ocel-quickjs", caps), !profile);
+    }
 }

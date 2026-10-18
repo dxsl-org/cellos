@@ -8586,13 +8586,16 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             let n = if written > 0 {
                 written
             } else {
-                #[cfg(feature = "dev-weak-rng")]
+                #[cfg(all(
+                    feature = "dev-weak-rng",
+                    not(feature = "qemu-dev-https")
+                ))]
                 {
                     static WEAK_RNG_WARNED: core::sync::atomic::AtomicBool =
                         core::sync::atomic::AtomicBool::new(false);
                     if !WEAK_RNG_WARNED.swap(true, core::sync::atomic::Ordering::Relaxed) {
                         log::warn!(
-                            "[kernel] GetRandom: no VirtIO-RNG — serving WEAK xorshift32 \
+                            "[kernel] GetRandom: no hardware entropy — serving WEAK xorshift32 \
                              (dev-weak-rng). NOT cryptographically secure; never ship this."
                         );
                     }
@@ -8607,7 +8610,12 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     }
                     capped
                 }
-                #[cfg(not(feature = "dev-weak-rng"))]
+                // The QEMU HTTPS image must fail closed even when development
+                // defaults also enabled dev-weak-rng through feature unification.
+                #[cfg(any(
+                    not(feature = "dev-weak-rng"),
+                    feature = "qemu-dev-https"
+                ))]
                 0
             };
             if n > 0 {

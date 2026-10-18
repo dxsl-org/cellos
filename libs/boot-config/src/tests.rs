@@ -132,7 +132,7 @@ fn names_paths_and_reserved_bootstrap_are_bounded() {
 fn fixed_bootstrap_and_demand_only_registry_ownership_cannot_be_overridden() {
     for path in [
         "/bin/init", "/bin/block", "/bin/NVME", "/bin/ahci",
-        "/bin/ocel-js", "/bin/OCEL-PDF",
+        "/bin/ocel-js", "/bin/ocel-quickjs", "/bin/OCEL-QUICKJS", "/bin/OCEL-PDF",
     ] {
         assert!(cells(&format!("[[cells]]\nname='alias'\npath='{path}'\nenabled=false")).is_err(), "{path}");
     }

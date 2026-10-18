@@ -8,7 +8,7 @@
 #   - deploy/kubevirt/    (KubeVirt containerdisk Dockerfile and VM manifest)
 #
 # Usage:
-#   bash scripts/build-cloud-images.sh [--containerdisk [tag]]
+#   bash scripts/build-cloud-images.sh [--ocel-profile embedded|desktop] [--javascript] [--qemu-dev-https] [--containerdisk [tag]]
 #
 set -euo pipefail
 
@@ -18,9 +18,30 @@ cd "$REPO_ROOT"
 
 BUILD_CONTAINER=0
 CONTAINER_TAG="cellos-containerdisk:latest"
+KERNEL_FEATURES="policy-required"
+QEMU_DEV_HTTPS=0
+OCEL_PROFILE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --javascript)
+            # Explicit opt-in; the default fleet image keeps Tier 2 closed.
+            KERNEL_FEATURES="browser-engine-profile"
+            shift
+            ;;
+        --qemu-dev-https)
+            # Requires an embedded NET built with the matching opt-in feature.
+            QEMU_DEV_HTTPS=1
+            shift
+            ;;
+        --ocel-profile)
+            if [[ $# -lt 2 || ( "$2" != "embedded" && "$2" != "desktop" ) ]]; then
+                echo "ERROR: --ocel-profile requires embedded or desktop" >&2
+                exit 1
+            fi
+            OCEL_PROFILE="$2"
+            shift 2
+            ;;
         --containerdisk)
             BUILD_CONTAINER=1
             if [[ $# -gt 1 && ! "$2" =~ ^-- ]]; then
@@ -30,7 +51,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            echo "Usage: bash scripts/build-cloud-images.sh [--containerdisk [tag]]"
+            echo "Usage: bash scripts/build-cloud-images.sh [--ocel-profile embedded|desktop] [--javascript] [--qemu-dev-https] [--containerdisk [tag]]"
             exit 0
             ;;
         *)
@@ -39,6 +60,15 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if (( QEMU_DEV_HTTPS )); then
+    KERNEL_FEATURES="${KERNEL_FEATURES},qemu-dev-https"
+    echo "[build-cloud] QEMU DEV HTTPS: prepared NET must use qemu-dev-https; host time companion required."
+fi
+
+if [[ "$OCEL_PROFILE" == "desktop" ]]; then
+    KERNEL_FEATURES="${KERNEL_FEATURES},large-cell-va"
+fi
 
 # ── 1. Check prerequisites ───────────────────────────────────────────────────
 for tool in cargo xorriso qemu-img gcc; do
@@ -56,9 +86,23 @@ fi
 
 mkdir -p build deploy/kubevirt
 
+if [[ -n "$OCEL_PROFILE" ]]; then
+    OCEL_FEATURE_ARGS=()
+    if [[ "$OCEL_PROFILE" == "desktop" ]]; then
+        OCEL_FEATURE_ARGS=(--features desktop)
+    fi
+    echo "[build-cloud] Building and packaging Ocel profile: $OCEL_PROFILE"
+    RUSTFLAGS="-C relocation-model=pic" cargo build --release -p ocel \
+        --no-default-features "${OCEL_FEATURE_ARGS[@]}" \
+        --target x86_64-unknown-none -Z build-std=core,alloc
+    python3 scripts/cellos-sign --sign target/x86_64-unknown-none/release/ocel
+    python3 scripts/package-ocel-profile.py kernel/src/embedded-x86_64/kernel_fs.img \
+        target/x86_64-unknown-none/release/ocel
+fi
+
 # ── 2. Build kernel ──────────────────────────────────────────────────────────
 echo "[build-cloud] 1/4 Compiling Cellos x86_64 kernel (release)..."
-cargo build --release -p cellos-kernel --target x86_64-unknown-none --features policy-required
+cargo build --release -p cellos-kernel --target x86_64-unknown-none --features "$KERNEL_FEATURES"
 
 # ── 3. Build hybrid ISO ──────────────────────────────────────────────────────
 echo "[build-cloud] 2/4 Generating dual BIOS+UEFI image..."
@@ -71,6 +115,9 @@ echo "[build-cloud] 3/4 Injecting Limine BIOS MBR/GPT stages for disk boot..."
 echo "[build-cloud] 4/4 Converting to QEMU QCOW2 and VMware VMDK..."
 qemu-img convert -f raw -O qcow2 build/cellos-x86_64.iso build/cellos-x86_64.qcow2
 qemu-img convert -f raw -O vmdk -o subformat=monolithicSparse build/cellos-x86_64.iso build/cellos-x86_64.vmdk
+if [[ -n "$OCEL_PROFILE" ]]; then
+    cp build/cellos-x86_64.qcow2 "build/cellos-x86_64-${OCEL_PROFILE}.qcow2"
+fi
 
 # ── 5. Optional KubeVirt Containerdisk ───────────────────────────────────────
 if (( BUILD_CONTAINER )); then
@@ -96,11 +143,19 @@ echo "==========================================================================
 echo "  Cellos Guest VM Images Ready in build/:"
 echo "=========================================================================="
 ls -lh build/cellos-x86_64.iso build/cellos-x86_64.qcow2 build/cellos-x86_64.vmdk
+if [[ -n "$OCEL_PROFILE" ]]; then
+    echo "  Packaged Ocel memory profile: $OCEL_PROFILE"
+    echo "  Profile-specific disk: build/cellos-x86_64-${OCEL_PROFILE}.qcow2"
+fi
 echo
 echo "Target 1 — QEMU / KVM:"
-echo "  qemu-system-x86_64 -enable-kvm -machine q35 -m 512M \\"
+if (( QEMU_DEV_HTTPS )); then
+    echo "  Start trusted-host time first: python3 scripts/qemu-dev-time.py"
+    echo "  QEMU DEV only: retain host state outside guest snapshots; whole-host rollback excluded."
+fi
+echo "  qemu-system-x86_64 -enable-kvm -cpu host -machine q35,vmport=on -m 1024M \\"
 echo "    -drive file=build/cellos-x86_64.qcow2,format=qcow2,if=virtio \\"
-echo "    -netdev user,id=net0 -device virtio-net-pci,netdev=net0 -serial stdio"
+echo "    -netdev user,id=net0 -device e1000,netdev=net0 -serial stdio"
 echo
 echo "Target 2 — VMware Workstation / ESXi:"
 echo "  Attach build/cellos-x86_64.vmdk as SATA/AHCI disk, or build/cellos-x86_64.iso as CD-ROM."

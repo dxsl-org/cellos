@@ -88,8 +88,15 @@ pub(super) fn spawn_gated(
             }
         },
         None => {
-            // Unsigned cell. Under ADR-0015: Admitted to Tier 2 Paged Domain
-            true
+            // This explicitly selected image runs only signed browser engines;
+            // an advisory launch path must never authorize unsigned ELF bytes.
+            #[cfg(feature = "browser-engine-profile")]
+            return Err(ViError::PermissionDenied);
+            #[cfg(not(feature = "browser-engine-profile"))]
+            {
+                // Unsigned artifacts remain Tier 2 in the ordinary development profile.
+                true
+            }
         }
     };
 

@@ -22,10 +22,14 @@ compile_error!(
         feature = "dev-signing-key",
         feature = "dev-weak-rng",
         feature = "test-hooks",
+        feature = "qemu-dev-https",
         feature = "maintenance-mode"
     )
 ))]
 compile_error!("production relay kernel excludes development, test, and recovery features");
+
+#[cfg(all(feature = "qemu-dev-https", not(target_arch = "x86_64")))]
+compile_error!("QEMU DEV HTTPS requires the x86_64 hardware entropy implementation");
 
 extern crate alloc;
 
@@ -790,6 +794,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "x86_64")]
     {
         task::drivers::ramdisk::init_driver();
+        task::drivers::ps2_keyboard::init();
         // COM1 TX remains available without ACPI. RX IRQ requires the validated
         // MADT/HPET gate because it is routed through IOAPIC/LAPIC.
         if x86_timer_ready {
@@ -1217,11 +1222,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
         );
     }
-    // Tier 2 admission posture (ADR-0019 §2.3). The build feature selects the
-    // backend; this call is the enablement decision, and it is made explicitly
-    // per profile. A development build runs unsigned and FFI/UNTRUSTED cells in
-    // private domains; a fleet-secure profile leaves admission disabled, so a
-    // domain-class artifact is denied rather than silently admitted anywhere.
+    // Tier 2 admission posture (ADR-0019 §2.3). The backend alone does not
+    // authorize admission. Fleet profiles stay closed unless the explicit x86
+    // browser profile is selected; that profile also narrows every publication
+    // to the reviewed QuickJS artifact and requires its signed policy row.
     #[cfg(all(
         feature = "native-domains",
         any(
@@ -1229,7 +1233,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             target_arch = "aarch64",
             target_arch = "x86_64"
         ),
-        not(any(feature = "policy-required", feature = "production-relay-image"))
+        not(any(feature = "policy-required", feature = "production-relay-image", feature = "browser-engine-profile"))
     ))]
     {
         if crate::loader::domain_admission::enable_for_boot() {
@@ -1244,6 +1248,19 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             );
         }
     }
+    #[cfg(all(feature = "browser-engine-profile", target_arch = "x86_64"))]
+    {
+        if crate::loader::domain_admission::browser_engine_policy_permitted()
+            && crate::loader::domain_admission::enable_for_boot()
+        {
+            log_info("Tier 2 admission: ENABLED (browser engine profile, QuickJS only)");
+        } else {
+            log_info(
+                "Tier 2 admission: DISABLED (browser engine policy or x86 substrate gate) \
+                 — domain-class artifacts are denied",
+            );
+        }
+    }
     #[cfg(all(
         feature = "native-domains",
         any(
@@ -1251,7 +1268,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             target_arch = "aarch64",
             target_arch = "x86_64"
         ),
-        any(feature = "policy-required", feature = "production-relay-image")
+        any(feature = "policy-required", feature = "production-relay-image"),
+        not(all(feature = "browser-engine-profile", target_arch = "x86_64"))
     ))]
     {
         log_info("Tier 2 admission: DISABLED (fleet profile) — domain-class artifacts are denied");

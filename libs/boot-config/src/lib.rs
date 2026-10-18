@@ -233,7 +233,7 @@ fn validate_local(config: &CellConfig) -> Result<(), ConfigError> {
         const FIXED_NAMES: &[&str] = &["init", "vfs", "block", "nvme", "ahci"];
         const FIXED_PATHS: &[&str] = &[
             "/bin/init", "/bin/vfs", "/bin/block", "/bin/nvme", "/bin/ahci",
-            "/bin/ocel-js", "/bin/ocel-pdf",
+            "/bin/ocel-js", "/bin/ocel-quickjs", "/bin/ocel-pdf",
         ];
         if FIXED_NAMES.iter().any(|name| cell.name.eq_ignore_ascii_case(name))
             || FIXED_PATHS.iter().any(|path| cell.path.eq_ignore_ascii_case(path))

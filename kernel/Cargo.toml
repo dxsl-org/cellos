@@ -79,6 +79,10 @@ dev-signing-key = []
 # default: without it GetRandom fails closed (returns 0 bytes), so crypto callers
 # (net TLS ViRng, net-broker BrokerRng) panic instead of using predictable bytes.
 dev-weak-rng = []
+# Opt-in x86_64 QEMU HTTPS image: GetRandom never falls back to dev-weak-rng,
+# even when Cargo's additive feature unification also enables default features.
+# Requires CPUID-advertised RDSEED/RDRAND; unsupported/exhausted CPUs fail closed.
+qemu-dev-https = []
 # Fleet-secure posture: an ABSENT or unlisted policy is fail-closed (deny all
 # grantable caps) instead of dev-permissive. Off in G1 (dev-permissive default).
 policy-required = []
@@ -97,6 +101,10 @@ maintenance-mode = []
 # scripts/qemu-cell-scale.sh. NEVER a shipped image: the raised ceilings are
 # unqualified, they exist to be measured.
 cell-scale-experiment = []
+# Opt-in desktop images: 256 MiB PIE slots instead of the embedded 32 MiB.
+# VA reservation only; ELF segments still consume their actual physical frames.
+# Incompatible with 32-bit targets and cell-scale-experiment (SV39 region bound).
+large-cell-va = []
 # QEMU `virt -m 1G` direct-kernel lane. QEMU's ELF loader may omit x0/DTB,
 # so the fallback map cannot discover RAM size at runtime.
 qemu-virt-1g = []
@@ -122,8 +130,12 @@ board-x86-pc = []
 board-rpi3 = ["hal/board-rpi3"]
 # The same board, trimmed to its bring-up drivers (see cellos-boards).
 board-rpi3-bring-up = ["board-rpi3", "cellos-boards/bring-up-drivers"]
-# Enables the unpublished RV64 private-root substrate. Admission remains policy-off.
+# Compile the private-root substrate; admission is selected separately at boot.
 native-domains = []
+# Explicit x86 Ocel image opt-in, never a fleet default. Only the reviewed,
+# signed, capability-free /bin/ocel-quickjs domain may launch, and only with its
+# exact empty-capability row in a verified POLICY.BIN.
+browser-engine-profile = ["native-domains", "policy-required", "signing-required"]
 # Phase-07 gate for warm snapshot capture/restore. The writer/reader format,
 # all-hart quiescence and restart story are unqualified today, so this stays out
 # of every default feature set: `serialize_snapshot` refuses before its first

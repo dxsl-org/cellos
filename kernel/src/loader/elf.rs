@@ -40,6 +40,37 @@ pub struct LoadedPage {
 }
 
 impl ElfLoader {
+    /// Validate every PIE extent before any mapping or page-metadata allocation.
+    /// A large BSS must never spill into the next cell's still-unmapped slot.
+    pub(super) fn preflight_pages(elf: &ElfFile<'_>, load_base: usize) -> ViResult<usize> {
+        let slot_end = if load_base == 0 {
+            None
+        } else {
+            Some(super::va_alloc::slot_end(load_base).ok_or(ViError::InvalidInput)?)
+        };
+        let mut pages = 0usize;
+        for ph in elf.program_iter() {
+            if !matches!(ph.get_type(), Ok(xmas_elf::program::Type::Load)) {
+                continue;
+            }
+            let relative = usize::try_from(ph.virtual_addr()).map_err(|_| ViError::InvalidInput)?;
+            let size = usize::try_from(ph.mem_size()).map_err(|_| ViError::InvalidInput)?;
+            let start = load_base.checked_add(relative).ok_or(ViError::InvalidInput)?;
+            let end = start.checked_add(size).ok_or(ViError::InvalidInput)?;
+            let page_start = start & !(crate::memory::paging::PAGE_SIZE - 1);
+            let page_end = end.checked_add(crate::memory::paging::PAGE_SIZE - 1)
+                .ok_or(ViError::InvalidInput)? & !(crate::memory::paging::PAGE_SIZE - 1);
+            if slot_end.is_some_and(|limit| start >= limit || page_start < load_base || page_end > limit) {
+                log::error!("ELF: PIE extent {:#x}..{:#x} exceeds reserved {} MiB slot",
+                    start, end, super::va_alloc::CELL_VA_STRIDE / (1024 * 1024));
+                return Err(ViError::PermissionDenied);
+            }
+            pages = pages.checked_add((page_end - page_start) / crate::memory::paging::PAGE_SIZE)
+                .ok_or(ViError::InvalidInput)?;
+        }
+        Ok(pages)
+    }
+
     /// Load loadable segments into memory.
     ///
     /// `load_base` is added to every segment's `p_vaddr` before mapping:
@@ -71,13 +102,8 @@ impl ElfLoader {
         // the infallible allocator, and a growth that cannot be satisfied halts
         // the kernel instead of failing the spawn (measured 2026-10-03: the growth
         // to 512 entries / 12 288 bytes is what ended the capacity sweep). One
-        // entry per mapped page, so summing the PT_LOAD pages is exact.
-        let page_bound: usize = elf
-            .program_iter()
-            .filter(|ph| matches!(ph.get_type(), Ok(xmas_elf::program::Type::Load)))
-            .filter_map(|ph| usize::try_from(ph.mem_size()).ok())
-            .map(|mem_size| mem_size.div_ceil(crate::memory::paging::PAGE_SIZE))
-            .sum();
+        // entry per mapped page; summing page-aligned PT_LOAD spans is an upper bound.
+        let page_bound = Self::preflight_pages(&elf, load_base)?;
         let mut mapped: alloc::vec::Vec<LoadedPage> = alloc::vec::Vec::new();
         mapped
             .try_reserve_exact(page_bound)
