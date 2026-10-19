@@ -51,3 +51,36 @@ const char *vios_js_to_bounded_string(JSContext *ctx, JSValue value, size_t limi
 }
 
 int abs(int v) { return v < 0 ? -v : v; }
+
+typedef JSValue (*ViosNativeLayout)(JSContext *, void *, uint32_t, const char *, size_t);
+static ViosNativeLayout native_layout_callback;
+
+static JSValue native_layout(JSContext *ctx, JSValueConst this_val,
+                            int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    uint32_t node;
+    if (argc != 2 || JS_ToUint32(ctx, &node, argv[0]) < 0)
+        return JS_ThrowTypeError(ctx, "Native layout requires node and mutations");
+    size_t length = 0;
+    const char *wire = vios_js_to_bounded_string(ctx, argv[1], 3 * 128 * 1024, &length);
+    if (!wire) return JS_ThrowRangeError(ctx, "Native layout mutation wire exceeds budget");
+    JSValue result = native_layout_callback(ctx, JS_GetContextOpaque(ctx), node, wire, length);
+    JS_FreeCString(ctx, wire);
+    return result;
+}
+
+void vios_js_install_native_layout(JSContext *ctx, void *opaque, ViosNativeLayout callback)
+{
+    native_layout_callback = callback;
+    JS_SetContextOpaque(ctx, opaque);
+    JSValue global = JS_GetGlobalObject(ctx);
+    JS_DefinePropertyValueStr(ctx, global, "__vios_nativeLayout",
+        JS_NewCFunction(ctx, native_layout, "__vios_nativeLayout", 2), 0);
+    JS_FreeValue(ctx, global);
+}
+
+JSValue vios_js_throw_error(JSContext *ctx, const char *message)
+{
+    return JS_ThrowInternalError(ctx, "%s", message);
+}

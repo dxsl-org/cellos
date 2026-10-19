@@ -56,17 +56,37 @@ pub fn is_same_site(host_a: &str, host_b: &str) -> bool {
     if a.eq_ignore_ascii_case(b) {
         return true;
     }
-    registrable_domain(a).eq_ignore_ascii_case(registrable_domain(b))
+    let a_lower; let b_lower;
+    let a = if a.bytes().any(|b| b.is_ascii_uppercase()) { a_lower = a.to_ascii_lowercase(); a_lower.as_str() } else { a };
+    let b = if b.bytes().any(|b| b.is_ascii_uppercase()) { b_lower = b.to_ascii_lowercase(); b_lower.as_str() } else { b };
+    match (registrable_domain(a), registrable_domain(b)) { (Some(a),Some(b)) => a == b, _ => false }
 }
 
-fn is_ip_or_single_label(host: &str) -> bool {
-    !host.contains('.') || host.bytes().all(|b| b.is_ascii_digit() || b == b'.' || b == b':')
+fn is_multi_part_suffix(sld: &str, tld: &str) -> bool {
+    if matches!((sld, tld),
+        ("github", "io") | ("gitlab", "io") | ("pages", "dev") | ("workers", "dev")
+        | ("vercel", "app") | ("netlify", "app") | ("appspot", "com")
+        | ("azurewebsites", "net") | ("herokuapp", "com") | ("myshopify", "com")
+    ) {
+        return true;
+    }
+    if tld.len() == 2 && tld.bytes().all(|b| b.is_ascii_alphabetic()) {
+        matches!(sld,
+            "co" | "com" | "net" | "org" | "edu" | "gov" | "ac" | "mil"
+            | "nic" | "res" | "gen" | "int" | "biz" | "info" | "pro"
+            | "gob" | "asso" | "nom" | "ltd" | "plc" | "ne" | "or" | "go" | "in" | "me"
+        )
+    } else {
+        false
+    }
 }
 
-pub fn registrable_domain(host: &str) -> &str {
+/// Public-suffix-aware registrable domain (eTLD+1). Public suffixes (e.g. `co.in`,
+/// `com`, `github.io`) have no registrant label and return `None`.
+pub fn registrable_domain(host: &str) -> Option<&str> {
     let host = host.trim().trim_end_matches('.');
-    if is_ip_or_single_label(host) {
-        return host;
+    if host.is_empty() || host.bytes().all(|b| b.is_ascii_digit() || b == b'.' || b == b':') {
+        return None;
     }
     let mut dot_indices = [0usize; 16];
     let mut count = 0;
@@ -77,29 +97,31 @@ pub fn registrable_domain(host: &str) -> &str {
         }
     }
     if count == 0 {
-        return host;
+        return None;
     }
     if count >= 2 {
         let last_dot = dot_indices[count - 1];
         let second_last_dot = dot_indices[count - 2];
-        let tld = &host[last_dot + 1..];
         let sld = &host[second_last_dot + 1..last_dot];
-        if matches!(tld, "vn" | "uk" | "jp" | "au" | "br" | "nz")
-            && matches!(sld, "com" | "net" | "org" | "edu" | "gov" | "co")
-        {
-            if count >= 3 {
-                let third_last_dot = dot_indices[count - 3];
-                return &host[third_last_dot + 1..];
+        let tld = &host[last_dot + 1..];
+        if is_multi_part_suffix(sld, tld) {
+            return if count >= 3 {
+                Some(&host[dot_indices[count - 3] + 1..])
             } else {
-                return host;
-            }
+                Some(host)
+            };
         }
     }
-    let prev_idx = if count >= 2 { dot_indices[count - 2] } else { 0 };
-    if count >= 2 {
-        &host[prev_idx + 1..]
+    let dot = dot_indices[count - 1];
+    let sld = if count >= 2 { &host[dot_indices[count - 2] + 1..dot] } else { &host[..dot] };
+    let tld = &host[dot + 1..];
+    if is_multi_part_suffix(sld, tld) {
+        return None;
+    }
+    if count == 1 {
+        Some(host)
     } else {
-        host
+        Some(&host[dot_indices[count - 2] + 1..])
     }
 }
 
@@ -124,6 +146,12 @@ pub fn resolve(base: &str, reference: &str) -> Result<String, String> {
 
     if let Some(target_url) = abs_ref {
         let (target_scheme, target_rest) = target_url.split_once("://").ok_or("Invalid resource URL")?;
+        if !matches!(target_scheme, "http" | "https" | "gemini" | "file")
+            || base_scheme == "file" && target_scheme != "file"
+            || base_scheme != "file" && target_scheme == "file"
+            || (base_scheme == "gemini") != (target_scheme == "gemini") {
+            return Err("Unsupported resource protocol change".into());
+        }
         if base_scheme == "https" && target_scheme == "http" {
             return Err("Insecure mixed content blocked".into());
         }
@@ -215,8 +243,26 @@ pub(crate) fn read_local(url: &str, limit: usize) -> Result<Vec<u8>, String> {
 }
 
 pub(crate) struct Reference { pub url: String, pub image: bool }
+fn is_noise_script_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    lower.contains("analytics")
+        || lower.contains("tracker")
+        || lower.contains("tracking")
+        || lower.contains("telemetry")
+        || lower.contains("gtag")
+        || lower.contains("facebook")
+        || lower.contains("doubleclick")
+        || lower.contains("adservice")
+        || lower.contains("criteo")
+        || lower.contains("clarity")
+        || lower.contains("hotjar")
+}
+
 fn push_reference(refs: &mut Vec<Reference>, base: &str, reference: &str, image: bool) -> Result<(), String> {
     let Ok(url) = resolve(base, reference) else { return Ok(()); }; // Cross-origin references are deliberately not fetched.
+    if !image && is_noise_script_url(&url) {
+        return Ok(());
+    }
     if let Some(index) = refs.iter().position(|item| item.url == url) {
         if image && !refs[index].image {
             if refs.iter().filter(|item| item.image).count() >= crate::budget::MAX_IMAGES { return Err("Document exceeds image resource budget".into()); }
@@ -289,6 +335,9 @@ mod tests {
         assert!(resolve("https://tuoitre.vn/", "https://evil.com/img.jpg").is_err());
         assert!(resolve("https://tuoitre.vn/", "https://tuoitre.vn.evil.com/img.jpg").is_err());
         assert!(resolve("https://tuoitre.vn/", "http://cdn2.tuoitre.vn/insecure.jpg").is_err());
+        assert!(resolve("https://host/index.html", "file://host/private.txt").is_err());
+        assert!(resolve("file:///data/index.html", "https://host/script.js").is_err());
+        assert!(resolve("https://host/index.html", "gemini://host/private").is_err());
     }
     #[test] fn local_paths_strip_url_suffix_before_decoding() {
         assert_eq!(local_path("file:///data/a%20b.md?q=x#toc").unwrap(), "/data/a b.md");

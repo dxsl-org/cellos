@@ -1,17 +1,28 @@
 // SPDX-License-Identifier: MIT
 //! Alloc-only CSS subset. Unsupported selectors/values are rejected, not broadened.
 //! This is not a CSS Syntax/Selectors conformance implementation.
-use alloc::{collections::BTreeMap, string::String, vec::Vec};
+use alloc::{collections::BTreeMap, rc::Rc, string::String, vec::Vec};
+use core::cell::RefCell;
 use dom_arena::{DocumentArena, NodeId};
 use taffy::prelude::*;
 use taffy::style::Overflow;
 use crate::draw::Color;
 pub const MAX_FONT_SIZE: f32 = 128.0;
 
+#[derive(Clone,Copy,Debug,Default,PartialEq,Eq)]
+pub(crate) enum CssPosition { #[default] Static, Relative, Absolute, Fixed }
+impl CssPosition {
+    pub(crate) fn out_of_flow(self)->bool{matches!(self,Self::Absolute|Self::Fixed)}
+}
+
 #[derive(Clone, Debug)]
 pub struct ComputedStyle {
     pub layout: Style,
+    pub(crate) calcs: Rc<RefCell<Vec<LinearCalc>>>,
+    pub(crate) position:CssPosition,
+    pub(crate) z_index:Option<i32>,
     pub inline: bool,
+    pub atomic_inline:bool,
     pub color: Color,
     pub background: Option<Color>,
     pub border_color: Color,
@@ -24,20 +35,26 @@ pub struct ComputedStyle {
     pub text_align: u8,
     pub pre: bool,
     pub wrap_pre: bool,
+    pub visible: bool,
 }
 impl ComputedStyle {
-    pub fn initial(parent: Option<&Self>, tag: &str) -> Self {
+    fn initial(parent: Option<&Self>, tag: &str, calcs:Rc<RefCell<Vec<LinearCalc>>>) -> Self {
         let mut s = Self {
             layout: Style { display: Display::Block, box_sizing: BoxSizing::ContentBox, ..Style::default() },
+            calcs,
+            position:CssPosition::Static,z_index:None,
             inline: matches!(tag, "a"|"span"|"b"|"strong"|"i"|"em"|"code"|"small"|"label"|"br"),
+            atomic_inline:false,
             color: Color::rgb(32,32,32), background: None, border_color: Color::rgb(32,32,32),
             font_size: 16.0, line_height: 20.0, bold: false, italic: false, mono: false, text_align: 0, pre: false, wrap_pre: false,
+            visible: true,
         };
         if let Some(p) = parent {
             s.color=p.color; s.font_size=p.font_size; s.line_height=p.line_height;
             s.bold=p.bold; s.italic=p.italic; s.pre=p.pre;
             s.wrap_pre=p.wrap_pre;
             s.mono=p.mono; s.text_align=p.text_align;
+            s.visible=p.visible;
         }
         if matches!(tag,"head"|"style"|"script"|"link"|"meta"|"title"|"template") { s.layout.display=Display::None; }
         if tag=="body" { s.layout.margin=Rect { left:length(8.0),right:length(8.0),top:length(8.0),bottom:length(8.0) }; }
@@ -58,7 +75,7 @@ struct Declaration { name:String, value:String, important:bool }
 #[derive(Clone)]
 struct Rule { selectors:Vec<String>, declarations:Vec<Declaration> }
 #[derive(Default)]
-pub struct Stylesheet { rules:Vec<Rule> }
+pub struct Stylesheet { rules:Vec<Rule>, calcs:Rc<RefCell<Vec<LinearCalc>>> }
 
 /// Split only at top level, preserving quoted strings and functions.
 fn split_top(input:&str, delimiter:char) -> Vec<&str> {
@@ -69,7 +86,7 @@ fn split_top(input:&str, delimiter:char) -> Vec<&str> {
         if let Some(q)=quote { if c==q {quote=None;} continue; }
         if c=='\''||c=='"' {quote=Some(c);continue;}
         if c=='('||c=='[' {depth+=1;} else if c==')'||c==']' {depth=depth.saturating_sub(1);}
-        else if c==delimiter && depth==0 {out.push(input[start..i].trim());start=i+c.len_utf8();}
+        else if (c==delimiter||(delimiter==' '&&c.is_ascii_whitespace())) && depth==0 {out.push(input[start..i].trim());start=i+c.len_utf8();}
     }
     out.push(input[start..].trim());out
 }
@@ -106,11 +123,11 @@ fn declarations(input:&str)->Vec<Declaration> {
         let value=stripped.trim();
         if value.is_empty() { continue; }
         // Expand spacing shorthands before cascading, so shorthand/longhand compete correctly.
-        if matches!(name.as_str(),"margin"|"padding"|"border-width") {
-            let words:Vec<_>=value.split_whitespace().collect(); if words.is_empty()||words.len()>4 {continue;}
+        if matches!(name.as_str(),"margin"|"padding"|"border-width"|"inset") {
+            let words:Vec<_>=split_top(value,' ').into_iter().filter(|v|!v.is_empty()).collect(); if words.is_empty()||words.len()>4 {continue;}
             let sides=[words[0],*words.get(1).unwrap_or(&words[0]),*words.get(2).unwrap_or(&words[0]),*words.get(3).unwrap_or(words.get(1).unwrap_or(&words[0]))];
             for (side,val) in ["top","right","bottom","left"].into_iter().zip(sides) {
-                let key=if name=="border-width" {alloc::format!("border-{}-width",side)} else {alloc::format!("{}-{}",name,side)};
+                let key=if name=="border-width" {alloc::format!("border-{}-width",side)} else if name=="inset"{String::from(side)}else{alloc::format!("{}-{}",name,side)};
                 out.push(Declaration{name:key,value:String::from(val),important});
             }
         } else if matches!(name.as_str(),"border-top"|"border-bottom"|"border-left"|"border-right") {
@@ -146,11 +163,12 @@ fn declarations(input:&str)->Vec<Declaration> {
                     out.push(Declaration{name:String::from("border-color"),value:String::from(*c),important});
                 }
             }
-        } else if name=="gap" {
-            let p:Vec<_>=value.split_whitespace().collect();
-            if (1..=2).contains(&p.len()) {for (key,v) in [("row-gap",p[0]),("column-gap",*p.get(1).unwrap_or(&p[0]))] {out.push(Declaration{name:String::from(key),value:String::from(v),important});}}
+        } else if name=="gap"||name=="overflow" {
+            let p:Vec<_>=split_top(value,' ').into_iter().filter(|v|!v.is_empty()).collect();
+            let keys=if name=="gap"{["row-gap","column-gap"]}else{["overflow-x","overflow-y"]};
+            if (1..=2).contains(&p.len()) {for (key,v) in [(keys[0],p[0]),(keys[1],*p.get(1).unwrap_or(&p[0]))] {out.push(Declaration{name:String::from(key),value:String::from(v),important});}}
         } else if name=="flex" {
-            let p:Vec<_>=value.split_whitespace().collect();
+            let p:Vec<_>=split_top(value,' ').into_iter().filter(|v|!v.is_empty()).collect();
             let expanded=match value {
                 "none"=>Some(("0","0","auto")), "auto"=>Some(("1","1","auto")),
                 _ if (1..=3).contains(&p.len()) && number(p[0]).is_some()=>Some((p[0],*p.get(1).unwrap_or(&"1"),*p.get(2).unwrap_or(&"0%"))),
@@ -212,8 +230,8 @@ impl Stylesheet {
         }
     }
     pub fn compute(&self,arena:&DocumentArena,id:NodeId,parent:Option<&ComputedStyle>,viewport:(u32,u32))->ComputedStyle {
-        let Some(node)=arena.get(id) else {return ComputedStyle::initial(parent,"");};
-        let mut style=ComputedStyle::initial(parent,node.tag().unwrap_or(""));
+        let Some(node)=arena.get(id) else {return ComputedStyle::initial(parent,"",self.calcs.clone());};
+        let mut style=ComputedStyle::initial(parent,node.tag().unwrap_or(""),self.calcs.clone());
         let mut winners:BTreeMap<&str,((bool,u32,u32,u32,u32,usize),&str)>=BTreeMap::new();
         let mut order=0;
         for rule in &self.rules {
@@ -225,6 +243,13 @@ impl Stylesheet {
         // Font size first: em dimensions and unitless line-height use the computed size.
         if let Some((_,v))=winners.get("font-size") {if let Some(n)=resolve_length(v,parent.map_or(16.0,|p|p.font_size),viewport) {if n>0.0 {style.font_size=n.min(MAX_FONT_SIZE);style.line_height=style.font_size*1.25;}}}
         for (name,(_,value)) in winners {apply(&mut style,name,value,viewport);}
+        if style.position==CssPosition::Static {style.layout.inset=Rect{left:auto(),right:auto(),top:auto(),bottom:auto()};}
+        let scrollable=|v|!matches!(v,Overflow::Visible|Overflow::Clip);
+        if scrollable(style.layout.overflow.x)||scrollable(style.layout.overflow.y) {
+            for axis in [&mut style.layout.overflow.x,&mut style.layout.overflow.y] {
+                if *axis==Overflow::Visible{*axis=Overflow::Scroll;}else if *axis==Overflow::Clip{*axis=Overflow::Hidden;}
+            }
+        }
         if node.get_attribute("hidden").is_some() {style.layout.display=Display::None;}
         style
     }
@@ -341,45 +366,69 @@ pub fn selector_specificity(arena:&DocumentArena,id:NodeId,selector:&str)->Optio
 }
 
 fn number(s:&str)->Option<f32>{let n=s.trim().parse::<f32>().ok()?;n.is_finite().then_some(n)}
-fn eval_calc(expr:&str,font:f32,viewport:(u32,u32))->Option<f32> {
-    let mut total=0.0f32;let mut sign=1.0f32;let mut pos=0usize;let bytes=expr.as_bytes();let len=bytes.len();
-    while pos<len {
-        while pos<len&&bytes[pos].is_ascii_whitespace(){pos+=1;}
-        if pos>=len{break;}
-        if bytes[pos]==b'+'{sign=1.0;pos+=1;continue;}
-        else if bytes[pos]==b'-'{sign=-1.0;pos+=1;continue;}
-        let start=pos;
-        while pos<len {
-            if bytes[pos]==b'+'||bytes[pos]==b'-' {
-                if pos>start {
-                    let prev=bytes[pos-1];
-                    if prev.is_ascii_whitespace()||matches!(prev,b'%'|b'x'|b'm'|b'h'|b'w'){break;}
-                }
-            }
-            pos+=1;
-        }
-        let token=expr[start..pos].trim();if token.is_empty(){continue;}
-        let val=if let Some(n)=token.strip_suffix("px"){number(n)?}
-            else if let Some(n)=token.strip_suffix('%'){number(n)?*(viewport.0 as f32)/100.0}
-            else if let Some(n)=token.strip_suffix("vw"){number(n)?*(viewport.0 as f32)/100.0}
-            else if let Some(n)=token.strip_suffix("vh"){number(n)?*(viewport.1 as f32)/100.0}
-            else if let Some(n)=token.strip_suffix("rem"){number(n)?*16.0}
-            else if let Some(n)=token.strip_suffix("em"){number(n)?*font}
-            else if token=="0"{0.0}
-            else{return None;};
-        total+=sign*val;
+/// Keep the percentage coefficient until Taffy supplies the containing-block
+/// axis. In particular, a percentage height with no definite basis stays auto.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct LinearCalc { px:f32, percent:f32, nonnegative:bool }
+impl LinearCalc {
+    pub(crate) fn resolve(self,basis:f32)->f32 {
+        let value=self.px+self.percent*basis;if self.nonnegative{value.max(0.0)}else{value}
     }
-    Some(total.max(0.0))
 }
-pub fn resolve_length(s:&str,font:f32,viewport:(u32,u32))->Option<f32>{
+fn parse_length(s:&str,font:f32,viewport:(u32,u32))->Option<LinearCalc> {
     let s=s.trim();
     if let Some(inner)=s.strip_prefix("calc(").and_then(|s|s.strip_suffix(')')) {
-        return eval_calc(inner,font,viewport);
+        let mut total=LinearCalc::default();let mut pos=0;let bytes=inner.as_bytes();let mut first=true;
+        while pos<bytes.len() {
+            while pos<bytes.len()&&bytes[pos].is_ascii_whitespace(){pos+=1;}
+            if pos==bytes.len(){return None;}
+            let sign=if bytes[pos]==b'-'{pos+=1;-1.0}else if bytes[pos]==b'+'{pos+=1;1.0}else if first{1.0}else{return None;};
+            while pos<bytes.len()&&bytes[pos].is_ascii_whitespace(){pos+=1;}
+            let start=pos;
+            while pos<bytes.len()&&!matches!(bytes[pos],b'+'|b'-'){pos+=1;}
+            let term=parse_length(&inner[start..pos],font,viewport)?;
+            total.px+=sign*term.px;total.percent+=sign*term.percent;first=false;
+        }
+        return (!first&&total.px.is_finite()&&total.percent.is_finite()).then_some(total);
     }
-    for (unit,factor) in [("rem",16.0),("px",1.0),("em",font),("vw",viewport.0 as f32/100.0),("vh",viewport.1 as f32/100.0)] {if let Some(v)=s.strip_suffix(unit){return number(v).map(|n|n*factor);}}(s=="0").then_some(0.0)
+    if let Some(v)=s.strip_suffix('%'){return Some(LinearCalc{px:0.0,percent:number(v)?/100.0,nonnegative:false});}
+    for (unit,factor) in [("rem",16.0),("px",1.0),("em",font),("vw",viewport.0 as f32/100.0),("vh",viewport.1 as f32/100.0)] {
+        if let Some(v)=s.strip_suffix(unit){return Some(LinearCalc{px:number(v)?*factor,percent:0.0,nonnegative:false});}
+    }
+    (s=="0").then_some(LinearCalc::default())
 }
-fn dimension<T:FromLength+FromPercent+TaffyAuto>(v:&str,font:f32,viewport:(u32,u32))->Option<T>{if v=="auto" {Some(auto())}else if let Some(n)=v.strip_suffix('%'){number(n).map(|n|percent(n/100.0))}else{resolve_length(v,font,viewport).map(length)}}
-fn spacing(v:&str,font:f32,viewport:(u32,u32))->Option<LengthPercentage>{if let Some(n)=v.strip_suffix('%'){number(n).map(|n|percent(n/100.0))}else{resolve_length(v,font,viewport).filter(|n|*n>=0.0).map(length)}}
+pub fn resolve_length(s:&str,font:f32,viewport:(u32,u32))->Option<f32>{
+    parse_length(s,font,viewport).filter(|v|v.percent==0.0).map(|v|v.px)
+}
+trait CssLength:FromLength+FromPercent {fn calc(handle:*const ())->Self;}
+impl CssLength for Dimension {fn calc(handle:*const ())->Self{Self::calc(handle)}}
+impl CssLength for LengthPercentageAuto {fn calc(handle:*const ())->Self{Self::calc(handle)}}
+impl CssLength for LengthPercentage {fn calc(handle:*const ())->Self{Self::calc(handle)}}
+fn compact_length<T:CssLength>(v:&str,font:f32,viewport:(u32,u32),calcs:&RefCell<Vec<LinearCalc>>)->Option<T> {
+    let value=parse_length(v,font,viewport)?;
+    if v.trim().ends_with('%') { return Some(percent(value.percent)); }
+    if value.percent==0.0 {return Some(length(value.px));}
+    if value.px==0.0 {return Some(percent(value.percent));}
+    let mut pool=calcs.borrow_mut();pool.push(value);
+    // Opaque, nonzero, eight-byte-aligned handles; no dereference or leaks.
+    Some(T::calc((pool.len()*8) as *const ()))
+}
+pub(crate) fn resolve_calc(calcs:&RefCell<Vec<LinearCalc>>,handle:*const (),basis:f32)->f32 {
+    calcs.borrow()[handle as usize/8-1].resolve(basis)
+}
+fn dimension<T:CssLength+TaffyAuto>(v:&str,font:f32,viewport:(u32,u32),calcs:&RefCell<Vec<LinearCalc>>)->Option<T>{
+    if v=="auto"{Some(auto())}else{compact_length(v,font,viewport,calcs)}
+}
+fn spacing(v:&str,font:f32,viewport:(u32,u32),calcs:&RefCell<Vec<LinearCalc>>)->Option<LengthPercentage>{
+    let mut value=parse_length(v,font,viewport)?;
+    if value.percent==0.0{return (value.px>=0.0||v.starts_with("calc(")).then_some(length(value.px.max(0.0)));}
+    value.nonnegative=true;
+    let mut pool=calcs.borrow_mut();pool.push(value);
+    Some(LengthPercentage::calc((pool.len()*8) as *const ()))
+}
+fn valid_spacing(v:&str,font:f32,viewport:(u32,u32))->bool{
+    parse_length(v,font,viewport).is_some_and(|n|n.percent!=0.0||n.px>=0.0||v.starts_with("calc("))
+}
 pub fn color(v:&str)->Option<Color>{
     let v=v.trim().to_ascii_lowercase();let c=match v.as_str(){
         "black"=>Color::rgb(0,0,0),"white"=>Color::rgb(255,255,255),"red"=>Color::rgb(255,0,0),
@@ -406,7 +455,12 @@ fn valid_value(name:&str,value:&str,font:f32,viewport:(u32,u32))->bool {
         "font-family"=>!v.trim().is_empty(),
         "text-align"=>matches!(v,"left"|"start"|"center"|"right"|"end"),
         "white-space"=>matches!(v,"normal"|"pre"|"pre-wrap"),
-        "width"|"height"|"min-width"|"max-width"|"min-height"|"max-height"|"flex-basis"=>v=="auto"||spacing(v,font,viewport).is_some(),
+        "visibility"=>matches!(v,"visible"|"hidden"|"collapse"),
+        "opacity"=>number(v).is_some_and(|n|(0.0..=1.0).contains(&n)),
+        "position"=>matches!(v,"static"|"relative"|"absolute"|"fixed"),
+        "top"|"right"|"bottom"|"left"=>v=="auto"||parse_length(v,font,viewport).is_some(),
+        "z-index"=>v=="auto"||v.parse::<i32>().is_ok(),
+        "width"|"height"|"min-width"|"max-width"|"min-height"|"max-height"|"flex-basis"=>v=="auto"||parse_length(v,font,viewport).is_some_and(|n|n.percent!=0.0||n.px>=0.0),
         "box-sizing"=>matches!(v,"border-box"|"content-box"),
         "overflow"|"overflow-x"|"overflow-y"=>matches!(v,"hidden"|"auto"|"scroll"|"visible"|"clip"),
         "flex-direction"=>matches!(v,"row"|"row-reverse"|"column"|"column-reverse"),
@@ -414,29 +468,56 @@ fn valid_value(name:&str,value:&str,font:f32,viewport:(u32,u32))->bool {
         "flex-grow"|"flex-shrink"=>number(v).is_some_and(|n|n>=0.0),
         "align-items"|"align-self"=>matches!(v,"start"|"end"|"flex-start"|"flex-end"|"center"|"stretch"),
         "justify-content"=>matches!(v,"start"|"end"|"flex-start"|"flex-end"|"center"|"space-between"|"space-around"|"space-evenly"),
-        "row-gap"|"column-gap"=>spacing(v,font,viewport).is_some(),
-        "grid-template-columns"|"grid-template-rows"=>tracks(v,font,viewport).is_some(),
-        _ if name.starts_with("margin-")=>dimension::<LengthPercentageAuto>(v,font,viewport).is_some(),
-        _ if name.starts_with("padding-")||name.starts_with("border-")=>spacing(v,font,viewport).is_some(),
+        "row-gap"|"column-gap"=>valid_spacing(v,font,viewport),
+        "grid-template-columns"|"grid-template-rows"=>valid_tracks(v,font,viewport),
+        _ if name.starts_with("margin-")=>v=="auto"||parse_length(v,font,viewport).is_some(),
+        _ if name.starts_with("padding-")||name.starts_with("border-")=>valid_spacing(v,font,viewport),
         _=>false,
     }
 }
 
-fn tracks(v:&str,font:f32,viewport:(u32,u32))->Option<Vec<GridTemplateComponent<String>>> {
+fn valid_tracks(v:&str,font:f32,viewport:(u32,u32))->bool {
+    if v=="none"{return true;}
+    if let Some(inner)=v.strip_prefix("repeat(").and_then(|v|v.strip_suffix(')')){
+        return inner.split_once(',').is_some_and(|(n,body)|n.trim().parse::<usize>().is_ok_and(|n|(1..=128).contains(&n))&&valid_tracks(body.trim(),font,viewport));
+    }
+    let mut any=false;
+    for word in split_top(v,' ').into_iter().filter(|v|!v.is_empty()) {
+        any=true;
+        if let Some(n)=word.strip_suffix("fr"){if !number(n).is_some_and(|n|n>=0.0){return false;}}
+        else if word!="auto"&&!valid_spacing(word,font,viewport){return false;}
+    }
+    any
+}
+fn tracks(v:&str,font:f32,viewport:(u32,u32),calcs:&RefCell<Vec<LinearCalc>>)->Option<Vec<GridTemplateComponent<String>>> {
     if v=="none"{return Some(Vec::new());}
-    if let Some(inner)=v.strip_prefix("repeat(").and_then(|v|v.strip_suffix(')')){let (n,body)=inner.split_once(',')?;let count=n.trim().parse::<usize>().ok()?;if !(1..=128).contains(&count){return None;}let part=tracks(body.trim(),font,viewport)?;let mut out=Vec::new();for _ in 0..count{out.extend(part.iter().cloned());}return Some(out);}
-    let mut out=Vec::new();for word in v.split_whitespace(){let track:TrackSizingFunction=if let Some(n)=word.strip_suffix("fr"){let n=number(n)?;if n<0.0{return None;}fr(n)}else if word=="auto"{auto()}else if let Some(n)=word.strip_suffix('%'){percent(number(n)?/100.0)}else{length(resolve_length(word,font,viewport)?)};out.push(GridTemplateComponent::Single(track));}(!out.is_empty()).then_some(out)
+    if let Some(inner)=v.strip_prefix("repeat(").and_then(|v|v.strip_suffix(')')){let (n,body)=inner.split_once(',')?;let count=n.trim().parse::<usize>().ok()?;if !(1..=128).contains(&count){return None;}let part=tracks(body.trim(),font,viewport,calcs)?;let mut out=Vec::new();for _ in 0..count{out.extend(part.iter().cloned());}return Some(out);}
+    let mut out=Vec::new();
+    for word in split_top(v,' ').into_iter().filter(|v|!v.is_empty()) {
+        let track:TrackSizingFunction=if let Some(n)=word.strip_suffix("fr"){let n=number(n)?;if n<0.0{return None;}fr(n)}
+            else if word=="auto"{auto()}else{TrackSizingFunction::from(spacing(word,font,viewport,calcs)?)};
+        out.push(GridTemplateComponent::Single(track));
+    }
+    (!out.is_empty()).then_some(out)
 }
 fn apply(s:&mut ComputedStyle,name:&str,value:&str,viewport:(u32,u32)) {
     let v=value.trim().to_ascii_lowercase();let v=v.as_str();let font=s.font_size;
     match name {
+        "position"=>{
+            s.position=match v{"relative"=>CssPosition::Relative,"absolute"=>CssPosition::Absolute,"fixed"=>CssPosition::Fixed,_=>CssPosition::Static};
+            s.layout.position=if s.position.out_of_flow(){Position::Absolute}else{Position::Relative};
+        },
+        "top"|"right"|"bottom"|"left"=>if let Some(n)=dimension(v,font,viewport,&s.calcs){
+            match name{"top"=>s.layout.inset.top=n,"right"=>s.layout.inset.right=n,"bottom"=>s.layout.inset.bottom=n,_=>s.layout.inset.left=n}
+        },
+        "z-index"=>s.z_index=if v=="auto"{None}else{v.parse().ok()},
         "display"=>match v {
             "none"=>s.layout.display=Display::None,
             "block"=>{s.layout.display=Display::Block;s.inline=false;},
             "inline"=>{s.layout.display=Display::Block;s.inline=true;},
-            "inline-block"=>{s.layout.display=Display::Block;s.inline=true;},
+            "inline-block"=>{s.layout.display=Display::FlowRoot;s.inline=true;s.atomic_inline=true;},
             "flex"=>{s.layout.display=Display::Flex;s.inline=false;},
-            "inline-flex"=>{s.layout.display=Display::Flex;s.inline=true;},
+            "inline-flex"=>{s.layout.display=Display::Flex;s.inline=true;s.atomic_inline=true;},
             "grid"=>{s.layout.display=Display::Grid;s.inline=false;},
             _=>{}
         },
@@ -452,14 +533,16 @@ fn apply(s:&mut ComputedStyle,name:&str,value:&str,viewport:(u32,u32)) {
         "text-align"=>s.text_align=match v {"center"=>1,"right"|"end"=>2,_=>0},
         "line-height"=>{if let Some(n)=number(v).map(|n|n*font).or_else(||resolve_length(v,font,viewport)){if n>0.0{s.line_height=n;}}},
         "white-space"=>match v{"pre"=>{s.pre=true;s.wrap_pre=false;},"pre-wrap"=>{s.pre=true;s.wrap_pre=true;},"normal"=>{s.pre=false;s.wrap_pre=false;},_=>{}},
-        "width"=>{if let Some(n)=dimension(v,font,viewport){s.layout.size.width=n;}},
-        "height"=>{if let Some(n)=dimension(v,font,viewport){s.layout.size.height=n;}},
-        "min-width"=>{if let Some(n)=dimension(v,font,viewport){s.layout.min_size.width=n;}},
-        "max-width"=>{if let Some(n)=dimension(v,font,viewport){s.layout.max_size.width=n;}},
-        "min-height"=>{if let Some(n)=dimension(v,font,viewport){s.layout.min_size.height=n;}},
-        "max-height"=>{if let Some(n)=dimension(v,font,viewport){s.layout.max_size.height=n;}},
+        "visibility"=>match v{"hidden"|"collapse"=>s.visible=false,"visible"=>s.visible=true,_=>{}},
+        "opacity"=>{if let Some(n)=number(v){if n<=0.05{s.visible=false;}}},
+        "width"=>{if let Some(n)=dimension(v,font,viewport,&s.calcs){s.layout.size.width=n;}},
+        "height"=>{if let Some(n)=dimension(v,font,viewport,&s.calcs){s.layout.size.height=n;}},
+        "min-width"=>{if let Some(n)=dimension(v,font,viewport,&s.calcs){s.layout.min_size.width=n;}},
+        "max-width"=>{if let Some(n)=dimension(v,font,viewport,&s.calcs){s.layout.max_size.width=n;}},
+        "min-height"=>{if let Some(n)=dimension(v,font,viewport,&s.calcs){s.layout.min_size.height=n;}},
+        "max-height"=>{if let Some(n)=dimension(v,font,viewport,&s.calcs){s.layout.max_size.height=n;}},
         "overflow"|"overflow-x"|"overflow-y"=>{
-            let o=match v {"hidden"|"clip"=>Overflow::Hidden,"scroll"|"auto"=>Overflow::Scroll,_=>Overflow::Visible};
+            let o=match v {"hidden"=>Overflow::Hidden,"clip"=>Overflow::Clip,"scroll"|"auto"=>Overflow::Scroll,_=>Overflow::Visible};
             if name=="overflow-y" { s.layout.overflow.y=o; }
             else if name=="overflow-x" { s.layout.overflow.x=o; }
             else { s.layout.overflow.x=o; s.layout.overflow.y=o; }
@@ -467,19 +550,19 @@ fn apply(s:&mut ComputedStyle,name:&str,value:&str,viewport:(u32,u32)) {
         "box-sizing"=>match v{"border-box"=>s.layout.box_sizing=BoxSizing::BorderBox,"content-box"=>s.layout.box_sizing=BoxSizing::ContentBox,_=>{}},
         "flex-direction"=>match v{"row"=>s.layout.flex_direction=FlexDirection::Row,"column"=>s.layout.flex_direction=FlexDirection::Column,"row-reverse"=>s.layout.flex_direction=FlexDirection::RowReverse,"column-reverse"=>s.layout.flex_direction=FlexDirection::ColumnReverse,_=>{}},
         "flex-wrap"=>match v{"wrap"=>s.layout.flex_wrap=FlexWrap::Wrap,"nowrap"=>s.layout.flex_wrap=FlexWrap::NoWrap,"wrap-reverse"=>s.layout.flex_wrap=FlexWrap::WrapReverse,_=>{}},
-        "flex-grow"=>{if let Some(n)=number(v).filter(|n|*n>=0.0){s.layout.flex_grow=n;}},"flex-shrink"=>{if let Some(n)=number(v).filter(|n|*n>=0.0){s.layout.flex_shrink=n;}},"flex-basis"=>{if let Some(n)=dimension(v,font,viewport){s.layout.flex_basis=n;}},
+        "flex-grow"=>{if let Some(n)=number(v).filter(|n|*n>=0.0){s.layout.flex_grow=n;}},"flex-shrink"=>{if let Some(n)=number(v).filter(|n|*n>=0.0){s.layout.flex_shrink=n;}},"flex-basis"=>{if let Some(n)=dimension(v,font,viewport,&s.calcs){s.layout.flex_basis=n;}},
         "align-items"|"align-self"=>{let alignment=match v{"start"=>Some(AlignItems::START),"end"=>Some(AlignItems::END),"flex-start"=>Some(AlignItems::FLEX_START),"flex-end"=>Some(AlignItems::FLEX_END),"center"=>Some(AlignItems::CENTER),"stretch"=>Some(AlignItems::STRETCH),_=>None};if let Some(a)=alignment{if name=="align-items"{s.layout.align_items=Some(a);}else{s.layout.align_self=Some(a);}}},
         "justify-content"=>{let a=match v{"start"=>Some(JustifyContent::START),"end"=>Some(JustifyContent::END),"flex-start"=>Some(JustifyContent::FLEX_START),"flex-end"=>Some(JustifyContent::FLEX_END),"center"=>Some(JustifyContent::CENTER),"space-between"=>Some(JustifyContent::SPACE_BETWEEN),"space-around"=>Some(JustifyContent::SPACE_AROUND),"space-evenly"=>Some(JustifyContent::SPACE_EVENLY),_=>None};if a.is_some(){s.layout.justify_content=a;}},
-        "row-gap"=>{if let Some(n)=spacing(v,font,viewport){s.layout.gap.height=n;}},"column-gap"=>{if let Some(n)=spacing(v,font,viewport){s.layout.gap.width=n;}},
-        "grid-template-columns"=>{if let Some(t)=tracks(v,font,viewport){s.layout.grid_template_columns=t;}},"grid-template-rows"=>{if let Some(t)=tracks(v,font,viewport){s.layout.grid_template_rows=t;}},
+        "row-gap"=>{if let Some(n)=spacing(v,font,viewport,&s.calcs){s.layout.gap.height=n;}},"column-gap"=>{if let Some(n)=spacing(v,font,viewport,&s.calcs){s.layout.gap.width=n;}},
+        "grid-template-columns"=>{if let Some(t)=tracks(v,font,viewport,&s.calcs){s.layout.grid_template_columns=t;}},"grid-template-rows"=>{if let Some(t)=tracks(v,font,viewport,&s.calcs){s.layout.grid_template_rows=t;}},
         _=>{
             let (side, kind) = if let Some(side)=name.strip_prefix("margin-") {(side,0)}
                 else if let Some(side)=name.strip_prefix("padding-") {(side,1)}
                 else if let Some(side)=name.strip_prefix("border-").and_then(|s|s.strip_suffix("-width")) {(side,2)}
                 else {return;};
             let index=match side {"left"=>0,"right"=>1,"top"=>2,"bottom"=>3,_=>return};
-            if kind==0 {if let Some(n)=dimension(v,font,viewport){match index{0=>s.layout.margin.left=n,1=>s.layout.margin.right=n,2=>s.layout.margin.top=n,_=>s.layout.margin.bottom=n}}}
-            else if let Some(n)=spacing(v,font,viewport){let r=if kind==1{&mut s.layout.padding}else{&mut s.layout.border};match index{0=>r.left=n,1=>r.right=n,2=>r.top=n,_=>r.bottom=n}}
+            if kind==0 {if let Some(n)=dimension(v,font,viewport,&s.calcs){match index{0=>s.layout.margin.left=n,1=>s.layout.margin.right=n,2=>s.layout.margin.top=n,_=>s.layout.margin.bottom=n}}}
+            else if let Some(n)=spacing(v,font,viewport,&s.calcs){let r=if kind==1{&mut s.layout.padding}else{&mut s.layout.border};match index{0=>r.left=n,1=>r.right=n,2=>r.top=n,_=>r.bottom=n}}
         }
     }
 }

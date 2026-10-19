@@ -186,9 +186,12 @@ window. TLS 1.3 only; no online revocation checking. The default fleet/private-C
 build remains fail-closed without its own protected authenticated time.
 
 Actual QEMU/KVM smoke rendered `https://example.com/` with JavaScript active.
-`https://tuoitre.vn` passed network/TLS fetching. Its initial image-count refusal
-was removed by the larger viewer limits; mutation-layout residency still rejects
-the observed page, so this is not full-site rendering support.
+`https://tuoitre.vn` passed network/TLS fetching, prefetched 23 same-site resources,
+and renders the live desktop page with correct layout, positioning, multi-column news,
+Vietnamese typography, and images. The previous black screen/modal occlusion from
+unsupported `visibility: hidden` and overlapping geometry from viewport-resolved
+`calc()` are resolved; QuickJS initializes under CR3 isolation after the x86 page-table
+user-permission fix.
 An invalid-host BadSSL navigation failed and preserved the prior document; the
 UI's generic TLS failure does not distinguish certificate versus protocol errors.
 Stopping the companion made a new HTTPS navigation fail closed; restarting it

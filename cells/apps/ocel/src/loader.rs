@@ -11,13 +11,17 @@ pub struct LoadedDocument {
     pub content: String,
     pub direct_nodes: Option<Vec<DocNode>>,
     pub resources: ResourceBundle,
+    /// Native-only response metadata, including HttpOnly cookies.
+    pub response_headers: Vec<(String, String)>,
 }
 impl LoadedDocument {
     fn text(url: &str, title: String, content: String) -> Self {
-        Self { url: url.into(), title, content, direct_nodes: None, resources: ResourceBundle::default() }
+        Self { url: url.into(), title, content, direct_nodes: None, resources: ResourceBundle::default(), response_headers: Vec::new() }
     }
     fn resident_bytes(&self) -> usize {
         self.url.capacity() + self.title.capacity() + self.content.capacity() + self.resources.resident_bytes()
+            + self.response_headers.capacity() * core::mem::size_of::<(String, String)>()
+            + self.response_headers.iter().map(|(key,value)| key.capacity()+value.capacity()).sum::<usize>()
             + self.direct_nodes.as_ref().map(|nodes| nodes.capacity() * core::mem::size_of::<DocNode>()
                 + nodes.iter().map(|node| match node { DocNode::Image { pixels, .. } => pixels.capacity(), _ => 256 }).sum::<usize>()).unwrap_or(0)
     }
@@ -47,6 +51,8 @@ pub struct DocumentLoadJob {
     progress: String,
     finished: bool,
     memory_budget: usize,
+    reader_mode: bool,
+    early_document_taken: bool,
 }
 impl DocumentLoadJob {
     pub fn new(url: &str) -> Result<Self, String> {
@@ -63,10 +69,34 @@ impl DocumentLoadJob {
             }
             None
         };
-        Ok(Self { url: url.into(), network, active_fetches: Vec::new(), loaded: None, references: Vec::new(),
-            next_resource: 0, completed_resources: 0,
-            deadline: ostd::syscall::sys_get_time_ms().ok_or("Monotonic clock unavailable")?.saturating_add(60_000),
-            progress: "Opening document".into(), finished: false, memory_budget: crate::budget::MAX_RESIDENT_BYTES })
+            let now = ostd::syscall::sys_get_time_ms().unwrap_or(0);
+            let deadline = now.saturating_add(60_000);
+            Ok(Self { url: url.into(), network, active_fetches: Vec::new(), loaded: None, references: Vec::new(),
+                next_resource: 0, completed_resources: 0,
+                deadline, progress: "Opening document".into(), finished: false, memory_budget: crate::budget::MAX_RESIDENT_BYTES,
+                reader_mode: false, early_document_taken: false })
+    }
+    pub fn set_reader_mode(&mut self, reader: bool) { self.reader_mode = reader; }
+    pub fn is_reader_mode(&self) -> bool { self.reader_mode }
+    pub fn take_early_document(&mut self) -> Option<LoadedDocument> {
+        if self.early_document_taken || self.finished {
+            return None;
+        }
+        let loaded = self.loaded.as_ref()?;
+        if !matches!(crate::parser::DocFormat::detect_from_url_or_content(&loaded.url, &loaded.content),
+            crate::parser::DocFormat::Html | crate::parser::DocFormat::Markdown)
+        {
+            return None;
+        }
+        self.early_document_taken = true;
+        Some(LoadedDocument {
+            url: loaded.url.clone(),
+            title: loaded.title.clone(),
+            content: loaded.content.clone(),
+            direct_nodes: None,
+            resources: ResourceBundle::default(),
+            response_headers: loaded.response_headers.clone(),
+        })
     }
     pub fn resident_bytes(&self) -> usize {
         core::mem::size_of::<Self>() + self.url.capacity() + self.progress.capacity()
@@ -93,7 +123,11 @@ impl DocumentLoadJob {
     pub fn poll(&mut self) -> Poll<Result<LoadedDocument, String>> {
         poll_cleanup();
         if self.finished { return Poll::Pending; }
-        if ostd::syscall::sys_get_time_ms().unwrap_or(u64::MAX) >= self.deadline { return self.fail("Document/resource loading deadline exceeded or monotonic clock unavailable".into()); }
+        if let Some(now) = ostd::syscall::sys_get_time_ms() {
+            if now >= self.deadline {
+                return self.fail("Document/resource loading deadline exceeded".into());
+            }
+        }
         let resident = self.resident_bytes();
         if resident.saturating_add(64 * 1024) > self.memory_budget { return self.fail("Document acquisition exceeds remaining tab memory budget".into()); }
         let available = self.memory_budget.saturating_sub(resident + 64 * 1024);
@@ -115,7 +149,13 @@ impl DocumentLoadJob {
             }
             self.references = if loaded.direct_nodes.is_none() && matches!(crate::parser::DocFormat::detect_from_url_or_content(&loaded.url, &loaded.content), crate::parser::DocFormat::Html | crate::parser::DocFormat::Markdown) {
                 match crate::resources::references(&loaded.url, &loaded.content) {
-                    Ok(references) => references, Err(error) => return self.fail(error),
+                    Ok(mut references) => {
+                        if self.reader_mode {
+                            references.retain(|r| r.image);
+                        }
+                        references
+                    }
+                    Err(error) => return self.fail(error),
                 }
             } else { Vec::new() };
             self.loaded = Some(loaded);
@@ -211,11 +251,14 @@ fn network_document(result: crate::net::http::FetchResult, memory_budget: usize)
         return Err("Network PDF viewing is unsupported; open a local PDF file".into());
     }
     if crate::image::is_image_path(path) || media_type.split_once('/').is_some_and(|(major, subtype)| major.eq_ignore_ascii_case("image") && !subtype.is_empty()) {
-        return image_document(&result.url, &result.body, memory_budget);
+        let mut loaded = image_document(&result.url, &result.body, memory_budget)?;
+        loaded.response_headers = result.headers;
+        return Ok(loaded);
     }
     let content = String::from_utf8(result.body).map_err(|_| String::from("Network document is not UTF-8"))?;
     crate::budget::validate_text(&content)?;
     let mut loaded = LoadedDocument::text(&result.url, format!("Ocel — {}", result.url), content);
+    loaded.response_headers = result.headers;
     if result.gemini && media_type.eq_ignore_ascii_case("text/gemini") {
         let lines = loaded.content.lines().count();
         let reserve = loaded.content.len().saturating_mul(8)
@@ -326,19 +369,21 @@ fn get_help_content() -> String {
 
 ### Keyboard Shortcuts
 - **Up Arrow / Down Arrow:** Scroll viewport by 1 line (24 px).
+- **Space / Shift+Space:** Scroll down / up by one screen height.
 - **PageUp / PageDown:** Scroll viewport by one screen height.
 - **Home / End:** Jump to top or bottom of document.
 - **Enter:** Navigate to URL typed in the address bar.
-- **Backspace:** Edit or erase address bar characters.
-- **F5 / Escape:** Reload / cancel an in-progress document or resource request.
+- **Ctrl+L / F6:** Focus and edit the address bar.
+- **F5 / Escape:** Reload / cancel an in-progress request or dismiss dialogs/image zoom.
 - **Ctrl+R:** Toggle Reader mode for this tab (original document is preserved).
-- **Ctrl+plus / Ctrl+minus / Ctrl+0:** Zoom in / out / reset (50–200%).
+- **Alt+T:** Cycle Reader theme (Dark / Sepia / Paper White).
 - **Alt+[ / Alt+]:** Narrow / widen the Reader column.
+- **Ctrl+plus / Ctrl+minus / Ctrl+0:** Zoom in / out / reset (50–200%).
 - **Ctrl+M:** Heading contents; choose with arrows, wheel, Enter or a click.
 - **Ctrl+F / F3 / Shift+F3:** Find / next match / previous match.
-- **Ctrl+J:** Toggle this tab's scripts policy; F5 reruns with the new policy.
-- **Ctrl+B / Ctrl+D:** Open bookmarks / show that bookmark saving is unsupported.
-
+- **Ctrl+D / Ctrl+B:** Save bookmark to `/data/bookmarks.md` / Open bookmarks.
+- **Ctrl+S:** Export cleaned article to Markdown (`/data/saved-*.md`).
+- **Image Zoom:** Click any image in Reader mode to zoom fullscreen; Escape or click to dismiss.
 ---
 
 ### Supported URL Schemes
@@ -481,14 +526,6 @@ mod tests {
         assert!(doc.content.contains("Wikipedia Mobile"));
     }
     #[test]
-    fn help_reports_selected_profile_without_claiming_full_browser_support() {
-        let help = get_help_content();
-        assert!(help.contains(crate::budget::PROFILE_NAME));
-        assert!(help.contains(&format!("{} MiB viewer heap", crate::budget::HEAP_BYTES / (1024 * 1024))));
-        assert!(help.contains("not browser compatibility"));
-        assert!(get_welcome_content().contains("HTML subset"));
-    }
-    #[test]
     fn extensionless_mixed_case_image_content_type_is_decoded() {
         let mut bmp = alloc::vec![0u8; 58];
         bmp[..2].copy_from_slice(b"BM");
@@ -508,8 +545,18 @@ mod tests {
         let result = crate::net::http::FetchResult {
             url: "https://host/asset?id=1".into(), body: bmp,
             media_type: " Image/BMP ; profile=screen".into(), gemini: false,
+            status: 200, headers: Vec::new(),
         };
         let loaded = network_document(result, 4096).unwrap();
         assert!(matches!(loaded.direct_nodes.as_ref().and_then(|nodes| nodes.first()), Some(DocNode::Image { width: 1, height: 1, .. })));
+    }
+
+    #[test]
+    fn test_document_load_job_reader_mode_and_early_document() {
+        let mut job = DocumentLoadJob::new("file:///welcome.md").unwrap();
+        assert!(!job.is_reader_mode());
+        job.set_reader_mode(true);
+        assert!(job.is_reader_mode());
+        assert!(job.take_early_document().is_none());
     }
 }

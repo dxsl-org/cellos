@@ -14,11 +14,13 @@
 //! line this cell prints at start-up.
 
 #![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_main)]
 
 extern crate alloc;
 extern crate api;
 extern crate ostd;
+#[cfg(test)]
+extern crate std;
 
 #[cfg(not(qjs_c_unavailable))]
 use dom_arena::{ipc::JsServiceSession, JsContext, JsEngine, OcelJsRequest, OCEL_JS_IPC_BUF_SIZE};
@@ -36,19 +38,21 @@ api::declare_syscalls![Log, Recv, Send, TryRecv, GetTime];
 // Cell heap includes QuickJS's 3 MiB accounted heap, Rust transfer buffers,
 // snapshot source and allocator overhead; the engine's own ceiling stays lower.
 #[cfg(all(not(qjs_c_unavailable), target_os = "none"))]
-ostd::declare_custom_heap!(8 * 1024 * 1024);
+ostd::declare_custom_heap!(24 * 1024 * 1024);
 
 #[cfg(not(qjs_c_unavailable))]
 mod engine;
 #[cfg(not(qjs_c_unavailable))]
 mod ffi;
-
 #[cfg(not(qjs_c_unavailable))]
+mod native_layout;
+
+#[cfg(all(not(qjs_c_unavailable), not(test)))]
 ostd::cell_main!(cell_main);
 
 /// Stub entry point for targets the engine cannot be built for (see build.rs):
 /// the cell still links, and says why it has no engine.
-#[cfg(qjs_c_unavailable)]
+#[cfg(all(qjs_c_unavailable, not(test)))]
 #[no_mangle]
 extern "C" fn main() -> usize {
     ostd::io::println(
@@ -57,7 +61,7 @@ extern "C" fn main() -> usize {
     1
 }
 
-#[cfg(not(qjs_c_unavailable))]
+#[cfg(all(not(qjs_c_unavailable), not(test)))]
 fn cell_main() {
     #[cfg(target_os = "none")]
     init_custom_heap();
@@ -102,27 +106,33 @@ fn cell_main() {
         match sys_recv(0, &mut recv_buf) {
             SyscallResult::Ok(caller_tid) if caller_tid > 0 => {
                 let operation = ostd::ipc::current();
+                native_layout::set_reply_operation(operation);
                 let mut context = None;
                 let response = match postcard::from_bytes::<OcelJsRequest>(&recv_buf) {
                     Ok(request) => {
                         context = match &request {
                             OcelJsRequest::OpenContext { context } | OcelJsRequest::CloseContext { context }
                             | OcelJsRequest::Begin { context, .. } | OcelJsRequest::Chunk { context, .. }
-                            | OcelJsRequest::Commit { context } | OcelJsRequest::ReadResponse { context, .. } => Some(*context),
+                            | OcelJsRequest::Commit { context } | OcelJsRequest::ReadResponse { context, .. }
+                            | OcelJsRequest::ReadLayoutQuery { context, .. } | OcelJsRequest::LayoutResumeBegin { context, .. }
+                            | OcelJsRequest::LayoutResumeChunk { context, .. } | OcelJsRequest::LayoutResumeCommit { context, .. } => Some(*context),
                             OcelJsRequest::Ping => None,
                         };
+                        ctx.begin_native_call(caller_tid, context.unwrap_or(0), operation);
                         session.handle_at(caller_tid, request, &mut ctx, ostd::syscall::sys_get_scheduler_ticks())
                     }
                     Err(_) => JsServiceSession::error("Malformed OcelJsRequest IPC payload"),
                 };
 
                 if let Ok(encoded) = postcard::to_slice(&response, &mut send_buf) {
-                    if let Some(operation) = operation {
+                    if let Some(operation) = native_layout::reply_operation() {
                         if ostd::ipc::reply(operation, encoded).is_err() {
                             if let Some(context) = context { session.abandon(caller_tid, context, &mut ctx); }
                         }
-                    } else {
+                    } else if operation.is_none() {
                         let _ = sys_send(caller_tid, encoded);
+                    } else if let Some(context) = context {
+                        session.abandon(caller_tid, context, &mut ctx);
                     }
                 }
                 // Script output (`console.log`) and engine diagnostics go to the

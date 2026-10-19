@@ -24,7 +24,7 @@ postcard = { version = "1.0", default-features = false, features = ["alloc"] }
 zune-core = { version = "0.5.3", default-features = false }
 zune-png = { version = "0.5.2", default-features = false }
 zune-jpeg = { version = "0.5.15", default-features = false }
-taffy = { version = "=0.14.0", default-features = false, features = ["alloc", "taffy_tree", "block_layout", "flexbox", "grid"] }
+taffy = { version = "=0.14.0", default-features = false, features = ["alloc", "taffy_tree", "block_layout", "flexbox", "grid", "calc"] }
 ai-image-webp = { version = "0.2.4", default-features = false }
 no_std_io = { version = "0.6", default-features = false }
 

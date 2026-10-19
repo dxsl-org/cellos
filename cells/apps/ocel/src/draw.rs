@@ -39,6 +39,58 @@ pub mod theme {
     pub const BORDER: Color = Color::rgb(69, 71, 90);
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReaderThemeMode {
+    Dark,
+    Sepia,
+    PaperWhite,
+}
+
+impl ReaderThemeMode {
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Dark => Self::Sepia,
+            Self::Sepia => Self::PaperWhite,
+            Self::PaperWhite => Self::Dark,
+        }
+    }
+    pub const fn bg_color(self) -> Color {
+        match self {
+            Self::Dark => Color::rgb(30, 30, 46),
+            Self::Sepia => Color::rgb(244, 238, 224),
+            Self::PaperWhite => Color::rgb(250, 250, 252),
+        }
+    }
+    pub const fn text_color(self) -> Color {
+        match self {
+            Self::Dark => Color::rgb(205, 214, 244),
+            Self::Sepia => Color::rgb(67, 52, 34),
+            Self::PaperWhite => Color::rgb(30, 30, 36),
+        }
+    }
+    pub const fn muted_color(self) -> Color {
+        match self {
+            Self::Dark => Color::rgb(166, 173, 200),
+            Self::Sepia => Color::rgb(140, 120, 100),
+            Self::PaperWhite => Color::rgb(110, 115, 130),
+        }
+    }
+    pub const fn accent_color(self) -> Color {
+        match self {
+            Self::Dark => Color::rgb(148, 226, 213),
+            Self::Sepia => Color::rgb(180, 83, 9),
+            Self::PaperWhite => Color::rgb(37, 99, 235),
+        }
+    }
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Dark => "Dark",
+            Self::Sepia => "Sepia",
+            Self::PaperWhite => "Paper White",
+        }
+    }
+}
+
 pub fn fill_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: Color) {
     let sw = surf.width() as i32;
     let sh = surf.height() as i32;
@@ -96,6 +148,55 @@ pub fn stroke_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, border:
     fill_rect(surf, x, y + h as i32 - 1, w, 1, border);
     fill_rect(surf, x, y, 1, h, border);
     fill_rect(surf, x + w as i32 - 1, y, 1, h, border);
+}
+pub fn draw_book_icon(surf: &mut ViSurface, cx: i32, cy: i32, color: Color) {
+    // Left page outline
+    fill_rect(surf, cx - 7, cy - 5, 6, 1, color);
+    fill_rect(surf, cx - 7, cy + 5, 6, 1, color);
+    fill_rect(surf, cx - 7, cy - 5, 1, 11, color);
+    fill_rect(surf, cx - 1, cy - 5, 1, 11, color);
+    // Left page lines
+    fill_rect(surf, cx - 5, cy - 2, 3, 1, color);
+    fill_rect(surf, cx - 5, cy + 1, 3, 1, color);
+
+    // Right page outline
+    fill_rect(surf, cx + 1, cy - 5, 6, 1, color);
+    fill_rect(surf, cx + 1, cy + 5, 6, 1, color);
+    fill_rect(surf, cx + 1, cy - 5, 1, 11, color);
+    fill_rect(surf, cx + 7, cy - 5, 1, 11, color);
+    // Right page lines
+    fill_rect(surf, cx + 3, cy - 2, 3, 1, color);
+    fill_rect(surf, cx + 3, cy + 1, 3, 1, color);
+
+    // Center spine
+    fill_rect(surf, cx, cy - 5, 1, 12, color);
+}
+
+pub fn draw_globe_icon(surf: &mut ViSurface, cx: i32, cy: i32, color: Color) {
+    // Outer circle
+    fill_rect(surf, cx - 3, cy - 6, 7, 1, color);
+    fill_rect(surf, cx - 3, cy + 6, 7, 1, color);
+    fill_rect(surf, cx - 6, cy - 3, 1, 7, color);
+    fill_rect(surf, cx + 6, cy - 3, 1, 7, color);
+    // Corner pixels
+    fill_rect(surf, cx - 5, cy - 5, 2, 1, color);
+    fill_rect(surf, cx + 4, cy - 5, 2, 1, color);
+    fill_rect(surf, cx - 5, cy + 5, 2, 1, color);
+    fill_rect(surf, cx + 4, cy + 5, 2, 1, color);
+    fill_rect(surf, cx - 5, cy - 4, 1, 2, color);
+    fill_rect(surf, cx + 5, cy - 4, 1, 2, color);
+    fill_rect(surf, cx - 5, cy + 3, 1, 2, color);
+    fill_rect(surf, cx + 5, cy + 3, 1, 2, color);
+
+    // Equator line
+    fill_rect(surf, cx - 5, cy, 11, 1, color);
+
+    // Prime meridian vertical line
+    fill_rect(surf, cx, cy - 5, 1, 11, color);
+
+    // Meridian inner curves
+    fill_rect(surf, cx - 3, cy - 4, 1, 9, color);
+    fill_rect(surf, cx + 3, cy - 4, 1, 9, color);
 }
 
 /// Paint measured, grayscale-antialiased text within a caller's viewport.

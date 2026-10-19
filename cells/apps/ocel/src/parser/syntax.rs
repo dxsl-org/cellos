@@ -13,6 +13,7 @@ pub enum Language {
     C,
     Json,
     Toml,
+    Xml,
 }
 
 impl Language {
@@ -20,8 +21,9 @@ impl Language {
         match name.split_whitespace().next().unwrap_or("") {
             "rust" | "rs" => Some(Self::Rust),
             "c" | "h" | "cpp" | "c++" | "cc" | "cxx" | "hpp" => Some(Self::C),
-            "json" => Some(Self::Json),
+            "json" | "jsonc" => Some(Self::Json),
             "toml" => Some(Self::Toml),
+            "xml" | "svg" | "xsd" | "xsl" => Some(Self::Xml),
             _ => None,
         }
     }
@@ -36,6 +38,7 @@ impl Language {
             Self::C => "c",
             Self::Json => "json",
             Self::Toml => "toml",
+            Self::Xml => "xml",
         }
     }
 }
@@ -103,18 +106,28 @@ impl Highlighter {
                     color = Color::rgb(166, 227, 161);
                 }
                 State::Normal => {
-                    if matches!(language, Language::Rust | Language::C)
+                    if matches!(language, Language::Rust | Language::C | Language::Json)
                         && bytes[i..].starts_with(b"//")
                         || language == Language::Toml && bytes[i] == b'#'
                     {
                         i = bytes.len();
                         color = theme::TEXT_MUTED;
-                    } else if matches!(language, Language::Rust | Language::C)
+                    } else if matches!(language, Language::Rust | Language::C | Language::Json)
                         && bytes[i..].starts_with(b"/*")
                     {
                         self.state = State::BlockComment(1);
                         i += 2;
                         color = theme::TEXT_MUTED;
+                    } else if language == Language::Xml && bytes[i..].starts_with(b"<!--") {
+                        if let Some(end) = text[i..].find("-->") {
+                            i += end + 3;
+                        } else {
+                            i = bytes.len();
+                        }
+                        color = theme::TEXT_MUTED;
+                    } else if language == Language::Xml && (bytes[i] == b'<' || bytes[i] == b'>' || bytes[i] == b'/') {
+                        i += 1;
+                        color = theme::ACCENT_BLUE;
                     } else if let Some((prefix, hashes)) = (language == Language::Rust)
                         .then(|| raw_open(&bytes[i..]))
                         .flatten()
@@ -376,6 +389,7 @@ fn keyword(language: Language, word: &str) -> bool {
         ),
         Language::Json => matches!(word, "true" | "false" | "null"),
         Language::Toml => matches!(word, "true" | "false"),
+        Language::Xml => false,
     }
 }
 

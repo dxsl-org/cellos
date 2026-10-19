@@ -123,7 +123,9 @@ fn calc_and_var_fallback_compute_proper_dimensions() {
         (1280, 800),
     );
     let s = sheet.compute(&arena, el, None, (1280, 800));
-    assert_eq!(s.layout.size.width, length(949.0));
+    use taffy::util::ResolveOrZero;
+    assert_eq!(s.layout.size.width.resolve_or_zero(Some(1280.0),|h,b|resolve_calc(&s.calcs,h,b)),949.0);
+    assert_eq!(s.layout.size.width.resolve_or_zero(Some(600.0),|h,b|resolve_calc(&s.calcs,h,b)),269.0);
     assert_eq!(s.layout.size.height, length(710.0));
     assert_eq!(s.layout.margin.right, length(8.0));
     assert_eq!(s.bold, true);

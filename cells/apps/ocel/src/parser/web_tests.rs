@@ -53,8 +53,8 @@ fn inline_links_keep_node_ids_and_unicode_uses_glyph_not_utf8_width() {
         assert!(line.width<=32.0);
         for run in &line.runs {assert!((run.width-fonts.measure(run.face(),&run.span.text,run.px)).abs()<0.01);}
     }
-    assert_eq!(laid.hit_link(text_box.x+1,text_box.y+1),Some(String::from("/next")));
-    assert_eq!(laid.hit_node(text_box.x+1,text_box.y+1),Some(a));
+    assert_eq!(laid.hit_link(text_box.x+1,text_box.y+1,0),Some(String::from("/next")));
+    assert_eq!(laid.hit_node(text_box.x+1,text_box.y+1,0),Some(a));
 }
 #[test]
 fn block_and_nested_links_resolve_enclosing_anchor() {
@@ -67,7 +67,7 @@ fn block_and_nested_links_resolve_enclosing_anchor() {
         let text_box = laid.boxes.iter().find(|b| !b.lines.is_empty()).unwrap();
         (text_box.x, text_box.y)
     };
-    assert_eq!(laid.hit_link(tx + 2, ty + 2), Some(String::from("/article/123")));
+    assert_eq!(laid.hit_link(tx + 2, ty + 2,0), Some(String::from("/article/123")));
 
     let mut doc = crate::doc::Document::new();
     doc.arena = Some(arena);
@@ -131,9 +131,9 @@ fn css_sizes_faces_baselines_alignment_and_link_rectangles_are_measured() {
     assert!((run.x+line.width-b.width as f32).abs()<0.01);
     assert!(line.baseline>=fonts.ascender(run.face(),23.0));
     let left=b.x+run.x as i32+1;
-    assert_eq!(laid.hit_link(left,b.y+1),Some(String::from("/type")));
-    assert_eq!(laid.hit_node(left,b.y+1),Some(a));
-    assert_eq!(laid.hit_link(b.x,b.y+1),None);
+    assert_eq!(laid.hit_link(left,b.y+1,0),Some(String::from("/type")));
+    assert_eq!(laid.hit_node(left,b.y+1,0),Some(a));
+    assert_eq!(laid.hit_link(b.x,b.y+1,0),None);
 }
 
 #[test]
@@ -202,8 +202,8 @@ fn collapsed_spaces_keep_their_source_link_node_style_and_hit_rectangle() {
         assert!((first.width-fonts.measure(first.face(),"foo ",first.px)).abs()<0.01);
         let gap=b.x+(fonts.measure(first.face(),"foo",first.px)
             +fonts.advance(first.face(),' ',first.px)*0.5) as i32;
-        assert_eq!(laid.hit_node(gap,b.y+1),Some(if inside_anchor {a}else{p}));
-        assert_eq!(laid.hit_link(gap,b.y+1),
+        assert_eq!(laid.hit_node(gap,b.y+1,0),Some(if inside_anchor {a}else{p}));
+        assert_eq!(laid.hit_link(gap,b.y+1,0),
             if inside_anchor {Some(String::from("/next"))}else{None});
     }
 }
@@ -237,8 +237,8 @@ fn parsed_separate_whitespace_nodes_keep_anchor_hit_ownership() {
         let space=b.lines[0].runs.iter().find(|r|r.span.text==" ").unwrap();
         assert_eq!(space.node_id,Some(if inside_anchor {a}else{p}));
         let x=b.x+(space.x+space.width*0.5) as i32;
-        assert_eq!(laid.hit_node(x,b.y+1),space.node_id);
-        assert_eq!(laid.hit_link(x,b.y+1),
+        assert_eq!(laid.hit_node(x,b.y+1,0),space.node_id);
+        assert_eq!(laid.hit_link(x,b.y+1,0),
             if inside_anchor {Some(String::from("/next"))}else{None});
     }
 }
@@ -409,4 +409,337 @@ fn markdown_preserves_ordered_labels_unmatched_delimiters_and_unicode_search() {
 fn html_resource_discovery_ignores_comments_rawtext_and_inert_templates() {
     let refs=crate::parser::html::resource_references_checked("<!-- <img src='comment'> --><textarea><img src='text'></textarea><title><img src='title'></title><template><img src='inert'><script src='inert.js'></script></template><script>const x='<img src=\"script\">'</script><style>x{content:'<img src=\"style\">'}</style><img src='real'><link rel='stylesheet' href='real.css'><script src='real.js'></script>").unwrap();
     assert_eq!(refs,alloc::vec![(String::from("real"),true),(String::from("real.css"),false),(String::from("real.js"),false)]);
+}
+
+#[test]
+fn calc_resolves_nested_containing_blocks_on_each_axis_not_viewport() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let outer=element(&mut arena,root,"div",&[("style","width:400px;height:300px")]);
+    let inner=element(&mut arena,outer,"div",&[("style","width:calc(50% - 20px);height:calc(100% - 53px)")]);
+    let nested=element(&mut arena,inner,"div",&[("style","width:calc(100% + 15px);height:calc(50% - 3px)")]);
+    for (width,height) in [(1000,600),(1300,900)] {
+        let laid=laid_out(&arena,&[],width,height);
+        assert_eq!((box_for(&laid,inner).width,box_for(&laid,inner).height),(180,247));
+        assert_eq!((box_for(&laid,nested).width,box_for(&laid,nested).height),(195,121));
+    }
+}
+
+#[test]
+fn percentage_calc_height_is_intrinsic_when_containing_height_is_indefinite() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let outer=element(&mut arena,root,"div",&[("style","width:300px")]);
+    let inner=element(&mut arena,outer,"div",&[("style","width:calc(100% - 20px);height:calc(100% - 53px)")]);
+    let content=element(&mut arena,inner,"div",&[("style","height:37px")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!(box_for(&laid,inner).width,280);
+    assert_eq!(box_for(&laid,inner).height,37);
+    assert_eq!(box_for(&laid,outer).height,box_for(&laid,content).height);
+}
+
+// Inspect the same clipped, scroll-adjusted paint traversal used by render.
+// These fixtures paint opaque backgrounds, so sampling needs no OS surface.
+fn painted_background(laid:&WebLayout,x:i32,y:i32,scroll:i32)->Option<Color> {
+    let mut color=None;
+    for (b,bx,by,clip) in laid.paint_boxes((0,0,1000,600),scroll) {
+        if x>=bx&&x<bx+b.width as i32&&y>=by&&y<by+b.height as i32
+            &&x>=clip.0&&x<clip.2&&y>=clip.1&&y<clip.3 {
+            if let Some(bg)=b.background {color=Some(bg);}
+        }
+    }
+    color
+}
+
+#[test]
+fn static_insets_are_ignored_relative_offsets_leave_flow_unchanged() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let a=element(&mut arena,root,"div",&[("style","width:80px;height:20px;left:200px;top:100px")]);
+    let b=element(&mut arena,root,"div",&[("style","position:relative;left:-7px;top:9px;width:80px;height:20px")]);
+    let c=element(&mut arena,root,"div",&[("style","width:80px;height:20px")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!((box_for(&laid,a).x,box_for(&laid,a).y),(0,0));
+    assert_eq!((box_for(&laid,b).x,box_for(&laid,b).y),(-7,29));
+    assert_eq!((box_for(&laid,c).x,box_for(&laid,c).y),(0,40));
+}
+
+#[test]
+fn absolute_skips_static_ancestors_and_uses_containing_padding_box_axes() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let outer=element(&mut arena,root,"div",&[("style","position:relative;width:400px;height:300px;padding:10px;border:2px solid black")]);
+    let static_parent=element(&mut arena,outer,"div",&[("style","width:80px;height:40px;margin-left:50px")]);
+    let absolute=element(&mut arena,static_parent,"div",&[("style","position:absolute;left:10%;top:calc(50% - 3px);width:calc(100% - 15px);height:calc(100% - 53px)")]);
+    let nested=element(&mut arena,absolute,"div",&[("style","position:absolute;right:-5px;bottom:-7px;width:50%;height:50%")]);
+    let laid=laid_out(&arena,&[],1000,600);let a=box_for(&laid,absolute);let n=box_for(&laid,nested);
+    assert_eq!((a.x,a.y,a.width,a.height),(44,159,405,267));
+    assert_eq!((n.width,n.height),(202,133));
+    assert_eq!(n.x+n.width as i32,a.x+a.width as i32+5);
+    assert_eq!(n.y+n.height as i32,a.y+a.height as i32+7);
+    assert_eq!(box_for(&laid,static_parent).height,40);
+}
+
+#[test]
+fn auto_insets_keep_hypothetical_position_and_absolute_stretch_is_not_in_flow() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let cb=element(&mut arena,root,"div",&[("style","position:relative;width:300px;height:200px")]);
+    let static_parent=element(&mut arena,cb,"div",&[("style","margin-left:30px;width:80px")]);
+    element(&mut arena,static_parent,"div",&[("style","height:17px")]);
+    let auto=element(&mut arena,static_parent,"div",&[("style","position:absolute;width:20px;height:10px")]);
+    let stretch=element(&mut arena,static_parent,"div",&[("style","position:absolute;inset:10px 20px 30px 40px")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!((box_for(&laid,auto).x,box_for(&laid,auto).y),(30,17));
+    assert_eq!((box_for(&laid,stretch).x,box_for(&laid,stretch).y,box_for(&laid,stretch).width,box_for(&laid,stretch).height),(40,10,240,160));
+    assert_eq!(box_for(&laid,static_parent).height,17);
+}
+
+#[test]
+fn ancestor_axis_clips_agree_for_paint_links_and_nodes() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let clip_y=element(&mut arena,root,"div",&[("style","width:100px;height:30px;overflow-y:clip")]);
+    let clip_x=element(&mut arena,clip_y,"div",&[("style","width:40px;height:20px;overflow-x:clip")]);
+    let link=element(&mut arena,clip_x,"a",&[("href","/clipped"),("style","display:block;position:relative;left:30px;top:10px;width:40px;height:40px;background:red")]);
+    text(&mut arena,link,"MMMM");
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!(painted_background(&laid,35,15,0),Some(Color::rgb(255,0,0)));
+    assert_eq!(painted_background(&laid,35,25,0),Some(Color::rgb(255,0,0)));
+    assert_eq!(painted_background(&laid,45,15,0),Some(Color::rgb(255,255,255)));
+    assert_eq!(painted_background(&laid,35,35,0),Some(Color::rgb(255,255,255)));
+    assert_eq!(laid.hit_link(35,15,0),Some(String::from("/clipped")));
+    assert_eq!(laid.hit_link(45,15,0),None);assert_eq!(laid.hit_link(35,35,0),None);
+    assert_ne!(laid.hit_node(45,15,0),Some(link));assert_ne!(laid.hit_node(35,35,0),Some(link));
+    assert_eq!(laid.hit_node(35,15,0),Some(link));
+}
+
+#[test]
+fn absolute_can_escape_static_overflow_but_not_its_containing_block_clip() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let cb=element(&mut arena,root,"div",&[("style","position:relative;width:100px;height:100px;overflow:hidden")]);
+    let intermediate=element(&mut arena,cb,"div",&[("style","width:10px;height:10px;overflow:hidden")]);
+    let absolute=element(&mut arena,intermediate,"div",&[("style","position:absolute;left:80px;top:20px;width:40px;height:20px;background:red")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!(painted_background(&laid,90,25,0),Some(Color::rgb(255,0,0)));
+    assert_eq!(laid.hit_node(90,25,0),Some(absolute));
+    assert_eq!(painted_background(&laid,110,25,0),Some(Color::rgb(255,255,255)));
+    assert_ne!(laid.hit_node(110,25,0),Some(absolute));
+}
+
+#[test]
+fn stacking_contexts_are_atomic_and_negative_contexts_precede_normal_flow() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let low=element(&mut arena,root,"div",&[("style","position:absolute;inset:0 auto auto 0;width:80px;height:80px;z-index:1;background:green")]);
+    let trapped=element(&mut arena,low,"div",&[("style","position:absolute;inset:0;width:80px;height:80px;z-index:999;background:red")]);
+    let high=element(&mut arena,root,"div",&[("style","position:absolute;inset:0 auto auto 0;width:80px;height:80px;z-index:2;background:blue")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!(painted_background(&laid,5,5,0),Some(Color::rgb(0,0,255)));
+    assert_eq!(laid.hit_node(5,5,0),Some(high));
+    let paint_index=|id|laid.boxes.iter().position(|b|b.node_id==Some(id)).unwrap();
+    assert!(paint_index(trapped)<paint_index(high));
+
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let negative=element(&mut arena,root,"div",&[("style","position:absolute;left:0;top:0;width:40px;height:40px;z-index:-1;background:red")]);
+    let normal=element(&mut arena,root,"div",&[("style","width:40px;height:40px;background:green")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!(painted_background(&laid,5,5,0),Some(Color::rgb(0,128,0)));
+    assert_eq!(laid.hit_node(5,5,0),Some(normal));
+    assert_ne!(laid.hit_node(5,5,0),Some(negative));
+}
+
+#[test]
+fn positioned_auto_does_not_trap_contexts_and_overlay_blocks_link_hits() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let auto=element(&mut arena,root,"div",&[("style","position:absolute;left:0;top:0;width:80px;height:80px")]);
+    let raised=element(&mut arena,auto,"div",&[("style","position:absolute;inset:0;width:80px;height:80px;z-index:100;background:red")]);
+    element(&mut arena,root,"div",&[("style","position:absolute;inset:0;width:80px;height:80px;z-index:1;background:blue")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!(painted_background(&laid,5,5,0),Some(Color::rgb(255,0,0)));
+    assert_eq!(laid.hit_node(5,5,0),Some(raised));
+
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let link=element(&mut arena,root,"a",&[("href","/covered")]);text(&mut arena,link,"Covered link");
+    let cover=element(&mut arena,root,"div",&[("style","position:absolute;left:0;top:0;width:100px;height:40px;z-index:1;background:blue")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!(laid.hit_link(3,3,0),None);assert_eq!(laid.hit_node(3,3,0),Some(cover));
+}
+
+#[test]
+fn fixed_descendants_use_viewport_axes_and_remain_anchored_during_scroll() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let parent=element(&mut arena,root,"div",&[("style","position:relative;width:200px;height:900px;overflow:hidden")]);
+    let fixed=element(&mut arena,parent,"a",&[("href","/fixed"),("style","display:block;position:fixed;right:10px;top:11px;width:calc(50% - 10px);height:30px;background:red")]);
+    text(&mut arena,fixed,"Fixed");
+    let laid=laid_out(&arena,&[],1000,600);let b=box_for(&laid,fixed);
+    assert_eq!((b.x,b.y,b.width,b.height),(500,11,490,30));
+    for scroll in [0,100,650] {
+        assert_eq!(painted_background(&laid,502,13,scroll),Some(Color::rgb(255,0,0)));
+        assert_eq!(laid.hit_node(502,13,scroll),Some(fixed));
+        assert_eq!(laid.hit_link(502,13,scroll),Some(String::from("/fixed")));
+    }
+    let mut doc=crate::doc::Document::new();doc.arena=Some(arena);doc.web_layout=Some(laid);
+    assert_eq!(doc.hit_test_node(512,33,10,20,650),Some(fixed));
+    assert_eq!(doc.hit_test_link(512,33,10,20,650),Some(String::from("/fixed")));
+}
+
+#[test]
+fn image_percentage_calc_survives_replaced_element_sizing_and_preserves_ratio() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let parent=element(&mut arena,root,"div",&[("style","width:300px")]);
+    let image=element(&mut arena,parent,"img",&[("style","width:calc(100% - 20px);height:auto")]);
+    let assets=[crate::doc::DocNode::DomImage{node_id:image,width:400,height:200,pixels:Rc::new(alloc::vec![0;400*200*4])}];
+    let laid=layout_with_nodes_zoom(&mut TextFonts::new(),&arena,&[],1000,600,&assets,1.0).unwrap();
+    assert_eq!((box_for(&laid,image).width,box_for(&laid,image).height),(280,140));
+}
+
+#[test]
+fn viewport_is_initial_containing_block_but_auto_descendants_stay_indefinite() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let html=element(&mut arena,root,"html",&[("style","height:100%")]);
+    let definite=element(&mut arena,html,"div",&[("style","height:calc(50% - 10px)")]);
+    let automatic=element(&mut arena,html,"div",&[]);
+    let intrinsic=element(&mut arena,automatic,"div",&[("style","height:calc(100% - 10px)")]);
+    element(&mut arena,intrinsic,"div",&[("style","height:23px")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!(box_for(&laid,html).height,600);assert_eq!(box_for(&laid,definite).height,290);
+    assert_eq!(box_for(&laid,intrinsic).height,23);
+}
+
+#[test]
+fn calc_min_max_and_vertical_padding_use_css_percentage_bases() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let outer=element(&mut arena,root,"div",&[("style","width:300px;height:100px")]);
+    let inner=element(&mut arena,outer,"div",&[("style","width:calc(100% - 20px);max-width:calc(50% + 10px);height:20px;padding-top:calc(10% + 2px)")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!(box_for(&laid,inner).width,160);
+    assert_eq!(box_for(&laid,inner).height,32);
+}
+
+#[test]
+fn positioned_descendant_of_flattened_inline_keeps_geometry_and_link() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let cb=element(&mut arena,root,"div",&[("style","position:relative;width:300px;height:200px")]);
+    let anchor=element(&mut arena,cb,"a",&[("href","/nested")]);
+    let span=element(&mut arena,anchor,"span",&[]);
+    let positioned=element(&mut arena,span,"span",&[("style","position:absolute;left:40px;top:30px;width:80px;height:20px;background:red")]);
+    text(&mut arena,positioned,"Link");
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!((box_for(&laid,positioned).x,box_for(&laid,positioned).y),(40,30));
+    assert_eq!(laid.hit_node(42,32,0),Some(positioned));
+    assert_eq!(laid.hit_link(42,32,0),Some(String::from("/nested")));
+}
+
+#[test]
+fn nested_absolute_in_fixed_uses_fixed_padding_box_and_scroll_space() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let fixed=element(&mut arena,root,"div",&[("style","position:fixed;left:10px;bottom:20%;width:200px;height:calc(25% - 10px);background:blue")]);
+    let child=element(&mut arena,fixed,"div",&[("style","position:absolute;left:25%;top:50%;width:50%;height:50%;background:red")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!((box_for(&laid,fixed).x,box_for(&laid,fixed).y,box_for(&laid,fixed).height),(10,340,140));
+    assert_eq!((box_for(&laid,child).x,box_for(&laid,child).y,box_for(&laid,child).width,box_for(&laid,child).height),(60,410,100,70));
+    assert_eq!(laid.hit_node(65,415,400),Some(child));
+    assert_eq!(painted_background(&laid,65,415,400),Some(Color::rgb(255,0,0)));
+    assert_eq!(laid.height,600);
+}
+
+#[test]
+fn grid_calc_tracks_and_flex_basis_resolve_local_axes() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let grid=element(&mut arena,root,"div",&[("style","display:grid;width:300px;height:200px;grid-template-columns:calc(50% - 10px) 1fr;grid-template-rows:calc(50% - 20px) 1fr")]);
+    let first=element(&mut arena,grid,"div",&[]);let second=element(&mut arena,grid,"div",&[]);
+    let third=element(&mut arena,grid,"div",&[]);
+    let flex=element(&mut arena,root,"div",&[("style","display:flex;width:300px")]);
+    let item=element(&mut arena,flex,"div",&[("style","flex:0 0 calc(50% - 10px);height:20px")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!((box_for(&laid,first).width,box_for(&laid,first).height),(140,80));
+    assert_eq!((box_for(&laid,second).x,box_for(&laid,second).width),(140,160));
+    assert_eq!((box_for(&laid,third).y,box_for(&laid,third).height),(80,120));
+    assert_eq!(box_for(&laid,item).width,140);
+}
+
+#[test]
+fn inline_blocks_are_atomic_painted_boxes_in_mixed_text_line_flow() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let parent=element(&mut arena,root,"div",&[("style","width:300px")]);
+    text(&mut arena,parent,"A");
+    let atomic=element(&mut arena,parent,"span",&[("style","display:inline-block;width:100px;height:40px;padding:3px;border:2px solid black;background:red")]);
+    text(&mut arena,parent,"B");
+    let laid=laid_out(&arena,&[],1000,600);let b=box_for(&laid,atomic);
+    let mut fonts=TextFonts::new();let a_width=fonts.measure(FontFace::UiRegular,"A",16.0);
+    assert!((b.x as f32-a_width).abs()<=1.0);
+    assert_eq!((b.width,b.height),(110,50));assert_eq!(b.padding,[3;4]);assert_eq!(b.border,[2;4]);
+    assert_eq!(painted_background(&laid,b.x+5,b.y+5,0),Some(Color::rgb(255,0,0)));
+    let after=laid.boxes.iter().find(|b|b.lines.iter().any(|line|line.runs.iter().any(|run|run.span.text=="B"))).unwrap();
+    assert_eq!(after.x,b.x+b.width as i32);
+    assert!(after.y>=b.y&&after.y<b.y+b.height as i32);
+    assert_eq!(laid.hit_node(b.x+5,b.y+5,0),Some(atomic));
+}
+
+#[test]
+fn inline_blocks_wrap_as_whole_units_and_do_not_swallow_following_block() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let parent=element(&mut arena,root,"div",&[("style","width:140px")]);
+    let a=element(&mut arena,parent,"span",&[("style","display:inline-block;width:60px;height:40px;background:red")]);
+    let b=element(&mut arena,parent,"span",&[("style","display:inline-block;width:60px;height:40px;background:blue")]);
+    let c=element(&mut arena,parent,"span",&[("style","display:inline-block;width:60px;height:40px;background:green")]);
+    let block=element(&mut arena,parent,"div",&[("style","height:10px")]);
+    let laid=laid_out(&arena,&[],1000,600);let a=box_for(&laid,a);let b=box_for(&laid,b);let c=box_for(&laid,c);
+    assert_eq!((a.x,b.x,c.x),(0,60,0));assert_eq!(a.y,b.y);assert!(c.y>=a.y+40);
+    assert!(box_for(&laid,block).y>=c.y+40);
+    assert_eq!(painted_background(&laid,5,c.y+5,0),Some(Color::rgb(0,128,0)));
+}
+
+#[test]
+fn input_hits_follow_fixed_scroll_clipping_and_overlay_paint_order() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let fixed=element(&mut arena,root,"input",&[("style","position:fixed;left:20px;top:10px;width:80px;height:25px")]);
+    let clip=element(&mut arena,root,"div",&[("style","width:40px;height:25px;overflow:clip;margin-top:50px")]);
+    let clipped=element(&mut arena,clip,"input",&[("style","width:80px;height:25px")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!(laid.hit_input_node(25,15,200),Some(fixed));
+    let y=box_for(&laid,clipped).y+5;
+    assert_eq!(laid.hit_input_node(5,y,0),Some(clipped));assert_eq!(laid.hit_input_node(50,y,0),None);
+    let mut doc=crate::doc::Document::new();doc.web_layout=Some(laid);
+    assert_eq!(doc.hit_test_input_node(35,35,10,20,200),Some(fixed));
+    assert_eq!(doc.hit_test_input_node(60,y+20,10,20,0),None);
+    element(&mut arena,root,"div",&[("style","position:fixed;left:20px;top:10px;width:80px;height:25px;background:red;z-index:2")]);
+    let covered=laid_out(&arena,&[],1000,600);
+    assert_eq!(covered.hit_input_node(25,15,200),None);
+}
+
+#[test]
+fn deferred_nonnegative_calc_clamps_spacing_tracks_and_gaps_not_offsets() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let cb=element(&mut arena,root,"div",&[("style","position:relative;width:100px;height:100px")]);
+    let padded=element(&mut arena,cb,"div",&[("style","width:20px;height:10px;padding:calc(1% - 100px);border-left-width:calc(1% - 100px)")]);
+    let grid=element(&mut arena,cb,"div",&[("style","display:grid;width:100px;grid-template-columns:calc(1% - 100px) 1fr;column-gap:calc(1% - 100px)")]);
+    let zero=element(&mut arena,grid,"div",&[("style","height:10px")]);let rest=element(&mut arena,grid,"div",&[("style","height:10px")]);
+    let shifted=element(&mut arena,cb,"div",&[("style","position:absolute;left:calc(1% - 100px);top:0;width:10px;height:10px;margin-left:calc(1% - 10px)")]);
+    let laid=laid_out(&arena,&[],1000,600);
+    assert_eq!((box_for(&laid,padded).width,box_for(&laid,padded).height),(20,10));
+    assert_eq!(box_for(&laid,padded).padding,[0;4]);assert_eq!(box_for(&laid,padded).border,[0;4]);
+    assert_eq!(box_for(&laid,zero).width,0);assert_eq!((box_for(&laid,rest).x,box_for(&laid,rest).width),(0,100));
+    assert_eq!(box_for(&laid,shifted).x,-108);
+}
+
+#[test]
+fn images_honor_two_explicit_css_or_attribute_axes_without_ratio_expansion() {
+    let mut arena=DocumentArena::new();let root=arena.root;
+    let css=element(&mut arena,root,"img",&[("style","width:300px;height:10px")]);
+    let attrs=element(&mut arena,root,"img",&[("width","250"),("height","12")]);
+    let assets=[css,attrs].map(|node_id|crate::doc::DocNode::DomImage{node_id,width:400,height:200,pixels:Rc::new(alloc::vec![0;400*200*4])});
+    let laid=layout_with_nodes_zoom(&mut TextFonts::new(),&arena,&[],1000,600,&assets,1.0).unwrap();
+    assert_eq!((box_for(&laid,css).width,box_for(&laid,css).height),(300,10));
+    assert_eq!((box_for(&laid,attrs).width,box_for(&laid,attrs).height),(250,12));
+}
+
+#[test]
+fn visibility_hidden_and_opacity_zero_elements_do_not_paint_or_block_clicks() {
+    let mut arena = DocumentArena::new(); let root = arena.root;
+    let base = element(&mut arena, root, "div", &[("id", "under"), ("style", "width:200px;height:100px;background:blue")]);
+    let overlay = element(&mut arena, root, "div", &[("id", "overlay"), ("style", "position:fixed;top:0;left:0;width:100%;height:100%;background:black;visibility:hidden")]);
+    let laid = laid_out(&arena, &[], 1000, 600);
+    assert!(!box_for(&laid, overlay).visible);
+    assert!(box_for(&laid, base).visible);
+    let mut count = 0;
+    for (b, ..) in laid.paint_boxes((0, 0, 1000, 600), 0) {
+        if b.node_id == Some(overlay) { count += 1; }
+    }
+    assert_eq!(count, 0);
+    assert_eq!(laid.hit_node(50, 50, 0), Some(base));
 }

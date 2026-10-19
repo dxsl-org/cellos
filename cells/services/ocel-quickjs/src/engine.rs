@@ -19,7 +19,8 @@ extern crate alloc;
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use dom_arena::{DocumentArena, DomEvent, DomMutation, JsContext, JsEngine, JsError, NodeData, NodeId};
+use dom_arena::{BrowserEnvironment, BrowserFrame, BrowserReply, BrowserRequest, BrowserResourceKind,
+    DocumentArena, DomEvent, DomMutation, JsContext, JsEngine, JsError, NodeData, NodeId};
 
 use super::ffi;
 
@@ -31,8 +32,8 @@ use super::ffi;
 const MAX_STACK_BYTES: usize = 192 * 1024;
 
 // QuickJS polls during interpretation/parsing; additionally cap promise jobs.
-const MAX_INTERRUPT_POLLS: usize = 1000;
-const MAX_PENDING_JOBS: usize = 1000;
+const MAX_INTERRUPT_POLLS: usize = 100_000;
+const MAX_PENDING_JOBS: usize = 10_000;
 
 unsafe extern "C" fn interrupt_budget(_: *mut ffi::JSRuntime, opaque: *mut core::ffi::c_void) -> core::ffi::c_int {
     let remaining = &mut *opaque.cast::<usize>();
@@ -57,7 +58,7 @@ impl Drop for InterruptGuard<'_> {
 /// Heap ceiling for the engine's own accounting. The allocation still comes
 /// from the cell heap (see the cell's `declare_custom_heap!`); this only makes
 /// the engine's allocator fail the allocation instead of the cell.
-const MAX_HEAP_BYTES: usize = 3 * 1024 * 1024;
+const MAX_HEAP_BYTES: usize = 20 * 1024 * 1024;
 
 const PRELUDE: &str = include_str!("prelude.js");
 
@@ -87,6 +88,9 @@ pub struct QuickJsContext {
     rt: *mut ffi::JSRuntime,
     ctx: *mut ffi::JSContext,
     mutations: Vec<DomMutation>,
+    browser_requests: Vec<BrowserRequest>,
+    browser_wakeup: Option<u64>,
+    native_layout: alloc::boxed::Box<super::native_layout::State>,
     /// Non-fatal engine diagnostics (script `console.log`, runtime warnings)
     /// surfaced to the cell log rather than into the mutation stream.
     logs: Vec<String>,
@@ -113,6 +117,9 @@ impl QuickJsContext {
             rt: core::ptr::null_mut(),
             ctx: core::ptr::null_mut(),
             mutations: Vec::new(),
+            browser_requests: Vec::new(),
+            browser_wakeup: None,
+            native_layout: alloc::boxed::Box::default(),
             logs: Vec::new(),
             output_limited: false,
             usable: true,
@@ -138,6 +145,7 @@ impl QuickJsContext {
             }
             out.ctx = ctx;
         }
+        super::native_layout::install(out.ctx, &mut out.native_layout);
         if let Err(e) = out.eval_raw(PRELUDE, "<ocel-prelude>") {
             // A prelude failure is fatal for the DOM dialect: report it through
             // the log channel so the cell's start-up line can say so.
@@ -183,14 +191,10 @@ impl QuickJsContext {
                 name.as_ptr(),
                 ffi::JS_EVAL_TYPE_GLOBAL,
             );
-            if ffi::vios_js_is_exception(value) != 0 {
-                let message = self.take_exception_message();
-                ffi::vios_js_free(self.ctx, value);
-                drop(guard);
-                self.collect_mutations();
-                return Err(JsError { message, line: 0 });
-            }
-            let repr = self.value_to_string(value);
+            let exception = if ffi::vios_js_is_exception(value) != 0 {
+                Some(self.take_exception_message())
+            } else { None };
+            let repr = if exception.is_none() { self.value_to_string(value) } else { String::new() };
             let result_limited = core::mem::take(&mut self.output_limited);
             ffi::vios_js_free(self.ctx, value);
             let mut job_error = None;
@@ -209,7 +213,7 @@ impl QuickJsContext {
             }
             drop(guard);
             self.collect_mutations();
-            match job_error {
+            match exception.or(job_error) {
                 _ if result_limited => Err(JsError { message: String::from("JavaScript result byte limit exceeded"), line: 0 }),
                 Some(message) => Err(JsError { message, line: 0 }),
                 None => Ok(repr),
@@ -275,102 +279,16 @@ impl QuickJsContext {
     /// Drain the prelude's queues into Rust-side mutations and logs.
     fn collect_mutations(&mut self) {
         let drained = self.eval_queue("__vios_takeMutations()");
-        let mut records = 0;
-        for record in drained.lines() {
-            records += 1;
-            if records > dom_arena::OCEL_JS_MAX_MUTATIONS || self.mutations.len() >= dom_arena::OCEL_JS_MAX_MUTATIONS {
-                self.usable = false;
-                break;
-            }
-            if record.is_empty() {
-                continue;
-            }
-            let Some(decoded) = record.split('\t').take(6).map(decode_field).collect::<Option<Vec<_>>>() else {
-                self.usable = false;
-                break;
-            };
-            let mut fields = decoded.iter().map(String::as_str);
-            let kind = fields.next().unwrap_or("");
-            match kind {
-                "C" => {
-                    let (Some(id), Some(kind), Some(tag), Some(text)) =
-                        (fields.next(), fields.next(), fields.next(), fields.next()) else { continue; };
-                    let Ok(id) = id.parse::<u32>() else { continue; };
-                    let data = match kind {
-                        "1" => NodeData::Element { tag: String::from(tag), attributes: Vec::new() },
-                        "3" => NodeData::Text(String::from(text)),
-                        "8" => NodeData::Comment(String::from(text)),
-                        _ => continue,
-                    };
-                    self.mutations.push(DomMutation::CreateNode { node: NodeId(id), data });
-                }
-                "T" => {
-                    if let Some(title) = fields.next() {
-                        self.mutations.push(DomMutation::SetDocumentTitle {
-                            title: title.to_string(),
-                        });
-                    }
-                }
-                "X" => {
-                    let (Some(node), Some(text)) = (fields.next(), fields.next()) else {
-                        continue;
-                    };
-                    if let Ok(id) = node.parse::<u32>() {
-                        self.mutations.push(DomMutation::SetText {
-                            node: NodeId(id),
-                            text: text.to_string(),
-                        });
-                    }
-                }
-                "A" => {
-                    let (Some(node), Some(key), Some(val)) =
-                        (fields.next(), fields.next(), fields.next())
-                    else {
-                        continue;
-                    };
-                    if let Ok(id) = node.parse::<u32>() {
-                        self.mutations.push(DomMutation::SetAttribute {
-                            node: NodeId(id),
-                            key: key.to_string(),
-                            val: val.to_string(),
-                        });
-                    }
-                }
-                "R" => {
-                    let (Some(node), Some(key)) = (fields.next(), fields.next()) else {
-                        continue;
-                    };
-                    if let Ok(id) = node.parse::<u32>() {
-                        self.mutations.push(DomMutation::RemoveAttribute {
-                            node: NodeId(id),
-                            key: key.to_string(),
-                        });
-                    }
-                }
-                "P" => {
-                    let (Some(parent), Some(child)) = (fields.next(), fields.next()) else {
-                        continue;
-                    };
-                    if let (Ok(p), Ok(c)) = (parent.parse::<u32>(), child.parse::<u32>()) {
-                        self.mutations.push(DomMutation::AppendChild {
-                            parent: NodeId(p),
-                            child: NodeId(c),
-                        });
-                    }
-                }
-                "D" => {
-                    let (Some(parent), Some(child)) = (fields.next(), fields.next()) else {
-                        continue;
-                    };
-                    if let (Ok(p), Ok(c)) = (parent.parse::<u32>(), child.parse::<u32>()) {
-                        self.mutations.push(DomMutation::RemoveChild {
-                            parent: NodeId(p),
-                            child: NodeId(c),
-                        });
-                    }
-                }
-                _ => {}
-            }
+        match super::native_layout::parse_mutations(&drained) {
+            Ok(parsed) => self.mutations.extend(parsed),
+            Err(_) => self.usable = false,
+        }
+        self.mutations.append(&mut self.native_layout.unapplied);
+        let bytes = dom_arena::ipc::serialized_len_bounded(&self.mutations, dom_arena::OCEL_JS_MAX_MUTATION_BYTES);
+        if self.mutations.len().saturating_add(self.native_layout.mutations) > dom_arena::OCEL_JS_MAX_MUTATIONS
+            || bytes.is_err() || bytes.unwrap_or(usize::MAX).saturating_add(self.native_layout.mutation_bytes) > dom_arena::OCEL_JS_MAX_MUTATION_BYTES
+            || self.native_layout.failed {
+            self.usable = false;
         }
 
         let logged = self.eval_queue("__vios_takeLogs()");
@@ -384,6 +302,45 @@ impl QuickJsContext {
                 self.logs.push(line.to_string());
             }
         }
+        self.collect_browser_output();
+    }
+
+    fn collect_browser_output(&mut self) {
+        let drained = self.eval_queue("__vios_takeRequests()");
+        for row in drained.lines() {
+            if self.browser_requests.len() >= dom_arena::OCEL_JS_MAX_BROWSER_REQUESTS { self.usable = false; break; }
+            let Some(fields) = row.split('\t').map(decode_field).collect::<Option<Vec<_>>>() else { self.usable = false; break; };
+            let parsed = (|| -> Option<BrowserRequest> {
+                let id = || fields.get(1)?.parse::<u32>().ok();
+                match fields.first()?.as_str() {
+                    "L" if fields.len() == 5 => Some(BrowserRequest::Load {
+                        id: id()?, node: Some(NodeId(fields[2].parse().ok()?)), url: fields[3].clone(),
+                        kind: match fields[4].as_str() {
+                            "Script" => BrowserResourceKind::Script,
+                            "Stylesheet" => BrowserResourceKind::Stylesheet,
+                            "Image" => BrowserResourceKind::Image, _ => return None,
+                        },
+                    }),
+                    "F" if fields.len() >= 6 && (fields.len() - 6) % 2 == 0 => Some(BrowserRequest::Fetch {
+                        id: id()?, url: fields[2].clone(), method: fields[3].clone(), body: fields[4].clone(),
+                        credentials: fields[5].clone(),
+                        headers: fields[6..].chunks_exact(2).map(|p| (p[0].clone(), p[1].clone())).collect(),
+                    }),
+                    "A" if fields.len() == 2 => Some(BrowserRequest::Abort { id: id()? }),
+                    "K" if fields.len() == 2 => Some(BrowserRequest::SetCookie { value: fields[1].clone() }),
+                    _ => None,
+                }
+            })();
+            let Some(request) = parsed else { self.usable = false; break; };
+            self.browser_requests.push(request);
+        }
+        if dom_arena::ipc::serialized_len_bounded(&self.browser_requests, dom_arena::OCEL_JS_MAX_BROWSER_REQUEST_BYTES).is_err() {
+            self.usable = false;
+        }
+        let wake = self.eval_queue("__vios_nextWakeup()");
+        self.browser_wakeup = if wake.is_empty() { None } else {
+            match wake.parse::<u64>() { Ok(value) if value <= 9_007_199_254_740_991 => Some(value), _ => { self.usable = false; None } }
+        };
     }
 
     /// Evaluate a prelude helper that returns a string, without recursing into
@@ -414,8 +371,12 @@ impl QuickJsContext {
             }
             // The prelude already bounds joined UTF-16 queues; allow three UTF-8
             // bytes per unit at the C boundary, then independently validate wire.
-            let limit = if expr == "__vios_takeLogs()" { dom_arena::OCEL_JS_MAX_LOG_BYTES }
-                else { dom_arena::OCEL_JS_MAX_MUTATION_BYTES };
+            let limit = match expr {
+                "__vios_takeLogs()" => dom_arena::OCEL_JS_MAX_LOG_BYTES,
+                "__vios_takeRequests()" => dom_arena::OCEL_JS_MAX_BROWSER_REQUEST_BYTES,
+                "__vios_nextWakeup()" => 32,
+                _ => dom_arena::OCEL_JS_MAX_MUTATION_BYTES,
+            };
             self.output_limited = false;
             let out = self.value_to_string_bounded(value, limit * 3);
             if core::mem::take(&mut self.output_limited) { self.usable = false; }
@@ -436,6 +397,7 @@ impl JsContext for QuickJsContext {
             if index != 0 { source.push(','); }
             let (kind, tag, text) = match &node.data {
                 NodeData::DocumentRoot => (9, "", ""),
+                NodeData::DocumentFragment => (11, "", ""),
                 NodeData::Element { tag, .. } => (1, tag.as_str(), ""),
                 NodeData::Text(text) => (3, "", text.as_str()),
                 NodeData::Comment(text) => (8, "", text.as_str()),
@@ -459,8 +421,60 @@ impl JsContext for QuickJsContext {
             source.push(']');
         }
         source.push_str("],"); push_js_string(&mut source, title); source.push(')');
-        self.eval_raw(&source, "<ocel-document-sync>").map(|_| ())
+        let res = self.eval_raw(&source, "<ocel-document-sync>");
+        unsafe { ffi::JS_RunGC(self.rt); }
+        res.map(|_| ())
     }
+    fn eval_script(&mut self, script: &str, node: Option<NodeId>) -> Result<String, JsError> {
+        let mut source = String::from("__vios_evalScript(");
+        push_js_string(&mut source, script);
+        source.push(',');
+        if let Some(node) = node { source.push_str(&alloc::format!("{}", node.0)); } else { source.push_str("null"); }
+        source.push(')');
+        let res = self.eval_raw(&source, "<document-script>");
+        unsafe { ffi::JS_RunGC(self.rt); }
+        res
+    }
+
+    fn configure_browser(&mut self, environment: &BrowserEnvironment) -> Result<(), JsError> {
+        if environment.now_ms > 9_007_199_254_740_991 {
+            return Err(JsError { message: String::from("Browser clock exceeds exact JavaScript range"), line: 0 });
+        }
+        let mut source = alloc::format!("__vios_configure({{width:{},height:{},now_ms:{},url:",
+            environment.width, environment.height, environment.now_ms);
+        push_js_string(&mut source, &environment.url); source.push_str(",user_agent:");
+        push_js_string(&mut source, &environment.user_agent); source.push_str(",cookie:");
+        push_js_string(&mut source, &environment.cookie); source.push_str("})");
+        self.eval_raw(&source, "<browser-configure>").map(|_| ())
+    }
+
+    fn pump_browser(&mut self, frame: &BrowserFrame) -> Result<(), JsError> {
+        if frame.now_ms > 9_007_199_254_740_991 {
+            return Err(JsError { message: String::from("Browser clock exceeds exact JavaScript range"), line: 0 });
+        }
+        let mut seen = alloc::collections::BTreeSet::new();
+        for item in &frame.layout {
+            if !seen.insert(item.node) || ![item.x, item.y, item.width, item.height].iter().all(|n| n.is_finite())
+                || item.width < 0.0 || item.height < 0.0 {
+                return Err(JsError { message: String::from("Invalid browser layout snapshot"), line: 0 });
+            }
+        }
+        let source = alloc::format!("__vios_pump({})", frame_expression(frame));
+        self.eval_raw(&source, "<browser-pump>").map(|_| ())
+    }
+
+    fn complete_browser(&mut self, reply: &BrowserReply) -> Result<(), JsError> {
+        let mut source = alloc::format!("__vios_complete({{id:{},status:{},url:", reply.id, reply.status);
+        push_js_string(&mut source, &reply.url); source.push_str(",headers:");
+        push_js_pairs(&mut source, &reply.headers); source.push_str(",body:");
+        push_js_string(&mut source, &reply.body); source.push_str(",error:");
+        if let Some(error) = &reply.error { push_js_string(&mut source, error); } else { source.push_str("null"); }
+        source.push_str("})");
+        self.eval_raw(&source, "<browser-complete>").map(|_| ())
+    }
+
+    fn take_browser_requests(&mut self) -> Vec<BrowserRequest> { core::mem::take(&mut self.browser_requests) }
+    fn next_browser_wakeup(&self) -> Option<u64> { self.browser_wakeup }
     fn eval(&mut self, script: &str) -> Result<String, JsError> {
         self.eval_raw(script, "<script>")
     }
@@ -497,6 +511,18 @@ impl QuickJsContext {
     pub fn take_logs(&mut self) -> Vec<String> {
         core::mem::take(&mut self.logs)
     }
+
+    pub(super) fn begin_native_call(&mut self, caller: usize, context: u64, operation: Option<usize>) {
+        super::native_layout::set_reply_operation(operation);
+        self.native_layout.caller = caller;
+        self.native_layout.context = context;
+        self.native_layout.operation = operation;
+        self.native_layout.queries = 0;
+        self.native_layout.mutations = 0;
+        self.native_layout.mutation_bytes = 0;
+        self.native_layout.failed = false;
+    }
+
 }
 
 /// Minimal `Number`-to-text for the value repr: integers print without a
@@ -533,7 +559,33 @@ fn push_js_string(out: &mut String, value: &str) {
     out.push('"');
 }
 
-fn decode_field(field: &str) -> Option<String> {
+fn push_js_pairs(out: &mut String, pairs: &[(String, String)]) {
+    out.push('[');
+    for (index, (key, value)) in pairs.iter().enumerate() {
+        if index != 0 { out.push(','); }
+        out.push('['); push_js_string(out, key); out.push(','); push_js_string(out, value); out.push(']');
+    }
+    out.push(']');
+}
+
+pub(super) fn frame_expression(frame: &BrowserFrame) -> String {
+    let mut source = alloc::format!("({{now_ms:{},width:{},height:{},scroll_y:{},parsing_complete:{},cookie:",
+        frame.now_ms, frame.width, frame.height, frame.scroll_y, frame.parsing_complete);
+    push_js_string(&mut source, &frame.cookie); source.push_str(",layout:[");
+    for (index, item) in frame.layout.iter().enumerate() {
+        if index != 0 { source.push(','); }
+        source.push_str(&alloc::format!("{{node:{},x:{},y:{},width:{},height:{},styles:",
+            item.node.0, item.x, item.y, item.width, item.height));
+        push_js_pairs(&mut source, &item.styles); source.push('}');
+    }
+    source.push_str("]})");
+    source
+}
+
+#[cfg(test)]
+mod tests;
+
+pub(super) fn decode_field(field: &str) -> Option<String> {
     let bytes = field.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut index = 0;

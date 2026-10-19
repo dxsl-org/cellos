@@ -193,3 +193,78 @@ fn success_location_is_not_followed_and_header_limit_rejects_growth() {
     for _ in 0..4 { decoder.feed(&chunk).unwrap(); }
     assert!(decoder.feed(b"x").is_err()); assert!(decoder.body.is_empty());
 }
+
+#[test]
+fn same_site_redirect_cannot_escape_the_original_resource_boundary() {
+    let fake = Fake::default();
+    fake.0.borrow_mut().reads.push_back(typed(NetResponse::Data(b"HTTP/1.1 302 Found\r\nLocation: http://unrelated.test/script.js\r\n\r\n")));
+    let mut resource = job("http://cdn.example.test/script.js", &fake);
+    resource.same_site = Some("example.test".into());
+    assert!(finish(&mut resource).unwrap_err().contains("Cross-site"));
+    assert_eq!(fake.0.borrow().closes, alloc::vec![1]);
+    assert!(fake.0.borrow().operations.is_empty());
+}
+
+#[test]
+fn browser_post_preserves_exact_bytes_and_returns_real_http_error() {
+    let fake = Fake::default();
+    fake.0.borrow_mut().reads.push_back(typed(NetResponse::Data(b"HTTP/1.1 404 Missing\r\nContent-Length: 7\r\nX-Real: yes\r\n\r\nmissing")));
+    let mut fetch = job("http://example.test/api", &fake);
+    fetch.configure_browser("POST", &[("Content-Type".into(),"text/plain".into())], b"a=1\r\nb=2").unwrap();
+    let expected = fetch.request.clone();
+    let result = finish(&mut fetch).unwrap();
+    assert_eq!(result.status,404); assert_eq!(result.body,b"missing");
+    assert!(result.headers.iter().any(|(k,v)| k == "x-real" && v == "yes"));
+    assert_eq!(fake.0.borrow().accepted,expected);
+    assert!(expected.ends_with(b"Content-Length: 8\r\n\r\na=1\r\nb=2"));
+    let fake = Fake::default();
+    fake.0.borrow_mut().reads.push_back(typed(NetResponse::Data(b"HTTP/1.1 404 Missing\r\nContent-Length: 0\r\n\r\n")));
+    assert!(finish(&mut job("http://example.test/api",&fake)).is_err());
+}
+
+#[test]
+fn browser_redirect_is_returned_without_issuing_unchecked_next_request() {
+    let fake = Fake::default();
+    fake.0.borrow_mut().reads.push_back(typed(NetResponse::Data(b"HTTP/1.1 302 Found\r\nLocation: http://evil.test/x\r\nSet-Cookie: secret=yes; HttpOnly\r\n\r\n")));
+    let mut fetch = job("http://example.test/api",&fake);
+    fetch.configure_browser("GET",&[],b"").unwrap();
+    let result = finish(&mut fetch).unwrap();
+    assert_eq!(result.status,302);
+    assert!(result.headers.iter().any(|(k,v)|k == "location" && v == "http://evil.test/x"));
+    assert_eq!(fake.0.borrow().closes,alloc::vec![1]);
+}
+
+#[test]
+fn head_and_bodyless_statuses_do_not_wait_for_eof_or_allocate_body() {
+    let mut head = ResponseDecoder::for_fetch(1,true);
+    head.feed(b"HTTP/1.1 200 OK\r\nContent-Length: 999999\r\n\r\n").unwrap();
+    assert!(head.complete()); assert_eq!(head.body.capacity(),0);
+    for code in [204,205,304] {
+        let mut decoder = ResponseDecoder::for_fetch(4,false);
+        decoder.feed(format!("HTTP/1.1 {code} Empty\r\n\r\n").as_bytes()).unwrap();
+        assert!(decoder.complete()); assert!(decoder.body.is_empty());
+    }
+    assert!(ResponseDecoder::for_fetch(4,false).feed(b"HTTP/1.1 999 Nope\r\n\r\n").is_err());
+    assert!(ResponseDecoder::for_fetch(4,false).feed(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n").is_err());
+}
+
+#[test]
+fn browser_request_validation_rejects_injection_and_unsupported_methods() {
+    let fake = Fake::default(); let mut fetch = job("http://example.test/",&fake);
+    assert!(fetch.configure_browser("GET",&[("X-Ok".into(),"a\r\nInjected: yes".into())],b"").is_err());
+    assert!(fetch.configure_browser("GET",&[("Host".into(),"evil.test".into())],b"").is_err());
+    assert!(fetch.configure_browser("CONNECT",&[],b"").is_err());
+    assert!(fetch.configure_browser("HEAD",&[],b"body").is_err());
+}
+
+#[test]
+fn cancelled_browser_post_reclaims_exact_pending_socket() {
+    let fake = Fake::default(); fake.0.borrow_mut().hold = Some(Stage::Read);
+    let mut fetch = job("http://example.test/api",&fake);
+    fetch.configure_browser("POST",&[],b"payload").unwrap();
+    advance_to_pending(&mut fetch,Stage::Read);
+    fetch.cancel();
+    assert!(fake.0.borrow().operations.is_empty());
+    assert_eq!(fake.0.borrow().closes,alloc::vec![1]);
+    assert!(fetch.poll().is_pending());
+}

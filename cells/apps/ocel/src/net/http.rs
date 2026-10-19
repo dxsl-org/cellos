@@ -62,9 +62,12 @@ pub struct ResponseDecoder {
     framing: Framing, pending: Vec<u8>, pub body: Vec<u8>, limit: usize,
     pub status: u16, pub location: Option<String>, pub media_type: String,
     gemini: bool, header_bytes: usize, interim: usize,
+    pub headers: Vec<(String, String)>,
+    fetch: bool, head: bool,
 }
 impl ResponseDecoder {
-    pub fn new(limit: usize, gemini: bool) -> Self { Self { framing: Framing::Headers, pending: Vec::new(), body: Vec::new(), limit, status: 0, location: None, media_type: String::new(), gemini, header_bytes: 0, interim: 0 } }
+    pub fn new(limit: usize, gemini: bool) -> Self { Self { framing: Framing::Headers, pending: Vec::new(), body: Vec::new(), limit, status: 0, location: None, media_type: String::new(), gemini, header_bytes: 0, interim: 0, headers: Vec::new(), fetch: false, head: false } }
+    pub fn for_fetch(limit: usize, head: bool) -> Self { Self { fetch: true, head, ..Self::new(limit, false) } }
     fn append_pending(&mut self, count: usize) -> Result<(), String> {
         if count > self.limit.saturating_sub(self.body.len()) { return Err("Response exceeds document/resource byte budget".into()); }
         let needed = self.body.len() + count;
@@ -166,12 +169,15 @@ impl ResponseDecoder {
         let code = fields.next().ok_or("Missing HTTP status code")?;
         if code.len() != 3 || !code.bytes().all(|b| b.is_ascii_digit()) { return Err("Malformed HTTP status code".into()); }
         self.status = code.parse().map_err(|_| "Invalid HTTP status")?;
+        if !(100..600).contains(&self.status) { return Err("Invalid HTTP status range".into()); }
         let mut length: Option<usize> = None; let mut transfer = false;
         for line in lines {
             if line.starts_with(' ') || line.starts_with('\t') { return Err("Folded HTTP headers unsupported".into()); }
             let (name, value) = line.split_once(':').ok_or("Malformed HTTP header")?;
             if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b)) || value.bytes().any(|b| b < 32 && b != 9 || b == 127) { return Err("Invalid HTTP header".into()); }
             let value = value.trim();
+            if self.headers.len() >= 64 { return Err("Too many HTTP headers".into()); }
+            self.headers.push((name.to_ascii_lowercase(), value.into()));
             if name.eq_ignore_ascii_case("content-length") {
                 if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) { return Err("Invalid Content-Length".into()); }
                 let n = value.parse::<usize>().map_err(|_| "Content-Length overflow")?;
@@ -181,21 +187,21 @@ impl ResponseDecoder {
             } else if name.eq_ignore_ascii_case("location") {
                 if self.location.is_some() || value.is_empty() { return Err("Invalid duplicate/empty redirect location".into()); } self.location = Some(value.into());
             } else if name.eq_ignore_ascii_case("content-type") { self.media_type = value.into(); }
-            else if name.eq_ignore_ascii_case("content-encoding") && !value.eq_ignore_ascii_case("identity") { return Err("Compressed HTTP content unsupported".into()); }
+            else if name.eq_ignore_ascii_case("content-encoding") && !self.head && !matches!(self.status,204|205|304) && !value.eq_ignore_ascii_case("identity") { return Err("Compressed HTTP content unsupported".into()); }
         }
         if transfer && length.is_some() { return Err("Ambiguous HTTP framing".into()); }
         if (100..200).contains(&self.status) {
             self.interim += 1; if self.interim > 4 || self.status == 101 { return Err("Unsupported HTTP interim response".into()); }
-            self.location = None; self.media_type.clear(); self.framing = Framing::Headers; return Ok(());
+            self.location = None; self.media_type.clear(); self.headers.clear(); self.framing = Framing::Headers; return Ok(());
         }
         if matches!(self.status, 301 | 302 | 303 | 307 | 308) {
             if self.location.is_none() { return Err("Redirect missing Location".into()); }
             self.pending.clear(); self.framing = Framing::Complete; return Ok(());
         }
-        if !(200..300).contains(&self.status) { return Err(format!("HTTP status {}", self.status)); }
+        if !self.fetch && !(200..300).contains(&self.status) { return Err(format!("HTTP status {}", self.status)); }
         self.location = None; // Location on a successful response is not a redirect.
-        if length.is_some_and(|n| n > self.limit) { return Err("Content-Length exceeds body budget".into()); }
-        self.framing = if self.status == 204 || self.status == 205 { Framing::Complete }
+        if !self.head && !matches!(self.status,204|205|304) && length.is_some_and(|n| n > self.limit) { return Err("Content-Length exceeds body budget".into()); }
+        self.framing = if self.head || matches!(self.status, 204 | 205 | 304) { Framing::Complete }
             else if transfer { Framing::ChunkSize } else if let Some(n) = length { if n == 0 { Framing::Complete } else { Framing::Fixed(n) } } else { Framing::Eof };
         Ok(())
     }
@@ -284,11 +290,12 @@ impl Transport for KernelTransport {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Stage { Resolve, Connect, WaitConnect, Send, Read, Done }
 #[derive(Debug)]
-pub struct FetchResult { pub url: String, pub body: Vec<u8>, pub media_type: String, pub gemini: bool }
+pub struct FetchResult { pub url: String, pub body: Vec<u8>, pub media_type: String, pub gemini: bool, pub status: u16, pub headers: Vec<(String, String)> }
 pub struct FetchJob<T: Transport = KernelTransport> {
     url: Url, endpoint: usize, deadline: u64, stage: Stage, pending: Option<IpcOpId>, cap: Option<u64>,
     request: Vec<u8>, sent: usize, sent_chunk: usize, decoder: ResponseDecoder, visited: Vec<String>,
     same_origin: Option<String>,
+    same_site: Option<String>, manual_redirects: bool,
     address: Option<[u8; 4]>,
     io: T,
 }
@@ -308,11 +315,24 @@ impl FetchJob<KernelTransport> {
         if !crate::resources::is_same_site(&base.host, &target.host) {
             return Err("Cross-site resource request blocked".into());
         }
-        Self::new(url, limit)
+        let mut job = Self::new(url, limit)?;
+        job.same_site = Some(base.host);
+        Ok(job)
+    }
+    /// Native browser controller follows redirects so cookies and CORS are checked per hop.
+    pub fn browser(url: &str, limit: usize, method: &str, headers: &[(&str, &str)], body: &[u8]) -> Result<Self, String> {
+        recover_unaccepted_cleanup();
+        let mut job = Self::prepare(url, limit, None, KernelTransport::new())?;
+        job.configure_browser(method, headers, body)?;
+        Ok(job)
     }
 }
 impl<T: Transport> FetchJob<T> {
-    fn with_transport(url: &str, limit: usize, same_origin: Option<String>, mut io: T) -> Result<Self, String> {
+    fn with_transport(url: &str, limit: usize, same_origin: Option<String>, io: T) -> Result<Self, String> {
+        let mut job = Self::prepare(url, limit, same_origin, io)?;
+        job.make_request(); Ok(job)
+    }
+    fn prepare(url: &str, limit: usize, same_origin: Option<String>, mut io: T) -> Result<Self, String> {
         let url = Url::parse(url)?;
         if same_origin.as_ref().is_some_and(|origin| *origin != url.origin()) { return Err("Cross-origin resource request blocked".into()); }
         let endpoint = match io.endpoint() {
@@ -322,8 +342,31 @@ impl<T: Transport> FetchJob<T> {
         let now = io.now();
         let cached_addr = cached_resolve(&url.host, now);
         let stage = if cached_addr.is_some() { Stage::Connect } else { Stage::Resolve };
-        let mut job = Self { decoder: ResponseDecoder::new(limit, url.scheme == "gemini"), visited: alloc::vec![url.full.clone()], url, endpoint, deadline: now.saturating_add(LOAD_TICKS), stage, pending: None, cap: None, request: Vec::new(), sent: 0, sent_chunk: 0, same_origin, address: cached_addr, io };
-        job.make_request(); Ok(job)
+        Ok(Self { decoder: ResponseDecoder::new(limit, url.scheme == "gemini"), visited: alloc::vec![url.full.clone()], url, endpoint, deadline: now.saturating_add(LOAD_TICKS), stage, pending: None, cap: None, request: Vec::new(), sent: 0, sent_chunk: 0, same_origin, same_site: None, manual_redirects: false, address: cached_addr, io })
+    }
+    fn configure_browser(&mut self, method: &str, headers: &[(&str, &str)], body: &[u8]) -> Result<(), String> {
+        if !matches!(self.url.scheme.as_str(), "http" | "https") || !matches!(method, "GET" | "HEAD" | "POST") || method != "POST" && !body.is_empty() {
+            return Err("Unsupported browser HTTP method/body".into());
+        }
+        if body.len() > 64 * 1024 || headers.len() > 32 { return Err("Browser HTTP request exceeds budget".into()); }
+        let header_bytes = headers.iter().try_fold(0usize, |total, (name, value)| {
+            if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
+                || value.bytes().any(|b| b < 32 || b == 127)
+                || ["host", "connection", "content-length", "transfer-encoding", "accept-encoding"].iter().any(|n| name.eq_ignore_ascii_case(n)) {
+                return Err(String::from("Invalid browser HTTP header"));
+            }
+            total.checked_add(name.len() + value.len() + 4).filter(|n| *n <= 8192).ok_or_else(|| String::from("Browser HTTP headers exceed budget"))
+        })?;
+        use core::fmt::Write;
+        let mut request = String::with_capacity(method.len() + self.url.path.len() + self.url.authority.len() + header_bytes + body.len() + 160);
+        write!(&mut request, "{} {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: Ocel/0.2 (CellOS)\r\nAccept-Encoding: identity\r\nConnection: close\r\n", method, self.url.path, self.url.authority).map_err(|_| "Cannot encode browser request")?;
+        for (name, value) in headers { request.push_str(name); request.push_str(": "); request.push_str(value); request.push_str("\r\n"); }
+        if method == "POST" { write!(&mut request, "Content-Length: {}\r\n", body.len()).map_err(|_| "Cannot encode browser request")?; }
+        request.push_str("\r\n");
+        self.request = request.into_bytes(); self.request.extend_from_slice(body);
+        self.decoder = ResponseDecoder::for_fetch(self.decoder.limit, method == "HEAD");
+        self.manual_redirects = true;
+        Ok(())
     }
     fn make_request(&mut self) {
         self.request = if self.url.scheme == "gemini" { format!("{}\r\n", self.url.full).into_bytes() }
@@ -335,6 +378,8 @@ impl<T: Transport> FetchJob<T> {
         self.request.capacity() + self.decoder.body.capacity() + self.decoder.pending.capacity()
             + self.visited.iter().map(String::capacity).sum::<usize>()
             + self.url.full.capacity() + self.url.host.capacity() + self.url.path.capacity() + 4096
+            + self.decoder.headers.capacity() * core::mem::size_of::<(String, String)>()
+            + self.decoder.headers.iter().map(|(k,v)| k.capacity() + v.capacity()).sum::<usize>()
     }
     pub fn set_memory_budget(&mut self, bytes: usize) {
         let overhead = self.resident_bytes().saturating_sub(self.decoder.body.capacity());
@@ -393,17 +438,18 @@ impl<T: Transport> FetchJob<T> {
         };
         if let Err(e) = self.response(&reply[..len]) { return self.fail(e); }
         if self.decoder.complete() {
-            if let Some(location) = self.decoder.location.take() {
+            if let Some(location) = self.decoder.location.take().filter(|_| !self.manual_redirects) {
                 if self.visited.len() > REDIRECT_LIMIT { return self.fail("Too many redirects".into()); }
                 let next = match self.url.redirect(&location) { Ok(next) => next, Err(e) => return self.fail(e) };
                 if self.same_origin.as_ref().is_some_and(|origin| *origin != next.origin()) { return self.fail("Cross-origin resource redirect blocked".into()); }
+                if self.same_site.as_ref().is_some_and(|host| !crate::resources::is_same_site(host, &next.host)) { return self.fail("Cross-site resource redirect blocked".into()); }
                 if self.visited.contains(&next.full) { return self.fail("Redirect loop".into()); }
                 self.close(); self.visited.push(next.full.clone()); self.url = next;
                 self.decoder = ResponseDecoder::new(self.decoder.limit, self.url.scheme == "gemini"); self.make_request(); self.stage = Stage::Resolve;
                 return Poll::Pending;
             }
             self.close(); self.stage = Stage::Done;
-            return Poll::Ready(Ok(FetchResult { url: self.url.document_url(), body: core::mem::take(&mut self.decoder.body), media_type: core::mem::take(&mut self.decoder.media_type), gemini: self.url.scheme == "gemini" }));
+            return Poll::Ready(Ok(FetchResult { url: self.url.document_url(), body: core::mem::take(&mut self.decoder.body), media_type: core::mem::take(&mut self.decoder.media_type), gemini: self.url.scheme == "gemini", status: self.decoder.status, headers: core::mem::take(&mut self.decoder.headers) }));
         }
         Poll::Pending
     }

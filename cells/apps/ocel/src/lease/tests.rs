@@ -20,6 +20,10 @@ pub(crate) struct State {
     pub fail_sync: bool,
     pub wrong_engine: bool,
     pub release_bad_ack: bool,
+    pub next_js_response: Option<OcelJsResponse>,
+    pub next_layout_query: Option<dom_arena::BrowserLayoutQuery>,
+    pub layout_resume: Option<dom_arena::BrowserLayoutReply>,
+    layout_bytes: Vec<u8>,
     incoming: Vec<u8>,
 }
 std::thread_local! {
@@ -84,13 +88,34 @@ impl Transport for MockTransport {
                     let fail = state.fail_sync && matches!(command, OcelJsCommand::SyncDocument { .. });
                     state.commands.push(command);
                     if fail { OcelJsReply::Error { message: String::from("sync rejected") } }
+                    else if let Some(query) = state.next_layout_query.take() {
+                        let data = postcard::to_allocvec(&query).unwrap();
+                        OcelJsReply::LayoutQueryChunk { context: state.active_context.unwrap(), query: 1,
+                            offset: 0, total: data.len(), data }
+                    }
                     else {
-                        let data = postcard::to_allocvec(&OcelJsResponse::Success { mutations: Vec::new(), result_repr: String::new() }).unwrap();
+                        let response = state.next_js_response.take().unwrap_or_else(|| OcelJsResponse::Success {
+                            mutations: Vec::new(), result_repr: String::new(), requests: Vec::new(), wake_at: None,
+                        });
+                        let data = postcard::to_allocvec(&response).unwrap();
                         OcelJsReply::ResponseChunk { offset: 0, total: data.len(), data }
                     }
                 }
                 OcelJsRequest::Ping => OcelJsReply::Ready,
                 OcelJsRequest::ReadResponse { .. } => panic!("small test response must fit one chunk"),
+                OcelJsRequest::LayoutResumeBegin { .. } => { state.layout_bytes.clear(); OcelJsReply::Ack }
+                OcelJsRequest::LayoutResumeChunk { offset, data, .. } => {
+                    assert_eq!(offset, state.layout_bytes.len()); state.layout_bytes.extend(data); OcelJsReply::Ack
+                }
+                OcelJsRequest::LayoutResumeCommit { .. } => {
+                    state.layout_resume = Some(postcard::from_bytes(&state.layout_bytes).unwrap());
+                    let response = state.next_js_response.take().unwrap_or(OcelJsResponse::Success {
+                        mutations: Vec::new(), result_repr: String::from("resumed"), requests: Vec::new(), wake_at: None,
+                    });
+                    let data = postcard::to_allocvec(&response).unwrap();
+                    OcelJsReply::ResponseChunk { offset: 0, total: data.len(), data }
+                }
+                OcelJsRequest::ReadLayoutQuery { .. } => panic!("small test query must fit one chunk"),
             };
             postcard::to_allocvec(&response).unwrap()
         };

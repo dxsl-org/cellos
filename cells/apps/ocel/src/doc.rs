@@ -175,6 +175,8 @@ pub struct Document {
     focused_input: Option<dom_arena::NodeId>,
     pub last_error: Option<String>,
     memory_budget: usize,
+    pub bionic_reading: bool,
+    pub reader_mono: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -240,13 +242,96 @@ fn lines_for(fonts:&mut TextFonts,spans:&[StyledSpan],px:f32,width:f32,pre:bool)
     wrap_runs(fonts,&runs,width,height,pre,true,0)
 }
 fn lines_height(lines:&[TextLine])->i32 { lines.iter().map(|l|l.height as i32).sum() }
+pub fn apply_bionic_reading(spans: &[StyledSpan]) -> Vec<StyledSpan> {
+    let mut out = Vec::new();
+    for span in spans {
+        if span.code || span.text.is_empty() {
+            out.push(span.clone());
+            continue;
+        }
+        let text = &span.text;
+        let mut word_start = None;
+        let bytes = text.as_bytes();
+        let mut i = 0;
+
+        while i < bytes.len() {
+            let ch = text[i..].chars().next().unwrap();
+            let ch_len = ch.len_utf8();
+            let is_word_char = ch.is_alphanumeric();
+
+            if is_word_char {
+                if word_start.is_none() {
+                    word_start = Some(i);
+                }
+            } else {
+                if let Some(start) = word_start.take() {
+                    let word = &text[start..i];
+                    push_bionic_word(word, span, &mut out);
+                }
+                let non_word = &text[i..i + ch_len];
+                let mut non_span = span.clone();
+                non_span.text = String::from(non_word);
+                out.push(non_span);
+            }
+            i += ch_len;
+        }
+        if let Some(start) = word_start.take() {
+            let word = &text[start..];
+            push_bionic_word(word, span, &mut out);
+        }
+    }
+    out
+}
+
+fn push_bionic_word(word: &str, base_span: &StyledSpan, out: &mut Vec<StyledSpan>) {
+    let count = word.chars().count();
+    if count <= 1 {
+        let mut s = base_span.clone();
+        s.text = String::from(word);
+        out.push(s);
+        return;
+    }
+    let bold_count = (count + 1) / 2;
+    let mut bold_part = String::new();
+    let mut rest_part = String::new();
+    for (idx, ch) in word.chars().enumerate() {
+        if idx < bold_count {
+            bold_part.push(ch);
+        } else {
+            rest_part.push(ch);
+        }
+    }
+    if !bold_part.is_empty() {
+        let mut s = base_span.clone();
+        s.bold = true;
+        s.text = bold_part;
+        out.push(s);
+    }
+    if !rest_part.is_empty() {
+        let mut s = base_span.clone();
+        s.text = rest_part;
+        out.push(s);
+    }
+}
+
 
 impl Document {
     pub fn new() -> Self {
         Self { nodes:Vec::new(), layout_boxes:Vec::new(), total_height:0,
             arena:None, external_stylesheets:Vec::new(), web_layout:None,
             reader_nodes:None, zoom:100, reader_column:720, search_query:String::new(),
-            active_match:None, focused_input:None, last_error:None, memory_budget:crate::budget::MAX_RESIDENT_BYTES }
+            active_match:None, focused_input:None, last_error:None, memory_budget:crate::budget::MAX_RESIDENT_BYTES,
+            bionic_reading: false, reader_mono: false }
+    }
+    pub fn toggle_bionic(&mut self, fonts: &mut TextFonts, width: u32) -> bool {
+        self.bionic_reading = !self.bionic_reading;
+        self.compute_layout(fonts, width);
+        self.bionic_reading
+    }
+    pub fn toggle_mono(&mut self, fonts: &mut TextFonts, width: u32) -> bool {
+        self.reader_mono = !self.reader_mono;
+        self.compute_layout(fonts, width);
+        self.reader_mono
     }
     pub fn clear(&mut self) {
         let memory_budget=self.memory_budget;
@@ -311,7 +396,21 @@ impl Document {
                     b.lines=lines_for(fonts,&[span],px,width,false);gap=8;
                 }
                 DocNode::Paragraph{spans}=>{
-                    b.lines=lines_for(fonts,spans,16.0,width,false);gap=6;
+                    let effective_spans;
+                    let p_spans: &[StyledSpan] = if self.bionic_reading && self.is_reader_mode() {
+                        effective_spans = apply_bionic_reading(spans);
+                        &effective_spans
+                    } else {
+                        spans
+                    };
+                    let mono_spans;
+                    let final_spans: &[StyledSpan] = if self.reader_mono && self.is_reader_mode() {
+                        mono_spans = p_spans.iter().map(|s| { let mut m = s.clone(); m.code = true; m }).collect::<Vec<_>>();
+                        &mono_spans
+                    } else {
+                        p_spans
+                    };
+                    b.lines=lines_for(fonts,final_spans,16.0,width,false);gap=6;
                 }
                 DocNode::CodeBlock{lang,lines}=>{
                     let mut highlighter=crate::parser::syntax::Highlighter::new(lang);
@@ -327,7 +426,21 @@ impl Document {
                     b.left_margin=*indent as i32*20+12;
                     let mut list=alloc::vec![StyledSpan::plain(&if *bullet=='\0'{String::new()}else{format!("{} ",bullet)})];
                     list[0].bold=true;list[0].color=Some(theme::ACCENT_CYAN);
-                    list.extend_from_slice(spans);
+                    let effective_spans;
+                    let li_spans: &[StyledSpan] = if self.bionic_reading && self.is_reader_mode() {
+                        effective_spans = apply_bionic_reading(spans);
+                        &effective_spans
+                    } else {
+                        spans
+                    };
+                    let mono_spans;
+                    let final_spans: &[StyledSpan] = if self.reader_mono && self.is_reader_mode() {
+                        mono_spans = li_spans.iter().map(|s| { let mut m = s.clone(); m.code = true; m }).collect::<Vec<_>>();
+                        &mono_spans
+                    } else {
+                        li_spans
+                    };
+                    list.extend_from_slice(final_spans);
                     b.lines=lines_for(fonts,&list,16.0,(width-b.left_margin as f32).max(1.0),false);
                 }
                 DocNode::Blockquote{lines}=>{
@@ -429,7 +542,14 @@ impl Document {
 
     pub fn render_viewport(&self,fonts:&mut TextFonts,surf:&mut ViSurface,
         view_x:i32,view_y:i32,view_w:u32,view_h:u32,scroll_y:i32) {
+        self.render_viewport_themed(fonts, surf, view_x, view_y, view_w, view_h, scroll_y, None);
+    }
+
+    pub fn render_viewport_themed(&self,fonts:&mut TextFonts,surf:&mut ViSurface,
+        view_x:i32,view_y:i32,view_w:u32,view_h:u32,scroll_y:i32, theme_mode: Option<crate::draw::ReaderThemeMode>) {
         if let Some(web)=&self.web_layout {web.render(fonts,surf,(view_x,view_y,view_w,view_h),scroll_y);return;}
+        let text_color = theme_mode.map_or(theme::TEXT_PRIMARY, |m| m.text_color());
+        let border_color = theme_mode.map_or(theme::BORDER, |m| m.muted_color());
         let clip=(view_x,view_y,view_x+view_w as i32,view_y+view_h as i32);
         for b in &self.layout_boxes {
             let y=view_y+b.y_offset-scroll_y;
@@ -446,7 +566,7 @@ impl Document {
                 draw::clipped_rect(surf,text_x-8,y,2,b.height as u32,border,clip);
             }
             if b.is_rule {
-                draw::clipped_rect(surf,view_x+10,y+4,view_w.saturating_sub(30),1,theme::BORDER,clip);continue;
+                draw::clipped_rect(surf,view_x+10,y+4,view_w.saturating_sub(30),1,border_color,clip);continue;
             }
             if let Some((iw,ih,pixels))=&b.image {
                 draw::draw_image_clipped(surf,view_x+b.left_margin,y+8,
@@ -501,7 +621,7 @@ impl Document {
                         draw::clipped_rect(surf,x+cell.x+cell.width as i32-1,ry,1,row.height,theme::BORDER,clip);
                         let cell_clip=((x+cell.x).max(clip.0),ry.max(clip.1),
                             (x+cell.x+cell.width as i32).min(clip.2),(ry+row.height as i32).min(clip.3));
-                        paint_lines(fonts,surf,&cell.lines,(x+cell.x+6) as f32,(ry+6) as f32,theme::TEXT_PRIMARY,cell_clip);
+                        paint_lines(fonts,surf,&cell.lines,(x+cell.x+6) as f32,(ry+6) as f32,text_color,cell_clip);
                     }
                 }
                 continue;
@@ -523,17 +643,32 @@ impl Document {
                 let width=b.lines.iter().map(|line|line.width as u32).max().unwrap_or(1);
                 draw::clipped_rect(surf,text_x,y+offset,width,height,if active{Color::rgb(245,158,11)}else{Color::rgb(100,90,30)},clip);
             }
-            paint_lines(fonts,surf,&b.lines,text_x as f32,(y+4) as f32,theme::TEXT_PRIMARY,clip);
+            paint_lines(fonts,surf,&b.lines,text_x as f32,(y+4) as f32,text_color,clip);
         }
+    }
+
+    pub fn hit_test_image(&self, click_x: i32, click_y: i32, view_x: i32, view_y: i32, scroll_y: i32) -> Option<(u32, u32, alloc::rc::Rc<alloc::vec::Vec<u8>>)> {
+        for b in &self.layout_boxes {
+            if let Some((iw, ih, pixels)) = &b.image {
+                let y = view_y + b.y_offset - scroll_y;
+                let x = view_x + b.left_margin;
+                let img_w = b.table_width;
+                let img_h = ((*ih as u64 * b.table_width as u64) / (*iw).max(1) as u64).max(1) as u32;
+                if click_x >= x && click_x <= x + img_w as i32 && click_y >= y + 8 && click_y <= y + 8 + img_h as i32 {
+                    return Some((*iw, *ih, pixels.clone()));
+                }
+            }
+        }
+        None
     }
 
     pub fn hit_test_link(&self,click_x:i32,click_y:i32,view_x:i32,view_y:i32,scroll_y:i32)->Option<String> {
         if let Some(web)=&self.web_layout {
-            if let Some(link) = web.hit_link(click_x-view_x,click_y-view_y+scroll_y) {
+            if let Some(link) = web.hit_link(click_x-view_x,click_y-view_y,scroll_y) {
                 return Some(link);
             }
             if let Some(arena) = &self.arena {
-                if let Some(node_id) = web.hit_node(click_x-view_x, click_y-view_y+scroll_y) {
+                if let Some(node_id) = web.hit_node(click_x-view_x,click_y-view_y,scroll_y) {
                     let mut curr = Some(node_id);
                     while let Some(id) = curr {
                         if let Some(node) = arena.get(id) {
@@ -570,7 +705,7 @@ impl Document {
         None
     }
     pub fn hit_test_node(&self,click_x:i32,click_y:i32,view_x:i32,view_y:i32,scroll_y:i32)->Option<dom_arena::NodeId> {
-        if let Some(web)=&self.web_layout {return web.hit_node(click_x-view_x,click_y-view_y+scroll_y);}
+        if let Some(web)=&self.web_layout {return web.hit_node(click_x-view_x,click_y-view_y,scroll_y);}
         for b in &self.layout_boxes {
             let y=view_y+b.y_offset-scroll_y;
             let x=view_x+8+b.left_margin;
@@ -674,7 +809,7 @@ impl Document {
         self.update_control(id,None,Some(checked))
     }
     pub fn hit_test_input_node(&self,x:i32,y:i32,vx:i32,vy:i32,scroll:i32)->Option<dom_arena::NodeId> {
-        if let Some(web)=&self.web_layout {return web.boxes.iter().rev().find(|b|b.input_data.is_some()&&x-vx>=b.x&&x-vx<b.x+b.width as i32&&y-vy+scroll>=b.y&&y-vy+scroll<b.y+b.height as i32).and_then(|b|b.node_id);}
+        if let Some(web)=&self.web_layout {return web.hit_input_node(x-vx,y-vy,scroll);}
         self.hit_test_input(x,y,vx,vy,scroll).and_then(|index|self.layout_boxes[index].node_id)
     }
 }
@@ -877,8 +1012,10 @@ impl Document {
             NodeData::Element{tag,attributes}=>tag.len()+attributes.len()*core::mem::size_of::<(String,String)>()+attributes.iter().map(|(name,value)|name.len()+value.len()).sum::<usize>(),_=>0,
         }).sum::<usize>();
         if self.resident_bytes().saturating_add(clone_bytes).saturating_add(growth.saturating_mul(4))>self.memory_budget{return Err(String::from("Mutation staging exceeds resident memory budget"));}
-        let future_layout=current_bytes.saturating_add(growth).saturating_mul(64).saturating_add(nodes.saturating_mul(1024)).saturating_add(128*1024);
-        if self.resident_bytes().saturating_add(clone_bytes).saturating_add(growth.saturating_mul(4)).saturating_add(future_layout)>self.memory_budget{return Err(String::from("Mutation layout exceeds resident memory budget"));}
+        let mutation_layout_reserve = growth.saturating_mul(64).saturating_add(mutations.len().saturating_mul(1024)).saturating_add(64 * 1024);
+        if self.resident_bytes().saturating_add(clone_bytes).saturating_add(mutation_layout_reserve) > self.memory_budget {
+            return Err(String::from("Mutation layout exceeds resident memory budget"));
+        }
         let mut staged=arena.clone();
         for mutation in mutations {
             if !staged.apply_mutation(mutation){return Err(String::from("Invalid or divergent DOM mutation"));}

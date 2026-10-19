@@ -10,8 +10,8 @@ use crate::doc::{DocNode, StyledSpan};
 use crate::draw::theme;
 
 pub enum ScriptSource {
-    Inline(String),
-    External(String),
+    Inline(NodeId),
+    External { node: NodeId, url: String },
 }
 
 pub struct HtmlOutput {
@@ -34,11 +34,9 @@ enum HtmlToken {
 }
 
 /// Tokenize an HTML string into tags and text chunks.
-fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<ScriptSource>) {
+fn tokenize_html(input: &str) -> Vec<HtmlToken> {
     let mut tokens = Vec::new();
-    let mut scripts = Vec::new();
     let mut chars = input.chars().peekable();
-    let mut template_depth=0usize;
 
     while let Some(c) = chars.next() {
         if c == '<' {
@@ -76,7 +74,6 @@ fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<ScriptSource>) {
             let trimmed_tag = tag_content.trim();
             if let Some(rest) = trimmed_tag.strip_prefix('/') {
                 let name = rest.trim().to_ascii_lowercase();
-                if name=="template"{template_depth=template_depth.saturating_sub(1);}
                 tokens.push(HtmlToken::EndTag { name });
             } else {
                 let self_closing = trimmed_tag.ends_with('/');
@@ -89,36 +86,12 @@ fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<ScriptSource>) {
                 let name_end = tag_body.find(char::is_whitespace).unwrap_or(tag_body.len());
                 let name = tag_body[..name_end].to_ascii_lowercase();
                 let attributes = parse_attributes(&tag_body[name_end..]);
-                if name=="template"&&!self_closing{template_depth+=1;}
-
-                // If this is a <script> tag, capture the script body directly
-                if name == "script" && !self_closing {
-                    let mut script_body = String::new();
-                    while let Some(sc) = chars.next() {
-                        if sc=='<' {
-                            if let Some(count)=crate::budget::rawtext_close_chars(chars.clone(),"script") {
-                                for _ in 0..count{chars.next();}
-                                break;
-                            }
-                        }
-                        script_body.push(sc);
-                    }
-                    let kind = attributes.iter().find(|(key, _)| key == "type").map(|(_, value)| value.as_str()).unwrap_or("");
-                    if template_depth==0&&matches!(kind, "" | "text/javascript" | "application/javascript") {
-                        if let Some((_, src)) = attributes.iter().find(|(key, _)| key == "src") {
-                            scripts.push(ScriptSource::External(src.clone()));
-                        } else {
-                            scripts.push(ScriptSource::Inline(script_body));
-                        }
-                    }
-                    continue;
-                }
-                if name == "style" && !self_closing {
+                if matches!(name.as_str(), "script" | "style") && !self_closing {
                     tokens.push(HtmlToken::StartTag { name: name.clone(), attributes, self_closing });
                     let mut body = String::new();
                     while let Some(ch) = chars.next() {
                         if ch=='<' {
-                            if let Some(count)=crate::budget::rawtext_close_chars(chars.clone(),"style") {
+                            if let Some(count)=crate::budget::rawtext_close_chars(chars.clone(),&name) {
                                 for _ in 0..count{chars.next();}
                                 break;
                             }
@@ -166,7 +139,7 @@ fn tokenize_html(input: &str) -> (Vec<HtmlToken>, Vec<ScriptSource>) {
         }
     }
 
-    (tokens, scripts)
+    tokens
 }
 
 fn parse_attributes(input: &str) -> Vec<(String, String)> {
@@ -216,7 +189,7 @@ pub fn parse_html_with_base(input: &str, base_url: Option<&str>) -> HtmlOutput {
 
 pub fn parse_html_with_base_checked(input: &str, base_url: Option<&str>) -> Result<HtmlOutput, String> {
     crate::budget::validate_html(input)?;
-    let (tokens, scripts) = tokenize_html(input);
+    let tokens = tokenize_html(input);
     let mut arena = DocumentArena::new();
     let mut tag_stack: Vec<(String, NodeId)> = alloc::vec![(String::from("root"), arena.root)];
 
@@ -256,6 +229,25 @@ pub fn parse_html_with_base_checked(input: &str, base_url: Option<&str>) -> Resu
                 let text_id = arena.alloc_node(NodeData::Text(text));
                 arena.append_child(parent_id, text_id);
             }
+        }
+    }
+    let mut scripts = Vec::new();
+    for node in &arena.nodes {
+        if node.tag() != Some("script") { continue; }
+        let kind = node.get_attribute("type").unwrap_or("").trim();
+        if !matches!(kind, "" | "text/javascript" | "application/javascript") { continue; }
+        let mut ancestor = node.parent;
+        let mut inert = false;
+        while let Some(id) = ancestor {
+            let Some(parent) = arena.get(id) else { break; };
+            if parent.tag() == Some("template") { inert = true; break; }
+            ancestor = parent.parent;
+        }
+        if !inert {
+            scripts.push(match node.get_attribute("src") {
+                Some(url) => ScriptSource::External { node: node.id, url: String::from(url) },
+                None => ScriptSource::Inline(node.id),
+            });
         }
     }
 
@@ -309,6 +301,7 @@ fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNo
             match &child.data {
                 NodeData::Element { tag, attributes: _ } => {
                     match tag.as_str() {
+                        "head" | "script" | "style" | "template" | "meta" | "link" | "title" => {}
                         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
                             let level = tag[1..].parse::<u8>().unwrap_or(1);
                             let text = arena.get_text_content(child_id);
@@ -497,6 +490,10 @@ fn collect_inline_spans(
         if let Some(child) = arena.get(child_id) {
             match &child.data {
                 NodeData::Element { tag, attributes } => {
+                    if matches!(tag.as_str(), "script" | "style" | "template" | "meta" | "link" | "title") {
+                        cur = child.next_sibling;
+                        continue;
+                    }
                     let next_bold = bold || tag == "b" || tag == "strong";
                     let next_italic = italic || tag == "i" || tag == "em";
                     let next_code = code || tag == "code";
@@ -727,9 +724,22 @@ mod tokenizer_tests {
     #[test]
     fn classic_scripts_preserve_source_order_without_executing_data_or_modules() {
         let parsed = parse_html("<script src='app.js'>ignored()</script><script>second()</script><script type='application/json'>{}</script><script type='module'>module()</script>");
-        assert!(matches!(&parsed.scripts[0], ScriptSource::External(src) if src == "app.js"));
-        assert!(matches!(&parsed.scripts[1], ScriptSource::Inline(src) if src == "second()"));
+        assert!(matches!(&parsed.scripts[0], ScriptSource::External { node, url } if url == "app.js" && parsed.arena.get(*node).unwrap().tag() == Some("script")));
+        assert!(matches!(&parsed.scripts[1], ScriptSource::Inline(node) if parsed.arena.get_text_content(*node) == "second()"));
         assert_eq!(parsed.scripts.len(), 2);
+    }
+    #[test]
+    fn script_nodes_remain_queryable_but_inert_text_never_becomes_document_content() {
+        let parsed = parse_html("<body><script id='boot'>window.x = '<b>&amp;'</script><template><script src='inert.js'></script></template><p>Visible</p></body>");
+        let script = parsed.arena.nodes.iter().find(|node| node.get_attribute("id") == Some("boot")).unwrap();
+        assert_eq!(parsed.arena.get_text_content(script.id), "window.x = '<b>&amp;'");
+        assert!(matches!(parsed.scripts.as_slice(), [ScriptSource::Inline(id)] if *id == script.id));
+        let text: String = parsed.nodes.iter().filter_map(|node| match node {
+            DocNode::Paragraph { spans } => Some(spans.iter().map(|span| span.text.as_str()).collect::<String>()),
+            _ => None,
+        }).collect();
+        assert_eq!(text, "Visible");
+        assert!(resource_references_checked("<template><script src='inert.js'></script></template>").unwrap().is_empty());
     }
     #[test]
     fn vietnamese_numeric_and_named_entities_are_decoded() {
@@ -742,7 +752,7 @@ mod tokenizer_tests {
 /// Resource discovery shares tokenization with the actual document parser.
 pub fn resource_references_checked(input:&str)->Result<Vec<(String,bool)>,String> {
     crate::budget::validate_html(input)?;
-    let (tokens,scripts)=tokenize_html(input);
+    let tokens=tokenize_html(input);
     let mut refs=Vec::new();let mut images=0usize;let mut inert=0usize;
     let mut add=|url:String,image:bool|->Result<(),String>{
         if url.len()>2048{return Err(String::from("Resource URL exceeds byte budget"));}
@@ -758,10 +768,12 @@ pub fn resource_references_checked(input:&str)->Result<Vec<(String,bool)>,String
             if name=="link"&&attributes.iter().any(|(name,value)|name=="rel"&&value.split_whitespace().any(|word|word.eq_ignore_ascii_case("stylesheet"))) {
                 if let Some((_,url))=attributes.iter().find(|(name,_)|name=="href"){add(url.clone(),false)?;}
             }
+            if name=="script"&&matches!(attributes.iter().find(|(name,_)|name=="type").map(|(_,value)|value.trim()).unwrap_or(""), ""|"text/javascript"|"application/javascript") {
+                if let Some((_,url))=attributes.iter().find(|(name,_)|name=="src"){add(url.clone(),false)?;}
+            }
         },
         HtmlToken::EndTag{name}=>{if name=="template"{inert=inert.saturating_sub(1);}},
         _=>{}
     }}
-    for script in scripts {if let ScriptSource::External(url)=script{add(url,false)?;}}
     Ok(refs)
 }

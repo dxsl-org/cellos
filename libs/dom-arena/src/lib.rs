@@ -37,6 +37,7 @@ impl NodeId {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum NodeData {
     DocumentRoot,
+    DocumentFragment,
     Element {
         tag: String,
         attributes: Vec<(String, String)>,
@@ -140,7 +141,7 @@ impl DocumentArena {
     pub fn append_child(&mut self, parent: NodeId, child: NodeId) -> bool {
         if self.get(child).is_none() || child == self.root
             || !matches!(self.get(parent).map(|n| &n.data),
-                Some(NodeData::DocumentRoot | NodeData::Element { .. }))
+                Some(NodeData::DocumentRoot | NodeData::DocumentFragment | NodeData::Element { .. }))
         {
             return false;
         }
@@ -162,6 +163,23 @@ impl DocumentArena {
             self.nodes[parent.index()].first_child = Some(child);
         }
         self.nodes[parent.index()].last_child = Some(child);
+        true
+    }
+
+    /// Moves a node before a direct child, preserving detached-node identity.
+    pub fn insert_before(&mut self, parent: NodeId, child: NodeId, reference: NodeId) -> bool {
+        if self.get(reference).and_then(|n| n.parent) != Some(parent) { return false; }
+        if child == reference { return true; }
+        if !self.append_child(parent, child) { return false; }
+        self.remove_child(parent, child);
+        let previous = self.nodes[reference.index()].prev_sibling;
+        let node = &mut self.nodes[child.index()];
+        node.parent = Some(parent);
+        node.prev_sibling = previous;
+        node.next_sibling = Some(reference);
+        self.nodes[reference.index()].prev_sibling = Some(child);
+        if let Some(previous) = previous { self.nodes[previous.index()].next_sibling = Some(child); }
+        else { self.nodes[parent.index()].first_child = Some(child); }
         true
     }
 
@@ -213,7 +231,7 @@ impl DocumentArena {
         match &mut n.data {
             NodeData::Text(s) | NodeData::Comment(s) => { *s = String::from(text); return true; }
             NodeData::DocumentRoot => return true,
-            NodeData::Element { .. } => {}
+            NodeData::DocumentFragment | NodeData::Element { .. } => {}
         }
         while let Some(child) = self.nodes[node.index()].first_child {
             self.remove_child(node, child);
@@ -233,12 +251,12 @@ impl DocumentArena {
         let mut colors = alloc::vec![0u8; self.nodes.len()];
         for (index, node) in self.nodes.iter().enumerate() {
             if node.id.index() != index { return false; }
-            if !matches!(node.data, NodeData::DocumentRoot | NodeData::Element { .. })
+            if !matches!(node.data, NodeData::DocumentRoot | NodeData::DocumentFragment | NodeData::Element { .. })
                 && (node.first_child.is_some() || node.last_child.is_some()) { return false; }
             if index != 0 && matches!(node.data, NodeData::DocumentRoot) { return false; }
             if let Some(parent) = node.parent {
                 let Some(parent) = self.get(parent) else { return false; };
-                if !matches!(parent.data, NodeData::DocumentRoot | NodeData::Element { .. }) { return false; }
+                if !matches!(parent.data, NodeData::DocumentRoot | NodeData::DocumentFragment | NodeData::Element { .. }) { return false; }
                 if node.prev_sibling.is_none() && parent.first_child != Some(node.id) { return false; }
                 if node.next_sibling.is_none() && parent.last_child != Some(node.id) { return false; }
             } else if node.prev_sibling.is_some() || node.next_sibling.is_some() { return false; }
@@ -332,6 +350,7 @@ impl DocumentArena {
                 false
             }
             DomMutation::AppendChild { parent, child } => self.append_child(*parent, *child),
+            DomMutation::InsertBefore { parent, child, reference } => self.insert_before(*parent, *child, *reference),
             DomMutation::RemoveChild { parent, child } => self.remove_child(*parent, *child),
             DomMutation::SetDocumentTitle { .. } => true,
         }
@@ -363,6 +382,11 @@ pub enum DomMutation {
     AppendChild {
         parent: NodeId,
         child: NodeId,
+    },
+    InsertBefore {
+        parent: NodeId,
+        child: NodeId,
+        reference: NodeId,
     },
     RemoveChild {
         parent: NodeId,
@@ -396,12 +420,74 @@ pub struct DomEvent {
 
 pub const OCEL_JS_IPC_BUF_SIZE: usize = 4096;
 
+/// Native browser state: the engine never acquires network or layout authority.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BrowserEnvironment {
+    pub url: String,
+    pub user_agent: String,
+    pub width: u32,
+    pub height: u32,
+    pub now_ms: u64,
+    pub cookie: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BrowserNodeLayout {
+    pub node: NodeId,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub styles: Vec<(String, String)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BrowserFrame {
+    pub now_ms: u64,
+    pub width: u32,
+    pub height: u32,
+    pub scroll_y: i32,
+    pub layout: Vec<BrowserNodeLayout>,
+    pub cookie: String,
+    pub parsing_complete: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BrowserResourceKind { Script, Stylesheet, Image }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum BrowserRequest {
+    Load { id: u32, node: Option<NodeId>, url: String, kind: BrowserResourceKind },
+    Fetch { id: u32, url: String, method: String, headers: Vec<(String, String)>, body: String, credentials: String },
+    Abort { id: u32 },
+    SetCookie { value: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BrowserReply {
+    pub id: u32,
+    pub url: String,
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: String,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BrowserLayoutQuery { pub node: NodeId, pub mutations: Vec<DomMutation> }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum BrowserLayoutReply { Frame(BrowserFrame), Error(String) }
 /// Logical commands transported through bounded, ordered IPC chunks.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OcelJsCommand {
     Eval { script: String },
     DispatchEvent { event: DomEvent },
     SyncDocument { arena: DocumentArena, title: String },
+    EvalScript { script: String, node: Option<NodeId> },
+    ConfigureBrowser { environment: BrowserEnvironment },
+    PumpBrowser { frame: BrowserFrame },
+    CompleteBrowser { reply: BrowserReply },
 }
 
 pub const OCEL_JS_CHUNK_SIZE: usize = 3072;
@@ -412,6 +498,8 @@ pub const OCEL_JS_MAX_MUTATION_BYTES: usize = 128 * 1024;
 pub const OCEL_JS_MAX_RESULT_BYTES: usize = 4096;
 pub const OCEL_JS_MAX_LOG_BYTES: usize = 8192;
 pub const OCEL_JS_MAX_LOG_LINES: usize = 64;
+pub const OCEL_JS_MAX_BROWSER_REQUESTS: usize = 64;
+pub const OCEL_JS_MAX_BROWSER_REQUEST_BYTES: usize = 128 * 1024;
 /// An idle context lease expires after 60 seconds (10 ms scheduler ticks).
 /// Only authenticated owner traffic renews it; a stale token must synchronize anew.
 pub const OCEL_JS_IDLE_TICKS: u64 = 6000;
@@ -428,6 +516,10 @@ pub enum OcelJsRequest {
     Ping,
     /// Owner-only close; must precede releasing the engine activation lease.
     CloseContext { context: u64 },
+    ReadLayoutQuery { context: u64, query: u32, offset: usize },
+    LayoutResumeBegin { context: u64, query: u32, total: usize },
+    LayoutResumeChunk { context: u64, query: u32, offset: usize, data: Vec<u8> },
+    LayoutResumeCommit { context: u64, query: u32 },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -438,13 +530,14 @@ pub enum OcelJsReply {
     Ready,
     /// Another nonexpired session owns the service. Does not change its state.
     Busy,
+    LayoutQueryChunk { context: u64, query: u32, offset: usize, total: usize, data: Vec<u8> },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OcelJsResponse {
-    Success { mutations: Vec<DomMutation>, result_repr: String },
+    Success { mutations: Vec<DomMutation>, result_repr: String, requests: Vec<BrowserRequest>, wake_at: Option<u64> },
     /// Side effects preceding a thrown exception must still reach the document.
-    Error { message: String, line: u32, mutations: Vec<DomMutation> },
+    Error { message: String, line: u32, mutations: Vec<DomMutation>, requests: Vec<BrowserRequest>, wake_at: Option<u64> },
 }
 
 pub mod ipc;
@@ -474,6 +567,20 @@ pub trait JsContext {
     fn sync_document(&mut self, _arena: &DocumentArena, _title: &str) -> Result<(), JsError> {
         Err(JsError { message: String::from("engine has no document-backed DOM"), line: 0 })
     }
+    fn eval_script(&mut self, _script: &str, _node: Option<NodeId>) -> Result<String, JsError> {
+        Err(JsError { message: String::from("engine has no document script execution"), line: 0 })
+    }
+    fn configure_browser(&mut self, _environment: &BrowserEnvironment) -> Result<(), JsError> {
+        Err(JsError { message: String::from("engine has no native browser environment"), line: 0 })
+    }
+    fn pump_browser(&mut self, _frame: &BrowserFrame) -> Result<(), JsError> {
+        Err(JsError { message: String::from("engine has no browser event loop"), line: 0 })
+    }
+    fn complete_browser(&mut self, _reply: &BrowserReply) -> Result<(), JsError> {
+        Err(JsError { message: String::from("engine has no browser request completion"), line: 0 })
+    }
+    fn take_browser_requests(&mut self) -> Vec<BrowserRequest> { Vec::new() }
+    fn next_browser_wakeup(&self) -> Option<u64> { None }
     /// Evaluate a JavaScript code string.
     fn eval(&mut self, script: &str) -> Result<String, JsError>;
     /// Dispatch an event to JavaScript event listeners.
@@ -545,5 +652,26 @@ mod tests {
         assert!(!arena.append_child(NodeId(1), NodeId(1)));
         arena.nodes[1].next_sibling = Some(NodeId(99));
         assert!(!arena.validate());
+    }
+
+    #[test]
+    fn fragment_nodes_remain_valid_and_insert_before_preserves_links() {
+        let mut arena = DocumentArena::new();
+        let fragment = arena.alloc_node(NodeData::DocumentFragment);
+        let a = element(&mut arena, "a"); let b = element(&mut arena, "b"); let c = element(&mut arena, "c");
+        assert!(arena.append_child(fragment, a)); assert!(arena.append_child(fragment, b));
+        assert!(arena.append_child(NodeId::ROOT, c));
+        assert!(arena.insert_before(NodeId::ROOT, a, c));
+        assert!(arena.insert_before(NodeId::ROOT, b, a));
+        assert_eq!(arena.get(NodeId::ROOT).unwrap().first_child, Some(b));
+        assert_eq!(arena.get(b).unwrap().next_sibling, Some(a));
+        assert_eq!(arena.get(a).unwrap().next_sibling, Some(c));
+        assert_eq!(arena.get(fragment).unwrap().first_child, None);
+        assert!(arena.validate());
+        let before = arena.nodes.clone();
+        assert!(!arena.insert_before(NodeId::ROOT, c, NodeId(999)));
+        assert_eq!(arena.nodes, before);
+        assert!(arena.insert_before(NodeId::ROOT, c, c));
+        assert!(arena.validate());
     }
 }

@@ -55,6 +55,9 @@ impl JsServiceSession {
             OcelJsRequest::Begin { context, .. } | OcelJsRequest::Chunk { context, .. }
             | OcelJsRequest::Commit { context } | OcelJsRequest::ReadResponse { context, .. }
             | OcelJsRequest::CloseContext { context } => self.owner == Some((caller, *context)),
+            OcelJsRequest::ReadLayoutQuery { context, .. } | OcelJsRequest::LayoutResumeBegin { context, .. }
+            | OcelJsRequest::LayoutResumeChunk { context, .. } | OcelJsRequest::LayoutResumeCommit { context, .. } =>
+                self.owner == Some((caller, *context)),
             OcelJsRequest::Ping => false,
         };
         let reply = self.handle(caller, request, ctx);
@@ -92,6 +95,8 @@ impl JsServiceSession {
             OcelJsRequest::Begin { context, .. } | OcelJsRequest::Chunk { context, .. }
             | OcelJsRequest::Commit { context } | OcelJsRequest::ReadResponse { context, .. }
             | OcelJsRequest::CloseContext { context } => *context,
+            OcelJsRequest::ReadLayoutQuery { context, .. } | OcelJsRequest::LayoutResumeBegin { context, .. }
+            | OcelJsRequest::LayoutResumeChunk { context, .. } | OcelJsRequest::LayoutResumeCommit { context, .. } => *context,
             OcelJsRequest::OpenContext { .. } | OcelJsRequest::Ping => unreachable!(),
         };
         if self.owner != Some((caller, context)) {
@@ -130,19 +135,30 @@ impl JsServiceSession {
                     Ok(OcelJsCommand::Eval { script }) if self.document_ready => ctx.eval(&script),
                     Ok(OcelJsCommand::DispatchEvent { event }) if self.document_ready =>
                         ctx.dispatch_event(&event).map(|_| String::from("event_dispatched")),
+                    Ok(OcelJsCommand::EvalScript { script, node }) if self.document_ready => ctx.eval_script(&script, node),
+                    Ok(OcelJsCommand::ConfigureBrowser { environment }) if self.document_ready =>
+                        ctx.configure_browser(&environment).map(|_| String::from("browser_configured")),
+                    Ok(OcelJsCommand::PumpBrowser { frame }) if self.document_ready =>
+                        ctx.pump_browser(&frame).map(|_| String::from("browser_pumped")),
+                    Ok(OcelJsCommand::CompleteBrowser { reply }) if self.document_ready =>
+                        ctx.complete_browser(&reply).map(|_| String::from("browser_completed")),
                     Ok(_) => return Self::error("Synchronize the document before executing JavaScript"),
                     Err(_) => return Self::error("Malformed JS command"),
                 };
                 let mutations = ctx.take_mutations();
+                let requests = ctx.take_browser_requests();
+                let wake_at = ctx.next_browser_wakeup();
                 let text_length = match &result { Ok(text) => text.len(), Err(error) => error.message.len() };
                 if !ctx.is_usable() || mutations.len() > OCEL_JS_MAX_MUTATIONS || text_length > OCEL_JS_MAX_RESULT_BYTES
-                    || serialized_len_bounded(&mutations, OCEL_JS_MAX_MUTATION_BYTES).is_err() {
+                    || serialized_len_bounded(&mutations, OCEL_JS_MAX_MUTATION_BYTES).is_err()
+                    || requests.len() > crate::OCEL_JS_MAX_BROWSER_REQUESTS
+                    || serialized_len_bounded(&requests, crate::OCEL_JS_MAX_BROWSER_REQUEST_BYTES).is_err() {
                     self.clear(ctx);
                     return Self::error("JS output budget exceeded; context closed, synchronize to recover");
                 }
                 let response = match result {
-                    Ok(result_repr) => OcelJsResponse::Success { mutations, result_repr },
-                    Err(e) => OcelJsResponse::Error { message: e.message, line: e.line, mutations },
+                    Ok(result_repr) => OcelJsResponse::Success { mutations, result_repr, requests, wake_at },
+                    Err(e) => OcelJsResponse::Error { message: e.message, line: e.line, mutations, requests, wake_at },
                 };
                 self.outgoing = match encode_bounded(&response, OCEL_JS_MAX_TRANSFER) {
                     Ok(bytes) => bytes,
@@ -154,6 +170,9 @@ impl JsServiceSession {
                 self.response_chunk(0)
             }
             OcelJsRequest::ReadResponse { offset, .. } => self.response_chunk(offset),
+            OcelJsRequest::ReadLayoutQuery { .. } | OcelJsRequest::LayoutResumeBegin { .. }
+            | OcelJsRequest::LayoutResumeChunk { .. } | OcelJsRequest::LayoutResumeCommit { .. } =>
+                Self::error("No suspended JavaScript layout query"),
             OcelJsRequest::OpenContext { .. } | OcelJsRequest::Ping => unreachable!(),
         }
     }
@@ -172,16 +191,29 @@ mod tests {
     use super::*;
     use crate::{DocumentArena, DomEvent, DomMutation, JsError};
     #[derive(Default)]
-    struct Context { resets: usize, evals: usize, mutation_count: usize, mutation_bytes: usize }
+    struct Context {
+        resets: usize, evals: usize, mutation_count: usize, mutation_bytes: usize,
+        browser_count: usize, browser_bytes: usize, fail_eval: bool,
+    }
     impl JsContext for Context {
         fn sync_document(&mut self, _: &DocumentArena, _: &str) -> Result<(), JsError> { Ok(()) }
-        fn eval(&mut self, script: &str) -> Result<String, JsError> { self.evals += 1; Ok(String::from(script)) }
+        fn eval(&mut self, script: &str) -> Result<String, JsError> {
+            self.evals += 1;
+            if self.fail_eval { Err(JsError { message: String::from("script exception"), line: 0 }) }
+            else { Ok(String::from(script)) }
+        }
         fn dispatch_event(&mut self, _: &DomEvent) -> Result<(), JsError> { Ok(()) }
         fn take_mutations(&mut self) -> Vec<DomMutation> {
             let count = core::mem::take(&mut self.mutation_count);
             let bytes = core::mem::take(&mut self.mutation_bytes);
             (0..count).map(|_| DomMutation::SetDocumentTitle { title: "x".repeat(bytes) }).collect()
         }
+        fn take_browser_requests(&mut self) -> Vec<crate::BrowserRequest> {
+            let count = core::mem::take(&mut self.browser_count);
+            let bytes = core::mem::take(&mut self.browser_bytes);
+            (0..count).map(|_| crate::BrowserRequest::SetCookie { value: "x".repeat(bytes) }).collect()
+        }
+        fn next_browser_wakeup(&self) -> Option<u64> { Some(123) }
         fn reset(&mut self) { self.resets += 1; }
     }
     #[test]
@@ -258,6 +290,36 @@ mod tests {
             assert!(matches!(command(&mut session, &mut ctx, OcelJsCommand::SyncDocument { arena: DocumentArena::new(), title: String::new() }), OcelJsReply::ResponseChunk { .. }));
             assert!(matches!(command(&mut session, &mut ctx, OcelJsCommand::Eval { script: String::from("recovered") }), OcelJsReply::ResponseChunk { .. }));
         }
+    }
+
+    #[test]
+    fn browser_request_count_and_bytes_have_independent_fail_closed_budgets() {
+        for (count, bytes) in [
+            (crate::OCEL_JS_MAX_BROWSER_REQUESTS + 1, 0),
+            (1, crate::OCEL_JS_MAX_BROWSER_REQUEST_BYTES + 1),
+        ] {
+            let mut session = JsServiceSession::default();
+            let mut ctx = Context::default();
+            session.handle(1, OcelJsRequest::OpenContext { context: 1 }, &mut ctx);
+            command(&mut session, &mut ctx, OcelJsCommand::SyncDocument { arena: DocumentArena::new(), title: String::new() });
+            ctx.browser_count = count; ctx.browser_bytes = bytes;
+            assert!(matches!(command(&mut session, &mut ctx, OcelJsCommand::Eval { script: String::new() }), OcelJsReply::Error { .. }));
+            assert!(session.owner.is_none());
+        }
+    }
+
+    #[test]
+    fn script_exceptions_preserve_browser_requests_mutations_and_wakeup() {
+        let mut session = JsServiceSession::default();
+        let mut ctx = Context::default();
+        session.handle(1, OcelJsRequest::OpenContext { context: 1 }, &mut ctx);
+        command(&mut session, &mut ctx, OcelJsCommand::SyncDocument { arena: DocumentArena::new(), title: String::new() });
+        ctx.fail_eval = true; ctx.browser_count = 1; ctx.browser_bytes = 5; ctx.mutation_count = 1;
+        let response = command(&mut session, &mut ctx, OcelJsCommand::Eval { script: String::new() });
+        let OcelJsReply::ResponseChunk { data, .. } = response else { panic!("expected response"); };
+        let response: OcelJsResponse = postcard::from_bytes(&data).unwrap();
+        let OcelJsResponse::Error { mutations, requests, wake_at, .. } = response else { panic!("expected exception"); };
+        assert_eq!(mutations.len(), 1); assert_eq!(requests.len(), 1); assert_eq!(wake_at, Some(123));
     }
 
     #[test]
