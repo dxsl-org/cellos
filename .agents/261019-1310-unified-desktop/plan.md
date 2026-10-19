@@ -18,7 +18,7 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
 | 01 | [Baseline and exact contract gates](phase-01-contract-baseline.md) | — | completed |
 | 02 | [Shared Linear theme and components](phase-02-system-theme.md) | 01 | completed |
 | 03 | [Native views, frames, tabs and lifecycle](phase-03-native-sessions.md) | 01,02 | completed |
-| 04 | [Bottom taskbar, Spotlight and launch registry](phase-04-desktop-launcher.md) | 01,02,03 | pending |
+| 04 | [Bottom taskbar, Spotlight and launch registry](phase-04-desktop-launcher.md) | 01,02,03 | completed |
 | 05 | [Six-zone snap and F11 fullscreen](phase-05-placement-fullscreen.md) | 03,04 | pending |
 | 06 | [Ocel native session and reader cutover](phase-06-ocel-cutover.md) | 02,03,04,05 | pending |
 | 07 | [Standalone Files and complete VFS operations](phase-07-files-vfs.md) | 01,02,03,04,05,06 | pending |
@@ -50,8 +50,14 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
   - Input focus routing and cleanup: `DESTROY_VIEW` and `SELECT_VIEW` query surface authenticated ownership from table to route focus to verified owner TID rather than caller; `input.remove_surface` prevents stale capability routing on destroy.
   - Owner crash reclamation: integrated `frames.cleanup_owner(dead_tid)` in compositor supervisor exit sweeper (`message_handler.rs:116`), safely destroying dead owner's views while leaving surviving views from other processes in mixed-owner frames intact and transferring focus to surviving active view.
   - Verified 10/10 tests in `service-compositor` and 356/356 workspace tests passing across `api`, `service-compositor`, `viui`, `ocel`, and `desktop`.
-- **Phase 04 — Bottom taskbar, Spotlight and launch registry**: **Pending (Unblocked)** — all Phase 01, Phase 02, and Phase 03 dependencies satisfied.
-- **Phase 05 — Six-zone snap and F11 fullscreen**: **Pending** — Phase 03 dependency unblocked; awaiting Phase 04 taskbar integration.
+- **Phase 04 — Bottom taskbar, Spotlight and launch registry**: **Completed** (2026-10-19).
+  - Implemented 3-section Spotlight HUD in `cells/apps/desktop/src/spotlight.rs` with `Applications`, `RunningTasks`, and `System` sections, dynamic placeholder search bar, `[1 Applications] [2 Tasks] [3 System]` tab band, Tab key and pointer click cycling, and action dispatch (`LaunchApp`, `TogglePin`, `SwitchTask`, `CycleTheme`, `Reboot`, `ShutDown`).
+  - Enforced Spotlight geometry: 480x320 DIP modal surface, tab header at Y=56 H=20, list items starting at Y=80 with row height 56 and step 62, `MAX_RESULTS = 3` fitting cleanly above footer at Y=292 with 26 DIP clearance.
+  - Expanded reviewed application catalog in `cells/apps/desktop/src/apps.rs` (`DEFAULT_CATALOG`), adding `Files` (`/bin/files`, `[F]`, File Manager & VFS) and `Chrome` (`/bin/chrome`, `[C]`, Web Browser Tier 3 Linux Guest); implemented case-insensitive substring searching across name, id, and description.
+  - Implemented fixed bottom shell taskbar in `cells/apps/desktop/src/taskbar.rs`: fixed 36 DIP height, 28 DIP button height centered vertically at Y=4, responsive narrow-screen pagination ($\le 727$ px) with "More" button triggering Spotlight search, and real service daemon indicators (`NET`, `VFS`, `AI`) wired to kernel `sys_lookup_service`.
+  - Added unit test suite in `cells/apps/desktop` (`spotlight::tests::test_spotlight_section_cycling_and_actions`, `taskbar::tests::narrow_taskbar_more_opens_application_search`).
+  - Verified 357 workspace tests passing across `api`, `service-compositor`, `viui`, `ocel`, and `desktop` (0 failures, 11 ignored); clean bare-metal x86 PIC build; `scripts/cellos-sign --check` passes with zero unallowlisted unsafe code.
+- **Phase 05 — Six-zone snap and F11 fullscreen**: **Pending (Unblocked)** — both Phase 03 (native frames/views) and Phase 04 (36 DIP taskbar geometry & work-area exclusion) dependencies satisfied.
 - **Phases 06–11**: Pending.
 
 ## Execution policy
@@ -80,5 +86,5 @@ Four internal review lenses completed; [20 unique findings and corrections](revi
 Product choices are approved in conversation. Three read-only recon slices plus direct source checks ground prerequisites; artifact validation checks links, AC IDs and phase/index DAG consistency. Phase 01 execution is completed: baseline manifest frozen, D-UI ABI deltas specified, and real x86 integration test runner materialized and verified in `tests/integration/tests/desktop-x86.rs`. Exact ABI approval, uncertain storage/VMX provenance and unavailable platform evidence remain phase-specific gates, not reasons to reopen settled UI choices.
 
 ## Handoff
-Phase 01 baseline, Phase 02 shared Linear theme and components, and Phase 03 native views, frames, tabs and lifecycle are completed and verified.
-Phase 04 (Bottom taskbar, Spotlight and launch registry) is unblocked for implementation via `hc-cook /home/dmin/cellos/.agents/261019-1310-unified-desktop/plan.md`. Phase 05 (Six-zone snap and F11 fullscreen) has its Phase 03 dependency unblocked and will proceed following Phase 04 taskbar work-area integration.
+Phase 01 baseline, Phase 02 shared Linear theme and components, Phase 03 native views, frames, tabs and lifecycle, and Phase 04 bottom taskbar, Spotlight and launch registry are completed and verified.
+Phase 05 (Six-zone snap and F11 fullscreen) is unblocked for implementation via `hc-cook /home/dmin/cellos/.agents/261019-1310-unified-desktop/plan.md`, with its Phase 03 native frame/view lifecycle and Phase 04 36 DIP taskbar work-area bounds fully satisfied.

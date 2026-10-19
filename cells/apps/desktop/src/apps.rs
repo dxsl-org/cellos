@@ -32,6 +32,22 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
         is_pinned: true,
     },
     AppInfo {
+        id: "files",
+        name: "Files",
+        path: "/bin/files",
+        icon: "[F]",
+        description: "File Manager & VFS",
+        is_pinned: true,
+    },
+    AppInfo {
+        id: "chrome",
+        name: "Chrome (Tier 3)",
+        path: "/bin/chrome",
+        icon: "[C]",
+        description: "Web Browser (Tier 3 Linux Guest)",
+        is_pinned: true,
+    },
+    AppInfo {
         id: "dashboard",
         name: "Robot Dash",
         path: "/bin/robot-dashboard",

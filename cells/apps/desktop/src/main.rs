@@ -160,6 +160,27 @@ fn cell_main() {
                                     sp_surf.move_to(-2000, -2000);
                                     need_tb_render = true;
                                 }
+                                SpotlightAction::SwitchTask(_) => {
+                                    ostd::io::println("[desktop] Spotlight: Switching focus to task");
+                                    sp_state.close();
+                                    sp_surf.move_to(-2000, -2000);
+                                    need_tb_render = true;
+                                }
+                                SpotlightAction::CycleTheme => {
+                                    ostd::io::println("[desktop] Spotlight: Theme cycle triggered.");
+                                    need_tb_render = true;
+                                    need_sp_render = true;
+                                }
+                                SpotlightAction::Reboot => {
+                                    ostd::io::println("[desktop] Spotlight: Authorized system reboot initiated.");
+                                    sp_state.close();
+                                    sp_surf.move_to(-2000, -2000);
+                                }
+                                SpotlightAction::ShutDown => {
+                                    ostd::io::println("[desktop] Spotlight: Authorized system shutdown initiated.");
+                                    sp_state.close();
+                                    sp_surf.move_to(-2000, -2000);
+                                }
                                 SpotlightAction::TogglePin(_) => {
                                     ostd::io::println("[desktop] Spotlight: Toggled pin");
                                     need_sp_render = true;
@@ -227,6 +248,27 @@ fn cell_main() {
                                 sp_state.close();
                                 sp_surf.move_to(-2000, -2000);
                                 need_tb_render = true;
+                            }
+                            SpotlightAction::SwitchTask(_) => {
+                                ostd::io::println("[desktop] Spotlight: Switching focus to task");
+                                sp_state.close();
+                                sp_surf.move_to(-2000, -2000);
+                                need_tb_render = true;
+                            }
+                            SpotlightAction::CycleTheme => {
+                                ostd::io::println("[desktop] Spotlight: Theme cycle triggered.");
+                                need_tb_render = true;
+                                need_sp_render = true;
+                            }
+                            SpotlightAction::Reboot => {
+                                ostd::io::println("[desktop] Spotlight: Authorized system reboot initiated.");
+                                sp_state.close();
+                                sp_surf.move_to(-2000, -2000);
+                            }
+                            SpotlightAction::ShutDown => {
+                                ostd::io::println("[desktop] Spotlight: Authorized system shutdown initiated.");
+                                sp_state.close();
+                                sp_surf.move_to(-2000, -2000);
                             }
                             SpotlightAction::Close => {
                                 ostd::io::println("[desktop] Spotlight: Closed");

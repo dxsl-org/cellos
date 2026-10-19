@@ -4,6 +4,23 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-19 — Unified Desktop Phase 04 bottom taskbar, 3-section Spotlight HUD, and launch registry.**
+  Completed Phase 04 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+  and implementation plan `.agents/261019-1310-unified-desktop/phase-04-desktop-launcher.md`:
+  - `cells/apps/desktop`: Implemented 3-section Spotlight HUD in `src/spotlight.rs` ($480 \times 320$ DIP, `MAX_RESULTS = 3`):
+    - Three-section HUD: `SpotlightSection` enum (`Applications`, `RunningTasks`, `System`) with `SpotlightSection::next()` cycling.
+    - Navigation & Tab cycling: Header tab bar at $Y = 56$ (height 20 DIP) rendering `[1 Applications] [2 Tasks] [3 System]` with `ACCENT_CYAN` text and `ACCENT_BLUE` indicator line; interactive section cycling via `KeySym::Tab` and pointer clicks. Arrow navigation (`Up`/`Down`) clamped within section items; search query preserved across tab switches with dynamic placeholder text per section (`"Type app name to filter..."`, `"Search active running tasks..."`, `"System settings & power..."`).
+    - Action dispatch: Implemented `SpotlightAction` enum handling `LaunchApp(path)`, `TogglePin(id)`, `SwitchTask(idx)`, `CycleTheme`, `Reboot`, and `ShutDown`.
+    - Geometry & clearance: 3 items span $Y \in [80, 266]$ (`ROW_STEP = 62`), maintaining a 26 DIP clearance above footer status bar ($Y = 292$).
+  - `DEFAULT_CATALOG` expanded in `src/apps.rs`:
+    - Added `Files` (`/bin/files`, icon `[F]`, description `"File Manager & VFS"`, `is_pinned: true`).
+    - Added `Chrome` (`/bin/chrome`, icon `[C]`, description `"Web Browser (Tier 3 Linux Guest)"`, `is_pinned: true`).
+    - Case-insensitive substring matching (`contains_case_insensitive`) verified across `name`, `description`, and `id`.
+  - Fixed 36 DIP bottom shell taskbar in `src/taskbar.rs`:
+    - Enforced fixed 36 DIP height (`TASKBAR_HEIGHT = 36`) and 28 DIP button height (`BUTTON_HEIGHT = 28`, centered at $Y = 4$).
+    - Responsive layout (`Layout::new`) paging pinned applications with arrow controls (`<` / `>`) and displaying the "More" button to invoke Spotlight search on narrow screens ($\le 727$ px).
+    - Status indicators for `NET`, `VFS`, and `AI` connected to kernel `sys_lookup_service`.
+  - Verified: Unit tests `spotlight::tests::test_spotlight_section_cycling_and_actions` and `taskbar::tests::narrow_taskbar_more_opens_application_search` pass; 357 workspace tests pass; `tests/integration/tests/desktop-x86.rs` compiles; signed F1/F5 policy checks pass with `#![forbid(unsafe_code)]`.
 - **2026-10-19 — Unified Desktop Phase 03 native views, frames, tabs and generational lifecycle.**
   Completed Phase 03 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
   and implementation plan `.agents/261019-1310-unified-desktop/phase-03-native-sessions.md`:

@@ -39,7 +39,6 @@ pub mod theme {
     pub const ACCENT_CYAN: Color = Color::rgb(0, 200, 220);
     pub const ACCENT_BLUE: Color = Color::rgb(70, 130, 245);
     pub const ACCENT_GREEN: Color = Color::rgb(45, 195, 95);
-    pub const ACCENT_RED: Color = Color::rgb(230, 70, 70);
     pub const TEXT_PRIMARY: Color = Color::rgb(240, 242, 248);
     pub const TEXT_MUTED: Color = Color::rgb(140, 145, 160);
 }

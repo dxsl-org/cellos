@@ -7,6 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- Unified Desktop Phase 04 bottom taskbar, 3-section Spotlight HUD, and launch registry (`.agents/261019-1310-unified-desktop/phase-04-desktop-launcher.md`):
+  - `cells/apps/desktop`: Implemented 3-section Spotlight HUD modal in `src/spotlight.rs` (480x320 DIP, `MAX_RESULTS = 3`):
+    - Three-section HUD: `SpotlightSection` enum (`Applications`, `RunningTasks`, `System`) with `SpotlightSection::next()` cycling.
+    - Navigation & Tab cycling: Header tab bar at Y=56 (20 DIP height) rendering `[1 Applications] [2 Tasks] [3 System]` with active accent underline (`ACCENT_CYAN` text, `ACCENT_BLUE` indicator); interactive section cycling via `KeySym::Tab` and pointer clicks. Arrow navigation (`Up`/`Down`) clamped within section items; search query preserved across tab switches with dynamic placeholder text per section (`"Type app name to filter..."`, `"Search active running tasks..."`, `"System settings & power..."`).
+    - Action dispatch: Implemented `SpotlightAction` enum handling `LaunchApp(path)`, `TogglePin(id)`, `SwitchTask(idx)`, `CycleTheme`, `Reboot`, and `ShutDown`.
+    - Geometry & clearance: Fixed bounds $480 \times 320$ DIP with `MAX_RESULTS = 3`, `LIST_START_Y = 80`, `ROW_STEP = 62`. The 3 items span $Y \in [80, 266]$, maintaining a 26 DIP clearance above the footer divider line ($Y = 292$).
+  - `DEFAULT_CATALOG` in `src/apps.rs` expanded:
+    - Added `Files` (`/bin/files`, icon `[F]`, description `"File Manager & VFS"`, `is_pinned: true`).
+    - Added `Chrome` (`/bin/chrome`, icon `[C]`, description `"Web Browser (Tier 3 Linux Guest)"`, `is_pinned: true`).
+    - Case-insensitive substring matching (`contains_case_insensitive`) verified across `name`, `description`, and `id`.
+  - Fixed 36 DIP bottom shell taskbar in `src/taskbar.rs`:
+    - Fixed 36 DIP height (`TASKBAR_HEIGHT = 36`) with 28 DIP button height (`BUTTON_HEIGHT = 28`, $Y = 4$, centered).
+    - Responsive layout (`Layout::new`) paging pinned applications with arrow controls (`<` / `>`) and displaying the "More" button to invoke Spotlight search on narrow screens ($\le 727$ px).
+    - System daemon status indicators for `NET`, `VFS`, and `AI` connected to kernel `sys_lookup_service`.
 - Unified Desktop Phase 03 native views, frames, tabs and lifecycle (`.agents/261019-1310-unified-desktop/phase-03-native-sessions.md`):
   - `libs/api`: Introduced native session tab management opcodes in `api::display::compositor_ops`: `CREATE_VIEW` (`0x20`), `DESTROY_VIEW` (`0x21`), `SELECT_VIEW` (`0x22`), `GROUP_VIEW` (`0x23`), `DETACH_VIEW` (`0x24`), `STAGE_GROUP_CONFIGURE` (`0x25`), and `COMMIT_GROUP_CONFIGURE` (`0x26`).
   - Implemented typed C-ABI structures with static compile-time size assertions: `ViewRef` (8 bytes), `FrameRef` (8 bytes), `ViewOpResult` status/error enum (`Success`, `StaleGeneration`, `InvalidToken`, `AccessDenied`, `CapacityExhausted`, `FrameNotFound`, `ViewNotFound`, `Timeout`, `Refused`), `ViewOpResponse` (20 bytes, `VIEW_OP_RESPONSE_WIRE_SIZE`), and `CreateViewRequest` (64 bytes, `CREATE_VIEW_REQUEST_WIRE_SIZE` naturally 8-byte aligned with `file_grant_id: u64` at offset 32).

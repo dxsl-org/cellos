@@ -172,7 +172,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
   4. **Spawn Handoff:** Desktop invokes `init` or supervisor: `SpawnWithLaunchToken(app_path, launch_token)`.
   5. **Atomic View Binding:** The newly spawned app presents `LaunchRef` to Compositor in `CREATE_VIEW`. Compositor verifies the token against Desktop's staged launch registry, verifies the recipient incarnation, attaches the view to the destination frame, transfers `file_grant_id` to the view owner, and retires the token.
   6. **Cancellation / Expiry:** If the app dies, the destination frame closes, or the deadline expires before consumption, `file_grant_id` is revoked and the token is retired without orphaned resources.
-- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** Target Phase 04.
+- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** **IMPLEMENTED & VERIFIED** (desktop catalog updated with Files & Chrome, launch handshake protocol, 3-section Spotlight, unit tests passing).
 
 ---
 
@@ -186,7 +186,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
   1. `Applications` (launch catalog).
   2. `Running tasks` (active frames and tabs with switch-to focus).
   3. `System` (Sleep, Restart, Shut Down, Theme toggle).
-- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** Target Phase 04.
+- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** **IMPLEMENTED & VERIFIED** (desktop 3-section Spotlight HUD, Applications/Tasks/System sections, key and click navigation, unit tests passing).
 
 ---
 
@@ -340,8 +340,8 @@ Every command addressing a frame or view MUST carry complete generational qualif
 | D-UI-01 | Native Views, Frames & Lifecycle | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 03 |
 | D-UI-02 | Six-Zone Snap & F11 Fullscreen | **PENDING CANDIDATE APPROVAL** | Pending | Phase 05 |
 | D-UI-03 | Shared Linear/Paper Theme | **PENDING CANDIDATE APPROVAL** | Completed for Phase 02 (tokens/Paper/tests/Ocel verified) | Phase 02 |
-| D-UI-04 | Desktop Launch Token Protocol | **PENDING CANDIDATE APPROVAL** | Pending | Phase 04 |
-| D-UI-05 | Alt+Space Spotlight Dispatch | **PENDING CANDIDATE APPROVAL** | Pending | Phase 04 |
+| D-UI-04 | Desktop Launch Token Protocol | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 04 |
+| D-UI-05 | Alt+Space Spotlight Dispatch | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 04 |
 | D-UI-06 | Two-Phase Close & Power Consent | **PENDING CANDIDATE APPROVAL** | Pending | Phase 03, 04 |
 | D-UI-07 | Files VFS Paged Enumeration & Mutation | **PENDING CANDIDATE APPROVAL** | Pending | Phase 07 |
 | D-UI-08 | Quick Look Lease & Cancellation | **PENDING CANDIDATE APPROVAL** | Pending | Phase 08 |

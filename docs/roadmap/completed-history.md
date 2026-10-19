@@ -29,6 +29,9 @@ archive.
   ratification, truthful source/image baseline manifest (`baseline-manifest.md`) at commit
   `4994602b55a43f3fd4262f36dc3dfaa7b1a2ff44` preserving user changes, and automated x86
   desktop integration test target (`tests/integration/tests/desktop-x86.rs`) under QEMU KVM/TCG.
+- Unified Desktop Phase 02 Shared Linear Theme & Components (2026-10-19): `ViTheme` tokens in `viui`, `PaperTheme`, `ThemePreferenceState` monotonic revision tracking, WCAG 2.1 contrast test suite, 20 DIP close button hit area with centered 16 DIP icon, 36 DIP taskbar / 480x320 Spotlight, Ocel reader theme integration.
+- Unified Desktop Phase 03 Native Views, Frames & Lifecycle (2026-10-19): Decoupled frames and views in `service-compositor`, `CREATE_VIEW`/`DESTROY_VIEW`/`SELECT_VIEW`/`GROUP_VIEW`/`DETACH_VIEW` opcodes in `libs/api`, C-ABI typed structs, generational invalidation, multi-view & mixed-owner frames, capacity DoS bounds, focus routing to authenticated owners, and process exit reclamation.
+- Unified Desktop Phase 04 Bottom Taskbar, Spotlight HUD & Launch Registry (2026-10-19): 3-section Spotlight HUD modal (`spotlight.rs`) with Tab key cycling and pointer header navigation, action dispatch (`LaunchApp`, `TogglePin`, `SwitchTask`, `CycleTheme`, `Reboot`, `ShutDown`), and 26 DIP footer clearance ($480 \times 320$, `MAX_RESULTS = 3`). Expanded `DEFAULT_CATALOG` (`apps.rs`) with `Files` and `Chrome` (Tier 3). Fixed 36 DIP bottom shell taskbar (`taskbar.rs`) with 28 DIP button height, responsive narrow-screen pagination, and system daemon status indicators.
 
 ## Historical Runtime Snapshot
 
