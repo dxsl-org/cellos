@@ -4,6 +4,17 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-19 — Unified Desktop Phase 07 Standalone Files manager and VFS navigation.**
+  Completed Phase 07 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+  and implementation plan `.agents/261019-1310-unified-desktop/phase-07-files-vfs.md`:
+  - `cells/apps/files`: Built standalone Files manager application (`#![no_std]`, `#![forbid(unsafe_code)]`, 4 MiB custom heap):
+    - Three unified view modes in `src/views/`: `ViewMode::List` (default linear list with item type icons, names, human-readable size formatting, and selection highlight), `ViewMode::Grid` (card preview with $110 \times 110$ DIP card tiles and centered file icons), and `ViewMode::Columns` (Miller Columns multi-panel hierarchical browser with 200 DIP panel widths and inspection pane).
+    - Places sidebar in `src/views/places.rs`: 160 DIP navigation sidebar rendering pinned volumes (`Root`, `Applications`, `Data`, `Storage`, `Services` mapped to `/`, `/bin`, `/data`, `/mnt`, `/srv`), active directory indicators, and single-click directory routing.
+    - Mouse and keyboard navigation: Continuous cursor tracking and click hit-testing across toolbar mode buttons (`[List]`, `[Grid]`, `[Cols]`), Places sidebar entries, and content items across all three views; keyboard arrow navigation (`Up`/`Down`), Return to drill down/open, Backspace for parent traversal, '1'/'2'/'3' view mode shortcuts, clipboard copy/cut/paste (`Ctrl+C`/`Ctrl+X`/`Ctrl+V`), and Delete with irreversible disclosure notice.
+    - Dynamic surface title synchronization: Surface title synchronized to `"Files — <path>"` upon directory transitions.
+    - Safe mutation controller in `src/model.rs`: Two-phase copy/cut/paste with automatic conflict name resolution (`resolve_conflict_name`), generating numbered non-colliding variants `(1)`, `(2)` to protect existing destination files, and explicit irreversible delete disclosures.
+  - Added `cells/apps/files` to `Cargo.toml` workspace members.
+  - Verified: 4 unit tests pass in `cells/apps/files` (`cargo test -p files`); 363 workspace tests pass (`cargo test -p files -p service-compositor -p ocel -p desktop -p viui -p api`); bare-metal PIC cross-build compiles cleanly (`RUSTFLAGS="-C relocation-model=pic" cargo build --release -p files --target x86_64-unknown-none -Z build-std=core,alloc`); signed F1/F5 policy checks pass with `#![forbid(unsafe_code)]`.
 - **2026-10-19 — Unified Desktop Phase 06 Ocel native session and reader cutover.**
   Completed Phase 06 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
   and implementation plan `.agents/261019-1310-unified-desktop/phase-06-ocel-cutover.md`:

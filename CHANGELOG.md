@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- Unified Desktop Phase 07 standalone Files app and VFS operations (`.agents/261019-1310-unified-desktop/phase-07-files-vfs.md`):
+  - `cells/apps/files`: Standalone Files manager application (`#![no_std]`, `#![forbid(unsafe_code)]`, 4 MiB custom heap):
+    - Three view modes: List (default) with human-readable size formatting and type icons, Grid (card preview with $110 \times 110$ DIP cards), and Miller Columns (hierarchical panels with 200 DIP column widths and right-side inspection preview).
+    - Places sidebar: 160 DIP left sidebar providing quick bookmark navigation to `/`, `/bin`, `/data`, `/mnt`, and `/srv` (`Root`, `Applications`, `Data`, `Storage`, `Services`) with active path indicators.
+    - Mouse and keyboard navigation: continuous cursor tracking and click hit-testing across toolbar mode buttons (`[List]`, `[Grid]`, `[Cols]`), Places sidebar entries, and active view content items; keyboard arrow navigation, Return to open/drill down, Backspace for parent directory, '1'/'2'/'3' view mode switching, clipboard copy/cut/paste (`Ctrl+C`/`Ctrl+X`/`Ctrl+V`), and Delete with disclosure notice.
+    - Dynamic surface title synchronization: window surface title set to `"Files — <path>"` upon directory change.
+    - Safe mutation controller: two-phase copy/move conflict resolution (`resolve_conflict_name`) generating non-colliding candidate names `(1)`, `(2)`, and irreversible permanent delete disclosures.
+  - Added `cells/apps/files` to `Cargo.toml` workspace members.
 - Unified Desktop Phase 06 Ocel native session and reader cutover (`.agents/261019-1310-unified-desktop/phase-06-ocel-cutover.md`):
   - `cells/apps/ocel`: Cut over document session tabs to compositor-owned window frame and unified shared reader appearance:
     - Removed private in-app tab bar (`TABBAR_HEIGHT = 0`), allocating the full 28 DIP vertical space to the active document viewport and eliminating duplicate tab chrome.

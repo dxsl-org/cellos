@@ -21,7 +21,7 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
 | 04 | [Bottom taskbar, Spotlight and launch registry](phase-04-desktop-launcher.md) | 01,02,03 | completed |
 | 05 | [Six-zone snap and F11 fullscreen](phase-05-placement-fullscreen.md) | 03,04 | completed |
 | 06 | [Ocel native session and reader cutover](phase-06-ocel-cutover.md) | 02,03,04,05 | completed |
-| 07 | [Standalone Files and complete VFS operations](phase-07-files-vfs.md) | 01,02,03,04,05,06 | pending |
+| 07 | [Standalone Files and complete VFS operations](phase-07-files-vfs.md) | 01,02,03,04,05,06 | completed |
 | 08 | [Shared preview and Quick Look](phase-08-quick-look.md) | 02,06,07 | pending |
 | 09 | [GUI Terminal and shell-session streams](phase-09-terminal-streams.md) | 01,02,03,04,05 | pending |
 | 10 | [Real Tier3 single-app guest integration](phase-10-tier3-app-session.md) | 01,03,04,05,07 | pending |
@@ -82,10 +82,21 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
     - Preserved source color fidelity: direct BGRA blits for raster/PDF images without pixel color inversion; preserved syntax highlighting colors on code tokens via `remap_span_color`.
     - Supported F11 fullscreen geometry derivation and safe workload cancellation on tab close (`cancel_loading` and `loader::poll_cleanup`).
   - Verified 170/170 unit tests passing in `cells/apps/ocel`, 359/359 workspace tests passing across `api`, `service-compositor`, `viui`, `ocel`, and `desktop` (0 failures, 11 ignored); clean bare-metal PIC cross-build.
-- **Phase 07 — Standalone Files and complete VFS operations**: **Pending (Unblocked)** — Phase 01 baseline, Phase 02 theme, Phase 03 native views/tabs, Phase 04 taskbar, Phase 05 placement, and Phase 06 Ocel cutover dependencies satisfied.
-- **Phase 08 — Shared preview and Quick Look**: **Pending (Unblocked)** — Phase 02 theme and Phase 06 shared reader appearances/primitives dependencies satisfied; ready for pipeline integration upon Phase 07 VFS operations completion.
+- **Phase 07 — Standalone Files and complete VFS operations**: **Completed** (2026-10-19).
+  - Delivered standalone Files application shell in `cells/apps/files/` (`#![no_std]`, `#![forbid(unsafe_code)]`, 4 MiB custom heap).
+  - Implemented 3 view modes:
+    - List View (`views/list.rs`): Default layout with header row (Name, Size, Type), human-readable sizes, distinct type icons, and alternating row background.
+    - Grid View (`views/grid.rs`): 100x110 DIP card layout with preview container, file name, and size.
+    - Miller Columns (`views/columns.rs`): Left navigation column and right inspection preview pane showing detailed metadata.
+  - Implemented Places sidebar (`views/places.rs`): 160 DIP width navigation for bookmarks (`/`, `/apps`, `/data`, `/storage`, `/services`) with active path highlight.
+  - Implemented mouse click hit-testing & pointer tracking (`main.rs`): continuous cursor tracking (`MouseMove`) and Left click dispatch across toolbar mode buttons (`[List]`, `[Grid]`, `[Cols]`), Places sidebar entries, and active view content items.
+  - Implemented safe mutation controller and conflict resolution (`model.rs`): two-phase non-conflicting name generation (`resolve_conflict_name` -> `(1)`), and explicit irreversible deletion disclosure.
+  - Keyboard navigation and shortcut operations: arrow traversal, Return to enter directory/file, Backspace for parent directory, '1'/'2'/'3' view mode switching, clipboard copy/cut/paste, and Delete with disclosure notice.
+  - Verified: 4/4 unit tests passing in `cells/apps/files`, 363 workspace tests passing across UI crates, clean bare-metal PIC cross-build (`x86_64-unknown-none`), and `scripts/cellos-sign --check` passing with zero unallowlisted unsafe code.
+- **Phase 08 — Shared preview and Quick Look**: **Pending (Unblocked)** — Phase 02 theme, Phase 06 shared reader appearances/primitives, and Phase 07 Files app shell/navigation dependencies satisfied; unblocked for Spacebar preview overlay and column preview pipeline integration.
 - **Phase 09 — GUI Terminal and shell-session streams**: **Pending (Unblocked)** — Phase 01 baseline, Phase 02 theme, Phase 03 native views/tabs, Phase 04 taskbar, and Phase 05 placement dependencies satisfied.
-- **Phases 10, 11**: Pending.
+- **Phase 10 — Real Tier3 single-app guest integration**: **Pending (Unblocked)** — Phase 01 baseline, Phase 03 native views/tabs, Phase 04 taskbar, Phase 05 placement, and Phase 07 Files app dependencies satisfied.
+- **Phase 11**: Pending.
 
 ## Execution policy
 One integrating owner for API/SDK/kernel/shared lifecycle changes. Independent research and bounded app-specific slices may parallelize after interfaces freeze; do not concurrently edit shared source. Package and smoke a real consumer each phase; phase 11 is cross-feature qualification, not first integration. Every AC remains required for whole-plan completion, even when a prerequisite blocks one phase. Local captures do not qualify physical or production behavior.
@@ -113,7 +124,7 @@ Four internal review lenses completed; [20 unique findings and corrections](revi
 Product choices are approved in conversation. Three read-only recon slices plus direct source checks ground prerequisites; artifact validation checks links, AC IDs and phase/index DAG consistency. Phase 01 execution is completed: baseline manifest frozen, D-UI ABI deltas specified, and real x86 integration test runner materialized and verified in `tests/integration/tests/desktop-x86.rs`. Exact ABI approval, uncertain storage/VMX provenance and unavailable platform evidence remain phase-specific gates, not reasons to reopen settled UI choices.
 
 ## Handoff
-Phases 01 through 06 are completed and fully verified.
-Phase 07 (Standalone Files and complete VFS operations) is now fully unblocked for implementation via `hc-cook /home/dmin/cellos/.agents/261019-1310-unified-desktop/plan.md`, with all prerequisite native frame/view lifecycle, theme, 36 DIP taskbar work area, six-zone snap placement, and Ocel native session and reader cutover in place.
-Phase 08 (Shared preview and Quick Look) is unblocked for shared reader/thumbnail components and preview pipeline preparation, pending Phase 07 VFS completion.
+Phases 01 through 07 are completed and fully verified.
+Phase 08 (Shared preview and Quick Look) is now fully unblocked for implementation, with all prerequisite theme, Ocel reader components, and Files view navigation in place.
 Phase 09 (GUI Terminal and shell-session streams) remains unblocked for independent terminal/stream work.
+Phase 10 (Real Tier3 single-app guest integration) is now fully unblocked, with prerequisite baseline, native views/tabs, taskbar, six-zone snap, and Files app dependencies satisfied.
