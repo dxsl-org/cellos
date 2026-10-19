@@ -17,7 +17,7 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
 |---|---|---|---|
 | 01 | [Baseline and exact contract gates](phase-01-contract-baseline.md) | — | completed |
 | 02 | [Shared Linear theme and components](phase-02-system-theme.md) | 01 | completed |
-| 03 | [Native views, frames, tabs and lifecycle](phase-03-native-sessions.md) | 01,02 | pending (unblocked) |
+| 03 | [Native views, frames, tabs and lifecycle](phase-03-native-sessions.md) | 01,02 | completed |
 | 04 | [Bottom taskbar, Spotlight and launch registry](phase-04-desktop-launcher.md) | 01,02,03 | pending |
 | 05 | [Six-zone snap and F11 fullscreen](phase-05-placement-fullscreen.md) | 03,04 | pending |
 | 06 | [Ocel native session and reader cutover](phase-06-ocel-cutover.md) | 02,03,04,05 | pending |
@@ -41,8 +41,18 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
   - Reconciled shared geometry across widgets: `WindowChrome` close hit target 20 DIP with centered 16 DIP icon; `desktop` taskbar height 36 DIP (28 DIP buttons); spotlight dimensions 480x320 DIP with `MAX_RESULTS = 3`.
   - Cut over Ocel reader theme (`cells/apps/ocel/src/{draw,doc,main}.rs`) to `ReaderThemeMode::{FollowSystem, Light, Dark, Paper}` backed by shared ViUI palette colors; wired `active_system_palette` atomic dynamic resolution and preserved syntax code colors.
   - Verified 64 tests passing in `viui`, 170 tests in `ocel`, 1 test in `desktop`, and real x86 QEMU runner (`desktop_x86_boots_to_shell_and_compositor`) passing in 18.73s.
-- **Phase 03 — Native views, frames, tabs and lifecycle**: **Pending (Unblocked)** — all Phase 01 and Phase 02 dependencies satisfied.
-- **Phases 04–11**: Pending.
+- **Phase 03 — Native views, frames, tabs and lifecycle**: **Completed** (2026-10-19).
+  - Materialized D-UI-01 wire protocol specifications and typed structures in `libs/api/src/services/display.rs` (`CreateViewRequest`, `ViewOpResponse`, `ViewRef`, `FrameRef`, `ViewOpResult`, and opcodes `0x20..=0x26`). Enforced compile-time size invariants (`size_of::<CreateViewRequest>() == 64`, `ViewOpResponse == 20`, `ViewRef == 8`, `FrameRef == 8`) and natural 8-byte alignment (`file_grant_id` at offset 32).
+  - Implemented `FrameRegistry`, `Frame`, and `View` in `cells/services/compositor/src/surface_table/frame.rs` supporting multiple views per process, mixed-owner frames, opaque monotonically allocated identifiers, and hard resource admission limits (`MAX_VIEWS_PER_FRAME = 32`, `MAX_FRAMES = 64`).
+  - Implemented request dispatch and handling in `cells/services/compositor/src/message_handler/view.rs` for `CREATE_VIEW` (`0x20`), `DESTROY_VIEW` (`0x21`), `SELECT_VIEW` (`0x22`), `GROUP_VIEW` (`0x23`), and `DETACH_VIEW` (`0x24`).
+  - Generational validation and invalidation: strictly validated `(frame_id, frame_generation)` and `(view_id, view_incarnation)` on every view/frame operation with `ViewOpResult::StaleGeneration` rejection; enforced monotonic generation increments on attach, destroy, group, detach, and owner death.
+  - Surface geometry synchronization and decoration dirtying: updated backing surface positions on create, group, and detach via `move_to`, dirtying decoration regions for immediate compositor repaint.
+  - Input focus routing and cleanup: `DESTROY_VIEW` and `SELECT_VIEW` query surface authenticated ownership from table to route focus to verified owner TID rather than caller; `input.remove_surface` prevents stale capability routing on destroy.
+  - Owner crash reclamation: integrated `frames.cleanup_owner(dead_tid)` in compositor supervisor exit sweeper (`message_handler.rs:116`), safely destroying dead owner's views while leaving surviving views from other processes in mixed-owner frames intact and transferring focus to surviving active view.
+  - Verified 10/10 tests in `service-compositor` and 356/356 workspace tests passing across `api`, `service-compositor`, `viui`, `ocel`, and `desktop`.
+- **Phase 04 — Bottom taskbar, Spotlight and launch registry**: **Pending (Unblocked)** — all Phase 01, Phase 02, and Phase 03 dependencies satisfied.
+- **Phase 05 — Six-zone snap and F11 fullscreen**: **Pending** — Phase 03 dependency unblocked; awaiting Phase 04 taskbar integration.
+- **Phases 06–11**: Pending.
 
 ## Execution policy
 One integrating owner for API/SDK/kernel/shared lifecycle changes. Independent research and bounded app-specific slices may parallelize after interfaces freeze; do not concurrently edit shared source. Package and smoke a real consumer each phase; phase 11 is cross-feature qualification, not first integration. Every AC remains required for whole-plan completion, even when a prerequisite blocks one phase. Local captures do not qualify physical or production behavior.
@@ -70,5 +80,5 @@ Four internal review lenses completed; [20 unique findings and corrections](revi
 Product choices are approved in conversation. Three read-only recon slices plus direct source checks ground prerequisites; artifact validation checks links, AC IDs and phase/index DAG consistency. Phase 01 execution is completed: baseline manifest frozen, D-UI ABI deltas specified, and real x86 integration test runner materialized and verified in `tests/integration/tests/desktop-x86.rs`. Exact ABI approval, uncertain storage/VMX provenance and unavailable platform evidence remain phase-specific gates, not reasons to reopen settled UI choices.
 
 ## Handoff
-Phase 01 baseline and Phase 02 shared Linear theme and components are completed and verified.
-Phase 03 (Native views, frames, tabs and lifecycle) is unblocked for implementation via `hc-cook /home/dmin/cellos/.agents/261019-1310-unified-desktop/plan.md`. Observe phase gates and ABI ratification checkpoints (D-UI-01) prior to modifying compositor frame/view lifecycle or `libs/api`.
+Phase 01 baseline, Phase 02 shared Linear theme and components, and Phase 03 native views, frames, tabs and lifecycle are completed and verified.
+Phase 04 (Bottom taskbar, Spotlight and launch registry) is unblocked for implementation via `hc-cook /home/dmin/cellos/.agents/261019-1310-unified-desktop/plan.md`. Phase 05 (Six-zone snap and F11 fullscreen) has its Phase 03 dependency unblocked and will proceed following Phase 04 taskbar work-area integration.

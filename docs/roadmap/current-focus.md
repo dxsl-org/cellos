@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-10-19 — Unified Desktop Phase 01 baseline under ADR-0027; Cell/Kernel authority and C2C on Intel x86-64
+**Last updated**: 2026-10-19 — Unified Desktop Phase 03 native views and frames under ADR-0027; Cell/Kernel authority and C2C on Intel x86-64
 
 ## Sole active direction: C2C Anywhere on Intel x86-64
 
@@ -78,6 +78,7 @@ and Phase 02 ([phase-02-system-theme.md](../../.agents/261019-1310-unified-deskt
 are completed, establishing:
 - **Phase 01 (Contract baseline & test harness):** Proposed contracts (`contracts.md`) and candidate ABI delta ledger (`abi-delta-ledger.md`) covering D-UI-01 through D-UI-10 with candidate specification digest `e47ffa52fc7d11ffe190bda41dc762d60f8d53131809562369b040456b2da6fb` and Law-1 Checkpoint 1 (Design Approval) pending candidate ratification before source edits in `libs/api` or `libs/types`. Truthful source baseline manifest (`baseline-manifest.md`) preserving user changes and cataloging SHA-256 hashes of 26 modified tracked files and untracked user artifacts at base commit `4994602b55a43f3fd4262f36dc3dfaa7b1a2ff44`. Automated x86 integration test runner `tests/integration/tests/desktop-x86.rs` and `boot_x86_bios_with_accel` helper in `tests/integration/src/lib.rs` supporting QEMU KVM/TCG boot and QMP interaction.
 - **Phase 02 (Shared Linear theme and components):** `ViTheme` semantic tokens in `libs/viui` (tabs, taskbar, spotlight, status, reader, `reader_link` >= 5.0:1), `PaperTheme` warm sepia (#F6F3EB), `SystemPalette` enum, `ThemePreferenceState` monotonic revision tracking, and mathematical WCAG 2.1 contrast test suite (text >= 4.5:1, links >= 5.0:1). Window chrome 20 DIP close hit area with centered 16 DIP icon in `libs/viui/src/window.rs`. Reconciled 36 DIP taskbar and 480x320 Spotlight (MAX_RESULTS=3) in `cells/apps/desktop`. Ocel `ReaderThemeMode::{FollowSystem, Light, Dark, Paper}` with dynamic system palette resolution and code color preservation.
+- **Phase 03 (Native views, frames, tabs and lifecycle):** Introduced native session tab management opcodes in `api::display::compositor_ops` (`CREATE_VIEW` 0x20, `DESTROY_VIEW` 0x21, `SELECT_VIEW` 0x22, `GROUP_VIEW` 0x23, `DETACH_VIEW` 0x24, `STAGE_GROUP_CONFIGURE` 0x25, `COMMIT_GROUP_CONFIGURE` 0x26), C-ABI types `ViewRef` (8B), `FrameRef` (8B), `ViewOpResult`, `ViewOpResponse` (20B), and naturally aligned `CreateViewRequest` (64B) with static compile-time assertions. Implemented `FrameRegistry`, `Frame`, and `View` in `cells/services/compositor/src/surface_table/frame.rs` and message dispatch in `message_handler/view.rs` with generational invalidation, capacity limits (`MAX_VIEWS_PER_FRAME = 32`, `MAX_FRAMES = 64`), input focus handoff to authenticated owners, decoration dirty tracking, and owner exit reclamation (`cleanup_owner`). Verified: 10 unit tests pass in `service-compositor` and 356 workspace tests pass.
 This desktop authorization is strictly bounded to ADR-0027 deliverables (unified session tabs, bottom taskbar with Spotlight HUD, six-zone snap, Linear theme, standalone Files, Quick Look, GUI Terminal, and single-app Tier 3 Linux guest integration); it does not unlock unadmitted legacy lanes, G2-J crash format promotion, or unauthenticated kernel capabilities.
 
 ### Task admission and working limits
@@ -751,6 +752,16 @@ events are maintained in
   icon, desktop 36 DIP taskbar and 480x320 Spotlight (MAX_RESULTS=3), and Ocel
   `ReaderThemeMode::{FollowSystem, Light, Dark, Paper}` with dynamic system palette resolution
   and code color preservation.
+- **Unified Desktop Phase 03 native views, frames, tabs and lifecycle (2026-10-19):** ADR-0027
+  implementation plan `.agents/261019-1310-unified-desktop/` completed Phase 03. Introduced
+  `CREATE_VIEW` (0x20), `DESTROY_VIEW` (0x21), `SELECT_VIEW` (0x22), `GROUP_VIEW` (0x23),
+  `DETACH_VIEW` (0x24), `STAGE_GROUP_CONFIGURE` (0x25), and `COMMIT_GROUP_CONFIGURE` (0x26)
+  in `libs/api/src/services/display.rs` alongside `ViewRef`, `FrameRef`, `ViewOpResult`,
+  `ViewOpResponse`, and 64-byte `CreateViewRequest`. Implemented compositor `FrameRegistry`,
+  `Frame`, and `View` in `cells/services/compositor/src/surface_table/frame.rs` and
+  `message_handler/view.rs` with multi-view and mixed-owner frame support, generational
+  invalidation, capacity DoS bounds, input focus handoff to authentic surface owners,
+  and process exit reclamation (`cleanup_owner`).
 
 ## Current Documentation Corrections
 

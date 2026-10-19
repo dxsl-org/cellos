@@ -4,6 +4,19 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-19 — Unified Desktop Phase 03 native views, frames, tabs and generational lifecycle.**
+  Completed Phase 03 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+  and implementation plan `.agents/261019-1310-unified-desktop/phase-03-native-sessions.md`:
+  - `libs/api`: Introduced native session tab management opcodes in `api::display::compositor_ops`: `CREATE_VIEW` (`0x20`), `DESTROY_VIEW` (`0x21`), `SELECT_VIEW` (`0x22`), `GROUP_VIEW` (`0x23`), and `DETACH_VIEW` (`0x24`), along with group configure opcodes `STAGE_GROUP_CONFIGURE` (`0x25`) and `COMMIT_GROUP_CONFIGURE` (`0x26`).
+  - Defined C-ABI structures in `libs/api/src/services/display.rs` with static compile-time assertions: `ViewRef` (8 bytes), `FrameRef` (8 bytes), `ViewOpResult` (error/status codes: `Success`, `StaleGeneration`, `InvalidToken`, `AccessDenied`, `CapacityExhausted`, `FrameNotFound`, `ViewNotFound`, `Timeout`, `Refused`), `ViewOpResponse` (20 bytes wire-size `VIEW_OP_RESPONSE_WIRE_SIZE`), and `CreateViewRequest` (64 bytes naturally 8-byte aligned `CREATE_VIEW_REQUEST_WIRE_SIZE` with `file_grant_id: u64` at offset 32).
+  - `cells/services/compositor`: Implemented `FrameRegistry`, `Frame`, and `View` in `surface_table/frame.rs` and message dispatch in `message_handler/view.rs`:
+    - Generational validation: Monotonic `wrapping_add(1)` generation updates on frame creation, view attachment, detachment, grouping, destruction, and owner exit, rejecting stale client handles (`ViewOpResult::StaleGeneration`).
+    - Multi-view & mixed-owner frames: Allowed multiple views per process and distinct client applications (`owner_tid`) to share the same window frame without privilege escalation or capability leakage.
+    - Capacity & DoS bounds: Enforced hard bounds of `MAX_VIEWS_PER_FRAME = 32` and `MAX_FRAMES = 64` upfront, returning `ViewOpResult::CapacityExhausted`.
+    - Safe grouping and detachment: Supported tab detachment into floating frames at specified coordinates and reparenting views into existing frames with same-frame no-op safety.
+    - Focus handoff and dirty tracking: `DESTROY_VIEW` and `SELECT_VIEW` route input focus to the authentic surface owner (`table.get(cap).owner`) and union decoration bounds into `pending_dirty` for immediate repaint.
+    - Owner exit reclamation: Integrated `cleanup_owner(dead_tid)` in compositor teardown (`message_handler.rs`), cleanly harvesting surfaces of crashed processes while preserving surviving tabs from other processes in mixed-owner frames.
+  - Verified: 10 unit tests pass in `service-compositor` (including mixed-owner tabs, same-frame grouping guard, stale generation rejection, and owner crash focus preservation) and 356 workspace tests pass.
 - **2026-10-19 — Unified Desktop Phase 02 shared Linear theme, component tokens, and Ocel reader integration.**
   Completed Phase 02 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
   and implementation plan `.agents/261019-1310-unified-desktop/phase-02-system-theme.md`:

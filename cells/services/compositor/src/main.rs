@@ -68,6 +68,7 @@ pub fn main() {
     let (w, h) = framebuffer::default_screen_size();
     let mut fb = ScreenFb::new(w, h);
     let mut table = SurfaceTable::new();
+    let mut frames = crate::surface_table::FrameRegistry::new();
     let mut z_order = ZOrder::new();
     let mut input = InputState::new();
     // Compositor-initiated repaint region: set by cursor moves, surface destroy/raise.
@@ -134,6 +135,7 @@ pub fn main() {
                             fb.height,
                             &mut input,
                             &mut table,
+                            &mut frames,
                             &mut z_order,
                             &mut pending_dirty,
                         ),

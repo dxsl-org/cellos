@@ -11,8 +11,10 @@ mod lifecycle;
 mod pixels;
 mod state;
 mod storage;
+pub mod frame;
 
 pub use configure::StateTransition;
+pub use frame::FrameRegistry;
 pub use state::SurfaceState;
 pub use storage::SurfaceTable;
 

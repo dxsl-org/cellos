@@ -73,6 +73,13 @@ byte[1..] = opcode-specific payload
 | `0x0F` | `RESTORE` | `cap: u32` | — |
 | `0x10` | `GET_SCREEN_SIZE` | — | `w: u32, h: u32` |
 | `0x11` | `DETACH_REPLACED_GRANT` | `cap: u32, old_reg_id: u64` | success/failure |
+| `0x20` | `CREATE_VIEW` | `CreateViewRequest` (64 bytes) | `ViewOpResponse` (20 bytes) |
+| `0x21` | `DESTROY_VIEW` | `[frame_id, frame_gen, view_id, view_inc]` (16 bytes) | `ViewOpResponse` (20 bytes) |
+| `0x22` | `SELECT_VIEW` | `[frame_id, frame_gen, view_id, view_inc]` (16 bytes) | `ViewOpResponse` (20 bytes) |
+| `0x23` | `GROUP_VIEW` | `[tgt_fid, tgt_gen, src_fid, src_gen, vid, vinc]` (24 bytes) | `ViewOpResponse` (20 bytes) |
+| `0x24` | `DETACH_VIEW` | `[src_fid, src_gen, vid, vinc, x: i32, y: i32]` (24 bytes) | `ViewOpResponse` (20 bytes) |
+| `0x25` | `STAGE_GROUP_CONFIGURE` | atomic frame resize proposal | — |
+| `0x26` | `COMMIT_GROUP_CONFIGURE` | commit staged group configuration | — |
 | `0xFE` | `DUMP_FB` | — | raw BGRA pixels (debug only) |
 
 ### Notes
@@ -114,6 +121,47 @@ new content geometry. It then detaches the identified old Grant, never the new
 active Grant. Frame, titlebar, and controls remain compositor-owned outside the
 client coordinate system. Background surfaces remain visible but cannot
 participate in this policy.
+
+---
+
+## Native Views, Frames & Session Lifecycle (ADR-0027 Phase 03)
+
+Under ADR-0027, window frames and tab views are decoupled:
+- **Frame (`Frame`)**: Compositor-owned window container managing position `(x, y)`, outer dimensions `(w, h)`, minimum constraints `(min_w, min_h)`, tab list (`Vec<ViewRef>`), and selected active tab.
+- **View (`View`)**: An application-owned session associated with an authentic client process (`owner_tid`), backing surface (`surface_cap`), role (`SurfaceRole`), and generational incarnation.
+
+### Multi-View and Mixed-Owner Support
+- Applications can allocate multiple tab views within the same frame (`req.frame_id != 0`) or spawn new frames (`req.frame_id == 0`).
+- Views owned by distinct processes (`owner_tid`) can share a single frame without privilege escalation, capability leakage, or impersonation.
+
+### Generational Validation
+All view operations enforce generational qualifiers:
+- `FrameRef`: `frame_id: u32`, `generation: u32` (8 bytes)
+- `ViewRef`: `view_id: u32`, `incarnation: u32` (8 bytes)
+- Any state modification (view attach, destroy, select, group, detach, or owner crash) monotonically increments frame generation (`wrapping_add(1)`).
+- Operations presenting stale generations fail with `ViewOpResult::StaleGeneration`, preventing race conditions and TID-reuse vulnerabilities.
+
+### Wire Structures & Protocol
+- **`CreateViewRequest`** (64 bytes, naturally 8-byte aligned, `CREATE_VIEW_REQUEST_WIRE_SIZE`):
+  `opcode` (1B), `role` (1B), `_pad` (2B), `frame_id` (4B), `frame_generation` (4B), `w` (4B), `h` (4B), `min_w` (4B), `min_h` (4B), `recipient_incarnation` (4B), `file_grant_id` (8B), `request_generation` (4B), `_reserved` (4B), `launch_token` (16B).
+- **`ViewOpResponse`** (20 bytes, `VIEW_OP_RESPONSE_WIRE_SIZE`):
+  `opcode` (1B), `result: ViewOpResult` (1B), `_pad` (2B), `frame_id` (4B), `frame_generation` (4B), `view_id` (4B), `view_incarnation` (4B).
+- **`ViewOpResult`**:
+  `Success` (0), `StaleGeneration` (1), `InvalidToken` (2), `AccessDenied` (3), `CapacityExhausted` (4), `FrameNotFound` (5), `ViewNotFound` (6), `Timeout` (7), `Refused` (8).
+
+### DoS & Capacity Limits
+`FrameRegistry` enforces hard limits preflighted before state publication:
+- `MAX_VIEWS_PER_FRAME = 32`
+- `MAX_FRAMES = 64`
+Excess allocations return `ViewOpResult::CapacityExhausted`.
+
+### Input Focus Handoff & Damage Tracking
+- `DESTROY_VIEW` and `SELECT_VIEW` route input focus directly to the authentic surface owner (`table.get(cap).owner`), preventing focus-stealing attacks by malicious request senders.
+- Tab transitions union full window decoration bounds into `pending_dirty` to guarantee clean, flicker-free repainting.
+
+### Owner Exit Reclamation
+- When an application process terminates or crashes, `cleanup_owner(dead_tid)` in `cells/services/compositor/src/message_handler.rs` sweeps and reclaims only that process's views and surfaces.
+- Surviving tabs owned by other processes within shared frames remain fully intact, with input focus automatically transferred to the surviving active view.
 
 ---
 
@@ -178,6 +226,9 @@ pub fn fill_rect(rect: Rect, rgba: u32) -> ViResult<()>
 | File | Purpose |
 |------|---------|
 | `libs/api/src/display.rs` | `Rect`, `PixelFormat`, `SurfaceCap`, opcode constants |
+| `libs/api/src/services/display.rs` | `CreateViewRequest`, `ViewOpResponse`, `ViewRef`, `FrameRef`, `ViewOpResult`, view opcodes |
+| `cells/services/compositor/src/surface_table/frame.rs` | `FrameRegistry`, `Frame`, `View`, capacity limits, generational tracking |
+| `cells/services/compositor/src/message_handler/view.rs` | Authenticated view IPC handler with validation, focus routing, dirty tracking |
 | `cells/services/compositor/src/lib.rs` | IPC receive loop + message dispatch |
 | `cells/services/compositor/src/surface_table.rs` | CapId → surface state map |
 | `cells/services/compositor/src/z_order.rs` | Ordered paint list |

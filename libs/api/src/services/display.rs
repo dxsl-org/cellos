@@ -579,6 +579,81 @@ pub struct WindowStateChanged {
     pub serial: u32,
 }
 
+/// Exact wire size of [`ViewOpResponse`].
+pub const VIEW_OP_RESPONSE_WIRE_SIZE: usize = 20;
+/// Exact wire size of [`CreateViewRequest`].
+pub const CREATE_VIEW_REQUEST_WIRE_SIZE: usize = 64;
+
+/// Reference to an active view session within the compositor.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ViewRef {
+    pub view_id: u32,
+    pub incarnation: u32,
+}
+
+/// Reference to a compositor-managed window frame.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct FrameRef {
+    pub frame_id: u32,
+    pub generation: u32,
+}
+
+/// Result code for view and frame management operations.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ViewOpResult {
+    #[default]
+    Success = 0,
+    StaleGeneration = 1,
+    InvalidToken = 2,
+    AccessDenied = 3,
+    CapacityExhausted = 4,
+    FrameNotFound = 5,
+    ViewNotFound = 6,
+    Timeout = 7,
+    Refused = 8,
+}
+
+/// Fixed 20-byte response frame for view and frame management operations.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ViewOpResponse {
+    pub opcode: u8,
+    pub result: ViewOpResult,
+    pub _pad: [u8; 2],
+    pub frame_id: u32,
+    pub frame_generation: u32,
+    pub view_id: u32,
+    pub view_incarnation: u32,
+}
+
+/// Fixed 64-byte request to create a view within a frame.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CreateViewRequest {
+    pub opcode: u8,
+    pub role: SurfaceRole,
+    pub _pad: [u8; 2],
+    pub frame_id: u32,
+    pub frame_generation: u32,
+    pub w: u32,
+    pub h: u32,
+    pub min_w: u32,
+    pub min_h: u32,
+    pub recipient_incarnation: u32,
+    pub file_grant_id: u64,
+    pub request_generation: u32,
+    pub _reserved: u32,
+    pub launch_token: [u8; 16],
+}
+
+const _: () = assert!(core::mem::size_of::<ViewRef>() == 8);
+const _: () = assert!(core::mem::size_of::<FrameRef>() == 8);
+const _: () = assert!(core::mem::size_of::<ViewOpResponse>() == 20);
+const _: () = assert!(core::mem::size_of::<CreateViewRequest>() == 64);
+
 impl ConfigureAck {
     /// Construct an acknowledgement for `cap` and compositor `serial`.
     ///
@@ -1091,6 +1166,30 @@ pub mod compositor_ops {
     /// Payload: empty  Reply: `[w: u32, h: u32]`
     pub const GET_SCREEN_SIZE: u8 = 0x10;
 
+
+    /// Create a new session view inside a frame (or new frame if frame_id == 0).
+    /// Payload: [`CreateViewRequest`] (64 bytes). Reply: [`ViewOpResponse`] (20 bytes).
+    pub const CREATE_VIEW: u8 = 0x20;
+
+    /// Destroy a session view and release its surface.
+    /// Payload: `[frame_id: u32, frame_generation: u32, view_id: u32, view_incarnation: u32]` (16 bytes).
+    pub const DESTROY_VIEW: u8 = 0x21;
+
+    /// Select/activate a tab view within a frame.
+    /// Payload: `[frame_id: u32, frame_generation: u32, view_id: u32, view_incarnation: u32]` (16 bytes).
+    pub const SELECT_VIEW: u8 = 0x22;
+
+    /// Move a session view into a target frame.
+    pub const GROUP_VIEW: u8 = 0x23;
+
+    /// Detach a session view into a new floating frame at `(x, y)`.
+    pub const DETACH_VIEW: u8 = 0x24;
+
+    /// Stage an atomic group resize across all member views of a frame.
+    pub const STAGE_GROUP_CONFIGURE: u8 = 0x25;
+
+    /// Commit staged group configuration after all member ACKs.
+    pub const COMMIT_GROUP_CONFIGURE: u8 = 0x26;
     /// Dump raw framebuffer (debug only).
     /// Reply: pixel data of whole screen
     pub const DUMP_FB: u8 = 0xFE;

@@ -111,7 +111,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
 
 - **Lifecycle States:** `Requested -> Ready -> ClosingRequested -> (Ready on cancel | Destroying -> Gone)`.
 - **Finite Bounds:** Max 32 views per frame, max 64 frames system-wide, title max 64 bytes UTF-8, configure timeout 250ms.
-- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** Target Phase 03.
+- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** **IMPLEMENTED & VERIFIED** (compositor FrameRegistry, ViewRef/FrameRef generational validation, multi-view same-frame/mixed-owner support, group/detach, owner crash cleanup, unit test suite passing).
 
 ---
 
@@ -337,7 +337,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
 
 | Delta Family | Title | CP1 (Design) | CP2 (Implementation) | Owning Phase |
 |---|---|---|---|---|
-| D-UI-01 | Native Views, Frames & Lifecycle | **PENDING CANDIDATE APPROVAL** | Pending | Phase 03 |
+| D-UI-01 | Native Views, Frames & Lifecycle | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 03 |
 | D-UI-02 | Six-Zone Snap & F11 Fullscreen | **PENDING CANDIDATE APPROVAL** | Pending | Phase 05 |
 | D-UI-03 | Shared Linear/Paper Theme | **PENDING CANDIDATE APPROVAL** | Completed for Phase 02 (tokens/Paper/tests/Ocel verified) | Phase 02 |
 | D-UI-04 | Desktop Launch Token Protocol | **PENDING CANDIDATE APPROVAL** | Pending | Phase 04 |

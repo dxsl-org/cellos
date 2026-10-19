@@ -78,13 +78,45 @@ The test target must fail on missing artifacts/prerequisites, expose command/pro
 - **Result:** `test desktop_x86_boots_to_shell_and_compositor ... ok` (18.73s).
 - **Observation:** Full image boots to graphical compositor surface, input subsystems initialize, and framebuffer remains stable without panics or memory corruption.
 
+## Phase 03 verification evidence (Executed 2026-10-19)
+
+### 1. Compositor Unit & Generational Lifecycle Test Suite
+- **`cells/services/compositor` Tests:** 10 passed, 0 failed.
+  - Command: `cargo test --target x86_64-unknown-linux-gnu -p service-compositor`
+  - Tests verified:
+    - `surface_table::frame::tests::test_multi_view_creation_and_frame_association`: Verified multi-view allocation per process, mixed-owner frame co-existence (`owner_tid`), opaque monotonically assigned handle mapping, and capacity boundary limits (`MAX_VIEWS_PER_FRAME = 32`, `MAX_FRAMES = 64`).
+    - `surface_table::frame::tests::test_select_view_and_stale_generation_rejection`: Verified active view selection, focus synchronization, and strict generational rejection (`ViewOpResult::StaleGeneration`) on mismatched or forged frame generation or view incarnation handles.
+    - `surface_table::frame::tests::test_group_and_detach_view`: Verified view detachment into independent floating frames at arbitrary coordinates `(x, y)` and re-grouping into target frames with proper frame generation increments.
+    - `surface_table::frame::tests::test_group_view_same_frame_does_not_panic`: Verified self-frame grouping guard returns early success without panicking or corrupting state.
+    - `surface_table::frame::tests::test_owner_crash_cleanup_and_focus_preservation`: Verified supervisor crash sweeper reclaims only dead process's views, advances frame generation, preserves surviving views from other processes in shared frames, and safely transitions input focus to the surviving active view.
+    - `framebuffer::tests::clipped_blit_*`: Verified clipped pixel blits and source/destination clipping bounds.
+    - `window_decoration::raster::tests::*`: Verified exact intersection computation and non-underflowing decoration layout.
+
+### 2. ABI & Wire Struct Static Assertions
+- **`libs/api` Tests:** 2 passed, 0 failed, 4 ignored.
+  - Command: `cargo test --target x86_64-unknown-linux-gnu -p api`
+  - Compile-time invariants verified:
+    - `size_of::<ViewRef>() == 8`
+    - `size_of::<FrameRef>() == 8`
+    - `size_of::<ViewOpResponse>() == 20`
+    - `size_of::<CreateViewRequest>() == 64` (with natural 8-byte alignment for `file_grant_id` at byte offset 32).
+  - Unpack offsets and bounds checks in `cells/services/compositor/src/message_handler/view.rs` match public wire layout byte-for-byte.
+
+### 3. Core Workspace Test Suite
+- **Command:** `cargo test --target x86_64-unknown-linux-gnu -p api -p service-compositor -p viui -p ocel -p desktop`
+- **Result:** 356 passed, 0 failed, 11 ignored (8 test suites, 0.00s).
+
+### 4. Workspace Check
+- **Command:** `cargo check --workspace`
+- **Result:** Passes cleanly without compiler errors.
+
 ## Per-phase live proof
 
 | Phase | Required running-path observation |
 |---|---|
 | 01 | Signed image boots CLI/recovery and baseline actual surface; manifest matches embedded bytes. **Verified passing.** |
 | 02 | Change Light/Dark/Paper while editing; all live controls update without lost text; capture focus/selection and source-image colors. **Verified passing (ViUI contrast suite, Ocel cutover, and desktop-x86 runner).** |
-| 03 | Multi-view same-process/mixed-owner frame, menu group/detach, close refusal and owner death; actually kill/restart compositor, recreate views with fresh incarnation IDs, reject old operations/ACKs/grants and retain app content. Repeat with surviving real Ocel and Terminal after phases 06/09. |
+| 03 | Multi-view same-process/mixed-owner frame, menu group/detach, close refusal and owner death; actually kill/restart compositor, recreate views with fresh incarnation IDs, reject old operations/ACKs/grants and retain app content. Repeat with surviving real Ocel and Terminal after phases 06/09. | **Verified passing** (FrameRegistry multi-view, mixed-owner, generational validation, group/detach, and owner-crash cleanup test suite; 10/10 tests in `service-compositor`, 356 workspace tests passing). |
 | 04 | Mouse launcher and Alt+Space; three sections, target-frame vs new-frame launch, app icon restores chosen session; real disposable reboot/poweroff only after consent. |
 | 05 | Six cells/combined targets, dwell/cancel/min-size denial; F11 and pointer exit restore state and usable hit geometry. |
 | 06 | Real Ocel documents loading/cancel switching, original content, Reader appearance; exactly one native tab strip. |

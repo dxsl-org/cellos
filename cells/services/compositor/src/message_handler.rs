@@ -2,8 +2,8 @@
 
 mod grant;
 mod surface;
+mod view;
 mod window;
-
 use api::display::Rect;
 use api::syscall::service;
 use ostd::syscall::{sys_grant_unregister, sys_lookup_service};
@@ -19,16 +19,17 @@ pub(crate) struct MessageContext<'a> {
     screen_h: u32,
     input: &'a mut InputState,
     table: &'a mut SurfaceTable,
+    frames: &'a mut crate::surface_table::FrameRegistry,
     z_order: &'a mut ZOrder,
     pending_dirty: &'a mut Option<Rect>,
 }
-
 impl<'a> MessageContext<'a> {
     pub(crate) fn new(
         screen_w: u32,
         screen_h: u32,
         input: &'a mut InputState,
         table: &'a mut SurfaceTable,
+        frames: &'a mut crate::surface_table::FrameRegistry,
         z_order: &'a mut ZOrder,
         pending_dirty: &'a mut Option<Rect>,
     ) -> Self {
@@ -37,6 +38,7 @@ impl<'a> MessageContext<'a> {
             screen_h,
             input,
             table,
+            frames,
             z_order,
             pending_dirty,
         }
@@ -50,6 +52,7 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
         screen_h,
         input,
         table,
+        frames,
         z_order,
         pending_dirty,
     } = context;
@@ -64,7 +67,7 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
                 .try_into()
                 .unwrap_or([0; core::mem::size_of::<usize>()]),
         );
-        cleanup_owner(dead_tid, input, table, z_order, pending_dirty);
+        cleanup_owner(dead_tid, input, table, frames, z_order, pending_dirty);
         return;
     }
 
@@ -91,6 +94,13 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
         | api::display::compositor_ops::DAMAGE_NOTIFY
         | api::display::compositor_ops::DETACH_GRANT
         | api::display::compositor_ops::GET_SCREEN_SIZE => grant::handle(buf, sender, table),
+        api::display::compositor_ops::CREATE_VIEW
+        | api::display::compositor_ops::DESTROY_VIEW
+        | api::display::compositor_ops::SELECT_VIEW
+        | api::display::compositor_ops::GROUP_VIEW
+        | api::display::compositor_ops::DETACH_VIEW => {
+            view::handle(buf, sender, input, table, frames, z_order, pending_dirty)
+        }
         _ => {}
     }
 }
@@ -99,9 +109,11 @@ fn cleanup_owner(
     dead_tid: usize,
     input: &mut InputState,
     table: &mut SurfaceTable,
+    frames: &mut crate::surface_table::FrameRegistry,
     z_order: &mut ZOrder,
     pending_dirty: &mut Option<Rect>,
 ) {
+    let _ = frames.cleanup_owner(dead_tid);
     for cap in table.caps_owned_by(dead_tid) {
         let Some(surface) = table.get(cap) else {
             continue;
