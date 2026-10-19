@@ -185,6 +185,7 @@ pub fn render(
         "Tab Switch Section    Esc Close    Enter Select",
         FontFace::UiRegular, 13.0, theme::TEXT_MUTED, false,
     );
+    surf.damage_all();
 }
 
 fn render_applications(

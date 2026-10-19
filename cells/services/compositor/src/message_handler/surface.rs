@@ -96,13 +96,17 @@ fn move_surface(
             w: surface.w,
             h: surface.h,
         });
-        if surface.is_window_managed() {
-            mark_dirty(
-                dirty,
-                window_decoration::bounds(old_rect),
-                window_decoration::bounds(surface.screen_rect()),
-            );
-        }
+        let old_region = if surface.is_window_managed() {
+            window_decoration::bounds(old_rect)
+        } else {
+            old_rect
+        };
+        let new_region = if surface.is_window_managed() {
+            window_decoration::bounds(surface.screen_rect())
+        } else {
+            surface.screen_rect()
+        };
+        mark_dirty(dirty, old_region, new_region);
     }
 }
 
@@ -120,7 +124,7 @@ fn raise_surface(
     let cap = u64::from_le_bytes(buf[1..9].try_into().unwrap());
     if !table
         .get(cap)
-        .is_some_and(|s| s.owner == sender && s.role == SurfaceRole::Interactive)
+        .is_some_and(|s| s.owner == sender && (s.role == SurfaceRole::Interactive || s.role == SurfaceRole::Panel))
     {
         return;
     }
@@ -137,13 +141,15 @@ fn raise_surface(
             Some(damage) => damage.union(&full),
             None => full,
         });
-        if surface.is_window_managed() {
-            let decoration = window_decoration::bounds(surface.screen_rect());
-            *dirty = Some(match dirty.take() {
-                Some(acc) => acc.union(&decoration),
-                None => decoration,
-            });
-        }
+        let region = if surface.is_window_managed() {
+            window_decoration::bounds(surface.screen_rect())
+        } else {
+            surface.screen_rect()
+        };
+        *dirty = Some(match dirty.take() {
+            Some(acc) => acc.union(&region),
+            None => region,
+        });
     }
 }
 
