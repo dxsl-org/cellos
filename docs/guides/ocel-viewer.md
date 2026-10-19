@@ -337,6 +337,15 @@ Reader view supports four appearance modes via `ReaderThemeMode`:
 
 Colors are directly derived from shared ViUI `ViTheme` tokens (`reader_bg`, `reader_text`, `reader_subtext`, `reader_link`). Code blocks in Markdown and HTML documents preserve their syntax highlighting colors across theme switches while adapting container margins and backgrounds to the active palette.
 
+Contrast ratios satisfy WCAG 2.1 compliance across all palettes:
+- Normal reader text achieves $\ge 4.5:1$ contrast against reader background (Light: 17.5:1, Dark: 13.8:1, Paper: 12.1:1).
+- High-contrast hyperlinks use `mode.link_color()` with guaranteed contrast $\ge 5.0:1$ against reader background (Light: 6.92:1, Dark: 5.93:1, Paper: 6.04:1).
+- Themed table headers in `cells/apps/ocel/src/doc.rs` resolve palette-aware backgrounds (`#EBEDF2` Light, `#262634` Dark, `#E8E4DA` Paper) and remapped text colors, achieving contrast $\ge 11:1$ (Light: 15.64:1, Dark: 13.71:1, Paper: 11.16:1).
+- Original source color spaces are preserved for image rasters, PDF pages, and syntax highlighting on code spans.
+
+### Native session tabs and window title synchronization
+
+Under ADR-0027 Phase 06, Ocel's private in-app tab strip is cut over (`TABBAR_HEIGHT = 0`), allocating the full 28 DIP vertical space to the active document viewport (`height - 68` instead of `height - 96` DIP) and eliminating redundant tab strip chrome. Active document titles synchronize dynamically with the compositor window frame title (`self.surface.set_title(&self.current_tab().title)`) across `new_tab`, `switch_tab`, `close_tab`, and `finish_load`.
 
 Search is NFC-normalized and Unicode-lowercased, including Vietnamese. Matching
 layout regions are highlighted; the active region has a distinct color. This
@@ -392,8 +401,8 @@ The desktop profile includes a compact `no_std` flat-path SVG rasterizer support
 viewBox, `path` (M/L/H/V/C/Z with cubic Bézier flattening), `rect`, and `circle`;
 the embedded profile keeps SVG disabled to conserve memory.
 
-Chrome-only edits repaint/damage the toolbar, tab bar and status, leaving
-document pixels intact. Scroll repaints the viewport and status, not navigation
+Chrome-only edits repaint/damage the toolbar and status, leaving
+document pixels intact (the private tab strip is cut over to compositor native tabs with `TABBAR_HEIGHT = 0`). Scroll repaints the viewport and status, not navigation
 chrome. No unbounded document/layout cache is introduced.
 
 ### Native syntax highlighting

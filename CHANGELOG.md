@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- Unified Desktop Phase 06 Ocel native session and reader cutover (`.agents/261019-1310-unified-desktop/phase-06-ocel-cutover.md`):
+  - `cells/apps/ocel`: Cut over document session tabs to compositor-owned window frame and unified shared reader appearance:
+    - Removed private in-app tab bar (`TABBAR_HEIGHT = 0`), allocating the full 28 DIP vertical space to the active document viewport and eliminating duplicate tab chrome.
+    - Synchronized document title with compositor window frame title via `self.surface.set_title(&self.current_tab().title)` across `new_tab`, `switch_tab`, `close_tab`, and `finish_load`.
+    - Integrated shared ViUI reader theme modes: `ReaderThemeMode::{FollowSystem, Light, Dark, Paper}` using shared ViUI tokens, dynamically resolving system palette via `active_system_palette()`.
+    - Maintained WCAG contrast invariants: reader hyperlinks $\ge 5.0:1$ (`mode.link_color()`), normal reader text $\ge 4.5:1$, and table header backgrounds/text $\ge 11:1$ across all three palettes.
+    - Preserved source color fidelity for image rasters, PDF pages, and syntax highlighting on code spans.
 - Unified Desktop Phase 05 six-zone snap and F11 content-only fullscreen (`.agents/261019-1310-unified-desktop/phase-05-placement-fullscreen.md`):
   - `libs/api`: Introduced window placement and fullscreen IPC protocol definitions in `api::display`:
     - Opcodes `SNAP_FRAME` (`0x27`, payload `[frame_id: u32, frame_generation: u32, zone: u8, _pad: [u8; 3]]`) and `TOGGLE_FULLSCREEN` (`0x28`, payload `[frame_id: u32, frame_generation: u32, enable: u8, _pad: [u8; 3]]`) in `compositor_ops`.

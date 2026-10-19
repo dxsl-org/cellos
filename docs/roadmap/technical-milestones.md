@@ -1,6 +1,6 @@
 # Technical Milestones
 
-**Last updated**: 2026-10-19 (Unified Desktop Phase 05 six-zone snap and F11 fullscreen under ADR-0027)
+**Last updated**: 2026-10-19 (Unified Desktop Phase 06 Ocel native session and reader cutover under ADR-0027)
 
 The sole program is **Intel x86-64 C2C Anywhere** under
 [ADR-0022](../decisions/0022-intel-x86-64-c2c-only-direction.md). Use
@@ -22,7 +22,7 @@ continue all architectures or runtime programs. See
 | Hotswap/supervisor | Supervisor hotswap path has QEMU smoke evidence; continue keeping authority gates explicit |
 | Security/trust | Signing mechanism exists; fleet enforcement and production key provisioning remain open; Tier 2 native domains have RV64 QEMU evidence behind `native-domains`, while production release remains gated by [Spec 22](../specs/22-native-domain-cell-implementation-gate.md) |
 | Cell scale profiles (D5) | Large-app profile stays the default (`MAX_CELLS = 64`); the per-request server profile is an accepted goal, not capacity. The 2026-07-31 ceiling (n = 8–9) was a hardcoded 190 MiB memory map — now replaced by firmware DTB discovery (`kernel/src/boot/dtb_memory.rs`) with `MemInfo = 243` making capacity measurable. Still open: shared immutable image frames, demand-paged stacks, dynamic tables, a variable VA budget, and the N = 64/128/256/512 baselines re-measured with heavy cells resident. See [Spec 19 §3](../specs/19-hardware-isolation-layers.md) |
-| Desktop & Compositor | Phase 01 through Phase 05 completed under ADR-0027 (`.agents/261019-1310-unified-desktop/`): ABI delta ledger D-UI-01..D-UI-10 specified, test harness operational; Phase 02 shared Linear theme and WCAG contrast verified; Phase 03 native views/frames and session tabs delivered in `service-compositor`; Phase 04 3-section Spotlight HUD, catalog expansion (Files, Chrome), and 36 DIP bottom taskbar implemented; Phase 05 six-zone snap, integer grid math, min-size preflighting, and F11 content-only fullscreen delivered and verified. |
+| Desktop & Compositor | Phase 01 through Phase 06 completed under ADR-0027 (`.agents/261019-1310-unified-desktop/`): ABI delta ledger D-UI-01..D-UI-10 specified, test harness operational; Phase 02 shared Linear theme and WCAG contrast verified; Phase 03 native views/frames and session tabs delivered in `service-compositor`; Phase 04 3-section Spotlight HUD, catalog expansion (Files, Chrome), and 36 DIP bottom taskbar implemented; Phase 05 six-zone snap, integer grid math, min-size preflighting, and F11 content-only fullscreen delivered; Phase 06 Ocel native session tabs, title synchronization across lifecycle events, and shared ViUI reader appearances cut over and verified. |
 
 ## Historical Milestones
 

@@ -326,7 +326,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
 | `libs/viui` | `src/{theme,managed_surface,elm}.rs` | Integrate Linear/Paper palette; deprecate private hardcoded colors. | Medium |
 | `cells/services/compositor` | `src/{surface_table,input_handler,message_handler}.rs` | Implement frame tab strip, six-zone snap, F11, Alt+Space dispatch. | High |
 | `cells/apps/desktop` | `src/{main,apps,spotlight,taskbar}.rs` | Dynamic catalog, 3-section Spotlight HUD, theme toggle, running task switch. | High |
-| `cells/apps/ocel` | `src/{main,draw,tab}.rs` | Remove private tab strip; attach to Compositor native session tabs; adopt Paper. | High |
+| `cells/apps/ocel` | `src/{main,draw,doc,loader}.rs` | Removed local tab bar (TABBAR_HEIGHT=0), adopted native compositor session tabs, and integrated shared ViUI reader theme tokens. | Completed (Phase 06) |
 | `cells/apps/files` | `src/*` (new standalone app) | Build standalone 3-view file manager (List/Grid/Columns) with Quick Look. | New Crate |
 | `cells/tools/shell` | `src/{executor,async_utils}.rs` | Add GUI Terminal support, atomic stdio pipe handoff, single reader lease. | Medium |
 | `cells/services/vfs` | `src/{manager,caller,dirs}.rs` | Add paged directory listing and safe two-phase file mutation. | Medium |

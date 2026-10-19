@@ -20,7 +20,7 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
 | 03 | [Native views, frames, tabs and lifecycle](phase-03-native-sessions.md) | 01,02 | completed |
 | 04 | [Bottom taskbar, Spotlight and launch registry](phase-04-desktop-launcher.md) | 01,02,03 | completed |
 | 05 | [Six-zone snap and F11 fullscreen](phase-05-placement-fullscreen.md) | 03,04 | completed |
-| 06 | [Ocel native session and reader cutover](phase-06-ocel-cutover.md) | 02,03,04,05 | pending |
+| 06 | [Ocel native session and reader cutover](phase-06-ocel-cutover.md) | 02,03,04,05 | completed |
 | 07 | [Standalone Files and complete VFS operations](phase-07-files-vfs.md) | 01,02,03,04,05,06 | pending |
 | 08 | [Shared preview and Quick Look](phase-08-quick-look.md) | 02,06,07 | pending |
 | 09 | [GUI Terminal and shell-session streams](phase-09-terminal-streams.md) | 01,02,03,04,05 | pending |
@@ -73,9 +73,19 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
     - Dispatches `SNAP_FRAME` and `TOGGLE_FULLSCREEN`, returning typed `ViewOpResponse` and unioning old and new frame bounds into `pending_dirty` for full repainting.
   - Added unit test suite in `cells/services/compositor` (`surface_table::frame::tests::test_six_zone_snap_geometry_and_min_size_refusal`, `surface_table::frame::tests::test_f11_fullscreen_toggle_and_state_restoration`).
   - Verified: 12/12 unit tests pass in `service-compositor`, 359 workspace tests pass across `api`, `service-compositor`, `viui`, `ocel`, and `desktop` (0 failures, 11 ignored); clean bare-metal PIC cross-build.
-- **Phase 06 — Ocel native session and reader cutover**: **Pending (Unblocked)** — Phase 02 theme, Phase 03 native views/tabs, Phase 04 taskbar, and Phase 05 placement dependencies satisfied.
+- **Phase 06 — Ocel native session and reader cutover**: **Completed** (2026-10-19).
+  - Cut over Ocel document viewer to compositor-managed native session tabs and shared ViUI reader themes:
+    - Removed redundant local tab bar by setting `TABBAR_HEIGHT = 0`, eliminating in-app tab rendering and hit testing while expanding active document viewport by +28 DIP vertical space (`height - 68` DIP).
+    - Synchronized document title to the compositor window surface via `self.surface.set_title(&self.current_tab().title)` across `new_tab`, `switch_tab`, `close_tab`, and `finish_load`.
+    - Integrated shared ViUI reader theme modes: `ReaderThemeMode::{FollowSystem, Light, Dark, Paper}` dynamically resolving system palette via atomic `active_system_palette()` without requiring app restart.
+    - Verified WCAG 2.1 contrast invariants: normal reader text $\ge 4.5:1$ (Light: 17.5:1, Dark: 13.8:1, Paper: 12.1:1), reader hyperlinks $\ge 5.0:1$ (`mode.link_color()`; Light: 6.92:1, Dark: 5.93:1, Paper: 6.04:1), and table headers with dynamic background/text achieving $\ge 11:1$ (Light: 15.64:1, Dark: 13.71:1, Paper: 11.16:1).
+    - Preserved source color fidelity: direct BGRA blits for raster/PDF images without pixel color inversion; preserved syntax highlighting colors on code tokens via `remap_span_color`.
+    - Supported F11 fullscreen geometry derivation and safe workload cancellation on tab close (`cancel_loading` and `loader::poll_cleanup`).
+  - Verified 170/170 unit tests passing in `cells/apps/ocel`, 359/359 workspace tests passing across `api`, `service-compositor`, `viui`, `ocel`, and `desktop` (0 failures, 11 ignored); clean bare-metal PIC cross-build.
+- **Phase 07 — Standalone Files and complete VFS operations**: **Pending (Unblocked)** — Phase 01 baseline, Phase 02 theme, Phase 03 native views/tabs, Phase 04 taskbar, Phase 05 placement, and Phase 06 Ocel cutover dependencies satisfied.
+- **Phase 08 — Shared preview and Quick Look**: **Pending (Unblocked)** — Phase 02 theme and Phase 06 shared reader appearances/primitives dependencies satisfied; ready for pipeline integration upon Phase 07 VFS operations completion.
 - **Phase 09 — GUI Terminal and shell-session streams**: **Pending (Unblocked)** — Phase 01 baseline, Phase 02 theme, Phase 03 native views/tabs, Phase 04 taskbar, and Phase 05 placement dependencies satisfied.
-- **Phases 07, 08, 10, 11**: Pending.
+- **Phases 10, 11**: Pending.
 
 ## Execution policy
 One integrating owner for API/SDK/kernel/shared lifecycle changes. Independent research and bounded app-specific slices may parallelize after interfaces freeze; do not concurrently edit shared source. Package and smoke a real consumer each phase; phase 11 is cross-feature qualification, not first integration. Every AC remains required for whole-plan completion, even when a prerequisite blocks one phase. Local captures do not qualify physical or production behavior.
@@ -103,5 +113,7 @@ Four internal review lenses completed; [20 unique findings and corrections](revi
 Product choices are approved in conversation. Three read-only recon slices plus direct source checks ground prerequisites; artifact validation checks links, AC IDs and phase/index DAG consistency. Phase 01 execution is completed: baseline manifest frozen, D-UI ABI deltas specified, and real x86 integration test runner materialized and verified in `tests/integration/tests/desktop-x86.rs`. Exact ABI approval, uncertain storage/VMX provenance and unavailable platform evidence remain phase-specific gates, not reasons to reopen settled UI choices.
 
 ## Handoff
-Phases 01 through 05 are completed and fully verified.
-Phase 06 (Ocel native session and reader cutover) and Phase 09 (GUI Terminal and shell-session streams) are now fully unblocked for implementation via `hc-cook /home/dmin/cellos/.agents/261019-1310-unified-desktop/plan.md`, with all prerequisite native frame/view lifecycle, theme, 36 DIP taskbar work-area bounds, and six-zone snap/fullscreen geometry in place.
+Phases 01 through 06 are completed and fully verified.
+Phase 07 (Standalone Files and complete VFS operations) is now fully unblocked for implementation via `hc-cook /home/dmin/cellos/.agents/261019-1310-unified-desktop/plan.md`, with all prerequisite native frame/view lifecycle, theme, 36 DIP taskbar work area, six-zone snap placement, and Ocel native session and reader cutover in place.
+Phase 08 (Shared preview and Quick Look) is unblocked for shared reader/thumbnail components and preview pipeline preparation, pending Phase 07 VFS completion.
+Phase 09 (GUI Terminal and shell-session streams) remains unblocked for independent terminal/stream work.

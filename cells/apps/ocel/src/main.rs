@@ -75,7 +75,7 @@ ostd::cell_main!(cell_main);
 ostd::declare_custom_heap!(budget::HEAP_BYTES);
 
 const TOOLBAR_HEIGHT: u32 = 44;
-const TABBAR_HEIGHT: u32 = 28;
+const TABBAR_HEIGHT: u32 = 0; // Cut over to compositor native session tabs (ADR-0027 Phase 06)
 const STATUS_HEIGHT: u32 = 24;
 
 fn ui_text(fonts:&mut TextFonts,surf:&mut ViSurface,rect:(i32,i32,u32,u32),
@@ -369,6 +369,7 @@ impl OcelViewer {
         self.tabs.push(tab);
         self.active_tab = self.tabs.len().saturating_sub(1);
         self.url_input = self.current_tab().url.clone();
+        let _ = self.surface.set_title(&self.current_tab().title);
         self.status_text = format!("New tab: {}", self.url_input);
         ostd::io::println(&format!(
             "[ocel] tab {} active: {}",
@@ -400,6 +401,7 @@ impl OcelViewer {
                 self.active_tab = self.tabs.len().saturating_sub(1);
             }
             self.url_input = self.current_tab().url.clone();
+            let _ = self.surface.set_title(&self.current_tab().title);
             self.status_text = format!("Closed tab. Active: {}", self.url_input);
             ostd::io::println(&format!(
                 "[ocel] tab {} active: {}",
@@ -423,6 +425,7 @@ impl OcelViewer {
             self.active_tab = index;
         }
         self.url_input = self.current_tab().url.clone();
+        let _ = self.surface.set_title(&self.current_tab().title);
         let w = self.width.saturating_sub(16);
         let h = self.viewport_height();
         let tab = &mut self.tabs[self.active_tab];
@@ -691,6 +694,7 @@ impl OcelViewer {
         }
         self.tabs[self.active_tab] = candidate;
         self.url_input = url;
+        let _ = self.surface.set_title(&self.current_tab().title);
         ostd::io::println(&format!("[ocel] loaded {} ({}, {} items)",
             self.url_input, format, self.current_tab().doc.nodes.len()));
         self.status_text = format!("Loaded {} · {}", format, self.script_status());
@@ -935,28 +939,30 @@ impl OcelViewer {
             draw::draw_globe_icon(surf, reader_x + 16, 22, theme::ACCENT_BLUE);
         }
 
-        let tabbar_y=TOOLBAR_HEIGHT as i32;
-        fill_rect(surf,0,tabbar_y,w,TABBAR_HEIGHT,theme::BG_TOOLBAR);
-        fill_rect(surf,0,tabbar_y+TABBAR_HEIGHT as i32-1,w,1,theme::BORDER);
-        let num_tabs=self.tabs.len() as u32;
-        let tab_w=140u32.min(w.saturating_sub(60)/num_tabs.max(1));
-        for (i,tab) in self.tabs.iter().enumerate() {
-            let x=10+i as i32*tab_w as i32;
-            let active=i==self.active_tab;
-            fill_rect(surf,x,tabbar_y+2,tab_w.saturating_sub(2),TABBAR_HEIGHT-2,
-                if active {theme::BG_DARK}else{theme::BG_INPUT});
-            if active {fill_rect(surf,x,tabbar_y,tab_w.saturating_sub(2),2,theme::ACCENT_CYAN);}
-            ui_text(fonts,surf,(x+6,tabbar_y+2,tab_w.saturating_sub(30),TABBAR_HEIGHT-4),
-                &tab.title,if active{theme::TEXT_PRIMARY}else{theme::TEXT_MUTED},regular,14.0,false);
-            if tab_w>=24 {
-                ui_text(fonts,surf,(x+tab_w as i32-20,tabbar_y+2,18,TABBAR_HEIGHT-4),
-                    "×",theme::TEXT_MUTED,regular,14.0,true);
+        if TABBAR_HEIGHT > 0 {
+            let tabbar_y=TOOLBAR_HEIGHT as i32;
+            fill_rect(surf,0,tabbar_y,w,TABBAR_HEIGHT,theme::BG_TOOLBAR);
+            fill_rect(surf,0,tabbar_y+TABBAR_HEIGHT as i32-1,w,1,theme::BORDER);
+            let num_tabs=self.tabs.len() as u32;
+            let tab_w=140u32.min(w.saturating_sub(60)/num_tabs.max(1));
+            for (i,tab) in self.tabs.iter().enumerate() {
+                let x=10+i as i32*tab_w as i32;
+                let active=i==self.active_tab;
+                fill_rect(surf,x,tabbar_y+2,tab_w.saturating_sub(2),TABBAR_HEIGHT-2,
+                    if active {theme::BG_DARK}else{theme::BG_INPUT});
+                if active {fill_rect(surf,x,tabbar_y,tab_w.saturating_sub(2),2,theme::ACCENT_CYAN);}
+                ui_text(fonts,surf,(x+6,tabbar_y+2,tab_w.saturating_sub(30),TABBAR_HEIGHT-4),
+                    &tab.title,if active{theme::TEXT_PRIMARY}else{theme::TEXT_MUTED},regular,14.0,false);
+                if tab_w>=24 {
+                    ui_text(fonts,surf,(x+tab_w as i32-20,tabbar_y+2,18,TABBAR_HEIGHT-4),
+                        "×",theme::TEXT_MUTED,regular,14.0,true);
+                }
             }
-        }
-        let plus_x=10+num_tabs as i32*tab_w as i32+6;
-        if plus_x+22<w as i32 {
-            fill_rect(surf,plus_x,tabbar_y+3,22,22,theme::BG_INPUT);
-            ui_text(fonts,surf,(plus_x,tabbar_y+3,22,22),"+",theme::ACCENT_BLUE,regular,16.0,true);
+            let plus_x=10+num_tabs as i32*tab_w as i32+6;
+            if plus_x+22<w as i32 {
+                fill_rect(surf,plus_x,tabbar_y+3,22,22,theme::BG_INPUT);
+                ui_text(fonts,surf,(plus_x,tabbar_y+3,22,22),"+",theme::ACCENT_BLUE,regular,16.0,true);
+            }
         }
         }
 
@@ -1105,7 +1111,7 @@ impl OcelViewer {
 
         // 4. Tab Bar clicks (y in 44..72)
         let tabbar_y = TOOLBAR_HEIGHT as i32;
-        if (tabbar_y..tabbar_y + TABBAR_HEIGHT as i32).contains(&cy) {
+        if TABBAR_HEIGHT > 0 && (tabbar_y..tabbar_y + TABBAR_HEIGHT as i32).contains(&cy) {
             let max_tab_w = 140u32;
             let num_tabs = self.tabs.len() as u32;
             let tab_w = max_tab_w.min(w.saturating_sub(60) / num_tabs.max(1));

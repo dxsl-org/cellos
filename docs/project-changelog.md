@@ -4,6 +4,19 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-19 — Unified Desktop Phase 06 Ocel native session and reader cutover.**
+  Completed Phase 06 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+  and implementation plan `.agents/261019-1310-unified-desktop/phase-06-ocel-cutover.md`:
+  - `cells/apps/ocel`: Cut over document session tabs to compositor-owned window frame and unified shared reader appearance:
+    - Tab strip cutover (`TABBAR_HEIGHT = 0`): Removed private 28 DIP in-app tab bar from layout, rendering (`if TABBAR_HEIGHT > 0`), and pointer hit testing, expanding the active content viewport vertically by 28 DIP (`height - 68` instead of `height - 96` DIP) and eliminating duplicate tab chrome.
+    - Title synchronization across tab transitions: Synchronized document title with compositor window frame title via `self.surface.set_title(&self.current_tab().title)` across all document lifecycle transitions (`new_tab`, `switch_tab`, `close_tab`, and `finish_load`).
+    - Shared ViUI reader theme integration: `ReaderThemeMode::{FollowSystem, Light, Dark, Paper}` backed by shared ViUI tokens (`reader_bg`, `reader_text`, `reader_subtext`, `reader_link`), dynamically resolving system palette via atomic `active_system_palette()` without restarting the application.
+    - Contrast invariants: Maintained WCAG-compliant contrast ratios across all palettes:
+      - Normal reader text achieves $\ge 4.5:1$ contrast against reader background (Light: 17.5:1, Dark: 13.8:1, Paper: 12.1:1).
+      - High-contrast hyperlinks via `mode.link_color()` achieve $\ge 5.0:1$ contrast against reader background (Light: 6.92:1, Dark: 5.93:1, Paper: 6.04:1).
+      - Themed table headers in `src/doc.rs` dynamically resolve palette-aware backgrounds (`#EBEDF2` Light, `#262634` Dark, `#E8E4DA` Paper) and remapped text colors, achieving contrast $\ge 11:1$ (Light: 15.64:1, Dark: 13.71:1, Paper: 11.16:1).
+    - Source color fidelity: Retained original color spaces for image rasters, PDF pages, and syntax highlighting colors on code tokens via `remap_span_color`.
+  - Verified: 170 unit tests pass in `cells/apps/ocel` (`cargo test -p ocel`); 359 workspace tests pass; bare-metal PIC cross-build compiles cleanly (`RUSTFLAGS="-C relocation-model=pic" cargo check --target x86_64-unknown-none -Z build-std=core,alloc -p ocel`); signed F1/F5 policy checks pass with `#![forbid(unsafe_code)]`.
 - **2026-10-19 — Unified Desktop Phase 05 six-zone snap and F11 fullscreen geometry.**
   Completed Phase 05 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
   and implementation plan `.agents/261019-1310-unified-desktop/phase-05-placement-fullscreen.md`:
