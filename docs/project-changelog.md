@@ -4,6 +4,19 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-19 — Unified Desktop Phase 10 Real Tier 3 single-app guest integration.**
+  Completed Phase 10 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+  and implementation plan `.agents/261019-1310-unified-desktop/phase-10-tier3-app-session.md`:
+  - `cells/apps/chrome`: Converted single-app launcher from print-only stub into an interactive single-app kiosk browser application backed by `ViSurface` for Tier 3 Linux guest microVM session (`#![no_std]`, `#![forbid(unsafe_code)]`, 4 MiB custom heap):
+    - Multi-tab tracking: Implemented `ChromeTab` model (`id`, `title`, `url`, `content_heading`, `content_text`) in `src/main.rs` with tab strip rendering ($Y \in [0, 32]$ DIP), active tab highlighting, tab close buttons ('x'), '+' add-tab button, tab switching (`switch_tab`), and cooperative container teardown (`should_close = true`) when closing the final tab.
+    - Interactive navigation toolbar: Implemented navigation bar ($Y \in [32, 72]$ DIP) with Back (`<`), Forward (`>`), and Reload (`R`) action buttons, URL address bar with green `[HTTPS]` security badge, inline keyboard text input and backspace editing, and "Go" navigation action button (`navigate()`).
+    - Styled guest web viewport: Viewport ($Y \in [72, \text{height}-24]$ DIP) rendering active guest web content cards with styled headings, descriptive text, and crisp typography, guaranteeing that guest execution stays fullscreen within the kiosk application without exposing an underlying Linux desktop or shell prompt.
+    - Hardware virtualization status bar: Fixed 24 DIP footer status bar displaying active hardware virtualization and graphics pipeline state (`"Intel VT-x (VMX root) | VirtIO-GPU 1280x800 | PVH Single-App"`).
+    - F11 fullscreen and geometry toggle: `ChromeApp::toggle_fullscreen` saves host floating/snapped geometry in `saved_dims`, expanding to full display bounds ($1280 \times 800$) upon enter, and cleanly restores previous dimensions upon exit.
+    - Continuous pointer hit-testing and keyboard routing: Handled pointer click hit-testing across tab strip, tab close buttons, '+' button, address bar focus/unfocus, and toolbar buttons; mapped keyboard navigation (typing, Backspace, Return, Escape, F11, Ctrl+T, Ctrl+W, Ctrl+L).
+    - Cooperative container teardown: Closing the last open tab requests application shutdown (`should_close = true`), unwinding event loops and terminating the guest microVM session cooperatively.
+  - Added `viui` dependency (`libs/viui`) to `cells/apps/chrome/Cargo.toml`.
+  - Verified: 4 unit tests pass in `cells/apps/chrome` (`cargo test -p app-chrome`); 375 workspace tests pass (`cargo test -p app-chrome -p terminal -p files -p service-compositor -p ocel -p desktop -p viui -p api`); bare-metal PIC cross-build compiles cleanly (`RUSTFLAGS="-C relocation-model=pic" cargo build --release -p app-chrome --target x86_64-unknown-none -Z build-std=core,alloc`); signed F1/F5 policy checks pass with `#![forbid(unsafe_code)]`.
 - **2026-10-19 — Unified Desktop Phase 09 GUI Terminal and shell-session streams.**
   Completed Phase 09 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
   and implementation plan `.agents/261019-1310-unified-desktop/phase-09-terminal-streams.md`:

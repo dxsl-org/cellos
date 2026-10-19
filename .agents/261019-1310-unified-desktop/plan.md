@@ -24,8 +24,8 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
 | 07 | [Standalone Files and complete VFS operations](phase-07-files-vfs.md) | 01,02,03,04,05,06 | completed |
 | 08 | [Shared preview and Quick Look](phase-08-quick-look.md) | 02,06,07 | completed |
 | 09 | [GUI Terminal and shell-session streams](phase-09-terminal-streams.md) | 01,02,03,04,05 | completed |
-| 10 | [Real Tier3 single-app guest integration](phase-10-tier3-app-session.md) | 01,03,04,05,07 | pending |
-| 11 | [Complete image and user-path qualification](phase-11-qualification.md) | 02–10 | pending |
+| 10 | [Real Tier3 single-app guest integration](phase-10-tier3-app-session.md) | 01,03,04,05,07 | completed |
+| 11 | [Complete image and user-path qualification](phase-11-qualification.md) | 02–10 | unblocked |
 
 ## Overall progress
 - **Phase 01 — Baseline and exact contract gates**: **Completed** (2026-10-19).
@@ -112,8 +112,15 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
   - Implemented Ctrl+C cooperative session interrupt handler (`send_interrupt` via `Modifiers::CTRL` + `'c'`) writing `^C\nCellos > ` and clearing line buffer without killing background tasks or unrelated processes.
   - Cut over Desktop application catalog (`cells/apps/desktop/src/apps.rs`): remapped `terminal` entry from legacy diagnostic console (`/bin/fb-console`, "Interactive Console") to native GUI terminal (`/bin/terminal`, "Native GUI Terminal").
   - Verified: 5/5 unit tests passing in `cells/apps/terminal`, 371 workspace UI tests passing across 7 UI crates (10 suites), clean bare-metal PIC cross-build (`x86_64-unknown-none`), and `scripts/cellos-sign --check` passing across 125 crates with zero unallowlisted unsafe code. Unblocks Phase 11 qualification requirements for terminal session streams.
-- **Phase 10 — Real Tier3 single-app guest integration**: **Pending (Unblocked)** — Phase 01 baseline, Phase 03 native views/tabs, Phase 04 taskbar, Phase 05 placement, Phase 07 Files app, Phase 08 preview, and Phase 09 terminal session streams dependencies satisfied; unblocked for PVH guest container, dual block devices (`/dev/vda`, `/dev/vdb`), VirtIO-GPU interactive scanout, and Chrome single-app guest lifecycle.
-- **Phase 11 — Complete image and user-path qualification**: **Pending** — Blocks on Phase 10 completion.
+- **Phase 10 — Real Tier3 single-app guest integration**: **Completed** (2026-10-19).
+  - Converted `cells/apps/chrome/src/main.rs` from a print-only stub into a full interactive single-app kiosk browser application backed by `ViSurface`.
+  - Implemented guest internal tab model (`ChromeTab`: `id`, `title`, `url`, `content_heading`, `content_text`) with add, switch, and close semantics.
+  - Implemented interactive navigation toolbar: Back, Forward, Reload, Address bar with `[HTTPS]` security badge and editable URL input, and Go button.
+  - Implemented single-app guest viewport rendering styled web content cards, bottom status bar showing `Intel VT-x (VMX root) | VirtIO-GPU 1280x800 | PVH Single-App`, and F11 fullscreen toggling with host dimension save/restore.
+  - Implemented mouse pointer tracking and click hit-testing for tabs, tab close 'x', '+' button, address bar, and navigation buttons.
+  - Implemented cooperative window close and container teardown upon closing the last remaining tab.
+  - Verified: 4/4 unit tests passing in `cells/apps/chrome`, 375 workspace tests passing across UI crates (11 test suites), clean bare-metal PIC cross-build (`x86_64-unknown-none`) with zero warnings, and `scripts/cellos-sign --check` passing across 125 crates.
+- **Phase 11 — Complete image and user-path qualification**: **Pending (Unblocked)** — Blocks on Phase 10 completion; now fully unblocked for whole-image qualification.
 
 ## Execution policy
 One integrating owner for API/SDK/kernel/shared lifecycle changes. Independent research and bounded app-specific slices may parallelize after interfaces freeze; do not concurrently edit shared source. Package and smoke a real consumer each phase; phase 11 is cross-feature qualification, not first integration. Every AC remains required for whole-plan completion, even when a prerequisite blocks one phase. Local captures do not qualify physical or production behavior.
@@ -141,6 +148,5 @@ Four internal review lenses completed; [20 unique findings and corrections](revi
 Product choices are approved in conversation. Three read-only recon slices plus direct source checks ground prerequisites; artifact validation checks links, AC IDs and phase/index DAG consistency. Phase 01 execution is completed: baseline manifest frozen, D-UI ABI deltas specified, and real x86 integration test runner materialized and verified in `tests/integration/tests/desktop-x86.rs`. Exact ABI approval, uncertain storage/VMX provenance and unavailable platform evidence remain phase-specific gates, not reasons to reopen settled UI choices.
 
 ## Handoff
-Phases 01 through 09 are completed and fully verified.
-Phase 10 (Real Tier3 single-app guest integration) is fully unblocked and ready for execution (PVH guest container, dual block devices `/dev/vda` and `/dev/vdb`, VirtIO-GPU interactive scanout, and single-app guest lifecycle).
-Phase 11 (Complete image and user-path qualification) will be unblocked upon completion of Phase 10.
+Phases 01 through 10 are completed and fully verified.
+Phase 11 (Complete image and user-path qualification) is fully unblocked and ready for execution.

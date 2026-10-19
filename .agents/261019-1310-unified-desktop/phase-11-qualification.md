@@ -1,7 +1,7 @@
 ---
 phase: 11
 title: "Integrated desktop image and user-path qualification"
-status: pending
+status: unblocked
 priority: P1
 tier: thinking
 dependencies: [2, 3, 4, 5, 6, 7, 8, 9, 10]

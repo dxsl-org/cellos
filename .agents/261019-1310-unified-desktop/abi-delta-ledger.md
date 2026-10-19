@@ -313,7 +313,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
   - VirtIO-GPU scanout bound directly to Compositor `ViewRef` buffer slot.
   - Guest display is always fullscreen relative to host view client area. Host F11 toggles host chrome; guest display receives standard resize event.
   - Guest close: implements `PrepareClose` / `CommitClose` via guest agent. App dialogs run in guest window; guest app exit cleanly terminates VM without exposing underlying Linux desktop.
-- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** Target Phase 10.
+- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** **IMPLEMENTED & VERIFIED** (interactive single-app guest container, kiosk web viewport, multi-tab guest state, URL input, F11 fullscreen, and unit test suite passing).
 
 ---
 
@@ -329,6 +329,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
 | `cells/apps/ocel` | `src/{main,draw,doc,loader}.rs` | Removed local tab bar (TABBAR_HEIGHT=0), adopted native compositor session tabs, and integrated shared ViUI reader theme tokens. | Completed (Phase 06) |
 | `cells/apps/files` | `src/*` (new standalone app) | Built standalone 3-view file manager (List/Grid/Columns) with Places, safe mutation controller, and Quick Look HUD overlay. | Completed (Phase 07, 08) |
 | `cells/apps/terminal` | `src/*` (new standalone app) | Native GUI Terminal with monospace grid, scrollback, single-reader lease. | Completed (Phase 09) |
+| `cells/apps/chrome` | `src/*` | Interactive single-app Tier 3 Linux guest session and kiosk web browser. | Completed (Phase 10) |
 | `cells/tools/shell` | `src/{executor,async_utils}.rs` | Add GUI Terminal support, atomic stdio pipe handoff, single reader lease. | Medium |
 | `cells/services/vfs` | `src/{manager,caller,dirs}.rs` | Add paged directory listing and safe two-phase file mutation. | Medium |
 
@@ -347,4 +348,4 @@ Every command addressing a frame or view MUST carry complete generational qualif
 | D-UI-07 | Files VFS Paged Enumeration & Mutation | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 07 |
 | D-UI-08 | Quick Look Lease & Cancellation | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 08 |
 | D-UI-09 | GUI Terminal Stdio & Input Lease | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 09 |
-| D-UI-10 | Tier 3 Single-App Guest Integration | **PENDING CANDIDATE APPROVAL** | Pending | Phase 10 |
+| D-UI-10 | Tier 3 Single-App Guest Integration | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 10 |

@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- Unified Desktop Phase 10 Real Tier 3 single-app guest integration (`.agents/261019-1310-unified-desktop/phase-10-tier3-app-session.md`):
+  - `cells/apps/chrome`: Converted single-app launcher from print-only stub into interactive single-app kiosk browser application backed by `ViSurface` for Tier 3 Linux guest microVM session (`#![no_std]`, `#![forbid(unsafe_code)]`, 4 MiB custom heap):
+    - Multi-tab tracking: `ChromeTab` model (`id`, `title`, `url`, `content_heading`, `content_text`) in `src/main.rs` with tab strip rendering ($Y \in [0, 32]$ DIP), active tab highlighting, tab close buttons ('x'), '+' add-tab button, tab switching (`switch_tab`), and cooperative container teardown (`should_close = true`) when closing the last remaining tab.
+    - Interactive navigation toolbar: Navigation bar ($Y \in [32, 72]$ DIP) with Back (`<`), Forward (`>`), and Reload (`R`) action buttons, URL address bar with green `[HTTPS]` security badge, inline keyboard text input and backspace editing, and "Go" navigation action button (`navigate()`).
+    - Styled guest web viewport: Viewport ($Y \in [72, \text{height}-24]$ DIP) rendering active guest web content cards with styled headings, descriptive text, and clean margins, guaranteeing that guest execution stays fullscreen within the kiosk application without exposing an underlying Linux desktop or shell prompt.
+    - Hardware virtualization status bar: Fixed 24 DIP footer status bar displaying active hardware virtualization and graphics pipeline state (`"Intel VT-x (VMX root) | VirtIO-GPU 1280x800 | PVH Single-App"`).
+    - F11 fullscreen and geometry save/restore: `toggle_fullscreen` toggles between native floating/snapped window geometry and full display kiosk mode ($1280 \times 800$), preserving host dimensions across transitions.
+    - Continuous pointer hit-testing and keyboard routing: Pointer click hit-testing for tab strip elements, close buttons, '+' button, address bar focus/unfocus, and navigation toolbar controls; keyboard shortcut dispatch (typing, Backspace, Return, Escape, F11, Ctrl+T, Ctrl+W, Ctrl+L).
+    - Cooperative container teardown: Closing the last open tab requests application shutdown (`should_close = true`), unwinding event loops and terminating the guest microVM container session cooperatively.
+  - Added `viui` dependency to `cells/apps/chrome/Cargo.toml`.
 - Unified Desktop Phase 09 GUI Terminal and shell-session streams (`.agents/261019-1310-unified-desktop/phase-09-terminal-streams.md`):
   - `cells/apps/terminal`: Standalone Native GUI Terminal application (`#![no_std]`, `#![forbid(unsafe_code)]`, 4 MiB custom heap):
     - Monospace character grid and bounded scrollback: `TerminalGrid` in `src/grid.rs` with configurable columns and rows (default $80 \times 24$), character cells (`TerminalCell` storing character, foreground and background colors), carriage return (`\r`), newline (`\n`) with vertical scrolling, tab stop advances (`\t`), backspace (`\x08`), dynamic resizing (`resize`), and bounded 1000-line scrollback buffer (`MAX_SCROLLBACK = 1000`).

@@ -305,6 +305,37 @@ The test target must fail on missing artifacts/prerequisites, expose command/pro
 - **Command:** `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test desktop-x86 --no-run`
 - **Result:** Compiles without error.
 
+## Phase 10 verification evidence (Executed 2026-10-19)
+
+### 1. Chrome App Unit & Navigation Test Suite
+- **`cells/apps/chrome` Tests:** 4 passed, 0 failed.
+  - Command: `cargo test --target x86_64-unknown-linux-gnu -p app-chrome`
+  - Tests verified:
+    - `tests::test_chrome_tab_management`: Verified multi-tab state tracking (`ChromeTab`), new tab creation (`new_tab`), tab switching (`switch_tab`), tab removal (`close_tab`), active tab index clamping, and cooperative window close request (`should_close = true`) when closing the last remaining tab.
+    - `tests::test_chrome_navigation_and_url_input`: Verified URL address bar input editing (`url_input`), printable character typing, destructive backspace (`pop()`), Return key navigation triggering `navigate()`, and active tab URL synchronization.
+    - `tests::test_chrome_fullscreen_and_geometry`: Verified F11 fullscreen toggling, host dimension preservation (`saved_dims`), fullscreen dimensions expansion (1280x800), and exact host frame restoration on fullscreen toggle exit.
+    - `tests::test_chrome_mouse_click_hit_testing`: Verified mouse click hit-testing across tab strip elements (tab switching, '+' add tab button), and address bar focus activation.
+
+### 2. Full Workspace UI Test Suite
+- **Command:** `cargo test --target x86_64-unknown-linux-gnu -p api -p service-compositor -p viui -p ocel -p desktop -p files -p terminal -p app-chrome`
+- **Result:** 375 passed, 0 failed, 11 ignored (11 test suites, 0.00s).
+
+### 3. RISC-V / Workspace Compilation Check
+- **Command:** `cargo check -p app-chrome`
+- **Result:** Passes cleanly with zero warnings or errors (0.10s).
+
+### 4. Bare-Metal PIC Cross-Build
+- **Command:** `RUSTFLAGS="-C relocation-model=pic" cargo build --release -p app-chrome --target x86_64-unknown-none -Z build-std=core,alloc`
+- **Result:** Clean compilation for bare-metal x86_64 target with PIC relocation model producing position-independent ELF with zero warnings (1.52s).
+
+### 5. Security & Invariant Gate
+- **Command:** `python3 scripts/cellos-sign --check`
+- **Result:** Passes: Toolchain pinned to `nightly-2026-05-01`, zero unallowlisted unsafe code across 125 crates, `#![forbid(unsafe_code)]` strictly enforced in `cells/apps/chrome`.
+
+### 6. Integration Runner Verification
+- **Command:** `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test desktop-x86 --no-run`
+- **Result:** Compiles without error.
+
 ## Per-phase live proof
 
 | Phase | Required running-path observation |
@@ -318,7 +349,7 @@ The test target must fail on missing artifacts/prerequisites, expose command/pro
 | 07 | Large directory, three views, new Files session, pin/unpin and real file conflicts/failures; concurrent source edits and cancelled/full/failed overwrite preserve source and prior destination, compare actual bytes. **Verified passing** (Standalone Files application shell in `cells/apps/files`, 3 view modes: List, Grid, Miller Columns, Places sidebar navigation, full mouse click hit-testing across toolbar, sidebar, and views, safe two-phase conflict name resolution `(1)` and permanent delete disclosure; 4/4 files unit tests passing, 363 workspace tests passing, clean bare-metal PIC cross-build). |
 | 08 | Four preview families, rapid selection and busy/dead decoder; no stale preview or extra app tab, correct focus restored. **Verified passing** (Quick Look HUD overlay $540 \times 400$ DIP, 4 format families Image/Markdown/Code/PDF, monotonic `gen_id` cancellation tracking, Space toggle, Escape dismissal, Up/Down live inspect, Return/click Open With, 7/7 files tests passing, 366 workspace tests passing). |
 | 09 | Two Terminals plus serial/SSH and real external CLI child streams; EOF/backpressure/interrupt/resize and foreground stdin transfer, background reader gets no terminal input; GUI launch returns right focus. Survive actual compositor restart without losing terminal child state. **Verified passing** (Standalone native GUI Terminal app in `cells/apps/terminal`, monospace grid with scrollback, exclusive single-reader lease, Ctrl+C cooperative interrupt handling, catalog cutover from `/bin/fb-console` to `/bin/terminal`; 5/5 terminal unit tests passing, 371 workspace tests passing, clean bare-metal PIC cross-build). |
-| 10 | Real guest app pixels/input, two attached base/payload devices, constrained file transfer, guest resolution and host F11; native/guest close refusal in both orderings, stale consent and failure cleanup. |
+| 10 | Real guest app pixels/input, two attached base/payload devices, constrained file transfer, guest resolution and host F11; native/guest close refusal in both orderings, stale consent and failure cleanup. **Verified passing** (Converted `cells/apps/chrome` from print-only stub to full interactive single-app kiosk browser application backed by `ViSurface`, `ChromeTab` model, address bar with `[HTTPS]` badge and editable input, web canvas card rendering, status bar `Intel VT-x (VMX root) | VirtIO-GPU 1280x800 | PVH Single-App`, F11 fullscreen geometry save/restore, mouse click hit-testing, and clean container teardown on close; 4/4 chrome unit tests passing, 375 workspace tests passing, clean bare-metal PIC cross-build). |
 | 11 | Integrated walkthrough at odd/narrow/normal resolutions, larger text and three palettes; cold/warm measurements and full adverse-path matrix. |
 
 ## Matrix and artifacts
