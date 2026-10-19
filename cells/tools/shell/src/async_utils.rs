@@ -39,10 +39,12 @@ impl AsyncStdin {
             // poll_events (sys_try_recv) never places shell in Recv — input
             // service's sys_try_send always drops when shell is not in Recv
             // state (G18 fix side-effect resolved here).
-            if let Some(input_tid) = sys_lookup_service(service::INPUT) {
+            let input_tid = sys_lookup_service(service::INPUT);
+            let comp_tid = sys_lookup_service(service::COMPOSITOR);
+            if input_tid.is_some() || comp_tid.is_some() {
                 let mut frame = [0u8; 65];
-                match sys_recv_timeout(0, &mut frame, 100) {
-                    SyscallResult::Ok(sender) if sender == input_tid => {
+                match sys_recv_timeout(0, &mut frame, 2) {
+                    SyscallResult::Ok(sender) if Some(sender) == input_tid || Some(sender) == comp_tid => {
                         if frame[0] == INPUT_EVENT_OPCODE {
                             if let Some(ev) = decode_event(&frame[1..]) {
                                 let InputEvent::Key(k) = ev else {

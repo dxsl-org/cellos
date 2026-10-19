@@ -4,6 +4,22 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-19 — Unified Desktop Phase 01 baseline, ABI delta ledger, and x86 integration test runner.**
+  Completed Phase 01 contract baseline under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+  and implementation plan `.agents/261019-1310-unified-desktop/`:
+  - Formally specified ABI Delta Families D-UI-01 through D-UI-10 in `.agents/261019-1310-unified-desktop/abi-delta-ledger.md`
+    (views/frames, six-zone snap/fullscreen, Linear theme distribution, launch tokens, Alt+Space dispatch,
+    shutdown consent, paged VFS, Quick Look leases, terminal stdio streams, and Tier 3 single-app guest integration),
+    recorded candidate digest `e47ffa52fc7d11ffe190bda41dc762d60f8d53131809562369b040456b2da6fb`, and established
+    Law-1 Checkpoint 1 (Design Approval — pending candidate ratification) gates before any `libs/api` or `libs/types` edits.
+  - Established source and image baseline manifest in `.agents/261019-1310-unified-desktop/baseline-manifest.md`
+    at commit `4994602b55a43f3fd4262f36dc3dfaa7b1a2ff44`, cataloging complete SHA-256 hashes of 26 modified tracked files,
+    untracked user artifacts, and compiler/toolchain state while strictly preserving user working changes untouched.
+  - Materialized and verified automated x86 integration test target `tests/integration/tests/desktop-x86.rs` and
+    `boot_x86_bios_with_accel` helper in `tests/integration/src/lib.rs`, supporting QEMU with KVM and TCG acceleration,
+    interactive boot, prompt assertion, and QMP keyboard/pointer/screendump capture.
+  - Reconciled ADR-0027 architectural scope and contracts in `contracts.md`. No ambient capability widening,
+    G2-J crash format promotion, or unadmitted scopes authorized.
 - **2026-10-10 — qualified x86 two-CPU SMP execution for C2C renderer and Tier-2 private roots.**
   Completed real x86 two-logical-CPU (`MAX_HARTS=2`) substrate with hardware AP startup,
   per-CPU GS `CpuLocal`, per-CPU GDT/TSS, directed legacy LAPIC IPI delivery (vector 0xf0),

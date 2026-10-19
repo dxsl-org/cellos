@@ -1,6 +1,6 @@
 # Technical Milestones
 
-**Last updated**: 2026-10-08 (direction routing; prior technical snapshot retained)
+**Last updated**: 2026-10-19 (Unified Desktop Phase 01 baseline under ADR-0027)
 
 The sole program is **Intel x86-64 C2C Anywhere** under
 [ADR-0022](../decisions/0022-intel-x86-64-c2c-only-direction.md). Use
@@ -22,6 +22,7 @@ continue all architectures or runtime programs. See
 | Hotswap/supervisor | Supervisor hotswap path has QEMU smoke evidence; continue keeping authority gates explicit |
 | Security/trust | Signing mechanism exists; fleet enforcement and production key provisioning remain open; Tier 2 native domains have RV64 QEMU evidence behind `native-domains`, while production release remains gated by [Spec 22](../specs/22-native-domain-cell-implementation-gate.md) |
 | Cell scale profiles (D5) | Large-app profile stays the default (`MAX_CELLS = 64`); the per-request server profile is an accepted goal, not capacity. The 2026-07-31 ceiling (n = 8–9) was a hardcoded 190 MiB memory map — now replaced by firmware DTB discovery (`kernel/src/boot/dtb_memory.rs`) with `MemInfo = 243` making capacity measurable. Still open: shared immutable image frames, demand-paged stacks, dynamic tables, a variable VA budget, and the N = 64/128/256/512 baselines re-measured with heavy cells resident. See [Spec 19 §3](../specs/19-hardware-isolation-layers.md) |
+| Desktop & Compositor | Phase 01 baseline completed under ADR-0027 (`.agents/261019-1310-unified-desktop/`): ABI delta ledger D-UI-01..D-UI-10 specified with candidate digest `e47ffa52fc7d...` and Law-1 CP1 pending ratification, source/image baseline manifest recorded at commit `4994602b55...`, and automated x86 integration test runner (`tests/integration/tests/desktop-x86.rs`) operational under QEMU KVM/TCG. |
 
 ## Historical Milestones
 

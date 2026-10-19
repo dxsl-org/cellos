@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-10-11 — Cell/Kernel Cell/authority and scoped placement/autoscaling contract cutover within Intel C2C
+**Last updated**: 2026-10-19 — Unified Desktop Phase 01 baseline under ADR-0027; Cell/Kernel authority and C2C on Intel x86-64
 
 ## Sole active direction: C2C Anywhere on Intel x86-64
 
@@ -68,6 +68,18 @@ includes routers/control capacity, unknown work and safe pending shrink. Missing
 telemetry never means zero load; stale routers cannot bypass destination drain.
 P08 has ordered transport/budget/routing/autoscale/failure slices; P10 observes
 actual load-driven spawn, balanced requests and drain, not only a client count.
+
+### Admitted desktop track: Unified desktop, native sessions and shared Linear theme (ADR-0027)
+
+On 2026-10-19, user-approved [ADR-0027](../decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+authorized the Unified Desktop implementation plan (`.agents/261019-1310-unified-desktop/plan.md`)
+on Intel x86-64 across 11 phases. Phase 01 ([phase-01-contract-baseline.md](../../.agents/261019-1310-unified-desktop/phase-01-contract-baseline.md))
+is completed, establishing:
+- Proposed contracts (`contracts.md`) and candidate ABI delta ledger (`abi-delta-ledger.md`) covering D-UI-01 through D-UI-10 with candidate specification digest `e47ffa52fc7d11ffe190bda41dc762d60f8d53131809562369b040456b2da6fb` and Law-1 Checkpoint 1 (Design Approval) pending candidate ratification before source edits in `libs/api` or `libs/types`.
+- Truthful source baseline manifest (`baseline-manifest.md`) preserving user changes and cataloging SHA-256 hashes of 26 modified tracked files and untracked user artifacts at base commit `4994602b55a43f3fd4262f36dc3dfaa7b1a2ff44`.
+- Materialized automated x86 integration test target `tests/integration/tests/desktop-x86.rs` and `boot_x86_bios_with_accel` helper in `tests/integration/src/lib.rs` supporting QEMU KVM/TCG boot and QMP interaction.
+
+This desktop authorization is strictly bounded to ADR-0027 deliverables (unified session tabs, bottom taskbar with Spotlight HUD, six-zone snap, Linear theme, standalone Files, Quick Look, GUI Terminal, and single-app Tier 3 Linux guest integration); it does not unlock unadmitted legacy lanes, G2-J crash format promotion, or unauthenticated kernel capabilities.
 
 ### Task admission and working limits
 
@@ -722,6 +734,15 @@ events are maintained in
   compositor-cursor scenario retains cursor coverage. This is still not a
   desktop shell or G2 qualification: taskbar, snapping, persistence, and live
   resize preview remain absent.
+- **Unified Desktop Phase 01 contract baseline (2026-10-19):** ADR-0027 implementation
+  plan `.agents/261019-1310-unified-desktop/` completed Phase 01. Formally specified
+  ABI Delta Families D-UI-01 through D-UI-10 in `abi-delta-ledger.md` with candidate
+  digest `e47ffa52fc7d11ffe190bda41dc762d60f8d53131809562369b040456b2da6fb` and Law-1
+  CP1 design gates pending candidate ratification. Truthful source baseline manifest
+  recorded in `baseline-manifest.md` at commit `4994602b55a43f3fd4262f36dc3dfaa7b1a2ff44`.
+  Automated x86 integration test target `tests/integration/tests/desktop-x86.rs` and
+  `boot_x86_bios_with_accel` helper in `tests/integration/src/lib.rs` verified operational
+  under QEMU KVM and TCG with QMP keyboard/pointer/screendump interaction.
 
 ## Current Documentation Corrections
 

@@ -12,7 +12,7 @@ use api::display::Rect;
 use api::input::{decode_event, InputEvent, INPUT_EVENT_IPC_SIZE, INPUT_EVENT_OPCODE};
 use api::ipc::{InputRequest, IPC_BUF_SIZE};
 use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_send, sys_try_send};
+use ostd::syscall::{sys_lookup_service, sys_try_send};
 
 use crate::cursor_state;
 use crate::pointer_router::{PointerRouter, RouteContext};
@@ -178,10 +178,27 @@ fn route_pointer(
     );
 }
 
-/// Re-send the key-event frame to the focused surface owner.
+fn find_shell_tid() -> usize {
+    let mut procs = [api::syscall::ProcessInfo::default(); 32];
+    if let Ok(count) = ostd::syscall::sys_get_procs(&mut procs) {
+        for p in procs.iter().take(count) {
+            if &p.name[..5] == b"shell" {
+                return p.id;
+            }
+        }
+    }
+    0
+}
+
+/// Re-send the key-event frame to the focused surface owner, or fallback to shell.
 fn forward_key(buf: &[u8; 512], state: &InputState) {
     let owner = state.pointer.focused_owner();
-    if owner != 0 {
-        let _ = sys_send(owner, &buf[..INPUT_FRAME_LEN]);
+    let target = if owner != 0 {
+        owner
+    } else {
+        find_shell_tid()
+    };
+    if target != 0 {
+        let _ = sys_try_send(target, &buf[..INPUT_FRAME_LEN]);
     }
 }

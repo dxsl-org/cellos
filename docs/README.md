@@ -49,6 +49,7 @@ GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V
 | [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md) | Canonical sole-program decision |
 | [ADR-0023](decisions/0023-local-service-generation-binding.md) | Local service binding axis `(cell_id, generation)`; additive `LookupServiceBound = 429` (Law-1 FROZEN) |
 | [ADR-0024](decisions/0024-cell-kernel-authority-contract.md) | Node-local Cell/Kernel identity, object-capability authority, scoped cluster placement/autoscaling and execution freeze |
+| [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md) | Unified desktop: session tabs, Spotlight HUD, six-zone snap, Linear theme, Files, GUI terminal, single-app Tier 3 guest |
 | [roadmap/current-focus.md](roadmap/current-focus.md) | Current Intel C2C priorities and evidence gates |
 | [QEMU q35 x86-64](../boards/qemu/q35-x86_64/README.md) | Documented x86 build/test path; software evidence, not physical qualification |
 | [getting-started.md](getting-started.md) | Setup, build, run, first contribution |

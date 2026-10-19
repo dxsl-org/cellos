@@ -834,6 +834,90 @@ impl QemuRunner {
         }
     }
 
+    /// Boot x86_64 q35 with Limine BIOS, explicit accelerator ("tcg" or "kvm"),
+    /// virtio keyboard/tablet, and active QMP monitor for screendump and input injection.
+    pub fn boot_x86_bios_with_accel(iso: &str, accel: &str) -> Self {
+        let serial_listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let serial_port = serial_listener.local_addr().unwrap().port();
+
+        let qmp_listener = TcpListener::bind("127.0.0.1:0").expect("bind qmp socket");
+        let qmp_port = qmp_listener.local_addr().unwrap().port();
+        drop(qmp_listener);
+
+        let mut cmd = Command::new(qemu_binary_x86());
+        cmd.args(["-machine", "q35"]);
+        match accel {
+            "kvm" => {
+                cmd.args(["-accel", "kvm", "-cpu", "host"]);
+            }
+            "tcg" => {
+                cmd.args(["-cpu", "qemu64,+pdpe1gb"]);
+            }
+            other => panic!("desktop-x86: unsupported accelerator '{other}'; must be 'tcg' or 'kvm'"),
+        }
+        cmd.args([
+            "-m",
+            "256M",
+            "-display",
+            "none",
+            "-cdrom",
+            iso,
+            "-boot",
+            "d",
+            "-no-reboot",
+            "-device",
+            "virtio-keyboard-pci",
+            "-device",
+            "virtio-tablet-pci",
+            "-qmp",
+            &format!("tcp:127.0.0.1:{qmp_port},server,nowait"),
+            "-serial",
+            &format!("tcp:127.0.0.1:{serial_port}"),
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+        let mut child = cmd.spawn().expect("qemu-system-x86_64 must be on PATH");
+        let stream = accept_qemu_serial(&serial_listener, &mut child);
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        let monitor_stream = {
+            let (tx, rx) = std::sync::mpsc::channel::<TcpStream>();
+            thread::spawn(move || {
+                for _ in 0..30 {
+                    if let Ok(s) = TcpStream::connect(format!("127.0.0.1:{qmp_port}")) {
+                        let _ = tx.send(s);
+                        return;
+                    }
+                    thread::sleep(Duration::from_millis(100));
+                }
+            });
+            rx.recv_timeout(Duration::from_secs(10)).ok()
+        };
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: monitor_stream,
+        }
+    }
+
     /// Boot x86_64 q35 from a Limine ISO with a PCIe NVMe disk attached.
     ///
     /// Same boot path as `boot_x86_bios` (SeaBIOS + ISO + Limine) but adds a
@@ -1984,7 +2068,7 @@ impl QemuRunner {
     ///
     /// Requires a runner created by [`Self::boot_with_pointer`]. A missing QMP
     /// connection is reported and the event is dropped.
-    pub fn send_qemu_mouse_abs(&mut self, x: u32, y: u32) {
+    pub fn send_qemu_mouse_abs(&mut self, x: u32, y: u32) -> bool {
         let command = format!(
             concat!(
                 r#"{{"execute":"input-send-event","arguments":{{"events":["#,
@@ -1996,9 +2080,11 @@ impl QemuRunner {
             y = y,
         );
         eprintln!("[test] QMP input-send-event abs x={x} y={y}");
-        if !self.send_qmp_command(&command) {
-            eprintln!("[test] WARNING: QMP monitor is None — send_qemu_mouse_abs({x},{y}) dropped");
+        let ok = self.send_qmp_command(&command);
+        if !ok {
+            eprintln!("[test] WARNING: QMP monitor is None or rejected — send_qemu_mouse_abs({x},{y}) dropped");
         }
+        ok
     }
 
     /// Inject one left-button state transition through the VirtIO tablet.
@@ -2181,7 +2267,7 @@ impl QemuRunner {
     /// Inject a keypress into the guest VirtIO keyboard through QMP.
     ///
     /// `key` uses QEMU's qcode syntax, e.g. `"tab"`, `"ret"`, or `"a"`.
-    pub fn send_qemu_key(&mut self, key: &str) {
+    pub fn send_qemu_key(&mut self, key: &str) -> bool {
         let command = format!(
             concat!(
                 r#"{{"execute":"input-send-event","arguments":{{"events":["#,
@@ -2192,9 +2278,22 @@ impl QemuRunner {
             key = key,
         );
         eprintln!("[test] QMP input-send-event key={key:?}");
-        if !self.send_qmp_command(&command) {
+        let ok = self.send_qmp_command(&command);
+        if !ok {
             eprintln!("[test] WARNING: QMP key event dropped");
         }
+        ok
+    }
+
+    /// Inject a sequence of keypresses into the guest VirtIO keyboard through QMP.
+    pub fn send_qemu_keys(&mut self, keys: &[&str]) -> bool {
+        for key in keys {
+            if !self.send_qemu_key(key) {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        true
     }
 
     /// Wait for QEMU to exit on its own (e.g. after a guest `shutdown` command).

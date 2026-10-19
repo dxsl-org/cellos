@@ -91,6 +91,27 @@ stages; it is not an executable child plan or a second WIP lane. Completion of
 Haily's first version requires an exact release/behavior/dependency review and
 subsequent scoped entry/handoff before implementation. No legacy lock, ABI,
 protected authority, physical gate or production admission is released here.
+## Active desktop plan — Unified desktop, native sessions and shared Linear theme
+
+**Recorded 2026-10-19:** The [Unified desktop plan](261019-1310-unified-desktop/plan.md)
+implements approved [ADR-0027](../docs/decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+outcomes on Intel x86-64 across 11 phases. Phase 01 ([phase-01-contract-baseline.md](261019-1310-unified-desktop/phase-01-contract-baseline.md))
+is **completed**:
+- Created [abi-delta-ledger.md](261019-1310-unified-desktop/abi-delta-ledger.md) specifying D-UI-01 through D-UI-10 candidate deltas, wire layouts, opcodes, error models, candidate specification digest `e47ffa52fc7d11ffe190bda41dc762d60f8d53131809562369b040456b2da6fb`, and Law-1 Checkpoint 1 (Design Approval) pending candidate ratification before code mutations in `libs/api`.
+- Created [baseline-manifest.md](261019-1310-unified-desktop/baseline-manifest.md) capturing truthful source baseline (commit `4994602b55a43f3fd4262f36dc3dfaa7b1a2ff44`), complete SHA-256 hash inventory of dirty tracked and untracked artifacts, preserving existing user changes.
+- Materialized and verified integration test target `tests/integration/tests/desktop-x86.rs` and `boot_x86_bios_with_accel` helper in `tests/integration/src/lib.rs` for automated x86 QEMU KVM/TCG boot and QMP interaction.
+- Reconciled ADR-0027 scope and contracts in `contracts.md`. No ambient scope widening, G2-J crash format promotion, or unadmitted capability changes authorized.
+
+
+## Parked research — VFS, storage and agent search
+
+**Recorded 2026-10-19:** [VFS/storage/search research plan](261019-1534-vfs-storage-search-research/plan.md)
+preserves the BFS/RedoxFS/modern-filesystem discussion, native-format source findings,
+measurement proposals and unresolved owner decisions. Analysis/research is unfinished
+and deliberately paused for owner consideration. No backend, disk format, index engine,
+VFS ABI or consistency policy is selected. This is documentation-only registration,
+not an implementation admission, new WIP lane or release of any existing execution lock.
+Resume requires an explicit owner request; implementation requires separate scoped approval.
 
 ## Historical Intel C2C execution ledger — not current admission
 

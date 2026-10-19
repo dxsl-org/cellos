@@ -6,8 +6,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ---
 
 ## [Unreleased]
+### Added
+- Unified Desktop Phase 01 contract baseline and test harness (`.agents/261019-1310-unified-desktop/`):
+  - ABI delta ledger (`abi-delta-ledger.md`): formal specification for Delta Families D-UI-01 through D-UI-10 (views/frames, six-zone snap, Linear theme, launch tokens, Alt+Space dispatch, shutdown consent, paged VFS, Quick Look leases, terminal stdio streams, Tier 3 guest integration) with candidate specification digest and Law-1 CP1 design gates.
+  - Baseline manifest (`baseline-manifest.md`): truthful source and image inventory at commit `4994602b55a43f3fd4262f36dc3dfaa7b1a2ff44`, tracking 26 modified files and untracked artifacts with full SHA-256 hashes.
+  - Automated x86 integration test runner (`tests/integration/tests/desktop-x86.rs`) and `boot_x86_bios_with_accel` helper in `tests/integration/src/lib.rs` for x86 QEMU KVM/TCG boot and QMP interaction.
+
 
 ### Fixed
+- Fix Ocel CSS layout and rendering fidelity for complex modern pages (`tuoitre.vn`):
+  - Retain symbolic `calc()` and percentage expressions through Taffy layout resolution; percentages now resolve against the containing-block axis and definiteness rather than viewport width.
+  - Support `position: static/relative/absolute/fixed`, signed insets, `z-index`, and nested stacking contexts; fixed elements stay viewport-anchored on scroll.
+  - Enforce ancestor per-axis `overflow: hidden/clip/scroll` clipping during painting and hit testing.
+  - Support `visibility: visible/hidden/collapse` and `opacity`; invisible elements take up space but omit box/text painting and pointer hit capture, eliminating full-screen modal backdrop blackouts (e.g. `.modal__bg`).
+- Fix x86-64 page-table user privilege propagation in `hal/arch/x86/src/x86_64/paging.rs`:
+  - Pass `flags & PageFlags::USER` through `PageTable::map` and `get_or_alloc` at all levels instead of checking `idx < 256`. Eliminates `#PF error=0x15` instruction-fetch permission faults on user code with high PD indices (e.g. QuickJS entry at `0x1b0000000`, PD index 384) while preserving supervisor leaf isolation and leaf W^X.
+- Implement browser Web APIs and dynamic resource lifecycle in `cells/apps/ocel` and `cells/services/ocel-quickjs`:
+  - Provide `BrowserSession` controller with bounded concurrency, same-site policy, per-hop redirect validation, and a transferable in-memory cookie jar with public-suffix verification.
+  - Add asynchronous `fetch` and `XMLHttpRequest`, `setTimeout`/`clearTimeout`/`requestAnimationFrame` driven by monotonic clock ticks, and synchronous native layout queries (`getBoundingClientRect`, `getComputedStyle`) over exact IPC continuation.
+- Fix DNS query slot starvation in `service-net` (`cells/services/net/src/dns.rs`):
+  - Allocate 32 query slots (`(0..32).map(|_| None).collect()`) in `smoltcp` `dns::Socket::new` instead of an empty slice `vec![]`. Eliminates `NoFreeSlot` query initialization failures and intermittent `DNS resolution failed` errors during parallel resource prefetching.
 - Enhance Ocel CSS engine in `cells/apps/ocel/src/parser/css.rs`:
   - Parse linear dimension expressions in `calc(...)` (e.g. `calc(100% - 331px)`, `calc(50% - 12px)`, `calc(100vh - 90px)`), resolving them to bounded viewport pixels.
   - Extract default fallbacks from CSS variables `var(--name, fallback)` (e.g. Swiper bullet widths, inactive background colors).

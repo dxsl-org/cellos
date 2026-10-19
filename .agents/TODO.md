@@ -66,6 +66,30 @@ earlier queue ordering. Use the [portfolio](plan-portfolio.md) and
   - *Pha 5 (Lua runtime & game cells) [done]:* Di chuyển thành công `cells/runtimes/lua` và `cells/demos/tetris-lua` sang Zig CC cross-compilation; bổ sung các hàm libc freestanding còn thiếu (`strpbrk`, `strcoll`, `strspn`, `strerror`) và chuẩn hóa c_char slice conversion qua các kiến trúc.
   - *Báo cáo nghiên cứu cơ sở:* `.agents/reports/research-261009-1530-zig-compiler-cross-compile-c-cpp-evaluation.md`.
 
+
+## Desktop Ecosystem & GUI Roadmap
+
+Kế hoạch theo yêu cầu người dùng 2026-10-19: [Unified desktop — 11 pha](261019-1310-unified-desktop/plan.md), [20 tiêu chí nghiệm thu](261019-1310-unified-desktop/acceptance.md). Pha 01 hoàn thành ([báo cáo cơ sở](261019-1310-unified-desktop/phase-01-contract-baseline.md)): ABI delta ledger `abi-delta-ledger.md` (Law-1 CP1 pending ratification), baseline manifest `baseline-manifest.md`, integration test `tests/integration/tests/desktop-x86.rs`. Các gate Law-1 CP1/CP2 cho từng delta và pha sau vẫn giữ nguyên; không tự mở các scope chưa phê duyệt.
+
+- [ ] **CellOS Linear dùng chung:** Light/Dark/Paper, live system theme và Ocel Reader dùng cùng token — pha 02/06.
+- [ ] **Unified native session tabs:** owner/generation, frame/menu gộp-tách, new-session/close/modal/focus — pha 01 [done: baseline/ABI spec] / pha 03/06.
+- [ ] **Desktop shell mới:** taskbar dưới gộp cố định, Spotlight Applications/Running tasks/System, registry/Open With và ảnh nền — pha 04.
+- [ ] **Snap 6 vùng và F11:** vùng gộp cạnh, dwell/preview/cancel, fullscreen content-only và phục hồi — pha 05.
+- [ ] **Tier 3 app thật trong VM:** guest app-only fullscreen, interactive host tab, resize/input/dialog/teardown; không dùng log launcher thay bằng chứng — pha 10.
+- [ ] **Standalone File Manager Cell (`cells/apps/files`):**
+  - Thiết kế đã chốt tại [ADR-0027 — Files](../docs/decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md#files-one-interaction-model-three-views): app độc lập, List mặc định; Grid và Miller Columns là chế độ xem tùy chọn, không tự đổi khi resize/snap.
+  - Dùng chung Places, breadcrumb/nhập đường dẫn, search, lựa chọn và thao tác file; Enter mở, F2 đổi tên, Ctrl+X/C/V, Space Quick Look ngoài ngữ cảnh nhập liệu.
+  - Quick Look trong cùng session, dùng chung backend với preview cột; chỉ đọc, có giới hạn, hủy yêu cầu cũ và không chặn Files. Không cam kết render mọi file trong 10 ms.
+  - Hoàn thiện thao tác qua VFS với tiến độ/hủy/lỗi từng mục, xung đột tên và bảo đảm copy/move; Trash/Undo chỉ khi backend thực sự hỗ trợ. Split View hai pane và cây thư mục đầy đủ để sau.
+- [ ] **File Association & MIME Router:**
+  - Dùng registry/Open With và launch intent theo [hợp đồng đề xuất](261019-1310-unified-desktop/contracts.md); tách Open/Preview khỏi Run script/ELF, không thực thi chỉ vì chọn/xem trước. Mỗi file được mở với quyền tối thiểu, qua gate ABI nếu cần mở rộng.
+  - Tích hợp vào File Manager và Desktop launcher để mở file tự động khi click đúp.
+- [ ] **Dedicated GUI Terminal Emulator (`cells/apps/terminal`):**
+  - Cửa sổ interactive ViUI terminal nổi trên màn hình thay thế việc nhìn log trần của `fb-console`.
+  - Nhận phím trực tiếp từ Compositor focus, chuyển tiếp I/O tới `shell` qua IPC/pipe, render lưới ký tự JetBrains Mono và bộ đệm cuộn dòng (scrollback).
+- [ ] **x86_64 Desktop Image Packaging Integration:**
+  - Cập nhật `scripts/build-cloud-images.sh` để biên dịch `desktop`, ký số bằng `cellos-sign` và đưa `/bin/desktop` vào `kernel_fs.img`.
+  - Hỗ trợ cờ khởi động hoặc cấu hình autoload trực tiếp vào môi trường Desktop GUI.
 Every task must name a direct dependency or measured defect of this direction,
 its acceptance scenario and evidence ceiling. Other work is **parked**.
 Old `[in-progress]`, `next` and unchecked entries below are historical diagnostics,
