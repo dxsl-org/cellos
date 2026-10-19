@@ -65,6 +65,24 @@ pub fn draw_text(
     );
 }
 
+
+#[allow(clippy::too_many_arguments)]
+pub fn draw_button(
+    surf: &mut ViSurface,
+    fonts: &mut TextFonts,
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+    text: &str,
+    bg: Color,
+    border: Color,
+    fg: Color,
+) {
+    fill_rect(surf, x, y, w, h, bg);
+    stroke_rect(surf, x, y, w, h, border);
+    draw_label(surf, fonts, x + 4, y, w.saturating_sub(8), h, text, FontFace::UiSemibold, 13.0, fg);
+}
 pub fn draw_label(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,

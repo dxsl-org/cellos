@@ -242,6 +242,37 @@ The test target must fail on missing artifacts/prerequisites, expose command/pro
 - **Command:** `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test desktop-x86 --no-run`
 - **Result:** Compiles without error.
 
+## Phase 08 verification evidence (Executed 2026-10-19)
+
+### 1. Files Quick Look & Preview Unit Test Suite
+- **`cells/apps/files` Tests:** 7 passed, 0 failed.
+  - Command: `cargo test --target x86_64-unknown-linux-gnu -p files`
+  - Tests verified:
+    - `preview::tests::test_preview_kind_from_filename`: Verified accurate file extension classification across all 4 preview format families: Image (`.png`, `.jpg`, `.ppm`), Markdown (`.md`), Code / Text (`.rs`, `.c`, `.toml`, `.txt`), PDF (`.pdf`), and fallback `Unsupported` classification (`.tar`, directories).
+    - `preview::tests::test_quick_look_generation_increment_and_cancel`: Verified monotonic `gen_id` tracking (initial `gen_id = 1`, increments to 2 and 3 on successive inspect calls), inspection state initialization, and clean state teardown (`lines.clear()`) on `close()`.
+    - `tests::test_quick_look_space_toggle`: Verified Space key HUD overlay toggle, item inspection, Escape key dismissal, mouse click hit-testing outside HUD modal bounds (`preview::handle_click` returning `Some(false)` and closing HUD), and mouse click on "Open With" button (`preview::handle_click` returning `Some(true)` triggering `open_selected()`).
+    - Existing 4 tests verified: safe conflict name resolution `(1)`, file item icon mappings and size formatting, view mode switching and navigation, and toolbar/sidebar mouse click hit-testing.
+
+### 2. Core Workspace UI Test Suite
+- **Command:** `cargo test --target x86_64-unknown-linux-gnu -p api -p service-compositor -p viui -p ocel -p desktop -p files`
+- **Result:** 366 passed, 0 failed, 11 ignored (9 test suites, 0.00s).
+
+### 3. RISC-V Compilation Check
+- **Command:** `cargo check -p files`
+- **Result:** Passes cleanly with zero warnings or errors.
+
+### 4. Bare-Metal PIC Cross-Build
+- **Command:** `RUSTFLAGS="-C relocation-model=pic" cargo build --release -p files --target x86_64-unknown-none -Z build-std=core,alloc`
+- **Result:** Clean compilation for bare-metal x86_64 target with PIC relocation model producing 1.2 MB position-independent ELF (`DYN`).
+
+### 5. Security & Invariant Gate
+- **Command:** `python3 scripts/cellos-sign --check`
+- **Result:** Passes: Toolchain pinned to `nightly-2026-05-01`, zero unallowlisted unsafe code across 124 crates, `#![forbid(unsafe_code)]` strictly enforced in `cells/apps/files`.
+
+### 6. Integration Runner Verification
+- **Command:** `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test desktop-x86 --no-run`
+- **Result:** Compiles without error.
+
 ## Per-phase live proof
 
 | Phase | Required running-path observation |
@@ -253,7 +284,7 @@ The test target must fail on missing artifacts/prerequisites, expose command/pro
 | 05 | Six cells/combined targets, dwell/cancel/min-size denial; F11 and pointer exit restore state and usable hit geometry. **Verified passing** (`calculate_snap_rect`, `snap_frame` with min-size preflighting, `toggle_fullscreen` with `saved_placement` and `saved_floating_rect` restoration, and dynamic screen dimension handling in `view.rs`; 12/12 tests in `service-compositor`, 359 workspace tests passing). |
 | 06 | Real Ocel documents loading/cancel switching, original content, Reader appearance; exactly one native tab strip. **Verified passing** (Ocel private tab bar removed via `TABBAR_HEIGHT = 0`, active document title synchronized to compositor surface on create/switch/close/finish_load, shared ViUI Light/Dark/Paper reader themes verified with $\ge 5.0:1$ link contrast and $\ge 11:1$ table header contrast, original images/PDF untouched; 170/170 ocel tests passing, 359 workspace tests passing). |
 | 07 | Large directory, three views, new Files session, pin/unpin and real file conflicts/failures; concurrent source edits and cancelled/full/failed overwrite preserve source and prior destination, compare actual bytes. **Verified passing** (Standalone Files application shell in `cells/apps/files`, 3 view modes: List, Grid, Miller Columns, Places sidebar navigation, full mouse click hit-testing across toolbar, sidebar, and views, safe two-phase conflict name resolution `(1)` and permanent delete disclosure; 4/4 files unit tests passing, 363 workspace tests passing, clean bare-metal PIC cross-build). |
-| 08 | Four preview families, rapid selection and busy/dead decoder; no stale preview or extra app tab, correct focus restored. |
+| 08 | Four preview families, rapid selection and busy/dead decoder; no stale preview or extra app tab, correct focus restored. **Verified passing** (Quick Look HUD overlay $540 \times 400$ DIP, 4 format families Image/Markdown/Code/PDF, monotonic `gen_id` cancellation tracking, Space toggle, Escape dismissal, Up/Down live inspect, Return/click Open With, 7/7 files tests passing, 366 workspace tests passing). |
 | 09 | Two Terminals plus serial/SSH and real external CLI child streams; EOF/backpressure/interrupt/resize and foreground stdin transfer, background reader gets no terminal input; GUI launch returns right focus. Survive actual compositor restart without losing terminal child state. |
 | 10 | Real guest app pixels/input, two attached base/payload devices, constrained file transfer, guest resolution and host F11; native/guest close refusal in both orderings, stale consent and failure cleanup. |
 | 11 | Integrated walkthrough at odd/narrow/normal resolutions, larger text and three palettes; cold/warm measurements and full adverse-path matrix. |

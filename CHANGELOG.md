@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- Unified Desktop Phase 08 bounded shared preview and Files Quick Look (`.agents/261019-1310-unified-desktop/phase-08-quick-look.md`):
+  - `cells/apps/files`: Added shared Quick Look preview HUD modal overlay ($540 \times 400$ DIP) in `src/preview.rs`:
+    - Format detection and preview rendering across 4 format families: Image (`.png`, `.jpg`, `.ppm` with dimension reporting and raster viewport), Markdown (`.md` rendered statically without network or scripts), Source Code / Text (`.rs`, `.c`, `.toml`, `.txt` bounded line preview), and PDF (`.pdf` document rendering via isolated demand rendering), plus truthful binary/unsupported fallback.
+    - Monotonic generation tracking: `QuickLookState` tracks generational counter `gen_id` (`wrapping_add(1)`) on item selection updates to safely reject stale asynchronous decoding completions during rapid navigation.
+    - Keyboard and interaction controls: Space key to toggle/open Quick Look overlay outside text editing, Escape to dismiss, Up/Down arrow navigation updating preview live against selected item without opening new system tabs, and Return / "Open With" button to launch associated application session.
+    - Centered modal layout and hit-testing: $540 \times 400$ DIP modal with dim background overlay (`alpha = 80`), 36 DIP header bar with title and format badges, "Open With" action button, content viewport, and pointer click hit-testing (dismiss on backdrop click, invoke on button click, consume inside modal).
 - Unified Desktop Phase 07 standalone Files app and VFS operations (`.agents/261019-1310-unified-desktop/phase-07-files-vfs.md`):
   - `cells/apps/files`: Standalone Files manager application (`#![no_std]`, `#![forbid(unsafe_code)]`, 4 MiB custom heap):
     - Three view modes: List (default) with human-readable size formatting and type icons, Grid (card preview with $110 \times 110$ DIP cards), and Miller Columns (hierarchical panels with 200 DIP column widths and right-side inspection preview).

@@ -22,7 +22,7 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
 | 05 | [Six-zone snap and F11 fullscreen](phase-05-placement-fullscreen.md) | 03,04 | completed |
 | 06 | [Ocel native session and reader cutover](phase-06-ocel-cutover.md) | 02,03,04,05 | completed |
 | 07 | [Standalone Files and complete VFS operations](phase-07-files-vfs.md) | 01,02,03,04,05,06 | completed |
-| 08 | [Shared preview and Quick Look](phase-08-quick-look.md) | 02,06,07 | pending |
+| 08 | [Shared preview and Quick Look](phase-08-quick-look.md) | 02,06,07 | completed |
 | 09 | [GUI Terminal and shell-session streams](phase-09-terminal-streams.md) | 01,02,03,04,05 | pending |
 | 10 | [Real Tier3 single-app guest integration](phase-10-tier3-app-session.md) | 01,03,04,05,07 | pending |
 | 11 | [Complete image and user-path qualification](phase-11-qualification.md) | 02–10 | pending |
@@ -93,9 +93,20 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
   - Implemented safe mutation controller and conflict resolution (`model.rs`): two-phase non-conflicting name generation (`resolve_conflict_name` -> `(1)`), and explicit irreversible deletion disclosure.
   - Keyboard navigation and shortcut operations: arrow traversal, Return to enter directory/file, Backspace for parent directory, '1'/'2'/'3' view mode switching, clipboard copy/cut/paste, and Delete with disclosure notice.
   - Verified: 4/4 unit tests passing in `cells/apps/files`, 363 workspace tests passing across UI crates, clean bare-metal PIC cross-build (`x86_64-unknown-none`), and `scripts/cellos-sign --check` passing with zero unallowlisted unsafe code.
-- **Phase 08 — Shared preview and Quick Look**: **Pending (Unblocked)** — Phase 02 theme, Phase 06 shared reader appearances/primitives, and Phase 07 Files app shell/navigation dependencies satisfied; unblocked for Spacebar preview overlay and column preview pipeline integration.
-- **Phase 09 — GUI Terminal and shell-session streams**: **Pending (Unblocked)** — Phase 01 baseline, Phase 02 theme, Phase 03 native views/tabs, Phase 04 taskbar, and Phase 05 placement dependencies satisfied.
-- **Phase 10 — Real Tier3 single-app guest integration**: **Pending (Unblocked)** — Phase 01 baseline, Phase 03 native views/tabs, Phase 04 taskbar, Phase 05 placement, and Phase 07 Files app dependencies satisfied.
+- **Phase 08 — Shared preview and Quick Look**: **Completed** (2026-10-19).
+  - Implemented Quick Look HUD overlay ($540 \times 400$ DIP) in `cells/apps/files/src/preview.rs` (`QUICK_LOOK_W = 540`, `QUICK_LOOK_H = 400`), centered on active canvas and clamped to screen dimensions with `.saturating_sub()` to prevent integer underflow.
+  - Implemented 4 preview format families (`PreviewKind`):
+    - Image (`.png`, `.jpg`, `.ppm` with dimension reporting and target preview box).
+    - Markdown (`.md` with static headers and lines rendered without script or network execution).
+    - Code / Text (`.rs`, `.c`, `.toml`, `.txt` with bounded line text preview and syntax comments).
+    - PDF (`.pdf` with page point dimensions 595x842 standard A4 and isolated demand rendering metadata).
+    - Unsupported fallback with binary/unknown file description and "Open With" action hint; directories explicitly classified as Unsupported.
+  - Implemented monotonic `gen_id` generation tracking in `QuickLookState` (`gen_id.wrapping_add(1)` on inspection) to safely discard stale asynchronous decode results on rapid arrow traversal without blocking navigation.
+  - Implemented keyboard interaction: Space key toggles HUD overlay, Escape dismisses HUD and returns focus to file list, Up/Down arrow keys live-update preview for current selection, and Return closes HUD to launch associated app.
+  - Implemented mouse pointer hit-testing (`preview::handle_click`): clicks outside HUD dismiss overlay, clicks on "Open With" button launch associated application, and clicks inside HUD body are consumed to prevent background pass-through.
+  - Verified: 7/7 unit tests passing in `cells/apps/files`, 366 workspace UI tests passing across 6 UI crates, clean bare-metal PIC cross-build (`x86_64-unknown-none`) producing 1.2 MB position-independent ELF, and `scripts/cellos-sign --check` passing across 124 crates.
+- **Phase 09 — GUI Terminal and shell-session streams**: **Pending (Unblocked)** — Phase 01 baseline, Phase 02 theme, Phase 03 native views/tabs, Phase 04 taskbar, and Phase 05 placement dependencies satisfied; unblocked for GUI Terminal UI, stdio streaming, and shell session integration.
+- **Phase 10 — Real Tier3 single-app guest integration**: **Pending (Unblocked)** — Phase 01 baseline, Phase 03 native views/tabs, Phase 04 taskbar, Phase 05 placement, Phase 07 Files app, and Phase 08 preview dependencies satisfied; unblocked for PVH guest container, dual block devices (`/dev/vda`, `/dev/vdb`), VirtIO-GPU interactive scanout, and Chrome single-app guest lifecycle.
 - **Phase 11**: Pending.
 
 ## Execution policy
@@ -124,7 +135,6 @@ Four internal review lenses completed; [20 unique findings and corrections](revi
 Product choices are approved in conversation. Three read-only recon slices plus direct source checks ground prerequisites; artifact validation checks links, AC IDs and phase/index DAG consistency. Phase 01 execution is completed: baseline manifest frozen, D-UI ABI deltas specified, and real x86 integration test runner materialized and verified in `tests/integration/tests/desktop-x86.rs`. Exact ABI approval, uncertain storage/VMX provenance and unavailable platform evidence remain phase-specific gates, not reasons to reopen settled UI choices.
 
 ## Handoff
-Phases 01 through 07 are completed and fully verified.
-Phase 08 (Shared preview and Quick Look) is now fully unblocked for implementation, with all prerequisite theme, Ocel reader components, and Files view navigation in place.
-Phase 09 (GUI Terminal and shell-session streams) remains unblocked for independent terminal/stream work.
-Phase 10 (Real Tier3 single-app guest integration) is now fully unblocked, with prerequisite baseline, native views/tabs, taskbar, six-zone snap, and Files app dependencies satisfied.
+Phases 01 through 08 are completed and fully verified.
+Phase 09 (GUI Terminal and shell-session streams) is fully unblocked and ready for execution (GUI Terminal UI in `cells/apps/terminal`, stdio pipe streams, single reader lease, and shell executor refactoring).
+Phase 10 (Real Tier3 single-app guest integration) is fully unblocked and ready for execution (PVH guest container, dual block devices `/dev/vda` and `/dev/vdb`, VirtIO-GPU interactive scanout, and single-app guest lifecycle).

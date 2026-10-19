@@ -15,8 +15,8 @@ use alloc::vec::Vec;
 
 mod draw;
 mod model;
+mod preview;
 mod views;
-
 use api::display::PixelFormat;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
@@ -66,6 +66,7 @@ pub struct FilesApp {
     pub status_message: String,
     pub width: u32,
     pub height: u32,
+    pub quick_look: preview::QuickLookState,
 }
 
 impl FilesApp {
@@ -80,6 +81,7 @@ impl FilesApp {
             status_message: format!("Ready. {} items", 0),
             width,
             height,
+            quick_look: preview::QuickLookState::new(),
         };
         app.load_directory(initial_path);
         app
@@ -310,6 +312,7 @@ impl FilesApp {
         fill_rect(surf, 0, status_y, sw, STATUS_HEIGHT, Color::rgb(240, 242, 246));
         fill_rect(surf, 0, status_y, sw, 1, border);
         draw_label(surf, fonts, 14, status_y + 2, sw.saturating_sub(28), 20, &self.status_message, FontFace::UiRegular, 13.0, Color::rgb(100, 105, 120));
+        preview::render(surf, fonts, &self.quick_look, sw, sh);
     }
 }
 
@@ -357,19 +360,34 @@ fn cell_main() {
                 }
                 InputEvent::Key(ke) if ke.state == KeyState::Pressed => {
                     match ke.keysym {
+                        KeySym::Escape => {
+                            if app.quick_look.is_open {
+                                app.quick_look.close();
+                                need_render = true;
+                            }
+                        }
                         KeySym::Up => {
                             if app.selected_index > 0 {
                                 app.selected_index -= 1;
+                                if app.quick_look.is_open {
+                                    app.quick_look.inspect(&app.items[app.selected_index]);
+                                }
                                 need_render = true;
                             }
                         }
                         KeySym::Down => {
                             if !app.items.is_empty() && app.selected_index + 1 < app.items.len() {
                                 app.selected_index += 1;
+                                if app.quick_look.is_open {
+                                    app.quick_look.inspect(&app.items[app.selected_index]);
+                                }
                                 need_render = true;
                             }
                         }
                         KeySym::Return => {
+                            if app.quick_look.is_open {
+                                app.quick_look.close();
+                            }
                             let _ = app.open_selected();
                             let _ = surf.set_title(&format!("Files — {}", app.current_path));
                             need_render = true;
@@ -395,17 +413,35 @@ fn cell_main() {
                                     need_render = true;
                                 } else {
                                     match ch {
-                                        '1' => { app.switch_view_mode(ViewMode::List); need_render = true; }
-                                        '2' => { app.switch_view_mode(ViewMode::Grid); need_render = true; }
-                                        '3' => { app.switch_view_mode(ViewMode::Columns); need_render = true; }
+                                        ' ' => {
+                                            if app.quick_look.is_open {
+                                                app.quick_look.close();
+                                            } else if !app.items.is_empty() {
+                                                app.quick_look.inspect(&app.items[app.selected_index]);
+                                            }
+                                        }
+                                        '1' => { app.switch_view_mode(ViewMode::List); }
+                                        '2' => { app.switch_view_mode(ViewMode::Grid); }
+                                        '3' => { app.switch_view_mode(ViewMode::Columns); }
                                         _ => {}
                                     }
+                                    need_render = true;
                                 }
                             }
                         }
                     }
                 }
                 InputEvent::MouseButton { button: MouseButton::Left, state: KeyState::Pressed } => {
+                    // Check Quick Look modal click first
+                    if app.quick_look.is_open {
+                        if let Some(open_with) = preview::handle_click(&mut app.quick_look, cursor_x, cursor_y, app.width, app.height) {
+                            if open_with {
+                                let _ = app.open_selected();
+                            }
+                            need_render = true;
+                            continue;
+                        }
+                    }
                     // Check toolbar view mode buttons: [List] [Grid] [Cols]
                     let btn_y = 8;
                     let btn_h = 28;
@@ -522,5 +558,36 @@ mod tests {
         // Click on Columns item 0
         let col_clicked = views::columns::handle_click(app.items.len(), content_x, content_y, content_x + 30, content_y + 10);
         assert_eq!(col_clicked, Some(0));
+    }
+
+    #[test]
+    fn test_quick_look_space_toggle() {
+        let mut app = FilesApp::new("/data", 800, 600);
+        assert!(!app.quick_look.is_open);
+
+        // Inspect selected item (e.g. index 1 notes.md)
+        app.selected_index = 1;
+        app.quick_look.inspect(&app.items[app.selected_index]);
+        assert!(app.quick_look.is_open);
+        assert_eq!(app.quick_look.kind, preview::PreviewKind::Markdown);
+
+        // Close Quick Look
+        app.quick_look.close();
+        assert!(!app.quick_look.is_open);
+        // Open Quick Look and test mouse click outside
+        app.quick_look.inspect(&app.items[1]);
+        assert!(app.quick_look.is_open);
+        // Click outside (e.g. at 10, 10)
+        let click_out = preview::handle_click(&mut app.quick_look, 10, 10, 800, 600);
+        assert_eq!(click_out, Some(false));
+        assert!(!app.quick_look.is_open);
+
+        // Open Quick Look and test Open With button click
+        app.quick_look.inspect(&app.items[1]);
+        assert!(app.quick_look.is_open);
+        // Open With button is at ql_x + ql_w - 102 = 130 + 540 - 102 = 568, y = 100 + 6 = 106
+        let click_btn = preview::handle_click(&mut app.quick_look, 580, 115, 800, 600);
+        assert_eq!(click_btn, Some(true));
+        assert!(!app.quick_look.is_open);
     }
 }

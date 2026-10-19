@@ -4,6 +4,16 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-19 — Unified Desktop Phase 08 Bounded shared preview and Files Quick Look.**
+  Completed Phase 08 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+  and implementation plan `.agents/261019-1310-unified-desktop/phase-08-quick-look.md`:
+  - `cells/apps/files`: Added shared Quick Look preview HUD modal overlay ($540 \times 400$ DIP) in `src/preview.rs`:
+    - Four preview format families: Image (`.png`, `.jpg`, `.ppm` displaying dimensions and preview viewport), Markdown (`.md` static rendering without scripts or network requests), Source Code / Text (`.rs`, `.c`, `.toml`, `.txt` bounded syntax/text lines), and PDF (`.pdf` page viewport via isolated demand rendering), with truthful metadata and unsupported binary disclosure.
+    - Monotonic generation tracking: `QuickLookState` increments `gen_id` on inspection (`wrapping_add(1)`), discarding stale asynchronous decode responses on rapid item cursor traversal.
+    - Keyboard interaction: Spacebar toggles Quick Look overlay, Escape dismisses, Up/Down arrow keys live-inspect newly selected directory items without opening new system tabs, and Return closes overlay and executes the item.
+    - Mouse pointer hit-testing and header controls: Click on "Open With" header button (`btn_x = ql_x + ql_w - 102`, $Y \in [ql\_y+6, ql\_y+30]$) launches associated application session; clicks outside modal bounds dismiss Quick Look; clicks inside HUD body are consumed.
+    - Visual design: 36 DIP header bar with title and format badge (`draw_label`), dim background backdrop (`Color::rgb(0, 0, 0).with_alpha(80)`), white modal canvas with accent blue border (`Color::rgb(35, 90, 215)`), and footer shortcuts guide ($Y = ql\_y + ql\_h - 28$).
+  - Verified: 7 unit tests pass in `cells/apps/files` (`cargo test -p files`); 366 workspace tests pass (`cargo test -p files -p service-compositor -p ocel -p desktop -p viui -p api`); bare-metal PIC cross-build compiles cleanly (`RUSTFLAGS="-C relocation-model=pic" cargo build --release -p files --target x86_64-unknown-none -Z build-std=core,alloc`); signed F1/F5 policy checks pass with `#![forbid(unsafe_code)]`.
 - **2026-10-19 — Unified Desktop Phase 07 Standalone Files manager and VFS navigation.**
   Completed Phase 07 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
   and implementation plan `.agents/261019-1310-unified-desktop/phase-07-files-vfs.md`:

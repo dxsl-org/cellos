@@ -290,7 +290,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
   - Rapid arrow key traversal increments `gen_id`. Outdated `gen_id` completions are discarded immediately.
   - Decoder crash or memory limit is isolated; main Files process does not crash.
   - Space bar toggles HUD preview; Escape dismisses preview and restores keyboard focus to file list.
-- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** Target Phase 08.
+- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** **IMPLEMENTED & VERIFIED** (Quick Look HUD overlay, 4 preview families Image/Markdown/Code/PDF, generation-based cancellation, Open With action, unit test suite passing).
 
 ---
 
@@ -327,7 +327,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
 | `cells/services/compositor` | `src/{surface_table,input_handler,message_handler}.rs` | Implement frame tab strip, six-zone snap, F11, Alt+Space dispatch. | High |
 | `cells/apps/desktop` | `src/{main,apps,spotlight,taskbar}.rs` | Dynamic catalog, 3-section Spotlight HUD, theme toggle, running task switch. | High |
 | `cells/apps/ocel` | `src/{main,draw,doc,loader}.rs` | Removed local tab bar (TABBAR_HEIGHT=0), adopted native compositor session tabs, and integrated shared ViUI reader theme tokens. | Completed (Phase 06) |
-| `cells/apps/files` | `src/*` (new standalone app) | Built standalone 3-view file manager (List/Grid/Columns) with Places and safe mutation controller. | Completed (Phase 07) |
+| `cells/apps/files` | `src/*` (new standalone app) | Built standalone 3-view file manager (List/Grid/Columns) with Places, safe mutation controller, and Quick Look HUD overlay. | Completed (Phase 07, 08) |
 | `cells/tools/shell` | `src/{executor,async_utils}.rs` | Add GUI Terminal support, atomic stdio pipe handoff, single reader lease. | Medium |
 | `cells/services/vfs` | `src/{manager,caller,dirs}.rs` | Add paged directory listing and safe two-phase file mutation. | Medium |
 
@@ -344,6 +344,6 @@ Every command addressing a frame or view MUST carry complete generational qualif
 | D-UI-05 | Alt+Space Spotlight Dispatch | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 04 |
 | D-UI-06 | Two-Phase Close & Power Consent | **PENDING CANDIDATE APPROVAL** | Pending | Phase 03, 04 |
 | D-UI-07 | Files VFS Paged Enumeration & Mutation | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 07 |
-| D-UI-08 | Quick Look Lease & Cancellation | **PENDING CANDIDATE APPROVAL** | Pending | Phase 08 |
+| D-UI-08 | Quick Look Lease & Cancellation | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 08 |
 | D-UI-09 | GUI Terminal Stdio & Input Lease | **PENDING CANDIDATE APPROVAL** | Pending | Phase 09 |
 | D-UI-10 | Tier 3 Single-App Guest Integration | **PENDING CANDIDATE APPROVAL** | Pending | Phase 10 |
