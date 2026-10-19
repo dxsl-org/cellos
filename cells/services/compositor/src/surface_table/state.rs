@@ -88,7 +88,8 @@ impl SurfaceState {
 
     /// True only for a visible interactive surface.
     pub fn accepts_input(&self) -> bool {
-        self.role == SurfaceRole::Interactive && self.is_visible_for_paint()
+        (self.role == SurfaceRole::Interactive || self.role == SurfaceRole::Panel)
+            && self.is_visible_for_paint()
     }
 
     /// Background surfaces are deliberately outside the window-manager state machine.

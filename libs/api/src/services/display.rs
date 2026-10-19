@@ -57,6 +57,13 @@ impl Rect {
             h: (y2 - y) as u32,
         }
     }
+    /// Return true if `(px, py)` is inside this rect.
+    pub fn contains_point(&self, px: i32, py: i32) -> bool {
+        px >= self.x
+            && px < self.x.saturating_add(self.w as i32)
+            && py >= self.y
+            && py < self.y.saturating_add(self.h as i32)
+    }
 }
 
 // ─── Pixel format ─────────────────────────────────────────────────────────────
@@ -97,12 +104,14 @@ impl PixelFormat {
 pub enum SurfaceRole {
     Interactive = 0,
     Background = 1,
+    Panel = 2,
 }
 
 impl SurfaceRole {
     pub const fn from_u8(value: u8) -> Self {
         match value {
             1 => Self::Background,
+            2 => Self::Panel,
             _ => Self::Interactive,
         }
     }

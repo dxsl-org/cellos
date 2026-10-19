@@ -66,7 +66,7 @@ fn cell_main() {
     // 3. Create Taskbar Surface
     let tb_h = taskbar::TASKBAR_HEIGHT;
     let tb_w = screen_w;
-    let mut tb_surf = ViSurface::create(comp_tid, tb_w, tb_h, PixelFormat::Bgra8888)
+    let mut tb_surf = ViSurface::create_panel(comp_tid, tb_w, tb_h, PixelFormat::Bgra8888)
         .expect("create taskbar surface");
     let _ = tb_surf.set_title("CellOS Taskbar");
     let tb_y = screen_h as i32 - tb_h as i32;
@@ -75,7 +75,7 @@ fn cell_main() {
     // 4. Create Spotlight Search Surface (Centered)
     let sp_w = spotlight::SPOTLIGHT_WIDTH;
     let sp_h = spotlight::SPOTLIGHT_HEIGHT;
-    let mut sp_surf = ViSurface::create(comp_tid, sp_w, sp_h, PixelFormat::Bgra8888)
+    let mut sp_surf = ViSurface::create_panel(comp_tid, sp_w, sp_h, PixelFormat::Bgra8888)
         .expect("create spotlight surface");
     let _ = sp_surf.set_title("Spotlight Search");
     let sp_x = (screen_w as i32 - sp_w as i32) / 2;
@@ -89,10 +89,8 @@ fn cell_main() {
     let mut sp_state = SpotlightState::new();
     let mut fonts = TextFonts::new();
 
-    // 6. Request Input Focus
-    while !ostd::input::request_focus() {
-        sys_yield();
-    }
+    // Focus is initially left to the shell so terminal / serial prompt works at boot.
+    // Spotlight requests focus when opened and releases it when closed.
 
     // 7. Initial Paint
     tb_state.update_daemons();
@@ -219,6 +217,7 @@ fn cell_main() {
                                         "[desktop] Taskbar: Opening Spotlight Search",
                                     );
                                     sp_state.open();
+                                    let _ = ostd::input::request_focus();
                                     sp_surf.move_to(sp_x, sp_y);
                                     sp_surf.raise();
                                     need_sp_render = true;
@@ -253,6 +252,7 @@ fn cell_main() {
                             need_tb_render = true;
                         } else {
                             sp_state.open();
+                            let _ = ostd::input::request_focus();
                             sp_surf.move_to(sp_x, sp_y);
                             sp_surf.raise();
                             need_sp_render = true;

@@ -148,12 +148,17 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         // Known boot cells that need no authority at all: pure IPC clients. They
         // are listed rather than left to the unknown-path fallback so a denial
         // report can distinguish "needs nothing" from "row missing".
-        "/bin/ocel" | "/bin/ocel-js" | "/bin/ocel-quickjs" | "/bin/ocel-pdf" => CapSet::EMPTY,
+        "/bin/ocel" | "/bin/ocel-js" | "/bin/ocel-quickjs" | "/bin/ocel-pdf" | "/bin/chrome" | "/bin/vm-runner" | "/bin/files" | "/bin/terminal" => CapSet::EMPTY,
         "/bin/config" | "/bin/compositor" | "/bin/fb-console" | "/bin/kms" | "/bin/silo-test"
         | "/bin/vfs-test" | "/bin/srv-test" | "/bin/std-smoke" | "/bin/desktop" | "/bin/sshd"
         | "/bin/tier2-exploit" | "/bin/tier2-smoke" | "/bin/cpp-smoke"
         | "/bin/tier2-rpc-provider" | "/bin/tier2-rpc-driver" => CapSet::EMPTY,
-        _ => return None,
+        _ => {
+            if path.starts_with("/apps/") || path.starts_with("/data/bin/") || path.starts_with("/home/") {
+                return Some(CapSet::EMPTY);
+            }
+            return None;
+        }
     };
     Some(caps)
 }

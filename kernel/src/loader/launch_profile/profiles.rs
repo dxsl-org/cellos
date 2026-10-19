@@ -20,7 +20,7 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
         | "/bin/kms" | "/bin/net" | "/bin/net-broker" | "/bin/nvme" | "/bin/serial" | "/bin/shell"
         | "/bin/silo" | "/bin/ai-test" | "/bin/silo-test" | "/bin/srv-test" | "/bin/supervisor"
         | "/bin/vfs" | "/bin/vfs-test" | "/bin/virtio-gpu" | "/bin/virtio-net"
-        | "/bin/std-smoke" | "/bin/desktop" | "/bin/sshd"
+        | "/bin/std-smoke" | "/bin/desktop" | "/bin/sshd" | "/bin/chrome" | "/bin/vm-runner" | "/bin/files" | "/bin/terminal"
         // Ocel's demand-only Tier 2 JavaScript engines. Init activates the exact
         // fixed target on a document lease, not through the boot service plan.
         // The empty boot ceiling grants no engine authority; domain admission

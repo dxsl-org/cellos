@@ -17,13 +17,25 @@ pub(super) struct PointerTarget {
 pub(super) fn at(x: i32, y: i32, table: &SurfaceTable, z_order: &ZOrder) -> Option<PointerTarget> {
     z_order.iter_top_to_bottom().find_map(|cap| {
         let surface = table.get(cap).filter(|surface| surface.accepts_input())?;
-        window_decoration::hit_test(surface.screen_rect(), x, y).map(|hit| PointerTarget {
-            cap,
-            owner: surface.owner,
-            origin_x: surface.x,
-            origin_y: surface.y,
-            hit,
-        })
+        if surface.is_window_managed() {
+            window_decoration::hit_test(surface.screen_rect(), x, y).map(|hit| PointerTarget {
+                cap,
+                owner: surface.owner,
+                origin_x: surface.x,
+                origin_y: surface.y,
+                hit,
+            })
+        } else if surface.screen_rect().contains_point(x, y) {
+            Some(PointerTarget {
+                cap,
+                owner: surface.owner,
+                origin_x: surface.x,
+                origin_y: surface.y,
+                hit: Hit::Content,
+            })
+        } else {
+            None
+        }
     })
 }
 

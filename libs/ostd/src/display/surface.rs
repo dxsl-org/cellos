@@ -52,6 +52,15 @@ impl ViSurface {
     ) -> ViResult<Self> {
         Self::create_with_role(comp_tid, width, height, fmt, SurfaceRole::Background)
     }
+    /// Create an undecorated panel/dock surface for `comp_tid` that receives input.
+    pub fn create_panel(
+        comp_tid: usize,
+        width: u32,
+        height: u32,
+        fmt: PixelFormat,
+    ) -> ViResult<Self> {
+        Self::create_with_role(comp_tid, width, height, fmt, SurfaceRole::Panel)
+    }
 
     fn create_with_role(
         comp_tid: usize,

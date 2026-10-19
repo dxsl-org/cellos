@@ -2,13 +2,15 @@ use api::display::Rect;
 
 use super::{clip_to_screen, control_rect, end, Control, TITLE};
 
-const FRAME_COLOR: [u8; 4] = [0x3b, 0x34, 0x2d, 0xff];
-const TITLE_INACTIVE: [u8; 4] = [0x56, 0x4d, 0x42, 0xff];
-const TITLE_ACTIVE: [u8; 4] = [0x83, 0x65, 0x31, 0xff];
-const CLOSE: [u8; 4] = [0x45, 0x45, 0xcb, 0xff];
-const MAXIMIZE: [u8; 4] = [0x53, 0xa4, 0x36, 0xff];
-const MINIMIZE: [u8; 4] = [0x53, 0xa4, 0xd6, 0xff];
-const SYMBOL: [u8; 4] = [0xf0, 0xf0, 0xf0, 0xff];
+const FRAME_COLOR: [u8; 4] = [0x20, 0x20, 0x24, 0xff];
+const TAB_ACTIVE: [u8; 4] = [0x20, 0xd2, 0xfd, 0xff]; // Haiku Golden Yellow (BGRA: R=253, G=210, B=32)
+const TAB_ACTIVE_HL: [u8; 4] = [0x60, 0xe8, 0xff, 0xff]; // Lighter gold highlight
+const TAB_INACTIVE: [u8; 4] = [0xc4, 0xbf, 0xb8, 0xff]; // Haiku Inactive Muted Slate
+const TAB_INACTIVE_HL: [u8; 4] = [0xdc, 0xd8, 0xd4, 0xff];
+const BTN_BORDER: [u8; 4] = [0x24, 0x20, 0x1c, 0xff];
+const BTN_ACTIVE_BG: [u8; 4] = [0x18, 0xb8, 0xe0, 0xff];
+const BTN_INACTIVE_BG: [u8; 4] = [0xa8, 0xa4, 0xa0, 0xff];
+const GLYPH: [u8; 4] = [0x20, 0x20, 0x20, 0xff];
 
 pub(super) fn paint(
     pixels: &mut [u8],
@@ -21,19 +23,11 @@ pub(super) fn paint(
     let outer = super::bounds(content);
     let content_right = end(content.x, content.w);
     let content_bottom = end(content.y, content.h);
-    paint_rect(
-        pixels,
-        width,
-        height,
-        Rect {
-            x: outer.x,
-            y: outer.y,
-            w: outer.w,
-            h: content.y.saturating_sub(outer.y) as u32,
-        },
-        dirty,
-        FRAME_COLOR,
-    );
+    let tab = super::tab_rect(content);
+    let tab_end = end(tab.x, tab.w);
+    let frame_right = end(outer.x, outer.w);
+
+    // 1. Left border
     paint_rect(
         pixels,
         width,
@@ -47,6 +41,8 @@ pub(super) fn paint(
         dirty,
         FRAME_COLOR,
     );
+
+    // 2. Right border
     paint_rect(
         pixels,
         width,
@@ -54,12 +50,14 @@ pub(super) fn paint(
         Rect {
             x: content_right,
             y: content.y,
-            w: end(outer.x, outer.w).saturating_sub(content_right) as u32,
+            w: frame_right.saturating_sub(content_right) as u32,
             h: content.h,
         },
         dirty,
         FRAME_COLOR,
     );
+
+    // 3. Bottom border
     paint_rect(
         pixels,
         width,
@@ -73,38 +71,90 @@ pub(super) fn paint(
         dirty,
         FRAME_COLOR,
     );
-    let title = Rect {
-        x: outer.x,
-        y: content.y.saturating_sub(TITLE),
-        w: outer.w,
-        h: TITLE as u32,
-    };
-    paint_rect(
-        pixels,
-        width,
-        height,
-        title,
-        dirty,
-        if active { TITLE_ACTIVE } else { TITLE_INACTIVE },
-    );
-    for control in [Control::Close, Control::Maximize, Control::Minimize] {
-        let rect = control_rect(content, control);
+
+    // 4. Top border to the right of the tab (thin frame border only; space above is empty)
+    if frame_right > tab_end {
         paint_rect(
             pixels,
             width,
             height,
-            rect,
-            dirty,
-            match control {
-                Control::Close => CLOSE,
-                Control::Maximize => MAXIMIZE,
-                Control::Minimize => MINIMIZE,
+            Rect {
+                x: tab_end,
+                y: content.y.saturating_sub(super::FRAME),
+                w: (frame_right - tab_end) as u32,
+                h: super::FRAME as u32,
             },
+            dirty,
+            FRAME_COLOR,
         );
+    }
+
+    // 5. Paint Haiku Tab sitting on top of the window frame
+    let tab_bg = if active { TAB_ACTIVE } else { TAB_INACTIVE };
+    let tab_hl = if active { TAB_ACTIVE_HL } else { TAB_INACTIVE_HL };
+    paint_rect(pixels, width, height, tab, dirty, tab_bg);
+
+    // Tab top highlight line (1px)
+    paint_rect(
+        pixels,
+        width,
+        height,
+        Rect { x: tab.x, y: tab.y, w: tab.w, h: 1 },
+        dirty,
+        tab_hl,
+    );
+    // Tab left border (1px)
+    paint_rect(
+        pixels,
+        width,
+        height,
+        Rect { x: tab.x, y: tab.y, w: 1, h: tab.h },
+        dirty,
+        FRAME_COLOR,
+    );
+    // Tab right border (1px)
+    paint_rect(
+        pixels,
+        width,
+        height,
+        Rect { x: tab_end.saturating_sub(1), y: tab.y, w: 1, h: tab.h },
+        dirty,
+        FRAME_COLOR,
+    );
+    // Tab top line (1px)
+    paint_rect(
+        pixels,
+        width,
+        height,
+        Rect { x: tab.x, y: tab.y, w: tab.w, h: 1 },
+        dirty,
+        FRAME_COLOR,
+    );
+
+    // 6. Paint BeOS/Haiku close box and zoom box on tab
+    for control in [Control::Close, Control::Maximize] {
+        let rect = control_rect(content, control);
+        // Button border
+        paint_rect(pixels, width, height, rect, dirty, BTN_BORDER);
+        // Button interior
+        if rect.w > 2 && rect.h > 2 {
+            paint_rect(
+                pixels,
+                width,
+                height,
+                Rect {
+                    x: rect.x + 1,
+                    y: rect.y + 1,
+                    w: rect.w - 2,
+                    h: rect.h - 2,
+                },
+                dirty,
+                if active { BTN_ACTIVE_BG } else { BTN_INACTIVE_BG },
+            );
+        }
         paint_symbol(pixels, width, height, rect, dirty, control);
     }
 }
-
 fn paint_symbol(
     pixels: &mut [u8],
     width: u32,
@@ -115,27 +165,54 @@ fn paint_symbol(
 ) {
     let mid_x = rect.x.saturating_add(super::CONTROL / 2);
     let mid_y = rect.y.saturating_add(super::CONTROL / 2);
-    let symbol = match control {
-        Control::Close => Rect {
-            x: mid_x.saturating_sub(4),
-            y: mid_y,
-            w: 8,
-            h: 1,
-        },
-        Control::Maximize => Rect {
-            x: mid_x.saturating_sub(4),
-            y: mid_y.saturating_sub(4),
-            w: 8,
-            h: 1,
-        },
-        Control::Minimize => Rect {
-            x: mid_x.saturating_sub(4),
-            y: mid_y.saturating_add(3),
-            w: 8,
-            h: 1,
-        },
-    };
-    paint_rect(pixels, width, height, symbol, dirty, SYMBOL);
+    match control {
+        Control::Close => {
+            // BeOS classic inner square
+            paint_rect(
+                pixels,
+                width,
+                height,
+                Rect {
+                    x: mid_x - 3,
+                    y: mid_y - 3,
+                    w: 6,
+                    h: 6,
+                },
+                dirty,
+                GLYPH,
+            );
+        }
+        Control::Maximize => {
+            // BeOS zoom glyph (two horizontal bars)
+            paint_rect(
+                pixels,
+                width,
+                height,
+                Rect {
+                    x: mid_x - 3,
+                    y: mid_y - 3,
+                    w: 6,
+                    h: 2,
+                },
+                dirty,
+                GLYPH,
+            );
+            paint_rect(
+                pixels,
+                width,
+                height,
+                Rect {
+                    x: mid_x - 3,
+                    y: mid_y + 1,
+                    w: 6,
+                    h: 2,
+                },
+                dirty,
+                GLYPH,
+            );
+        }
+        Control::Minimize => {}
+    }
 }
 
 fn paint_rect(pixels: &mut [u8], width: u32, height: u32, rect: Rect, dirty: Rect, color: [u8; 4]) {
@@ -180,7 +257,7 @@ mod tests {
         assert_eq!(intersect(title, cursor_dirty), None);
 
         let mut pixels = alloc::vec![0u8; 1280 * 800 * 4];
-        paint_rect(&mut pixels, 1280, 800, title, cursor_dirty, TITLE_ACTIVE);
+        paint_rect(&mut pixels, 1280, 800, title, cursor_dirty, TAB_ACTIVE);
         assert!(pixels.iter().all(|&byte| byte == 0));
     }
 

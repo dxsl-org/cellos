@@ -49,7 +49,7 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/desktop"
         | "/bin/ocel"
         | "/bin/ocel-js"
-        | "/bin/ocel-quickjs" | "/bin/ocel-pdf" => CapSet::EMPTY,
+        | "/bin/ocel-quickjs" | "/bin/ocel-pdf" | "/bin/chrome" | "/bin/vm-runner" | "/bin/files" | "/bin/terminal" => CapSet::EMPTY,
         // These clients and servers use typed IPC to the net service; they do
         // not hold NetworkCap themselves. Keeping their launch ceiling empty
         // also lets exact shell SpawnFromElf edges remain capability-free.
@@ -96,7 +96,15 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
             mmio_devices: gpio_mmio_capset().mmio_devices,
             ..CapSet::EMPTY
         },
-        _ => return None,
+        _ => {
+            // Option A: Path-based User App Sandbox
+            // Any user application in /apps/, /data/bin/, or /home/ is automatically
+            // authorized with CapSet::EMPTY (pure IPC client, zero ambient hardware authority).
+            if target.starts_with("/apps/") || target.starts_with("/data/bin/") || target.starts_with("/home/") {
+                return Some(CapSet::EMPTY);
+            }
+            return None;
+        }
     };
     Some(caps)
 }

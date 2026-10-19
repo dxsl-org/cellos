@@ -4,10 +4,26 @@ use api::display::Rect;
 
 mod raster;
 
-pub const FRAME: i32 = 4;
-pub const TITLE: i32 = 20;
-pub(super) const CONTROL: i32 = 16;
+pub const FRAME: i32 = 3;
+pub const TITLE: i32 = 24;
+pub(super) const CONTROL: i32 = 14;
 pub(super) const INSET: i32 = 2;
+
+pub fn tab_width(content_w: u32) -> u32 {
+    let half = content_w / 2;
+    let clamped = if half < 160 { 160 } else if half > 240 { 240 } else { half };
+    clamped.min(content_w.saturating_add((FRAME * 2) as u32))
+}
+
+pub fn tab_rect(content: Rect) -> Rect {
+    let tab_w = tab_width(content.w);
+    Rect {
+        x: content.x.saturating_sub(FRAME),
+        y: content.y.saturating_sub(TITLE.saturating_add(FRAME)),
+        w: tab_w,
+        h: (TITLE + FRAME) as u32,
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Control {
@@ -38,9 +54,7 @@ pub enum Hit {
 
 pub fn bounds(content: Rect) -> Rect {
     let right = end(content.x, content.w).saturating_add(FRAME);
-    let frame_left = content.x.saturating_sub(FRAME);
-    let control_left = right.saturating_sub(INSET + CONTROL * 3);
-    let x = frame_left.min(control_left);
+    let x = content.x.saturating_sub(FRAME);
     Rect {
         x,
         y: content.y.saturating_sub(FRAME.saturating_add(TITLE)),
@@ -67,15 +81,35 @@ pub fn hit_test(content: Rect, x: i32, y: i32) -> Option<Hit> {
     if !contains(outer, x, y) {
         return None;
     }
+
+    let tab = tab_rect(content);
+
+    // Check controls (Close on left of tab, Maximize/Zoom on right of tab)
     for control in [Control::Close, Control::Maximize, Control::Minimize] {
         if contains(control_rect(content, control), x, y) {
             return Some(Hit::Control(control));
         }
     }
+
+    // Check if clicked inside the Haiku tab
+    if contains(tab, x, y) {
+        return Some(Hit::Title);
+    }
+
+    let tab_end = end(tab.x, tab.w);
+    let content_right = end(content.x, content.w);
+    let content_bottom = end(content.y, content.h);
+
+    // BeOS / Haiku feature: open space to the right of the tab is transparent!
+    if y < content.y.saturating_sub(FRAME) && x >= tab_end {
+        return None;
+    }
+
     let left = x < content.x;
-    let right = x >= end(content.x, content.w);
-    let top = y < content.y.saturating_sub(TITLE);
-    let bottom = y >= end(content.y, content.h);
+    let right = x >= content_right;
+    let top = y < content.y;
+    let bottom = y >= content_bottom;
+
     match (top, bottom, left, right) {
         (true, _, true, _) => Some(Hit::Resize(ResizeEdge::NorthWest)),
         (true, _, _, true) => Some(Hit::Resize(ResizeEdge::NorthEast)),
@@ -85,7 +119,6 @@ pub fn hit_test(content: Rect, x: i32, y: i32) -> Option<Hit> {
         (_, true, _, _) => Some(Hit::Resize(ResizeEdge::South)),
         (_, _, true, _) => Some(Hit::Resize(ResizeEdge::West)),
         (_, _, _, true) => Some(Hit::Resize(ResizeEdge::East)),
-        _ if y < content.y => Some(Hit::Title),
         _ => Some(Hit::Content),
     }
 }
@@ -95,19 +128,31 @@ pub fn paint(pixels: &mut [u8], width: u32, height: u32, content: Rect, dirty: R
 }
 
 pub(super) fn control_rect(content: Rect, control: Control) -> Rect {
-    let right = end(content.x, content.w)
-        .saturating_add(FRAME)
-        .saturating_sub(INSET);
-    let index = match control {
-        Control::Close => 0,
-        Control::Maximize => 1,
-        Control::Minimize => 2,
-    };
-    Rect {
-        x: right.saturating_sub(CONTROL * (index + 1)),
-        y: content.y.saturating_sub(TITLE).saturating_add(INSET),
-        w: CONTROL as u32,
-        h: CONTROL as u32,
+    let tab = tab_rect(content);
+    let tab_end = end(tab.x, tab.w);
+    let mid_y = tab.y.saturating_add((tab.h as i32 - CONTROL) / 2);
+
+    match control {
+        // Close box on the left side of the tab
+        Control::Close => Rect {
+            x: tab.x.saturating_add(6),
+            y: mid_y,
+            w: CONTROL as u32,
+            h: CONTROL as u32,
+        },
+        // Zoom/Maximize button on the right side of the tab
+        Control::Maximize => Rect {
+            x: tab_end.saturating_sub(CONTROL + 6),
+            y: mid_y,
+            w: CONTROL as u32,
+            h: CONTROL as u32,
+        },
+        Control::Minimize => Rect {
+            x: tab_end.saturating_sub(CONTROL * 2 + 10),
+            y: mid_y,
+            w: CONTROL as u32,
+            h: CONTROL as u32,
+        },
     }
 }
 
