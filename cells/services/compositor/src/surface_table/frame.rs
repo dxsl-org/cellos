@@ -4,7 +4,8 @@ extern crate alloc;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use api::display::{
-    CreateViewRequest, SurfaceRole, ViewOpResponse, ViewOpResult, ViewRef,
+    CreateViewRequest, FramePlacement, Rect, SnapZone, SurfaceRole, ViewOpResponse, ViewOpResult,
+    ViewRef,
 };
 
 pub const MAX_VIEWS_PER_FRAME: usize = 32;
@@ -22,6 +23,9 @@ pub struct Frame {
     pub selected_view: Option<ViewRef>,
     pub min_w: u32,
     pub min_h: u32,
+    pub placement: FramePlacement,
+    pub saved_floating_rect: Option<Rect>,
+    pub saved_placement: Option<FramePlacement>,
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +95,9 @@ impl FrameRegistry {
                 selected_view: Some(view_ref),
                 min_w: req.min_w,
                 min_h: req.min_h,
+                placement: FramePlacement::Floating,
+                saved_floating_rect: None,
+                saved_placement: None,
             };
             self.frames.insert(fid, frame);
             fid
@@ -382,6 +389,9 @@ impl FrameRegistry {
             selected_view: Some(view_ref),
             min_w,
             min_h,
+            placement: FramePlacement::Floating,
+            saved_floating_rect: None,
+            saved_placement: None,
         };
         self.frames.insert(new_fid, new_frame);
 
@@ -419,6 +429,112 @@ impl FrameRegistry {
         self.frames.get(&frame_id).map(|f| (f.x, f.y))
     }
 
+    pub fn snap_frame(
+        &mut self,
+        frame_id: u32,
+        frame_gen: u32,
+        zone: SnapZone,
+        work_area: Rect,
+    ) -> Result<(ViewOpResponse, Rect), ViewOpResult> {
+        let frame = self.frames.get_mut(&frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+        if frame.generation != frame_gen {
+            return Err(ViewOpResult::StaleGeneration);
+        }
+
+        let target_rect = calculate_snap_rect(zone, work_area);
+        if target_rect.w < frame.min_w || target_rect.h < frame.min_h {
+            return Err(ViewOpResult::Refused);
+        }
+
+        if frame.placement == FramePlacement::Floating {
+            frame.saved_floating_rect = Some(Rect {
+                x: frame.x,
+                y: frame.y,
+                w: frame.w,
+                h: frame.h,
+            });
+        }
+
+        frame.x = target_rect.x;
+        frame.y = target_rect.y;
+        frame.w = target_rect.w;
+        frame.h = target_rect.h;
+        frame.placement = FramePlacement::Snapped(zone);
+        frame.generation = frame.generation.wrapping_add(1);
+
+        Ok((
+            ViewOpResponse {
+                opcode: api::display::compositor_ops::SNAP_FRAME,
+                result: ViewOpResult::Success,
+                _pad: [0; 2],
+                frame_id,
+                frame_generation: frame.generation,
+                view_id: frame.selected_view.map_or(0, |v| v.view_id),
+                view_incarnation: frame.selected_view.map_or(0, |v| v.incarnation),
+            },
+            target_rect,
+        ))
+    }
+
+    pub fn toggle_fullscreen(
+        &mut self,
+        frame_id: u32,
+        frame_gen: u32,
+        enable: bool,
+        screen_w: u32,
+        screen_h: u32,
+    ) -> Result<(ViewOpResponse, Rect), ViewOpResult> {
+        let frame = self.frames.get_mut(&frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+        if frame.generation != frame_gen {
+            return Err(ViewOpResult::StaleGeneration);
+        }
+
+        let result_rect = if enable {
+            if frame.placement != FramePlacement::Fullscreen {
+                frame.saved_placement = Some(frame.placement);
+                frame.saved_floating_rect = Some(Rect {
+                    x: frame.x,
+                    y: frame.y,
+                    w: frame.w,
+                    h: frame.h,
+                });
+            }
+            frame.y = 0;
+            frame.w = screen_w;
+            frame.h = screen_h;
+            frame.placement = FramePlacement::Fullscreen;
+            frame.generation = frame.generation.wrapping_add(1);
+            Rect { x: 0, y: 0, w: screen_w, h: screen_h }
+        } else {
+            let restored = frame.saved_floating_rect.take().unwrap_or(Rect {
+                x: 100,
+                y: 100,
+                w: 800.min(screen_w),
+                h: 600.min(screen_h),
+            });
+            frame.x = restored.x;
+            frame.y = restored.y;
+            frame.w = restored.w;
+            frame.h = restored.h;
+            frame.placement = frame.saved_placement.take().unwrap_or(FramePlacement::Floating);
+            restored
+        };
+
+        Ok((
+            ViewOpResponse {
+                opcode: api::display::compositor_ops::TOGGLE_FULLSCREEN,
+                result: ViewOpResult::Success,
+                _pad: [0; 2],
+                frame_id,
+                frame_generation: frame.generation,
+                view_id: frame.selected_view.map_or(0, |v| v.view_id),
+                view_incarnation: frame.selected_view.map_or(0, |v| v.incarnation),
+            },
+            result_rect,
+        ))
+    }
+
+
     /// Clean up all views owned by a dying TID.
     pub fn cleanup_owner(&mut self, dead_tid: usize) -> Vec<u64> {
         let mut dead_caps = Vec::new();
@@ -447,6 +563,51 @@ impl FrameRegistry {
         }
 
         dead_caps
+    }
+}
+pub fn calculate_snap_rect(zone: SnapZone, work_area: Rect) -> Rect {
+    let half_w = work_area.w / 2;
+    let other_half_w = work_area.w - half_w;
+    let half_h = work_area.h / 2;
+    let other_half_h = work_area.h - half_h;
+
+    match zone {
+        SnapZone::LeftHalf => Rect {
+            x: work_area.x,
+            y: work_area.y,
+            w: half_w,
+            h: work_area.h,
+        },
+        SnapZone::RightHalf => Rect {
+            x: work_area.x + half_w as i32,
+            y: work_area.y,
+            w: other_half_w,
+            h: work_area.h,
+        },
+        SnapZone::TopLeftQuarter => Rect {
+            x: work_area.x,
+            y: work_area.y,
+            w: half_w,
+            h: half_h,
+        },
+        SnapZone::BottomLeftQuarter => Rect {
+            x: work_area.x,
+            y: work_area.y + half_h as i32,
+            w: half_w,
+            h: other_half_h,
+        },
+        SnapZone::TopRightQuarter => Rect {
+            x: work_area.x + half_w as i32,
+            y: work_area.y,
+            w: other_half_w,
+            h: half_h,
+        },
+        SnapZone::BottomRightQuarter => Rect {
+            x: work_area.x + half_w as i32,
+            y: work_area.y + half_h as i32,
+            w: other_half_w,
+            h: other_half_h,
+        },
     }
 }
 
@@ -612,5 +773,88 @@ mod tests {
         assert_eq!(d2.result, ViewOpResult::Success);
         assert!(reg.frames.is_empty());
         assert!(reg.views.is_empty());
+    }
+
+    #[test]
+    fn test_six_zone_snap_geometry_and_min_size_refusal() {
+        let mut reg = FrameRegistry::new();
+        let tid = 100;
+        let r1 = reg.create_view(&dummy_req(0, 0), tid, 10).unwrap();
+
+        let work_area = Rect { x: 0, y: 0, w: 1280, h: 800 - 36 }; // 1280x764
+
+        // Test all 6 zones
+        let zones = [
+            SnapZone::LeftHalf,
+            SnapZone::RightHalf,
+            SnapZone::TopLeftQuarter,
+            SnapZone::BottomLeftQuarter,
+            SnapZone::TopRightQuarter,
+            SnapZone::BottomRightQuarter,
+        ];
+
+        for zone in zones {
+            let cur_gen = reg.frames.get(&r1.frame_id).unwrap().generation;
+            let (resp, rect) = reg.snap_frame(r1.frame_id, cur_gen, zone, work_area).expect("snap zone");
+            assert_eq!(resp.result, ViewOpResult::Success);
+            assert_eq!(rect, calculate_snap_rect(zone, work_area));
+            let frame = reg.frames.get(&r1.frame_id).unwrap();
+            assert_eq!(frame.placement, FramePlacement::Snapped(zone));
+            assert_eq!(frame.w, rect.w);
+            assert_eq!(frame.h, rect.h);
+        }
+
+        // Test min-size refusal: create frame with huge min_w = 1000
+        let mut big_req = dummy_req(0, 0);
+        big_req.min_w = 1000;
+        let r2 = reg.create_view(&big_req, tid, 11).unwrap();
+        let cur_gen2 = reg.frames.get(&r2.frame_id).unwrap().generation;
+
+        // Snap to LeftHalf (width 640 < min_w 1000) must be Refused
+        let refused = reg.snap_frame(r2.frame_id, cur_gen2, SnapZone::LeftHalf, work_area);
+        assert_eq!(refused, Err(ViewOpResult::Refused));
+        // Frame remains floating
+        assert_eq!(reg.frames.get(&r2.frame_id).unwrap().placement, FramePlacement::Floating);
+    }
+
+    #[test]
+    fn test_f11_fullscreen_toggle_and_state_restoration() {
+        let mut reg = FrameRegistry::new();
+        let tid = 100;
+        let r1 = reg.create_view(&dummy_req(0, 0), tid, 10).unwrap();
+
+        let cur_gen = reg.frames.get(&r1.frame_id).unwrap().generation;
+
+        // Enter fullscreen
+        let (fs_resp, fs_rect) = reg.toggle_fullscreen(r1.frame_id, cur_gen, true, 1280, 800).expect("enter fullscreen");
+        assert_eq!(fs_resp.result, ViewOpResult::Success);
+        assert_eq!(fs_rect, Rect { x: 0, y: 0, w: 1280, h: 800 });
+        let frame_fs = reg.frames.get(&r1.frame_id).unwrap();
+        assert_eq!(frame_fs.placement, FramePlacement::Fullscreen);
+
+        // Exit fullscreen (restore floating)
+        let cur_gen_fs = frame_fs.generation;
+        let (rest_resp, rest_rect) = reg.toggle_fullscreen(r1.frame_id, cur_gen_fs, false, 1280, 800).expect("exit fullscreen");
+        assert_eq!(rest_resp.result, ViewOpResult::Success);
+        assert_eq!(rest_rect, Rect { x: 100, y: 100, w: 800, h: 600 });
+        let frame_rest = reg.frames.get(&r1.frame_id).unwrap();
+        assert_eq!(frame_rest.placement, FramePlacement::Floating);
+        assert_eq!(frame_rest.w, 800);
+        assert_eq!(frame_rest.h, 600);
+
+        // Snap to LeftHalf, then enter and exit fullscreen — verify Snapped placement is restored!
+        let work_area = Rect { x: 0, y: 0, w: 1280, h: 764 };
+        let cur_gen_rest = frame_rest.generation;
+        let (snap_resp, snap_rect) = reg.snap_frame(r1.frame_id, cur_gen_rest, SnapZone::LeftHalf, work_area).unwrap();
+        assert_eq!(snap_resp.result, ViewOpResult::Success);
+
+        let snap_gen = reg.frames.get(&r1.frame_id).unwrap().generation;
+        let _ = reg.toggle_fullscreen(r1.frame_id, snap_gen, true, 1280, 800).unwrap();
+        assert_eq!(reg.frames.get(&r1.frame_id).unwrap().placement, FramePlacement::Fullscreen);
+
+        let fs_gen = reg.frames.get(&r1.frame_id).unwrap().generation;
+        let (_, exit_rect) = reg.toggle_fullscreen(r1.frame_id, fs_gen, false, 1280, 800).unwrap();
+        assert_eq!(exit_rect, snap_rect);
+        assert_eq!(reg.frames.get(&r1.frame_id).unwrap().placement, FramePlacement::Snapped(SnapZone::LeftHalf));
     }
 }

@@ -13,6 +13,8 @@ use crate::z_order::ZOrder;
 pub(super) fn handle(
     buf: &[u8; 512],
     sender: usize,
+    screen_w: u32,
+    screen_h: u32,
     input: &mut InputState,
     table: &mut SurfaceTable,
     frames: &mut FrameRegistry,
@@ -233,6 +235,76 @@ pub(super) fn handle(
                 }
                 Err(err) => {
                     send_error(sender, compositor_ops::DETACH_VIEW, err);
+                }
+            }
+        }
+        compositor_ops::SNAP_FRAME => {
+            if buf.len() < 12 {
+                send_error(sender, compositor_ops::SNAP_FRAME, ViewOpResult::InvalidToken);
+                return;
+            }
+            let frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
+            let frame_gen = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
+            let zone_byte = buf[9];
+            let Some(zone) = api::display::SnapZone::from_u8(zone_byte) else {
+                send_error(sender, compositor_ops::SNAP_FRAME, ViewOpResult::InvalidToken);
+                return;
+            };
+
+            // Work area excludes bottom taskbar (36 DIP)
+            let work_area = Rect {
+                x: 0,
+                y: 0,
+                w: screen_w,
+                h: screen_h.saturating_sub(36),
+            };
+
+            match frames.snap_frame(frame_id, frame_gen, zone, work_area) {
+                Ok((resp, rect)) => {
+                    if let Some(v) = frames.selected_view_for_frame(frame_id) {
+                        if let Some(cap) = frames.surface_for_view(v.view_id) {
+                            if let Some(s) = table.get_mut(cap) {
+                                s.move_to(rect.x, rect.y);
+                                *pending_dirty = Some(match pending_dirty.take() {
+                                    Some(acc) => acc.union(&rect),
+                                    None => rect,
+                                });
+                            }
+                        }
+                    }
+                    send_response(sender, &resp);
+                }
+                Err(err) => {
+                    send_error(sender, compositor_ops::SNAP_FRAME, err);
+                }
+            }
+        }
+        compositor_ops::TOGGLE_FULLSCREEN => {
+            if buf.len() < 12 {
+                send_error(sender, compositor_ops::TOGGLE_FULLSCREEN, ViewOpResult::InvalidToken);
+                return;
+            }
+            let frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
+            let frame_gen = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
+            let enable = buf[9] != 0;
+
+            match frames.toggle_fullscreen(frame_id, frame_gen, enable, screen_w, screen_h) {
+                Ok((resp, rect)) => {
+                    if let Some(v) = frames.selected_view_for_frame(frame_id) {
+                        if let Some(cap) = frames.surface_for_view(v.view_id) {
+                            if let Some(s) = table.get_mut(cap) {
+                                s.move_to(rect.x, rect.y);
+                                *pending_dirty = Some(match pending_dirty.take() {
+                                    Some(acc) => acc.union(&rect),
+                                    None => rect,
+                                });
+                            }
+                        }
+                    }
+                    send_response(sender, &resp);
+                }
+                Err(err) => {
+                    send_error(sender, compositor_ops::TOGGLE_FULLSCREEN, err);
                 }
             }
         }

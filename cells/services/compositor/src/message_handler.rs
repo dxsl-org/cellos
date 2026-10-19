@@ -98,8 +98,10 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
         | api::display::compositor_ops::DESTROY_VIEW
         | api::display::compositor_ops::SELECT_VIEW
         | api::display::compositor_ops::GROUP_VIEW
-        | api::display::compositor_ops::DETACH_VIEW => {
-            view::handle(buf, sender, input, table, frames, z_order, pending_dirty)
+        | api::display::compositor_ops::DETACH_VIEW
+        | api::display::compositor_ops::SNAP_FRAME
+        | api::display::compositor_ops::TOGGLE_FULLSCREEN => {
+            view::handle(buf, sender, screen_w, screen_h, input, table, frames, z_order, pending_dirty)
         }
         _ => {}
     }

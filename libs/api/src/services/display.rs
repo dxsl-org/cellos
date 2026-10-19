@@ -629,6 +629,42 @@ pub struct ViewOpResponse {
     pub view_incarnation: u32,
 }
 
+/// Six-zone snap target layout positions.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapZone {
+    LeftHalf = 1,
+    RightHalf = 2,
+    TopLeftQuarter = 3,
+    BottomLeftQuarter = 4,
+    TopRightQuarter = 5,
+    BottomRightQuarter = 6,
+}
+
+impl SnapZone {
+    pub const fn from_u8(val: u8) -> Option<Self> {
+        match val {
+            1 => Some(Self::LeftHalf),
+            2 => Some(Self::RightHalf),
+            3 => Some(Self::TopLeftQuarter),
+            4 => Some(Self::BottomLeftQuarter),
+            5 => Some(Self::TopRightQuarter),
+            6 => Some(Self::BottomRightQuarter),
+            _ => None,
+        }
+    }
+}
+
+/// Window frame placement modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FramePlacement {
+    #[default]
+    Floating,
+    Snapped(SnapZone),
+    Maximized,
+    Fullscreen,
+}
+
 /// Fixed 64-byte request to create a view within a frame.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1190,6 +1226,14 @@ pub mod compositor_ops {
 
     /// Commit staged group configuration after all member ACKs.
     pub const COMMIT_GROUP_CONFIGURE: u8 = 0x26;
+
+    /// Snap a window frame into one of the 6 screen zones.
+    /// Payload: `[frame_id: u32, frame_generation: u32, zone: u8, _pad: [u8; 3]]` (12 bytes).
+    pub const SNAP_FRAME: u8 = 0x27;
+
+    /// Toggle content-only fullscreen mode for a frame.
+    /// Payload: `[frame_id: u32, frame_generation: u32, enable: u8, _pad: [u8; 3]]` (12 bytes).
+    pub const TOGGLE_FULLSCREEN: u8 = 0x28;
     /// Dump raw framebuffer (debug only).
     /// Reply: pixel data of whole screen
     pub const DUMP_FB: u8 = 0xFE;

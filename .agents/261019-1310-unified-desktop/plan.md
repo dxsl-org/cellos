@@ -19,7 +19,7 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
 | 02 | [Shared Linear theme and components](phase-02-system-theme.md) | 01 | completed |
 | 03 | [Native views, frames, tabs and lifecycle](phase-03-native-sessions.md) | 01,02 | completed |
 | 04 | [Bottom taskbar, Spotlight and launch registry](phase-04-desktop-launcher.md) | 01,02,03 | completed |
-| 05 | [Six-zone snap and F11 fullscreen](phase-05-placement-fullscreen.md) | 03,04 | pending |
+| 05 | [Six-zone snap and F11 fullscreen](phase-05-placement-fullscreen.md) | 03,04 | completed |
 | 06 | [Ocel native session and reader cutover](phase-06-ocel-cutover.md) | 02,03,04,05 | pending |
 | 07 | [Standalone Files and complete VFS operations](phase-07-files-vfs.md) | 01,02,03,04,05,06 | pending |
 | 08 | [Shared preview and Quick Look](phase-08-quick-look.md) | 02,06,07 | pending |
@@ -57,8 +57,25 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
   - Implemented fixed bottom shell taskbar in `cells/apps/desktop/src/taskbar.rs`: fixed 36 DIP height, 28 DIP button height centered vertically at Y=4, responsive narrow-screen pagination ($\le 727$ px) with "More" button triggering Spotlight search, and real service daemon indicators (`NET`, `VFS`, `AI`) wired to kernel `sys_lookup_service`.
   - Added unit test suite in `cells/apps/desktop` (`spotlight::tests::test_spotlight_section_cycling_and_actions`, `taskbar::tests::narrow_taskbar_more_opens_application_search`).
   - Verified 357 workspace tests passing across `api`, `service-compositor`, `viui`, `ocel`, and `desktop` (0 failures, 11 ignored); clean bare-metal x86 PIC build; `scripts/cellos-sign --check` passes with zero unallowlisted unsafe code.
-- **Phase 05 — Six-zone snap and F11 fullscreen**: **Pending (Unblocked)** — both Phase 03 (native frames/views) and Phase 04 (36 DIP taskbar geometry & work-area exclusion) dependencies satisfied.
-- **Phases 06–11**: Pending.
+- **Phase 05 — Six-zone snap and F11 fullscreen**: **Completed** (2026-10-19).
+  - Materialized D-UI-02 wire protocol opcodes and types in `libs/api/src/services/display.rs`:
+    - `SNAP_FRAME` (`0x27`) with payload `[frame_id: u32, frame_generation: u32, zone: u8, _pad: [u8; 3]]` (12 bytes).
+    - `TOGGLE_FULLSCREEN` (`0x28`) with payload `[frame_id: u32, frame_generation: u32, enable: u8, _pad: [u8; 3]]` (12 bytes).
+    - `SnapZone` enum (`LeftHalf = 1`, `RightHalf = 2`, `TopLeftQuarter = 3`, `BottomLeftQuarter = 4`, `TopRightQuarter = 5`, `BottomRightQuarter = 6`) with `from_u8`.
+    - `FramePlacement` enum (`Floating`, `Snapped(SnapZone)`, `Maximized`, `Fullscreen`).
+  - Implemented placement algorithms and state restoration in `cells/services/compositor/src/surface_table/frame.rs`:
+    - `calculate_snap_rect`: Integer grid math using shared endpoints (`half_w = work_area.w / 2`, `other_half_w = work_area.w - half_w`), preventing pixel gaps or overlap at odd screen resolutions.
+    - `snap_frame`: Validates frame generation, preflights member views' `min_w` and `min_h` against target snap rect (returning `ViewOpResult::Refused` on conflict without altering state), saves prior floating rect (`saved_floating_rect`), transitions placement to `Snapped(zone)`, and updates backing surface geometry.
+    - `toggle_fullscreen`: Saves current placement (`saved_placement`) and floating rect (`saved_floating_rect`) on fullscreen enter; restores previous placement (floating or snapped) and geometry on fullscreen exit with 36 DIP taskbar exclusion.
+  - Implemented message dispatch and dynamic screen dimension handling in `cells/services/compositor/src/message_handler/view.rs`:
+    - Parametrized view handler with dynamic screen dimensions `(screen_w, screen_h)`.
+    - Dynamically computes usable desktop work area excluding the 36 DIP bottom taskbar: `Rect::new(0, 0, screen_w, screen_h.saturating_sub(36))`.
+    - Dispatches `SNAP_FRAME` and `TOGGLE_FULLSCREEN`, returning typed `ViewOpResponse` and unioning old and new frame bounds into `pending_dirty` for full repainting.
+  - Added unit test suite in `cells/services/compositor` (`surface_table::frame::tests::test_six_zone_snap_geometry_and_min_size_refusal`, `surface_table::frame::tests::test_f11_fullscreen_toggle_and_state_restoration`).
+  - Verified: 12/12 unit tests pass in `service-compositor`, 359 workspace tests pass across `api`, `service-compositor`, `viui`, `ocel`, and `desktop` (0 failures, 11 ignored); clean bare-metal PIC cross-build.
+- **Phase 06 — Ocel native session and reader cutover**: **Pending (Unblocked)** — Phase 02 theme, Phase 03 native views/tabs, Phase 04 taskbar, and Phase 05 placement dependencies satisfied.
+- **Phase 09 — GUI Terminal and shell-session streams**: **Pending (Unblocked)** — Phase 01 baseline, Phase 02 theme, Phase 03 native views/tabs, Phase 04 taskbar, and Phase 05 placement dependencies satisfied.
+- **Phases 07, 08, 10, 11**: Pending.
 
 ## Execution policy
 One integrating owner for API/SDK/kernel/shared lifecycle changes. Independent research and bounded app-specific slices may parallelize after interfaces freeze; do not concurrently edit shared source. Package and smoke a real consumer each phase; phase 11 is cross-feature qualification, not first integration. Every AC remains required for whole-plan completion, even when a prerequisite blocks one phase. Local captures do not qualify physical or production behavior.
@@ -86,5 +103,5 @@ Four internal review lenses completed; [20 unique findings and corrections](revi
 Product choices are approved in conversation. Three read-only recon slices plus direct source checks ground prerequisites; artifact validation checks links, AC IDs and phase/index DAG consistency. Phase 01 execution is completed: baseline manifest frozen, D-UI ABI deltas specified, and real x86 integration test runner materialized and verified in `tests/integration/tests/desktop-x86.rs`. Exact ABI approval, uncertain storage/VMX provenance and unavailable platform evidence remain phase-specific gates, not reasons to reopen settled UI choices.
 
 ## Handoff
-Phase 01 baseline, Phase 02 shared Linear theme and components, Phase 03 native views, frames, tabs and lifecycle, and Phase 04 bottom taskbar, Spotlight and launch registry are completed and verified.
-Phase 05 (Six-zone snap and F11 fullscreen) is unblocked for implementation via `hc-cook /home/dmin/cellos/.agents/261019-1310-unified-desktop/plan.md`, with its Phase 03 native frame/view lifecycle and Phase 04 36 DIP taskbar work-area bounds fully satisfied.
+Phases 01 through 05 are completed and fully verified.
+Phase 06 (Ocel native session and reader cutover) and Phase 09 (GUI Terminal and shell-session streams) are now fully unblocked for implementation via `hc-cook /home/dmin/cellos/.agents/261019-1310-unified-desktop/plan.md`, with all prerequisite native frame/view lifecycle, theme, 36 DIP taskbar work-area bounds, and six-zone snap/fullscreen geometry in place.

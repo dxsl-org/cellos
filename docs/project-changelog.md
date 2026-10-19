@@ -4,6 +4,19 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-19 — Unified Desktop Phase 05 six-zone snap and F11 fullscreen geometry.**
+  Completed Phase 05 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+  and implementation plan `.agents/261019-1310-unified-desktop/phase-05-placement-fullscreen.md`:
+  - `libs/api`: Introduced window placement and fullscreen IPC protocol definitions in `api::display`:
+    - Opcodes `SNAP_FRAME` (`0x27`, payload `[frame_id: u32, frame_generation: u32, zone: u8, _pad: [u8; 3]]`) and `TOGGLE_FULLSCREEN` (`0x28`, payload `[frame_id: u32, frame_generation: u32, enable: u8, _pad: [u8; 3]]`) in `compositor_ops`.
+    - `SnapZone` enum representing 6 screen placement zones (`LeftHalf = 1`, `RightHalf = 2`, `TopLeftQuarter = 3`, `BottomLeftQuarter = 4`, `TopRightQuarter = 5`, `BottomRightQuarter = 6`) with `SnapZone::from_u8`.
+    - `FramePlacement` enum (`Floating`, `Snapped(SnapZone)`, `Maximized`, `Fullscreen`).
+  - `cells/services/compositor`: Implemented six-zone snap math, preflighting, and fullscreen restoration in `surface_table/frame.rs` and message dispatch in `message_handler/view.rs`:
+    - Six-zone integer grid calculation: `calculate_snap_rect` uses integer arithmetic with shared midpoint endpoints (`half_w = work_area.w / 2`, `other_half_w = work_area.w - half_w`), preventing pixel gaps or overlap at odd screen resolutions.
+    - Snap placement with min-size preflighting: `snap_frame` validates generational counters, preflights member view `min_w` and `min_h` constraints against target snap geometry, returning `ViewOpResult::Refused` on violation without state changes, and preserves floating geometry in `saved_floating_rect`.
+    - Content-only F11 fullscreen and state restoration: `toggle_fullscreen` saves prior `placement` and floating geometry on enter, expanding the frame to the full display `(0, 0, screen_w, screen_h)`; on exit, restores previous snapped or floating geometry with 36 DIP taskbar work area exclusion.
+    - Dynamic screen dimension parametrization: `message_handler/view.rs` dynamically accepts screen width and height, computes usable desktop work area excluding the 36 DIP bottom taskbar (`screen_h.saturating_sub(36)`), validates requests, and marks composite dirty damage on geometry transitions.
+  - Verified: Unit tests `surface_table::frame::tests::test_six_zone_snap_geometry_and_min_size_refusal` and `surface_table::frame::tests::test_f11_fullscreen_toggle_and_state_restoration` pass; 12/12 unit tests pass in `service-compositor`; 359 workspace tests pass; bare-metal PIC cross-build compiles; signed F1/F5 policy checks pass with `#![forbid(unsafe_code)]`.
 - **2026-10-19 — Unified Desktop Phase 04 bottom taskbar, 3-section Spotlight HUD, and launch registry.**
   Completed Phase 04 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
   and implementation plan `.agents/261019-1310-unified-desktop/phase-04-desktop-launcher.md`:

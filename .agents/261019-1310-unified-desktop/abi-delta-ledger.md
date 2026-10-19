@@ -125,7 +125,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
   - Fullscreen hides frame tab bar, borders, decorations, and bottom taskbar. Content receives the exact physical screen rect.
   - F11 key press and mouse exit (dwell 500ms at top screen edge) restore previous floating/snapped placement.
   - Group minimum size is `max(member.min_w), max(member.min_h)`. If snap target < min size, snap is visibly rejected and frame remains floating.
-- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** Target Phase 05.
+- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** **IMPLEMENTED & VERIFIED** (six-zone integer grid calculation, min-size refusal, F11 fullscreen toggle and prior placement restoration, unit test suite passing).
 
 ---
 
@@ -338,7 +338,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
 | Delta Family | Title | CP1 (Design) | CP2 (Implementation) | Owning Phase |
 |---|---|---|---|---|
 | D-UI-01 | Native Views, Frames & Lifecycle | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 03 |
-| D-UI-02 | Six-Zone Snap & F11 Fullscreen | **PENDING CANDIDATE APPROVAL** | Pending | Phase 05 |
+| D-UI-02 | Six-Zone Snap & F11 Fullscreen | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 05 |
 | D-UI-03 | Shared Linear/Paper Theme | **PENDING CANDIDATE APPROVAL** | Completed for Phase 02 (tokens/Paper/tests/Ocel verified) | Phase 02 |
 | D-UI-04 | Desktop Launch Token Protocol | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 04 |
 | D-UI-05 | Alt+Space Spotlight Dispatch | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 04 |

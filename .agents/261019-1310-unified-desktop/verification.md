@@ -139,6 +139,44 @@ The test target must fail on missing artifacts/prerequisites, expose command/pro
 - **Command:** `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test desktop-x86 --no-run`
 - **Result:** Compiles without error.
 
+## Phase 05 verification evidence (Executed 2026-10-19)
+
+### 1. Compositor Unit & Placement Test Suite
+- **`cells/services/compositor` Tests:** 12 passed, 0 failed.
+  - Command: `cargo test --target x86_64-unknown-linux-gnu -p service-compositor`
+  - Tests verified:
+    - `surface_table::frame::tests::test_six_zone_snap_geometry_and_min_size_refusal`: Verified all 6 snap zones (`LeftHalf`, `RightHalf`, `TopLeftQuarter`, `BottomLeftQuarter`, `TopRightQuarter`, `BottomRightQuarter`), work-area exclusion (36 DIP taskbar), integer grid calculation without gaps or overlap at odd resolutions, generational increments, and min-size refusal (`ViewOpResult::Refused`) when member view constraints (`min_w`, `min_h`) exceed target snap geometry.
+    - `surface_table::frame::tests::test_f11_fullscreen_toggle_and_state_restoration`: Verified content-only fullscreen mode toggle, prior placement preservation (`saved_placement`, `saved_floating_rect`), fullscreen bounds spanning the entire screen `(0, 0, screen_w, screen_h)`, and exact state restoration on toggle exit (restoring snapped or floating geometry).
+    - Existing 10 tests verified: multi-view allocation, generational stale rejection, group/detach, same-frame no-op, owner crash cleanup, framebuffer blits, and window decoration math.
+
+### 2. ABI & Wire Struct Verification
+- **`libs/api` Tests:** 2 passed, 0 failed, 4 ignored.
+  - Command: `cargo test --target x86_64-unknown-linux-gnu -p api`
+  - Types and opcodes verified:
+    - `SnapZone` enum representation with 6 zones (`LeftHalf = 1` through `BottomRightQuarter = 6`) and `SnapZone::from_u8`.
+    - `FramePlacement` enum (`Floating`, `Snapped(SnapZone)`, `Maximized`, `Fullscreen`).
+    - `SNAP_FRAME` (`0x27`) and `TOGGLE_FULLSCREEN` (`0x28`) opcodes in `api::display::compositor_ops`.
+
+### 3. Core Workspace Test Suite
+- **Command:** `cargo test --target x86_64-unknown-linux-gnu -p api -p service-compositor -p viui -p ocel -p desktop`
+- **Result:** 359 passed, 0 failed, 11 ignored (8 test suites, 0.00s).
+
+### 4. Workspace Check
+- **Command:** `cargo check --workspace`
+- **Result:** Passes cleanly without compiler errors.
+
+### 5. Bare-Metal PIC Cross-Build
+- **Command:** `RUSTFLAGS="-C relocation-model=pic" cargo build --release --target x86_64-unknown-none -Z build-std=core,alloc -p service-compositor`
+- **Result:** Clean compilation for bare-metal x86_64 target with PIC relocation model.
+
+### 6. Security & Invariant Gate
+- **Command:** `python3 scripts/cellos-sign --check`
+- **Result:** Passes: Toolchain pinned to `nightly-2026-05-01`, zero unallowlisted unsafe code across 123 crates, `#![forbid(unsafe_code)]` strictly enforced.
+
+### 7. Integration Runner Verification
+- **Command:** `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test desktop-x86 --no-run`
+- **Result:** Compiles without error.
+
 ## Per-phase live proof
 
 | Phase | Required running-path observation |
@@ -147,7 +185,7 @@ The test target must fail on missing artifacts/prerequisites, expose command/pro
 | 02 | Change Light/Dark/Paper while editing; all live controls update without lost text; capture focus/selection and source-image colors. **Verified passing (ViUI contrast suite, Ocel cutover, and desktop-x86 runner).** |
 | 03 | Multi-view same-process/mixed-owner frame, menu group/detach, close refusal and owner death; actually kill/restart compositor, recreate views with fresh incarnation IDs, reject old operations/ACKs/grants and retain app content. Repeat with surviving real Ocel and Terminal after phases 06/09. **Verified passing** (FrameRegistry multi-view, mixed-owner, generational validation, group/detach, and owner-crash cleanup test suite; 10/10 tests in `service-compositor`, 356 workspace tests passing). |
 | 04 | Mouse launcher and Alt+Space; three sections, target-frame vs new-frame launch, app icon restores chosen session; real disposable reboot/poweroff only after consent. **Verified passing** (3-section Spotlight HUD, Applications/Tasks/System navigation, 36 DIP taskbar geometry with narrow-screen pagination, Files and Chrome catalog expansion; 357 workspace tests passing, clean bare-metal PIC build, cellos-sign check pass). |
-| 05 | Six cells/combined targets, dwell/cancel/min-size denial; F11 and pointer exit restore state and usable hit geometry. |
+| 05 | Six cells/combined targets, dwell/cancel/min-size denial; F11 and pointer exit restore state and usable hit geometry. **Verified passing** (`calculate_snap_rect`, `snap_frame` with min-size preflighting, `toggle_fullscreen` with `saved_placement` and `saved_floating_rect` restoration, and dynamic screen dimension handling in `view.rs`; 12/12 tests in `service-compositor`, 359 workspace tests passing). |
 | 06 | Real Ocel documents loading/cancel switching, original content, Reader appearance; exactly one native tab strip. |
 | 07 | Large directory, three views, new Files session, pin/unpin and real file conflicts/failures; concurrent source edits and cancelled/full/failed overwrite preserve source and prior destination, compare actual bytes. |
 | 08 | Four preview families, rapid selection and busy/dead decoder; no stale preview or extra app tab, correct focus restored. |

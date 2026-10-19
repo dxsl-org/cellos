@@ -80,6 +80,8 @@ byte[1..] = opcode-specific payload
 | `0x24` | `DETACH_VIEW` | `[src_fid, src_gen, vid, vinc, x: i32, y: i32]` (24 bytes) | `ViewOpResponse` (20 bytes) |
 | `0x25` | `STAGE_GROUP_CONFIGURE` | atomic frame resize proposal | — |
 | `0x26` | `COMMIT_GROUP_CONFIGURE` | commit staged group configuration | — |
+| `0x27` | `SNAP_FRAME` | `[frame_id: u32, frame_gen: u32, zone: u8, _pad: [u8; 3]]` (12 bytes) | `ViewOpResponse` (20 bytes) |
+| `0x28` | `TOGGLE_FULLSCREEN` | `[frame_id: u32, frame_gen: u32, enable: u8, _pad: [u8; 3]]` (12 bytes) | `ViewOpResponse` (20 bytes) |
 | `0xFE` | `DUMP_FB` | — | raw BGRA pixels (debug only) |
 
 ### Notes
@@ -165,6 +167,44 @@ Excess allocations return `ViewOpResult::CapacityExhausted`.
 
 ---
 
+## Six-Zone Snap & F11 Fullscreen Geometry (ADR-0027 Phase 05)
+
+Under ADR-0027 Phase 05, the compositor manages six-zone window placement and content-only fullscreen mode:
+
+### Placement Modes & Zones
+- **`SnapZone`**: Identifies one of six screen zones:
+  - `LeftHalf` (1): Left half of the usable work area ($0 \le X < \lfloor W/2 \rfloor$, full height).
+  - `RightHalf` (2): Right half of the usable work area ($\lfloor W/2 \rfloor \le X < W$, full height).
+  - `TopLeftQuarter` (3): Top-left quarter ($0 \le X < \lfloor W/2 \rfloor$, $0 \le Y < \lfloor H/2 \rfloor$).
+  - `BottomLeftQuarter` (4): Bottom-left quarter ($0 \le X < \lfloor W/2 \rfloor$, $\lfloor H/2 \rfloor \le Y < H$).
+  - `TopRightQuarter` (5): Top-right quarter ($\lfloor W/2 \rfloor \le X < W$, $0 \le Y < \lfloor H/2 \rfloor$).
+  - `BottomRightQuarter` (6): Bottom-right quarter ($\lfloor W/2 \rfloor \le X < W$, $\lfloor H/2 \rfloor \le Y < H$).
+- **`FramePlacement`**: `Floating` (default), `Snapped(SnapZone)`, `Maximized`, `Fullscreen`.
+
+### Usable Work Area & Integer Grid Math
+- **Work Area Exclusion**: Snapped windows and maximized windows exclude the fixed 36 DIP bottom taskbar:
+  $$\text{work\_area} = (0, 0, \text{screen\_w}, \text{screen\_h} - 36)$$
+- **Integer Arithmetic**: `calculate_snap_rect` uses shared midpoint boundaries:
+  $$\text{half\_w} = \lfloor W / 2 \rfloor, \quad \text{other\_half\_w} = W - \text{half\_w}$$
+  $$\text{half\_h} = \lfloor H / 2 \rfloor, \quad \text{other\_half\_h} = H - \text{half\_h}$$
+  This guarantees zero pixel gaps, overlapping boundaries, or unpainted seams at odd resolutions and arbitrary UI scaling factors.
+
+### Minimum-Size Preflighting
+- Before applying snap geometry, `FrameRegistry::snap_frame` checks every view in the target frame.
+- If any member view's `min_w > target_w` or `min_h > target_h`, the snap request is rejected with `ViewOpResult::Refused`.
+- The window frame remains untouched in its prior state with zero geometry or focus disruption.
+
+### Content-Only F11 Fullscreen & State Restoration
+- **Enter Fullscreen (`enable = 1`)**:
+  - Saves existing placement in `frame.saved_placement`.
+  - Saves floating geometry in `frame.saved_floating_rect` if the frame was in `Floating` mode.
+  - Expands window bounds to cover the entire physical screen $(0, 0, \text{screen\_w}, \text{screen\_h})$, hiding tab headers, window chrome, and the bottom taskbar.
+- **Exit Fullscreen (`enable = 0`)**:
+  - Restores previous placement (`saved_placement`, defaulting to `Floating`).
+  - Restores floating rect if previously floating, or recomputes snapped bounds within the work area if previously snapped.
+  - Advances frame generation counter and invalidates display regions for immediate redrawing.
+---
+
 ## GpuFlush Kernel Syscall
 
 Internal to the compositor; cells should not call this directly.
@@ -227,7 +267,7 @@ pub fn fill_rect(rect: Rect, rgba: u32) -> ViResult<()>
 |------|---------|
 | `libs/api/src/display.rs` | `Rect`, `PixelFormat`, `SurfaceCap`, opcode constants |
 | `libs/api/src/services/display.rs` | `CreateViewRequest`, `ViewOpResponse`, `ViewRef`, `FrameRef`, `ViewOpResult`, view opcodes |
-| `cells/services/compositor/src/surface_table/frame.rs` | `FrameRegistry`, `Frame`, `View`, capacity limits, generational tracking |
+| `cells/services/compositor/src/surface_table/frame.rs` | `FrameRegistry`, `Frame`, `View`, capacity limits, generational tracking, snap math, fullscreen restoration |
 | `cells/services/compositor/src/message_handler/view.rs` | Authenticated view IPC handler with validation, focus routing, dirty tracking |
 | `cells/services/compositor/src/lib.rs` | IPC receive loop + message dispatch |
 | `cells/services/compositor/src/surface_table.rs` | CapId → surface state map |
