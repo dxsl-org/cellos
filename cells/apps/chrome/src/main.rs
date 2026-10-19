@@ -470,6 +470,7 @@ impl ChromeApp {
             [130, 135, 150, 255],
             (0, status_y, sw as i32, sh as i32),
         );
+        surf.damage_all();
     }
 }
 

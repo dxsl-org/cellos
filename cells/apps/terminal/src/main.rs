@@ -133,6 +133,7 @@ impl TerminalApp {
         if cur_x + self.cell_w <= sw as f32 && cur_y + self.cell_h <= sh as f32 {
             fill_rect(surf, cur_x as i32, cur_y as i32 + 2, self.cell_w as u32, (self.cell_h - 4.0) as u32, Color::rgb(0, 200, 255).with_alpha(160));
         }
+        surf.damage_all();
     }
 }
 

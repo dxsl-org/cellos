@@ -11,19 +11,23 @@ pub fn fill_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: Co
     let stride = surf.stride();
     let pixels = surf.pixels_mut();
 
-    let x0 = x.max(0);
-    let y0 = y.max(0);
-    let x1 = x.saturating_add(w as i32).min(sw);
-    let y1 = y.saturating_add(h as i32).min(sh);
+    let x0 = x.clamp(0, sw);
+    let y0 = y.clamp(0, sh);
+    let x1 = x.saturating_add(w as i32).clamp(0, sw);
+    let y1 = y.saturating_add(h as i32).clamp(0, sh);
+
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+
+    let bgra = [color.b(), color.g(), color.r(), color.a()];
 
     for cy in y0..y1 {
-        for cx in x0..x1 {
-            let offset = (cy as usize * stride + cx as usize) * 4;
+        let row_start = (cy as usize * stride) + (x0 as usize * 4);
+        for cx in 0..(x1 - x0) as usize {
+            let offset = row_start + (cx * 4);
             if offset + 4 <= pixels.len() {
-                pixels[offset] = color.b();
-                pixels[offset + 1] = color.g();
-                pixels[offset + 2] = color.r();
-                pixels[offset + 3] = color.a();
+                pixels[offset..offset + 4].copy_from_slice(&bgra);
             }
         }
     }

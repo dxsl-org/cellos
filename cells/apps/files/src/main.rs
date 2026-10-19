@@ -313,6 +313,7 @@ impl FilesApp {
         fill_rect(surf, 0, status_y, sw, 1, border);
         draw_label(surf, fonts, 14, status_y + 2, sw.saturating_sub(28), 20, &self.status_message, FontFace::UiRegular, 13.0, Color::rgb(100, 105, 120));
         preview::render(surf, fonts, &self.quick_look, sw, sh);
+        surf.damage_all();
     }
 }
 
