@@ -13,7 +13,7 @@ pub const TASKBAR_HEIGHT: u32 = 36;
 pub const MAX_VISIBLE_APPS: usize = 4;
 const BUTTON_Y: i32 = 4;
 const BUTTON_HEIGHT: u32 = 28;
-const APPS_X: i32 = 204;
+const APPS_X: i32 = 106;
 const APP_WIDTH: u32 = 148;
 const APP_STEP: i32 = APP_WIDTH as i32 + 6;
 const PAGE_WIDTH: u32 = 28;
@@ -134,18 +134,13 @@ pub fn render(
     fill_rect(surf, 0, 0, sw, sh, theme::TASKBAR_BG);
     fill_rect(surf, 0, 0, sw, 1, theme::TASKBAR_BORDER);
 
-    for (x, w, text, border, fg) in [
-        (8, 84, "CellOS", theme::TASKBAR_BORDER, theme::ACCENT_CYAN),
-        (98, 94, "Search", theme::ACCENT_BLUE, theme::TEXT_PRIMARY),
-    ] {
-        let bg = if is_inside(state.mouse_x, state.mouse_y, x, BUTTON_Y, w, BUTTON_HEIGHT) {
-            theme::BTN_HOVER
-        } else {
-            theme::BTN_NORMAL
-        };
-        draw_button(surf, fonts, x, BUTTON_Y, w, BUTTON_HEIGHT, text, bg, border, fg);
-    }
-    fill_rect(surf, 198, 10, 1, 28, theme::TASKBAR_BORDER);
+    let cellos_bg = if is_inside(state.mouse_x, state.mouse_y, 8, BUTTON_Y, 84, BUTTON_HEIGHT) {
+        theme::BTN_HOVER
+    } else {
+        theme::BTN_NORMAL
+    };
+    draw_button(surf, fonts, 8, BUTTON_Y, 84, BUTTON_HEIGHT, "CellOS", cellos_bg, theme::TASKBAR_BORDER, theme::ACCENT_CYAN);
+    fill_rect(surf, 98, 10, 1, 28, theme::TASKBAR_BORDER);
 
     if layout.paged && layout.start > 0 {
         render_page_button(surf, fonts, state, APPS_X, "<");
@@ -238,9 +233,7 @@ pub fn handle_click(
     y: i32,
     width: u32,
 ) -> TaskbarAction {
-    if is_inside(x, y, 8, BUTTON_Y, 84, BUTTON_HEIGHT)
-        || is_inside(x, y, 98, BUTTON_Y, 94, BUTTON_HEIGHT)
-    {
+    if is_inside(x, y, 8, BUTTON_Y, 84, BUTTON_HEIGHT) {
         return TaskbarAction::OpenSpotlight;
     }
     let pinned = registry.pinned_apps();
@@ -289,7 +282,7 @@ mod tests {
     fn narrow_taskbar_more_opens_application_search() {
         let mut registry = AppRegistry::new();
         let mut state = TaskbarState::new();
-        for width in [600, 640, 700, 727] {
+        for width in [380, 400, 420, 450] {
             let layout = Layout::new(width, registry.pinned_apps().len(), 0);
             assert_eq!(layout.capacity, 0);
             assert!(layout.paged);

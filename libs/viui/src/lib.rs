@@ -61,6 +61,7 @@ pub mod response;
 pub mod signal;
 pub mod state_store;
 pub mod surface_renderer;
+pub mod surface;
 pub mod theme;
 pub mod widget;
 pub mod widgets;
