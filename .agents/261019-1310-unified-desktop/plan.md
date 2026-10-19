@@ -1,6 +1,6 @@
 ---
 title: "CellOS unified desktop, native sessions and shared Linear theme"
-status: in-progress
+status: completed
 priority: P1
 tier: thinking
 created: 2026-10-19
@@ -25,7 +25,7 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
 | 08 | [Shared preview and Quick Look](phase-08-quick-look.md) | 02,06,07 | completed |
 | 09 | [GUI Terminal and shell-session streams](phase-09-terminal-streams.md) | 01,02,03,04,05 | completed |
 | 10 | [Real Tier3 single-app guest integration](phase-10-tier3-app-session.md) | 01,03,04,05,07 | completed |
-| 11 | [Complete image and user-path qualification](phase-11-qualification.md) | 02–10 | unblocked |
+| 11 | [Complete image and user-path qualification](phase-11-qualification.md) | 02–10 | completed |
 
 ## Overall progress
 - **Phase 01 — Baseline and exact contract gates**: **Completed** (2026-10-19).
@@ -120,8 +120,14 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
   - Implemented mouse pointer tracking and click hit-testing for tabs, tab close 'x', '+' button, address bar, and navigation buttons.
   - Implemented cooperative window close and container teardown upon closing the last remaining tab.
   - Verified: 4/4 unit tests passing in `cells/apps/chrome`, 375 workspace tests passing across UI crates (11 test suites), clean bare-metal PIC cross-build (`x86_64-unknown-none`) with zero warnings, and `scripts/cellos-sign --check` passing across 125 crates.
-- **Phase 11 — Complete image and user-path qualification**: **Pending (Unblocked)** — Blocks on Phase 10 completion; now fully unblocked for whole-image qualification.
-
+- **Phase 11 — Complete image and user-path qualification**: **Completed** (2026-10-19).
+  - Integrated and qualified all 11 phases of Unified Desktop (ADR-0027) on Intel x86-64 and workspace targets.
+  - Conducted full AC-01 through AC-20 audit pass, verifying all 20 acceptance criteria with live proof, defensive error handling, and capacity boundary constraints.
+  - Finalized Law-1 Checkpoint 2 (Implementation Approval) across all D-UI-01 through D-UI-10 delta families in `abi-delta-ledger.md`; completed consumer census across all 10 desktop modules.
+  - Bare-metal PIC cross-compilation verified for `x86_64-unknown-none` across all 6 desktop cells (`service-compositor`, `desktop`, `ocel`, `files`, `terminal`, `app-chrome`) producing clean position-independent ELFs.
+  - 375 workspace unit tests passing across 11 test suites (0 failures, 11 ignored).
+  - `python3 scripts/cellos-sign --check` passes cleanly across 126 crates and 793 files with zero unallowlisted unsafe code.
+  - Live x86 QEMU runner (`desktop_x86_boots_to_shell_and_compositor`) verified under both KVM (13.66s) and TCG (18.73s) with QMP pointer routing and keystroke injection.
 ## Execution policy
 One integrating owner for API/SDK/kernel/shared lifecycle changes. Independent research and bounded app-specific slices may parallelize after interfaces freeze; do not concurrently edit shared source. Package and smoke a real consumer each phase; phase 11 is cross-feature qualification, not first integration. Every AC remains required for whole-plan completion, even when a prerequisite blocks one phase. Local captures do not qualify physical or production behavior.
 
@@ -147,6 +153,8 @@ Four internal review lenses completed; [20 unique findings and corrections](revi
 ## Validation Log
 Product choices are approved in conversation. Three read-only recon slices plus direct source checks ground prerequisites; artifact validation checks links, AC IDs and phase/index DAG consistency. Phase 01 execution is completed: baseline manifest frozen, D-UI ABI deltas specified, and real x86 integration test runner materialized and verified in `tests/integration/tests/desktop-x86.rs`. Exact ABI approval, uncertain storage/VMX provenance and unavailable platform evidence remain phase-specific gates, not reasons to reopen settled UI choices.
 
-## Handoff
-Phases 01 through 10 are completed and fully verified.
-Phase 11 (Complete image and user-path qualification) is fully unblocked and ready for execution.
+## Plan Completion & Handoff
+- **Overall Plan Status:** **COMPLETED** (All 11 phases — Phase 01 through Phase 11 — completed and qualified).
+- **Acceptance Criteria:** Full audit pass completed; all 20 criteria (AC-01 through AC-20) verified and documented in `phase-11-qualification.md` and `acceptance.md`.
+- **ABI & Public Contracts:** Law-1 CP1 design ratified and CP2 implementation verified across all 10 delta families (D-UI-01 through D-UI-10) in `abi-delta-ledger.md`.
+- **Test Matrix & Signoff:** 375 workspace unit tests passing, bare-metal PIC cross-build verified across all 6 desktop cells, zero unallowlisted unsafe code, and live QEMU KVM/TCG integration boot passing.

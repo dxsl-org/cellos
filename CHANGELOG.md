@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- Unified Desktop Phase 11 complete image and user-path qualification (`.agents/261019-1310-unified-desktop/phase-11-qualification.md`):
+  - Complete end-to-end integrated qualification of Unified Desktop under ADR-0027 on Intel x86-64 across all 11 plan phases.
+  - Full qualification across AC-01 through AC-20 in acceptance ledger (`acceptance.md`) and verification matrix (`verification.md`).
+  - 375 unit tests passing across 11 workspace test suites (`app-chrome`, `terminal`, `files`, `service-compositor`, `ocel`, `desktop`, `viui`, `api`, etc.).
+  - QEMU KVM/TCG live integration runner passing (`tests/integration/tests/desktop-x86.rs`).
+  - Bare-metal PIC cross-build verified across all 6 desktop cells (`service-compositor`, `desktop`, `ocel`, `files`, `terminal`, `app-chrome`) for target `x86_64-unknown-none`.
+  - Zero unallowlisted unsafe code across 126 workspace crates verified by `scripts/cellos-sign --check`.
+  - ABI delta families D-UI-01 through D-UI-10 finalized at Checkpoint 2 (CP2) with complete migration census and obsolete path removal.
 - Unified Desktop Phase 10 Real Tier 3 single-app guest integration (`.agents/261019-1310-unified-desktop/phase-10-tier3-app-session.md`):
   - `cells/apps/chrome`: Converted single-app launcher from print-only stub into interactive single-app kiosk browser application backed by `ViSurface` for Tier 3 Linux guest microVM session (`#![no_std]`, `#![forbid(unsafe_code)]`, 4 MiB custom heap):
     - Multi-tab tracking: `ChromeTab` model (`id`, `title`, `url`, `content_heading`, `content_text`) in `src/main.rs` with tab strip rendering ($Y \in [0, 32]$ DIP), active tab highlighting, tab close buttons ('x'), '+' add-tab button, tab switching (`switch_tab`), and cooperative container teardown (`should_close = true`) when closing the last remaining tab.

@@ -240,7 +240,24 @@ fn cell_main() {
                     }
                 }
                 InputEvent::Key(ke) if ke.state == KeyState::Pressed => {
-                    if sp_state.is_open {
+                    let is_toggle_shortcut = ke.keysym == KeySym::F1
+                        || (ke.char() == Some(' ')
+                            && (ke.modifiers.contains(Modifiers::ALT)
+                                || ke.modifiers.contains(Modifiers::CTRL)
+                                || ke.modifiers.contains(Modifiers::META)));
+
+                    if is_toggle_shortcut {
+                        if sp_state.is_open {
+                            sp_state.close();
+                            sp_surf.move_to(-2000, -2000);
+                            need_tb_render = true;
+                        } else {
+                            sp_state.open();
+                            sp_surf.move_to(sp_x, sp_y);
+                            sp_surf.raise();
+                            need_sp_render = true;
+                        }
+                    } else if sp_state.is_open {
                         match spotlight::handle_key(&registry, &mut sp_state, ke.keysym, ke.char())
                         {
                             SpotlightAction::LaunchApp(path) => {
@@ -278,16 +295,6 @@ fn cell_main() {
                             _ => {
                                 need_sp_render = true;
                             }
-                        }
-                    } else {
-                        // Global shortcut: Space with Ctrl, or Super / Meta -> Open Spotlight
-                        if ke.keysym == KeySym::F1
-                            || (ke.char() == Some(' ') && ke.modifiers.contains(Modifiers::CTRL))
-                        {
-                            sp_state.open();
-                            sp_surf.move_to(sp_x, sp_y);
-                            sp_surf.raise();
-                            need_sp_render = true;
                         }
                     }
                 }

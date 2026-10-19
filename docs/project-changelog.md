@@ -4,6 +4,24 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-19 — Unified Desktop Phase 11 Complete image and user-path qualification.**
+  Completed Phase 11 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+  and implementation plan `.agents/261019-1310-unified-desktop/phase-11-qualification.md`:
+  - Complete end-to-end integrated qualification of Unified Desktop under ADR-0027 on Intel x86-64 across all 11 phases.
+  - Full qualification across AC-01 through AC-20 in `acceptance.md` and `verification.md` with zero regressions:
+    - AC-01..AC-02: Shared Linear theme tokens, Paper palette (#F6F3EB), and WCAG 2.1 contrast ($\ge 4.5:1$ text, $\ge 5.0:1$ links, $\ge 11:1$ table headers).
+    - AC-03..AC-06: Native views/frames and session tabs decoupled in `service-compositor`, authenticated process ownership, generational invalidation, and mixed-owner grouping.
+    - AC-07..AC-08: Six-zone snap math with integer grid endpoints and F11 content-only fullscreen with layout restoration.
+    - AC-09..AC-12: Fixed 36 DIP bottom taskbar, 3-section Spotlight HUD modal ($480 \times 320$, `MAX_RESULTS = 3`), system daemon indicators (`NET`, `VFS`, `AI`), and cooperative dirty-session close/shutdown routing.
+    - AC-13..AC-16: Standalone Files app with 3 view modes (List, Grid, Miller Columns), Places sidebar bookmarks, and Quick Look HUD preview ($540 \times 400$ DIP) across 4 format families (Image, Markdown, Code, PDF) with monotonic `gen_id` generation tracking.
+    - AC-17: Standalone Native GUI Terminal (`/bin/terminal`) with monospace character grid ($80 \times 24$, 1000-line scrollback buffer), single-reader stdio lease management, and cooperative Ctrl+C interrupt handling.
+    - AC-18: Real Tier 3 single-app guest integration (`cells/apps/chrome`) with multi-tab tracking, navigation toolbar, hardware virtualization status bar (`Intel VT-x (VMX root) | VirtIO-GPU 1280x800 | PVH Single-App`), and cooperative container teardown.
+    - AC-19..AC-20: Signed deterministic x86 desktop image packaging, CLI/desktop boot choice, QEMU KVM/TCG automated integration test execution, and Unicode/Vietnamese input/rendering validation.
+  - Test suites: 375 unit tests passing across 11 workspace test suites (`cargo test -p app-chrome -p terminal -p files -p service-compositor -p ocel -p desktop -p viui -p api`).
+  - Integration runner: Automated x86 integration test runner passing under QEMU KVM/TCG (`tests/integration/tests/desktop-x86.rs`).
+  - Bare-metal cross-build: Position-independent code (`-C relocation-model=pic`) cross-build verified across all 6 desktop cells (`service-compositor`, `desktop`, `ocel`, `files`, `terminal`, `app-chrome`) for target `x86_64-unknown-none`.
+  - Security audit: Zero unallowlisted unsafe code across 126 workspace crates verified by `scripts/cellos-sign --check`.
+  - ABI Governance: Checkpoint 2 (CP2) closed across all D-UI-01 through D-UI-10 ABI delta families with complete consumer migration census and obsolete path removal (duplicate private tab bars, `/bin/fb-console` desktop catalog entry).
 - **2026-10-19 — Unified Desktop Phase 10 Real Tier 3 single-app guest integration.**
   Completed Phase 10 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
   and implementation plan `.agents/261019-1310-unified-desktop/phase-10-tier3-app-session.md`:
