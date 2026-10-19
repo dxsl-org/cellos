@@ -148,6 +148,49 @@ let (_state, _ui) = Counter::build();
 
 For standalone `.vi` files, use `viui-build` from `build.rs`. Both authoring paths generate ordinary Rust/node structures; they do not add another runtime or compositor protocol.
 
+## Linear theming, semantic tokens, and palettes
+
+ViUI provides a unified `ViTheme` contract (`libs/viui/src/theme.rs`) defining semantic color tokens across the desktop shell and native applications. Palettes share identical layout geometry while providing distinct visual surfaces.
+
+### Palettes and SystemPalette
+
+The system defines three standard palettes via the `SystemPalette` enum:
+- `SystemPalette::Light` (`LIGHT_THEME`): Clean light surface (`#FFFFFF` background, `#14141C` high-contrast primary text).
+- `SystemPalette::Dark` (`DARK_THEME`): Low-glare dark surface (`#121216` background, `#F5F5FA` primary text).
+- `SystemPalette::Paper` (`PAPER_THEME`): Warm sepia palette (`#F6F3EB` background, `#2B2B2A` ink text, `#9C5B28` terracotta accent) tailored for extended reading and writing.
+
+Dynamic theme instantiation is provided by `theme_for_palette(palette: SystemPalette) -> Box<dyn ViTheme>`.
+
+### Semantic token categories
+
+`ViTheme` exposes semantic accessors rather than hardcoded hex colors:
+- **Window and Tab Chrome:** `tab_active_bg()`, `tab_active_fg()`, `tab_inactive_bg()`, `tab_inactive_fg()`, `tab_border()`, `tab_close_hover()`.
+- **Taskbar and Spotlight:** `taskbar_bg()`, `taskbar_fg()`, `taskbar_border()`, `spotlight_bg()`, `spotlight_border()`.
+- **Focus and Status Badges:** `focus_ring()` (keyboard focus outline), `badge_dirty()` (unsaved changes), `badge_attention()` (notifications), `badge_error()` (errors and refusals).
+- **Document Reader:** `reader_bg()`, `reader_text()`, `reader_subtext()`, and `reader_link()` (guaranteed strictly $\ge 5.0:1$ contrast against reader background).
+
+### Preference state and revision monotonicity
+
+`ThemePreferenceState` manages client-side preference tracking:
+```rust
+pub struct ThemePreferenceState {
+    pub palette: SystemPalette,
+    pub revision: u32,
+}
+```
+`apply_update(new_palette, new_revision)` enforces monotonic revision sequencing and rejects duplicate or stale updates. `update_from_raw(raw_u8, new_revision)` converts untrusted input bytes, falling back safely to the documented default `Light` theme.
+
+### WCAG 2.1 contrast compliance
+
+All three standard palettes are verified by an automated mathematical relative luminance and contrast ratio test suite in `libs/viui/src/theme.rs`:
+- Normal body text and secondary text on surface/background achieve $\ge 4.5:1$ contrast.
+- Document hyperlinks (`reader_link`) achieve strictly $\ge 5.0:1$ contrast (Light 6.92:1, Dark 5.93:1, Paper 6.04:1).
+- Active tabs, inactive tabs, and taskbar text achieve $\ge 4.5:1$ contrast.
+
+### Window chrome geometry
+
+`WindowChrome` (`libs/viui/src/window.rs`) provides client-side window decorations. To satisfy accessibility and pointer hit targets without compromising compact titlebar aesthetics, `close_btn_rect` defines a 20 DIP pointer hit area while `close_btn_icon_rect` centers a 16 DIP visual icon within that hit area.
+
 ## Further reading
 
 - [ViUI contract](../specs/14-viui.md) — normative architecture, non-goals, and verification gates.

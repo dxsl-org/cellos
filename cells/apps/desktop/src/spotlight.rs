@@ -11,12 +11,12 @@ use ostd::typography::{FontFace, TextFonts};
 use crate::apps::AppRegistry;
 use crate::draw::{draw_button, draw_label, draw_text, fill_rect, stroke_rect, theme, Color};
 
-pub const SPOTLIGHT_WIDTH: u32 = 600;
-pub const SPOTLIGHT_HEIGHT: u32 = 392;
-pub const MAX_RESULTS: usize = 4;
+pub const SPOTLIGHT_WIDTH: u32 = 480;
+pub const SPOTLIGHT_HEIGHT: u32 = 320;
+pub const MAX_RESULTS: usize = 3;
 const LIST_START_Y: i32 = 76;
-const ROW_HEIGHT: u32 = 64;
-const ROW_STEP: i32 = ROW_HEIGHT as i32 + 6;
+const ROW_HEIGHT: u32 = 60;
+const ROW_STEP: i32 = 66;
 const ACTION_WIDTH: u32 = 64;
 const ACTION_HEIGHT: u32 = 32;
 const ACTION_Y: i32 = (ROW_HEIGHT as i32 - ACTION_HEIGHT as i32) / 2;

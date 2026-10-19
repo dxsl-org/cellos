@@ -335,7 +335,7 @@ impl OcelViewer {
             toc_open: false,
             toc_entries: Vec::new(),
             toc_offset: 0,
-            reader_theme: draw::ReaderThemeMode::Dark,
+            reader_theme: draw::ReaderThemeMode::FollowSystem,
             zoomed_image: None,
             should_exit: false,
         };
@@ -1860,16 +1860,45 @@ mod main_ux_tests {
     #[test]
     fn test_reader_theme_mode_cycling_and_properties() {
         use draw::ReaderThemeMode;
-        assert_eq!(ReaderThemeMode::Dark.next(), ReaderThemeMode::Sepia);
-        assert_eq!(ReaderThemeMode::Sepia.next(), ReaderThemeMode::PaperWhite);
-        assert_eq!(ReaderThemeMode::PaperWhite.next(), ReaderThemeMode::Dark);
+        use viui::theme::SystemPalette;
 
+        assert_eq!(ReaderThemeMode::FollowSystem.next(), ReaderThemeMode::Light);
+        assert_eq!(ReaderThemeMode::Light.next(), ReaderThemeMode::Dark);
+        assert_eq!(ReaderThemeMode::Dark.next(), ReaderThemeMode::Paper);
+        assert_eq!(ReaderThemeMode::Paper.next(), ReaderThemeMode::FollowSystem);
+
+        assert_eq!(ReaderThemeMode::FollowSystem.name(), "Follow System");
+        assert_eq!(ReaderThemeMode::Light.name(), "Light");
         assert_eq!(ReaderThemeMode::Dark.name(), "Dark");
-        assert_eq!(ReaderThemeMode::Sepia.name(), "Sepia");
-        assert_eq!(ReaderThemeMode::PaperWhite.name(), "Paper White");
+        assert_eq!(ReaderThemeMode::Paper.name(), "Paper");
 
-        assert_ne!(ReaderThemeMode::Dark.bg_color(), ReaderThemeMode::Sepia.bg_color());
-        assert_ne!(ReaderThemeMode::Sepia.text_color(), ReaderThemeMode::PaperWhite.text_color());
+        // Verify FollowSystem resolves to the current active SystemPalette
+        assert_eq!(
+            ReaderThemeMode::FollowSystem.resolved_bg(SystemPalette::Light),
+            ReaderThemeMode::Light.resolved_bg(SystemPalette::Light)
+        );
+        assert_eq!(
+            ReaderThemeMode::FollowSystem.resolved_bg(SystemPalette::Dark),
+            ReaderThemeMode::Dark.resolved_bg(SystemPalette::Dark)
+        );
+        assert_eq!(
+            ReaderThemeMode::FollowSystem.resolved_bg(SystemPalette::Paper),
+            ReaderThemeMode::Paper.resolved_bg(SystemPalette::Paper)
+        );
+
+        // Verify dynamic zero-argument bg_color() follows active system palette
+        draw::set_active_system_palette(SystemPalette::Dark);
+        assert_eq!(ReaderThemeMode::FollowSystem.bg_color(), ReaderThemeMode::Dark.bg_color());
+
+        draw::set_active_system_palette(SystemPalette::Paper);
+        assert_eq!(ReaderThemeMode::FollowSystem.bg_color(), ReaderThemeMode::Paper.bg_color());
+
+        draw::set_active_system_palette(SystemPalette::Light);
+        assert_eq!(ReaderThemeMode::FollowSystem.bg_color(), ReaderThemeMode::Light.bg_color());
+
+        assert_ne!(ReaderThemeMode::Light.bg_color(), ReaderThemeMode::Dark.bg_color());
+        assert_ne!(ReaderThemeMode::Dark.bg_color(), ReaderThemeMode::Paper.bg_color());
+        assert_ne!(ReaderThemeMode::Paper.bg_color(), ReaderThemeMode::Light.bg_color());
     }
 
     #[test]

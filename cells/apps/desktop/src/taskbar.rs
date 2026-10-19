@@ -9,10 +9,10 @@ use ostd::typography::{FontFace, TextFonts};
 use crate::apps::AppRegistry;
 use crate::draw::{draw_button, draw_label, fill_rect, stroke_rect, theme};
 
-pub const TASKBAR_HEIGHT: u32 = 48;
+pub const TASKBAR_HEIGHT: u32 = 36;
 pub const MAX_VISIBLE_APPS: usize = 4;
-const BUTTON_Y: i32 = 6;
-const BUTTON_HEIGHT: u32 = 36;
+const BUTTON_Y: i32 = 4;
+const BUTTON_HEIGHT: u32 = 28;
 const APPS_X: i32 = 204;
 const APP_WIDTH: u32 = 148;
 const APP_STEP: i32 = APP_WIDTH as i32 + 6;

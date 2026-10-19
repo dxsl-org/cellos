@@ -39,54 +39,121 @@ pub mod theme {
     pub const BORDER: Color = Color::rgb(69, 71, 90);
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use core::sync::atomic::{AtomicU8, Ordering};
+
+static ACTIVE_SYSTEM_PALETTE: AtomicU8 = AtomicU8::new(viui::theme::SystemPalette::Light as u8);
+
+pub fn set_active_system_palette(palette: viui::theme::SystemPalette) {
+    ACTIVE_SYSTEM_PALETTE.store(palette as u8, Ordering::Relaxed);
+}
+
+pub fn active_system_palette() -> viui::theme::SystemPalette {
+    viui::theme::SystemPalette::from_u8(ACTIVE_SYSTEM_PALETTE.load(Ordering::Relaxed))
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ReaderThemeMode {
+    #[default]
+    FollowSystem,
+    Light,
     Dark,
-    Sepia,
-    PaperWhite,
+    Paper,
 }
 
 impl ReaderThemeMode {
     pub const fn next(self) -> Self {
         match self {
-            Self::Dark => Self::Sepia,
-            Self::Sepia => Self::PaperWhite,
-            Self::PaperWhite => Self::Dark,
+            Self::FollowSystem => Self::Light,
+            Self::Light => Self::Dark,
+            Self::Dark => Self::Paper,
+            Self::Paper => Self::FollowSystem,
         }
     }
-    pub const fn bg_color(self) -> Color {
+
+    /// Resolve effective palette, mapping FollowSystem to the active system palette.
+    pub fn resolved_palette(self, system: viui::theme::SystemPalette) -> viui::theme::SystemPalette {
         match self {
-            Self::Dark => Color::rgb(30, 30, 46),
-            Self::Sepia => Color::rgb(244, 238, 224),
-            Self::PaperWhite => Color::rgb(250, 250, 252),
+            Self::FollowSystem => system,
+            Self::Light => viui::theme::SystemPalette::Light,
+            Self::Dark => viui::theme::SystemPalette::Dark,
+            Self::Paper => viui::theme::SystemPalette::Paper,
         }
     }
-    pub const fn text_color(self) -> Color {
-        match self {
-            Self::Dark => Color::rgb(205, 214, 244),
-            Self::Sepia => Color::rgb(67, 52, 34),
-            Self::PaperWhite => Color::rgb(30, 30, 36),
+
+    /// Obtain the shared ViTheme reference for the resolved palette.
+    pub fn resolved_theme(self, system: viui::theme::SystemPalette) -> &'static dyn viui::theme::ViTheme {
+        match self.resolved_palette(system) {
+            viui::theme::SystemPalette::Light => &viui::theme::LIGHT_THEME,
+            viui::theme::SystemPalette::Dark => &viui::theme::DARK_THEME,
+            viui::theme::SystemPalette::Paper => &viui::theme::PAPER_THEME,
         }
     }
-    pub const fn muted_color(self) -> Color {
-        match self {
-            Self::Dark => Color::rgb(166, 173, 200),
-            Self::Sepia => Color::rgb(140, 120, 100),
-            Self::PaperWhite => Color::rgb(110, 115, 130),
-        }
+
+    pub fn bg_color(self) -> Color {
+        self.resolved_bg(active_system_palette())
     }
-    pub const fn accent_color(self) -> Color {
-        match self {
-            Self::Dark => Color::rgb(148, 226, 213),
-            Self::Sepia => Color::rgb(180, 83, 9),
-            Self::PaperWhite => Color::rgb(37, 99, 235),
-        }
+
+    pub fn resolved_bg(self, system: viui::theme::SystemPalette) -> Color {
+        let c = self.resolved_theme(system).reader_bg();
+        Color::rgb(c.r(), c.g(), c.b())
     }
+
+    pub fn text_color(self) -> Color {
+        self.resolved_text(active_system_palette())
+    }
+
+    pub fn resolved_text(self, system: viui::theme::SystemPalette) -> Color {
+        let c = self.resolved_theme(system).reader_text();
+        Color::rgb(c.r(), c.g(), c.b())
+    }
+
+    pub fn muted_color(self) -> Color {
+        self.resolved_muted(active_system_palette())
+    }
+
+    pub fn resolved_muted(self, system: viui::theme::SystemPalette) -> Color {
+        let c = self.resolved_theme(system).reader_subtext();
+        Color::rgb(c.r(), c.g(), c.b())
+    }
+
+    pub fn accent_color(self) -> Color {
+        self.resolved_accent(active_system_palette())
+    }
+
+    pub fn resolved_accent(self, system: viui::theme::SystemPalette) -> Color {
+        let c = self.resolved_theme(system).accent();
+        Color::rgb(c.r(), c.g(), c.b())
+    }
+
+    pub fn link_color(self) -> Color {
+        self.resolved_link(active_system_palette())
+    }
+
+    pub fn resolved_link(self, system: viui::theme::SystemPalette) -> Color {
+        let c = self.resolved_theme(system).reader_link();
+        Color::rgb(c.r(), c.g(), c.b())
+    }
+
     pub const fn name(self) -> &'static str {
         match self {
+            Self::FollowSystem => "Follow System",
+            Self::Light => "Light",
             Self::Dark => "Dark",
-            Self::Sepia => "Sepia",
-            Self::PaperWhite => "Paper White",
+            Self::Paper => "Paper",
+        }
+    }
+
+    /// Remap legacy dark-theme span colors to the corresponding semantic color of this reader mode.
+    pub fn remap_span_color(self, c: Color) -> Color {
+        if c == theme::ACCENT_BLUE {
+            self.accent_color()
+        } else if c == theme::ACCENT_CYAN {
+            self.text_color()
+        } else if c == theme::TEXT_MUTED {
+            self.muted_color()
+        } else if c == theme::TEXT_PRIMARY {
+            self.text_color()
+        } else {
+            c
         }
     }
 }

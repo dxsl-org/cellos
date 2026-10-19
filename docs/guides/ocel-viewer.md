@@ -327,6 +327,17 @@ checkbox and submit controls support owning-form GET actions with UTF-8 query
 encoding; POST and unsupported controls report explicit errors. Ordinary
 buttons do not submit. Selection/clipboard integration is not implemented.
 
+### Reader themes and Linear integration
+
+Reader view supports four appearance modes via `ReaderThemeMode`:
+- `ReaderThemeMode::FollowSystem` (default): dynamically resolves to the desktop's active system palette (`viui::theme::SystemPalette`) at paint time via an atomic palette observer.
+- `ReaderThemeMode::Light`: forces crisp light book reading surface (`#FFFFFF`).
+- `ReaderThemeMode::Dark`: forces dark reading surface (`#121216`).
+- `ReaderThemeMode::Paper`: warm sepia reading surface (`#F6F3EB`) with soft ink typography.
+
+Colors are directly derived from shared ViUI `ViTheme` tokens (`reader_bg`, `reader_text`, `reader_subtext`, `reader_link`). Code blocks in Markdown and HTML documents preserve their syntax highlighting colors across theme switches while adapting container margins and backgrounds to the active palette.
+
+
 Search is NFC-normalized and Unicode-lowercased, including Vietnamese. Matching
 layout regions are highlighted; the active region has a distinct color. This
 is region-based navigation, not an occurrence counter for every word on a line.

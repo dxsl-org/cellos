@@ -70,6 +70,8 @@ The source tree currently provides:
 - overlay/menu support;
 - line and bar charts;
 - signal-driven animation and dirty-region repaint.
+- unified Linear theme tokens, `Paper`/`Dark`/`Light` system palettes, and WCAG 2.1 contrast compliance;
+- client-side window chrome with 20 DIP close button hit areas;
 
 This list describes implemented library surface. Exact widget/test counts belong in
 generated project status, not this normative specification.

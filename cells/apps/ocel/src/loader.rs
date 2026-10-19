@@ -376,7 +376,7 @@ fn get_help_content() -> String {
 - **Ctrl+L / F6:** Focus and edit the address bar.
 - **F5 / Escape:** Reload / cancel an in-progress request or dismiss dialogs/image zoom.
 - **Ctrl+R:** Toggle Reader mode for this tab (original document is preserved).
-- **Alt+T:** Cycle Reader theme (Dark / Sepia / Paper White).
+- **Alt+T:** Cycle Reader theme (Follow System / Light / Dark / Paper).
 - **Alt+[ / Alt+]:** Narrow / widen the Reader column.
 - **Ctrl+plus / Ctrl+minus / Ctrl+0:** Zoom in / out / reset (50–200%).
 - **Ctrl+M:** Heading contents; choose with arrows, wheel, Enter or a click.

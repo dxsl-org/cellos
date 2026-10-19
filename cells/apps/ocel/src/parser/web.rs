@@ -572,18 +572,45 @@ fn measure(fonts:&mut TextFonts,context:&TextContext,known:Size<Option<f32>>,ava
     Size{width:known.width.unwrap_or(actual.min(width)),height:known.height.unwrap_or(lines.iter().map(|l|l.height).sum::<u32>() as f32)}
 }
 
-pub fn paint_lines(fonts:&mut TextFonts,surf:&mut ostd::display::ViSurface,lines:&[TextLine],
-    x:f32,y:f32,color:Color,clip:(i32,i32,i32,i32)) {
-    let mut top=y;
+pub fn paint_lines_themed(
+    fonts: &mut TextFonts,
+    surf: &mut ostd::display::ViSurface,
+    lines: &[TextLine],
+    x: f32,
+    y: f32,
+    color: Color,
+    clip: (i32, i32, i32, i32),
+    theme_mode: Option<crate::draw::ReaderThemeMode>,
+) {
+    let mut top = y;
     for line in lines {
         for run in &line.runs {
             if !run.visible { continue; }
-            let run_top=top+line.baseline-fonts.ascender(run.face(),run.px);
-            crate::draw::text(fonts,surf,x+run.x,run_top,&run.span.text,run.face(),run.px,
-                run.span.color.unwrap_or(color),clip);
+            let run_top = top + line.baseline - fonts.ascender(run.face(), run.px);
+            let effective_color = match (run.span.color, theme_mode) {
+                (_, Some(mode)) if run.span.link.is_some() => mode.link_color(),
+                (Some(c), Some(_)) if run.span.code => c,
+                (Some(c), Some(mode)) => mode.remap_span_color(c),
+                (Some(c), None) => c,
+                (None, _) => color,
+            };
+            crate::draw::text(fonts, surf, x + run.x, run_top, &run.span.text, run.face(), run.px,
+                effective_color, clip);
         }
-        top+=line.height as f32;
+        top += line.height as f32;
     }
+}
+
+pub fn paint_lines(
+    fonts: &mut TextFonts,
+    surf: &mut ostd::display::ViSurface,
+    lines: &[TextLine],
+    x: f32,
+    y: f32,
+    color: Color,
+    clip: (i32, i32, i32, i32),
+) {
+    paint_lines_themed(fonts, surf, lines, x, y, color, clip, None)
 }
 
 fn pixel(value:f32)->u32 { (value.max(0.0) as i32) as u32 }

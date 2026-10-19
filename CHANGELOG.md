@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- Unified Desktop Phase 02 shared Linear theme, component tokens, and Ocel reader integration (`.agents/261019-1310-unified-desktop/phase-02-system-theme.md`):
+  - `libs/viui`: Extended `ViTheme` trait with semantic tokens for tabs (`tab_active_bg`, `tab_active_fg`, `tab_inactive_bg`, `tab_inactive_fg`, `tab_border`, `tab_close_hover`), taskbar (`taskbar_bg`, `taskbar_fg`, `taskbar_border`), spotlight (`spotlight_bg`, `spotlight_border`), status badges (`focus_ring`, `badge_dirty`, `badge_attention`, `badge_error`), reader mode (`reader_bg`, `reader_text`, `reader_subtext`), and document hyperlinks (`reader_link` guaranteed >= 5.0:1 contrast).
+  - Introduced `PaperTheme` warm sepia palette (`#F6F3EB`), `SystemPalette` enum (`Light`, `Dark`, `Paper`) with boxed theme dispatch (`theme_for_palette`), and `ThemePreferenceState` with monotonic revision tracking, stale-revision rejection, and raw-mode fallback.
+  - Implemented mathematical WCAG 2.1 contrast ratio test suite verifying all text, links, and interactive states achieve >= 4.5:1 (links >= 5.0:1) contrast ratio across Light, Dark, and Paper themes.
+  - `libs/viui/src/window.rs`: Enforced 20 DIP close button hit area (`close_btn_rect`) with centered 16 DIP icon (`close_btn_icon_rect`), ensuring touch/pointer hit compliance per contract.
+  - `cells/apps/desktop`: Reconciled taskbar to 36 DIP height (`TASKBAR_HEIGHT = 36`, button height 28 DIP) and Spotlight HUD to 480x320 (`SPOTLIGHT_WIDTH = 480`, `SPOTLIGHT_HEIGHT = 320`) with `MAX_RESULTS = 3` to fit cleanly above the taskbar and footer.
+  - `cells/apps/ocel`: Refactored reader theme to `ReaderThemeMode::{FollowSystem, Light, Dark, Paper}` backed by shared ViUI palettes; integrated `ACTIVE_SYSTEM_PALETTE` atomic dynamic resolution and preserved code syntax highlighting across theme switches.
 - Unified Desktop Phase 01 contract baseline and test harness (`.agents/261019-1310-unified-desktop/`):
   - ABI delta ledger (`abi-delta-ledger.md`): formal specification for Delta Families D-UI-01 through D-UI-10 (views/frames, six-zone snap, Linear theme, launch tokens, Alt+Space dispatch, shutdown consent, paged VFS, Quick Look leases, terminal stdio streams, Tier 3 guest integration) with candidate specification digest and Law-1 CP1 design gates.
   - Baseline manifest (`baseline-manifest.md`): truthful source and image inventory at commit `4994602b55a43f3fd4262f36dc3dfaa7b1a2ff44`, tracking 26 modified files and untracked artifacts with full SHA-256 hashes.

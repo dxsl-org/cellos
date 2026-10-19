@@ -4,6 +4,16 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-19 — Unified Desktop Phase 02 shared Linear theme, component tokens, and Ocel reader integration.**
+  Completed Phase 02 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+  and implementation plan `.agents/261019-1310-unified-desktop/phase-02-system-theme.md`:
+  - Extended `ViTheme` trait in `libs/viui/src/theme.rs` with semantic tokens for tabs (`tab_active_bg`, `tab_active_fg`, `tab_inactive_bg`, `tab_inactive_fg`, `tab_border`, `tab_close_hover`), taskbar (`taskbar_bg`, `taskbar_fg`, `taskbar_border`), spotlight (`spotlight_bg`, `spotlight_border`), status badges (`focus_ring`, `badge_dirty`, `badge_attention`, `badge_error`), reader mode (`reader_bg`, `reader_text`, `reader_subtext`), and document hyperlinks (`reader_link` guaranteed >= 5.0:1 contrast). Sourced base colors in `LightTheme` and `DarkTheme` to align with `contracts.md`.
+  - Introduced `PaperTheme` warm sepia palette (`#F6F3EB`), `SystemPalette` enum (`Light`, `Dark`, `Paper`) with boxed theme dispatch (`theme_for_palette`), and production `ThemePreferenceState` enforcing monotonic revision ordering and stale-revision rejection.
+  - Implemented mathematical WCAG 2.1 contrast ratio test suite in `libs/viui/src/theme.rs` validating that all normal text achieves >= 4.5:1 contrast against background/surface and hyperlinks achieve strictly >= 5.0:1 contrast across Light (6.92:1), Dark (5.93:1), and Paper (6.04:1) palettes.
+  - Reconciled shared geometry and touch/pointer compliance: `WindowChrome` in `libs/viui/src/window.rs` updated with a 20 DIP close button hit area (`close_btn_rect`) containing a centered 16 DIP icon (`close_btn_icon_rect`).
+  - Reconciled desktop layout in `cells/apps/desktop`: updated bottom taskbar height to 36 DIP (`src/taskbar.rs`, button height 28 DIP) and Spotlight HUD window dimensions to 480x320 (`src/spotlight.rs`) with `MAX_RESULTS = 3` to guarantee placement cleanly above the taskbar and footer status bar.
+  - Cut over Ocel document reader in `cells/apps/ocel` to `ReaderThemeMode::{FollowSystem, Light, Dark, Paper}` using shared ViUI palettes; wired `active_system_palette` atomic dynamic resolution and preserved code syntax highlighting across theme switches.
+  - Verified: 64 unit tests pass in `viui`, 170 unit tests pass in `ocel`, and automated x86 QEMU runner passes in 13.67s.
 - **2026-10-19 — Unified Desktop Phase 01 baseline, ABI delta ledger, and x86 integration test runner.**
   Completed Phase 01 contract baseline under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
   and implementation plan `.agents/261019-1310-unified-desktop/`:

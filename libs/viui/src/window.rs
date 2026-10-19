@@ -25,6 +25,7 @@ use crate::widget::{PaintCx, ViWidget, WidgetTree};
 
 const TITLEBAR_H: f32 = 28.0;
 const BTN_SIZE: f32 = 16.0;
+const BTN_HIT_SIZE: f32 = 20.0;
 const BTN_MARGIN: f32 = 6.0;
 const CHROME_BG: Color = Color::rgb(35, 35, 50);
 const CHROME_BTN_CLOSE: Color = Color::rgb(200, 60, 60);
@@ -69,10 +70,17 @@ impl WindowChrome {
         )
     }
 
-    /// Close button rect (surface-local).
+    /// Close button hit rect (surface-local, 20 DIP hit area per contract).
     pub fn close_btn_rect(&self, surf_w: u32) -> Rect {
-        let x = surf_w as f32 - BTN_MARGIN - BTN_SIZE;
-        Rect::new(x, (TITLEBAR_H - BTN_SIZE) / 2.0, BTN_SIZE, BTN_SIZE)
+        let x = surf_w as f32 - BTN_MARGIN - BTN_HIT_SIZE;
+        Rect::new(x, (TITLEBAR_H - BTN_HIT_SIZE) / 2.0, BTN_HIT_SIZE, BTN_HIT_SIZE)
+    }
+
+    /// Close button visual icon rect (16 DIP icon centered inside 20 DIP hit area).
+    pub fn close_btn_icon_rect(&self, surf_w: u32) -> Rect {
+        let hit = self.close_btn_rect(surf_w);
+        let offset = (BTN_HIT_SIZE - BTN_SIZE) / 2.0;
+        Rect::new(hit.x + offset, hit.y + offset, BTN_SIZE, BTN_SIZE)
     }
 
     pub fn max_btn_rect(&self, surf_w: u32) -> Rect {
@@ -105,7 +113,7 @@ impl WindowChrome {
         );
 
         // Buttons: close, max, min (right-aligned)
-        canvas.fill_rect(self.close_btn_rect(w), CHROME_BTN_CLOSE);
+        canvas.fill_rect(self.close_btn_icon_rect(w), CHROME_BTN_CLOSE);
         canvas.fill_rect(self.max_btn_rect(w), CHROME_BTN_MAX);
         canvas.fill_rect(self.min_btn_rect(w), CHROME_BTN_MIN);
     }

@@ -16,8 +16,8 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
 | Phase | Deliverable | Depends on | State |
 |---|---|---|---|
 | 01 | [Baseline and exact contract gates](phase-01-contract-baseline.md) | — | completed |
-| 02 | [Shared Linear theme and components](phase-02-system-theme.md) | 01 | pending |
-| 03 | [Native views, frames, tabs and lifecycle](phase-03-native-sessions.md) | 01,02 | pending |
+| 02 | [Shared Linear theme and components](phase-02-system-theme.md) | 01 | completed |
+| 03 | [Native views, frames, tabs and lifecycle](phase-03-native-sessions.md) | 01,02 | pending (unblocked) |
 | 04 | [Bottom taskbar, Spotlight and launch registry](phase-04-desktop-launcher.md) | 01,02,03 | pending |
 | 05 | [Six-zone snap and F11 fullscreen](phase-05-placement-fullscreen.md) | 03,04 | pending |
 | 06 | [Ocel native session and reader cutover](phase-06-ocel-cutover.md) | 02,03,04,05 | pending |
@@ -33,8 +33,16 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
   - Materialized `baseline-manifest.md` (source baseline, dirty tracked and untracked files inventory with full SHA-256 hashes, toolchain state, verification matrix).
   - Materialized and verified `tests/integration/tests/desktop-x86.rs` and `boot_x86_bios_with_accel` in `tests/integration/src/lib.rs` (tested TCG and KVM, QMP pointer routing + screendump diff, QMP keyboard injection).
   - Reconciled `docs/decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md` scope; updated `contracts.md` and `phase-01-contract-baseline.md`.
-- **Phase 02 — Shared Linear theme and components**: Pending (next phase).
-- **Phases 03–11**: Pending.
+- **Phase 02 — Shared Linear theme and components**: **Completed** (2026-10-19).
+  - Implemented `ViTheme` semantic tokens in `libs/viui/src/theme.rs` (tabs, taskbar, spotlight, status badges, focus ring, and reader mode).
+  - Added `PaperTheme` (#F6F3EB warm sepia palette), `SystemPalette` dynamic enum with boxed dispatch, and `ThemePreferenceState` monotonic revision update validation.
+  - Sourced base colors in `LightTheme` and `DarkTheme` aligned with `contracts.md`.
+  - Added semantic `reader_link` token ensuring $\ge 5.0:1$ contrast (Light 6.92:1, Dark 5.93:1, Paper 6.04:1); implemented mathematical WCAG 2.1 contrast ratio test suite in `viui` verifying $\ge 4.5:1$ text contrast across Light, Dark, and Paper themes.
+  - Reconciled shared geometry across widgets: `WindowChrome` close hit target 20 DIP with centered 16 DIP icon; `desktop` taskbar height 36 DIP (28 DIP buttons); spotlight dimensions 480x320 DIP with `MAX_RESULTS = 3`.
+  - Cut over Ocel reader theme (`cells/apps/ocel/src/{draw,doc,main}.rs`) to `ReaderThemeMode::{FollowSystem, Light, Dark, Paper}` backed by shared ViUI palette colors; wired `active_system_palette` atomic dynamic resolution and preserved syntax code colors.
+  - Verified 64 tests passing in `viui`, 170 tests in `ocel`, 1 test in `desktop`, and real x86 QEMU runner (`desktop_x86_boots_to_shell_and_compositor`) passing in 18.73s.
+- **Phase 03 — Native views, frames, tabs and lifecycle**: **Pending (Unblocked)** — all Phase 01 and Phase 02 dependencies satisfied.
+- **Phases 04–11**: Pending.
 
 ## Execution policy
 One integrating owner for API/SDK/kernel/shared lifecycle changes. Independent research and bounded app-specific slices may parallelize after interfaces freeze; do not concurrently edit shared source. Package and smoke a real consumer each phase; phase 11 is cross-feature qualification, not first integration. Every AC remains required for whole-plan completion, even when a prerequisite blocks one phase. Local captures do not qualify physical or production behavior.
@@ -62,4 +70,5 @@ Four internal review lenses completed; [20 unique findings and corrections](revi
 Product choices are approved in conversation. Three read-only recon slices plus direct source checks ground prerequisites; artifact validation checks links, AC IDs and phase/index DAG consistency. Phase 01 execution is completed: baseline manifest frozen, D-UI ABI deltas specified, and real x86 integration test runner materialized and verified in `tests/integration/tests/desktop-x86.rs`. Exact ABI approval, uncertain storage/VMX provenance and unavailable platform evidence remain phase-specific gates, not reasons to reopen settled UI choices.
 
 ## Handoff
-Phase 01 baseline is established and verified. Next step: Phase 02 (Shared Linear theme and components) implementation via `hc-cook /home/dmin/cellos/.agents/261019-1310-unified-desktop/plan.md`. Observe phase gates and ABI ratification checkpoints prior to modifying `libs/api` or `libs/types`.
+Phase 01 baseline and Phase 02 shared Linear theme and components are completed and verified.
+Phase 03 (Native views, frames, tabs and lifecycle) is unblocked for implementation via `hc-cook /home/dmin/cellos/.agents/261019-1310-unified-desktop/plan.md`. Observe phase gates and ABI ratification checkpoints (D-UI-01) prior to modifying compositor frame/view lifecycle or `libs/api`.

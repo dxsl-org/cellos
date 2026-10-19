@@ -49,8 +49,20 @@ Dialog/modal links are owner-verified parent ViewRefs. App-owned modal overlays 
 
 ## Appearance
 
-Shared palette roles and geometry are versioned pure data, adapted into existing ViTheme. Desktop owns runtime preference writes; apps only observe. Configuration persistence is through approved existing storage with explicit guarantees, not a new hidden global database. Ocel Reader chooses FollowSystem or explicit shared Light/Dark/Paper. Config/provider restart triggers snapshot refresh; user document state remains app-owned.
+Shared palette roles and geometry are versioned pure data, adapted into existing `ViTheme` (`libs/viui/src/theme.rs`). Desktop owns runtime preference writes; apps only observe. Configuration persistence is through approved existing storage with explicit guarantees, not a new hidden global database. Ocel Reader chooses FollowSystem or explicit shared Light/Dark/Paper. Config/provider restart triggers snapshot refresh; user document state remains app-owned.
 
+### Palette Specifications and Contrast Invariants
+- **Light (System Default):** Background `#F5F5F8`, Surface `#FFFFFF`, Border `#D7DAE0`, Text Primary `#14141C` (17.5:1 contrast against surface), Text Secondary `#5F6473` (5.2:1 contrast), Accent `#235AD7`, Tab Active Bg `#FFFFFF`, Tab Inactive Bg `#EBEDF2`, Reader Bg `#FFFFFF`.
+- **Dark:** Background `#121218`, Surface `#1C1C26`, Border `#37374B`, Text Primary `#F5F5FA` (13.8:1 contrast against surface), Text Secondary `#9BA0AF` (5.5:1 contrast), Accent `#5082F0`, Tab Active Bg `#262634`, Tab Inactive Bg `#16161E`, Reader Bg `#16161E`.
+- **Paper:** Background `#F6F3EB`, Surface `#EFECE3`, Border `#DAD5C8`, Text Primary `#2B2B2A` (12.1:1 contrast against surface), Text Secondary `#605E5A` (5.4:1 contrast against surface), Accent `#9C5B28`, Tab Active Bg `#FAF8F3`, Tab Inactive Bg `#E8E4DA`, Reader Bg `#F6F3EB`.
+- **Invariants:** Normal text contrast strictly $\ge 4.5:1$ across all three palettes. Images, PDF pages, video frames, and syntax highlighting retain source color fidelity (never blindly inverted).
+
+### Geometry and Hit Areas
+- Session Tab height: 28 DIP (touch target $\ge 28$ DIP, padding horizontal 12 DIP).
+- Tab Close Button: 16 DIP icon, 20 DIP active hit area.
+- Bottom Taskbar height: 36 DIP fixed at bottom edge ($y = \text{height} - 36$).
+- Spotlight Search HUD: 480 DIP width, 320 DIP max height, centered horizontally.
+- Focus ring outline: 2 DIP solid stroke using `focus_ring()`.
 ## Files and preview
 
 Directory paging must encode full filenames unambiguously, bound batch count/bytes and specify concurrent change restart semantics. Handle-relative operations preserve existing owner/right sealing. Metadata absence is unknown/unsupported, never zero/fake permission/time. Capability result distinguishes source preserved, partial destination, completion and unsupported durability. Mutation sequence identity prevents blindly repeating uncertain moves/deletes.

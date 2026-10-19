@@ -8,7 +8,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::draw::{self, theme, Color};
-use crate::parser::web::{paint_lines, wrap_runs, TextLine, TextRun};
+use crate::parser::web::{paint_lines, paint_lines_themed, wrap_runs, TextLine, TextRun};
 use ostd::display::ViSurface;
 use ostd::typography::{FontFace, TextFonts};
 
@@ -612,7 +612,18 @@ impl Document {
                 let x=view_x+b.left_margin;
                 for row in rows {
                     let ry=y+row.y_rel;
-                    if row.is_header {draw::clipped_rect(surf,x,ry,b.table_width,row.height,theme::BG_INPUT,clip);}
+                    let header_bg = match theme_mode {
+                        Some(mode) => {
+                            let pal = mode.resolved_palette(crate::draw::active_system_palette());
+                            match pal {
+                                viui::theme::SystemPalette::Dark => Color::rgb(38, 38, 52),
+                                viui::theme::SystemPalette::Paper => Color::rgb(232, 228, 218),
+                                viui::theme::SystemPalette::Light => Color::rgb(235, 237, 242),
+                            }
+                        }
+                        None => theme::BG_INPUT,
+                    };
+                    if row.is_header {draw::clipped_rect(surf,x,ry,b.table_width,row.height,header_bg,clip);}
                     for &(offset,height,active) in &b.search_highlights {
                         if offset>=row.y_rel&&offset<row.y_rel+row.height as i32 {draw::clipped_rect(surf,x,y+offset,b.table_width,height,if active{Color::rgb(245,158,11)}else{Color::rgb(100,90,30)},clip);}
                     }
@@ -621,7 +632,7 @@ impl Document {
                         draw::clipped_rect(surf,x+cell.x+cell.width as i32-1,ry,1,row.height,theme::BORDER,clip);
                         let cell_clip=((x+cell.x).max(clip.0),ry.max(clip.1),
                             (x+cell.x+cell.width as i32).min(clip.2),(ry+row.height as i32).min(clip.3));
-                        paint_lines(fonts,surf,&cell.lines,(x+cell.x+6) as f32,(ry+6) as f32,text_color,cell_clip);
+                        paint_lines_themed(fonts,surf,&cell.lines,(x+cell.x+6) as f32,(ry+6) as f32,text_color,cell_clip,theme_mode);
                     }
                 }
                 continue;
@@ -643,7 +654,7 @@ impl Document {
                 let width=b.lines.iter().map(|line|line.width as u32).max().unwrap_or(1);
                 draw::clipped_rect(surf,text_x,y+offset,width,height,if active{Color::rgb(245,158,11)}else{Color::rgb(100,90,30)},clip);
             }
-            paint_lines(fonts,surf,&b.lines,text_x as f32,(y+4) as f32,text_color,clip);
+            paint_lines_themed(fonts,surf,&b.lines,text_x as f32,(y+4) as f32,text_color,clip,theme_mode);
         }
     }
 

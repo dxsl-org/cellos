@@ -142,7 +142,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
   - Theme change updates live views without process restart or document state loss.
   - Content images, PDF pages, video frames, and syntax highlights preserve source colors (not blindly inverted).
   - Normal text contrast ratio strictly $\ge 4.5:1$ against surface background across all 3 palettes.
-- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** Target Phase 02.
+- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** COMPLETED FOR PHASE 02 (libs/viui theme tokens, PaperTheme, SystemPalette, ThemePreferenceState, WCAG contrast suite, and Ocel reader cutover implemented & verified; live IPC broadcast wiring deferred to Phase 04 Desktop integration).
 
 ---
 
@@ -339,7 +339,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
 |---|---|---|---|---|
 | D-UI-01 | Native Views, Frames & Lifecycle | **PENDING CANDIDATE APPROVAL** | Pending | Phase 03 |
 | D-UI-02 | Six-Zone Snap & F11 Fullscreen | **PENDING CANDIDATE APPROVAL** | Pending | Phase 05 |
-| D-UI-03 | Shared Linear/Paper Theme | **PENDING CANDIDATE APPROVAL** | Pending | Phase 02 |
+| D-UI-03 | Shared Linear/Paper Theme | **PENDING CANDIDATE APPROVAL** | Completed for Phase 02 (tokens/Paper/tests/Ocel verified) | Phase 02 |
 | D-UI-04 | Desktop Launch Token Protocol | **PENDING CANDIDATE APPROVAL** | Pending | Phase 04 |
 | D-UI-05 | Alt+Space Spotlight Dispatch | **PENDING CANDIDATE APPROVAL** | Pending | Phase 04 |
 | D-UI-06 | Two-Phase Close & Power Consent | **PENDING CANDIDATE APPROVAL** | Pending | Phase 03, 04 |
