@@ -18,9 +18,9 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
     AppInfo {
         id: "terminal",
         name: "Terminal",
-        path: "/bin/fb-console",
+        path: "/bin/terminal",
         icon: ">_",
-        description: "Interactive Console",
+        description: "Native GUI Terminal",
         is_pinned: true,
     },
     AppInfo {

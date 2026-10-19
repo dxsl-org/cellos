@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- Unified Desktop Phase 09 GUI Terminal and shell-session streams (`.agents/261019-1310-unified-desktop/phase-09-terminal-streams.md`):
+  - `cells/apps/terminal`: Standalone Native GUI Terminal application (`#![no_std]`, `#![forbid(unsafe_code)]`, 4 MiB custom heap):
+    - Monospace character grid and bounded scrollback: `TerminalGrid` in `src/grid.rs` with configurable columns and rows (default $80 \times 24$), character cells (`TerminalCell` storing character, foreground and background colors), carriage return (`\r`), newline (`\n`) with vertical scrolling, tab stop advances (`\t`), backspace (`\x08`), dynamic resizing (`resize`), and bounded 1000-line scrollback buffer (`MAX_SCROLLBACK = 1000`).
+    - Single-reader lease management: `TerminalSession` in `src/session.rs` manages exclusive input lease (`has_reader_lease`), command buffer accumulation, cooperative cancellation, and session close flagging.
+    - Cooperative interrupt handling: Session-local Ctrl+C interrupt (`send_interrupt` emitting `^C` and clearing active input line without killing unrelated system processes).
+    - Built-in command execution: In-session command processor supporting `help`, `clear` (wiping active screen while preserving session state), `echo`, `uname`, and `exit`.
+    - Dynamic window surface title synchronization: Surface title set to `"Terminal — CellOS Shell"` via `surf.set_title()`.
+    - Window resizing: `TerminalApp::resize` dynamically recomputes terminal grid columns and rows based on window width and height clamped to minimum dimensions ($40 \times 12$), preserving active buffer state.
+  - `cells/apps/desktop/src/apps.rs`: Updated catalog `terminal` path from `/bin/fb-console` to `/bin/terminal` with description `"Native GUI Terminal"`.
+  - Added `cells/apps/terminal` to `Cargo.toml` workspace members.
 - Unified Desktop Phase 08 bounded shared preview and Files Quick Look (`.agents/261019-1310-unified-desktop/phase-08-quick-look.md`):
   - `cells/apps/files`: Added shared Quick Look preview HUD modal overlay ($540 \times 400$ DIP) in `src/preview.rs`:
     - Format detection and preview rendering across 4 format families: Image (`.png`, `.jpg`, `.ppm` with dimension reporting and raster viewport), Markdown (`.md` rendered statically without network or scripts), Source Code / Text (`.rs`, `.c`, `.toml`, `.txt` bounded line preview), and PDF (`.pdf` document rendering via isolated demand rendering), plus truthful binary/unsupported fallback.

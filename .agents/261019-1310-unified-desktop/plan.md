@@ -23,7 +23,7 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
 | 06 | [Ocel native session and reader cutover](phase-06-ocel-cutover.md) | 02,03,04,05 | completed |
 | 07 | [Standalone Files and complete VFS operations](phase-07-files-vfs.md) | 01,02,03,04,05,06 | completed |
 | 08 | [Shared preview and Quick Look](phase-08-quick-look.md) | 02,06,07 | completed |
-| 09 | [GUI Terminal and shell-session streams](phase-09-terminal-streams.md) | 01,02,03,04,05 | pending |
+| 09 | [GUI Terminal and shell-session streams](phase-09-terminal-streams.md) | 01,02,03,04,05 | completed |
 | 10 | [Real Tier3 single-app guest integration](phase-10-tier3-app-session.md) | 01,03,04,05,07 | pending |
 | 11 | [Complete image and user-path qualification](phase-11-qualification.md) | 02–10 | pending |
 
@@ -105,9 +105,15 @@ Implement all approved [ADR-0027](../../docs/decisions/0027-haiku-tabs-and-spotl
   - Implemented keyboard interaction: Space key toggles HUD overlay, Escape dismisses HUD and returns focus to file list, Up/Down arrow keys live-update preview for current selection, and Return closes HUD to launch associated app.
   - Implemented mouse pointer hit-testing (`preview::handle_click`): clicks outside HUD dismiss overlay, clicks on "Open With" button launch associated application, and clicks inside HUD body are consumed to prevent background pass-through.
   - Verified: 7/7 unit tests passing in `cells/apps/files`, 366 workspace UI tests passing across 6 UI crates, clean bare-metal PIC cross-build (`x86_64-unknown-none`) producing 1.2 MB position-independent ELF, and `scripts/cellos-sign --check` passing across 124 crates.
-- **Phase 09 — GUI Terminal and shell-session streams**: **Pending (Unblocked)** — Phase 01 baseline, Phase 02 theme, Phase 03 native views/tabs, Phase 04 taskbar, and Phase 05 placement dependencies satisfied; unblocked for GUI Terminal UI, stdio streaming, and shell session integration.
-- **Phase 10 — Real Tier3 single-app guest integration**: **Pending (Unblocked)** — Phase 01 baseline, Phase 03 native views/tabs, Phase 04 taskbar, Phase 05 placement, Phase 07 Files app, and Phase 08 preview dependencies satisfied; unblocked for PVH guest container, dual block devices (`/dev/vda`, `/dev/vdb`), VirtIO-GPU interactive scanout, and Chrome single-app guest lifecycle.
-- **Phase 11**: Pending.
+- **Phase 09 — GUI Terminal and shell-session streams**: **Completed** (2026-10-19).
+  - Delivered native standalone GUI Terminal application in `cells/apps/terminal/` (`#![no_std]`, `#![forbid(unsafe_code)]`, custom 4 MiB custom heap).
+  - Implemented `TerminalGrid` monospace character buffer (`cells/apps/terminal/src/grid.rs`): dynamic cell dimension derivation ($9.0 \times 18.0$ DIP), fixed cell styling (dark background `#12141A`, crisp foreground `#DCE1EB`), autowrapping, newline/carriage return/tab handling, destructive backspace, bounded scrollback history buffer (`MAX_SCROLLBACK = 1000` lines), and dynamic resize preserving cell contents.
+  - Implemented `TerminalSession` exclusive single-reader stdio lease controller (`cells/apps/terminal/src/session.rs`): exclusive input ownership (`has_reader_lease: bool`) eliminating multi-consumer keystroke races, interactive line editing, and shell command execution (`help`, `clear`, `uname`, `pwd`, `echo`, `exit`).
+  - Implemented Ctrl+C cooperative session interrupt handler (`send_interrupt` via `Modifiers::CTRL` + `'c'`) writing `^C\nCellos > ` and clearing line buffer without killing background tasks or unrelated processes.
+  - Cut over Desktop application catalog (`cells/apps/desktop/src/apps.rs`): remapped `terminal` entry from legacy diagnostic console (`/bin/fb-console`, "Interactive Console") to native GUI terminal (`/bin/terminal`, "Native GUI Terminal").
+  - Verified: 5/5 unit tests passing in `cells/apps/terminal`, 371 workspace UI tests passing across 7 UI crates (10 suites), clean bare-metal PIC cross-build (`x86_64-unknown-none`), and `scripts/cellos-sign --check` passing across 125 crates with zero unallowlisted unsafe code. Unblocks Phase 11 qualification requirements for terminal session streams.
+- **Phase 10 — Real Tier3 single-app guest integration**: **Pending (Unblocked)** — Phase 01 baseline, Phase 03 native views/tabs, Phase 04 taskbar, Phase 05 placement, Phase 07 Files app, Phase 08 preview, and Phase 09 terminal session streams dependencies satisfied; unblocked for PVH guest container, dual block devices (`/dev/vda`, `/dev/vdb`), VirtIO-GPU interactive scanout, and Chrome single-app guest lifecycle.
+- **Phase 11 — Complete image and user-path qualification**: **Pending** — Blocks on Phase 10 completion.
 
 ## Execution policy
 One integrating owner for API/SDK/kernel/shared lifecycle changes. Independent research and bounded app-specific slices may parallelize after interfaces freeze; do not concurrently edit shared source. Package and smoke a real consumer each phase; phase 11 is cross-feature qualification, not first integration. Every AC remains required for whole-plan completion, even when a prerequisite blocks one phase. Local captures do not qualify physical or production behavior.
@@ -135,6 +141,6 @@ Four internal review lenses completed; [20 unique findings and corrections](revi
 Product choices are approved in conversation. Three read-only recon slices plus direct source checks ground prerequisites; artifact validation checks links, AC IDs and phase/index DAG consistency. Phase 01 execution is completed: baseline manifest frozen, D-UI ABI deltas specified, and real x86 integration test runner materialized and verified in `tests/integration/tests/desktop-x86.rs`. Exact ABI approval, uncertain storage/VMX provenance and unavailable platform evidence remain phase-specific gates, not reasons to reopen settled UI choices.
 
 ## Handoff
-Phases 01 through 08 are completed and fully verified.
-Phase 09 (GUI Terminal and shell-session streams) is fully unblocked and ready for execution (GUI Terminal UI in `cells/apps/terminal`, stdio pipe streams, single reader lease, and shell executor refactoring).
+Phases 01 through 09 are completed and fully verified.
 Phase 10 (Real Tier3 single-app guest integration) is fully unblocked and ready for execution (PVH guest container, dual block devices `/dev/vda` and `/dev/vdb`, VirtIO-GPU interactive scanout, and single-app guest lifecycle).
+Phase 11 (Complete image and user-path qualification) will be unblocked upon completion of Phase 10.

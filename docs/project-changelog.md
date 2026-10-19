@@ -4,6 +4,19 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-10-19 — Unified Desktop Phase 09 GUI Terminal and shell-session streams.**
+  Completed Phase 09 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
+  and implementation plan `.agents/261019-1310-unified-desktop/phase-09-terminal-streams.md`:
+  - `cells/apps/terminal`: Built standalone Native GUI Terminal application (`#![no_std]`, `#![forbid(unsafe_code)]`, 4 MiB custom heap):
+    - Monospace character grid and bounded scrollback: Implemented `TerminalGrid` in `src/grid.rs` supporting character cell manipulation (`TerminalCell`), UTF-8 character rendering via `ViSurface` and `TextFonts`, carriage return (`\r`), newline (`\n`) with vertical scrolling, horizontal tab navigation (`\t` 8-column tab stops), backspace (`\x08`), dynamic grid resizing (`resize`), and bounded 1000-line scrollback buffer (`MAX_SCROLLBACK = 1000`).
+    - Single-reader lease management: Implemented `TerminalSession` in `src/session.rs` enforcing exclusive stdin stream ownership via `has_reader_lease`, atomic input line collection, and command dispatch.
+    - Cooperative Ctrl+C interrupt handling: Session-local interrupt dispatch (`send_interrupt` emitting `^C` and clearing active input line without killing unrelated system processes or triggering destructive process termination).
+    - Built-in command execution: Integrated command executor supporting `help`, `clear` (resets visible grid while retaining prompt), `echo`, `uname`, and `exit` (flags session shutdown).
+    - Surface title synchronization: Initialized window surface with dynamic title `"Terminal — CellOS Shell"` via `surf.set_title()`.
+    - Responsive window resizing: `TerminalApp::resize` calculates grid column and row dimensions from surface width and height (scaled to font metrics `cell_w = 9.0`, `cell_h = 18.0`), updating `TerminalGrid` dynamically while preserving existing cell content.
+  - `cells/apps/desktop/src/apps.rs`: Updated `DEFAULT_CATALOG` application entry `terminal` launch path from `/bin/fb-console` to `/bin/terminal`, updating description to `"Native GUI Terminal"`.
+  - Added `cells/apps/terminal` to `Cargo.toml` workspace members.
+  - Verified: 5 unit tests pass in `cells/apps/terminal` (`cargo test -p terminal`); 371 workspace tests pass (`cargo test -p terminal -p files -p service-compositor -p ocel -p desktop -p viui -p api`); bare-metal PIC cross-build compiles cleanly (`RUSTFLAGS="-C relocation-model=pic" cargo build --release -p terminal --target x86_64-unknown-none -Z build-std=core,alloc`); signed F1/F5 policy checks pass with `#![forbid(unsafe_code)]`.
 - **2026-10-19 — Unified Desktop Phase 08 Bounded shared preview and Files Quick Look.**
   Completed Phase 08 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
   and implementation plan `.agents/261019-1310-unified-desktop/phase-08-quick-look.md`:

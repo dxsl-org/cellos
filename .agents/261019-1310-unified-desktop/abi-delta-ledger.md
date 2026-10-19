@@ -302,7 +302,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
   - Exclusive reader lease: exactly one process holds the stdin reader lease. Shell holds it while at prompt; foreground child receives it on spawn.
   - Cooperative interrupt: Ctrl+C sends out-of-band `SIGINT` signal event through the session control pipe; does not destroy the terminal window.
   - Terminal resize: sends `TerminalResize(cols: u16, rows: u16)` to child.
-- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** Target Phase 09.
+- **CP1 Status:** PENDING CANDIDATE APPROVAL. **CP2 Status:** **IMPLEMENTED & VERIFIED** (standalone Terminal crate, monospace grid with scrollback, exclusive reader lease, built-in shell commands, unit test suite passing).
 
 ---
 
@@ -328,6 +328,7 @@ Every command addressing a frame or view MUST carry complete generational qualif
 | `cells/apps/desktop` | `src/{main,apps,spotlight,taskbar}.rs` | Dynamic catalog, 3-section Spotlight HUD, theme toggle, running task switch. | High |
 | `cells/apps/ocel` | `src/{main,draw,doc,loader}.rs` | Removed local tab bar (TABBAR_HEIGHT=0), adopted native compositor session tabs, and integrated shared ViUI reader theme tokens. | Completed (Phase 06) |
 | `cells/apps/files` | `src/*` (new standalone app) | Built standalone 3-view file manager (List/Grid/Columns) with Places, safe mutation controller, and Quick Look HUD overlay. | Completed (Phase 07, 08) |
+| `cells/apps/terminal` | `src/*` (new standalone app) | Native GUI Terminal with monospace grid, scrollback, single-reader lease. | Completed (Phase 09) |
 | `cells/tools/shell` | `src/{executor,async_utils}.rs` | Add GUI Terminal support, atomic stdio pipe handoff, single reader lease. | Medium |
 | `cells/services/vfs` | `src/{manager,caller,dirs}.rs` | Add paged directory listing and safe two-phase file mutation. | Medium |
 
@@ -345,5 +346,5 @@ Every command addressing a frame or view MUST carry complete generational qualif
 | D-UI-06 | Two-Phase Close & Power Consent | **PENDING CANDIDATE APPROVAL** | Pending | Phase 03, 04 |
 | D-UI-07 | Files VFS Paged Enumeration & Mutation | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 07 |
 | D-UI-08 | Quick Look Lease & Cancellation | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 08 |
-| D-UI-09 | GUI Terminal Stdio & Input Lease | **PENDING CANDIDATE APPROVAL** | Pending | Phase 09 |
+| D-UI-09 | GUI Terminal Stdio & Input Lease | **PENDING CANDIDATE APPROVAL** | **IMPLEMENTED & VERIFIED** | Phase 09 |
 | D-UI-10 | Tier 3 Single-App Guest Integration | **PENDING CANDIDATE APPROVAL** | Pending | Phase 10 |

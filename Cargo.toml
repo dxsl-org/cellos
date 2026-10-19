@@ -139,6 +139,7 @@ members = [
     "cells/apps/desktop",
     "cells/apps/ocel",
     "cells/apps/files",
+    "cells/apps/terminal",
     "cells/apps/c2c-render",
     "cells/apps/hypha/llm-gateway",   # Hypha P0 — LLM network gateway
     "cells/apps/hypha/core",          # Hypha P1 — agent brain (chat loop)

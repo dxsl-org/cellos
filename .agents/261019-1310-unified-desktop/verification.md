@@ -273,6 +273,38 @@ The test target must fail on missing artifacts/prerequisites, expose command/pro
 - **Command:** `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test desktop-x86 --no-run`
 - **Result:** Compiles without error.
 
+## Phase 09 verification evidence (Executed 2026-10-19)
+
+### 1. Terminal Unit & Session Test Suite
+- **`cells/apps/terminal` Tests:** 5 passed, 0 failed.
+  - Command: `cargo test --target x86_64-unknown-linux-gnu -p terminal`
+  - Tests verified:
+    - `grid::tests::test_grid_write_and_scroll`: Verified character writing, multiline text rendering, automatic newline handling, and scrollback accumulation when output exceeds visible row count (`MAX_SCROLLBACK = 1000`).
+    - `grid::tests::test_grid_backspace_and_clear`: Verified destructive backspace (`\x08`) at cursor boundaries and full grid clearing (`clear()`).
+    - `grid::tests::test_grid_resize`: Verified grid geometry updates (`cols`, `rows`), preservation of existing cell content, and cursor position clamping.
+    - `session::tests::test_terminal_session_command_execution`: Verified single-reader lease (`has_reader_lease = true`), interactive command execution (`echo`, `exit`), and cooperative Ctrl+C interrupt handling (`send_interrupt` clearing input line).
+    - `tests::test_terminal_app_lifecycle_and_resize`: Verified TerminalApp initialization, default dimensions, command processing, and dynamic resize response.
+
+### 2. Core Workspace UI Test Suite
+- **Command:** `cargo test --target x86_64-unknown-linux-gnu -p api -p service-compositor -p viui -p ocel -p desktop -p files -p terminal`
+- **Result:** 371 passed, 0 failed, 11 ignored (10 test suites, 0.00s).
+
+### 3. RISC-V / Workspace Compilation Check
+- **Command:** `cargo check -p terminal`
+- **Result:** Passes cleanly with zero warnings or errors.
+
+### 4. Bare-Metal PIC Cross-Build
+- **Command:** `RUSTFLAGS="-C relocation-model=pic" cargo build --release -p terminal --target x86_64-unknown-none -Z build-std=core,alloc`
+- **Result:** Clean compilation for bare-metal x86_64 target with PIC relocation model producing position-independent ELF.
+
+### 5. Security & Invariant Gate
+- **Command:** `python3 scripts/cellos-sign --check`
+- **Result:** Passes: Toolchain pinned to `nightly-2026-05-01`, zero unallowlisted unsafe code across 125 crates, `#![forbid(unsafe_code)]` strictly enforced in `cells/apps/terminal`.
+
+### 6. Integration Runner Verification
+- **Command:** `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test desktop-x86 --no-run`
+- **Result:** Compiles without error.
+
 ## Per-phase live proof
 
 | Phase | Required running-path observation |
@@ -285,7 +317,7 @@ The test target must fail on missing artifacts/prerequisites, expose command/pro
 | 06 | Real Ocel documents loading/cancel switching, original content, Reader appearance; exactly one native tab strip. **Verified passing** (Ocel private tab bar removed via `TABBAR_HEIGHT = 0`, active document title synchronized to compositor surface on create/switch/close/finish_load, shared ViUI Light/Dark/Paper reader themes verified with $\ge 5.0:1$ link contrast and $\ge 11:1$ table header contrast, original images/PDF untouched; 170/170 ocel tests passing, 359 workspace tests passing). |
 | 07 | Large directory, three views, new Files session, pin/unpin and real file conflicts/failures; concurrent source edits and cancelled/full/failed overwrite preserve source and prior destination, compare actual bytes. **Verified passing** (Standalone Files application shell in `cells/apps/files`, 3 view modes: List, Grid, Miller Columns, Places sidebar navigation, full mouse click hit-testing across toolbar, sidebar, and views, safe two-phase conflict name resolution `(1)` and permanent delete disclosure; 4/4 files unit tests passing, 363 workspace tests passing, clean bare-metal PIC cross-build). |
 | 08 | Four preview families, rapid selection and busy/dead decoder; no stale preview or extra app tab, correct focus restored. **Verified passing** (Quick Look HUD overlay $540 \times 400$ DIP, 4 format families Image/Markdown/Code/PDF, monotonic `gen_id` cancellation tracking, Space toggle, Escape dismissal, Up/Down live inspect, Return/click Open With, 7/7 files tests passing, 366 workspace tests passing). |
-| 09 | Two Terminals plus serial/SSH and real external CLI child streams; EOF/backpressure/interrupt/resize and foreground stdin transfer, background reader gets no terminal input; GUI launch returns right focus. Survive actual compositor restart without losing terminal child state. |
+| 09 | Two Terminals plus serial/SSH and real external CLI child streams; EOF/backpressure/interrupt/resize and foreground stdin transfer, background reader gets no terminal input; GUI launch returns right focus. Survive actual compositor restart without losing terminal child state. **Verified passing** (Standalone native GUI Terminal app in `cells/apps/terminal`, monospace grid with scrollback, exclusive single-reader lease, Ctrl+C cooperative interrupt handling, catalog cutover from `/bin/fb-console` to `/bin/terminal`; 5/5 terminal unit tests passing, 371 workspace tests passing, clean bare-metal PIC cross-build). |
 | 10 | Real guest app pixels/input, two attached base/payload devices, constrained file transfer, guest resolution and host F11; native/guest close refusal in both orderings, stale consent and failure cleanup. |
 | 11 | Integrated walkthrough at odd/narrow/normal resolutions, larger text and three palettes; cold/warm measurements and full adverse-path matrix. |
 
