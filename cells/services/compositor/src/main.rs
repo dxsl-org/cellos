@@ -112,15 +112,13 @@ pub fn main() {
                     handle_input_event(
                         &buf,
                         &mut input,
+                        fb.width,
+                        fb.height,
                         Rect {
-                            x: window_decoration::FRAME,
-                            y: window_decoration::FRAME + window_decoration::TITLE,
-                            w: fb
-                                .width
-                                .saturating_sub((window_decoration::FRAME * 2) as u32),
-                            h: fb.height.saturating_sub(
-                                (window_decoration::FRAME * 2 + window_decoration::TITLE) as u32,
-                            ),
+                            x: 0,
+                            y: 0,
+                            w: fb.width,
+                            h: fb.height.saturating_sub(36),
                         },
                         &mut table,
                         &mut z_order,
