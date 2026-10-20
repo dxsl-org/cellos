@@ -1,4 +1,6 @@
-//! Compositor-owned window frame geometry, hit testing, and rasterization.
+//! Cell Tab window frame geometry, hit testing, and rasterization (BeOS / Haiku OS style).
+//!
+//! A Cell Tab represents a view/session of an App Cell perched on the top-left of the Cell Frame.
 
 use api::display::Rect;
 

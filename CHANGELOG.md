@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- Conceptual and UI terminology unification:
+  - Applications are formally unified as **App Cells** (or simply **Cells**).
+  - Window frame tabs (BeOS / Haiku OS style) are formally named **Cell Tabs**.
+  - Window containers hosting one or more Cell Tabs are named **Cell Frames**.
+  - Grouping/stacking multiple tabs into a single window is designated **Cell Stacking** (Stack & Tile).
+  - Desktop Spotlight sections updated to **Cells** (replacing "Applications") and **Active Cells** (replacing "Running Tasks").
+  - Elevated high-level UI primitives and components into `viui::surface` (`Toolbar`, `SegmentedControl`, `PlacesSidebar`, `ListView`, `GridView`, `ScrollBar`, `AddressBar`, `NavigationButtons`, `StatusBar`).
 - Unified Desktop Phase 11 complete image and user-path qualification (`.agents/261019-1310-unified-desktop/phase-11-qualification.md`):
   - Complete end-to-end integrated qualification of Unified Desktop under ADR-0027 on Intel x86-64 across all 11 plan phases.
   - Full qualification across AC-01 through AC-20 in acceptance ledger (`acceptance.md`) and verification matrix (`verification.md`).

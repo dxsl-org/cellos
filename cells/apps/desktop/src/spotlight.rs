@@ -34,17 +34,17 @@ fn run_x(width: u32) -> i32 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SpotlightSection {
     #[default]
-    Applications = 0,
-    RunningTasks = 1,
+    Cells = 0,
+    ActiveCells = 1,
     System = 2,
 }
 
 impl SpotlightSection {
     pub const fn next(self) -> Self {
         match self {
-            Self::Applications => Self::RunningTasks,
-            Self::RunningTasks => Self::System,
-            Self::System => Self::Applications,
+            Self::Cells => Self::ActiveCells,
+            Self::ActiveCells => Self::System,
+            Self::System => Self::Cells,
         }
     }
 }
@@ -74,7 +74,7 @@ impl SpotlightState {
     pub fn new() -> Self {
         Self {
             is_open: false,
-            section: SpotlightSection::Applications,
+            section: SpotlightSection::Cells,
             query: String::new(),
             selected_index: 0,
             mouse_x: -1,
@@ -84,7 +84,7 @@ impl SpotlightState {
 
     pub fn open(&mut self) {
         self.is_open = true;
-        self.section = SpotlightSection::Applications;
+        self.section = SpotlightSection::Cells;
         self.query.clear();
         self.selected_index = 0;
     }
@@ -126,8 +126,8 @@ pub fn render(
         draw_label(
             surf, fonts, query_x, input_y, query_w, input_h,
             match state.section {
-                SpotlightSection::Applications => "Type app name to filter...",
-                SpotlightSection::RunningTasks => "Search active running tasks...",
+                SpotlightSection::Cells => "Type cell name to filter...",
+                SpotlightSection::ActiveCells => "Browse active cells...",
                 SpotlightSection::System => "System settings & power...",
             },
             FontFace::UiRegular, 14.0, theme::TEXT_MUTED, false,
@@ -147,10 +147,10 @@ pub fn render(
 
     // Three Section Headers: [1 Applications] [2 Tasks] [3 System]
     let tab_w = (sw.saturating_sub(28)) / 3;
-    for (i, name) in ["1 Applications", "2 Tasks", "3 System"].iter().enumerate() {
+    for (i, name) in ["1 Cells", "2 Active", "3 System"].iter().enumerate() {
         let tx = 14 + i as i32 * tab_w as i32;
-        let is_active = (i == 0 && state.section == SpotlightSection::Applications)
-            || (i == 1 && state.section == SpotlightSection::RunningTasks)
+        let is_active = (i == 0 && state.section == SpotlightSection::Cells)
+            || (i == 1 && state.section == SpotlightSection::ActiveCells)
             || (i == 2 && state.section == SpotlightSection::System);
         let tab_col = if is_active { theme::ACCENT_CYAN } else { theme::TEXT_MUTED };
         draw_label(
@@ -166,10 +166,10 @@ pub fn render(
 
     // Section Content
     match state.section {
-        SpotlightSection::Applications => {
+        SpotlightSection::Cells => {
             render_applications(surf, fonts, registry, state, sw);
         }
-        SpotlightSection::RunningTasks => {
+        SpotlightSection::ActiveCells => {
             render_running_tasks(surf, fonts, state, sw);
         }
         SpotlightSection::System => {
@@ -182,7 +182,7 @@ pub fn render(
     fill_rect(surf, 0, footer_y, sw, 1, theme::MODAL_BORDER);
     draw_label(
         surf, fonts, 14, footer_y + 1, sw.saturating_sub(28), 26,
-        "Tab Switch Section    Esc Close    Enter Select",
+        "Tab Switch Section    Esc Close    Enter Select Cell",
         FontFace::UiRegular, 13.0, theme::TEXT_MUTED, false,
     );
     surf.damage_all();
@@ -199,7 +199,7 @@ fn render_applications(
     if results.is_empty() {
         draw_label(
             surf, fonts, 24, LIST_START_Y + 28, sw.saturating_sub(48), 32,
-            "No matching applications found", FontFace::UiRegular,
+            "No matching cells found", FontFace::UiRegular,
             15.0, theme::TEXT_MUTED, true,
         );
         return;
@@ -399,7 +399,7 @@ pub fn handle_key(
         }
         KeySym::Return => {
             match state.section {
-                SpotlightSection::Applications => {
+                SpotlightSection::Cells => {
                     let results = registry.filtered(&state.query);
                     if let Some(app) = results.get(state.selected_index) {
                         let path = app.path;
@@ -409,7 +409,7 @@ pub fn handle_key(
                         SpotlightAction::None
                     }
                 }
-                SpotlightSection::RunningTasks => {
+                SpotlightSection::ActiveCells => {
                     let idx = state.selected_index;
                     state.close();
                     SpotlightAction::SwitchTask(idx)
@@ -432,8 +432,8 @@ pub fn handle_key(
         }
         KeySym::Down => {
             let max_idx = match state.section {
-                SpotlightSection::Applications => registry.filtered(&state.query).len().min(MAX_RESULTS),
-                SpotlightSection::RunningTasks | SpotlightSection::System => 3,
+                SpotlightSection::Cells => registry.filtered(&state.query).len().min(MAX_RESULTS),
+                SpotlightSection::ActiveCells | SpotlightSection::System => 3,
             };
             if max_idx > 0 && state.selected_index + 1 < max_idx {
                 state.selected_index += 1;
@@ -469,8 +469,8 @@ pub fn handle_click(
         let tab_w = (sw.saturating_sub(28)) / 3;
         let tab_idx = ((x - 14).max(0) as u32) / tab_w;
         state.section = match tab_idx {
-            0 => SpotlightSection::Applications,
-            1 => SpotlightSection::RunningTasks,
+            0 => SpotlightSection::Cells,
+            1 => SpotlightSection::ActiveCells,
             _ => SpotlightSection::System,
         };
         state.selected_index = 0;
@@ -478,7 +478,7 @@ pub fn handle_click(
     }
 
     match state.section {
-        SpotlightSection::Applications => {
+        SpotlightSection::Cells => {
             let results = registry.filtered(&state.query);
             let total_results = results.len();
             let max_display = total_results.min(MAX_RESULTS);
@@ -506,7 +506,7 @@ pub fn handle_click(
                 }
             }
         }
-        SpotlightSection::RunningTasks => {
+        SpotlightSection::ActiveCells => {
             for i in 0..MAX_RESULTS {
                 let row_y = LIST_START_Y + i as i32 * ROW_STEP;
                 if is_inside(x, y, 14, row_y, sw - 28, ROW_HEIGHT) {
@@ -549,12 +549,12 @@ mod tests {
         let mut state = SpotlightState::new();
         state.open();
 
-        assert_eq!(state.section, SpotlightSection::Applications);
+        assert_eq!(state.section, SpotlightSection::Cells);
 
         // Tab key cycles section to RunningTasks
         let act1 = handle_key(&registry, &mut state, KeySym::Tab, None);
         assert_eq!(act1, SpotlightAction::None);
-        assert_eq!(state.section, SpotlightSection::RunningTasks);
+        assert_eq!(state.section, SpotlightSection::ActiveCells);
 
         // Enter on RunningTasks switches task
         let act_task = handle_key(&registry, &mut state, KeySym::Return, None);

@@ -19,13 +19,15 @@ Sources:
 
 ## Decision
 
-### Unified native session tabs
+### Unified native session tabs (Cell Tabs)
 
-- A tab represents an application view/session, not necessarily a process. One process may own multiple tabs; one frame may contain tabs owned by different applications/processes.
-- Native applications register sessions with the system tab mechanism rather than drawing a second session-tab strip. Ocel pages, terminal sessions and Files browsing sessions use this contract.
-- The system manages presentation, selection, ordering, frame membership and placement. Applications own session content, rendering, titles and lifecycle decisions, including unsaved-data confirmation.
-- Membership is a presentation relationship, never a grant of capabilities, shared memory or access to another application's data.
-- Dialogs, inspectors and tightly coupled panes need not become independent system tabs.
+- In CellOS, applications are formally designated as **App Cells** (or simply **Cells**).
+- A tab perched on the top-left of the window frame (BeOS/Haiku OS style) represents an application view/session and is officially termed a **Cell Tab**. The window container hosting one or more Cell Tabs is a **Cell Frame**.
+- One Cell may own multiple Cell Tabs; one Cell Frame may contain Cell Tabs owned by different Cells (Cell Stacking / Stack & Tile).
+- Native Cells register sessions with the system tab mechanism rather than drawing a second session-tab strip. Ocel pages, terminal sessions and Files browsing sessions use this contract.
+- The system manages presentation, selection, ordering, frame membership and placement. Cells own session content, rendering, titles and lifecycle decisions, including unsaved-data confirmation.
+- Membership is a presentation relationship, never a grant of capabilities, shared memory or access to another Cell's data.
+- Dialogs, inspectors and tightly coupled panes need not become independent Cell Tabs.
 
 ### Labels, menus and new sessions
 
