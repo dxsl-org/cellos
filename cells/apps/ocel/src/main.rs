@@ -896,13 +896,12 @@ impl OcelViewer {
         if navigation_dirty {
         fill_rect(surf, 0, 0, w, TOOLBAR_HEIGHT, sys_theme.surface());
         fill_rect(surf, 0, TOOLBAR_HEIGHT as i32 - 1, w, 1, sys_theme.border());
-        ui_text(fonts, surf, (10, 8, 48, 28), "Ocel", sys_theme.accent(), semibold, 16.0, false);
         let tab = &self.tabs[self.active_tab];
         let can_back = tab.history_idx > 0;
         let can_fwd = tab.history_idx + 1 < tab.history.len();
-        NavigationButtons::render(surf, fonts, sys_theme, 64, 8, can_back, can_fwd);
-        let addr_x = 126;
-        let addr_w = w.saturating_sub(250);
+        NavigationButtons::render(surf, fonts, sys_theme, 10, 8, can_back, can_fwd);
+        let addr_x = 76;
+        let addr_w = w.saturating_sub(176);
         AddressBar::render(surf, fonts, sys_theme, addr_x, 8, addr_w, 28, &self.url_input);
         let btn_x = addr_x + addr_w as i32 + 8;
         fill_rect(surf, btn_x, 8, 38, 28, sys_theme.accent());
@@ -911,12 +910,12 @@ impl OcelViewer {
         let reader = tab.doc.is_reader_mode() || tab.doc.web_layout.is_none();
         let btn_w = 32u32;
         if reader {
-            fill_rect(surf, reader_x, 8, btn_w, 28, theme::ACCENT_CYAN);
-            draw::draw_book_icon(surf, reader_x + 16, 22, Color::rgb(17, 17, 27));
+            fill_rect(surf, reader_x, 8, btn_w, 28, sys_theme.accent());
+            draw::draw_book_icon(surf, reader_x + 16, 22, Color::WHITE);
         } else {
-            fill_rect(surf, reader_x, 8, btn_w, 28, theme::BG_INPUT);
-            stroke_rect(surf, reader_x, 8, btn_w, 28, theme::BORDER);
-            draw::draw_globe_icon(surf, reader_x + 16, 22, theme::ACCENT_BLUE);
+            fill_rect(surf, reader_x, 8, btn_w, 28, sys_theme.input_bg());
+            stroke_rect(surf, reader_x, 8, btn_w, 28, sys_theme.border());
+            draw::draw_globe_icon(surf, reader_x + 16, 22, sys_theme.accent());
         }
 
         if TABBAR_HEIGHT > 0 {
@@ -1053,22 +1052,22 @@ impl OcelViewer {
         }
 
         // 1. Toolbar Back button [<]
-        if (64..90).contains(&cx) && (8..36).contains(&cy) {
+        if (10..36).contains(&cx) && (8..36).contains(&cy) {
             self.go_back();
             self.render();
             return;
         }
 
         // 2. Toolbar Forward button [>]
-        if (94..120).contains(&cx) && (8..36).contains(&cy) {
+        if (40..66).contains(&cx) && (8..36).contains(&cy) {
             self.go_forward();
             self.render();
             return;
         }
 
-        // 3. Toolbar [Go] button
-        let addr_x = 126;
-        let addr_w = w.saturating_sub(250) as i32;
+        // 3. Toolbar [Go] button and Address bar
+        let addr_x = 76;
+        let addr_w = w.saturating_sub(176) as i32;
         let btn_x = addr_x + addr_w + 8;
         if (btn_x..btn_x + 38).contains(&cx) && (8..36).contains(&cy) {
             let target = loader::classify_smart_url(&self.url_input);
@@ -1079,6 +1078,10 @@ impl OcelViewer {
         let reader_x = btn_x + 44;
         if (reader_x..reader_x + 32).contains(&cx) && (8..36).contains(&cy) {
             self.toggle_reader_mode();
+            return;
+        }
+        if (addr_x..addr_x + addr_w).contains(&cx) && (8..36).contains(&cy) {
+            let _ = ostd::input::request_focus();
             return;
         }
 
