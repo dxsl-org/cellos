@@ -26,6 +26,7 @@ def main():
         "/bin/terminal": rel_dir / "terminal",
         "/bin/chrome": rel_dir / "chrome",
         "/bin/ocel": rel_dir / "ocel",
+        "/bin/net": rel_dir / "service-net",
     }
 
     # Verify all artifacts exist
