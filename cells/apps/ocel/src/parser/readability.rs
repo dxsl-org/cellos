@@ -249,12 +249,12 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
     let has_h1 = !h1_title.is_empty();
     let is_article = if schema_body_node.is_some() {
         true
-    } else if list_cards.len() >= 2 && best_p_count <= 4 {
+    } else if list_cards.len() >= 2 {
         false
     } else if is_portal {
         (has_h1 && best_p_count >= 1 && highest_score >= 35) || best_p_count >= 3
     } else {
-        best_node.is_some() && (highest_score >= 35 || (has_h1 && best_p_count >= 2) || (best_p_count >= 3 && highest_score >= 20))
+        best_node.is_some() && (highest_score >= 35 || (has_h1 && best_p_count >= 1) || (best_p_count >= 3 && highest_score >= 20))
     };
 
     let target_node = if is_article { best_node } else { None };
@@ -1137,53 +1137,48 @@ fn extract_list_cards(arena: &DocumentArena, base_url: &str, assets: &[DocNode])
         .map(|n| n.id)
         .collect();
 
-    let candidate_container_nodes = if article_nodes.len() >= 2 {
-        article_nodes
-    } else {
-        let mut list = Vec::new();
-        for node in &arena.nodes {
-            if is_noise_or_modal(arena, node.id) { continue; }
-            if let NodeData::Element { tag, attributes } = &node.data {
-                let tag_name = tag.as_str();
-                if matches!(tag_name, "div" | "section" | "li" | "tr") {
-                    let mut is_item = false;
-                    let mut is_container = false;
-                    for (k, v) in attributes {
-                        if k == "class" || k == "id" {
-                            let lower = v.to_ascii_lowercase();
-                            if is_card_item_class(&lower) {
-                                is_item = true;
-                                break;
-                            } else if is_card_container_class(&lower) {
-                                is_container = true;
-                            }
+    let mut candidate_container_nodes = article_nodes;
+    for node in &arena.nodes {
+        if is_noise_or_modal(arena, node.id) || candidate_container_nodes.contains(&node.id) { continue; }
+        if let NodeData::Element { tag, attributes } = &node.data {
+            let tag_name = tag.as_str();
+            if matches!(tag_name, "div" | "section" | "li" | "tr") {
+                let mut is_item = false;
+                let mut is_container = false;
+                for (k, v) in attributes {
+                    if k == "class" || k == "id" {
+                        let lower = v.to_ascii_lowercase();
+                        if is_card_item_class(&lower) {
+                            is_item = true;
+                            break;
+                        } else if is_card_container_class(&lower) {
+                            is_container = true;
                         }
                     }
-                    if is_item {
-                        list.push(node.id);
-                    } else if is_container && tag_name != "tr" {
-                        let mut child = node.first_child;
-                        while let Some(cid) = child {
-                            if let Some(cnode) = arena.get(cid) {
-                                if let NodeData::Element { attributes: cattrs, .. } = &cnode.data {
-                                    if !is_noise_or_modal(arena, cid) {
-                                        let child_has_item_class = cattrs.iter().any(|(ck, cv)| {
-                                            (ck == "class" || ck == "id") && is_card_item_class(&cv.to_ascii_lowercase())
-                                        });
-                                        if !child_has_item_class {
-                                            list.push(cid);
-                                        }
+                }
+                if is_item {
+                    candidate_container_nodes.push(node.id);
+                } else if is_container && tag_name != "tr" {
+                    let mut child = node.first_child;
+                    while let Some(cid) = child {
+                        if let Some(cnode) = arena.get(cid) {
+                            if let NodeData::Element { attributes: cattrs, .. } = &cnode.data {
+                                if !is_noise_or_modal(arena, cid) && !candidate_container_nodes.contains(&cid) {
+                                    let child_has_item_class = cattrs.iter().any(|(ck, cv)| {
+                                        (ck == "class" || ck == "id") && is_card_item_class(&cv.to_ascii_lowercase())
+                                    });
+                                    if !child_has_item_class {
+                                        candidate_container_nodes.push(cid);
                                     }
                                 }
                             }
-                            child = arena.get(cid).and_then(|n| n.next_sibling);
                         }
+                        child = arena.get(cid).and_then(|n| n.next_sibling);
                     }
                 }
             }
         }
-        list
-    };
+    }
 
     for card_id in candidate_container_nodes {
         if let Some(card) = extract_single_card(arena, card_id, base_url, &mut seen_urls, assets) {
@@ -1237,7 +1232,11 @@ fn extract_pagination_links(arena: &DocumentArena, base_url: &str) -> Vec<(Strin
 fn is_portal_or_homepage(base_url: &str) -> bool {
     let without_scheme = base_url.split("://").nth(1).unwrap_or(base_url);
     let path = without_scheme.split('/').nth(1).unwrap_or("");
-    path.is_empty() || path == "index.html" || path == "index.htm" || path == "index.php"
+    let path = path.split('?').next().unwrap_or(path);
+    path.is_empty()
+        || path == "index.html" || path == "index.htm" || path == "index.php" || path == "home"
+        || (path.ends_with(".htm") || path.ends_with(".html")) && !path.chars().any(|c| c.is_ascii_digit())
+        || path.contains("category") || path.contains("topic") || path.contains("tag") || path.contains("channel") || path.contains("section")
 }
 
 fn clean_article_title(title: &str, base_url: &str) -> Option<String> {
@@ -1551,12 +1550,22 @@ fn render_clean_subtree(
                     match tag_name {
                         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
                             let level = tag[1..].parse::<u8>().unwrap_or(2);
-                            let text = String::from(arena.get_text_content(child_id).trim());
-                            if !text.is_empty() {
-                                out.push(DocNode::Heading {
-                                    level: level.clamp(1, 4),
-                                    text,
+                            let mut spans = Vec::new();
+                            collect_article_spans(arena, child_id, &mut spans, base_url, true, false, false, None);
+                            if spans.iter().any(|s| s.link.is_some()) {
+                                out.push(DocNode::ListItem {
+                                    bullet: '•',
+                                    indent: 0,
+                                    spans,
                                 });
+                            } else {
+                                let text = String::from(arena.get_text_content(child_id).trim());
+                                if !text.is_empty() {
+                                    out.push(DocNode::Heading {
+                                        level: level.clamp(1, 4),
+                                        text,
+                                    });
+                                }
                             }
                         }
                         "p" => {
@@ -1607,19 +1616,19 @@ fn render_clean_subtree(
                             while let Some(li_id) = li_cur {
                                 if let Some(li_node) = arena.get(li_id) {
                                     if li_node.tag() == Some("li") {
-                                        let text = String::from(arena.get_text_content(li_id).trim());
-                                        out.push(DocNode::ListItem {
-                                            bullet: '•',
-                                            indent: 0,
-                                            spans: alloc::vec![StyledSpan::plain(&text)],
-                                        });
+                                        let mut spans = Vec::new();
+                                        collect_article_spans(arena, li_id, &mut spans, base_url, false, false, false, None);
+                                        if !spans.is_empty() {
+                                            out.push(DocNode::ListItem {
+                                                bullet: '•',
+                                                indent: 0,
+                                                spans,
+                                            });
+                                        }
                                     }
                                 }
                                 li_cur = arena.get(li_id).and_then(|n| n.next_sibling);
                             }
-                        }
-                        "form" => {
-                            collect_form_nodes(arena, child_id, out);
                         }
                         "input" => {
                             if let Some(inp) = collect_single_input(arena, child_id) {
@@ -1635,6 +1644,15 @@ fn render_clean_subtree(
                             if let Some(ta) = collect_single_textarea(arena, child_id) {
                                 out.push(ta);
                             }
+                        }
+                        "a" => {
+                            let mut spans = Vec::new();
+                            collect_article_spans(arena, child_id, &mut spans, base_url, false, false, false, None);
+                            if !spans.is_empty() {
+                                out.push(DocNode::Paragraph { spans });
+                            }
+                            cur = child.next_sibling;
+                            continue;
                         }
                         _ => {
                             // Recursively extract from div, section, etc.
