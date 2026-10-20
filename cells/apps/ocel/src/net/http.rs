@@ -455,14 +455,23 @@ impl<T: Transport> FetchJob<T> {
     }
     fn response(&mut self, bytes: &[u8]) -> Result<(), String> {
         if self.stage == Stage::Resolve {
-            let addr = match api::ipc::decode::<NetResponse>(bytes) { Ok(NetResponse::Addr(addr)) => addr, _ => return Err(format!("DNS resolution failed for {}", self.url.host)) };
+            ostd::io::println(&alloc::format!("[ocel/net] Resolve reply len={}", bytes.len()));
+            let addr = match api::ipc::decode::<NetResponse>(bytes) {
+                Ok(NetResponse::Addr(addr)) => {
+                    ostd::io::println(&alloc::format!("[ocel/net] DNS resolved {}: {}.{}.{}.{}", self.url.host, addr[0], addr[1], addr[2], addr[3]));
+                    addr
+                }
+                _ => return Err(format!("DNS resolution failed for {}", self.url.host)),
+            };
             cache_dns(self.url.host.clone(), addr, self.io.now());
             self.address = Some(addr); self.stage = Stage::Connect; return Ok(());
         }
         if self.stage == Stage::Connect {
+            ostd::io::println(&alloc::format!("[ocel/net] Connect reply len={}", bytes.len()));
             let cap = if self.url.tls() {
                 u64::from_le_bytes(bytes.try_into().map_err(|_| "Malformed TLS connect reply")?)
             } else { match api::ipc::decode::<NetResponse>(bytes) { Ok(NetResponse::CapId(cap)) => cap as u64, _ => return Err("TCP connect failed".into()) } };
+            ostd::io::println(&alloc::format!("[ocel/net] Connect result cap={}", cap));
             if cap == 0 { return Err("TLS connection failed (network/certificate/time policy)".into()); }
             self.cap = Some(cap); self.stage = if self.url.tls() { Stage::Send } else { Stage::WaitConnect }; return Ok(());
         }

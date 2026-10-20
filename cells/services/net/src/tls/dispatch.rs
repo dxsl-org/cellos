@@ -230,19 +230,32 @@ impl TlsPending {
             cursor = Some(cap);
             let mut op = self.operations.remove(&cap).unwrap();
             if table.get(cap, op.owner) != Some(op.handle) || sys_get_time() >= op.deadline {
+                ostd::io::println(&alloc::format!("[net/tls] Operation TIMEOUT or handle lost for cap={}", cap));
                 self.fail(cap, op, sockets, table);
                 continue;
             }
             let result = match &mut op.state {
-                State::Connecting(_) => match sockets.get_mut::<tcp::Socket>(op.handle).state() {
-                    tcp::State::Established => Step::TcpConnected,
-                    tcp::State::Closed | tcp::State::CloseWait => Step::Failed,
+                State::Connecting(h) => match sockets.get_mut::<tcp::Socket>(op.handle).state() {
+                    tcp::State::Established => {
+                        ostd::io::println(&alloc::format!("[net/tls] TCP Established for {}, starting TLS handshake", h));
+                        Step::TcpConnected
+                    }
+                    tcp::State::Closed | tcp::State::CloseWait => {
+                        ostd::io::println(&alloc::format!("[net/tls] TCP Closed/CloseWait for {}", h));
+                        Step::Failed
+                    }
                     _ => Step::Waiting,
                 },
                 State::Handshake(future) => {
                     match poll_future(future, iface, device, sockets) {
-                        Poll::Ready(Ok(entry)) => Step::Connected(entry),
-                        Poll::Ready(Err(_)) => Step::Failed,
+                        Poll::Ready(Ok(entry)) => {
+                            ostd::io::println(&alloc::format!("[net/tls] Handshake SUCCESS for cap={}", cap));
+                            Step::Connected(entry)
+                        }
+                        Poll::Ready(Err(e)) => {
+                            ostd::io::println(&alloc::format!("[net/tls] Handshake FAILED for cap={}: {:?}", cap, e));
+                            Step::Failed
+                        }
                         Poll::Pending => Step::Waiting,
                     }
                 }

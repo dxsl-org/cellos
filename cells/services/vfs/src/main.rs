@@ -103,7 +103,7 @@ api::declare_syscalls![
 // The size is named because the sector cache in `page_cache` has to fit inside
 // it: the cache declares its budget as a fraction of this, and a cache that
 // cannot fit kills the cell as soon as it fills (`OOM: cell heap exhausted`).
-pub(crate) const VFS_HEAP_BYTES: usize = 4 * 1024 * 1024;
+pub(crate) const VFS_HEAP_BYTES: usize = 16 * 1024 * 1024;
 
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(VFS_HEAP_BYTES);

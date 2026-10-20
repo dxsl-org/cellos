@@ -103,6 +103,7 @@ pub fn handle_tls_raw(
             }
         }
         RawTlsRequest::Connect { addr, port, hostname } => {
+            ostd::io::println(&alloc::format!("[net/tls] Connect request: host={} addr={}.{}.{}.{} port={}", hostname, addr[0], addr[1], addr[2], addr[3], port));
             if !cfg!(feature = "qemu-dev-https") && !authenticated_time_available() {
                 announce_tls_refusal_once();
                 send_connect_reply(sender, 0);
@@ -114,14 +115,16 @@ pub fn handle_tls_raw(
             let (handle, cap) = match make_tcp(sockets, table, owner) {
                 Ok(pair) => pair,
                 Err(_) => {
+                    ostd::io::println("[net/tls] make_tcp failed");
                     send_connect_reply(sender, 0);
                     return;
                 }
             };
             let remote = IpEndpoint::new(IpAddress::v4(addr[0], addr[1], addr[2], addr[3]), port);
-            if sockets.get_mut::<tcp::Socket>(handle)
-                .connect(iface.context(), remote, next_ephemeral_port()).is_err()
+            if let Err(e) = sockets.get_mut::<tcp::Socket>(handle)
+                .connect(iface.context(), remote, next_ephemeral_port())
             {
+                ostd::io::println(&alloc::format!("[net/tls] socket.connect error: {:?}", e));
                 table.remove_internal(cap);
                 sockets.remove(handle);
                 send_connect_reply(sender, 0);

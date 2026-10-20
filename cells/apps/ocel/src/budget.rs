@@ -15,7 +15,7 @@ mod profile {
     pub const MAX_REFERENCES: usize = 64;
     pub const MAX_CSS_RULES: usize = 1024;
     pub const MAX_CSS_SELECTORS: usize = 4096;
-    pub const MAX_IMAGES: usize = 16;
+    pub const MAX_IMAGES: usize = 64;
     pub const MAX_IMAGE_PIXELS: usize = 1024 * 1024;
     pub const MAX_IMAGE_TOTAL_BYTES: usize = 4 * 1024 * 1024;
     pub const MAX_CONCURRENT_RESOURCE_FETCHES: usize = 4;
@@ -25,17 +25,17 @@ mod profile {
     pub const PROFILE_NAME: &str = "desktop";
     pub const HEAP_BYTES: usize = 128 * 1024 * 1024;
     pub const MAX_RESIDENT_BYTES: usize = 96 * 1024 * 1024;
-    pub const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
-    pub const MAX_RESOURCE_BYTES: usize = 32 * 1024 * 1024;
-    pub const MAX_CSS_BYTES: usize = 4 * 1024 * 1024;
-    pub const MAX_ENCODED_IMAGE_BYTES: usize = 8 * 1024 * 1024;
-    pub const MAX_REFERENCES: usize = 1024;
-    pub const MAX_CSS_RULES: usize = 16_384;
-    pub const MAX_CSS_SELECTORS: usize = 65_536;
-    pub const MAX_IMAGES: usize = 512;
-    pub const MAX_IMAGE_PIXELS: usize = 4 * 1024 * 1024;
-    pub const MAX_IMAGE_TOTAL_BYTES: usize = 32 * 1024 * 1024;
-    pub const MAX_CONCURRENT_RESOURCE_FETCHES: usize = 24;
+    pub const MAX_TEXT_BYTES: usize = 8 * 1024 * 1024;
+    pub const MAX_RESOURCE_BYTES: usize = 64 * 1024 * 1024;
+    pub const MAX_CSS_BYTES: usize = 8 * 1024 * 1024;
+    pub const MAX_ENCODED_IMAGE_BYTES: usize = 16 * 1024 * 1024;
+    pub const MAX_REFERENCES: usize = 4096;
+    pub const MAX_CSS_RULES: usize = 32_768;
+    pub const MAX_CSS_SELECTORS: usize = 131_072;
+    pub const MAX_IMAGES: usize = 4096;
+    pub const MAX_IMAGE_PIXELS: usize = 8 * 1024 * 1024;
+    pub const MAX_IMAGE_TOTAL_BYTES: usize = 64 * 1024 * 1024;
+    pub const MAX_CONCURRENT_RESOURCE_FETCHES: usize = 32;
 }
 pub use profile::*;
 pub const MAX_DOM_NODES: usize = 16_384;

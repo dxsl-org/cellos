@@ -59,9 +59,19 @@ pub struct TlsSocketEntry {
 impl TlsSocketEntry {
     /// Consumes the hostname and owns all resources across suspended polls.
     pub async fn handshake(handle: SocketHandle, hostname: String) -> Result<Self, TlsError> {
+        ostd::io::println(&alloc::format!("[net/tls] Starting handshake for hostname={}", hostname));
         #[cfg(feature = "qemu-dev-https")]
-        super::qemu_time::fresh_for_handshake().await?;
-        let mut buffers = prepare_handshake_buffers()?;
+        if let Err(e) = super::qemu_time::fresh_for_handshake().await {
+            ostd::io::println(&alloc::format!("[net/tls] fresh_for_handshake failed: {:?}", e));
+            return Err(e);
+        }
+        let mut buffers = match prepare_handshake_buffers() {
+            Ok(b) => b,
+            Err(e) => {
+                ostd::io::println(&alloc::format!("[net/tls] prepare_handshake_buffers failed: {:?}", e));
+                return Err(e);
+            }
+        };
         // SAFETY: both allocations live at stable heap addresses. `conn` is
         // destroyed before `buffers` on every path (including future drop while
         // suspended); the completed entry likewise declares conn first.
@@ -80,10 +90,18 @@ impl TlsSocketEntry {
             if hostname.is_empty() {
                 return Err(TlsError::InvalidCertificate);
             }
-            let provider = ViTlsProvider::new(ViRng::new(), &hostname)?;
-            conn.open(TlsContext::new(&config, provider)).await?;
+            let provider = match ViTlsProvider::new(ViRng::new(), &hostname) {
+                Ok(p) => p,
+                Err(e) => {
+                    ostd::io::println(&alloc::format!("[net/tls] ViTlsProvider::new failed: {:?}", e));
+                    return Err(e);
+                }
+            };
+            if let Err(e) = conn.open(TlsContext::new(&config, provider)).await {
+                ostd::io::println(&alloc::format!("[net/tls] conn.open failed: {:?}", e));
+                return Err(e);
+            }
         }
-
         #[cfg(feature = "tls-insecure")]
         {
             static BANNER_PRINTED: core::sync::atomic::AtomicBool =

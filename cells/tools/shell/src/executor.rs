@@ -888,9 +888,13 @@ fn spawn_external(prog: &str, args: &[String]) -> i32 {
         return 1;
     }
 
-    let mut path = alloc::string::String::from("/bin/");
-    path.push_str(prog);
-
+    let path = if prog.starts_with('/') {
+        alloc::string::String::from(prog)
+    } else {
+        let mut p = alloc::string::String::from("/bin/");
+        p.push_str(prog);
+        p
+    };
     // Try the kernel's own path route first: it is the only route that reaches a
     // cell whose reviewed launch edge carries authority (the VFS-loaded route
     // refuses a non-empty child ceiling), and for VIFS1-resident cells it is also
@@ -898,12 +902,13 @@ fn spawn_external(prog: &str, args: &[String]) -> i32 {
     // command line by design, and the fallback below may need a second attempt, so
     // the argv is published again in between — `args` is still owned here, which is
     // the only place that can do it.
+    if !ostd::set_spawn_argv(args) {
+        shell_println("shell: external argv exceeds 512-byte transport limit");
+        return 1;
+    }
     let mut spawned = syscall::sys_spawn_from_path_raw(&path);
     if matches!(spawned, syscall::SyscallResult::Err(_)) {
-        if !ostd::set_spawn_argv(args) {
-            shell_println("shell: external argv exceeds 512-byte transport limit");
-            return 1;
-        }
+        let _ = ostd::set_spawn_argv(args);
         spawned = syscall::sys_spawn_from_path(&path);
     }
     match spawned {
@@ -948,6 +953,36 @@ fn spawn_external(prog: &str, args: &[String]) -> i32 {
             code
         }
         syscall::SyscallResult::Err(_) => {
+            if prog != "vm-runner" && !prog.starts_with('/') {
+                let app_toml = alloc::format!("/apps/{}/{}.toml", prog, prog);
+                let app_lua = alloc::format!("/apps/{}/{}.lua", prog, prog);
+                let has_app = match syscall::sys_open_cap(&app_toml) {
+                    Ok(cap) => {
+                        syscall::sys_close_cap(cap);
+                        true
+                    }
+                    Err(_) => match syscall::sys_open_cap(&app_lua) {
+                        Ok(cap) => {
+                            syscall::sys_close_cap(cap);
+                            true
+                        }
+                        Err(_) => false,
+                    },
+                };
+
+                if has_app {
+                    let mut runner_args = alloc::vec![alloc::string::String::from(prog)];
+                    runner_args.extend_from_slice(args);
+                    return spawn_external("vm-runner", &runner_args);
+                }
+
+                // Check for direct native user app binary at /apps/<prog>/<prog>
+                let direct_app = alloc::format!("/apps/{}/{}", prog, prog);
+                if let Ok(cap) = syscall::sys_open_cap(&direct_app) {
+                    syscall::sys_close_cap(cap);
+                    return spawn_external(&direct_app, args);
+                }
+            }
             ostd::io::print("shell: command not found: ");
             ostd::io::println(prog);
             127

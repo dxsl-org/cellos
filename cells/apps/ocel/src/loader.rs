@@ -155,7 +155,14 @@ impl DocumentLoadJob {
                         }
                         references
                     }
-                    Err(error) => return self.fail(error),
+                    Err(error) => {
+                        if self.reader_mode {
+                            ostd::io::println(&alloc::format!("[ocel] reader mode: ignoring raw HTML reference discovery warning: {}", error));
+                            Vec::new()
+                        } else {
+                            return self.fail(error);
+                        }
+                    }
                 }
             } else { Vec::new() };
             self.loaded = Some(loaded);
