@@ -19,6 +19,7 @@ mod profile {
     pub const MAX_IMAGE_PIXELS: usize = 1024 * 1024;
     pub const MAX_IMAGE_TOTAL_BYTES: usize = 4 * 1024 * 1024;
     pub const MAX_CONCURRENT_RESOURCE_FETCHES: usize = 4;
+    pub const MAX_DOM_NODES: usize = 16_384;
 }
 #[cfg(feature = "desktop")]
 mod profile {
@@ -36,9 +37,9 @@ mod profile {
     pub const MAX_IMAGE_PIXELS: usize = 8 * 1024 * 1024;
     pub const MAX_IMAGE_TOTAL_BYTES: usize = 64 * 1024 * 1024;
     pub const MAX_CONCURRENT_RESOURCE_FETCHES: usize = 32;
+    pub const MAX_DOM_NODES: usize = 65_536;
 }
 pub use profile::*;
-pub const MAX_DOM_NODES: usize = 16_384;
 pub const MAX_DOM_DEPTH: usize = 64;
 pub const MAX_SELECTOR_BYTES: usize = 1024;
 pub const MAX_TABS: usize = 4;

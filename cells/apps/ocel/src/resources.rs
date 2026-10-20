@@ -193,6 +193,41 @@ pub fn resolve(base: &str, reference: &str) -> Result<String, String> {
     if let Some(query) = query { result.push('?'); result.push_str(query); }
     Ok(result)
 }
+/// Resolve a hyperlink target (<a href="...">) against the base document URL.
+/// Unlike sub-resource resolution, hyperlinks are unrestricted navigation targets
+/// and MUST preserve cross-site links, anchors, and queries.
+pub fn resolve_hyperlink(base: &str, reference: &str) -> Option<String> {
+    let reference = reference.trim();
+    if reference.is_empty() || reference.starts_with("javascript:") {
+        return None;
+    }
+    if reference.starts_with('#') {
+        let base_no_hash = base.split('#').next().unwrap_or(base);
+        return Some(format!("{}{}", base_no_hash, reference));
+    }
+    if reference.contains("://") {
+        return Some(String::from(reference));
+    }
+    if reference.starts_with("//") {
+        let scheme = base.split("://").next().unwrap_or("https");
+        return Some(format!("{}:{}", scheme, reference));
+    }
+    let (base_scheme, base_rest) = base.split_once("://")?;
+    let base_split = base_rest.find(|c| c == '/' || c == '?').unwrap_or(base_rest.len());
+    let base_authority = &base_rest[..base_split];
+    let base_origin = format!("{}://{}", base_scheme, base_authority);
+    let base_path = &base_rest[base_split..];
+    let base_path = base_path.split('?').next().unwrap_or(base_path);
+    let joined = if reference.starts_with('/') {
+        format!("{}{}", base_origin, reference)
+    } else if reference.starts_with('?') {
+        format!("{}{}{}", base_origin, if base_path.is_empty() { "/" } else { base_path }, reference)
+    } else {
+        let dir = base_path.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+        format!("{}/{}/{}", base_origin, dir, reference)
+    };
+    Some(joined)
+}
 
 fn cached(url: &str, limit: usize) -> Result<Arc<Vec<u8>>, String> {
     let active = ACTIVE.lock();
@@ -356,6 +391,25 @@ mod tests {
         bundle.insert("https://host/a".into(), Err("Truncated response".into()), false).unwrap();
         assert!(bundle.resident_bytes() > 0);
         assert_eq!(bundle.warnings().collect::<Vec<_>>(), alloc::vec!["Truncated response"]);
+    }
+    #[test]
+    fn test_hyperlink_resolution_preserves_cross_site_and_anchors() {
+        assert_eq!(
+            resolve_hyperlink("https://news.ycombinator.com/news", "https://github.com/rust-lang/rust"),
+            Some(String::from("https://github.com/rust-lang/rust"))
+        );
+        assert_eq!(
+            resolve_hyperlink("https://news.ycombinator.com/news", "/item?id=123"),
+            Some(String::from("https://news.ycombinator.com/item?id=123"))
+        );
+        assert_eq!(
+            resolve_hyperlink("https://example.com/article", "#comments"),
+            Some(String::from("https://example.com/article#comments"))
+        );
+        assert_eq!(
+            resolve_hyperlink("https://example.com/article", "javascript:void(0)"),
+            None
+        );
     }
     #[test]
     fn decoded_resource_budget_is_preflighted_and_shared_bytes_are_not_cloned() {

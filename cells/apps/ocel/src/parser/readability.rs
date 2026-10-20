@@ -284,8 +284,19 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
     // Assemble clean Markdown-style reader view:
     let mut nodes = Vec::new();
 
-    // 1. Logo (if available)
-    if let Some(logo_node) = find_logo(arena, assets) {
+    // 1. Logo (if available) - scaled to compact, elegant reader header
+    if let Some(mut logo_node) = find_logo(arena, assets) {
+        if let DocNode::DomImage { ref mut width, ref mut height, .. } = logo_node {
+            let max_w = 140u32;
+            let max_h = 36u32;
+            let orig_w = (*width).max(1);
+            let orig_h = (*height).max(1);
+            let scale_w = (max_w as f32) / (orig_w as f32);
+            let scale_h = (max_h as f32) / (orig_h as f32);
+            let scale = scale_w.min(scale_h).min(1.0);
+            *width = (orig_w as f32 * scale).max(1.0) as u32;
+            *height = (orig_h as f32 * scale).max(1.0) as u32;
+        }
         nodes.push(logo_node);
     }
 
@@ -958,19 +969,17 @@ fn extract_single_card(
 
             if tag_name == "a" && !href_val.is_empty() {
                 let href = href_val.trim();
-                if !href.starts_with('#') && !href.starts_with("javascript:") {
-                    if let Ok(resolved) = crate::resources::resolve(base_url, href) {
-                        let link_text = arena.get_text_content(nid).trim().to_string();
-                        if link_text.chars().count() >= 5 {
-                            let is_heading_anchor = lower_class.contains("title")
-                                 || lower_class.contains("heading")
-                                 || lower_class.contains("name")
-                                 || node.parent.and_then(|p| arena.get(p)).and_then(|pn| pn.tag()).map_or(false, |t| t.starts_with('h'));
+                if let Some(resolved) = crate::resources::resolve_hyperlink(base_url, href) {
+                    let link_text = arena.get_text_content(nid).trim().to_string();
+                    if link_text.chars().count() >= 5 {
+                        let is_heading_anchor = lower_class.contains("title")
+                             || lower_class.contains("heading")
+                             || lower_class.contains("name")
+                             || node.parent.and_then(|p| arena.get(p)).and_then(|pn| pn.tag()).map_or(false, |t| t.starts_with('h'));
 
-                            if is_heading_anchor || link_text.chars().count() > longest_link_text {
-                                longest_link_text = link_text.chars().count();
-                                best_link = Some((resolved, link_text));
-                            }
+                        if is_heading_anchor || link_text.chars().count() > longest_link_text {
+                            longest_link_text = link_text.chars().count();
+                            best_link = Some((resolved, link_text));
                         }
                     }
                 }
@@ -1180,8 +1189,8 @@ fn extract_pagination_links(arena: &DocumentArena, base_url: &str) -> Vec<(Strin
                         "trang sau" | "trang trước" | "tiếp" | "lùi" | "next" | "prev" | "previous" | "»" | "«" | ">" | "<"
                     );
 
-                if is_pagination && !href_val.is_empty() && !href_val.starts_with('#') {
-                    if let Ok(resolved) = crate::resources::resolve(base_url, href_val) {
+                if is_pagination && !href_val.is_empty() {
+                    if let Some(resolved) = crate::resources::resolve_hyperlink(base_url, href_val) {
                         if !seen.contains(&resolved) {
                             seen.insert(resolved.clone());
                             pages.push((text, resolved));
@@ -1260,8 +1269,8 @@ fn find_next_page_link(arena: &DocumentArena, base_url: &str) -> Option<String> 
                 let is_next = rel_val.eq_ignore_ascii_case("next")
                     || class_val.to_ascii_lowercase().contains("next-page")
                     || class_val.to_ascii_lowercase().contains("page-next");
-                if is_next && !href_val.is_empty() && !href_val.starts_with('#') {
-                    if let Ok(resolved) = crate::resources::resolve(base_url, href_val) {
+                if is_next && !href_val.is_empty() {
+                    if let Some(resolved) = crate::resources::resolve_hyperlink(base_url, href_val) {
                         return Some(resolved);
                     }
                 }
@@ -1396,9 +1405,9 @@ fn collect_page_links(arena: &DocumentArena, base_url: &str) -> (Vec<(String, St
                     {
                         continue;
                     }
-                    let resolved = match crate::resources::resolve(base_url, href) {
-                        Ok(url) => url,
-                        Err(_) => continue,
+                    let resolved = match crate::resources::resolve_hyperlink(base_url, href) {
+                        Some(url) => url,
+                        None => continue,
                     };
                     if resolved.trim_end_matches('/') == base_url.trim_end_matches('/') {
                         continue;
@@ -1645,12 +1654,7 @@ fn collect_article_spans(
                             .iter()
                             .find(|(k, _)| k == "href")
                             .and_then(|(_, href)| {
-                                let href = href.trim();
-                                if href.is_empty() || href.starts_with('#') || href.starts_with("javascript:") {
-                                    None
-                                } else {
-                                    crate::resources::resolve(base_url, href).ok()
-                                }
+                                crate::resources::resolve_hyperlink(base_url, href)
                             })
                             .or(link.clone())
                     } else {
