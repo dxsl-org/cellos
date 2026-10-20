@@ -4,27 +4,9 @@
 use ostd::typography::{FontFace, TextFonts};
 use ostd::display::ViSurface;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Color {
-    pub b: u8,
-    pub g: u8,
-    pub r: u8,
-    pub a: u8,
-}
-
-impl Color {
-    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
-        Self { r, g, b, a: 255 }
-    }
-    #[allow(dead_code)]
-    pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Self { r, g, b, a }
-    }
-
-    pub const fn as_bgra_bytes(self) -> [u8; 4] {
-        [self.b, self.g, self.r, self.a]
-    }
-}
+pub use viui::canvas::Color;
+pub use viui::surface::{fill_rect, stroke_rect};
+pub use viui::surface::components::*;
 
 pub mod theme {
     use super::Color;
@@ -93,8 +75,7 @@ impl ReaderThemeMode {
     }
 
     pub fn resolved_bg(self, system: viui::theme::SystemPalette) -> Color {
-        let c = self.resolved_theme(system).reader_bg();
-        Color::rgb(c.r(), c.g(), c.b())
+        self.resolved_theme(system).reader_bg()
     }
 
     pub fn text_color(self) -> Color {
@@ -102,8 +83,7 @@ impl ReaderThemeMode {
     }
 
     pub fn resolved_text(self, system: viui::theme::SystemPalette) -> Color {
-        let c = self.resolved_theme(system).reader_text();
-        Color::rgb(c.r(), c.g(), c.b())
+        self.resolved_theme(system).reader_text()
     }
 
     pub fn muted_color(self) -> Color {
@@ -111,8 +91,7 @@ impl ReaderThemeMode {
     }
 
     pub fn resolved_muted(self, system: viui::theme::SystemPalette) -> Color {
-        let c = self.resolved_theme(system).reader_subtext();
-        Color::rgb(c.r(), c.g(), c.b())
+        self.resolved_theme(system).reader_subtext()
     }
 
     pub fn accent_color(self) -> Color {
@@ -120,8 +99,7 @@ impl ReaderThemeMode {
     }
 
     pub fn resolved_accent(self, system: viui::theme::SystemPalette) -> Color {
-        let c = self.resolved_theme(system).accent();
-        Color::rgb(c.r(), c.g(), c.b())
+        self.resolved_theme(system).accent()
     }
 
     pub fn link_color(self) -> Color {
@@ -129,8 +107,7 @@ impl ReaderThemeMode {
     }
 
     pub fn resolved_link(self, system: viui::theme::SystemPalette) -> Color {
-        let c = self.resolved_theme(system).reader_link();
-        Color::rgb(c.r(), c.g(), c.b())
+        self.resolved_theme(system).reader_link()
     }
 
     pub const fn name(self) -> &'static str {
@@ -158,64 +135,6 @@ impl ReaderThemeMode {
     }
 }
 
-pub fn fill_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: Color) {
-    let sw = surf.width() as i32;
-    let sh = surf.height() as i32;
-    let stride = surf.stride();
-    let pixels = surf.pixels_mut();
-
-    let x0 = x.max(0);
-    let y0 = y.max(0);
-    let x1 = x.saturating_add(w.min(i32::MAX as u32) as i32).min(sw);
-    let y1 = y.saturating_add(h.min(i32::MAX as u32) as i32).min(sh);
-    if x0 >= x1 || y0 >= y1 {
-        return;
-    }
-
-    let [b, g, r, a] = color.as_bgra_bytes();
-    if a == 0 { return; }
-    if a == 255 {
-        let color = [b, g, r, a];
-        for py in y0..y1 {
-            let start = py as usize * stride + x0 as usize * 4;
-            let end = py as usize * stride + x1 as usize * 4;
-            for pixel in pixels[start..end].chunks_exact_mut(4) {
-                pixel.copy_from_slice(&color);
-            }
-        }
-        return;
-    }
-    for py in y0..y1 {
-        let row_start = py as usize * stride;
-        for px in x0..x1 {
-            let offset = row_start + px as usize * 4;
-            blend_pixel(&mut pixels[offset..offset + 4], b, g, r, a);
-        }
-    }
-}
-
-fn blend_pixel(pixel: &mut [u8], b: u8, g: u8, r: u8, a: u8) {
-    if a == 255 {
-        pixel.copy_from_slice(&[b, g, r, 255]);
-    } else if a != 0 {
-        let alpha = a as u32;
-        let inverse = 255 - alpha;
-        for (dst, src) in pixel[..3].iter_mut().zip([b, g, r]) {
-            *dst = ((src as u32 * alpha + *dst as u32 * inverse + 127) / 255) as u8;
-        }
-        pixel[3] = (alpha + pixel[3] as u32 * inverse / 255) as u8;
-    }
-}
-
-pub fn stroke_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, border: Color) {
-    if w == 0 || h == 0 {
-        return;
-    }
-    fill_rect(surf, x, y, w, 1, border);
-    fill_rect(surf, x, y + h as i32 - 1, w, 1, border);
-    fill_rect(surf, x, y, 1, h, border);
-    fill_rect(surf, x + w as i32 - 1, y, 1, h, border);
-}
 pub fn draw_book_icon(surf: &mut ViSurface, cx: i32, cy: i32, color: Color) {
     // Left page outline
     fill_rect(surf, cx - 7, cy - 5, 6, 1, color);

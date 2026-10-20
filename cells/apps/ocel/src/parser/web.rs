@@ -902,7 +902,7 @@ impl WebLayout {
             alloc::vec![
                 ("font-size".into(), format!("{px}px")),
                 ("line-height".into(), format!("{line_height}px")),
-                ("color".into(), format!("rgba({},{},{},{})", color.r, color.g, color.b, color.a as f32 / 255.0)),
+                ("color".into(), format!("rgba({},{},{},{})", color.r(), color.g(), color.b(), color.a() as f32 / 255.0)),
                 ("display".into(), display.into()),
             ]
         }
@@ -1004,7 +1004,7 @@ impl WebLayout {
             ("display".into(),display.into()),
             ("font-size".into(),format!("{}px",style.font_size)),
             ("line-height".into(),format!("{}px",style.line_height)),
-            ("color".into(),format!("rgba({},{},{},{})",style.color.r,style.color.g,style.color.b,style.color.a as f32/255.0)),
+            ("color".into(),format!("rgba({},{},{},{})",style.color.r(),style.color.g(),style.color.b(),style.color.a() as f32/255.0)),
             ("box-sizing".into(),if style.layout.box_sizing == BoxSizing::BorderBox { "border-box".into() } else { "content-box".into() }),
             ("position".into(),match style.position { CssPosition::Static=>"static",CssPosition::Relative=>"relative",CssPosition::Absolute=>"absolute",CssPosition::Fixed=>"fixed" }.into()),
         ];

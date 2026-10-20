@@ -23,15 +23,38 @@ pub fn fill_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: Co
     if x0 >= x1 || y0 >= y1 {
         return;
     }
+    let sa = color.a() as u32;
+    if sa == 0 {
+        return;
+    }
+    if sa == 255 {
+        let bgra = [color.b(), color.g(), color.r(), 255];
+        for cy in y0..y1 {
+            let row_start = (cy as usize * stride) + (x0 as usize * 4);
+            for cx in 0..(x1 - x0) as usize {
+                let offset = row_start + (cx * 4);
+                if offset + 4 <= pixels.len() {
+                    pixels[offset..offset + 4].copy_from_slice(&bgra);
+                }
+            }
+        }
+        return;
+    }
 
-    let bgra = [color.b(), color.g(), color.r(), color.a()];
-
+    let inv = 255 - sa;
+    let (sb, sg, sr) = (color.b() as u32, color.g() as u32, color.r() as u32);
     for cy in y0..y1 {
         let row_start = (cy as usize * stride) + (x0 as usize * 4);
         for cx in 0..(x1 - x0) as usize {
             let offset = row_start + (cx * 4);
             if offset + 4 <= pixels.len() {
-                pixels[offset..offset + 4].copy_from_slice(&bgra);
+                let db = pixels[offset] as u32;
+                let dg = pixels[offset + 1] as u32;
+                let dr = pixels[offset + 2] as u32;
+                pixels[offset] = ((sb * sa + db * inv + 127) / 255) as u8;
+                pixels[offset + 1] = ((sg * sa + dg * inv + 127) / 255) as u8;
+                pixels[offset + 2] = ((sr * sa + dr * inv + 127) / 255) as u8;
+                pixels[offset + 3] = 255;
             }
         }
     }

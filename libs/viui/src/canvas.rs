@@ -33,6 +33,20 @@ impl Color {
     pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
         Self::bgra(b, g, r, 0xFF)
     }
+    /// Construct from RGBA channels.
+    pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self::bgra(b, g, r, a)
+    }
+
+    /// Return packed BGRA bytes in little-endian order.
+    pub const fn as_bgra_bytes(self) -> [u8; 4] {
+        [
+            (self.0 & 0xFF) as u8,
+            ((self.0 >> 8) & 0xFF) as u8,
+            ((self.0 >> 16) & 0xFF) as u8,
+            ((self.0 >> 24) & 0xFF) as u8,
+        ]
+    }
 
     #[inline]
     pub fn b(self) -> u8 {

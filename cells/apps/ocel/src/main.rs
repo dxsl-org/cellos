@@ -27,7 +27,10 @@ mod pdf;
 mod resources;
 
 use doc::{DocNode, Document};
-use draw::{fill_rect, stroke_rect, theme, Color};
+use draw::{
+    fill_rect, stroke_rect, theme, AddressBar, Color, NavigationButtons, ProgressIndicator,
+    ScrollBar, StatusBar,
+};
 use loader::{load_document, LoadedDocument, DocumentLoadJob};
 use parser::DocFormat;
 
@@ -845,6 +848,7 @@ impl OcelViewer {
 
         let active_scroll = self.tabs[self.active_tab].scroll_y;
         let max_s = self.max_scroll();
+        let sys_theme = self.reader_theme.resolved_theme(draw::active_system_palette());
         let script_status = self.script_status();
         if document_dirty {
         self.tabs[self.active_tab].browser.layout_dirty = true;
@@ -864,39 +868,22 @@ impl OcelViewer {
         // Reading Progress Indicator (2px thin bar at top of viewport)
         if is_reader && max_s > 0 {
             let progress_ratio = (active_scroll as f32 / max_s as f32).clamp(0.0, 1.0);
-            let prog_w = (w as f32 * progress_ratio) as u32;
-            if prog_w > 0 {
-                fill_rect(&mut self.surface, 0, view_y, prog_w, 2, self.reader_theme.accent_color());
-            }
+            ProgressIndicator::render(&mut self.surface, sys_theme, 0, view_y, w, 2, progress_ratio);
         }
         // 3. Render Scrollbar on the right edge if content overflows
-        // A scroll invalidates the viewport, not the navigation chrome.
         if max_s > 0 {
             let sb_x = (w.saturating_sub(12)) as i32;
-            let track_h = view_h as i32;
-
-            fill_rect(
+            let doc_h = self.current_tab().doc.total_height;
+            ScrollBar::render(
                 &mut self.surface,
+                sys_theme,
                 sb_x,
                 view_y,
                 12,
                 view_h,
-                theme::BG_TOOLBAR,
-            );
-
-            let doc_h = self.current_tab().doc.total_height;
-            let thumb_h = ((view_h as f32 / doc_h as f32) * (track_h as f32)).max(20.0) as u32;
-            let scroll_ratio = active_scroll as f32 / max_s as f32;
-            let available_track = track_h.saturating_sub(thumb_h as i32);
-            let thumb_y = view_y + (scroll_ratio * available_track as f32) as i32;
-
-            fill_rect(
-                &mut self.surface,
-                sb_x + 2,
-                thumb_y,
-                8,
-                thumb_h,
-                theme::ACCENT_BLUE,
+                active_scroll,
+                max_s,
+                doc_h,
             );
         }
         }
@@ -907,26 +894,19 @@ impl OcelViewer {
         let regular=FontFace::UiRegular;
         let semibold=FontFace::UiSemibold;
         if navigation_dirty {
-        fill_rect(surf,0,0,w,TOOLBAR_HEIGHT,theme::BG_TOOLBAR);
-        fill_rect(surf,0,TOOLBAR_HEIGHT as i32-1,w,1,theme::BORDER);
-        ui_text(fonts,surf,(10,8,48,28),"Ocel",theme::ACCENT_CYAN,semibold,16.0,false);
-        let tab=&self.tabs[self.active_tab];
-        let can_back=tab.history_idx>0;
-        let can_fwd=tab.history_idx+1<tab.history.len();
-        for (x,label,enabled) in [(64,"<",can_back),(94,">",can_fwd)] {
-            fill_rect(surf,x,8,26,28,if enabled {theme::ACCENT_BLUE}else{theme::BORDER});
-            ui_text(fonts,surf,(x,8,26,28),label,
-                if enabled {Color::rgb(17,17,27)}else{theme::TEXT_MUTED},semibold,16.0,true);
-        }
-        let addr_x=126;
-        let addr_w=w.saturating_sub(250);
-        fill_rect(surf,addr_x,8,addr_w,28,theme::BG_INPUT);
-        stroke_rect(surf,addr_x,8,addr_w,28,theme::BORDER);
-        ui_text(fonts,surf,(addr_x+8,8,addr_w.saturating_sub(16),28),
-            &self.url_input,theme::TEXT_PRIMARY,regular,15.0,false);
-        let btn_x=addr_x+addr_w as i32+8;
-        fill_rect(surf,btn_x,8,38,28,theme::ACCENT_BLUE);
-        ui_text(fonts,surf,(btn_x,8,38,28),"Go",Color::rgb(17,17,27),semibold,14.0,true);
+        fill_rect(surf, 0, 0, w, TOOLBAR_HEIGHT, sys_theme.surface());
+        fill_rect(surf, 0, TOOLBAR_HEIGHT as i32 - 1, w, 1, sys_theme.border());
+        ui_text(fonts, surf, (10, 8, 48, 28), "Ocel", sys_theme.accent(), semibold, 16.0, false);
+        let tab = &self.tabs[self.active_tab];
+        let can_back = tab.history_idx > 0;
+        let can_fwd = tab.history_idx + 1 < tab.history.len();
+        NavigationButtons::render(surf, fonts, sys_theme, 64, 8, can_back, can_fwd);
+        let addr_x = 126;
+        let addr_w = w.saturating_sub(250);
+        AddressBar::render(surf, fonts, sys_theme, addr_x, 8, addr_w, 28, &self.url_input);
+        let btn_x = addr_x + addr_w as i32 + 8;
+        fill_rect(surf, btn_x, 8, 38, 28, sys_theme.accent());
+        ui_text(fonts, surf, (btn_x, 8, 38, 28), "Go", Color::WHITE, semibold, 14.0, true);
         let reader_x = btn_x + 44;
         let reader = tab.doc.is_reader_mode() || tab.doc.web_layout.is_none();
         let btn_w = 32u32;
@@ -999,17 +979,10 @@ impl OcelViewer {
                     theme::TEXT_PRIMARY,regular,14.0,false);
             }
         }
-        let status_y=h.saturating_sub(STATUS_HEIGHT) as i32;
-        fill_rect(surf,0,status_y,w,STATUS_HEIGHT,theme::BG_TOOLBAR);
-        fill_rect(surf,0,status_y,w,1,theme::BORDER);
-        let pct=if max_s>0{active_scroll*100/max_s}else{100};
-        let info=format!("{} · Zoom {}% · {}%", script_status, self.tabs[self.active_tab].doc.zoom_percent(),pct);
-        let info_w=fonts.measure(regular,&info,14.0) as u32+16;
-        ui_text(fonts,surf,(10,status_y+1,w.saturating_sub(info_w+30),STATUS_HEIGHT-2),
-            &self.status_text,theme::TEXT_MUTED,regular,14.0,false);
-        ui_text(fonts,surf,(w.saturating_sub(info_w+8) as i32,status_y+1,info_w,STATUS_HEIGHT-2),
-            &info,theme::TEXT_MUTED,regular,14.0,true);
-
+        let status_y = h.saturating_sub(STATUS_HEIGHT) as i32;
+        let pct = if max_s > 0 { active_scroll * 100 / max_s } else { 100 };
+        let info = format!("{} · Zoom {}% · {}%", script_status, self.tabs[self.active_tab].doc.zoom_percent(), pct);
+        StatusBar::render_split(&mut self.surface, fonts, sys_theme, status_y, w, STATUS_HEIGHT, &self.status_text, &info);
         let top_h = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
         if navigation_dirty {
             self.surface.damage(api::display::Rect { x:0, y:0, w, h:top_h });

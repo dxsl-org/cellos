@@ -515,4 +515,175 @@ impl StatusBar {
             theme.text_secondary(),
         );
     }
+
+    /// Render a split status bar with left message and right status/zoom metrics.
+    pub fn render_split(
+        surf: &mut ViSurface,
+        fonts: &mut TextFonts,
+        theme: &dyn ViTheme,
+        y: i32,
+        width: u32,
+        height: u32,
+        left_message: &str,
+        right_info: &str,
+    ) {
+        fill_rect(surf, 0, y, width, height, theme.surface());
+        fill_rect(surf, 0, y, width, 1, theme.border());
+
+        let right_w = if right_info.is_empty() {
+            0
+        } else {
+            fonts.measure(FontFace::UiRegular, right_info, 12.0) as u32 + 20
+        };
+
+        let left_w = width.saturating_sub(right_w + 30);
+        draw_label(
+            surf,
+            fonts,
+            14,
+            y + 2,
+            left_w,
+            height.saturating_sub(2),
+            left_message,
+            FontFace::UiRegular,
+            12.0,
+            theme.text_secondary(),
+        );
+
+        if !right_info.is_empty() {
+            let right_x = width.saturating_sub(right_w + 12) as i32;
+            draw_label_aligned(
+                surf,
+                fonts,
+                right_x,
+                y + 2,
+                right_w,
+                height.saturating_sub(2),
+                right_info,
+                FontFace::UiRegular,
+                12.0,
+                theme.text_secondary(),
+                true,
+            );
+        }
+    }
+}
+
+// === ScrollBar Component ===
+
+pub struct ScrollBar;
+
+impl ScrollBar {
+    pub const DEFAULT_WIDTH: u32 = 12;
+
+    /// Render a standard vertical scrollbar track and thumb.
+    pub fn render(
+        surf: &mut ViSurface,
+        theme: &dyn ViTheme,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+        scroll_y: i32,
+        max_scroll: i32,
+        content_total_h: i32,
+    ) {
+        // Track
+        fill_rect(surf, x, y, width, height, theme.surface());
+
+        if max_scroll > 0 && content_total_h > 0 {
+            let thumb_h = ((height as f32 / content_total_h as f32) * height as f32)
+                .max(20.0) as u32;
+            let scroll_ratio = (scroll_y.max(0) as f32 / max_scroll as f32).clamp(0.0, 1.0);
+            let available_track = height.saturating_sub(thumb_h);
+            let thumb_y = y + (scroll_ratio * available_track as f32) as i32;
+
+            // Thumb
+            fill_rect(surf, x + 2, thumb_y, width.saturating_sub(4), thumb_h, theme.accent());
+        }
+    }
+}
+
+// === ProgressIndicator Component ===
+
+pub struct ProgressIndicator;
+
+impl ProgressIndicator {
+    /// Render a thin horizontal progress indicator bar.
+    pub fn render(
+        surf: &mut ViSurface,
+        theme: &dyn ViTheme,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+        progress: f32,
+    ) {
+        let fill_w = (width as f32 * progress.clamp(0.0, 1.0)) as u32;
+        if fill_w > 0 {
+            fill_rect(surf, x, y, fill_w, height, theme.accent());
+        }
+    }
+}
+
+// === AddressBar Component ===
+
+pub struct AddressBar;
+
+impl AddressBar {
+    pub const DEFAULT_HEIGHT: u32 = 28;
+
+    /// Render an editable URL/Search address bar with theme styling.
+    pub fn render(
+        surf: &mut ViSurface,
+        fonts: &mut TextFonts,
+        theme: &dyn ViTheme,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+        url_text: &str,
+    ) {
+        fill_rect(surf, x, y, width, height, theme.input_bg());
+        stroke_rect(surf, x, y, width, height, theme.border());
+        draw_label(
+            surf,
+            fonts,
+            x + 8,
+            y,
+            width.saturating_sub(16),
+            height,
+            url_text,
+            FontFace::UiRegular,
+            14.0,
+            theme.text_primary(),
+        );
+    }
+}
+
+// === NavigationButtons Component ===
+
+pub struct NavigationButtons;
+
+impl NavigationButtons {
+    /// Render standard Back and Forward browser/viewer navigation buttons.
+    pub fn render(
+        surf: &mut ViSurface,
+        fonts: &mut TextFonts,
+        theme: &dyn ViTheme,
+        x: i32,
+        y: i32,
+        can_back: bool,
+        can_forward: bool,
+    ) {
+        for (idx, (label, enabled)) in [("<", can_back), (">", can_forward)].iter().enumerate() {
+            let btn_x = x + idx as i32 * 30;
+            let (bg, fg) = if *enabled {
+                (theme.accent(), Color::WHITE)
+            } else {
+                (theme.surface(), theme.text_secondary())
+            };
+            crate::surface::draw_button(surf, fonts, btn_x, y, 26, 28, label, bg, theme.border(), fg);
+        }
+    }
 }
