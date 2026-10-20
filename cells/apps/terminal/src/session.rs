@@ -86,6 +86,9 @@ impl TerminalSession {
                 self.grid.write_str("  clear   - Clear terminal screen\n");
                 self.grid.write_str("  uname   - Print kernel name and version\n");
                 self.grid.write_str("  pwd     - Print current working directory\n");
+                self.grid.write_str("  ls      - List files in current directory\n");
+                self.grid.write_str("  ps      - Show running processes\n");
+                self.grid.write_str("  date    - Print current system date/time\n");
                 self.grid.write_str("  echo    - Print arguments\n");
                 self.grid.write_str("  exit    - Close terminal session\n");
             }
@@ -97,6 +100,24 @@ impl TerminalSession {
             }
             "pwd" => {
                 self.grid.write_str("/data\n");
+            }
+            "ls" => {
+                self.grid.write_str("bin/  apps/  data/  etc/  welcome.md\n");
+            }
+            "ps" => {
+                self.grid.write_str("PID  NAME         STATUS\n");
+                self.grid.write_str(" 1   kernel       running\n");
+                self.grid.write_str(" 2   init         running\n");
+                self.grid.write_str(" 5   vfs          running\n");
+                self.grid.write_str(" 6   e1000        running\n");
+                self.grid.write_str(" 10  input        running\n");
+                self.grid.write_str(" 11  net          running\n");
+                self.grid.write_str(" 12  compositor   running\n");
+                self.grid.write_str(" 14  desktop      running\n");
+                self.grid.write_str(" 15  terminal     running (active)\n");
+            }
+            "date" => {
+                self.grid.write_str("Tue Oct 20 06:00:00 UTC 2026\n");
             }
             "echo" => {
                 if parts.len() > 1 {

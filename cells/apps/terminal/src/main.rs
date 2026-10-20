@@ -15,10 +15,11 @@ mod session;
 
 use api::display::PixelFormat;
 use ostd::display::ViSurface;
-use ostd::input::{InputEvent, KeyState, KeySym, Modifiers};
+use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{sys_get_resolution, sys_yield};
 use ostd::typography::{FontFace, TextFonts};
 use viui::canvas::Color;
+use viui::surface::fill_rect;
 
 use crate::session::TerminalSession;
 
@@ -88,8 +89,8 @@ impl TerminalApp {
         let pad_x = 8;
         let pad_y = 6;
         let font_size = 14.0;
-        let line_h = fonts.line_height(FontFace::UiRegular, font_size);
-        let ascender = fonts.ascender(FontFace::UiRegular, font_size);
+        let line_h = fonts.line_height(FontFace::MonoRegular, font_size);
+        let ascender = fonts.ascender(FontFace::MonoRegular, font_size);
 
         for r in 0..self.session.grid.rows {
             let row_y = pad_y as f32 + r as f32 * self.cell_h;
@@ -117,7 +118,7 @@ impl TerminalApp {
                             col_x,
                             row_y,
                             &text,
-                            FontFace::UiRegular,
+                            FontFace::MonoRegular,
                             font_size,
                             [cell.fg.b(), cell.fg.g(), cell.fg.r(), cell.fg.a()],
                             clip,
@@ -173,6 +174,9 @@ fn cell_main() {
 
         for ev in ostd::input::poll_events(16) {
             match ev {
+                InputEvent::MouseButton { button: MouseButton::Left, state: KeyState::Pressed } => {
+                    let _ = ostd::input::request_focus();
+                }
                 InputEvent::Key(ke) if ke.state == KeyState::Pressed => {
                     if ke.modifiers.contains(Modifiers::CTRL) && ke.char() == Some('c') {
                         app.session.send_interrupt();
@@ -207,29 +211,6 @@ fn cell_main() {
     }
 }
 
-fn fill_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: Color) {
-    let sw = surf.width() as i32;
-    let sh = surf.height() as i32;
-    let stride = surf.stride();
-    let pixels = surf.pixels_mut();
-
-    let x0 = x.max(0);
-    let y0 = y.max(0);
-    let x1 = x.saturating_add(w as i32).min(sw);
-    let y1 = y.saturating_add(h as i32).min(sh);
-
-    for cy in y0..y1 {
-        for cx in x0..x1 {
-            let offset = (cy as usize * stride + cx as usize) * 4;
-            if offset + 4 <= pixels.len() {
-                pixels[offset] = color.b();
-                pixels[offset + 1] = color.g();
-                pixels[offset + 2] = color.r();
-                pixels[offset + 3] = color.a();
-            }
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
