@@ -96,6 +96,12 @@ pub enum DocNode {
         height: u32,
         pixels: Rc<Vec<u8>>,
     },
+    LinkedImage {
+        width: u32,
+        height: u32,
+        pixels: Rc<Vec<u8>>,
+        link: String,
+    },
     Table {
         headers: Vec<String>,
         rows: Vec<Vec<String>>,
@@ -146,6 +152,7 @@ pub struct LayoutBox {
     pub is_rule: bool,
     pub left_margin: i32,
     pub image: Option<(u32, u32, Rc<Vec<u8>>)>,
+    pub image_link: Option<String>,
     pub table_rows: Option<Vec<TableRowLayout>>,
     pub table_width: u32,
     pub node_id: Option<dom_arena::NodeId>,
@@ -155,7 +162,7 @@ pub struct LayoutBox {
 impl LayoutBox {
     fn new(y: i32) -> Self {
         Self { y_offset:y, height:0, lines:Vec::new(), bg_color:None,
-            border_color:None, is_rule:false, left_margin:0, image:None,
+            border_color:None, is_rule:false, left_margin:0, image:None, image_link:None,
             table_rows:None, table_width:0, node_id:None, input_data: None, search_highlights:Vec::new() }
     }
 }
@@ -465,6 +472,14 @@ impl Document {
                     b.table_width=display_w;
                     b.image=Some((*iw,*ih,pixels.clone()));
                 }
+                DocNode::LinkedImage{width:iw,height:ih,pixels,link}=>{
+                    let display_w=(*iw).min(logical_width.saturating_sub(32).max(1));
+                    let display_h=((*ih as u64*display_w as u64)/(*iw).max(1) as u64).max(1) as u32;
+                    b.height=display_h as i32+16;b.left_margin=16;
+                    b.table_width=display_w;
+                    b.image=Some((*iw,*ih,pixels.clone()));
+                    b.image_link=Some(link.clone());
+                }
                 DocNode::Table{headers,rows}=>{
                     let count=headers.len().max(rows.iter().map(|r|r.len()).max().unwrap_or(0));
                     if count==0{b.height=8;y+=8;self.layout_boxes.push(b);continue;}
@@ -700,6 +715,17 @@ impl Document {
             return None;
         }
         for b in &self.layout_boxes {
+            if let Some(link) = &b.image_link {
+                if let Some((iw, ih, _)) = &b.image {
+                    let y = view_y + b.y_offset - scroll_y + 8;
+                    let x = view_x + b.left_margin;
+                    let img_w = b.table_width as i32;
+                    let img_h = ((*ih as u64 * b.table_width as u64) / (*iw).max(1) as u64).max(1) as i32;
+                    if click_x >= x && click_x <= x + img_w && click_y >= y && click_y <= y + img_h {
+                        return Some(link.clone());
+                    }
+                }
+            }
             let mut y=view_y+b.y_offset-scroll_y+4;
             for line in &b.lines {
                 if click_y>=y && click_y<y+line.height as i32 {
@@ -909,7 +935,7 @@ impl Document {
         let nodes_bytes=|nodes:&Vec<DocNode>|->usize{(nodes.capacity()-nodes.len())*core::mem::size_of::<DocNode>()+nodes.iter().map(|node|core::mem::size_of::<DocNode>()+match node {
             DocNode::Heading{text,..}|DocNode::Button{text,..}=>text.capacity(),
             DocNode::Paragraph{spans}|DocNode::ListItem{spans,..}=>spans.iter().map(span_bytes).sum(),
-            DocNode::Image{..}|DocNode::DomImage{..}=>0,
+            DocNode::Image{..}|DocNode::DomImage{..}|DocNode::LinkedImage{..}=>0,
             DocNode::CodeBlock{lang,lines}=>lang.capacity()+lines.iter().map(String::capacity).sum::<usize>(),
             DocNode::RawLines{lines}|DocNode::Blockquote{lines}=>lines.iter().map(String::capacity).sum(),
             DocNode::Table{headers,rows}=>headers.iter().chain(rows.iter().flatten()).map(String::capacity).sum(),
@@ -920,7 +946,7 @@ impl Document {
         if let Some(nodes)=&self.reader_nodes {bytes+=nodes_bytes(nodes);}
         let mut image_allocations=Vec::new();
         for node in self.nodes.iter().chain(self.reader_nodes.iter().flat_map(|nodes|nodes.iter())) {
-            if let DocNode::Image{pixels,..}|DocNode::DomImage{pixels,..}=node {
+            if let DocNode::Image{pixels,..}|DocNode::DomImage{pixels,..}|DocNode::LinkedImage{pixels,..}=node {
                 let pointer=Rc::as_ptr(pixels);
                 if !image_allocations.contains(&pointer){image_allocations.push(pointer);bytes+=pixels.capacity();}
             }

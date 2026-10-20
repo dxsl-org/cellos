@@ -245,8 +245,7 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
             }
         }
     }
-
-    let list_cards = extract_list_cards(arena, base_url);
+    let list_cards = extract_list_cards(arena, base_url, assets);
     let has_h1 = !h1_title.is_empty();
     let is_article = if schema_body_node.is_some() {
         true
@@ -406,8 +405,11 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
         // C. List / Catalog Cards (News feed, product items, forum threads)
         if !list_cards.is_empty() {
             for card in list_cards {
+                if let Some(thumb) = card.thumbnail {
+                    nodes.push(thumb);
+                }
                 let mut span = StyledSpan::plain(&card.title);
-                span.link = Some(card.url);
+                span.link = Some(card.url.clone());
                 span.bold = true;
                 span.color = Some(crate::draw::theme::ACCENT_CYAN);
                 nodes.push(DocNode::ListItem {
@@ -422,7 +424,8 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
                     nodes.push(DocNode::Paragraph { spans: alloc::vec![price_span] });
                 }
                 if let Some(sapo) = card.sapo {
-                    let text_span = StyledSpan::plain(&format!("  {}", sapo));
+                    let mut text_span = StyledSpan::plain(&format!("  {}", sapo));
+                    text_span.link = Some(card.url.clone());
                     nodes.push(DocNode::Paragraph { spans: alloc::vec![text_span] });
                 }
                 if let Some(meta) = card.meta {
@@ -431,6 +434,7 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
                     meta_span.color = Some(crate::draw::theme::TEXT_MUTED);
                     nodes.push(DocNode::Paragraph { spans: alloc::vec![meta_span] });
                 }
+                nodes.push(DocNode::Rule);
             }
         } else if !article_links.is_empty() {
             for (link_title, link_url) in article_links {
@@ -933,6 +937,7 @@ pub struct ListCard {
     pub sapo: Option<String>,
     pub price: Option<String>,
     pub meta: Option<String>,
+    pub thumbnail: Option<DocNode>,
 }
 
 fn extract_single_card(
@@ -940,6 +945,7 @@ fn extract_single_card(
     card_id: NodeId,
     base_url: &str,
     seen_urls: &mut BTreeSet<String>,
+    assets: &[DocNode],
 ) -> Option<ListCard> {
     let mut best_link: Option<(String, String)> = None;
     let mut longest_link_text = 0;
@@ -949,7 +955,7 @@ fn extract_single_card(
     let mut author: Option<String> = None;
     let mut date: Option<String> = None;
     let mut replies: Option<String> = None;
-
+    let mut thumbnail: Option<DocNode> = None;
     let mut stack = alloc::vec![card_id];
     while let Some(nid) = stack.pop() {
         let Some(node) = arena.get(nid) else { continue; };
@@ -966,7 +972,27 @@ fn extract_single_card(
                 else if k == "datetime" { dt_val = v.as_str(); }
             }
             let lower_class = class_val.to_ascii_lowercase();
-
+            if thumbnail.is_none() && tag_name == "img" {
+                if let Some(image) = assets.iter().find(|asset| matches!(asset, DocNode::DomImage { node_id, .. } if *node_id == nid)) {
+                    if let DocNode::DomImage { width, height, pixels, .. } = image {
+                        let max_w = 200u32;
+                        let max_h = 120u32;
+                        let orig_w = (*width).max(1);
+                        let orig_h = (*height).max(1);
+                        let scale_w = (max_w as f32) / (orig_w as f32);
+                        let scale_h = (max_h as f32) / (orig_h as f32);
+                        let scale = scale_w.min(scale_h).min(1.0);
+                        let thumb_w = (orig_w as f32 * scale).max(1.0) as u32;
+                        let thumb_h = (orig_h as f32 * scale).max(1.0) as u32;
+                        thumbnail = Some(DocNode::LinkedImage {
+                            width: thumb_w,
+                            height: thumb_h,
+                            pixels: pixels.clone(),
+                            link: String::new(),
+                        });
+                    }
+                }
+            }
             if tag_name == "a" && !href_val.is_empty() {
                 let href = href_val.trim();
                 if let Some(resolved) = crate::resources::resolve_hyperlink(base_url, href) {
@@ -1067,12 +1093,17 @@ fn extract_single_card(
         None
     };
 
+    if let Some(DocNode::LinkedImage { ref mut link, .. }) = thumbnail {
+        *link = url.clone();
+    }
+
     Some(ListCard {
         title,
         url,
         sapo,
         price,
         meta,
+        thumbnail,
     })
 }
 
@@ -1097,7 +1128,7 @@ fn is_card_item_class(lower: &str) -> bool {
         && !is_card_container_class(lower)
 }
 
-fn extract_list_cards(arena: &DocumentArena, base_url: &str) -> Vec<ListCard> {
+fn extract_list_cards(arena: &DocumentArena, base_url: &str, assets: &[DocNode]) -> Vec<ListCard> {
     let mut cards = Vec::new();
     let mut seen_urls = BTreeSet::new();
 
@@ -1155,7 +1186,7 @@ fn extract_list_cards(arena: &DocumentArena, base_url: &str) -> Vec<ListCard> {
     };
 
     for card_id in candidate_container_nodes {
-        if let Some(card) = extract_single_card(arena, card_id, base_url, &mut seen_urls) {
+        if let Some(card) = extract_single_card(arena, card_id, base_url, &mut seen_urls, assets) {
             cards.push(card);
         }
     }
@@ -2075,6 +2106,43 @@ mod tests {
         let parsed = crate::parser::html::parse_html(html);
         let extracted = extract_article(&parsed.arena, "https://cellos.org/article/page-1.html", "Article");
         assert!(extracted.nodes.iter().any(|n| matches!(n, DocNode::ListItem { spans, .. } if spans.iter().any(|s| s.text.contains("Đọc tiếp trang tiếp theo") && s.link.as_deref() == Some("https://cellos.org/article/page-2.html")))));
+    }
+    #[test]
+    fn test_reader_portal_list_cards_preserve_links_on_title_sapo_and_thumbnail() {
+        let html = r#"
+            <html>
+            <body>
+                <div class="news-list">
+                    <div class="card">
+                        <img src="/thumb1.jpg" alt="Photo">
+                        <h3><a href="/post-101.html">Tiêu đề bài viết số 1</a></h3>
+                        <p class="summary">Đoạn tóm tắt nội dung bài viết thứ nhất hiển thị trên trang chủ.</p>
+                        <span class="date">20/10/2026</span>
+                    </div>
+                    <div class="card">
+                        <img src="/thumb2.jpg" alt="Photo">
+                        <h3><a href="/post-102.html">Tiêu đề bài viết số 2</a></h3>
+                        <p class="summary">Đoạn tóm tắt nội dung bài viết thứ hai hiển thị trên trang chủ.</p>
+                        <span class="date">20/10/2026</span>
+                    </div>
+                </div>
+            </body>
+            </html>
+        "#;
+        let parsed = crate::parser::html::parse_html(html);
+        let extracted = extract_article(&parsed.arena, "https://example.com/category/news", "News Portal");
+
+        // Title link
+        assert!(extracted.nodes.iter().any(|node| match node {
+            DocNode::ListItem { spans, .. } => spans.iter().any(|s| s.text.contains("Tiêu đề bài viết số 1") && s.link == Some(String::from("https://example.com/post-101.html"))),
+            _ => false,
+        }));
+
+        // Sapo summary link
+        assert!(extracted.nodes.iter().any(|node| match node {
+            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("Đoạn tóm tắt") && s.link == Some(String::from("https://example.com/post-101.html"))),
+            _ => false,
+        }));
     }
 }
 
