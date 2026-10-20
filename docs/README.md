@@ -1,6 +1,6 @@
 # Cellos Documentation Index
 
-**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-10-11
+**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-10-20
 
 ---
 
@@ -14,6 +14,12 @@ and [Spec 25](specs/25-cell-kernel-authority-contract.md), with the
 Related unfinished execution is scoped and locked by
 [CELL-CONTRACT-0024](../.agents/cell-contract-0024-locks.md); old phase links and
 admissions cannot bypass that lock. Architecture approval is not concrete ABI or remote activation approval.
+
+The accepted [Cellbox CLI architecture](decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md)
+selects a modular single executable, typed pipelines, essential operational tools
+and selective Ratatui TUI outside viUI. Read the [design](cellbox-cli.md) and
+[pending implementation plan](../.agents/261020-1750-cellbox-cli/plan.md).
+This is documentation/planning approval, not a code/ABI unlock or an IDE program.
 
 Use the [root README](../README.md) ([Tiếng Việt](../README_VN.md)) for key
 features and implementation status; the [architecture guide](system-architecture.md)
@@ -50,6 +56,7 @@ GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V
 | [ADR-0023](decisions/0023-local-service-generation-binding.md) | Local service binding axis `(cell_id, generation)`; additive `LookupServiceBound = 429` (Law-1 FROZEN) |
 | [ADR-0024](decisions/0024-cell-kernel-authority-contract.md) | Node-local Cell/Kernel identity, object-capability authority, scoped cluster placement/autoscaling and execution freeze |
 | [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md) | Unified desktop: session tabs, Spotlight HUD, six-zone snap, Linear theme, Files, GUI terminal, single-app Tier 3 guest |
+| [ADR-0028](decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md) | Accepted CLI-first cellbox, typed data, editor/search/top/SSH and reusable terminal/Ratatui boundaries; implementation pending |
 | [roadmap/current-focus.md](roadmap/current-focus.md) | Current Intel C2C priorities and evidence gates |
 | [QEMU q35 x86-64](../boards/qemu/q35-x86_64/README.md) | Documented x86 build/test path; software evidence, not physical qualification |
 | [getting-started.md](getting-started.md) | Setup, build, run, first contribution |
@@ -82,6 +89,7 @@ GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V
 | File | Purpose |
 |------|---------|
 | [system-architecture.md](system-architecture.md) | System layers, kernel, HAL, IPC |
+| [cellbox-cli.md](cellbox-cli.md) | Accepted CLI, pipeline, terminal/TUI, selected-tool and migration design; not a frozen wire ABI |
 | [decisions/0003-application-tier-taxonomy.md](decisions/0003-application-tier-taxonomy.md) | Canonical application tier, runtime profile, and SDK terminology |
 | [code-standards.md](code-standards.md) | The 8 Coding Laws + conventions |
 | [PATTERNS.md](PATTERNS.md) | Common Rust patterns for Cellos |

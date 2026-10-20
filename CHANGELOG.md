@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- Accepted Cellbox CLI architecture and implementation plan (documentation only):
+  - [ADR-0028](docs/decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md) records one modular essential-suite executable, CLI-first shared backends, typed pipelines with explicit JSON boundaries and selective TUI.
+  - [CLI design](docs/cellbox-cli.md) selects a compact Kibi-inspired editor, ripgrep-derived search, Cell-aware top and outbound SSH; Ratatui/Terminal SDK remain reusable outside viUI and cellbox.
+  - [Ten-phase plan](.agents/261020-1750-cellbox-cli/plan.md) and CBX-01..CBX-29 are pending; no code/ABI/legacy-lock/remote/production admission or IDE/build-environment program is implied.
 - Conceptual and UI terminology unification:
   - Applications are formally unified as **App Cells** (or simply **Cells**).
   - Window frame tabs (BeOS / Haiku OS style) are formally named **Cell Tabs**.

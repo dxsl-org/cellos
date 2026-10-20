@@ -103,6 +103,25 @@ is **completed**:
 - Reconciled ADR-0027 scope and contracts in `contracts.md`. No ambient scope widening, G2-J crash format promotion, or unadmitted capability changes authorized.
 
 
+## Accepted tooling design — Cellbox CLI and selective Ratatui TUI
+
+**Recorded 2026-10-20:** The maintainer approved recording
+[ADR-0028](../docs/decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md)
+and the [Cellbox implementation plan](261020-1750-cellbox-cli/plan.md):
+one essential-suite executable with modular source, typed pipelines, compact
+editor, ripgrep-derived search, Cell-aware top, outbound SSH and a reusable
+Terminal SDK/Ratatui backend independent of viUI.
+
+The plan has ten pending implementation phases and CBX-01..CBX-29 pending.
+This registration is documentation/planning only, not a new active WIP slice,
+ABI ratification, legacy-lock release or remote/production admission. A future
+implementation request begins with Phase 01's exact catalog/contracts,
+upstream/runtime review and file-owner handoff. Existing completed evidence is
+reused at its original ceiling; conflicting older status projections must be
+resolved per surface, not by inferring blanket permission.
+Scope supports Intel Cellos operations; no IDE/build environment, general Linux
+command inventory or independent application ecosystem is selected.
+
 ## Parked research — VFS, storage and agent search
 
 **Recorded 2026-10-19:** [VFS/storage/search research plan](261019-1534-vfs-storage-search-research/plan.md)
