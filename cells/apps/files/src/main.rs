@@ -21,16 +21,16 @@ use api::display::PixelFormat;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{sys_get_resolution, sys_yield};
-use ostd::typography::{FontFace, TextFonts};
-use viui::canvas::Color;
+use ostd::typography::TextFonts;
+use viui::surface::components::{
+    GridItemDef, GridView, ListView, ListViewItemDef, PlacesItemDef, PlacesSidebar,
+    SegmentedControl, StatusBar, Toolbar,
+};
 use viui::theme::{ViTheme, LIGHT_THEME};
-
-use crate::draw::{draw_label, fill_rect};
 use crate::model::{
     resolve_conflict_name, FileItem, PlacesItem, ViewMode, DEFAULT_PLACES,
 };
 use crate::views::places::PLACES_WIDTH;
-
 api::declare_manifest!(block_io = false, network = false, spawn = true);
 api::declare_syscalls![
     Log,
@@ -208,48 +208,54 @@ impl FilesApp {
     pub fn render(&self, surf: &mut ViSurface, fonts: &mut TextFonts) {
         let sw = self.width;
         let sh = self.height;
-
         let theme = &LIGHT_THEME;
-        let bg = theme.bg();
-        let fg = theme.text_primary();
-        let border = theme.border();
-        let accent = theme.accent();
 
-        // 1. Toolbar (Top 44 DIP)
-        fill_rect(surf, 0, 0, sw, TOOLBAR_HEIGHT, Color::rgb(240, 242, 246));
-        fill_rect(surf, 0, TOOLBAR_HEIGHT as i32 - 1, sw, 1, border);
+        // 1. Toolbar Component (Top 44 DIP)
+        let path_title = format!("Files: {}", self.current_path);
+        Toolbar::render(surf, fonts, theme, sw, TOOLBAR_HEIGHT, "[F]", &path_title);
 
-        // App Icon & Path Breadcrumb
-        draw_label(surf, fonts, 12, 10, 32, 24, "[F]", FontFace::UiSemibold, 16.0, accent);
-        let path_text = format!("Files: {}", self.current_path);
-        draw_label(surf, fonts, 50, 10, sw.saturating_sub(260), 24, &path_text, FontFace::UiSemibold, 15.0, fg);
-
-        // View Mode Buttons: [List] [Grid] [Cols]
-        let btn_y = 8;
-        let btn_h = 28;
-        let btn_w = 54;
+        // View Mode SegmentedControl: [List] [Grid] [Cols]
         let btn_start_x = sw as i32 - 180;
-
-        for (i, mode) in [ViewMode::List, ViewMode::Grid, ViewMode::Columns].iter().enumerate() {
-            let bx = btn_start_x + i as i32 * (btn_w as i32 + 4);
-            let is_cur = self.view_mode == *mode;
-            fill_rect(surf, bx, btn_y, btn_w, btn_h, if is_cur { accent } else { Color::rgb(228, 230, 236) });
-            draw_label(surf, fonts, bx, btn_y + 4, btn_w, 20, mode.name(), FontFace::UiSemibold, 13.0, if is_cur { Color::WHITE } else { fg });
-        }
-
-        // 2. Sidebar: Places
-        let content_y = TOOLBAR_HEIGHT as i32;
-        let content_h = sh.saturating_sub(TOOLBAR_HEIGHT + STATUS_HEIGHT);
-        views::places::render(
+        let cur_mode_idx = match self.view_mode {
+            ViewMode::List => 0,
+            ViewMode::Grid => 1,
+            ViewMode::Columns => 2,
+        };
+        SegmentedControl::render(
             surf,
             fonts,
-            &self.places,
-            &self.current_path,
+            theme,
+            btn_start_x,
+            8,
+            54,
+            28,
+            &["List", "Grid", "Cols"],
+            cur_mode_idx,
+        );
+
+        // 2. Sidebar: Places Component
+        let content_y = TOOLBAR_HEIGHT as i32;
+        let content_h = sh.saturating_sub(TOOLBAR_HEIGHT + STATUS_HEIGHT);
+        let places_defs: Vec<PlacesItemDef> = self
+            .places
+            .iter()
+            .map(|p| PlacesItemDef {
+                name: String::from(p.name),
+                path: String::from(p.path),
+                icon: String::from(p.icon),
+            })
+            .collect();
+        PlacesSidebar::render(
+            surf,
+            fonts,
+            theme,
+            0,
+            content_y,
+            PLACES_WIDTH,
             content_h,
-            Color::rgb(246, 248, 252),
-            fg,
-            accent,
-            border,
+            "PLACES",
+            &places_defs,
+            &self.current_path,
         );
 
         // 3. Main Content View
@@ -258,35 +264,49 @@ impl FilesApp {
 
         match self.view_mode {
             ViewMode::List => {
-                views::list::render(
+                let list_defs: Vec<ListViewItemDef> = self
+                    .items
+                    .iter()
+                    .map(|item| ListViewItemDef {
+                        icon: String::from(item.icon),
+                        name: item.name.clone(),
+                        size_str: item.formatted_size(),
+                        kind_str: String::from(if item.is_dir { "Folder" } else { "File" }),
+                        is_dir: item.is_dir,
+                    })
+                    .collect();
+                ListView::render(
                     surf,
                     fonts,
-                    &self.items,
-                    self.selected_index,
+                    theme,
                     content_x,
                     content_y,
                     content_w,
                     content_h,
-                    bg,
-                    fg,
-                    accent,
-                    border,
+                    &list_defs,
+                    Some(self.selected_index),
                 );
             }
             ViewMode::Grid => {
-                views::grid::render(
+                let grid_defs: Vec<GridItemDef> = self
+                    .items
+                    .iter()
+                    .map(|item| GridItemDef {
+                        icon: String::from(item.icon),
+                        name: item.name.clone(),
+                        is_dir: item.is_dir,
+                    })
+                    .collect();
+                GridView::render(
                     surf,
                     fonts,
-                    &self.items,
-                    self.selected_index,
+                    theme,
                     content_x,
                     content_y,
                     content_w,
                     content_h,
-                    bg,
-                    fg,
-                    accent,
-                    border,
+                    &grid_defs,
+                    Some(self.selected_index),
                 );
             }
             ViewMode::Columns => {
@@ -299,19 +319,17 @@ impl FilesApp {
                     content_y,
                     content_w,
                     content_h,
-                    bg,
-                    fg,
-                    accent,
-                    border,
+                    theme.bg(),
+                    theme.text_primary(),
+                    theme.accent(),
+                    theme.border(),
                 );
             }
         }
 
-        // 4. Status Bar (Bottom 24 DIP)
+        // 4. Status Bar Component (Bottom 24 DIP)
         let status_y = sh as i32 - STATUS_HEIGHT as i32;
-        fill_rect(surf, 0, status_y, sw, STATUS_HEIGHT, Color::rgb(240, 242, 246));
-        fill_rect(surf, 0, status_y, sw, 1, border);
-        draw_label(surf, fonts, 14, status_y + 2, sw.saturating_sub(28), 20, &self.status_message, FontFace::UiRegular, 13.0, Color::rgb(100, 105, 120));
+        StatusBar::render(surf, fonts, theme, status_y, sw, STATUS_HEIGHT, &self.status_message);
         preview::render(surf, fonts, &self.quick_look, sw, sh);
         surf.damage_all();
     }
@@ -443,20 +461,16 @@ fn cell_main() {
                             continue;
                         }
                     }
-                    // Check toolbar view mode buttons: [List] [Grid] [Cols]
-                    let btn_y = 8;
-                    let btn_h = 28;
-                    let btn_w = 54;
+                    // Check toolbar view mode SegmentedControl
                     let btn_start_x = app.width as i32 - 180;
-                    if cursor_y >= btn_y && cursor_y < btn_y + btn_h as i32 {
-                        for (i, mode) in [ViewMode::List, ViewMode::Grid, ViewMode::Columns].iter().enumerate() {
-                            let bx = btn_start_x + i as i32 * (btn_w as i32 + 4);
-                            if cursor_x >= bx && cursor_x < bx + btn_w as i32 {
-                                app.switch_view_mode(*mode);
-                                need_render = true;
-                                break;
-                            }
-                        }
+                    if let Some(idx) = SegmentedControl::hit_test(cursor_x, cursor_y, btn_start_x, 8, 54, 28, 3) {
+                        let new_mode = match idx {
+                            0 => ViewMode::List,
+                            1 => ViewMode::Grid,
+                            _ => ViewMode::Columns,
+                        };
+                        app.switch_view_mode(new_mode);
+                        need_render = true;
                     }
 
                     // Check Places sidebar
@@ -471,8 +485,8 @@ fn cell_main() {
                     let content_y = TOOLBAR_HEIGHT as i32;
                     let content_w = app.width.saturating_sub(PLACES_WIDTH);
                     let clicked_idx = match app.view_mode {
-                        ViewMode::List => views::list::handle_click(app.items.len(), content_x, content_y, content_w, cursor_x, cursor_y),
-                        ViewMode::Grid => views::grid::handle_click(app.items.len(), content_x, content_y, content_w, cursor_x, cursor_y),
+                        ViewMode::List => ListView::hit_test(cursor_x, cursor_y, content_x, content_y, content_w, app.items.len()),
+                        ViewMode::Grid => GridView::hit_test(cursor_x, cursor_y, content_x, content_y, content_w, app.items.len()),
                         ViewMode::Columns => views::columns::handle_click(app.items.len(), content_x, content_y, cursor_x, cursor_y),
                     };
                     if let Some(idx) = clicked_idx {

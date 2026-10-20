@@ -4,6 +4,9 @@
 use ostd::display::ViSurface;
 use ostd::typography::{FontFace, TextFonts};
 use crate::canvas::Color;
+use crate::theme::ViTheme;
+pub mod components;
+pub use components::*;
 
 /// Fill a rectangle directly on a ViSurface buffer using its native stride and bounds.
 pub fn fill_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: Color) {
@@ -42,7 +45,7 @@ pub fn stroke_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: 
     fill_rect(surf, x + w as i32 - 1, y, 1, h, color);
 }
 
-/// Draw a text label on a ViSurface with clipping and FontFace.
+/// Draw a text label on a ViSurface with clipping and FontFace (left-aligned by default).
 pub fn draw_label(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
@@ -58,21 +61,36 @@ pub fn draw_label(
     draw_label_aligned(surf, fonts, x, y, w, h, text, face, size, color, false);
 }
 
-pub fn draw_label_centered(
+/// Draw raw text at `(x, y)` with clipping.
+pub fn draw_text(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
-    x: i32,
-    y: i32,
-    w: u32,
-    h: u32,
+    x: f32,
+    y: f32,
     text: &str,
     face: FontFace,
-    size: f32,
+    px: f32,
     color: Color,
+    clip: (i32, i32, i32, i32),
 ) {
-    draw_label_aligned(surf, fonts, x, y, w, h, text, face, size, color, true);
+    let width = surf.width();
+    let height = surf.height();
+    let stride = surf.stride();
+    fonts.draw_text(
+        surf.pixels_mut(),
+        width,
+        height,
+        stride,
+        x,
+        y,
+        text,
+        face,
+        px,
+        [color.b(), color.g(), color.r(), color.a()],
+        clip,
+    );
 }
-
+/// Draw a text label on a ViSurface with optional horizontal centering.
 pub fn draw_label_aligned(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
@@ -94,6 +112,7 @@ pub fn draw_label_aligned(
     } else {
         x as f32 + 8.0
     };
+
     let clip = (x, y, x + w as i32, y + h as i32);
     let width = surf.width();
     let height = surf.height();
@@ -128,5 +147,60 @@ pub fn draw_button(
 ) {
     fill_rect(surf, x, y, w, h, bg);
     stroke_rect(surf, x, y, w, h, border);
-    draw_label_centered(surf, fonts, x, y, w, h, text, FontFace::UiSemibold, 13.0, fg);
+    draw_label_aligned(surf, fonts, x, y, w, h, text, FontFace::UiSemibold, 13.0, fg, true);
+}
+
+/// Draw badge / chip (e.g. `[HTTPS]`, format badge `[PDF]`, or count tag).
+pub fn draw_badge(
+    surf: &mut ViSurface,
+    fonts: &mut TextFonts,
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+    text: &str,
+    bg: Color,
+    fg: Color,
+) {
+    fill_rect(surf, x, y, w, h, bg);
+    draw_label_aligned(surf, fonts, x, y, w, h, text, FontFace::UiSemibold, 11.0, fg, true);
+}
+
+// ─── Theme-aware High-Level Surface Helpers ─────────────────────────────────
+
+/// Draw a themed panel/card container with background and border derived from `theme`.
+pub fn draw_themed_panel(
+    surf: &mut ViSurface,
+    theme: &dyn ViTheme,
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+) {
+    fill_rect(surf, x, y, w, h, theme.surface());
+    stroke_rect(surf, x, y, w, h, theme.border());
+}
+
+/// Draw a themed button using theme tokens (Normal / Hovered / Primary).
+pub fn draw_themed_button(
+    surf: &mut ViSurface,
+    fonts: &mut TextFonts,
+    theme: &dyn ViTheme,
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+    text: &str,
+    is_hovered: bool,
+    is_primary: bool,
+) {
+    let (bg, border, fg) = if is_primary {
+        (theme.accent(), theme.accent(), Color::WHITE)
+    } else if is_hovered {
+        (theme.button_hovered(), theme.border(), theme.text_primary())
+    } else {
+        (theme.button_normal(), theme.border(), theme.text_primary())
+    };
+
+    draw_button(surf, fonts, x, y, w, h, text, bg, border, fg);
 }

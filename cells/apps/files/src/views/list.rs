@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // SPDX-License-Identifier: MIT
 //! List View renderer for Files application (default tabular browsing).
 
