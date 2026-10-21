@@ -25,6 +25,7 @@ mod net;
 mod parser;
 mod pdf;
 mod resources;
+mod trace;
 
 use doc::{DocNode, Document};
 use draw::{
@@ -118,7 +119,7 @@ impl Tab {
             native_dom_dirty: false,
             browser: browser_runtime::DocumentBrowser::new(url),
         };
-        let (loaded_url, _fmt) = tab.install_loaded(load_document(url), viewport_w, viewport_h, js_runtime, fonts);
+        let (loaded_url, _fmt) = tab.install_loaded(load_document(url), viewport_w, viewport_h, js_runtime, fonts, Install::Web);
         tab.history = alloc::vec![loaded_url];
         tab
     }
@@ -130,8 +131,26 @@ impl Tab {
             .saturating_add(self.history.capacity() * core::mem::size_of::<String>())
             .saturating_add(self.history.iter().map(String::capacity).sum::<usize>())
     }
+}
 
+/// How `Tab::install_loaded` treats a parsed HTML document.
+enum Install {
+    /// Full web document: CSS cascade, web layout, script engine.
+    Web,
+    /// Reader navigation: parse only; readability and reader layout follow.
+    Reader,
+    /// Reader resource-complete pass: reuse the already parsed arena.
+    ReaderAssets(dom_arena::DocumentArena),
+}
+
+impl Tab {
     /// Install a completed load; navigation never waits for network IPC here.
+    ///
+    /// `Install::Reader` is the reader-mode navigation path: the DOM arena is kept
+    /// for a later switch to web mode, but no script engine, CSS cascade or web
+    /// layout runs until the user asks for it. `Install::ReaderAssets` reuses the
+    /// arena already parsed by the early document pass, so the resource-complete
+    /// pass only re-resolves images.
     fn install_loaded(
         &mut self,
         mut loaded: LoadedDocument,
@@ -139,7 +158,9 @@ impl Tab {
         viewport_h: u32,
         js_runtime: &mut js::Tier2JsBridge,
         fonts: &mut TextFonts,
+        install: Install,
     ) -> (String, &'static str) {
+        let reader = !matches!(install, Install::Web);
         // Navigation relinquishes the old context before loading another engine.
         js_runtime.reset();
         let previous_resources = resources::replace(core::mem::take(&mut loaded.resources));
@@ -148,8 +169,14 @@ impl Tab {
         let (nodes, scripts, mut arena, fmt_name) = if let Some(direct) = loaded.direct_nodes {
             let format_name = if pdf::is_pdf_path(&loaded.url) { "PDF" } else { "Image" };
             (direct, alloc::vec::Vec::new(), None, format_name)
+        } else if let Install::ReaderAssets(arena) = install {
+            let t = trace::now();
+            let nodes = parser::html::arena_to_doc_nodes_with_base(&arena, Some(&loaded.url));
+            trace::stamp_took("  image resolve (arena reused)", t);
+            (nodes, alloc::vec::Vec::new(), Some(arena), "HTML")
         } else {
             let fmt = DocFormat::detect_from_url_or_content(&loaded.url, &loaded.content);
+            let t = trace::now();
             let (parsed_nodes, parsed_scripts, parsed_arena) =
                 match parser::parse_content_with_base_checked(fmt, &loaded.content, Some(&loaded.url)) {
                     Ok(parsed) => parsed,
@@ -158,6 +185,7 @@ impl Tab {
                         (Vec::new(), Vec::new(), None)
                     }
                 };
+            trace::stamp_took("  parse", t);
             (
                 parsed_nodes,
                 parsed_scripts,
@@ -174,6 +202,7 @@ impl Tab {
 
         self.doc.clear();
         self.doc.external_stylesheets.clear();
+        let t_links = trace::now();
         if let Some(document) = &arena {
             for node in &document.nodes {
                 if node.tag() == Some("link") && node.get_attribute("rel").is_some_and(|rel| rel.split_ascii_whitespace().any(|value| value.eq_ignore_ascii_case("stylesheet"))) {
@@ -186,11 +215,13 @@ impl Tab {
                 }
             }
         }
+        trace::stamp_took("  stylesheet links", t_links);
+        let t = trace::now();
         let cookies = self.browser.session.cookies();
         self.browser = browser_runtime::DocumentBrowser::new(&loaded.url);
         self.browser.session.set_cookies(cookies);
         self.browser.session.accept_response_cookies(&loaded.url, &loaded.response_headers);
-        let mut scripts_ready = match js_runtime.sync_script_document(arena.as_ref(), self.scripts_enabled && !scripts.is_empty(), &loaded.title) {
+        let mut scripts_ready = match js_runtime.sync_script_document(arena.as_ref(), !reader && self.scripts_enabled && !scripts.is_empty(), &loaded.title) {
             Ok(ready) => ready,
             Err(error) => {
                 ostd::io::println(&format!("[ocel] DOM sync failed: {:?}", error));
@@ -205,15 +236,21 @@ impl Tab {
                 false
             }
         };
+        trace::stamp_took("  js sync_script_document", t);
+        let t = trace::now();
         self.url = loaded.url.clone();
         self.title = loaded.title;
         self.doc.arena = arena.take();
         self.doc.nodes = nodes;
-        if self.doc.arena.is_some() {
+        if reader && self.doc.arena.is_some() {
+            // Reader layout follows in `finish_load` once the article is extracted.
+        } else if self.doc.arena.is_some() {
             self.doc.relayout_from_arena(fonts, viewport_w, viewport_h);
         } else {
             self.doc.compute_layout(fonts, viewport_w);
         }
+        trace::stamp_took("  layout", t);
+        let t = trace::now();
         use js::JsContext;
         if scripts_ready {
             let configured = self.configure_browser(js_runtime, viewport_w, viewport_h)
@@ -255,6 +292,7 @@ impl Tab {
                 js_runtime.reset(); self.browser.cancel(); self.js_context_id = 0;
             }
         }
+        trace::stamp_took("  scripts", t);
         self.url = loaded.url;
         self.scroll_y = 0;
         if load_error.is_some() { self.doc.last_error = load_error; }
@@ -554,6 +592,7 @@ impl OcelViewer {
                 if enable_reader {
                     job.set_reader_mode(true);
                 }
+                trace::begin(url);
                 self.url_input = String::from(url);
                 self.status_text = format!("Loading {} — Esc cancels", url);
                 self.pending_load = Some(PendingLoad { job, navigation });
@@ -578,9 +617,12 @@ impl OcelViewer {
 
         // Instant Text Streaming: stream early text document as soon as HTML payload arrives
         if let Some(early) = pending.job.take_early_document() {
+            trace::stamp("early document available");
             self.finish_load(early, pending.navigation);
             self.status_text = format!("{} — Esc cancels", pending.job.progress());
+            let t = trace::now();
             self.render();
+            trace::stamp_took("first paint (early)", t);
         }
 
         match pending.job.poll() {
@@ -593,13 +635,15 @@ impl OcelViewer {
             }
             core::task::Poll::Ready(result) => {
                 match result {
-                    Ok(loaded) => self.finish_load(loaded, pending.navigation),
+                    Ok(loaded) => { trace::stamp("final document (resources complete)"); self.finish_load(loaded, pending.navigation) },
                     Err(error) => {
                         self.url_input = self.current_tab().url.clone();
                         self.status_text = format!("Load failed: {}", error);
                     }
                 }
+                let t = trace::now();
                 self.render();
+                trace::stamp_took("paint (final)", t);
             }
         }
     }
@@ -651,34 +695,51 @@ impl OcelViewer {
         candidate.browser.session.set_cookies(self.current_tab().browser.session.cookies());
         candidate.doc.set_memory_budget(budget::MAX_RESIDENT_BYTES.saturating_sub(retained)
             .saturating_sub(loaded.resources.resident_bytes()).saturating_sub(loaded.content.len()));
-        let (url, format) = candidate.install_loaded(loaded, viewport_w, viewport_h, &mut self.js_runtime, &mut self.fonts);
+        let install = if !enable_reader {
+            Install::Web
+        } else if is_asset_update && self.tabs[self.active_tab].doc.is_reader_mode() {
+            match self.tabs[self.active_tab].doc.arena.take() { Some(arena) => Install::ReaderAssets(arena), None => Install::Reader }
+        } else {
+            Install::Reader
+        };
+        let t = trace::now();
+        let (url, format) = candidate.install_loaded(loaded, viewport_w, viewport_h, &mut self.js_runtime, &mut self.fonts, install);
+        trace::stamp_took("install_loaded", t);
         let tab = &mut candidate;
         tab.scroll_y = existing_scroll;
-        if zoom != tab.doc.zoom_percent() {
+        if zoom != tab.doc.zoom_percent() && !(enable_reader && tab.doc.arena.is_some()) {
             tab.doc.set_zoom(zoom, &mut self.fonts, viewport_w, viewport_h);
         }
         if enable_reader && tab.doc.arena.is_some() {
             tab.doc.set_reader_width(reader_column, &mut self.fonts, viewport_w, viewport_h);
             let previous = resources::replace(core::mem::take(&mut tab.resources));
+            let t = trace::now();
             if tab.doc.toggle_reader(&mut self.fonts, viewport_w, viewport_h, &tab.url, &tab.title).is_ok() {
                 self.status_text = String::from("Reader Mode · Alt+[ / Alt+] changes column width");
             }
+            trace::stamp_took("toggle_reader (readability + reader layout)", t);
             tab.resources = resources::replace(previous);
+            if zoom != tab.doc.zoom_percent() {
+                tab.doc.set_zoom(zoom, &mut self.fonts, viewport_w, viewport_h);
+            }
         }
-        if let Some(error) = &tab.doc.last_error {
+        if let Some(error) = tab.doc.last_error.clone() {
             use js::JsContext;
             self.js_runtime.reset();
+            self.restore_arena_if_reused(&mut candidate, is_asset_update);
             self.status_text = format!("Document rejected: {}", error);
             self.url_input = self.current_tab().url.clone();
             return;
         }
-        if retained.saturating_add(tab.resident_bytes()) > budget::MAX_RESIDENT_BYTES {
+        if retained.saturating_add(candidate.resident_bytes()) > budget::MAX_RESIDENT_BYTES {
             use js::JsContext;
             self.js_runtime.reset();
+            self.restore_arena_if_reused(&mut candidate, is_asset_update);
             self.status_text = String::from("Rendered document exceeds the shared tab memory budget.");
             self.url_input = self.current_tab().url.clone();
             return;
         }
+        let tab = &mut candidate;
         tab.history = core::mem::take(&mut self.tabs[self.active_tab].history);
         tab.history_idx = self.tabs[self.active_tab].history_idx;
         if !is_asset_update {
@@ -705,6 +766,14 @@ impl OcelViewer {
             self.status_text = format!("Loaded with resource error: {}", warning);
         }
         if self.search_open { self.perform_search(); }
+    }
+
+    /// A rejected asset pass must hand the reused DOM arena back to the tab that
+    /// is still on screen, or its web-mode toggle would have nothing to lay out.
+    fn restore_arena_if_reused(&mut self, candidate: &mut Tab, is_asset_update: bool) {
+        if is_asset_update && self.tabs[self.active_tab].doc.arena.is_none() {
+            self.tabs[self.active_tab].doc.arena = candidate.doc.arena.take();
+        }
     }
 
     fn submit_form(&mut self, input: dom_arena::NodeId) {

@@ -71,6 +71,16 @@ The explicit kernel/NET `qemu-dev-https` profile cannot select the fleet TLS
 flavor; default fleet time refusal is unchanged. See the
 [QEMU profile guide](../guides/ocel-viewer.md#qemu-dev-https-profile).
 
+**Amendment 2026-10-21 (maintainer decision):** a new TLS handshake is satisfied
+by a nonce-bound host exchange that completed at most 2 s before the handshake's
+demand, or by the first exchange started after it. The guest demands at TLS
+connect acceptance so the exchange overlaps the TCP connect, and a pending demand
+starts an exchange immediately instead of waiting for the 1 s idle cadence.
+Measured on tuoitre.vn under QEMU/KVM the gate dropped from 0.85–2.2 s to the
+idle-refresh residue; TLS itself is 13–38 ms. An exchange older than 2 s (including
+any restored guest lease) still never authorizes a handshake. This loosens only the
+DEV profile; fleet time refusal is unchanged.
+
 ## Considered Alternatives
 
 - **Continue using Cloudflare:** rejected because observed responses violate the

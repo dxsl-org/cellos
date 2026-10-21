@@ -297,6 +297,7 @@ pub struct FetchJob<T: Transport = KernelTransport> {
     same_origin: Option<String>,
     same_site: Option<String>, manual_redirects: bool,
     address: Option<[u8; 4]>,
+    reads: usize, first_read_ms: u64,
     io: T,
 }
 impl FetchJob<KernelTransport> {
@@ -342,7 +343,7 @@ impl<T: Transport> FetchJob<T> {
         let now = io.now();
         let cached_addr = cached_resolve(&url.host, now);
         let stage = if cached_addr.is_some() { Stage::Connect } else { Stage::Resolve };
-        Ok(Self { decoder: ResponseDecoder::new(limit, url.scheme == "gemini"), visited: alloc::vec![url.full.clone()], url, endpoint, deadline: now.saturating_add(LOAD_TICKS), stage, pending: None, cap: None, request: Vec::new(), sent: 0, sent_chunk: 0, same_origin, same_site: None, manual_redirects: false, address: cached_addr, io })
+        Ok(Self { decoder: ResponseDecoder::new(limit, url.scheme == "gemini"), visited: alloc::vec![url.full.clone()], url, endpoint, deadline: now.saturating_add(LOAD_TICKS), stage, pending: None, cap: None, request: Vec::new(), sent: 0, sent_chunk: 0, same_origin, same_site: None, manual_redirects: false, address: cached_addr, reads: 0, first_read_ms: 0, io })
     }
     fn configure_browser(&mut self, method: &str, headers: &[(&str, &str)], body: &[u8]) -> Result<(), String> {
         if !matches!(self.url.scheme.as_str(), "http" | "https") || !matches!(method, "GET" | "HEAD" | "POST") || method != "POST" && !body.is_empty() {
@@ -448,9 +449,13 @@ impl<T: Transport> FetchJob<T> {
                 self.decoder = ResponseDecoder::new(self.decoder.limit, self.url.scheme == "gemini"); self.make_request(); self.stage = Stage::Resolve;
                 return Poll::Pending;
             }
+            crate::trace::stamp(&alloc::format!("body complete {} ({} bytes, {} read ops, {}ms since first read)", self.url.full, self.decoder.body.len(), self.reads, self.io.now().saturating_sub(self.first_read_ms)));
             self.close(); self.stage = Stage::Done;
             return Poll::Ready(Ok(FetchResult { url: self.url.document_url(), body: core::mem::take(&mut self.decoder.body), media_type: core::mem::take(&mut self.decoder.media_type), gemini: self.url.scheme == "gemini", status: self.decoder.status, headers: core::mem::take(&mut self.decoder.headers) }));
         }
+        // The next operation goes out in this turn: a reply and the following
+        // request no longer cost two UI turns each, which halves body transfer time.
+        if let Err(e) = self.submit() { return self.fail(e); }
         Poll::Pending
     }
     fn response(&mut self, bytes: &[u8]) -> Result<(), String> {
@@ -458,7 +463,7 @@ impl<T: Transport> FetchJob<T> {
             ostd::io::println(&alloc::format!("[ocel/net] Resolve reply len={}", bytes.len()));
             let addr = match api::ipc::decode::<NetResponse>(bytes) {
                 Ok(NetResponse::Addr(addr)) => {
-                    ostd::io::println(&alloc::format!("[ocel/net] DNS resolved {}: {}.{}.{}.{}", self.url.host, addr[0], addr[1], addr[2], addr[3]));
+                    crate::trace::stamp(&alloc::format!("dns {} -> {}.{}.{}.{}", self.url.host, addr[0], addr[1], addr[2], addr[3]));
                     addr
                 }
                 _ => return Err(format!("DNS resolution failed for {}", self.url.host)),
@@ -471,7 +476,7 @@ impl<T: Transport> FetchJob<T> {
             let cap = if self.url.tls() {
                 u64::from_le_bytes(bytes.try_into().map_err(|_| "Malformed TLS connect reply")?)
             } else { match api::ipc::decode::<NetResponse>(bytes) { Ok(NetResponse::CapId(cap)) => cap as u64, _ => return Err("TCP connect failed".into()) } };
-            ostd::io::println(&alloc::format!("[ocel/net] Connect result cap={}", cap));
+            crate::trace::stamp(&alloc::format!("connect{} cap={}", if self.url.tls() { "+tls" } else { "" }, cap));
             if cap == 0 { return Err("TLS connection failed (network/certificate/time policy)".into()); }
             self.cap = Some(cap); self.stage = if self.url.tls() { Stage::Send } else { Stage::WaitConnect }; return Ok(());
         }
@@ -487,7 +492,7 @@ impl<T: Transport> FetchJob<T> {
             let count = if self.url.tls() { u32::from_le_bytes(bytes.try_into().map_err(|_| "Malformed TLS send reply")?) as usize }
                 else { match api::ipc::decode::<NetResponse>(bytes) { Ok(NetResponse::WriteProgress(n)) => n as usize, Ok(NetResponse::NotReady) => return Ok(()), _ => return Err("TCP write failed".into()) } };
             if count > self.sent_chunk || count == 0 { return Err("Invalid/failed network write progress".into()); }
-            self.sent += count; if self.sent == self.request.len() { self.stage = Stage::Read; } return Ok(());
+            self.sent += count; if self.sent == self.request.len() { self.stage = Stage::Read; crate::trace::stamp("request sent"); } return Ok(());
         }
         if self.url.tls() {
             if bytes.len() < 2 { return Err("Malformed TLS read reply".into()); }
@@ -495,8 +500,12 @@ impl<T: Transport> FetchJob<T> {
             if count == u16::MAX as usize { return Err("TLS read failed".into()); }
             if count == u16::MAX as usize - 1 { return Ok(()); }
             if bytes.len() != count + 2 { return Err("Truncated TLS read IPC reply".into()); }
+            self.reads += 1;
+            if self.decoder.status == 0 { self.first_read_ms = self.io.now(); }
             if count == 0 { self.decoder.eof() } else { self.decoder.feed(&bytes[2..]) }
         } else {
+            self.reads += 1;
+            if self.decoder.status == 0 { self.first_read_ms = self.io.now(); }
             match api::ipc::decode::<NetResponse>(bytes) {
                 Ok(NetResponse::Data(data)) if !data.is_empty() => self.decoder.feed(data),
                 Ok(NetResponse::Eof) => self.decoder.eof(), Ok(NetResponse::NotReady) => Ok(()),

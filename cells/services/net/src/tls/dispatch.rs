@@ -32,7 +32,9 @@ type Sending = Pin<Box<dyn Future<Output = (TlsSocketEntry, Result<usize, embedd
 type Receiving = Pin<Box<dyn Future<Output = (TlsSocketEntry, Vec<u8>, Result<usize, embedded_tls::TlsError>)>>>;
 
 enum State {
-    Connecting(String),
+    /// Hostname plus the authenticated-time ticket demanded when the connect was
+    /// accepted, so the host time exchange overlaps the TCP connect.
+    Connecting(String, (u64, u64)),
     Handshake(Handshake),
     Send(Sending),
     Recv(Receiving),
@@ -108,7 +110,7 @@ impl TlsPending {
         self.operations.insert(cap, Pending {
             owner, reply, handle,
             deadline: sys_get_time().saturating_add(TCP_TIMEOUT),
-            state: State::Connecting(hostname), queue: VecDeque::new(),
+            state: State::Connecting(hostname, crate::tls::qemu_time::demand()), queue: VecDeque::new(),
         });
     }
 
@@ -200,7 +202,7 @@ impl TlsPending {
         if let Some(op) = self.operations.remove(&cap) {
             let Pending { reply, owner, state, queue, .. } = op;
             let response: &[u8] = match &state {
-                State::Connecting(_) | State::Handshake(_) => &[0; 8],
+                State::Connecting(..) | State::Handshake(_) => &[0; 8],
                 State::Send(_) => &[0xff; 4],
                 State::Recv(_) => &[0xff; 2],
                 State::Vacant => &[],
@@ -235,7 +237,7 @@ impl TlsPending {
                 continue;
             }
             let result = match &mut op.state {
-                State::Connecting(h) => match sockets.get_mut::<tcp::Socket>(op.handle).state() {
+                State::Connecting(h, _) => match sockets.get_mut::<tcp::Socket>(op.handle).state() {
                     tcp::State::Established => {
                         ostd::io::println(&alloc::format!("[net/tls] TCP Established for {}, starting TLS handshake", h));
                         Step::TcpConnected
@@ -273,10 +275,10 @@ impl TlsPending {
                 Step::Waiting => { self.operations.insert(cap, op); }
                 Step::TcpConnected => {
                     table.set_state(cap, SocketState::Connected);
-                    let State::Connecting(hostname) = core::mem::replace(&mut op.state, State::Vacant) else {
+                    let State::Connecting(hostname, ticket) = core::mem::replace(&mut op.state, State::Vacant) else {
                         unreachable!();
                     };
-                    op.state = State::Handshake(Box::pin(TlsSocketEntry::handshake(op.handle, hostname)));
+                    op.state = State::Handshake(Box::pin(TlsSocketEntry::handshake(op.handle, hostname, ticket)));
                     op.deadline = sys_get_time().saturating_add(TLS_TIMEOUT);
                     self.operations.insert(cap, op);
                 }
@@ -342,7 +344,7 @@ impl TlsPending {
     fn fail(&mut self, cap: u64, op: Pending, sockets: &mut SocketSet<'_>, table: &mut SocketTable) {
         let Pending { reply, owner, state, queue, .. } = op;
         let response: &[u8] = match &state {
-            State::Connecting(_) | State::Handshake(_) => &[0; 8],
+            State::Connecting(..) | State::Handshake(_) => &[0; 8],
             State::Send(_) => &[0xff; 4],
             State::Recv(_) => &[0xff; 2],
             State::Vacant => &[],

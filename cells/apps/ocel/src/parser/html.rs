@@ -283,7 +283,7 @@ pub fn arena_to_doc_nodes_with_base(arena: &DocumentArena, base_url: Option<&str
                         None => ostd::io::println(&alloc::format!("[ocel] image decode failed for: {}", src)),
                     }
                 }
-                Err(err) => ostd::io::println(&alloc::format!("[ocel] load_binary failed for {}: {}", src, err)),
+                Err(_) => {}
             }
         }
     }
@@ -407,7 +407,7 @@ fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNo
                                                 None => ostd::io::println(&alloc::format!("[ocel] render_children decode failed: {}", src_val)),
                                             }
                                         }
-                                        Err(err) => ostd::io::println(&alloc::format!("[ocel] render_children load_binary failed {}: {}", src_val, err)),
+                                        Err(_) => {}
                                     }
                                 }
                             }

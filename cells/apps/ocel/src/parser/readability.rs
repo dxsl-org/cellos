@@ -130,9 +130,10 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
     let mut best_p_count = 0;
     let mut highest_score = -1000i32;
 
+    let stats = SubtreeStats::build(arena);
     if best_node.is_none() {
         for node in &arena.nodes {
-            if is_noise_or_modal(arena, node.id) {
+            if stats.noisy(node.id) {
                 continue;
             }
             if let NodeData::Element { tag, attributes } = &node.data {
@@ -186,7 +187,7 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
                 }
 
                 // Recursive metrics (text length, punctuation, link density, paragraph count)
-                let (total_chars, link_chars, p_count, punct_count) = compute_node_stats(arena, node.id);
+                let (total_chars, link_chars, p_count, punct_count) = stats.get(node.id);
 
                 if total_chars > 30 {
                     score += (total_chars / 25) as i32;
@@ -210,7 +211,7 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
             }
         }
     } else if let Some(nid) = schema_body_node {
-        let (_, _, p_count, _) = compute_node_stats(arena, nid);
+        let (_, _, p_count, _) = stats.get(nid);
         best_p_count = p_count;
         highest_score = 100;
     }
@@ -746,53 +747,97 @@ fn extract_date_from_url(url: &str) -> Option<String> {
     None
 }
 
-fn compute_node_stats(arena: &DocumentArena, node_id: NodeId) -> (usize, usize, usize, usize) {
-    let mut total_chars = 0;
-    let mut link_chars = 0;
-    let mut p_count = 0;
-    let mut punct_count = 0;
+/// Per-node subtree metrics for candidate scoring, computed in one pass over the
+/// arena so scoring N candidates costs O(N) instead of O(N · subtree).
+/// Noise (`script`/`style`/modal/overlay) is inherited from ancestors exactly as
+/// `is_noise_or_modal` defines it; a noisy node contributes nothing to any
+/// ancestor's totals.
+struct SubtreeStats {
+    noisy: Vec<bool>,
+    /// (total_chars, link_chars, p_count, punct_count)
+    stats: Vec<(usize, usize, usize, usize)>,
+}
 
-    fn walk(
-        arena: &DocumentArena,
-        id: NodeId,
-        in_link: bool,
-        total: &mut usize,
-        link: &mut usize,
-        p_cnt: &mut usize,
-        punct: &mut usize,
-    ) {
-        let Some(node) = arena.get(id) else { return; };
-        if is_noise_or_modal(arena, id) { return; }
-        match &node.data {
-            NodeData::Element { tag, .. } => {
-                let is_link = in_link || tag == "a";
-                if tag == "p" {
-                    *p_cnt += 1;
+impl SubtreeStats {
+    fn build(arena: &DocumentArena) -> Self {
+        let n = arena.nodes.len();
+        let mut noisy = alloc::vec![false; n];
+        let mut stats = alloc::vec![(0usize, 0usize, 0usize, 0usize); n];
+        // Iterative post-order DFS from the root: parents are finished after all
+        // children, so each child's totals fold into its parent exactly once.
+        // Nodes unreachable from the root (detached) stay zero and non-noisy,
+        // matching the recursive walk, which never visited them either.
+        let mut stack: Vec<(NodeId, bool, bool)> = alloc::vec![(arena.root, false, false)];
+        while let Some((id, in_link, expanded)) = stack.pop() {
+            let Some(node) = arena.get(id) else { continue; };
+            let index = id.index();
+            if expanded {
+                // Post-order: fold into parent.
+                if let Some(parent) = node.parent {
+                    if !noisy[index] {
+                        let own = stats[index];
+                        let p = &mut stats[parent.index()];
+                        p.0 += own.0; p.1 += own.1; p.2 += own.2; p.3 += own.3;
+                    }
                 }
-                let mut child = node.first_child;
-                while let Some(cid) = child {
-                    walk(arena, cid, is_link, total, link, p_cnt, punct);
-                    child = arena.get(cid).and_then(|n| n.next_sibling);
-                }
+                continue;
             }
-            NodeData::Text(txt) => {
-                let count = txt.chars().count();
-                *total += count;
-                if in_link {
-                    *link += count;
+            let parent_noisy = node.parent.is_some_and(|p| noisy[p.index()]);
+            match &node.data {
+                NodeData::Element { tag, attributes } => {
+                    noisy[index] = parent_noisy || noise_element(tag, attributes);
+                    if noisy[index] { continue; }
+                    if tag == "p" { stats[index].2 = 1; }
+                    let is_link = in_link || tag == "a";
+                    stack.push((id, in_link, true));
+                    let mut child = node.first_child;
+                    while let Some(cid) = child {
+                        stack.push((cid, is_link, false));
+                        child = arena.get(cid).and_then(|c| c.next_sibling);
+                    }
                 }
-                for c in txt.chars() {
-                    if matches!(c, ',' | '.' | ';' | ':' | '!' | '?' | '—' | '-') {
-                        *punct += 1;
+                NodeData::Text(txt) => {
+                    noisy[index] = parent_noisy;
+                    if noisy[index] { continue; }
+                    let mut count = 0;
+                    let mut punct = 0;
+                    for c in txt.chars() {
+                        count += 1;
+                        if matches!(c, ',' | '.' | ';' | ':' | '!' | '?' | '—' | '-') { punct += 1; }
+                    }
+                    stats[index] = (count, if in_link { count } else { 0 }, 0, punct);
+                    stack.push((id, in_link, true));
+                }
+                _ => {
+                    // Document root and other non-element containers are transparent.
+                    noisy[index] = parent_noisy;
+                    if noisy[index] { continue; }
+                    stack.push((id, in_link, true));
+                    let mut child = node.first_child;
+                    while let Some(cid) = child {
+                        stack.push((cid, in_link, false));
+                        child = arena.get(cid).and_then(|c| c.next_sibling);
                     }
                 }
             }
-            _ => {}
         }
+        Self { noisy, stats }
     }
+    fn noisy(&self, id: NodeId) -> bool { self.noisy.get(id.index()).copied().unwrap_or(false) }
+    fn get(&self, id: NodeId) -> (usize, usize, usize, usize) { self.stats.get(id.index()).copied().unwrap_or((0, 0, 0, 0)) }
+}
 
-    walk(arena, node_id, false, &mut total_chars, &mut link_chars, &mut p_count, &mut punct_count);
-    (total_chars, link_chars, p_count, punct_count)
+/// Own-attribute noise test shared by `is_noise_or_modal` and `SubtreeStats`.
+fn noise_element(tag: &str, attributes: &[(String, String)]) -> bool {
+    if matches!(tag, "script" | "style" | "noscript" | "dialog") {
+        return true;
+    }
+    attributes.iter().any(|(k, v)| (k == "class" || k == "id") && {
+        let lower = v.to_ascii_lowercase();
+        lower.contains("modal") || lower.contains("popup") || lower.contains("dialog")
+            || lower.contains("overlay") || lower.contains("banner") || lower.contains("cookie")
+            || lower.contains("lightbox") || lower.contains("advertisement") || lower.contains("subscribe")
+    })
 }
 
 fn collect_single_input(arena: &DocumentArena, id: NodeId) -> Option<DocNode> {
@@ -1383,34 +1428,13 @@ fn is_in_nav_or_header(arena: &DocumentArena, id: NodeId) -> bool {
 fn is_noise_or_modal(arena: &DocumentArena, id: NodeId) -> bool {
     let mut cur = Some(id);
     while let Some(nid) = cur {
-        if let Some(node) = arena.get(nid) {
-            if let NodeData::Element { tag, attributes } = &node.data {
-                let tag_name = tag.as_str();
-                if matches!(tag_name, "script" | "style" | "noscript" | "dialog") {
-                    return true;
-                }
-                for (k, v) in attributes {
-                    if k == "class" || k == "id" {
-                        let lower = v.to_ascii_lowercase();
-                        if lower.contains("modal")
-                            || lower.contains("popup")
-                            || lower.contains("dialog")
-                            || lower.contains("overlay")
-                            || lower.contains("banner")
-                            || lower.contains("cookie")
-                            || lower.contains("lightbox")
-                            || lower.contains("advertisement")
-                            || lower.contains("subscribe")
-                        {
-                            return true;
-                        }
-                    }
-                }
+        let Some(node) = arena.get(nid) else { break; };
+        if let NodeData::Element { tag, attributes } = &node.data {
+            if noise_element(tag, attributes) {
+                return true;
             }
-            cur = node.parent;
-        } else {
-            break;
         }
+        cur = node.parent;
     }
     false
 }
@@ -2173,3 +2197,4 @@ fn append_cached_images(arena:&DocumentArena,id:NodeId,out:&mut Vec<DocNode>,ass
     let mut child=node.first_child;
     while let Some(id)=child {append_cached_images(arena,id,out,assets);child=arena.get(id).and_then(|node|node.next_sibling);}
 }
+

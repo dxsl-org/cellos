@@ -145,9 +145,10 @@ Guest/host communication is an unsigned fixed binary exchange to SLIRP's trusted
 host at `10.0.2.2:18443`. The companion binds only `127.0.0.1`; do not expose it
 to an untrusted host/network. Local host users are within this DEV trust boundary.
 This does **not** protect whole-host rollback, compromised host software, restored
-host state, or an already restored live TLS session. Every new TLS handshake
-requires a new nonce-bound host exchange; a cached guest clock alone cannot
-authorize it. No stale-time or alternate-source fallback exists.
+host state, or an already restored live TLS session. A new TLS handshake needs a
+nonce-bound host exchange completed within the last 2 s (or the next one started
+after its demand, which the guest issues at connect acceptance); a cached guest
+clock alone cannot authorize it. No stale-time or alternate-source fallback exists.
 
 Build NET as an explicit alternative to the default fleet CA flavor:
 

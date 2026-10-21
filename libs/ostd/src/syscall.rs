@@ -80,6 +80,13 @@ fn decode_snapshot_result(ret: isize) -> SyscallResult {
 
 #[inline(always)]
 unsafe fn syscall(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) -> isize {
+    // Host (test) builds have no cell kernel: a raw `syscall` would execute an
+    // unrelated Linux call (e.g. IpcTake == openat), so fail closed instead.
+    #[cfg(not(target_os = "none"))]
+    {
+        let _ = (id, a0, a1, a2, a3);
+        return -1;
+    }
     let mut ret: isize;
     #[cfg(target_arch = "riscv64")]
     asm!(

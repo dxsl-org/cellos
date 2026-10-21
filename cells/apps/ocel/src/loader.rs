@@ -147,6 +147,7 @@ impl DocumentLoadJob {
             if loaded.content.len().saturating_mul(12).saturating_add(128 * 1024) > available {
                 return self.fail("Document resource discovery exceeds remaining tab memory budget".into());
             }
+            let t = crate::trace::now();
             self.references = if loaded.direct_nodes.is_none() && matches!(crate::parser::DocFormat::detect_from_url_or_content(&loaded.url, &loaded.content), crate::parser::DocFormat::Html | crate::parser::DocFormat::Markdown) {
                 match crate::resources::references(&loaded.url, &loaded.content) {
                     Ok(mut references) => {
@@ -165,6 +166,7 @@ impl DocumentLoadJob {
                     }
                 }
             } else { Vec::new() };
+            crate::trace::stamp_took(&alloc::format!("reference discovery ({} refs)", self.references.len()), t);
             self.loaded = Some(loaded);
             return Poll::Pending;
         }

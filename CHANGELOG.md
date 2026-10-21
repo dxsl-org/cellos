@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- Ocel reader-mode first paint on `https://tuoitre.vn` (QEMU/KVM, desktop profile, fixture ISO) from ~4.3 s to ~1.4–1.6 s; the remaining floor is the QEMU DEV authenticated-time gate (ADR-0026), about 0.9 s on the first handshake of the final run against a 13–47 ms TLS handshake:
+  - Reader navigation no longer spawns/syncs the Tier 2 script engine, cascades CSS or builds the web layout before extracting the article (`Install::Reader`); the DOM arena is kept so Ctrl+R to web mode lays out on demand. The resource-complete pass reuses the parsed arena (`Install::ReaderAssets`) instead of re-tokenizing the HTML.
+  - Readability candidate scoring computes subtree text/link/paragraph/punctuation metrics in one post-order pass (`SubtreeStats`) instead of a subtree walk with ancestor noise checks per candidate (58 → 17 ms host, 105 → 36–52 ms guest for 3 955 nodes).
+  - `FetchJob::poll` submits the next network operation in the same UI turn that consumed a reply (277 KB body: 86 read ops in ~160 ms instead of ~200–390 ms).
+  - Expected image prefetch misses on the early pass no longer print one serial line per `<img>` (two per image previously; the serial log spam alone cost ~470 ms of the parse step).
+  - Navigation waterfall: `[ocel/t] +<ms> <stage>` serial stamps from `navigate` through DNS, connect+TLS, body, parse, readability, paint; `[net/tls] handshake <host> timing: time-gate <ms>, tls <ms>` from the net service.
+  - QEMU DEV time gate (ADR-0026 amendment 2026-10-21, maintainer decision): a handshake is satisfied by a nonce exchange completed ≤2 s before its demand or by the next one started after it; the demand is registered at TLS connect acceptance (overlapping the TCP connect) and served immediately instead of after the 1 s idle cadence. Fleet time refusal unchanged.
+  - `scripts/package-ocel-profile.py --dest /bin/net` replaces any single cell binary in a prepared embedded image (default remains `/bin/ocel`).
+  - `run-desktop.sh --rebuild` builds a local dev fixture image from the current tree (signed Ocel and NET, explicit `X86_KERNEL` route) and restores the tracked embedded image afterwards. It is not a release or qualification artifact.
 - Accepted Cellbox CLI architecture and implementation plan (documentation only):
   - [ADR-0028](docs/decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md) records one modular essential-suite executable, CLI-first shared backends, typed pipelines with explicit JSON boundaries and selective TUI.
   - [CLI design](docs/cellbox-cli.md) selects a compact Kibi-inspired editor, ripgrep-derived search, Cell-aware top and outbound SSH; Ratatui/Terminal SDK remain reusable outside viUI and cellbox.

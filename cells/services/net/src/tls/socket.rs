@@ -58,13 +58,17 @@ pub struct TlsSocketEntry {
 
 impl TlsSocketEntry {
     /// Consumes the hostname and owns all resources across suspended polls.
-    pub async fn handshake(handle: SocketHandle, hostname: String) -> Result<Self, TlsError> {
+    pub async fn handshake(handle: SocketHandle, hostname: String, time_ticket: (u64, u64)) -> Result<Self, TlsError> {
+        let started = crate::service_runtime::sys_get_time();
         ostd::io::println(&alloc::format!("[net/tls] Starting handshake for hostname={}", hostname));
+        #[cfg(not(feature = "qemu-dev-https"))]
+        let _ = time_ticket;
         #[cfg(feature = "qemu-dev-https")]
-        if let Err(e) = super::qemu_time::fresh_for_handshake().await {
-            ostd::io::println(&alloc::format!("[net/tls] fresh_for_handshake failed: {:?}", e));
+        if let Err(e) = super::qemu_time::fresh_for_ticket(time_ticket.0, time_ticket.1).await {
+            ostd::io::println(&alloc::format!("[net/tls] fresh_for_ticket failed: {:?}", e));
             return Err(e);
         }
+        let time_ready = crate::service_runtime::sys_get_time();
         let mut buffers = match prepare_handshake_buffers() {
             Ok(b) => b,
             Err(e) => {
@@ -115,6 +119,11 @@ impl TlsSocketEntry {
             conn.open(TlsContext::new(&config, provider)).await?;
         }
 
+        let done = crate::service_runtime::sys_get_time();
+        ostd::io::println(&alloc::format!(
+            "[net/tls] handshake {} timing: time-gate {}ms, tls {}ms",
+            hostname, time_ready.saturating_sub(started) / 10_000, done.saturating_sub(time_ready) / 10_000
+        ));
         Ok(Self {
             conn,
             _buffers: buffers,

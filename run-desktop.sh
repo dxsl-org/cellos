@@ -9,9 +9,43 @@ cd "$REPO_ROOT"
 
 ISO="build/cellos-x86_64-desktop.qcow2"
 
+# `--rebuild`: dev fixture image from the current tree — builds + signs Ocel
+# (desktop profile) and NET (qemu-dev-https), injects them into the embedded
+# ramdisk, builds the kernel, and makes the disk from an *explicitly selected*
+# kernel copy (`X86_KERNEL`, the fixture route that stays open while the default
+# rollout route is blocked). This is a local development image, not a release
+# or qualification artifact. Signing needs a passing F1/F5 for the whole tree.
+# The tracked embedded image is restored right after the kernel build, so the repo stays unchanged.
+if [[ "${1:-}" == "--rebuild" ]]; then
+    KFS="kernel/src/embedded-x86_64/kernel_fs.img"
+    mkdir -p build
+    cp "$KFS" build/kernel_fs.saved.img
+    trap 'cp build/kernel_fs.saved.img "$KFS"' EXIT
+    echo "  [Build]    Ocel (desktop) ..."
+    RUSTFLAGS="-C relocation-model=pic" cargo build --release -p ocel --no-default-features --features desktop \
+        --target x86_64-unknown-none -Z build-std=core,alloc
+    echo "  [Build]    NET (qemu-dev-https) ..."
+    RUSTFLAGS="-C relocation-model=pic" cargo build --release -p service-net --no-default-features --features qemu-dev-https \
+        --target x86_64-unknown-none -Z build-std=core,alloc
+    python3 scripts/cellos-sign --sign target/x86_64-unknown-none/release/ocel target/x86_64-unknown-none/release/service-net
+    python3 scripts/package-ocel-profile.py "$KFS" target/x86_64-unknown-none/release/ocel
+    python3 scripts/package-ocel-profile.py "$KFS" target/x86_64-unknown-none/release/service-net --dest /bin/net
+    echo "  [Build]    Kernel ..."
+    cargo build --release -p cellos-kernel --target x86_64-unknown-none \
+        --features "dev-policy-key,dev-signing-key,dev-weak-rng,signing-required,native-domains,qemu-dev-https,large-cell-va"
+    cp build/kernel_fs.saved.img "$KFS"
+    cp target/x86_64-unknown-none/release/cellos-kernel build/cellos-kernel-desktop-fixture
+    X86_KERNEL="$REPO_ROOT/build/cellos-kernel-desktop-fixture" X86_ISO_ROOT="$REPO_ROOT/build/desktop-fixture-isoroot" \
+        bash scripts/x86/make-iso-ci.sh build/cellos-x86_64-desktop-fixture.iso
+    limine/limine-8.7.0/bin/limine bios-install build/cellos-x86_64-desktop-fixture.iso
+    if [[ -f "$ISO" ]]; then cp "$ISO" "${ISO%.qcow2}.prev.qcow2"; fi
+    qemu-img convert -f raw -O qcow2 build/cellos-x86_64-desktop-fixture.iso "$ISO"
+    echo "  [Build]    Disk written: $ISO (previous kept as ${ISO%.qcow2}.prev.qcow2)"
+    shift
+fi
+
 if [[ ! -f "$ISO" ]]; then
-    echo "ERROR: image $ISO not found." >&2
-    echo "Vui lòng build image trước: python3 scripts/package-desktop-x86.py && cargo build --release -p cellos-kernel --target x86_64-unknown-none --features \"policy-required,large-cell-va,qemu-dev-https\"" >&2
+    echo "ERROR: image $ISO not found. Build the dev fixture image: bash run-desktop.sh --rebuild" >&2
     exit 1
 fi
 

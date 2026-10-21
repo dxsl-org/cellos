@@ -8,6 +8,9 @@ use crate::service_runtime::sys_get_time;
 use smoltcp::{iface::{Interface, SocketHandle, SocketSet}, socket::tcp, wire::{IpAddress, IpEndpoint}};
 
 const SECOND: u64 = 10_000_000;
+/// A nonce exchange that completed within this long before a handshake's
+/// demand satisfies that handshake; older exchanges force a fresh one.
+const RECENT_EXCHANGE: u64 = 2 * SECOND;
 const MAGIC: &[u8; 8] = b"CTIME001";
 static RECEIVED: AtomicU64 = AtomicU64::new(0);
 static LOWER: AtomicU64 = AtomicU64::new(0);
@@ -17,14 +20,29 @@ static VALID_UNTIL: AtomicU64 = AtomicU64::new(0);
 static DEMAND: AtomicU64 = AtomicU64::new(0);
 static FULFILLED: AtomicU64 = AtomicU64::new(0);
 
-/// A restored guest lease is never enough for a new TLS handshake. Require an
-/// exchange whose fresh nonce was generated after this handshake requested it.
-pub async fn fresh_for_handshake() -> Result<(), embedded_tls::TlsError> {
+/// Register a handshake's demand for fresh authenticated time and return
+/// `(ticket, demanded_at)`. Taking the ticket when the connect is accepted lets
+/// the exchange overlap the TCP connect instead of starting after it.
+pub fn demand() -> (u64, u64) {
     let ticket = DEMAND.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1))
-        .map_err(|_| embedded_tls::TlsError::InvalidCertificate)? + 1;
-    let deadline = sys_get_time().saturating_add(10 * SECOND);
+        .map_or(u64::MAX, |n| n + 1);
+    (ticket, sys_get_time())
+}
+
+/// Wait until authenticated time satisfies the demand: either the exchange
+/// started after the demand has completed, or one completed within
+/// `RECENT_EXCHANGE` before the demand (maintainer decision 2026-10-21; the
+/// idle refresh keeps such an exchange available, so a handshake normally
+/// proceeds at once). A restored guest lease older than that never qualifies.
+pub async fn fresh_for_ticket(ticket: u64, demanded_at: u64) -> Result<(), embedded_tls::TlsError> {
+    if ticket == u64::MAX {
+        return Err(embedded_tls::TlsError::InvalidCertificate);
+    }
+    let deadline = demanded_at.saturating_add(10 * SECOND);
     core::future::poll_fn(|_| {
-        if FULFILLED.load(Ordering::Acquire) >= ticket && validity_window().is_some() {
+        let fulfilled = FULFILLED.load(Ordering::Acquire) >= ticket;
+        let recent = RECEIVED.load(Ordering::Acquire).saturating_add(RECENT_EXCHANGE) >= demanded_at;
+        if (fulfilled || recent) && validity_window().is_some() {
             core::task::Poll::Ready(Ok(()))
         } else if sys_get_time() >= deadline {
             core::task::Poll::Ready(Err(embedded_tls::TlsError::InvalidCertificate))
@@ -68,7 +86,11 @@ struct Exchange {
 #[derive(Default)]
 pub struct ClockClient {
     exchange: Option<Exchange>,
+    /// Earliest start for an unsolicited refresh (idle pacing / failure backoff).
     next: u64,
+    /// Earliest start for a refresh that a waiting handshake asked for; only a
+    /// failed exchange pushes this out, so demand is normally served at once.
+    next_on_demand: u64,
     sequence: u64,
     announced: bool,
 }
@@ -107,6 +129,7 @@ impl ClockClient {
                     Err(_) => finished = true,
                 }
             }
+            let mut fulfilled = false;
             if exchange.received == exchange.response.len() {
                 if !finished {
                     if let Some((mut unix, lower, upper, sequence)) = decode(&exchange.response, &exchange.request, self.sequence) {
@@ -124,6 +147,7 @@ impl ClockClient {
                                 VALID_UNTIL.store(now.saturating_add(2 * SECOND), Ordering::Release);
                                 self.sequence = sequence;
                                 FULFILLED.store(exchange.demand, Ordering::Release);
+                                fulfilled = true;
                                 if !self.announced {
                                     ostd::io::println(&alloc::format!("[net/time] QEMU DEV authenticated time ready: unix={} sequence={} source=time.txryan.com; trusted host floor", unix, sequence));
                                     self.announced = true;
@@ -140,13 +164,19 @@ impl ClockClient {
             if finished {
                 socket.abort();
                 sockets.remove(exchange.handle);
-                self.next = now.saturating_add(SECOND / 2);
+                // Start-to-start pacing (set when the exchange began) already bounds
+                // the rate to one per second; a success needs no extra gap, so the
+                // last completed exchange stays within `RECENT_EXCHANGE` of the next
+                // handshake as often as upstream latency allows. Failure backs off.
+                if !fulfilled { self.next = now.saturating_add(SECOND / 2); }
+                self.next_on_demand = if fulfilled { now } else { now.saturating_add(SECOND / 2) };
             } else {
                 self.exchange = Some(exchange);
             }
             return;
         }
-        if !configured || now < self.next {
+        let demanded = DEMAND.load(Ordering::Acquire) > FULFILLED.load(Ordering::Acquire);
+        if !configured || now < if demanded { self.next_on_demand } else { self.next } {
             return;
         }
         self.next = now.saturating_add(SECOND);
