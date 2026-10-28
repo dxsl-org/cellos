@@ -1,0 +1,2561 @@
+{
+  "stage": "S10-4",
+  "status": "STOP_RUNTIME_MEASUREMENT",
+  "candidate_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "approval": "user2026-10-28 D4-Obs1/2/3 A + D4-Sign1 A",
+  "host_tests": {
+    "count": 43,
+    "pass": true,
+    "source_tool_result_id": "895eac77",
+    "log": "runtime/host-tests.log"
+  },
+  "B1": {
+    "signed_six_bytes": 980528,
+    "runtime_baseline": null
+  },
+  "B2": {
+    "signed_six_bytes": 980528,
+    "original_unsigned_six_bytes": 994064,
+    "details": "b2-final-measurement.json",
+    "scoped_signing": true,
+    "non_pristine": true
+  },
+  "static_profiles": {
+    "headless": {
+      "suite_only_signed_bytes": 3093952,
+      "workers_signed_bytes": 151464,
+      "six_elf_set_signed_bytes": 3245416,
+      "seven_packaged_elf_bytes_including_alias": 6339368,
+      "physical_alias_copy_bytes": 3093952,
+      "all_file_payload_bytes": 8032782,
+      "image": {
+        "path": "/tmp/cellbox-s10-3d-resume/cand/headless/kernel_fs.img",
+        "sha256": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+        "size": 12582912
+      },
+      "kernel": {
+        "path": "/tmp/cellbox-s10-3d-resume/cand/headless.kernel.elf",
+        "sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+        "size": 15599680,
+        "features": [
+          "default",
+          "policy-required"
+        ],
+        "embeds_kernel_fs_img": true,
+        "embeds_init": true
+      },
+      "iso": {
+        "path": "/tmp/cellbox-s10-3d-resume/cand/headless.iso",
+        "sha256": "49b32f3442f40fd52295ccf12f0009e9e46a99cd32615ffeb3a5a7ec598a753a",
+        "size": 19472384
+      }
+    },
+    "desktop": {
+      "suite_only_signed_bytes": 3094016,
+      "workers_signed_bytes": 151464,
+      "six_elf_set_signed_bytes": 3245480,
+      "seven_packaged_elf_bytes_including_alias": 6339496,
+      "physical_alias_copy_bytes": 3094016,
+      "all_file_payload_bytes": 18604628,
+      "image": {
+        "path": "/tmp/cellbox-s10-3d-resume/cand/desktop/kernel_fs.img",
+        "sha256": "3848cefb25f0e7c4abc67feccf3d8886292e25da60a88b4633552651292479ec",
+        "size": 25165824
+      },
+      "kernel": {
+        "path": "/tmp/cellbox-s10-3d-resume/cand/desktop.kernel.elf",
+        "sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a",
+        "size": 28182592,
+        "features": [
+          "default",
+          "policy-required"
+        ],
+        "embeds_kernel_fs_img": true,
+        "embeds_init": true
+      },
+      "iso": {
+        "path": "/tmp/cellbox-s10-3d-resume/cand/desktop.iso",
+        "sha256": "d207031983d53460fed88a8578975b13517dd4c412e4544c0b833ce06afe7334",
+        "size": 32055296
+      }
+    }
+  },
+  "runtime": [
+    {
+      "profile": "headless",
+      "mode": "untraced",
+      "number": 1,
+      "status": "COMPLETE",
+      "error": null,
+      "observer_error": null,
+      "cleanup_error": null,
+      "work": "/tmp/cellbox-s10-4-runtime-headless-untraced-1-c088ee",
+      "fresh_VM_to_exact_prompt_ms": 2589.808195,
+      "idle": {
+        "samples": 100,
+        "elapsed_ms": 10000.210632,
+        "content_change_frames": null,
+        "qemu_cpu_seconds": 9.44,
+        "serial_bytes": 246,
+        "frame_scope": "UART-only; no framebuffer change metric"
+      },
+      "top_idle": {
+        "samples": 100,
+        "elapsed_ms": 10000.206292,
+        "content_change_frames": null,
+        "qemu_cpu_seconds": 0.59,
+        "serial_bytes": 1686,
+        "frame_scope": "UART-only; no framebuffer change metric"
+      },
+      "long_stream": {
+        "collected_cat_submit_ns": 382041507867868,
+        "collected_cat_zero_json_seconds": 10,
+        "collected_cat_cancel": {
+          "ctrl_c_ns": 382051508203205,
+          "prompt_ns": 382051528742736,
+          "ctrl_c_to_prompt_ms": 20.539531,
+          "status": 130,
+          "rows": []
+        },
+        "flow_submit_ns": 382055779921793,
+        "first_live_observed_ns": 382056826629166,
+        "terminal_stream_cancel": {
+          "ctrl_c_ns": 382066826744711,
+          "prompt_ns": 382066847587684,
+          "ctrl_c_to_prompt_ms": 20.842973,
+          "status": 130,
+          "rows": []
+        },
+        "rg_cancel": {
+          "ctrl_c_ns": 382074098926865,
+          "prompt_ns": 382074241800390,
+          "ctrl_c_to_prompt_ms": 142.873525,
+          "status": 130,
+          "rows": []
+        },
+        "quiescence_seconds": 4,
+        "fixture_bytes": 7340032,
+        "scope": "Collected cat buffers; no-cat terminal sink streams. Separate contract-correct boundedness measures, not generic throughput."
+      },
+      "qualified_complete_observed_workload": false
+    },
+    {
+      "profile": "headless",
+      "mode": "untraced",
+      "number": 2,
+      "status": "COMPLETE",
+      "error": null,
+      "observer_error": null,
+      "cleanup_error": null,
+      "work": "/tmp/cellbox-s10-4-runtime-headless-untraced-2-4f6313",
+      "fresh_VM_to_exact_prompt_ms": 2646.040699,
+      "idle": {
+        "samples": 100,
+        "elapsed_ms": 10000.203983,
+        "content_change_frames": null,
+        "qemu_cpu_seconds": 9.54,
+        "serial_bytes": 246,
+        "frame_scope": "UART-only; no framebuffer change metric"
+      },
+      "top_idle": {
+        "samples": 100,
+        "elapsed_ms": 10000.209087,
+        "content_change_frames": null,
+        "qemu_cpu_seconds": 0.65,
+        "serial_bytes": 804,
+        "frame_scope": "UART-only; no framebuffer change metric"
+      },
+      "long_stream": {
+        "collected_cat_submit_ns": 382101612921135,
+        "collected_cat_zero_json_seconds": 10,
+        "collected_cat_cancel": {
+          "ctrl_c_ns": 382111613218021,
+          "prompt_ns": 382111633828966,
+          "ctrl_c_to_prompt_ms": 20.610945,
+          "status": 130,
+          "rows": []
+        },
+        "flow_submit_ns": 382115884859343,
+        "first_live_observed_ns": 382116931749290,
+        "terminal_stream_cancel": {
+          "ctrl_c_ns": 382126931840558,
+          "prompt_ns": 382126952710250,
+          "ctrl_c_to_prompt_ms": 20.869692,
+          "status": 130,
+          "rows": []
+        },
+        "rg_cancel": {
+          "ctrl_c_ns": 382134204291793,
+          "prompt_ns": 382134367518204,
+          "ctrl_c_to_prompt_ms": 163.226411,
+          "status": 130,
+          "rows": []
+        },
+        "quiescence_seconds": 4,
+        "fixture_bytes": 7340032,
+        "scope": "Collected cat buffers; no-cat terminal sink streams. Separate contract-correct boundedness measures, not generic throughput."
+      },
+      "qualified_complete_observed_workload": false
+    },
+    {
+      "profile": "headless",
+      "mode": "untraced",
+      "number": 3,
+      "status": "COMPLETE",
+      "error": null,
+      "observer_error": null,
+      "cleanup_error": null,
+      "work": "/tmp/cellbox-s10-4-runtime-headless-untraced-3-e30282",
+      "fresh_VM_to_exact_prompt_ms": 2923.023544,
+      "idle": {
+        "samples": 100,
+        "elapsed_ms": 10000.229067,
+        "content_change_frames": null,
+        "qemu_cpu_seconds": 9.41,
+        "serial_bytes": 183,
+        "frame_scope": "UART-only; no framebuffer change metric"
+      },
+      "top_idle": {
+        "samples": 100,
+        "elapsed_ms": 10000.198144,
+        "content_change_frames": null,
+        "qemu_cpu_seconds": 0.6,
+        "serial_bytes": 1507,
+        "frame_scope": "UART-only; no framebuffer change metric"
+      },
+      "long_stream": {
+        "collected_cat_submit_ns": 382161919588147,
+        "collected_cat_zero_json_seconds": 10,
+        "collected_cat_cancel": {
+          "ctrl_c_ns": 382171919887915,
+          "prompt_ns": 382171940454733,
+          "ctrl_c_to_prompt_ms": 20.566818,
+          "status": 130,
+          "rows": []
+        },
+        "flow_submit_ns": 382176191432052,
+        "first_live_observed_ns": 382177238737608,
+        "terminal_stream_cancel": {
+          "ctrl_c_ns": 382187238843751,
+          "prompt_ns": 382187259594160,
+          "ctrl_c_to_prompt_ms": 20.750409,
+          "status": 130,
+          "rows": []
+        },
+        "rg_cancel": {
+          "ctrl_c_ns": 382194510863270,
+          "prompt_ns": 382194694549595,
+          "ctrl_c_to_prompt_ms": 183.686325,
+          "status": 130,
+          "rows": []
+        },
+        "quiescence_seconds": 4,
+        "fixture_bytes": 7340032,
+        "scope": "Collected cat buffers; no-cat terminal sink streams. Separate contract-correct boundedness measures, not generic throughput."
+      },
+      "qualified_complete_observed_workload": false
+    },
+    {
+      "profile": "desktop",
+      "mode": "untraced",
+      "number": 1,
+      "status": "COMPLETE",
+      "error": null,
+      "observer_error": null,
+      "cleanup_error": null,
+      "work": "/tmp/cellbox-s10-4-runtime-desktop-untraced-1-b8d5e5",
+      "fresh_VM_to_exact_prompt_ms": 11186.309965,
+      "fresh_VM_to_desktop_ready_ms": 3872.364604,
+      "click_to_exact_Terminal_prompt_ms": 4169.392301,
+      "idle": {
+        "samples": 100,
+        "elapsed_ms": 10059.208043,
+        "content_change_frames": 0,
+        "qemu_cpu_seconds": 10.13,
+        "serial_bytes": 0,
+        "frame_scope": "GUI sampled content differences, not draw calls"
+      },
+      "top_idle": {
+        "samples": 98,
+        "elapsed_ms": 10084.460072,
+        "content_change_frames": 10,
+        "qemu_cpu_seconds": 10.16,
+        "serial_bytes": 0,
+        "frame_scope": "GUI sampled content differences, not draw calls"
+      },
+      "qualified_complete_observed_workload": false
+    },
+    {
+      "profile": "desktop",
+      "mode": "untraced",
+      "number": 2,
+      "status": "COMPLETE",
+      "error": null,
+      "observer_error": null,
+      "cleanup_error": null,
+      "work": "/tmp/cellbox-s10-4-runtime-desktop-untraced-2-79e7c2",
+      "fresh_VM_to_exact_prompt_ms": 11436.829514,
+      "fresh_VM_to_desktop_ready_ms": 4146.777226,
+      "click_to_exact_Terminal_prompt_ms": 4209.18736,
+      "idle": {
+        "samples": 100,
+        "elapsed_ms": 10095.229684,
+        "content_change_frames": 0,
+        "qemu_cpu_seconds": 10.16,
+        "serial_bytes": 0,
+        "frame_scope": "GUI sampled content differences, not draw calls"
+      },
+      "top_idle": {
+        "samples": 97,
+        "elapsed_ms": 10071.935093,
+        "content_change_frames": 10,
+        "qemu_cpu_seconds": 10.14,
+        "serial_bytes": 0,
+        "frame_scope": "GUI sampled content differences, not draw calls"
+      },
+      "qualified_complete_observed_workload": false
+    },
+    {
+      "profile": "desktop",
+      "mode": "untraced",
+      "number": 3,
+      "status": "COMPLETE",
+      "error": null,
+      "observer_error": null,
+      "cleanup_error": null,
+      "work": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c",
+      "fresh_VM_to_exact_prompt_ms": 11558.978615,
+      "fresh_VM_to_desktop_ready_ms": 4170.796745,
+      "click_to_exact_Terminal_prompt_ms": 4307.725282,
+      "idle": {
+        "samples": 99,
+        "elapsed_ms": 10080.350342,
+        "content_change_frames": 0,
+        "qemu_cpu_seconds": 10.16,
+        "serial_bytes": 0,
+        "frame_scope": "GUI sampled content differences, not draw calls"
+      },
+      "top_idle": {
+        "samples": 97,
+        "elapsed_ms": 10097.612515,
+        "content_change_frames": 10,
+        "qemu_cpu_seconds": 10.18,
+        "serial_bytes": 0,
+        "frame_scope": "GUI sampled content differences, not draw calls"
+      },
+      "qualified_complete_observed_workload": false
+    },
+    {
+      "profile": "headless",
+      "mode": "observed",
+      "number": 1,
+      "status": "STOP",
+      "error": "Stop: no new prompt after 'top --records -d 1 --frames 2 | to jsonl | cat' within 120s",
+      "observer_error": "Stop: observation blocker: RspError: single native instruction did not advance current breakpoint",
+      "cleanup_error": null,
+      "work": "/tmp/cellbox-s10-4-runtime-headless-observed-1-7e63d8",
+      "fresh_VM_to_exact_prompt_ms": 13995.375117,
+      "idle": {
+        "samples": 100,
+        "elapsed_ms": 10000.298314,
+        "content_change_frames": null,
+        "qemu_cpu_seconds": 5.32,
+        "serial_bytes": 127,
+        "frame_scope": "UART-only; no framebuffer change metric"
+      },
+      "observation": {
+        "status": "STOP_OBSERVATION",
+        "error": "RspError: single native instruction did not advance current breakpoint",
+        "profile": "headless",
+        "instances": [
+          {
+            "id": 1,
+            "role": "headless",
+            "base": 4429185024,
+            "cr3": 364544,
+            "initial_rsp": 38940672,
+            "stack_top": 38940672,
+            "stack_bottom": 38875136,
+            "stack_pages": {
+              "38875136": 38875136,
+              "38879232": 38879232,
+              "38883328": 38883328,
+              "38887424": 38887424,
+              "38891520": 38891520,
+              "38895616": 38895616,
+              "38899712": 38899712,
+              "38903808": 38903808,
+              "38907904": 38907904,
+              "38912000": 38912000,
+              "38916096": 38916096,
+              "38920192": 38920192,
+              "38924288": 38924288,
+              "38928384": 38928384,
+              "38932480": 38932480,
+              "38936576": 38936576
+            },
+            "touched_pages": [
+              38936576,
+              38932480,
+              38928384,
+              38924288,
+              38920192,
+              38916096,
+              38912000,
+              38907904,
+              38903808
+            ],
+            "heap": 4438261952,
+            "peak_aligned_used_bytes": 43056,
+            "phase_peaks": {
+              "boot": 25120,
+              "initial-prompt": 29216,
+              "ordinary-prompt-idle": 33312,
+              "finite-stream": 43056
+            },
+            "last_value": 38104,
+            "pending_writer": null,
+            "coverage_writes": 210,
+            "post_events": 209,
+            "initial_counter": 0,
+            "watch_completed_post": 4430119089,
+            "stack_write_attempt_depth_bound_bytes": [
+              32769,
+              36864
+            ],
+            "scope": "aligned allocator event peak; CPU stack write-attempt4KiB bounds, NOT exact stack/RSS/kernel-stack peak"
+          }
+        ],
+        "focus_base": 4429185024,
+        "heap_post_event_count": 209,
+        "observer_pause_ns": 524074821,
+        "stack_write_attempts": [
+          {
+            "monotonic_ns": 383870553491108,
+            "instance": 1,
+            "phase": "boot",
+            "page_va": 38936576,
+            "page_pa": 38936576,
+            "pc": 4429774256,
+            "cr3": 364544,
+            "witness": [
+              {
+                "table_pa": 364544,
+                "index": 0,
+                "pte": 368679,
+                "shift": 39
+              },
+              {
+                "table_pa": 368640,
+                "index": 0,
+                "pte": 34951207,
+                "shift": 30
+              },
+              {
+                "table_pa": 34951168,
+                "index": 18,
+                "pte": 61177895,
+                "shift": 21
+              },
+              {
+                "table_pa": 61177856,
+                "index": 290,
+                "pte": 9223372036893712487,
+                "shift": 12
+              }
+            ]
+          },
+          {
+            "monotonic_ns": 383870558018419,
+            "instance": 1,
+            "phase": "boot",
+            "page_va": 38932480,
+            "page_pa": 38932480,
+            "pc": 4429774281,
+            "cr3": 364544,
+            "witness": [
+              {
+                "table_pa": 364544,
+                "index": 0,
+                "pte": 368679,
+                "shift": 39
+              },
+              {
+                "table_pa": 368640,
+                "index": 0,
+                "pte": 34951207,
+                "shift": 30
+              },
+              {
+                "table_pa": 34951168,
+                "index": 18,
+                "pte": 61177895,
+                "shift": 21
+              },
+              {
+                "table_pa": 61177856,
+                "index": 289,
+                "pte": 9223372036893708391,
+                "shift": 12
+              }
+            ]
+          },
+          {
+            "monotonic_ns": 383870562556973,
+            "instance": 1,
+            "phase": "boot",
+            "page_va": 38928384,
+            "page_pa": 38928384,
+            "pc": 4429774296,
+            "cr3": 364544,
+            "witness": [
+              {
+                "table_pa": 364544,
+                "index": 0,
+                "pte": 368679,
+                "shift": 39
+              },
+              {
+                "table_pa": 368640,
+                "index": 0,
+                "pte": 34951207,
+                "shift": 30
+              },
+              {
+                "table_pa": 34951168,
+                "index": 18,
+                "pte": 61177895,
+                "shift": 21
+              },
+              {
+                "table_pa": 61177856,
+                "index": 288,
+                "pte": 9223372036893704295,
+                "shift": 12
+              }
+            ]
+          },
+          {
+            "monotonic_ns": 383870569611351,
+            "instance": 1,
+            "phase": "boot",
+            "page_va": 38924288,
+            "page_pa": 38924288,
+            "pc": 4430128078,
+            "cr3": 364544,
+            "witness": [
+              {
+                "table_pa": 364544,
+                "index": 0,
+                "pte": 368679,
+                "shift": 39
+              },
+              {
+                "table_pa": 368640,
+                "index": 0,
+                "pte": 34951207,
+                "shift": 30
+              },
+              {
+                "table_pa": 34951168,
+                "index": 18,
+                "pte": 61177895,
+                "shift": 21
+              },
+              {
+                "table_pa": 61177856,
+                "index": 287,
+                "pte": 9223372036893700199,
+                "shift": 12
+              }
+            ]
+          },
+          {
+            "monotonic_ns": 383870625969107,
+            "instance": 1,
+            "phase": "boot",
+            "page_va": 38920192,
+            "page_pa": 38920192,
+            "pc": 4430131128,
+            "cr3": 364544,
+            "witness": [
+              {
+                "table_pa": 364544,
+                "index": 0,
+                "pte": 368679,
+                "shift": 39
+              },
+              {
+                "table_pa": 368640,
+                "index": 0,
+                "pte": 34951207,
+                "shift": 30
+              },
+              {
+                "table_pa": 34951168,
+                "index": 18,
+                "pte": 61177895,
+                "shift": 21
+              },
+              {
+                "table_pa": 61177856,
+                "index": 286,
+                "pte": 9223372036893696103,
+                "shift": 12
+              }
+            ]
+          },
+          {
+            "monotonic_ns": 383870630612263,
+            "instance": 1,
+            "phase": "boot",
+            "page_va": 38916096,
+            "page_pa": 38916096,
+            "pc": 4430131143,
+            "cr3": 364544,
+            "witness": [
+              {
+                "table_pa": 364544,
+                "index": 0,
+                "pte": 368679,
+                "shift": 39
+              },
+              {
+                "table_pa": 368640,
+                "index": 0,
+                "pte": 34951207,
+                "shift": 30
+              },
+              {
+                "table_pa": 34951168,
+                "index": 18,
+                "pte": 61177895,
+                "shift": 21
+              },
+              {
+                "table_pa": 61177856,
+                "index": 285,
+                "pte": 9223372036893692007,
+                "shift": 12
+              }
+            ]
+          },
+          {
+            "monotonic_ns": 383870635552244,
+            "instance": 1,
+            "phase": "boot",
+            "page_va": 38912000,
+            "page_pa": 38912000,
+            "pc": 4430157913,
+            "cr3": 364544,
+            "witness": [
+              {
+                "table_pa": 364544,
+                "index": 0,
+                "pte": 368679,
+                "shift": 39
+              },
+              {
+                "table_pa": 368640,
+                "index": 0,
+                "pte": 34951207,
+                "shift": 30
+              },
+              {
+                "table_pa": 34951168,
+                "index": 18,
+                "pte": 61177895,
+                "shift": 21
+              },
+              {
+                "table_pa": 61177856,
+                "index": 284,
+                "pte": 9223372036893687911,
+                "shift": 12
+              }
+            ]
+          },
+          {
+            "monotonic_ns": 383870788435348,
+            "instance": 1,
+            "phase": "ordinary-prompt-idle",
+            "page_va": 38907904,
+            "page_pa": 38907904,
+            "pc": 4430131143,
+            "cr3": 364544,
+            "witness": [
+              {
+                "table_pa": 364544,
+                "index": 0,
+                "pte": 368679,
+                "shift": 39
+              },
+              {
+                "table_pa": 368640,
+                "index": 0,
+                "pte": 34951207,
+                "shift": 30
+              },
+              {
+                "table_pa": 34951168,
+                "index": 18,
+                "pte": 61177895,
+                "shift": 21
+              },
+              {
+                "table_pa": 61177856,
+                "index": 283,
+                "pte": 9223372036893683815,
+                "shift": 12
+              }
+            ]
+          },
+          {
+            "monotonic_ns": 383870793313011,
+            "instance": 1,
+            "phase": "ordinary-prompt-idle",
+            "page_va": 38903808,
+            "page_pa": 38903808,
+            "pc": 4430157913,
+            "cr3": 364544,
+            "witness": [
+              {
+                "table_pa": 364544,
+                "index": 0,
+                "pte": 368679,
+                "shift": 39
+              },
+              {
+                "table_pa": 368640,
+                "index": 0,
+                "pte": 34951207,
+                "shift": 30
+              },
+              {
+                "table_pa": 34951168,
+                "index": 18,
+                "pte": 61177895,
+                "shift": 21
+              },
+              {
+                "table_pa": 61177856,
+                "index": 282,
+                "pte": 9223372036893679719,
+                "shift": 12
+              }
+            ]
+          }
+        ],
+        "snapshots": [
+          {
+            "phase": "initial-prompt",
+            "instance": 1,
+            "monotonic_ns": 383870734667956,
+            "cr3": 364544,
+            "aligned_live_used_bytes": 29216,
+            "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+            "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+          },
+          {
+            "phase": "ordinary-prompt-idle",
+            "instance": 1,
+            "monotonic_ns": 383880827278642,
+            "cr3": 364544,
+            "aligned_live_used_bytes": 33312,
+            "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+            "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+          }
+        ],
+        "draw_events": [],
+        "resident_bytes": null,
+        "exact_stack_peak_bytes": null,
+        "kernel_stack_peak_bytes": null,
+        "historical_runtime_baseline": null
+      },
+      "qualified_complete_observed_workload": false
+    }
+  ],
+  "untraced_startup_statistics": {
+    "headless": {
+      "count": 3,
+      "values_ms": [
+        2589.808195,
+        2646.040699,
+        2923.023544
+      ],
+      "min_ms": 2589.808195,
+      "median_ms": 2646.040699,
+      "max_ms": 2923.023544
+    },
+    "desktop": {
+      "count": 3,
+      "values_ms": [
+        11186.309965,
+        11436.829514,
+        11558.978615
+      ],
+      "min_ms": 11186.309965,
+      "median_ms": 11436.829514,
+      "max_ms": 11558.978615
+    }
+  },
+  "remaining_unrun": [
+    [
+      "desktop",
+      "observed",
+      1
+    ]
+  ],
+  "final_preservation": {
+    "unchanged": true,
+    "files": 546,
+    "canonical_files": 469,
+    "changed": []
+  },
+  "feature_equivalent": false,
+  "historical_runtime_comparator": null,
+  "exact_RSP_stack_peak": null,
+  "kernel_stack_peak": null,
+  "RSS": null,
+  "CBX27_met": false,
+  "phase10_criterion4_met": false,
+  "canonical_promotion": false,
+  "containment_lift": false,
+  "limitations": "Fresh-VM TCG only. Peak means aligned live allocator counter with complete hardware coverage; stack metric only CPU write-attempt page bounds; backing not RSS. Observer timings separate. No matched baseline runtime; no universal optimization.",
+  "cleanup": {
+    "command": [
+      "git",
+      "worktree",
+      "remove",
+      "/tmp/cellbox-s10-4/baseline-worktree"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "worktree_removed": true,
+    "signed_evidence": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/signing/verified/summary.json",
+    "mirror_removed": true,
+    "build_cache_removed": true
+  },
+  "startup_statistics_scope": "Completed startup predicates only; later workload status is retained separately and not converted to a complete run.",
+  "startup_harness_deviation": {
+    "initial_attempt": {
+      "records": [
+        {
+          "profile": "headless",
+          "mode": "untraced",
+          "number": 1,
+          "work": "/tmp/cellbox-s10-4-runtime-headless-untraced-1-89e971",
+          "status": "STOP",
+          "start_monotonic_ns": 380667475406489,
+          "qemu_start_monotonic_ns": 380670442209590,
+          "qemu_pid": 2117795,
+          "error": "Stop: 900s measurement window expired",
+          "traceback": "Traceback (most recent call last):\n  File \"/tmp/cellbox-s10-4/runtime/run.py\", line 18, in run_one\n    s=Surface(m,obs);s.ready();record['timestamps']=s.timestamps\n                     ^^^^^^^^^\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 104, in ready\n    self.wait(lambda:self.sh.idle(count=1),900,'exact initial idle prompt')\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 89, in wait\n    self.check()\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 84, in check\n    need(time.monotonic_ns()-self.m.start_ns<900_000_000_000,'900s measurement window expired')\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 18, in need\n    if not ok:raise Stop(why)\n              ^^^^^^^^^^^^^^^\ncommon.Stop: 900s measurement window expired\n",
+          "surface_events": [],
+          "end_monotonic_ns": 381570821120328
+        }
+      ],
+      "remaining_unrun": [
+        [
+          "headless",
+          "untraced",
+          2
+        ],
+        [
+          "headless",
+          "untraced",
+          3
+        ],
+        [
+          "desktop",
+          "untraced",
+          1
+        ],
+        [
+          "desktop",
+          "untraced",
+          2
+        ],
+        [
+          "desktop",
+          "untraced",
+          3
+        ],
+        [
+          "headless",
+          "observed",
+          1
+        ],
+        [
+          "desktop",
+          "observed",
+          1
+        ]
+      ],
+      "status": "STOP"
+    },
+    "correction": "Evaluate every received genuine prompt prefix with existing Shell.idle(count1); receive timestamp contains boundary; preserve failed900s attempt with normal prompt/product boot. No ignored-line/acceptance or product change.",
+    "new_host_behavioral_tests": 3
+  },
+  "buffered_cat_harness_deviation": {
+    "failed_attempt": {
+      "records": [
+        {
+          "profile": "headless",
+          "mode": "untraced",
+          "number": 1,
+          "work": "/tmp/cellbox-s10-4-runtime-headless-untraced-1-17801a",
+          "status": "STOP",
+          "start_monotonic_ns": 381707633877550,
+          "qemu_start_monotonic_ns": 381709115321068,
+          "qemu_pid": 2120917,
+          "timestamps": {
+            "exact_prompt_ns": 381712040935447,
+            "prompt_prefix_end_offset": 20896,
+            "predicate_observed_ns": 381712059303517
+          },
+          "idle": {
+            "name": "ordinary-prompt-idle",
+            "start_ns": 381712059309930,
+            "end_ns": 381722059532622,
+            "target_hz": 10,
+            "samples": [
+              {
+                "monotonic_ns": 381712059442301,
+                "serial_bytes": 0
+              },
+              {
+                "monotonic_ns": 381712159547919,
+                "serial_bytes": 0
+              },
+              {
+                "monotonic_ns": 381712259563981,
+                "serial_bytes": 0
+              },
+              {
+                "monotonic_ns": 381712359568329,
+                "serial_bytes": 0
+              },
+              {
+                "monotonic_ns": 381712459559560,
+                "serial_bytes": 43
+              },
+              {
+                "monotonic_ns": 381712559556038,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381712659556487,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381712759557295,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381712859572306,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381712959612773,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381713059551840,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381713159556799,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381713259554562,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381713359557574,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381713459556233,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381713559569922,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381713659562805,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381713759563168,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381713859561196,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381713959569073,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381714059566589,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381714159551206,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381714259558975,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381714359564811,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381714459559589,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381714559565565,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381714659561394,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381714759568935,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381714859554052,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381714959561673,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381715059563973,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381715159556081,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381715259567375,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381715359581463,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381715459558305,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381715559567684,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381715659550802,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381715759560651,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381715859564559,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381715959564013,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381716059564632,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381716159566890,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381716259558938,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381716359551396,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381716459555493,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381716559549006,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381716659556921,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381716759563959,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381716859557334,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381716959551843,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381717059532811,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381717159565728,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381717259567932,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381717359571657,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381717459560428,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381717559549355,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381717659593917,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381717759566015,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381717859546623,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381717959545720,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381718059552361,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381718159548675,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381718259547612,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381718359614464,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381718459552489,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381718559601325,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381718659577110,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381718759591452,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381718859570819,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381718959573404,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381719059570745,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381719159603730,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381719259563642,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381719359565679,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381719459556289,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381719559555251,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381719659545985,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381719759561152,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381719859564711,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381719959559953,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381720059544475,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381720159561647,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381720259620697,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381720359575372,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381720459595054,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381720559568675,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381720659553018,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381720759574410,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381720859560130,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381720959559165,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381721059576187,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381721159550509,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381721259566120,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381721359552913,
+                "serial_bytes": 121
+              },
+              {
+                "monotonic_ns": 381721459567049,
+                "serial_bytes": 184
+              },
+              {
+                "monotonic_ns": 381721559619878,
+                "serial_bytes": 184
+              },
+              {
+                "monotonic_ns": 381721659557294,
+                "serial_bytes": 184
+              },
+              {
+                "monotonic_ns": 381721759550912,
+                "serial_bytes": 184
+              },
+              {
+                "monotonic_ns": 381721859556079,
+                "serial_bytes": 184
+              },
+              {
+                "monotonic_ns": 381721959559937,
+                "serial_bytes": 184
+              }
+            ],
+            "qemu_cpu_ticks_delta": 941,
+            "host_ticks_per_second": 100,
+            "serial_bytes": 184,
+            "scope": "whole-QEMU CPU incl sampling overhead; content changes not redraw calls"
+          },
+          "error": "Stop: timeout: live JSON sink",
+          "traceback": "Traceback (most recent call last):\n  File \"/tmp/cellbox-s10-4/runtime/run.py\", line 20, in run_one\n    if profile=='headless' or mode=='observed':record['long_stream']=s.streams()\n                                                                     ^^^^^^^^^^^\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 197, in streams\n    else:self.wait(lambda:D.strip_ansi(self.sh.raw()[before[1]:]).count(b'USER: {')>=3,120,'live JSON sink')\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 99, in wait\n    raise Stop(f'timeout: {label}')\ncommon.Stop: timeout: live JSON sink\n",
+          "surface_events": [
+            {
+              "phase": "initial-prompt",
+              "monotonic_ns": 381712059305378
+            },
+            {
+              "phase": "ordinary-prompt-idle",
+              "monotonic_ns": 381712059309575
+            },
+            {
+              "phase": "finite-stream",
+              "monotonic_ns": 381722059938423
+            },
+            {
+              "command": "top --records -d 1 --frames 2 | to jsonl | cat",
+              "name": "finite-stream",
+              "start_ns": 381722059947701,
+              "end_ns": 381724313439347,
+              "rows": [
+                "{\"frame\":\"begin\",\"sample_id\":2,\"monotonic_ns\":13025137580,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e2b66c1578eb0e\",\"interval_ns\":1004949410,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":8,\"total_tasks\":8,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":234885120,\"mem_used_bytes\":81780736,\"mem_free_bytes\":153104384,\"memory_interval\":true}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":8,\"generation\":115,\"root_tid\":10,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":246066790,\"cpu_tenths\":34,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":117,\"root_tid\":12,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":91810860,\"cpu_tenths\":21,\"cpu_quality\":\"ok\",\"quota_bytes\":18704,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":111,\"root_tid\":6,\"name\":\"e1000\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":25018470,\"cpu_tenths\":1,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":116,\"root_tid\":11,\"name\":\"net\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":17923070,\"cpu_tenths\":1,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":194878510,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":837765860,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3317168,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":110,\"root_tid\":5,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":313320560,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":1016,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":113,\"root_tid\":8,\"name\":\"serial\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":9145549820,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+                "{\"frame\":\"begin\",\"sample_id\":3,\"monotonic_ns\":14051682460,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e2b66c1578eb0e\",\"interval_ns\":1026544880,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":8,\"total_tasks\":8,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":234885120,\"mem_used_bytes\":81780736,\"mem_free_bytes\":153104384,\"memory_interval\":true}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":8,\"generation\":115,\"root_tid\":10,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":291772260,\"cpu_tenths\":44,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":117,\"root_tid\":12,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121363320,\"cpu_tenths\":28,\"cpu_quality\":\"ok\",\"quota_bytes\":18704,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":111,\"root_tid\":6,\"name\":\"e1000\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":26191300,\"cpu_tenths\":1,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":194878510,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":837765860,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3317168,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":110,\"root_tid\":5,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":313320560,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":1016,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":113,\"root_tid\":8,\"name\":\"serial\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":9145549820,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":116,\"root_tid\":11,\"name\":\"net\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":18917860,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+                "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}"
+              ]
+            },
+            {
+              "command": "echo st=$?",
+              "name": "status",
+              "start_ns": 381724313454785,
+              "end_ns": 381724564168983,
+              "rows": [
+                "st=0"
+              ]
+            },
+            {
+              "phase": "endless-stream",
+              "monotonic_ns": 381724564331294
+            }
+          ],
+          "end_monotonic_ns": 381844895116568
+        }
+      ],
+      "remaining_unrun": [
+        [
+          "headless",
+          "untraced",
+          2
+        ],
+        [
+          "headless",
+          "untraced",
+          3
+        ],
+        [
+          "desktop",
+          "untraced",
+          1
+        ],
+        [
+          "desktop",
+          "untraced",
+          2
+        ],
+        [
+          "desktop",
+          "untraced",
+          3
+        ],
+        [
+          "headless",
+          "observed",
+          1
+        ],
+        [
+          "desktop",
+          "observed",
+          1
+        ]
+      ],
+      "status": "STOP"
+    },
+    "classification": "observer assumption error, not demonstrated product defect",
+    "existing_contract": "S10-3b.8 Collected sinks buffer until complete and return130/no bytes on interrupt; executor1875-1895/1919-1922, typed915-931/959-1001; qualified L0 explicitly0rows before cat CtrlC, separate no-cat streaming live check.",
+    "disposition": "Main explicitly authorized contract-correct10s zero-output cat cancellation plus separate no-cat live stream measurement; preserve120s failed observation, no product/acceptance change."
+  },
+  "qemu_xml_harness_deviation": {
+    "failed_attempt": {
+      "profile": "headless",
+      "mode": "observed",
+      "number": 1,
+      "work": "/tmp/cellbox-s10-4-runtime-headless-observed-1-9f8b66",
+      "status": "STOP",
+      "start_monotonic_ns": 382330639005158,
+      "qemu_start_monotonic_ns": 382331635085065,
+      "qemu_pid": 2123206,
+      "error": "Stop: observation blocker: RspError: malformed target XML",
+      "traceback": "Traceback (most recent call last):\n  File \"/tmp/cellbox-s10-4/runtime/run.py\", line 17, in run_one\n    obs.check()\n  File \"/tmp/cellbox-s10-4/runtime/observer.py\", line 53, in check\n    if self.error:raise Stop(f'observation blocker: {self.error}')\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ncommon.Stop: observation blocker: RspError: malformed target XML\n",
+      "observer_error": "Stop: observation blocker: RspError: malformed target XML",
+      "end_monotonic_ns": 382332087276803
+    },
+    "classification": "host parser compatibility bug before guest resume; QEMU target.xml xi:include without xmlns:xi",
+    "correction": "Bind only known xi prefix on otherwise unbound target root; same entity/include/depth/path/register/packet policies. Two captured XML/unknown-prefix/bad-path regression tests pass; original bytes retained; completed timing lanes not rerun."
+  },
+  "native_step_amendment": {
+    "prior_unsupported_attempt": {
+      "profile": "headless",
+      "mode": "observed",
+      "number": 1,
+      "work": "/tmp/cellbox-s10-4-runtime-headless-observed-1-f1172c",
+      "status": "STOP",
+      "start_monotonic_ns": 382411503138900,
+      "qemu_start_monotonic_ns": 382413110708624,
+      "qemu_pid": 2123434,
+      "error": "Stop: 900s measurement window expired",
+      "traceback": "Traceback (most recent call last):\n  File \"/tmp/cellbox-s10-4/runtime/run.py\", line 18, in run_one\n    s=Surface(m,obs);s.ready();record['timestamps']=s.timestamps\n                     ^^^^^^^^^\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 110, in ready\n    end=self.wait(lambda:first_exact_prompt(self.sh,self.sh.raw()),900,'exact initial idle prompt prefix')\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 95, in wait\n    self.check()\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 90, in check\n    need(time.monotonic_ns()-self.m.start_ns<900_000_000_000,'900s measurement window expired')\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 18, in need\n    if not ok:raise Stop(why)\n              ^^^^^^^^^^^^^^^\ncommon.Stop: 900s measurement window expired\n",
+      "surface_events": [],
+      "end_monotonic_ns": 383313593338910
+    },
+    "approval": "user2026-10-28 exact one native instruction with current hardware execute breakpoint removed/restored before continue; all other breakpoints/write guards remain, no guest writes/Z0/injection",
+    "diagnosis": "runtime/hardware-resume-observer-failure/diagnosis.json",
+    "host_tests": 7,
+    "timing_reruns": 0
+  },
+  "interleaved_echo_harness_deviation": {
+    "failed_attempt": {
+      "profile": "headless",
+      "mode": "observed",
+      "number": 1,
+      "work": "/tmp/cellbox-s10-4-runtime-headless-observed-1-e6c373",
+      "status": "STOP",
+      "start_monotonic_ns": 383703453373476,
+      "qemu_start_monotonic_ns": 383705376785042,
+      "qemu_pid": 2127162,
+      "timestamps": {
+        "exact_prompt_ns": 383720489246420,
+        "prompt_prefix_end_offset": 21030,
+        "predicate_observed_ns": 383720495318614
+      },
+      "idle": {
+        "name": "ordinary-prompt-idle",
+        "start_ns": 383720559772489,
+        "end_ns": 383730560018456,
+        "target_hz": 10,
+        "samples": [
+          {
+            "monotonic_ns": 383720559909339,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383720660043203,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383720760056647,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383720860048100,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383720960054216,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383721060053141,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383721160022931,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383721260046010,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383721360059203,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383721460045650,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383721560054584,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383721660048906,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383721760048851,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383721860038122,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383721960047237,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383722060073481,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383722160028287,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383722260053895,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383722360074253,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383722460043519,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383722560044143,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383722660045417,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383722760047327,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383722860050544,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383722960024790,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383723060037860,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383723160037191,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383723260041859,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383723360040041,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383723460078908,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383723560049385,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383723660046281,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383723760070579,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383723860052677,
+            "serial_bytes": 0
+          },
+          {
+            "monotonic_ns": 383723960040870,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383724060030632,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383724160036083,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383724260033447,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383724360023756,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383724460036623,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383724560021540,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383724660027826,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383724760048536,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383724860030188,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383724960030560,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383725060027427,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383725160022025,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383725260027152,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383725360033782,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383725460025515,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383725560036105,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383725660033845,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383725760076937,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383725860064539,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383725960029012,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383726060021333,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383726160022978,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383726260066361,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383726360042319,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383726460028433,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383726560050609,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383726660038036,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383726760029158,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383726860034269,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383726960044506,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383727060050502,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383727160049745,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383727260040792,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383727360050748,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383727460029938,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383727560027192,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383727660040581,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383727760037706,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383727860053854,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383727960028088,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383728060034903,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383728160041522,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383728259997944,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383728360030416,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383728460018385,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383728560044436,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383728660036111,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383728760037981,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383728860043356,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383728960035243,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383729060037071,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383729160030457,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383729260027210,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383729360021440,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383729460046272,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383729560031586,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383729660040793,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383729760044047,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383729860041548,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383729960041869,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383730060039139,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383730160037634,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383730260062283,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383730360049922,
+            "serial_bytes": 64
+          },
+          {
+            "monotonic_ns": 383730460031086,
+            "serial_bytes": 64
+          }
+        ],
+        "qemu_cpu_ticks_delta": 504,
+        "host_ticks_per_second": 100,
+        "serial_bytes": 64,
+        "scope": "whole-QEMU CPU incl sampling overhead; content changes not redraw calls"
+      },
+      "error": "StepFailed: echo of 'top --records -d 1 --frames 2 | to jsonl | cat' not seen: 'top --reco'",
+      "traceback": "Traceback (most recent call last):\n  File \"/tmp/cellbox-s10-4/runtime/run.py\", line 20, in run_one\n    if profile=='headless' or mode=='observed':record['long_stream']=s.streams()\n                                                                     ^^^^^^^^^^^\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 187, in streams\n    self.phase('finite-stream');rows=self.command('finite-stream','top --records -d 1 --frames 2 | to jsonl | cat',120)\n                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 135, in command\n    else:out=self.sh.run(cmd,timeout)[0]\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/dmin/cellos/scripts/phase10_canonical_drive.py\", line 357, in run\n    raise StepFailed(f\"echo of {cmd!r} not seen: {echo[:200]!r}\")\nphase04_gui_drive.StepFailed: echo of 'top --records -d 1 --frames 2 | to jsonl | cat' not seen: 'top --reco'\n",
+      "surface_events": [
+        {
+          "phase": "initial-prompt",
+          "monotonic_ns": 383720495320231
+        },
+        {
+          "phase": "ordinary-prompt-idle",
+          "monotonic_ns": 383720559770010
+        },
+        {
+          "phase": "finite-stream",
+          "monotonic_ns": 383730627247311
+        }
+      ],
+      "end_monotonic_ns": 383739110280660
+    },
+    "classification": "exact command echo split by existing approved service log; guest completed actual two frames/new prompt",
+    "correction": "Reassemble exact command prefix fragments only across original SERVICE_LINE/KERNEL_LINE, preserve background records, same new prompt/deadline; arbitrary/truncated text still fails",
+    "host_tests": 4
+  },
+  "total_distinct_observer_host_tests": 59,
+  "desktop_component_statistics": {
+    "fresh_VM_to_desktop_ready_ms": {
+      "count": 3,
+      "values_ms": [
+        3872.364604,
+        4146.777226,
+        4170.796745
+      ],
+      "min_ms": 3872.364604,
+      "median_ms": 4146.777226,
+      "max_ms": 4170.796745
+    },
+    "click_to_exact_Terminal_prompt_ms": {
+      "count": 3,
+      "values_ms": [
+        4169.392301,
+        4209.18736,
+        4307.725282
+      ],
+      "min_ms": 4169.392301,
+      "median_ms": 4209.18736,
+      "max_ms": 4307.725282
+    }
+  },
+  "native_step_completion_investigation": {
+    "status": "UNAVAILABLE_PROVEN_SAFE_OBSERVER_STEP_COMPLETION_PREREQUISITE",
+    "product_defect": false,
+    "candidate_retry_performed": false,
+    "native_step_no_progress": {
+      "actual_rip": "0x1080e40b1",
+      "instruction": "eb02 jmp 0x1080e40b5",
+      "pre_stop": "T05thread:01;watch:1088a80c0;",
+      "step_stop": "T05thread:01;",
+      "same_pc": true,
+      "restoration_OK": true,
+      "heap_aligned_used_at_stop": 38104,
+      "packets": [
+        {
+          "monotonic_ns": 383882551530324,
+          "event": "rx",
+          "raw_hex": "245430357468726561643a30313b77617463683a3130383861383063303b236330"
+        },
+        {
+          "monotonic_ns": 383882551553618,
+          "event": "tx",
+          "raw_hex": "2b"
+        },
+        {
+          "monotonic_ns": 383882551572190,
+          "event": "packet_rx",
+          "payload_hex": "5430357468726561643a30313b77617463683a3130383861383063303b"
+        },
+        {
+          "monotonic_ns": 383882551580516,
+          "event": "state",
+          "state": "stopped",
+          "reply_hex": "5430357468726561643a30313b77617463683a3130383861383063303b"
+        },
+        {
+          "monotonic_ns": 383882551589597,
+          "event": "packet_tx",
+          "payload_hex": "703130"
+        },
+        {
+          "monotonic_ns": 383882551594225,
+          "event": "tx",
+          "raw_hex": "24703130236431"
+        },
+        {
+          "monotonic_ns": 383882551625281,
+          "event": "rx",
+          "raw_hex": "2b2462313430306530383031303030303030233735"
+        },
+        {
+          "monotonic_ns": 383882551635107,
+          "event": "tx",
+          "raw_hex": "2b"
+        },
+        {
+          "monotonic_ns": 383882551649885,
+          "event": "packet_rx",
+          "payload_hex": "62313430306530383031303030303030"
+        },
+        {
+          "monotonic_ns": 383882551710508,
+          "event": "packet_tx",
+          "payload_hex": "6d3130383861383063302c38"
+        },
+        {
+          "monotonic_ns": 383882551715473,
+          "event": "tx",
+          "raw_hex": "246d3130383861383063302c38236665"
+        },
+        {
+          "monotonic_ns": 383882551746225,
+          "event": "rx",
+          "raw_hex": "2b2464383934303030303030303030303030233439"
+        },
+        {
+          "monotonic_ns": 383882551755425,
+          "event": "tx",
+          "raw_hex": "2b"
+        },
+        {
+          "monotonic_ns": 383882551771061,
+          "event": "packet_rx",
+          "payload_hex": "64383934303030303030303030303030"
+        },
+        {
+          "monotonic_ns": 383882551790884,
+          "event": "packet_tx",
+          "payload_hex": "703130"
+        },
+        {
+          "monotonic_ns": 383882551795596,
+          "event": "tx",
+          "raw_hex": "24703130236431"
+        },
+        {
+          "monotonic_ns": 383882551836772,
+          "event": "rx",
+          "raw_hex": "2b2462313430306530383031303030303030233735"
+        },
+        {
+          "monotonic_ns": 383882551861892,
+          "event": "tx",
+          "raw_hex": "2b"
+        },
+        {
+          "monotonic_ns": 383882551880762,
+          "event": "packet_rx",
+          "payload_hex": "62313430306530383031303030303030"
+        },
+        {
+          "monotonic_ns": 383882551898299,
+          "event": "packet_tx",
+          "payload_hex": "703130"
+        },
+        {
+          "monotonic_ns": 383882551907882,
+          "event": "tx",
+          "raw_hex": "24703130236431"
+        },
+        {
+          "monotonic_ns": 383882551950170,
+          "event": "rx",
+          "raw_hex": "2b2462313430306530383031303030303030233735"
+        },
+        {
+          "monotonic_ns": 383882551976081,
+          "event": "tx",
+          "raw_hex": "2b"
+        },
+        {
+          "monotonic_ns": 383882551995592,
+          "event": "packet_rx",
+          "payload_hex": "62313430306530383031303030303030"
+        },
+        {
+          "monotonic_ns": 383882552030900,
+          "event": "packet_tx",
+          "payload_hex": "7a312c3130383065343062312c31"
+        },
+        {
+          "monotonic_ns": 383882552040193,
+          "event": "tx",
+          "raw_hex": "247a312c3130383065343062312c31233539"
+        },
+        {
+          "monotonic_ns": 383882552071868,
+          "event": "rx",
+          "raw_hex": "2b244f4b233961"
+        },
+        {
+          "monotonic_ns": 383882552081454,
+          "event": "tx",
+          "raw_hex": "2b"
+        },
+        {
+          "monotonic_ns": 383882552095232,
+          "event": "packet_rx",
+          "payload_hex": "4f4b"
+        },
+        {
+          "monotonic_ns": 383882552103306,
+          "event": "packet_tx",
+          "payload_hex": "73"
+        },
+        {
+          "monotonic_ns": 383882552107799,
+          "event": "tx",
+          "raw_hex": "2473233733"
+        },
+        {
+          "monotonic_ns": 383882552119231,
+          "event": "state",
+          "state": "running",
+          "native_single_step": true
+        },
+        {
+          "monotonic_ns": 383882552127578,
+          "event": "rx",
+          "raw_hex": "2b"
+        },
+        {
+          "monotonic_ns": 383882552309604,
+          "event": "rx",
+          "raw_hex": "245430357468726561643a30313b233037"
+        },
+        {
+          "monotonic_ns": 383882552321249,
+          "event": "tx",
+          "raw_hex": "2b"
+        },
+        {
+          "monotonic_ns": 383882552336037,
+          "event": "packet_rx",
+          "payload_hex": "5430357468726561643a30313b"
+        },
+        {
+          "monotonic_ns": 383882552343442,
+          "event": "state",
+          "state": "stopped",
+          "reply_hex": "5430357468726561643a30313b"
+        },
+        {
+          "monotonic_ns": 383882552350201,
+          "event": "packet_tx",
+          "payload_hex": "703130"
+        },
+        {
+          "monotonic_ns": 383882552354386,
+          "event": "tx",
+          "raw_hex": "24703130236431"
+        },
+        {
+          "monotonic_ns": 383882552384759,
+          "event": "rx",
+          "raw_hex": "2b2462313430306530383031303030303030233735"
+        },
+        {
+          "monotonic_ns": 383882552393987,
+          "event": "tx",
+          "raw_hex": "2b"
+        },
+        {
+          "monotonic_ns": 383882552408635,
+          "event": "packet_rx",
+          "payload_hex": "62313430306530383031303030303030"
+        },
+        {
+          "monotonic_ns": 383882552422887,
+          "event": "packet_tx",
+          "payload_hex": "5a312c3130383065343062312c31"
+        },
+        {
+          "monotonic_ns": 383882552427420,
+          "event": "tx",
+          "raw_hex": "245a312c3130383065343062312c31233339"
+        },
+        {
+          "monotonic_ns": 383882552476434,
+          "event": "rx",
+          "raw_hex": "2b244f4b233961"
+        },
+        {
+          "monotonic_ns": 383882552500211,
+          "event": "tx",
+          "raw_hex": "2b"
+        },
+        {
+          "monotonic_ns": 383882552515737,
+          "event": "packet_rx",
+          "payload_hex": "4f4b"
+        },
+        {
+          "monotonic_ns": 383882552554169,
+          "event": "state",
+          "state": "closed"
+        }
+      ],
+      "raw_trace_sha256": "77ac4486a1cf8f011ad021cffa84d7738a420a33ae315d983b39250ca2242f11"
+    },
+    "source_evidence": [
+      {
+        "url": "https://raw.githubusercontent.com/qemu/qemu/v8.2.2/gdbstub/gdbstub.c",
+        "sha256": "fc070617bba2a741a5e678de4bfc48c3044d8802a7a46469e11ec080bb106d90",
+        "excerpts": [
+          {
+            "needle": "static void handle_step",
+            "line": 1312,
+            "first": 1307,
+            "text": [
+              "    gdb_memtohex(gdbserver_state.str_buf, gdbserver_state.mem_buf->data, len);",
+              "    gdb_put_strbuf();",
+              "}",
+              "",
+              "",
+              "static void handle_step(GArray *params, void *user_ctx)",
+              "{",
+              "    if (params->len) {",
+              "        gdb_set_cpu_pc(get_param(params, 0)->val_ull);",
+              "    }",
+              "",
+              "    cpu_single_step(gdbserver_state.c_cpu, gdbserver_state.sstep_flags);",
+              "    gdb_continue();",
+              "}",
+              ""
+            ]
+          },
+          {
+            "needle": "cpu_single_step(gdbserver_state.c_cpu",
+            "line": 1318,
+            "first": 1313,
+            "text": [
+              "{",
+              "    if (params->len) {",
+              "        gdb_set_cpu_pc(get_param(params, 0)->val_ull);",
+              "    }",
+              "",
+              "    cpu_single_step(gdbserver_state.c_cpu, gdbserver_state.sstep_flags);",
+              "    gdb_continue();",
+              "}",
+              "",
+              "static void handle_backward(GArray *params, void *user_ctx)",
+              "{",
+              "    if (!gdb_can_reverse()) {",
+              "        gdb_put_packet(\"E22\");",
+              "    }",
+              "    if (params->len == 1) {"
+            ]
+          },
+          {
+            "needle": "sstep_flags = SSTEP_ENABLE",
+            "line": 73,
+            "first": 68,
+            "text": [
+              "     * What single-step modes are supported is accelerator dependent.",
+              "     * By default try to use no IRQs and no timers while single",
+              "     * stepping so as to make single stepping like a typical ICE HW step.",
+              "     */",
+              "    gdbserver_state.supported_sstep_flags = accel_supported_gdbstub_sstep_flags();",
+              "    gdbserver_state.sstep_flags = SSTEP_ENABLE | SSTEP_NOIRQ | SSTEP_NOTIMER;",
+              "    gdbserver_state.sstep_flags &= gdbserver_state.supported_sstep_flags;",
+              "}",
+              "",
+              "/* writes 2*len+1 bytes in buf */",
+              "void gdb_memtohex(GString *buf, const uint8_t *mem, int len)",
+              "{",
+              "    int i, c;",
+              "    for(i = 0; i < len; i++) {",
+              "        c = mem[i];"
+            ]
+          }
+        ]
+      },
+      {
+        "url": "https://raw.githubusercontent.com/qemu/qemu/v8.2.2/gdbstub/system.c",
+        "sha256": "7ebdffa82f33873f401b94064f0dae18f41bd6d7efd41a947698362c2e1b4496",
+        "excerpts": [
+          {
+            "needle": "if (cpu->watchpoint_hit)",
+            "line": 150,
+            "first": 145,
+            "text": [
+              "",
+              "    gdb_append_thread_id(cpu, tid);",
+              "",
+              "    switch (state) {",
+              "    case RUN_STATE_DEBUG:",
+              "        if (cpu->watchpoint_hit) {",
+              "            switch (cpu->watchpoint_hit->flags & BP_MEM_ACCESS) {",
+              "            case BP_MEM_READ:",
+              "                type = \"r\";",
+              "                break;",
+              "            case BP_MEM_ACCESS:",
+              "                type = \"a\";",
+              "                break;",
+              "            default:",
+              "                type = \"\";"
+            ]
+          },
+          {
+            "needle": "cpu->watchpoint_hit = NULL",
+            "line": 168,
+            "first": 163,
+            "text": [
+              "                                         gdb_get_cpu_index(cpu),",
+              "                                         cpu->watchpoint_hit->vaddr);",
+              "            g_string_printf(buf, \"T%02xthread:%s;%swatch:%\" VADDR_PRIx \";\",",
+              "                            GDB_SIGNAL_TRAP, tid->str, type,",
+              "                            cpu->watchpoint_hit->vaddr);",
+              "            cpu->watchpoint_hit = NULL;",
+              "            goto send_packet;",
+              "        } else {",
+              "            trace_gdbstub_hit_break();",
+              "        }",
+              "        tb_flush(cpu);",
+              "        ret = GDB_SIGNAL_TRAP;",
+              "        break;",
+              "    case RUN_STATE_PAUSED:",
+              "        trace_gdbstub_hit_paused();"
+            ]
+          },
+          {
+            "needle": "cpu_single_step(cpu, 0)",
+            "line": 215,
+            "first": 210,
+            "text": [
+              "send_packet:",
+              "    gdb_put_packet(buf->str);",
+              "    gdbserver_state.allow_stop_reply = false;",
+              "",
+              "    /* disable single step if it was enabled */",
+              "    cpu_single_step(cpu, 0);",
+              "}",
+              "",
+              "#ifndef _WIN32",
+              "static void gdb_sigterm_handler(int signal)",
+              "{",
+              "    if (runstate_is_running()) {",
+              "        vm_stop(RUN_STATE_PAUSED);",
+              "    }",
+              "}"
+            ]
+          }
+        ]
+      },
+      {
+        "url": "https://raw.githubusercontent.com/qemu/qemu/v8.2.2/system/watchpoint.c",
+        "sha256": "c220690a420ee4d48b46ba35981c1201eb4b931c9fa816459781b09cec07113e",
+        "excerpts": [
+          {
+            "needle": "if (cpu->watchpoint_hit)",
+            "line": 152,
+            "first": 147,
+            "text": [
+              "{",
+              "    CPUClass *cc = CPU_GET_CLASS(cpu);",
+              "    CPUWatchpoint *wp;",
+              "",
+              "    assert(tcg_enabled());",
+              "    if (cpu->watchpoint_hit) {",
+              "        /*",
+              "         * We re-entered the check after replacing the TB.",
+              "         * Now raise the debug interrupt so that it will",
+              "         * trigger after the current instruction.",
+              "         */",
+              "        qemu_mutex_lock_iothread();",
+              "        cpu_interrupt(cpu, CPU_INTERRUPT_DEBUG);",
+              "        qemu_mutex_unlock_iothread();",
+              "        return;"
+            ]
+          },
+          {
+            "needle": "cpu_interrupt(cpu, CPU_INTERRUPT_DEBUG)",
+            "line": 159,
+            "first": 154,
+            "text": [
+              "         * We re-entered the check after replacing the TB.",
+              "         * Now raise the debug interrupt so that it will",
+              "         * trigger after the current instruction.",
+              "         */",
+              "        qemu_mutex_lock_iothread();",
+              "        cpu_interrupt(cpu, CPU_INTERRUPT_DEBUG);",
+              "        qemu_mutex_unlock_iothread();",
+              "        return;",
+              "    }",
+              "",
+              "    if (cc->tcg_ops->adjust_watchpoint_address) {",
+              "        /* this is currently used only by ARM BE32 */",
+              "        addr = cc->tcg_ops->adjust_watchpoint_address(cpu, addr, len);",
+              "    }",
+              ""
+            ]
+          }
+        ]
+      },
+      {
+        "url": "https://raw.githubusercontent.com/qemu/qemu/v8.2.2/accel/tcg/cpu-exec.c",
+        "sha256": "9643d9f679ecb80038ae5f44f69d72f4288dfc6357173aaf9433b3d196aa1018",
+        "excerpts": [
+          {
+            "needle": "if (interrupt_request & CPU_INTERRUPT_DEBUG)",
+            "line": 821,
+            "first": 816,
+            "text": [
+              "        interrupt_request = cpu->interrupt_request;",
+              "        if (unlikely(cpu->singlestep_enabled & SSTEP_NOIRQ)) {",
+              "            /* Mask out external interrupts for this step. */",
+              "            interrupt_request &= ~CPU_INTERRUPT_SSTEP_MASK;",
+              "        }",
+              "        if (interrupt_request & CPU_INTERRUPT_DEBUG) {",
+              "            cpu->interrupt_request &= ~CPU_INTERRUPT_DEBUG;",
+              "            cpu->exception_index = EXCP_DEBUG;",
+              "            qemu_mutex_unlock_iothread();",
+              "            return true;",
+              "        }",
+              "#if !defined(CONFIG_USER_ONLY)",
+              "        if (replay_mode == REPLAY_MODE_PLAY && !replay_has_interrupt()) {",
+              "            /* Do nothing */",
+              "        } else if (interrupt_request & CPU_INTERRUPT_HALT) {"
+            ]
+          },
+          {
+            "needle": "cpu->interrupt_request &= ~CPU_INTERRUPT_DEBUG",
+            "line": 822,
+            "first": 817,
+            "text": [
+              "        if (unlikely(cpu->singlestep_enabled & SSTEP_NOIRQ)) {",
+              "            /* Mask out external interrupts for this step. */",
+              "            interrupt_request &= ~CPU_INTERRUPT_SSTEP_MASK;",
+              "        }",
+              "        if (interrupt_request & CPU_INTERRUPT_DEBUG) {",
+              "            cpu->interrupt_request &= ~CPU_INTERRUPT_DEBUG;",
+              "            cpu->exception_index = EXCP_DEBUG;",
+              "            qemu_mutex_unlock_iothread();",
+              "            return true;",
+              "        }",
+              "#if !defined(CONFIG_USER_ONLY)",
+              "        if (replay_mode == REPLAY_MODE_PLAY && !replay_has_interrupt()) {",
+              "            /* Do nothing */",
+              "        } else if (interrupt_request & CPU_INTERRUPT_HALT) {",
+              "            replay_interrupt();"
+            ]
+          },
+          {
+            "needle": "if (unlikely(cpu->singlestep_enabled) && cpu->exception_index == -1)",
+            "line": 503,
+            "first": 498,
+            "text": [
+              "    /*",
+              "     * If gdb single-step, and we haven't raised another exception,",
+              "     * raise a debug exception.  Single-step with another exception",
+              "     * is handled in cpu_handle_exception.",
+              "     */",
+              "    if (unlikely(cpu->singlestep_enabled) && cpu->exception_index == -1) {",
+              "        cpu->exception_index = EXCP_DEBUG;",
+              "        cpu_loop_exit(cpu);",
+              "    }",
+              "",
+              "    return last_tb;",
+              "}",
+              "",
+              "",
+              "static void cpu_exec_enter(CPUState *cpu)"
+            ]
+          }
+        ]
+      },
+      {
+        "url": "https://raw.githubusercontent.com/qemu/qemu/v8.2.2/target/i386/tcg/translate.c",
+        "sha256": "10b174db6de1d1a946a81b172ebaa58ba7af0ea18bed847e2780b3f4f1aaa835",
+        "excerpts": [
+          {
+            "needle": "HF_RF_MASK",
+            "line": 2788,
+            "first": 2783,
+            "text": [
+              "        gen_set_hflag(s, HF_INHIBIT_IRQ_MASK);",
+              "    } else {",
+              "        gen_reset_hflag(s, HF_INHIBIT_IRQ_MASK);",
+              "    }",
+              "",
+              "    if (s->base.tb->flags & HF_RF_MASK) {",
+              "        gen_reset_eflags(s, RF_MASK);",
+              "    }",
+              "    if (recheck_tf) {",
+              "        gen_helper_rechecking_single_step(tcg_env);",
+              "        tcg_gen_exit_tb(NULL, 0);",
+              "    } else if (s->flags & HF_TF_MASK) {",
+              "        gen_helper_single_step(tcg_env);",
+              "    } else if (jr) {",
+              "        tcg_gen_lookup_and_goto_ptr();"
+            ]
+          },
+          {
+            "needle": "gen_reset_eflags(s, RF_MASK)",
+            "line": 2789,
+            "first": 2784,
+            "text": [
+              "    } else {",
+              "        gen_reset_hflag(s, HF_INHIBIT_IRQ_MASK);",
+              "    }",
+              "",
+              "    if (s->base.tb->flags & HF_RF_MASK) {",
+              "        gen_reset_eflags(s, RF_MASK);",
+              "    }",
+              "    if (recheck_tf) {",
+              "        gen_helper_rechecking_single_step(tcg_env);",
+              "        tcg_gen_exit_tb(NULL, 0);",
+              "    } else if (s->flags & HF_TF_MASK) {",
+              "        gen_helper_single_step(tcg_env);",
+              "    } else if (jr) {",
+              "        tcg_gen_lookup_and_goto_ptr();",
+              "    } else {"
+            ]
+          },
+          {
+            "needle": "s->flags & HF_TF_MASK",
+            "line": 2794,
+            "first": 2789,
+            "text": [
+              "        gen_reset_eflags(s, RF_MASK);",
+              "    }",
+              "    if (recheck_tf) {",
+              "        gen_helper_rechecking_single_step(tcg_env);",
+              "        tcg_gen_exit_tb(NULL, 0);",
+              "    } else if (s->flags & HF_TF_MASK) {",
+              "        gen_helper_single_step(tcg_env);",
+              "    } else if (jr) {",
+              "        tcg_gen_lookup_and_goto_ptr();",
+              "    } else {",
+              "        tcg_gen_exit_tb(NULL, 0);",
+              "    }",
+              "    s->base.is_jmp = DISAS_NORETURN;",
+              "}",
+              ""
+            ]
+          }
+        ]
+      }
+    ],
+    "interpretation": {
+      "confirmed": "QEMU gdbstub clears watchpoint_hit after reporting watched stop, and CPU_INTERRUPT_DEBUG can be consumed before an instruction even in native single-step; bare T05 and unchangedPC are not affirmative instruction-retirement proof. Host single-step is CPUState/cflags, not a P/G register-write or guest-TF setter. RF/TF guest flags were not sampled at failed event; no claim of their actual values.",
+      "not_proven": "Cannot establish hidden pending-debug/cpu-exit state or specific ordering that caused THIS observed samePC from existing allowed reads/stop packet. Do not call the trap a completed instruction, auto-retry extra steps, drop a watch guard, or infer product hang.",
+      "minimal_falsification": "Isolated actual QEMU8.2.2 Q35/TCG bootsector watchedadd+postexecuteBP branches correctly on first single-step with/without preexisting executeBP. Repetitive isolated version completes1000 watched writes/firststeps, no samePC. Generic writewatch+postBP is insufficient to reproduce actual failure."
+    },
+    "next_requirement": "Need independently observable instruction retirement/pending debug-state proof or an approved bounded semantic amendment for additional native control; no candidate change/full observed rerun authorized. Keep observed workloads incomplete, headless partial captured values labeled only partial interval, desktop observed unrun; static/timing complete; CBX27/criterion4 remain unmet."
+  },
+  "observed_scope": "Headless partial interval only; complete observed workload failed native-step no-progress guard, desktop observed unrun. Never infer workload-wide peak, zero memory, matched baseline, exact stack/RSS/kernel-stack or performance from observed runs.",
+  "known_unmet": [
+    "CBX27",
+    "Phase10 criterion4",
+    "matched historical runtime baseline",
+    "complete headless observed workload peak",
+    "desktop observed metrics",
+    "exact user stack/RSS/kernel-stack peak"
+  ],
+  "approved_cp1_snapshot_sha256": "df21c6f76c0528d5bb1b0084278427082f572cc413774409cbcf50ba391a299b"
+}
