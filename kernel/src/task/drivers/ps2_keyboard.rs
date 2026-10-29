@@ -152,9 +152,10 @@ fn init_controller() -> Result<(), &'static str> {
     }
     let config = read_response(false).ok_or("missing controller configuration")?;
     // Poll both ports: IRQ1/IRQ12 must remain disabled. The kernel has no PS/2
-    // interrupt handlers. Enable Set-2 -> Set-1 keyboard translation explicitly.
-    let config = (config | 0x40 | 0x30) & !0x03;
-    if !command(0x60) || !write_data(config) || !command(0xA8) {
+    // interrupt handlers. Enable Set-2 -> Set-1 keyboard translation explicitly (bit 6 = 1),
+    // and enable both keyboard clock (bit 4 = 0) and mouse clock (bit 5 = 0).
+    let config = (config | 0x40) & !0x33;
+    if !command(0x60) || !write_data(config) || !command(0xAE) || !command(0xA8) {
         return Err("programming polling configuration timed out");
     }
     // Defaults select the standard stream settings; no wheel negotiation is
