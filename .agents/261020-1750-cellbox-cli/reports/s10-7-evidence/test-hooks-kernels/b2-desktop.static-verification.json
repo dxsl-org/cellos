@@ -1,0 +1,306 @@
+{
+  "artifacts": {
+    "b2-desktop-control.kernel.elf": {
+      "bytes": 15407480,
+      "sha256": "5959acd79291fe693aa0deaacac5cc67dcc16cb76e911705f5290bfa1e3ba828"
+    },
+    "b2-desktop-test-hooks.kernel.elf": {
+      "bytes": 15720424,
+      "sha256": "8d876239e5821240f2b9a3be9770ed9ff3bbaad9a278782fe3272d90050f1b5e"
+    },
+    "cellos-x86_64-desktop-b2-test-hooks.bios-installed.iso": {
+      "bytes": 19591168,
+      "sha256": "964fa3f5d58d6b9f6a4ced1d4eae9cf0c1d8b475c2667ee5d84d7a6bf3e95a43"
+    },
+    "cellos-x86_64-desktop-b2-test-hooks.iso": {
+      "bytes": 19591168,
+      "sha256": "05fec13a6b15eb3189675901b075da8b8cc936b9970a643df5f4ef2183c47f7f"
+    },
+    "cellos-x86_64-desktop-b2-test-hooks.qcow2": {
+      "bytes": 12779520,
+      "sha256": "e4d6d676bda1198b9497cf6d37af2983fabfb7be1e0a87297f4fe76fe2ba2b7a"
+    },
+    "control-readelf.txt": {
+      "bytes": 1793,
+      "sha256": "4358661ce9b35f698bec38cbde24cad4e82814cb07e1b7ef0af43c4fd8f2cd6a"
+    },
+    "init": {
+      "bytes": 393152,
+      "sha256": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104"
+    },
+    "iso-files.txt": {
+      "bytes": 619,
+      "sha256": "74f8e33aab2fa11c64e48268e5464ee27b312942ba58ed00f24d5b8449584fae"
+    },
+    "kernel_fs.img": {
+      "bytes": 12582912,
+      "sha256": "37040c38f62fd1b28999517f8b1bd9b646f2ed12d3073e810ea7dae601593f83"
+    },
+    "limine-bios-install.log": {
+      "bytes": 526,
+      "sha256": "b97d2ddbe9697cb0a078668d8cbf193c4d4396449d0a6095eda8c3aa97440b8d"
+    },
+    "make-iso.log": {
+      "bytes": 914,
+      "sha256": "bf9f51bdcea1dd4c9ebb87ceddfce0f261ce824767a584dad1199545a7694e67"
+    },
+    "test-hooks-readelf.txt": {
+      "bytes": 1793,
+      "sha256": "5ededa6c8db3be462b16bd56541804f28c25aa11cfc399af3e683b3e25072d06"
+    }
+  },
+  "checks": [
+    {
+      "detail": {
+        "control": "5959acd79291fe693aa0deaacac5cc67dcc16cb76e911705f5290bfa1e3ba828",
+        "expected": "5959acd79291fe693aa0deaacac5cc67dcc16cb76e911705f5290bfa1e3ba828"
+      },
+      "name": "control kernel (non-hooks, same recipe) == previously qualified/built kernel (byte-reproduced)",
+      "ok": true
+    },
+    {
+      "detail": {
+        "control_bytes": 15407480,
+        "hooks": "8d876239e5821240f2b9a3be9770ed9ff3bbaad9a278782fe3272d90050f1b5e",
+        "hooks_bytes": 15720424
+      },
+      "name": "test-hooks kernel differs from control kernel",
+      "ok": true
+    },
+    {
+      "detail": "37040c38f62fd1b28999517f8b1bd9b646f2ed12d3073e810ea7dae601593f83",
+      "name": "embedded kernel_fs.img sha256 as expected",
+      "ok": true
+    },
+    {
+      "detail": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104",
+      "name": "embedded init sha256 as expected",
+      "ok": true
+    },
+    {
+      "detail": {
+        "img_second": -1,
+        "init": 1526223,
+        "kernel_fs.img": 1936934
+      },
+      "name": "control kernel embeds kernel_fs.img byte-for-byte (single copy)",
+      "ok": true
+    },
+    {
+      "detail": {
+        "img_second": -1,
+        "init": 1526223,
+        "kernel_fs.img": 1936934
+      },
+      "name": "control kernel embeds init byte-for-byte",
+      "ok": true
+    },
+    {
+      "detail": {
+        "img_second": -1,
+        "init": 1782464,
+        "kernel_fs.img": 2195627
+      },
+      "name": "test-hooks kernel embeds kernel_fs.img byte-for-byte (single copy)",
+      "ok": true
+    },
+    {
+      "detail": {
+        "img_second": -1,
+        "init": 1782464,
+        "kernel_fs.img": 2195627
+      },
+      "name": "test-hooks kernel embeds init byte-for-byte",
+      "ok": true
+    },
+    {
+      "detail": {
+        "count": 33,
+        "extra": [],
+        "missing": []
+      },
+      "name": "embedded image has exactly the file set of the non-hooks build",
+      "ok": true
+    },
+    {
+      "detail": [],
+      "name": "every embedded-image file sha256 == non-hooks build record (cellbox/B2 ELFs byte-identical)",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/thv-a3_1gjzr/bin_shell)",
+      "name": "/bin/shell dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/thv-a3_1gjzr/bin_ls)",
+      "name": "/bin/ls dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/thv-a3_1gjzr/bin_cat)",
+      "name": "/bin/cat dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/thv-a3_1gjzr/bin_echo)",
+      "name": "/bin/echo dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/thv-a3_1gjzr/bin_ps)",
+      "name": "/bin/ps dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/thv-a3_1gjzr/bin_kill)",
+      "name": "/bin/kill dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "/POLICY.BIN present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "/etc/cellos/autoload.toml present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "/etc/cellos/services.toml present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "/etc/cellos/system.toml present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "shell ELF carries the \"Cellos > \" prompt literal",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "control kernel is ELF64 x86-64 EXEC",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "test-hooks kernel is ELF64 x86-64 EXEC",
+      "ok": true
+    },
+    {
+      "detail": 0,
+      "name": "make-iso-ci.sh succeeded",
+      "ok": true
+    },
+    {
+      "detail": "8d876239e5821240f2b9a3be9770ed9ff3bbaad9a278782fe3272d90050f1b5e",
+      "name": "ISO /boot/kernel.elf == test-hooks kernel",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "ISO /boot/limine.conf == tree scripts/x86/limine.conf",
+      "ok": true
+    },
+    {
+      "detail": [
+        "boot/kernel.elf"
+      ],
+      "name": "ISO tree differs from the non-hooks ISO tree ONLY in boot/kernel.elf",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "non-hooks ISO boot/kernel.elf == control kernel",
+      "ok": true
+    },
+    {
+      "detail": "ectories of\n          one of the partitions on the device, or boot will fail!\nLimine BIOS stages installed successfully!",
+      "name": "limine bios-install succeeded",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "qemu-img convert succeeded",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "qcow2 round-trips to the bios-installed ISO",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "disk LBA0 0x55AA boot signature",
+      "ok": true
+    },
+    {
+      "detail": "e found on the image.\n190/299 = 63.55% allocated, 0.00% fragmented, 0.00% compressed clusters\nImage end offset: 12779520",
+      "name": "qcow2 qemu-img check clean",
+      "ok": true
+    }
+  ],
+  "embed_offsets": {
+    "control": {
+      "img_second": -1,
+      "init": 1526223,
+      "kernel_fs.img": 1936934
+    },
+    "test-hooks": {
+      "img_second": -1,
+      "init": 1782464,
+      "kernel_fs.img": 2195627
+    }
+  },
+  "entry": {
+    "control": [
+      "0xffffffff80000000"
+    ],
+    "test-hooks": [
+      "0xffffffff80000000"
+    ]
+  },
+  "image_file_sha256": {
+    "/POLICY.BIN": "ef21d5086163ff08c82c34ea0f5927630b260309ed5cb2fa5ef85ee6e06dc910",
+    "/bin/ahci": "fde08ac246ce56ecc078387ac8b3d292bd8e2923515a1dad0272fe4134afbabe",
+    "/bin/cat": "9fb4d1ff159ea0faf3d373043ccd25cc2bcea72b60346636d84f1208a7c0dc72",
+    "/bin/compositor": "452515f785afa27724de6b91ac3e7d2d0081319517636cb89d0aa27f301077e3",
+    "/bin/config": "6ec6aff2029b8b814ffca2235d3f1451cec188ef6ee859c40cf46455b2f54551",
+    "/bin/e1000": "b46bd1c5d131869216e45ff73d5b7be92b4efe891556c4cd0c6a2faae267bbfb",
+    "/bin/echo": "861ca14a7b28eab867eee713ebc9c110701873bc41edff2055a3ad415bb574c0",
+    "/bin/fb-console": "2df20ca6c9532df83aeb8c1bbf681ec81b4f3dcb9a45ae7b6e109dd60544bde4",
+    "/bin/igb": "9fb90ebd3546431c7f46142dea6824213bc31fb77381261b9845ff0d60a6acdf",
+    "/bin/input": "4dd998ebae0787d954f3a43a79c1fd265ae1af592a7b9c8ec13f06298a6f49e3",
+    "/bin/kill": "b5fe3980d032c912b90447e886b4f8ac708dc5872a7714cad5c1a5f7a4cc2851",
+    "/bin/ls": "3a99ac33ff89f237c3fd908bcdb0b3e233bcb99c5570440d3a5b6a7f02adcffc",
+    "/bin/net": "3c0a9beb3d3e3803e7b4b8e720b0c07d5ed208e3fb235b3f6bb7082b841a1ee4",
+    "/bin/nvme": "63f9997609d79f8b4a2178dd2a886c16649c1505296302081bf4ce093125149b",
+    "/bin/ocel": "ffa317c68036a4d4577f7f7c8a48794261c172b1787072d9564725c998c759ff",
+    "/bin/ocel-quickjs": "99bc7921da2879e783cc78faed1869c8d88da7083259176696c6e8ebb8f2c924",
+    "/bin/platform": "7fb6ee4f9db332d41dd108bc1d7e84c57788b264f7e7dcfbf2674e948afcf48b",
+    "/bin/ps": "b5371860a45303815dd77a2b562d08055024ac7eead9cd0e143e30333341544a",
+    "/bin/serial": "a67a01d86102b0ecb1ce45f12b3fa29015850d2431c4acea65857564477ba350",
+    "/bin/shell": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90",
+    "/bin/sshd": "502fc7312f93ba861cf2ff082f7c37304580219621891a2e08e39e181afb37e3",
+    "/bin/tier2-exploit": "64ffc91b920ef75506ed6ba7f07839ff85569b3b87c46bfcf638dcd49f4600f2",
+    "/bin/tier2-smoke": "74da62ea56a05631ef4ea8dbaaaed6bb1453b85c75018446ba5b3296d3366a6f",
+    "/bin/vfs": "0d6735c6892500f94f30fced9bf059e17f88a2c90a2a821e496bb391e4a1ec42",
+    "/bin/xhci": "2a7eae9b4282e6b1b6b20459826604febd9659de93223426f6a5c8c38a69d89d",
+    "/data/ocel-js-demo.html": "4ca5b4d8d98f3b75847db3f77de19e999a8c3eb71377127cd7740486ab6c9ab2",
+    "/data/ocel-native-web.css": "ea09ac56965b811b49d944c3b050a7d3a045e39fc3d78957280d767dde4d4d50",
+    "/data/ocel-native-web.html": "442c8819d58cf157fbedd88f47536f6cf7400caedff055c2de3df7cd05938ba9",
+    "/data/ocel-native-web.js": "f9619a12c01ca47ab390ce4992cbb988444df2cec414e26751ca5316196bafb5",
+    "/etc/cellos/autoload.toml": "8ad987ca730bd8506efdda91cc37c4bdd8b70e945b390c5c2e25e44cf8186472",
+    "/etc/cellos/services.toml": "3fb6cf84b09e21306cb6c7122b976fb9a5cf31c5f7e26c45ba619c4bd393a19c",
+    "/etc/cellos/system.toml": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293",
+    "/welcome.md": "442c8819d58cf157fbedd88f47536f6cf7400caedff055c2de3df7cd05938ba9"
+  },
+  "image_system_toml": "# Embedded boot settings, loaded before init starts.\nversion = 1\n\n[logging]\nlevel = \"info\"\n\n[memory]\ndefault_cell_heap_mib = 16\n",
+  "ok": true,
+  "set": "b2-desktop"
+}

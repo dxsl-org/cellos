@@ -1,0 +1,452 @@
+kernel/Cargo.toml:146:test-hooks = ["dep:qemu-exit", "hal/test-hooks"]
+kernel/Cargo.toml:148:x86-idt-cpl3-test = ["test-hooks", "hal/x86-idt-cpl3-test"]
+kernel/Cargo.toml:159:getrandom-sas-test = ["native-domains", "test-hooks"]
+kernel/build.rs:18:        Ok("1") => panic!("CELLOS_P01_TRACE requires test-hooks and x86_64"),
+kernel/build.rs:40:        Ok("1") => panic!("CELLOS_G1_CPU requires x86_64 test-hooks private trace without observer faults"),
+kernel/build.rs:75:    // EMBEDDED_OVERRIDE lets CI test-hooks builds point at a different directory
+kernel/build.rs:76:    // (e.g. src/embedded-test-hooks/) without touching committed source files.
+kernel/build.rs:82:        // "kernel/src/embedded-test-hooks" — try both. A misresolved override
+kernel/src/task.rs:16:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task.rs:31:    feature = "test-hooks",
+kernel/src/task.rs:40:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:48:    feature = "test-hooks",
+kernel/src/task.rs:56:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:67:    feature = "test-hooks",
+kernel/src/task.rs:77:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:91:    feature = "test-hooks",
+kernel/src/task.rs:99:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:108:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:112:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:118:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:131:    feature = "test-hooks",
+kernel/src/task.rs:135:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:138:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:144:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:426:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:430:    #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
+kernel/src/task.rs:508:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:510:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:512:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:514:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:516:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:518:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:520:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:522:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:530:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:532:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:685:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:694:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:708:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:726:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:763:#[cfg(feature = "test-hooks")]
+kernel/src/task.rs:826:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:840:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:960:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1023:    #[cfg(feature = "test-hooks")]
+kernel/src/task.rs:1087:        feature = "test-hooks",
+kernel/src/task.rs:1095:        feature = "test-hooks",
+kernel/src/task.rs:1118:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1137:        #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1155:    #[cfg(all(feature = "native-domains", feature = "test-hooks", target_arch = "x86_64"))]
+kernel/src/task.rs:1160:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1163:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1171:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1177:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1235:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1237:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1239:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1304:    #[cfg(feature = "test-hooks")]
+kernel/src/task.rs:1341:            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1360:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1365:    #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
+kernel/src/task.rs:1473:            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1485:            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task.rs:1580:        feature = "test-hooks",
+kernel/src/task.rs:1590:        feature = "test-hooks",
+kernel/src/task.rs:1662:                #[cfg(feature = "test-hooks")]
+kernel/src/task.rs:1751:            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/loader.rs:14:#[cfg(feature = "test-hooks")]
+kernel/src/loader.rs:95:    #[cfg(feature = "test-hooks")]
+kernel/src/loader.rs:98:    #[cfg(feature = "test-hooks")]
+kernel/src/loader.rs:126:#[cfg(feature = "test-hooks")]
+kernel/src/loader.rs:131:#[cfg(feature = "test-hooks")]
+kernel/src/loader.rs:136:#[cfg(feature = "test-hooks")]
+kernel/src/loader.rs:141:#[cfg(not(feature = "test-hooks"))]
+kernel/src/loader.rs:146:#[cfg(feature = "test-hooks")]
+kernel/src/loader.rs:151:#[cfg(not(feature = "test-hooks"))]
+kernel/src/snapshot.rs:253:#[cfg(any(feature = "test-hooks", test))]
+kernel/src/snapshot.rs:1597:#[cfg(any(feature = "test-hooks", test))]
+kernel/src/snapshot.rs:1601:#[cfg(any(feature = "test-hooks", test))]
+kernel/src/snapshot.rs:1607:#[cfg(any(feature = "test-hooks", test))]
+kernel/src/snapshot.rs:1615:    #[cfg(any(feature = "test-hooks", test))]
+kernel/src/snapshot.rs:3076:// bare-metal `test-hooks` kernel.
+kernel/src/loader/elf_tests.rs:64:    #[cfg(feature = "test-hooks")]
+kernel/src/loader/elf.rs:344:                    #[cfg(feature = "test-hooks")]
+kernel/src/loader/va_alloc.rs:145:#[cfg(feature = "test-hooks")]
+kernel/src/loader/atomic_publication_tests/snapshot.rs:517:/// normal signed test-hooks image flow, not transaction residue.
+kernel/src/loader/atomic_publication_tests/cases.rs:105:    // architecture whose first test-hooks boot runs it (x86_64, phase 02) has no
+kernel/src/loader/atomic_publication_tests.rs:25:/// cell that the test-hooks image does not embed. `INIT_ELF` is a real embedded
+kernel/src/loader/atomic_publication_tests.rs:29:/// The test-hooks image's embedded init is signed by its normal image build;
+kernel/src/loader/atomic_publication_tests.rs:35:/// Publish the signed, authority-free probe packaged only in the test-hooks
+kernel/src/loader/domain_admission.rs:105:        feature = "test-hooks",
+kernel/src/loader/domain_admission.rs:157:        || cfg!(all(target_arch = "aarch64", feature = "test-hooks"))
+kernel/src/loader/domain_admission.rs:168:    not(feature = "test-hooks")
+kernel/src/loader/domain_admission.rs:336:    // that is every production build; the test-hooks image qualifies and enables.
+kernel/src/loader/domain_admission.rs:377:    feature = "test-hooks",
+kernel/src/loader/domain_admission.rs:394:    feature = "test-hooks",
+kernel/src/loader/domain_admission.rs:400:    feature = "test-hooks",
+kernel/src/loader/domain_admission.rs:406:    feature = "test-hooks",
+kernel/src/loader/domain_admission.rs:421:    feature = "test-hooks",
+kernel/src/loader/domain_admission.rs:504:    feature = "test-hooks",
+kernel/src/loader/domain_admission.rs:605:/// the test-hooks publication probe, so it carries that caller's cfg — a
+kernel/src/loader/domain_admission.rs:610:    feature = "test-hooks",
+kernel/src/loader/governed_spawn.rs:217:            #[cfg(feature = "test-hooks")]
+kernel/src/loader/governed_spawn.rs:261:            #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:24:        feature = "test-hooks",
+kernel/src/main.rs:39:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/main.rs:55:pub mod layer2_selftest; // Layer-2 hardware security self-tests (test-hooks only)
+kernel/src/main.rs:94:/// Only available under the `test-hooks` feature — never call this in
+kernel/src/main.rs:100:#[cfg(feature = "test-hooks")]
+kernel/src/main.rs:494:        #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/main.rs:934:    #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:955:    #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:966:    #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:968:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/main.rs:974:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/main.rs:1000:        #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:1011:        #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:1044:        #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:1050:        #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:1058:        #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:1076:    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+kernel/src/main.rs:1081:        feature = "test-hooks"
+kernel/src/main.rs:1085:    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+kernel/src/main.rs:1284:        feature = "test-hooks"
+kernel/src/main.rs:1292:        feature = "test-hooks"
+kernel/src/main.rs:1295:    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+kernel/src/main.rs:1300:        feature = "test-hooks"
+kernel/src/main.rs:1325:        feature = "test-hooks"
+kernel/src/main.rs:1337:    #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:1349:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/main.rs:1391:        #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:1429:        // Layer-2 hardware security self-tests (test-hooks feature only).
+kernel/src/main.rs:1432:        #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:1532:        #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:1545:                #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:1559:                #[cfg(feature = "test-hooks")]
+kernel/src/main.rs:1568:    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+kernel/src/main.rs:1595:    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+kernel/src/main.rs:1638:    // silenced here. `test-hooks` only — no production image is affected.
+kernel/src/main.rs:1656:            feature = "test-hooks",
+kernel/src/main.rs:1661:            feature = "test-hooks",
+kernel/src/main.rs:1730:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/admission/mod.rs:8:#[cfg(feature = "test-hooks")]
+kernel/src/admission/mod.rs:13:#[cfg(feature = "test-hooks")]
+kernel/src/admission/mod.rs:15:#[cfg(feature = "test-hooks")]
+kernel/src/admission/mod.rs:17:#[cfg(feature = "test-hooks")]
+kernel/src/admission/mod.rs:166:#[cfg(feature = "test-hooks")]
+kernel/src/admission/mod.rs:176:#[cfg(feature = "test-hooks")]
+kernel/src/layer2_selftest.rs:3://! Runs at boot when the `test-hooks` feature is active. Each test prints
+kernel/src/layer2_selftest.rs:7://! ⚠️ Never ship `test-hooks` in a production image. These tests exercise
+kernel/src/layer2_selftest.rs:27:#[cfg(all(target_arch = "aarch64", feature = "test-hooks"))]
+kernel/src/layer2_selftest.rs:92:#[cfg(all(target_arch = "aarch64", feature = "test-hooks"))]
+kernel/src/layer2_selftest.rs:125:#[cfg(all(target_arch = "aarch64", feature = "test-hooks"))]
+kernel/src/layer2_selftest.rs:143:#[cfg(all(target_arch = "aarch64", feature = "test-hooks"))]
+kernel/src/layer2_selftest.rs:165:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/layer2_selftest.rs:216:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/resource_registry.rs:206:#[cfg(feature = "test-hooks")]
+kernel/src/resource_registry.rs:819:#[cfg(feature = "test-hooks")]
+kernel/src/resource_registry.rs:823:#[cfg(feature = "test-hooks")]
+kernel/src/audit.rs:222:#[cfg(feature = "test-hooks")]
+kernel/src/hypervisor.rs:17:#[cfg(all(target_arch = "aarch64", feature = "test-hooks"))]
+kernel/src/hypervisor/svm_registry.rs:437:#[cfg(feature = "test-hooks")]
+kernel/src/hypervisor/registry.rs:205:/// Under `test-hooks`, writes a P04 HVC smoke blob (`MOVZ X0,#42; HVC #0; B .`)
+kernel/src/hypervisor/registry.rs:216:        // test-hooks: write P04 HVC smoke blob so the test cell can verify Hvc exit.
+kernel/src/hypervisor/registry.rs:217:        #[cfg(feature = "test-hooks")]
+kernel/src/hypervisor/smoke_guest.rs:3://! These tests are only compiled and invoked on AArch64 with the `test-hooks`
+kernel/src/hypervisor/smoke_guest.rs:234:/// Call from `kmain` under `#[cfg(feature = "test-hooks")]` after
+kernel/src/memory.rs:54:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/paging.rs:200:        #[cfg(feature = "test-hooks")]
+kernel/src/memory/paging.rs:983:#[cfg(feature = "test-hooks")]
+kernel/src/memory/paging.rs:1178:#[cfg(all(feature = "test-hooks", target_arch = "x86_64"))]
+kernel/src/memory/paging.rs:1451:#[cfg(feature = "test-hooks")]
+kernel/src/memory/paging.rs:1460:    feature = "test-hooks",
+kernel/src/memory/paging.rs:1491:#[cfg(all(feature = "test-hooks", target_arch = "x86_64"))]
+kernel/src/memory/paging.rs:1505:    feature = "test-hooks",
+kernel/src/memory/address_space.rs:47:#[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:76:    feature = "test-hooks",
+kernel/src/memory/address_space.rs:82:#[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:84:#[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:147:        feature = "test-hooks",
+kernel/src/memory/address_space.rs:172:    #[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:446:        #[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:462:            #[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:489:    #[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:664:    #[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:1039:    #[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:1235:        #[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:1251:            #[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:1270:            #[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:1310:    feature = "test-hooks",
+kernel/src/memory/address_space.rs:1434:#[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
+kernel/src/memory/address_space.rs:1439:#[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
+kernel/src/memory/address_space.rs:1461:#[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:1564:    #[cfg(feature = "test-hooks")]
+kernel/src/memory/address_space.rs:1623:    feature = "test-hooks",
+kernel/src/memory/address_space.rs:1631:    feature = "test-hooks",
+kernel/src/memory/address_space.rs:1637:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/cell_quota.rs:374:#[cfg(feature = "test-hooks")]
+kernel/src/memory/cell_quota.rs:382:#[cfg(feature = "test-hooks")]
+kernel/src/memory/cell_quota.rs:412:#[cfg(feature = "test-hooks")]
+kernel/src/memory/cell_quota.rs:417:#[cfg(feature = "test-hooks")]
+kernel/src/memory/tlb_shootdown.rs:19:#[cfg(feature = "test-hooks")]
+kernel/src/memory/tlb_shootdown.rs:23:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/tlb_shootdown.rs:35:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/tlb_shootdown.rs:39:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/tlb_shootdown.rs:44:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/tlb_shootdown.rs:49:#[cfg(feature = "test-hooks")]
+kernel/src/memory/tlb_shootdown.rs:51:#[cfg(feature = "test-hooks")]
+kernel/src/memory/tlb_shootdown.rs:54:#[cfg(feature = "test-hooks")]
+kernel/src/memory/tlb_shootdown.rs:58:#[cfg(feature = "test-hooks")]
+kernel/src/memory/tlb_shootdown.rs:65:#[cfg(feature = "test-hooks")]
+kernel/src/memory/tlb_shootdown.rs:70:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/tlb_shootdown.rs:75:#[cfg(feature = "test-hooks")]
+kernel/src/memory/tlb_shootdown.rs:81:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/tlb_shootdown.rs:116:            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/tlb_shootdown.rs:125:            #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
+kernel/src/memory/tlb_shootdown.rs:129:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/tlb_shootdown.rs:175:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/tlb_shootdown.rs:201:    #[cfg(feature = "test-hooks")]
+kernel/src/memory/tlb_shootdown.rs:328:    #[cfg(feature = "test-hooks")]
+kernel/src/memory/tlb_shootdown.rs:366:        #[cfg(feature = "test-hooks")]
+kernel/src/memory/stage2.rs:480:/// Call from kernel init under `#[cfg(feature = "test-hooks")]` or a CI boot flag.
+kernel/src/memory/tlb_shootdown_selftest.rs:3://! Compiled only with `test-hooks`: hart 1 primes a writable translation, hart
+kernel/src/memory/deferred_release.rs:278:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/memory/deferred_release.rs:481:#[cfg(feature = "test-hooks")]
+kernel/src/memory/deferred_release.rs:491:#[cfg(feature = "test-hooks")]
+kernel/src/memory/deferred_release.rs:506:#[cfg(feature = "test-hooks")]
+kernel/src/memory/deferred_release.rs:523:#[cfg(feature = "test-hooks")]
+kernel/src/memory/deferred_release.rs:537:#[cfg(feature = "test-hooks")]
+kernel/src/memory/deferred_release.rs:547:#[cfg(feature = "test-hooks")]
+kernel/src/memory/deferred_release.rs:557:#[cfg(feature = "test-hooks")]
+kernel/src/memory/deferred_release.rs:567:#[cfg(feature = "test-hooks")]
+kernel/src/memory/frame.rs:206:    #[cfg(any(cellos_p01_trace, feature = "test-hooks"))]
+kernel/src/memory/frame.rs:399:    #[cfg(feature = "test-hooks")]
+kernel/src/memory/frame.rs:1163:#[cfg(feature = "test-hooks")]
+kernel/src/task/thread_cap_selftest.rs:33:/// A synthetic BAR window, registered only under `test-hooks` so the global
+kernel/src/task/thread_cap_selftest.rs:35:#[cfg(feature = "test-hooks")]
+kernel/src/task/thread_cap_selftest.rs:358:        #[cfg(feature = "test-hooks")]
+kernel/src/task/thread_cap_selftest.rs:398:        #[cfg(feature = "test-hooks")]
+kernel/src/task/thread_cap_selftest.rs:401:        #[cfg(not(feature = "test-hooks"))]
+kernel/src/task/stack_overflow_probe.rs:1:#![cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/hart_local/ready.rs:10:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/hart_local/ready.rs:16:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/hart_local/ready.rs:27:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/hart_local/ready.rs:37:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/hart_local/ready.rs:47:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/hart_local/ready.rs:58:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/hart_local/ready.rs:69:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/hart_local/ready.rs:79:#[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
+kernel/src/task/stack.rs:11:#[cfg(feature = "test-hooks")]
+kernel/src/task/stack.rs:15:    feature = "test-hooks",
+kernel/src/task/stack.rs:23:    feature = "test-hooks",
+kernel/src/task/stack.rs:45:    feature = "test-hooks",
+kernel/src/task/stack.rs:108:        feature = "test-hooks",
+kernel/src/task/stack.rs:251:            feature = "test-hooks",
+kernel/src/task/stack.rs:289:                feature = "test-hooks",
+kernel/src/task/stack.rs:318:    #[cfg(feature = "test-hooks")]
+kernel/src/task/stack.rs:337:    #[cfg(feature = "test-hooks")]
+kernel/src/task/stack.rs:362:#[cfg(feature = "test-hooks")]
+kernel/src/task/stack.rs:396:            feature = "test-hooks",
+kernel/src/task/stack.rs:518:    #[cfg(feature = "test-hooks")]
+kernel/src/task/cap.rs:65:#[cfg(feature = "test-hooks")]
+kernel/src/task/cap.rs:69:#[cfg(feature = "test-hooks")]
+kernel/src/task/cap.rs:202:#[cfg(feature = "test-hooks")]
+kernel/src/task/scheduler.rs:224:#[cfg(feature = "test-hooks")]
+kernel/src/task/scheduler.rs:550:    #[cfg(feature = "test-hooks")]
+kernel/src/task/scheduler.rs:619:        #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/scheduler.rs:689:    /// resulting no-re-issue property at boot under `test-hooks`.
+kernel/src/task/scheduler.rs:738:        #[cfg(feature = "test-hooks")]
+kernel/src/task/scheduler.rs:740:        #[cfg(feature = "test-hooks")]
+kernel/src/task/scheduler.rs:1019:            #[cfg(feature = "test-hooks")]
+kernel/src/task/scheduler.rs:1021:            #[cfg(feature = "test-hooks")]
+kernel/src/task/scheduler.rs:1298:        #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
+kernel/src/task/scheduler.rs:1374:            #[cfg(feature = "test-hooks")]
+kernel/src/task/scheduler.rs:2275:            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/scheduler.rs:2318:            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/domain_grant.rs:39:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/domain_grant.rs:41:#[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
+kernel/src/task/domain_grant.rs:318:    feature = "test-hooks",
+kernel/src/task/futex.rs:236:    feature = "test-hooks",
+kernel/src/task/user_copy_tests.rs:4://! they are never linked without `test-hooks`.
+kernel/src/task/drivers/iommu.rs:56:/// build failure for the whole lane (e.g. `scripts/build-aarch64-test-hooks-ci.sh`).
+kernel/src/task/drivers/iommu_pt.rs:337:#[cfg(feature = "test-hooks")]
+kernel/src/task/drivers/iommu_pt.rs:360:#[cfg(feature = "test-hooks")]
+kernel/src/task/drivers/iommu_pt.rs:383:#[cfg(feature = "test-hooks")]
+kernel/src/task/drivers/iommu_pt.rs:400:#[cfg(feature = "test-hooks")]
+kernel/src/task/drivers/iommu_pt.rs:446:#[cfg(feature = "test-hooks")]
+kernel/src/task/drivers/iommu_pt.rs:480:#[cfg(feature = "test-hooks")]
+kernel/src/task/drivers/driver_cell.rs:191:#[cfg(feature = "test-hooks")]
+kernel/src/task/user_hello.rs:1:#![cfg(feature = "test-hooks")]
+kernel/src/task/domain_switch.rs:136:                #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/hart_local.rs:815:    feature = "test-hooks",
+kernel/src/task/smp.rs:108:        #[cfg(all(feature = "test-hooks", not(target_arch = "x86_64")))]
+kernel/src/task/smp.rs:120:#[cfg(feature = "test-hooks")]
+kernel/src/task/smp.rs:168:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/smp.rs:171:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/smp.rs:179:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/smp.rs:188:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/smp.rs:202:    #[cfg(feature = "test-hooks")]
+kernel/src/task/smp.rs:223:            #[cfg(feature = "test-hooks")]
+kernel/src/task/smp.rs:311:    feature = "test-hooks",
+kernel/src/task/smp.rs:789:    #[cfg(feature = "test-hooks")]
+kernel/src/task/smp.rs:854:    #[cfg(feature = "test-hooks")]
+kernel/src/task/smp.rs:877:        #[cfg(feature = "test-hooks")]
+kernel/src/task/smp.rs:891:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:893:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:895:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:897:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:900:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:919:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:965:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:968:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:970:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:973:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:982:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:1003:#[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
+kernel/src/task/smp.rs:1156:        #[cfg(feature = "test-hooks")]
+kernel/src/task/smp.rs:1164:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/smp.rs:1172:        #[cfg(feature = "test-hooks")]
+kernel/src/task/thread_user_entry_selftest.rs:7:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:9:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:11:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:13:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:16:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:19:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:21:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:23:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:25:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:27:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:30:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:53:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:69:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:79:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:92:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:97:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:124:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:133:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/thread_user_entry_selftest.rs:207:#[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
+kernel/src/task/elf_prepare.rs:111:    #[cfg(feature = "test-hooks")]
+kernel/src/task/elf_prepare.rs:161:    #[cfg(feature = "test-hooks")]
+kernel/src/task/elf_prepare.rs:179:    #[cfg(feature = "test-hooks")]
+kernel/src/task/elf_prepare.rs:183:    #[cfg(feature = "test-hooks")]
+kernel/src/task/quiesce.rs:521:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/quiesce.rs:534:        #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/quiesce.rs:538:    #[cfg(any(feature = "test-hooks", test))]
+kernel/src/task/quiesce.rs:540:        #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/quiesce.rs:548:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/quiesce.rs:556:            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/quiesce.rs:570:    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/quiesce.rs:579:#[cfg(any(feature = "test-hooks", test))]
+kernel/src/task/quiesce.rs:585:#[cfg(any(feature = "test-hooks", test))]
+kernel/src/task/quiesce.rs:592:#[cfg(any(feature = "test-hooks", test))]
+kernel/src/task/quiesce.rs:697:#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/launch.rs:17:    #[cfg(feature = "test-hooks")]
+kernel/src/task/launch.rs:185:    #[cfg(feature = "test-hooks")]
+kernel/src/task/syscall.rs:16:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:280:            all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:300:/// A production AArch64 build (no `test-hooks`) has no domain grant lifecycle,
+kernel/src/task/syscall.rs:313:    not(feature = "test-hooks")
+kernel/src/task/syscall.rs:392:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:440:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:465:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:477:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:490:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:500:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:513:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:528:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:544:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:563:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:575:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:590:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:1348:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:1395:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:1727:#[cfg(feature = "test-hooks")]
+kernel/src/task/syscall.rs:2961:#[cfg(feature = "test-hooks")]
+kernel/src/task/syscall.rs:3095:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:3146:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:3207:        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:5488:            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/syscall.rs:5756:            // root task in test-hooks kernels; HypervisorCap alone is insufficient.
+kernel/src/task/syscall.rs:5757:            #[cfg(feature = "test-hooks")]
+kernel/src/task/syscall.rs:7736:            #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
+kernel/src/task/syscall.rs:7739:            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+kernel/src/task/syscall.rs:7742:            #[cfg(all(not(feature = "test-hooks"), target_arch = "riscv64"))]
+kernel/src/task/syscall.rs:7754:            #[cfg(all(not(feature = "test-hooks"), target_arch = "aarch64"))]
+kernel/src/task/syscall.rs:7883:                        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:7894:                        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:7910:                    all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:7974:                    all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:8066:                    all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:8353:                        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:8364:                        all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:8377:                    all(target_arch = "aarch64", feature = "test-hooks")
+kernel/src/task/syscall.rs:8789:#[cfg(feature = "test-hooks")]
+kernel/src/task/tcb.rs:351:    #[cfg(feature = "test-hooks")]
+kernel/src/task/tcb.rs:558:#[cfg(feature = "test-hooks")]
+kernel/src/task/tcb.rs:563:#[cfg(feature = "test-hooks")]
+kernel/src/task/tcb.rs:629:            #[cfg(feature = "test-hooks")]
+kernel/src/task/tcb.rs:689:        feature = "test-hooks",
+kernel/src/task/user_copy/sv39_probe.rs:245:    feature = "test-hooks",
+kernel/src/task/user_copy/guard.rs:223:    feature = "test-hooks",
+kernel/src/task/user_copy/mod.rs:49:    feature = "test-hooks",
+kernel/src/task/user_copy/mod.rs:55:    feature = "test-hooks",
+kernel/src/task/user_copy/mod.rs:63:    feature = "test-hooks",
+kernel/src/resource_registry_selftest.rs:1://! Bare-metal PCIe BAR-window validation for `test-hooks` kernels.
+kernel/src/fast_ipc.rs:75:#[cfg(feature = "test-hooks")]
+kernel/src/fast_ipc.rs:83:#[cfg(feature = "test-hooks")]
+kernel/src/fast_ipc.rs:90:#[cfg(feature = "test-hooks")]
+kernel/src/cell/service_registry.rs:257:#[cfg(feature = "test-hooks")]
+kernel/src/cell/state_stash.rs:217:#[cfg(feature = "test-hooks")]
+kernel/src/cell/hotswap.rs:101:    #[cfg(feature = "test-hooks")]
+kernel/src/cell/hotswap.rs:185:#[cfg(feature = "test-hooks")]
+kernel/src/cell/hotswap.rs:187:#[cfg(feature = "test-hooks")]
+kernel/src/cell/hotswap.rs:190:#[cfg(feature = "test-hooks")]
+hal/arch/x86/Cargo.toml:18:test-hooks = []
+hal/arch/x86/Cargo.toml:20:x86-idt-cpl3-test = ["test-hooks", "dep:qemu-exit"]
+hal/arch/x86/src/x86_64/pku.rs:25:/// The dedicated test-hooks oracle may arm it without IBT after requiring PKU
+hal/arch/x86/src/x86_64/pku.rs:102:    // Production requires IBT before enabling PKU. The dedicated test-hooks
+hal/arch/x86/src/x86_64/domain.rs:20:#[cfg(feature = "test-hooks")]
+hal/arch/x86/src/x86_64/domain.rs:23:#[cfg(feature = "test-hooks")]
+hal/arch/x86/src/x86_64/domain.rs:216:    #[cfg(feature = "test-hooks")]
+hal/arch/x86/src/x86_64/domain.rs:249:    #[cfg(feature = "test-hooks")]
+hal/arch/x86/src/x86_64/domain.rs:274:    #[cfg(feature = "test-hooks")]
+hal/arch/x86/src/x86_64/domain.rs:293:#[cfg(feature = "test-hooks")]
+hal/arch/x86/src/x86_64/domain.rs:301:#[cfg(feature = "test-hooks")]
+hal/arch/x86/src/x86_64/domain.rs:310:    #[cfg(feature = "test-hooks")]
+hal/arch/arm/Cargo.toml:22:test-hooks = []
+hal/arch/arm/src/aarch64/paging.rs:92:#[cfg(feature = "test-hooks")]
+hal/arch/arm/src/aarch64/paging.rs:98:#[cfg(feature = "test-hooks")]
+hal/arch/arm/src/aarch64/domain.rs:10:#[cfg(feature = "test-hooks")]
+hal/arch/arm/src/aarch64/domain.rs:13:#[cfg(feature = "test-hooks")]
+hal/arch/arm/src/aarch64/domain.rs:16:#[cfg(feature = "test-hooks")]
+hal/arch/arm/src/aarch64/domain.rs:19:#[cfg(feature = "test-hooks")]
+hal/arch/arm/src/aarch64/domain.rs:29:#[cfg(feature = "test-hooks")]
+hal/arch/arm/src/aarch64/domain.rs:44:#[cfg(feature = "test-hooks")]
+hal/arch/arm/src/aarch64/domain.rs:52:#[cfg(feature = "test-hooks")]
+hal/arch/arm/src/aarch64/domain.rs:106:    #[cfg(feature = "test-hooks")]
+hal/arch/arm/src/aarch64/domain.rs:131:    #[cfg(feature = "test-hooks")]
+hal/arch/arm/src/aarch64/domain.rs:146:    #[cfg(feature = "test-hooks")]
+hal/arch/riscv/Cargo.toml:24:test-hooks = []
+hal/arch/riscv/src/rv64/trap.rs:18:    #[cfg(feature = "test-hooks")]
+hal/arch/riscv/src/rv64/trap.rs:185:                    #[cfg(feature = "test-hooks")]
+hal/arch/riscv/src/rv64/domain.rs:8:#[cfg(feature = "test-hooks")]
+hal/arch/riscv/src/rv64/domain.rs:10:#[cfg(feature = "test-hooks")]
+hal/arch/riscv/src/rv64/domain.rs:14:#[cfg(feature = "test-hooks")]
+hal/arch/riscv/src/rv64/domain.rs:22:#[cfg(feature = "test-hooks")]
+hal/arch/riscv/src/rv64/domain.rs:31:    #[cfg(feature = "test-hooks")]
+hal/arch/riscv/src/rv64/domain.rs:85:    #[cfg(feature = "test-hooks")]
+hal/arch/riscv/src/rv64/domain.rs:99:    #[cfg(feature = "test-hooks")]
+hal/core/Cargo.toml:43:test-hooks = ["hal-riscv?/test-hooks", "hal-arm?/test-hooks", "hal-x86?/test-hooks"]
+hal/core/Cargo.toml:44:x86-idt-cpl3-test = ["test-hooks", "hal-x86?/x86-idt-cpl3-test"]
+libs/ostd/src/service.rs:38:/// capabilities. The development/test-hooks Silo route is one such exception and can

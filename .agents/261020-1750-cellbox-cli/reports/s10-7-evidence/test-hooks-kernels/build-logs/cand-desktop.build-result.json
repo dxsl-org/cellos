@@ -1,0 +1,10 @@
+{
+  "status": "BUILT",
+  "tree": "/tmp/cellbox-s10-7/cand-measure",
+  "features_control": "policy-required",
+  "features_measure": "policy-required,test-hooks",
+  "control_kernel_sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a",
+  "control_kernel_bytes": 28182592,
+  "measure_kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+  "measure_kernel_bytes": 28618912
+}

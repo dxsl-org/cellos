@@ -1,0 +1,76 @@
+[
+  {
+    "step": "00-rustc",
+    "argv": [
+      "rustc",
+      "+nightly-2026-05-01",
+      "-Vv"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/cand-measure",
+    "rc": 0,
+    "seconds": 0.0,
+    "log": "/tmp/cellbox-s10-7/th/cand-headless/logs/00-rustc.log",
+    "log_sha256": "bad5444a63089c36f7ab533cfb95f78c2ef4a4440bbed965d6458e322361da30"
+  },
+  {
+    "step": "01-cargo",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "-V"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/cand-measure",
+    "rc": 0,
+    "seconds": 0.0,
+    "log": "/tmp/cellbox-s10-7/th/cand-headless/logs/01-cargo.log",
+    "log_sha256": "44723352161599307344f2bea07569fd8cb23e82cca593b39f8f834d30af93f2"
+  },
+  {
+    "step": "build-control",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "cellos-kernel",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc",
+      "--features",
+      "policy-required"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/cand-measure",
+    "rc": 0,
+    "seconds": 50.9,
+    "log": "/tmp/cellbox-s10-7/th/cand-headless/logs/build-control.log",
+    "log_sha256": "3d7563c349dcc4883f2b201684edef3841e250e7bd26e507232e891addf49188"
+  },
+  {
+    "step": "build-test-hooks",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "cellos-kernel",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc",
+      "--features",
+      "policy-required,test-hooks"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/cand-measure",
+    "rc": 0,
+    "seconds": 28.5,
+    "log": "/tmp/cellbox-s10-7/th/cand-headless/logs/build-test-hooks.log",
+    "log_sha256": "85ca88525b55ceab0ec4a8cf356c502cf53ce312db32c3cd7e39828233b7915f"
+  }
+]

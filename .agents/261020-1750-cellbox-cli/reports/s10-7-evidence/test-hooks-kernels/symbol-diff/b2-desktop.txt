@@ -1,0 +1,243 @@
+# symbols only in test-hooks kernel (b2-desktop)
+T vi_x86_handoff_fixture_entry
+b cellos_kernel::loader::atomic_publication_tests::cases::SUCCESS_PARTS
+b cellos_kernel::loader::atomic_publication_tests::harness::FAIL_AT
+b cellos_kernel::loader::atomic_publication_tests::harness::LAST_OBSERVED
+b cellos_kernel::loader::atomic_publication_tests::harness::OBSERVATION_FAILED
+b cellos_kernel::loader::atomic_publication_tests::harness::OBSERVE_AT
+b cellos_kernel::loader::atomic_publication_tests::success::GOVERNED_CASE
+b cellos_kernel::loader::atomic_publication_tests::success::TRUSTED_ARMED
+b cellos_kernel::memory::address_space::FAIL_NEXT_MAP
+b cellos_kernel::memory::tlb_shootdown::TEST_FLUSH_TRACKING
+b cellos_kernel::task::STACK_BASELINE_EMITTED
+b cellos_kernel::task::domain_switch_tests::CPU_SEEN_PRIVATE_ROOT
+b cellos_kernel::task::domain_switch_tests::observe_domain_teardown::REPORTED
+b cellos_kernel::task::domain_switch_tests::observe_incoming_live_root::REPORTED
+b cellos_kernel::task::smp::X86_HANDOFF_CONTEXTS
+b cellos_kernel::task::smp::X86_HANDOFF_FIRST_EPOCH
+b cellos_kernel::task::smp::X86_HANDOFF_LATE_EPOCH
+b cellos_kernel::task::smp::X86_PROBE_AFTER
+b cellos_kernel::task::smp::X86_PROBE_BEFORE
+b cellos_kernel::task::smp::X86_PROBE_STAGE
+b hal_x86::x86_64::domain::ASID_FLUSHES
+b hal_x86::x86_64::domain::ROOT_PROGRAMMINGS
+d cellos_kernel::loader::atomic_publication_tests::probe::AP02_MAPPINGS
+d cellos_kernel::loader::atomic_publication_tests::success::GOVERNED_PENDING
+d cellos_kernel::loader::atomic_publication_tests::success::TRUSTED_PENDING
+d cellos_kernel::memory::tlb_shootdown::TEST_FLUSHED_PAGES
+d cellos_kernel::memory::tlb_shootdown::TEST_FLUSHED_TAGS
+d cellos_kernel::task::domain_switch_tests::observe_domain_teardown::BASELINE
+t <&&str as core::fmt::Debug>::fmt
+t <&(usize, types::CellId, cellos_kernel::task::tcb::TaskState) as core::fmt::Debug>::fmt
+t <&(usize, usize) as core::fmt::Debug>::fmt
+t <&(usize, usize, types::CellId, cellos_kernel::task::tcb::TaskState) as core::fmt::Debug>::fmt
+t <&[u64; 8] as core::fmt::Debug>::fmt
+t <&alloc::collections::btree::map::BTreeMap<u8, alloc::collections::vec_deque::VecDeque<usize>> as core::fmt::Debug>::fmt
+t <&alloc::collections::vec_deque::VecDeque<usize> as core::fmt::Debug>::fmt
+t <&alloc::vec::Vec<cellos_kernel::loader::manifest_section_tests::HartSchedulerSnapshot> as core::fmt::Debug>::fmt
+t <&cellos_kernel::admission::SlotId as core::fmt::Debug>::fmt
+t <&cellos_kernel::loader::manifest_section_tests::SchedulerSnapshot as core::fmt::Debug>::fmt
+t <&cellos_kernel::task::cap::CapSet as core::fmt::Debug>::fmt
+t <&cellos_kernel::task::tcb::TaskState as core::fmt::Debug>::fmt
+t <&core::option::Option<usize> as core::fmt::Debug>::fmt
+t <&core::result::Result<(), types::ViError> as core::fmt::Debug>::fmt
+t <&core::result::Result<usize, types::ViError> as core::fmt::Debug>::fmt
+t <(u16, usize, bool) as core::slice::cmp::SlicePartialEq<(u16, usize, bool)>>::equal_same_length
+t <(u64, alloc::vec::Vec<u8>) as core::slice::cmp::SlicePartialEq<(u64, alloc::vec::Vec<u8>)>>::equal_same_length
+t <(usize, core::option::Option<(cellos_kernel::task::cap::CapSet, u64, u64, u64)>) as core::slice::cmp::SlicePartialEq<(usize, core::option::Option<(cellos_kernel::task::cap::CapSet, u64, u64, u64)>)>>::equal_same_length
+t <(usize, usize, usize) as core::slice::cmp::SlicePartialEq<(usize, usize, usize)>>::equal_same_length
+t <[u8]>::repeat
+t <alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<u8, alloc::collections::vec_deque::VecDeque<usize>, alloc::alloc::Global>
+t <alloc::collections::btree::map::BTreeMap<u8, alloc::collections::vec_deque::VecDeque<usize>> as core::cmp::PartialEq>::eq
+t <alloc::collections::btree::map::BTreeMap<u8, alloc::collections::vec_deque::VecDeque<usize>> as core::ops::drop::Drop>::drop
+t <alloc::collections::btree::map::BTreeMap<usize, alloc::vec::Vec<usize>>>::remove::<usize>
+t <alloc::collections::btree::map::BTreeMap<usize, cellos_kernel::cell::hotswap::CeilingState>>::get::<usize>
+t <alloc::collections::btree::map::Iter<u8, alloc::collections::vec_deque::VecDeque<usize>> as core::iter::traits::iterator::Iterator>::next
+t <alloc::collections::btree::map::IterMut<usize, alloc::vec::Vec<usize>> as core::iter::traits::iterator::Iterator>::next
+t <alloc::collections::btree::map::entry::OccupiedEntry<cellos_kernel::task::futex::FutexKey, alloc::collections::vec_deque::VecDeque<usize>>>::remove_kv
+t <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, usize, alloc::vec::Vec<usize>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::ExtractIfInner<usize, alloc::vec::Vec<usize>, core::ops::range::RangeFull>>::next<<alloc::collections::btree::map::BTreeMap<usize, alloc::vec::Vec<usize>>>::retain<cellos_kernel::task::scheduler::drain_death_subscribers<cellos_kernel::task::scheduler::death_subscription_quota_self_test::{closure#2}>::{closure#1}>::{closure#0}, alloc::alloc::Global>::{closure#0}, alloc::alloc::Global>
+t <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, cellos_kernel::task::futex::FutexKey, alloc::collections::vec_deque::VecDeque<usize>, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<cellos_kernel::task::futex::FutexKey>
+t <alloc::collections::vec_deque::VecDeque<usize> as core::clone::Clone>::clone
+t <alloc::raw_vec::RawVec<[u8; 32]> as core::ops::drop::Drop>::drop
+t <alloc::raw_vec::RawVec<[u8; 32]>>::grow_one
+t <alloc::raw_vec::RawVec<cellos_kernel::memory::cell_quota::QuotaReservation>>::grow_one
+t <alloc::raw_vec::RawVec<cellos_kernel::memory::pin::ReleasedRange> as core::ops::drop::Drop>::drop
+t <alloc::vec::Vec<(usize, core::option::Option<(cellos_kernel::task::cap::CapSet, u64, u64, u64)>)> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<(usize, core::option::Option<(cellos_kernel::task::cap::CapSet, u64, u64, u64)>), core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<usize, cellos_kernel::cell::hotswap::CeilingState>, cellos_kernel::cell::hotswap::replacement_ceiling_snapshot::{closure#0}>>>::from_iter
+t <alloc::vec::Vec<(usize, types::CellId, cellos_kernel::task::tcb::TaskState)> as core::fmt::Debug>::fmt
+t <alloc::vec::Vec<(usize, usize, types::CellId, cellos_kernel::task::tcb::TaskState)> as core::fmt::Debug>::fmt
+t <alloc::vec::Vec<cellos_kernel::memory::domain_supervisor_registry::SupervisorRange> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<cellos_kernel::memory::domain_supervisor_registry::SupervisorRange, core::iter::adapters::filter::Filter<core::iter::adapters::copied::Copied<core::slice::iter::Iter<cellos_kernel::memory::domain_supervisor_registry::SupervisorRange>>, cellos_kernel::memory::domain_supervisor_registry::shared_snapshot::{closure#0}>>>::from_iter
+t <alloc::vec::Vec<cellos_kernel::memory::frame::OwnedFrame>>::extend_trusted::<alloc::vec::drain::Drain<cellos_kernel::memory::frame::OwnedFrame>>
+t <alloc::vec::Vec<u8> as core::clone::Clone>::clone
+t <alloc::vec::Vec<usize> as core::fmt::Debug>::fmt
+t <api::abi::dir_handles::ViDirHandle as serde_core::ser::Serialize>::serialize::<&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice>>
+t <api::abi::hypervisor::ViVmExit as core::fmt::Debug>::fmt
+t <cellos_kernel::admission::AdmissionDecision as core::fmt::Debug>::fmt
+t <cellos_kernel::admission::slot_format::SlotParseError as core::fmt::Debug>::fmt
+t <cellos_kernel::loader::atomic_publication_tests::baseline::SharedStateBaseline>::install
+t <cellos_kernel::loader::atomic_publication_tests::baseline::SharedStateBaseline>::owners_are_populated
+t <cellos_kernel::loader::elf::ElfLoader>::load_segments
+t <cellos_kernel::loader::elf::ElfLoader>::preflight_pages
+t <cellos_kernel::memory::address_space::AddressSpaceBuilder>::build
+t <cellos_kernel::memory::address_space::AddressSpaceBuilder>::map_registered_execution
+t <cellos_kernel::memory::cell_quota::QuotaReservation>::reserve
+t <cellos_kernel::memory::cell_quota::QuotaReservation>::reserve_next
+t <cellos_kernel::memory::cell_quota::QuotaSnapshot as core::cmp::PartialEq>::eq
+t <cellos_kernel::sync::Spinlock<alloc::collections::btree::map::BTreeMap<usize, cellos_kernel::cell::hotswap::CeilingState>>>::lock
+t <cellos_kernel::sync::Spinlock<alloc::vec::Vec<cellos_kernel::memory::domain_supervisor_registry::SupervisorRange>>>::lock
+t <cellos_kernel::task::completion::CompletionQueue>::reserve
+t <cellos_kernel::task::domain_switch::SwitchPlan>::new
+t <cellos_kernel::task::domain_switch::SwitchPlan>::root_switch
+t <cellos_kernel::task::drivers::iommu_pt::VtdSlpt>::map_range
+t <cellos_kernel::task::drivers::mmc::core::MmcCore>::wait_ready_and_flush
+t <cellos_kernel::task::stack::CellSegments>::eager_unmap
+t <cellos_kernel::task::stack::Stack>::test_hook_prime_watermark
+t <core::fmt::Arguments as core::fmt::Display>::fmt
+t <core::fmt::Formatter>::debug_struct_field4_finish
+t <core::fmt::Formatter>::debug_struct_fields_finish
+t <core::fmt::builders::DebugList>::entries::<&u64, core::slice::iter::Iter<u64>>
+t <core::iter::adapters::chain::Chain<alloc::collections::btree::map::Values<usize, alloc::boxed::Box<cellos_kernel::task::tcb::Task>>, core::slice::iter::Iter<alloc::boxed::Box<cellos_kernel::task::tcb::Task>>> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::traits::iterator::Iterator::find_map::check<&alloc::boxed::Box<cellos_kernel::task::tcb::Task>, usize, &mut <cellos_kernel::task::scheduler::Scheduler>::root_generation_member_tids::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<usize>>
+t <core::option::Option<usize> as core::fmt::Debug>::fmt
+t <core::result::Result<(), types::ViError> as core::fmt::Debug>::fmt
+t <core::result::Result<(usize, usize), types::ViError> as core::fmt::Debug>::fmt
+t <core::result::Result<usize, types::ViError> as core::fmt::Debug>::fmt
+t <u16 as core::fmt::Debug>::fmt
+t cellos_kernel::admission::decide
+t cellos_kernel::admission::gate::evaluate_owner_admission
+t cellos_kernel::admission::report_selftest_case
+t cellos_kernel::admission::slot_format::parse_slot
+t cellos_kernel::admission::slot_selftest::run
+t cellos_kernel::admission::state_selftest::both_old_slots_deny
+t cellos_kernel::admission::state_selftest::duplicate_current_slots_deny_as_ambiguous
+t cellos_kernel::admission::state_selftest::exhausted_backend_denies
+t cellos_kernel::admission::state_selftest::floor_ahead_denies
+t cellos_kernel::admission::state_selftest::invalid_backend_evidence_denies
+t cellos_kernel::admission::state_selftest::invalid_slot_denies
+t cellos_kernel::admission::state_selftest::missing_backend_denies
+t cellos_kernel::admission::state_selftest::missing_slot_denies
+t cellos_kernel::admission::state_selftest::old_a_replay_admits_current_b_only
+t cellos_kernel::admission::state_selftest::old_a_replay_without_valid_current_b_denies
+t cellos_kernel::admission::state_selftest::old_b_replay_admits_current_a_only
+t cellos_kernel::admission::state_selftest::old_b_replay_without_valid_current_a_denies
+t cellos_kernel::admission::state_selftest::replaced_backend_denies
+t cellos_kernel::admission::state_selftest::slot_ahead_denies
+t cellos_kernel::admission::state_selftest::stale_floor_response_denies
+t cellos_kernel::admission::state_selftest::torn_uncommitted_slot_denies
+t cellos_kernel::admission::state_selftest::unavailable_backend_denies
+t cellos_kernel::admission::state_selftest::wrong_backend_binding_denies
+t cellos_kernel::admission::state_selftest::wrong_transaction_binding_denies
+t cellos_kernel::admission::transaction_selftest::duplicate_advance_is_exactly_once
+t cellos_kernel::admission::transaction_selftest::exhausted_advance_fails_closed
+t cellos_kernel::admission::transaction_selftest::local_history_cannot_admit_or_advance_floor
+t cellos_kernel::admission::transaction_selftest::power_loss_after_commit_write
+t cellos_kernel::admission::transaction_selftest::power_loss_after_floor_advance
+t cellos_kernel::admission::transaction_selftest::power_loss_after_intent_write
+t cellos_kernel::admission::transaction_selftest::power_loss_before_intent_write
+t cellos_kernel::cell::hotswap::clear_swap_ceiling
+t cellos_kernel::cell::service_registry::clear_tid
+t cellos_kernel::cell::service_registry::snapshot
+t cellos_kernel::hypervisor::svm_registry::create_vcpu
+t cellos_kernel::hypervisor::svm_registry::create_vm
+t cellos_kernel::hypervisor::svm_registry::reap_vms_for_task
+t cellos_kernel::hypervisor::svm_registry::write_guest_memory
+t cellos_kernel::kmain::{closure#1}
+t cellos_kernel::loader::atomic_publication_tests::baseline::fixture_vfs_handler
+t cellos_kernel::loader::atomic_publication_tests::baseline::preexisting_vfs_handler
+t cellos_kernel::loader::atomic_publication_tests::cases::run_all
+t cellos_kernel::loader::atomic_publication_tests::harness::code
+t cellos_kernel::loader::atomic_publication_tests::observe_unpublished_pages
+t cellos_kernel::loader::atomic_publication_tests::observe_unpublished_segments
+t cellos_kernel::loader::atomic_publication_tests::probe::ap02_cleanup_complete
+t cellos_kernel::loader::atomic_publication_tests::probe::arm_ap02
+t cellos_kernel::loader::atomic_publication_tests::snapshot::snapshot
+t cellos_kernel::loader::atomic_publication_tests::snapshot::snapshot_matches
+t cellos_kernel::loader::atomic_publication_tests::success::arm_trusted_success
+t cellos_kernel::loader::atomic_publication_tests::success::observed_success
+t cellos_kernel::loader::domain_admission::run_selftest
+t cellos_kernel::loader::elf_tests::build_minimal_signed_elf
+t cellos_kernel::loader::elf_tests::run_all
+t cellos_kernel::loader::legacy_path_caps
+t cellos_kernel::loader::manifest_section::classify
+t cellos_kernel::loader::manifest_section_tests::elf64
+t cellos_kernel::loader::manifest_section_tests::named_nobits_manifest
+t cellos_kernel::loader::manifest_section_tests::scheduler_snapshot
+t cellos_kernel::loader::manifest_section_tests::section64
+t cellos_kernel::loader::mem_spawn_gate::mem_label
+t cellos_kernel::loader::observe_pre_ready
+t cellos_kernel::loader::spawn_gated
+t cellos_kernel::loader::spawn_trusted_init
+t cellos_kernel::memory::address_space::register_private_table_frames
+t cellos_kernel::memory::cell_quota::snapshot
+t cellos_kernel::memory::domain_supervisor_registry::unregister
+t cellos_kernel::memory::paging::mapping_state
+t cellos_kernel::memory::paging::revoke_mmio_user
+t cellos_kernel::memory::paging::translation_probe
+t cellos_kernel::memory::pin::find_vfs_lease
+t cellos_kernel::memory::pin::holder_of
+t cellos_kernel::memory::pin::mark_vfs_lease_pending_revoke
+t cellos_kernel::memory::pin::quarantined_pages
+t cellos_kernel::memory::pin::release_vfs_holder_leases
+t cellos_kernel::memory::pin::withhold_vfs_frames
+t cellos_kernel::memory::tlb_shootdown::begin_test_flush_observation
+t cellos_kernel::resource_registry::lookup_mmio_owner
+t cellos_kernel::resource_registry::revoke_mmio_for
+t cellos_kernel::resource_registry::test_register_region
+t cellos_kernel::signing::self_test
+t cellos_kernel::signing::verify_cell
+t cellos_kernel::task::domain_switch_tests::run_pinned_retire_regression
+t cellos_kernel::task::drivers::iommu_pt::run_selftest::{closure#0}
+t cellos_kernel::task::elf_prepare::prepare_elf_task::{closure#1}
+t cellos_kernel::task::emit_stack_baseline
+t cellos_kernel::task::futex::wait::{closure#0}
+t cellos_kernel::task::hart_local::ready::steal_from_busiest_with
+t cellos_kernel::task::smp::x86_handoff_fixture_incoming
+t cellos_kernel::task::smp::x86_shootdown_fixture_primary
+t cellos_kernel::task::stack_baseline_bit
+t cellos_kernel::task::syscall::caller_has_development_silo_registration
+t cellos_kernel::task::syscall::install_vfs_lease_if_context_live
+t cellos_kernel::task::syscall::reap_grants_for_task
+t cellos_kernel::task::syscall::test_registered_grant_owner
+t cellos_kernel::task::vfs_lifecycle_selftest::fail
+t cellos_kernel::task::vfs_lifecycle_selftest::grant_slice_and_teardown_are_linearized
+t cellos_kernel::task::vfs_lifecycle_selftest::insert
+t cellos_kernel::task::vfs_lifecycle_selftest::mk_task
+t cellos_kernel::task::vfs_lifecycle_selftest::remove
+t cellos_kernel::task::vfs_lifecycle_selftest::renew_vfs_grant_context
+t cellos_kernel::task::vfs_lifecycle_selftest::self_test
+t cellos_kernel::task::vfs_lifecycle_selftest::set_recv_waiting
+t cellos_kernel::task::vfs_lifecycle_selftest::vfs_send_release_is_exact::{closure#3}
+t core::panicking::assert_failed::<alloc::string::String, &str>
+t core::panicking::assert_failed::<bool, bool>
+t core::panicking::assert_failed::<cellos_kernel::admission::SlotId, cellos_kernel::admission::SlotId>
+t core::panicking::assert_failed::<cellos_kernel::loader::manifest_section_tests::SchedulerSnapshot, cellos_kernel::loader::manifest_section_tests::SchedulerSnapshot>
+t core::panicking::assert_failed::<cellos_kernel::task::cap::CapSet, cellos_kernel::task::cap::CapSet>
+t core::panicking::assert_failed::<core::option::Option<usize>, core::option::Option<usize>>
+t core::panicking::assert_failed::<core::result::Result<(), types::ViError>, core::result::Result<(), types::ViError>>
+t core::panicking::assert_failed::<core::result::Result<usize, types::ViError>, core::result::Result<usize, types::ViError>>
+t core::panicking::assert_failed::<u8, u8>
+t core::panicking::assert_failed::<usize, usize>
+t core::ptr::drop_in_place::<alloc::vec::into_iter::IntoIter<cellos_kernel::task::user_copy::copy::PinnedCopy>>
+t core::ptr::drop_in_place::<cellos_kernel::loader::atomic_publication_tests::baseline::SharedStateBaseline>
+t core::ptr::drop_in_place::<cellos_kernel::loader::atomic_publication_tests::snapshot::StateSnapshot>
+t core::ptr::drop_in_place::<cellos_kernel::task::domain_switch::SwitchPlan>
+t core::ptr::drop_in_place::<cellos_kernel::task::elf_prepare::PreparedElfTask>
+t core::ptr::drop_in_place::<core::result::Result<alloc::vec::Vec<cellos_kernel::loader::elf::LoadedPage>, types::ViError>>
+
+# symbols only in control kernel (b2-desktop)
+t <alloc::collections::btree::map::BTreeMap<cellos_kernel::task::futex::FutexKey, alloc::collections::vec_deque::VecDeque<usize>>>::remove::<cellos_kernel::task::futex::FutexKey>
+t <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, usize, alloc::vec::Vec<usize>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::ExtractIfInner<usize, alloc::vec::Vec<usize>, core::ops::range::RangeFull>>::next<<alloc::collections::btree::map::BTreeMap<usize, alloc::vec::Vec<usize>>>::retain<cellos_kernel::task::scheduler::drain_death_subscribers<<cellos_kernel::task::scheduler::Scheduler>::exit_task::{closure#6}>::{closure#1}>::{closure#0}, alloc::alloc::Global>::{closure#0}, alloc::alloc::Global>
+t <alloc::raw_vec::RawVec<(usize, hal_paging::PageFlags)> as core::ops::drop::Drop>::drop
+t <alloc::raw_vec::RawVec<cellos_kernel::memory::pin::ReleasedRange>>::grow_one
+t <alloc::vec::Vec<cellos_kernel::task::pending_mailbox::PendingMsg>>::remove
+t <alloc::vec::into_iter::IntoIter<(usize, alloc::sync::Arc<cellos_kernel::task::completion::CompletionQueue>, cellos_kernel::task::completion::SlotId)> as core::ops::drop::Drop>::drop
+t <alloc::vec::into_iter::IntoIter<cellos_kernel::task::user_copy::copy::PinnedCopy> as core::ops::drop::Drop>::drop
+t <cellos_kernel::sync::Spinlock<cellos_kernel::memory::pin::Registry>>::lock
+t <cellos_kernel::task::scheduler::Scheduler>::pick_next_domain
+t <core::option::Option<u64> as core::fmt::Debug>::fmt
+t cellos_kernel::hypervisor::registry::create_vcpu
+t cellos_kernel::hypervisor::registry::create_vm
+t cellos_kernel::hypervisor::registry::write_guest_memory
+t cellos_kernel::loader::aligned_elf::bytes
+t cellos_kernel::loader::governed_spawn::spawn_gated
+t cellos_kernel::task::completion_wait::net_rx_cleanup_step
+t cellos_kernel::task::pipe::on_deadline
+t cellos_kernel::task::user_copy::copy::execute

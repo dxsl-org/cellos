@@ -1,0 +1,264 @@
+{
+  "a_boot_behaviour_changes": {
+    "boot_executing_sites_x86": [
+      "main.rs:924 death_subscription_quota_self_test (log only)",
+      "main.rs:945 pcie_bar_window_self_test (log only)",
+      "main.rs:956 loader::elf_tests::run_all -> atomic_publication_tests::run_all (cases.rs:129; ALIGN/CELLID/FIXTURE/denials AP-00..PZ) : ~25 prepare_elf_task of the canonical init (BOOT-FATAL asserts: cases.rs:130,137,143,149,152; elf_tests asserts); leaves ~68 fake /atomic/* entries in the measurement log, +~1.5 KB audit, NEXT_CELL_GENERATION +30..40; tids/CellIds/VA slots restored",
+      "main.rs:990 mmio_revoke_selftest, 1001 task_id_selftest (restores next_task_id), 1034 vfs_lifecycle_selftest, 1040 stack_probe_self_test, 1048 stack_sizing_policy_self_test (log only)",
+      "task/smp.rs:785 x86_handoff_fixture (asserts total_ready_count()==0; BOOT-FATAL if a queue is non-empty) and smp.rs:850/873 x86_shootdown_fixture_primary/secondary (VA 0x0600_0000, panics + 4 bounded 100M-spin waits; leaves 2-3 PD/PT frames)",
+      "main.rs:1276 domain_switch_tests::run_primary (native-domains+test-hooks; logs S22-X86-ADMISSION-ENABLED: FAIL, then domain_admission.rs:500 forces Tier-2 admission POLICY=ENABLED; leaves hart 0 with a fixture private-root pin -> one extra safe-root switch at first dispatch; +1 CellSpawnDenied audit record)",
+      "main.rs:1327 iommu_pt::run_selftest (leaks ~6 heap pages), main.rs:1381 admission::self_test (ADMISSION_REGISTRY left populated, still permissive; vector-length asserts boot-fatal only on drift)",
+      "main.rs:1422 layer2_selftest::run_pku_selftest (SKIP on TCG), main.rs:1430 svm_registry::x86_smoke (only if SVM root entered at boot)",
+      "main.rs:1522-1552 AP-15 arm/finish around spawn_trusted_init(INIT_ELF): assert on contract (cases.rs:227) and panic! if init spawn fails (main.rs:1549-1550) - BOOT-FATAL (race possible with hart 1 running init)",
+      "task/domain_switch_tests.rs:413-474 observe_* at every context-switch completion (no-op for SAS tasks); hal/arch/x86 domain.rs counters (relaxed atomics)"
+    ],
+    "comparison_relevant_deltas": [
+      "cell stacks start as 0xA5 (instead of 0 for kernel stacks / stale data for ELF user stacks)",
+      "Tier-2 domain admission POLICY=ENABLED instead of DISABLED (only domain-class/unsigned/tier>=3 cells affected; not cellbox/shell/ls/cat/echo/ps/kill/terminal)",
+      "measurement_log carries ~68 fake entries; only ~188 real entries fit before \"log full\" (cellbox worker spawns use per-creator PublicationReservation which evicts own oldest, so they still succeed)",
+      "task ids / CellIds / VA slots of real cells equal a production boot; NEXT_CELL_GENERATION is higher",
+      "kernel frames: a few PD/PT frames, 1 fixture private root/ASID lease, ~6 leaked heap pages; transient heap peaks <= ~3 MB inside the 32 MiB heap; cell RSS (mapped-backed stack/ELF bytes) is unchanged: stacks were already eagerly allocated and mapped",
+      "timer ISR cost and boot time (~25 prepares of the 1.3 MiB-memsz init, O(n^2) translation_probe in RF/RM/RW): seconds under TCG"
+    ],
+    "log_level": "unchanged: canonical system.toml has explicit [logging] level=\"info\" so the test-hooks log::set_max_level branch (main.rs:1644-1655) is skipped; INFO in both builds. Serial output grows by ~150-250 pre-init selftest lines + per-prepare ELF LOAD lines + ~6x boot-ceiling \"narrowed\" lines.",
+    "no_qemu_exit_on_x86": "qemu_exit (main.rs:100) is only defined under test-hooks; no x86_64 call site (callers are riscv64/aarch64 only); x86 Syscall::Shutdown is an hlt loop with or without hooks.",
+    "per_spawn_runtime_sites": [
+      "task/elf_prepare.rs:179-184 kstack/ustack test_hook_prime_watermark on EVERY prepare_elf_task (init, services, cellbox, terminal, ls/cat/echo/ps/kill): fills whole usable stack with 0xA5 after the explicit kstack zeroing; user stack previously unzeroed (stale frames) now 0xA5; 2 extra memsets of 16 or 64 pages per stack; assert on virt_to_phys",
+      "task/scheduler.rs:889-892 (spawn_with_stacks_configured: in-kernel tasks) and 1170-1173 (Syscall::Spawn user threads: zeroed then primed)",
+      "loader.rs:94-101 begin/finish_governed_attempt, loader.rs:136 atomic_checkpoint (~10/spawn, per-page AP-02 at loader/elf.rs:344-347), probe observe_pages: negligible when not armed (x86 never arms them)",
+      "task/launch.rs development_silo route bool / task field (Option<ZST>), observe_pre_ready (launch.rs:322): negligible"
+    ],
+    "per_tick_runtime": "task.rs:1026-1027 maybe_emit_boot_stack_baselines on every timer tick of both harts after system_ticks>=1500 takes SCHEDULER.lock() and string-matches all task names FOREVER (STACK_BASELINE_ALL includes the vfs-test bit, never set on the desktop): scheduler-lock/ISR overhead, not a memory effect."
+  },
+  "b_stack_watermark": {
+    "every_cellbox_spawn_path_primes": "yes. Every task that has an ELF image is created by prepare_elf_task (called only from loader/governed_spawn.rs:198 prepare_gated [spawn_gated, session/launch children via SpawnRequest], governed_spawn.rs:261 spawn_init and loader/domain_admission.rs:529 [fixture]); it primes both stacks (elf_prepare.rs:179-184). Threads: scheduler.rs:1170-1173. In-kernel spawn_with_stacks / spawn_synthetic: scheduler.rs:889-892. Not primed: AP idle/boot stacks (smp.rs:370,567,827) and fixture stacks, which are not task stacks.",
+    "pages": "stack_pages_for(name): 16 pages (64 KiB) for init, cellbox (b2: shell), vfs-test, net, virtio-net, thread, block, platform, config, bench, bench-probe; STACK_PAGES=64 (256 KiB) for vfs and every other name (terminal, ls, cat, echo, ps, kill, compositor, desktop, ...). Task name = path basename (governed_spawn.rs:190).",
+    "pattern": "STACK_WATERMARK_PATTERN: u8 = 0xA5 (kernel/src/task/stack.rs:11-12; b2 tree stack.rs:12 identical)",
+    "primed_range": "Stack::usable_start() .. Stack::top, i.e. [base + guard_pages*4096, top) with guard_pages = STACK_GUARD_PAGES = 2 (the 2 bottom guard frames are unmapped and NOT primed); length = usable_bytes = pages*4096. Both the kernel stack and the user stack of each task (user pages are USER|RW identity-mapped; x86 has no SMAP/SMEP code in hal/arch/x86 or kernel so the CPL0 write to user pages is legal).",
+    "scan": "Stack::test_hook_watermark_bytes = usable - (length of the leading run of 0xA5 starting at usable_start); an idle stack reads the trap frame (kernel: ViTrapFrame at top, task.rs:179) as used; a legitimately written 0xA5 byte can only under-count."
+  },
+  "boot_readiness": {
+    "boot_fatal_risks_not_provable_without_a_VM": [
+      "AP-15 race: hart 1 can run the new canonical init while hart 0 takes its post-spawn snapshot; if init publishes a task first, next_task_id/measurement +1 contract fails -> assert panic (cases.rs:227). Low probability, host-load dependent.",
+      "x86 frame-ledger settle (ALIGN LEDGER_WARMUP_CYCLES=6) and full-rollback free-frame equalities were only ever run with the 44 KB CI test-hooks init, never with the 407 KB canonical init: assert!/assert_eq! boot panic if they fail.",
+      "x86_handoff_fixture total_ready_count()==0 and x86_shootdown_fixture (VA 0x0600_0000 not already mapped; 100M-spin waits) are boot-fatal on regression/starved AP vCPU."
+    ],
+    "note": "Static only (no VM): the ISOs boot the unchanged canonical init/kernel_fs.img; whether the hooks kernel reaches the prompt is NOT proven. check_default_kernel.py admits the cand-desktop hooks kernel against kernel/src/embedded-x86_64.",
+    "static_verification_files": [
+      "cand-desktop.static-verification.json",
+      "cand-headless.static-verification.json",
+      "b2-desktop.static-verification.json",
+      "b2-headless.static-verification.json"
+    ]
+  },
+  "byte_identity": "In every set the embedded kernel_fs.img and init are the unchanged non-hooks bytes (sha256 checked), every file extracted from the image (cellbox / six B2 ELFs / services) has the sha256 of the non-hooks build record (candidate.json files map; b2-image/static-verification.json), dev signatures of the key ELFs verify, each ISO tree equals the non-hooks ISO tree except boot/kernel.elf. Only the kernel ELF differs. NOTE: the position of the embedded init/kernel_fs.img inside the kernel ELF moves (cand: init 1655200 -> 2036559, kernel_fs.img 2064272 -> 2498033 file offsets), and in the cand hooks kernels INIT_ELF is no longer 8-byte aligned (VA mod 8 = 7, kernel_fs.img mod 16 = 1) whereas the cand control kernels are 16-aligned; loader::aligned_elf::bytes then heap-copies init (406,976 B, fallible, freed after prepare) at spawn. The B2 control kernels were already unaligned for init (desktop mod 16 = 15).",
+  "c_stack_baseline_emission": {
+    "boot_phase": "maybe_emit_boot_stack_baselines (task.rs:729-764), called from the timer-tick ISR (task.rs:1026-1027) on every tick of both harts once system_ticks()>=1500 (hart 0 counts ticks). For each task whose name is in {init, cellbox [b2: shell], vfs, net, virtio-net, thread} (vfs-test deferred) not yet emitted: emits kind=kernel then kind=user, phase=boot, ONCE per name (STACK_BASELINE_EMITTED bit). It is a first-seen-after-tick-1500 sample, NOT a post-workload watermark. Workers (ls/cat/echo/ps/kill), terminal, compositor etc. NEVER emit.",
+    "consequence": "Final per-task watermarks (cellbox user/kernel at end of workload, workers, terminal) cannot come from the guest [stack-baseline] lines; they must be read from guest memory by host introspection of the primed 0xA5 stacks (scan from usable_start for the first non-0xA5 byte) while the task is alive; a worker stack is freed at exit (frames return to the allocator with their contents until reuse).",
+    "exit_phase": "maybe_emit_exit_stack_baseline (task.rs:767-785; called from scheduler.rs exit_task:1526-1531): only for name vfs-test (absent on the desktop/headless image), so never.",
+    "format": "log::warn!(\"[stack-baseline] name={} phase={} kind={} used_bytes={} used_pages={} alloc_bytes={} usable_bytes={} baseline=authoritative-input\") (task.rs:712-724) -> serial/logger (WARN so it is visible even at lower log levels)"
+  },
+  "hook_site_review": {
+    "b2_vs_cand": "The B2 tree has the same hook lines in main.rs, task/stack.rs, task/elf_prepare.rs, loader/*, task/scheduler.rs (one line fewer); it lacks a few later accessor/launch/measurement_log/ready.rs/cspace/syscall sites (hook-sites-diff-cand-vs-b2.txt). B2 was not separately reviewed line by line [INFERENCE: same hook behaviour; B2 task name for the baseline/16-page rule is \"shell\", the candidate is \"cellbox\"].",
+    "full_site_greps": [
+      "hook-sites-cand-measure.txt",
+      "hook-sites-b2-measure.txt",
+      "hook-sites-diff-cand-vs-b2.txt"
+    ],
+    "reports": [
+      "review-slice-A-boot-path.md",
+      "review-slice-B-runtime.md"
+    ],
+    "symbol_diffs": "symbol-diff/<set>.txt (+ .size.txt); cand: 277 symbols only in hooks kernel, bss +376 B, text +405,504 B"
+  },
+  "recipe": {
+    "b2-desktop": "copy (rsync excl. target) of /tmp/cellbox-s10-7/worktree -> b2-measure; EMBEDDED_OVERRIDE=th/embed-b2-desktop (desktop-kernel_fs.img 37040c38, desktop-init 0c2f607b from b2-image); features dev-policy-key,dev-signing-key,dev-weak-rng,signing-required,native-domains,qemu-dev-https,large-cell-va [+test-hooks]; NO -Z build-std (the S10-7.1 desktop kernel route, driver/b2.py phase_desktop, omitted BS).",
+    "b2-headless": "same tree; EMBEDDED_OVERRIDE=th/embed-b2-headless (kernel_fs.img f75f3c06, init 920c0294); default features [+test-hooks]; -Z build-std=core,alloc (b2.py headless route).",
+    "cand-desktop": "cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc --features policy-required[,test-hooks]; default embedded dir kernel/src/embedded-x86_64 (promoted desktop kernel_fs.img 3848cefb, init c0bd1458). Tree = git clone --local of /home/dmin/cellos at HEAD adcbcf9db (clean) at /tmp/cellbox-s10-7/cand-measure; repo .cargo/config.toml copied; CC/CFLAGS/BINDGEN freestanding env as S10-3.",
+    "cand-headless": "same, EMBEDDED_OVERRIDE=~/.cache/cellos-candidates/4fae8b20.../headless (kernel_fs.img 384c04fa, init fc1e6559); headless route = S10-3d build-candidate.sh (assemble-x86-image --profile headless, kernel features default+policy-required).",
+    "kernel_rustflags": "-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static (== repo .cargo/config.toml x86_64-unknown-none block == CI CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS)",
+    "toolchain": "nightly-2026-05-01 (rustc 1.97.0-nightly f53b654a8 2026-04-30), --locked --offline, no network"
+  },
+  "reproduction_controls": {
+    "b2-desktop": "5959acd79291fe693aa0deaacac5cc67dcc16cb76e911705f5290bfa1e3ba828 (== S10-7.1 desktop kernel)",
+    "b2-headless": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672 (== S10-7.1 headless kernel)",
+    "cand-desktop": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a (== promoted default kernel)",
+    "cand-headless": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74 (== S10-3d headless candidate kernel)",
+    "failed_first_attempt_retained": "b2-desktop first attempt used -Z build-std and produced control e51abe87cf4d805cf3c3b2f4e53008dfb1c717175d220d0548147d10cec7c382 (test-hooks e26009c1...), which does NOT equal the 7.1 kernel because 7.1 built that kernel without build-std; discarded, logs in build-logs/b2-desktop-FIRST-ATTEMPT-with-build-std; rebuilt in label b2-desktop-nbs.",
+    "note": "The non-hooks control kernel built by the same driver in the disposable trees is byte-identical to the previously qualified/built kernel in all four profiles, so the recipe, paths and toolchain are proven equal; the only difference between control and measurement kernel is the `test-hooks` cargo feature."
+  },
+  "sets": {
+    "b2-desktop": {
+      "control_kernel_bytes": 15407480,
+      "control_kernel_non_hooks_sha256": "5959acd79291fe693aa0deaacac5cc67dcc16cb76e911705f5290bfa1e3ba828",
+      "dir": "/tmp/cellbox-s10-7/measure/b2-desktop",
+      "embed_offsets": {
+        "control": {
+          "img_second": -1,
+          "init": 1526223,
+          "kernel_fs.img": 1936934
+        },
+        "test-hooks": {
+          "img_second": -1,
+          "init": 1782464,
+          "kernel_fs.img": 2195627
+        }
+      },
+      "init_sha256": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104",
+      "iso": {
+        "cellos-x86_64-desktop-b2-test-hooks.iso": {
+          "bytes": 19591168,
+          "sha256": "05fec13a6b15eb3189675901b075da8b8cc936b9970a643df5f4ef2183c47f7f"
+        }
+      },
+      "iso_bios_installed": {
+        "cellos-x86_64-desktop-b2-test-hooks.bios-installed.iso": {
+          "bytes": 19591168,
+          "sha256": "964fa3f5d58d6b9f6a4ced1d4eae9cf0c1d8b475c2667ee5d84d7a6bf3e95a43"
+        }
+      },
+      "kernel_fs_img_sha256": "37040c38f62fd1b28999517f8b1bd9b646f2ed12d3073e810ea7dae601593f83",
+      "qcow2": {
+        "cellos-x86_64-desktop-b2-test-hooks.qcow2": {
+          "bytes": 12779520,
+          "sha256": "e4d6d676bda1198b9497cf6d37af2983fabfb7be1e0a87297f4fe76fe2ba2b7a"
+        }
+      },
+      "static_checks": 33,
+      "static_ok": true,
+      "test_hooks_kernel_bytes": 15720424,
+      "test_hooks_kernel_sha256": "8d876239e5821240f2b9a3be9770ed9ff3bbaad9a278782fe3272d90050f1b5e"
+    },
+    "b2-headless": {
+      "control_kernel_bytes": 7004832,
+      "control_kernel_non_hooks_sha256": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672",
+      "dir": "/tmp/cellbox-s10-7/measure/b2-headless",
+      "embed_offsets": {
+        "control": {
+          "img_second": -1,
+          "init": 1506975,
+          "kernel_fs.img": 1920574
+        },
+        "test-hooks": {
+          "img_second": -1,
+          "init": 1796895,
+          "kernel_fs.img": 2207224
+        }
+      },
+      "init_sha256": "920c0294727b5b10cf8ca88738ef3c71f82366363b34b7f88547eebc522b3621",
+      "iso": {
+        "vicell-x86-b2-test-hooks.iso": {
+          "bytes": 11204608,
+          "sha256": "6e0b1691b62704634bc0889a1c66b067434f92f4e8e8fc7974d34c2413bda1c0"
+        }
+      },
+      "iso_bios_installed": {
+        "vicell-x86-b2-test-hooks.bios-installed.iso": {
+          "bytes": 11204608,
+          "sha256": "fb0bc73333948f201d52d5529f51b62622a16ee7db98605185f09cd0e86a4556"
+        }
+      },
+      "kernel_fs_img_sha256": "f75f3c0651107571b03f6249f4f2c4c12d0ef747620ccd12228039b47ece0330",
+      "qcow2": {
+        "vicell-x86-b2-test-hooks.qcow2": {
+          "bytes": 6291456,
+          "sha256": "f349ced72823c207a7673780ad36ed935eae250d49cf549fd1d85790e6e4e4fe"
+        }
+      },
+      "static_checks": 33,
+      "static_ok": true,
+      "test_hooks_kernel_bytes": 7333632,
+      "test_hooks_kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb"
+    },
+    "cand-desktop": {
+      "control_kernel_bytes": 28182592,
+      "control_kernel_non_hooks_sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a",
+      "dir": "/tmp/cellbox-s10-7/measure/cand-desktop",
+      "embed_offsets": {
+        "control": {
+          "img_second": -1,
+          "init": 1655200,
+          "kernel_fs.img": 2064272
+        },
+        "test-hooks": {
+          "img_second": -1,
+          "init": 2036559,
+          "kernel_fs.img": 2498033
+        }
+      },
+      "init_sha256": "c0bd14580fda0d697a2edd66b19168107fa6877a190bc06c1a8a482b467b23f3",
+      "iso": {
+        "cellos-x86_64-desktop-test-hooks.iso": {
+          "bytes": 32491520,
+          "sha256": "52f51a9cc49b2e14e2591a3f76ea6d6bd76651178721420281f93ec3cf898a49"
+        }
+      },
+      "iso_bios_installed": {
+        "cellos-x86_64-desktop-test-hooks.bios-installed.iso": {
+          "bytes": 32491520,
+          "sha256": "50ee98dd0b368c133656b8f277f5bfbe0ec0727288ae52dd1a8c1609fea8f72d"
+        }
+      },
+      "kernel_fs_img_sha256": "3848cefb25f0e7c4abc67feccf3d8886292e25da60a88b4633552651292479ec",
+      "qcow2": {
+        "cellos-x86_64-desktop-test-hooks.qcow2": {
+          "bytes": 23068672,
+          "sha256": "c54942747220a0bdfff5dd4ed50707abd1bdd0387f96f2c93b5a9979ecbb616b"
+        }
+      },
+      "static_checks": 29,
+      "static_ok": true,
+      "test_hooks_kernel_bytes": 28618912,
+      "test_hooks_kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91"
+    },
+    "cand-headless": {
+      "control_kernel_bytes": 15599680,
+      "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+      "dir": "/tmp/cellbox-s10-7/measure/cand-headless",
+      "embed_offsets": {
+        "control": {
+          "img_second": -1,
+          "init": 1655200,
+          "kernel_fs.img": 2064272
+        },
+        "test-hooks": {
+          "img_second": -1,
+          "init": 2036559,
+          "kernel_fs.img": 2498033
+        }
+      },
+      "init_sha256": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab",
+      "iso": {
+        "vicell-x86-test-hooks.iso": {
+          "bytes": 19908608,
+          "sha256": "b534c7512b844a8d05a360e5c5e9b04fce58803aefb04c5fc93f77f4fe215563"
+        }
+      },
+      "iso_bios_installed": {
+        "vicell-x86-test-hooks.bios-installed.iso": {
+          "bytes": 19908608,
+          "sha256": "31e32bf07be3c0101b8c085abcf122e2dd3932c23f182da58fb6bcfc64426118"
+        }
+      },
+      "kernel_fs_img_sha256": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+      "qcow2": {
+        "vicell-x86-test-hooks.qcow2": {
+          "bytes": 12386304,
+          "sha256": "012fde4cb58ecfe6fda7c8ee37f09647b7a95a2a5480b2c10c3b842fd14c55e9"
+        }
+      },
+      "static_checks": 29,
+      "static_ok": true,
+      "test_hooks_kernel_bytes": 16036000,
+      "test_hooks_kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa"
+    }
+  },
+  "source_modified": false,
+  "status": "BUILT",
+  "task": "S10-7.2 test-hooks measurement kernels (no VM)",
+  "tools": {
+    "driver": "driver/build_kernels.py, driver/assemble_verify.py"
+  },
+  "validity_assessment": "No hook found that changes the behaviour of cellbox/shell/ls/cat/echo/ps/kill/terminal workloads other than stack fill pattern (0xA5), per-spawn memset and per-tick scheduler-lock scan, so the comparison is not invalidated by a forced behaviour change; STOPPED was therefore not used. The measurement kernel is a different binary from the qualified kernel, boots a large pre-init selftest corpus, and carries boot-fatal asserts that have not run against the canonical images: a single (D7-3) run can end in a boot panic that is not a workload result. Main/the user should decide whether to accept that risk before the run.",
+  "vm_run": false
+}

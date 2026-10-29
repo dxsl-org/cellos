@@ -1,0 +1,22 @@
+39d38
+< kernel/src/cell/cspace.rs:     #[cfg(feature = "test-hooks")]
+133,135d131
+< kernel/src/measurement_log.rs: #[cfg(feature = "test-hooks")]
+< kernel/src/measurement_log.rs: #[cfg(feature = "test-hooks")]
+< kernel/src/measurement_log.rs: #[cfg(feature = "test-hooks")]
+276d271
+< kernel/src/task/cell_session.rs: #[cfg(feature = "test-hooks")]
+302,303d296
+< kernel/src/task/hart_local/ready.rs: #[cfg(feature = "test-hooks")]
+< kernel/src/task/hart_local/ready.rs: #[cfg(feature = "test-hooks")]
+305,308d297
+< kernel/src/task/hart_local/ready.rs: #[cfg_attr(not(any(cellos_g1_cpu, feature = "test-hooks")), allow(dead_code))]
+< kernel/src/task/hart_local/ready.rs: #[cfg_attr(not(any(cellos_g1_cpu, feature = "test-hooks")), allow(dead_code))]
+< kernel/src/task/launch.rs:         #[cfg(feature = "test-hooks")]
+< kernel/src/task/launch.rs:         #[cfg(feature = "test-hooks")]
+331d319
+< kernel/src/task/scheduler.rs:     #[cfg(feature = "test-hooks")]
+343a332
+> kernel/src/task/smp.rs:     feature = "test-hooks",
+409d397
+< kernel/src/task/syscall.rs: #[cfg(feature = "test-hooks")]

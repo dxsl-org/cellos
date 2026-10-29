@@ -1,0 +1,3 @@
+   text	   data	    bss	    dec	    hex	filename
+14708808	  88032	 561176	15358016	 ea5840	cand-headless/control.kernel.elf
+15114312	  89008	 561552	15764872	 f08d88	cand-headless/test-hooks.kernel.elf

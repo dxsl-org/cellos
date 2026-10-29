@@ -1,0 +1,10 @@
+{
+  "status": "BUILT",
+  "tree": "/tmp/cellbox-s10-7/b2-measure",
+  "features_control": "dev-policy-key,dev-signing-key,dev-weak-rng,signing-required,native-domains,qemu-dev-https,large-cell-va",
+  "features_measure": "dev-policy-key,dev-signing-key,dev-weak-rng,signing-required,native-domains,qemu-dev-https,large-cell-va,test-hooks",
+  "control_kernel_sha256": "e51abe87cf4d805cf3c3b2f4e53008dfb1c717175d220d0548147d10cec7c382",
+  "control_kernel_bytes": 15393320,
+  "measure_kernel_sha256": "e26009c15f2767f89cf33e24c77234b30714cb21f1f990c20c3d4a09e05bd2da",
+  "measure_kernel_bytes": 15722112
+}
