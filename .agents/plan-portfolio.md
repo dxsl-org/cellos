@@ -466,7 +466,7 @@ Satisfying an old trigger alone does not reopen an independent program.
   through Sunset's `SignKey::AgentEd25519`/`CliEvent::AgentSign`, and caller admission for
   `/bin/cellbox-ssh`. It depends on the CellosFS crash-safety plan
   (`261025-cellosfs-crash-safety`). It unblocks Phase 09 S9-5 (`--auth publickey`, pipeline
-  exec, exact non-UTF-8 stdin).
+  exec, exact non-UTF-8 stdin). **Opened 2026-10-30 as plan `261030-1000-kms-ssh-key-custody` (charter KSSH-CP1-A approved, documents only; tiers T0/T1 `DEV_POSTURE`/T2; slices K0-K9; every code slice needs its own CP1/CP2 and the lock-adoption packet).**
 - Completed assets remain in-tree; existing cross-architecture regressions may
   protect shared changes but do not make those architectures active targets.
 

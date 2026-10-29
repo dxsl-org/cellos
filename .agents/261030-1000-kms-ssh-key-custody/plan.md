@@ -1,0 +1,65 @@
+---
+title: "KMS SSH key custody (KSSH): ed25519 keys in KMS for outbound Cellbox SSH publickey auth"
+status: charter-approved-docs-only
+priority: P2
+created: 2026-10-30
+origin: "Cellbox Phase 09 S9-5 (deferred by D79-14, 2026-10-25); Phase 10 S10-10 decision D10-2 = E (user, 2026-10-30)"
+blockedBy: []
+blocks: ["Cellbox Phase 09 S9-5 (--auth publickey, pipeline exec, exact non-UTF-8 stdin)", "Cellbox CBX-24 publickey half"]
+executionGate: "KSSH-CP1-A approved (documents only). Every code slice needs its own CP1/CP2; Law-1 slices follow the two-confirmation rule; kernel/KMS paths are CELL-CONTRACT-0024 locked and need the lock-adoption packet approved first. No code, key, network fetch or lock edit is authorized by the charter."
+---
+# KSSH: ed25519 SSH key custody in KMS
+
+## Why
+
+`cellbox ssh --auth publickey` is refused because KMS has no SSH key class, its protected persistence is fail-closed, and its admission list excludes `/bin/cellbox-ssh` (D79-14). Source: [probe report](../261020-1750-cellbox-cli/reports/s10-10-evidence/probe/kms-prerequisites.md) (read-only, 2026-10-30), which holds all file:line evidence and the "not checked" list.
+
+## Tiers (what each honestly proves)
+
+| Tier | Content | Does NOT prove |
+|---|---|---|
+| **T0 volatile dev custody** | SSH leaf in RAM, imported every boot via an admin path; new opcodes; new kernel-attested caller flag; `AgentSign` wiring | persistence, confidentiality at rest, rollback, crash safety |
+| **T1 dev persistent (`DEV_POSTURE`)** | T0 + sealed blob under `/srv/cellos/kms/` with a development root key; new x86 development provider | rollback resistance, crash durability, confidentiality against a disk+image holder, any production claim |
+| **T2 production-grade** | authority-held root, sealed state, monotonic floor, signed time, qualified provider, crash-safe store | blocked (hardware, AWS, ADR-0006 NO-GO, lock handoffs); separate program K9 |
+
+T0/T1 are labelled `DEV_POSTURE` and are never reported as `ProductionQualified`. CBX-24's publickey half may be called "met at dev-posture ceiling" only by an explicit user disposition at the end.
+
+## Decisions (KSSH-CP1-A, approved by the user 2026-10-30 "as proposed")
+
+| ID | Decision | Status |
+|---|---|---|
+| D-K1 | Posture ceiling: deliver T0 then T1 labelled `DEV_POSTURE`; T2 stays a separate program | decided |
+| D-K2 | CellosFS crash safety (`261025-cellosfs-crash-safety`) is a soft dependency for T0/T1 and a hard dependency for T2 and any "survives power loss" claim | decided |
+| D-K3 | Key import is a non-CLI credential-owner path (supervisor-authorised op or dedicated admin cell); the contract delta against `command-contracts.md:142` and the S9-5 proposal line 108 (`cellbox ssh-key import`) is recorded in K0 before any implementation | decided |
+| D-K4 | Parser choice (`ssh-key` with `encryption` vs own parser with an AES-256-CTR-only allowlist before the KDF): **not decided here**; the probe gave no recommendation; decided in K1's CP1 with the license/dependency evidence | deferred to K1 CP1 |
+| D-K5 | Decrypt once and re-seal under the KMS root vs keep passphrase-wrapped and unlock per session (contract §4.1 says "unlock"; the S9-5 proposal implied the former): **not decided here**; decided in K2's design CP1 | deferred to K2 CP1 |
+| D-K6 | Caller right is a new kernel-attested flag (the only precedent that works); a registration handshake is not available for an unregistered client | decided |
+| D-K7 | T1 uses a new x86 development provider, not the AArch64 Silo | decided |
+
+## Slice DAG
+
+Effort: S ≤ days, M ≈ 1-2 weeks, L ≈ weeks plus an external dependency. Every code slice has its own CP1/CP2.
+
+| ID | Slice | Entry gate | Effort |
+|---|---|---|---|
+| K0 | Charter completion (docs): contract delta for the import surface (D-K3), lock-adoption packet ([draft](lock-adoption-draft.md)) submitted for approval, owner of `261025-cellosfs-crash-safety` under the lock stated | this charter | S |
+| K1 | Dependency admission: `bcrypt-pbkdf` (+ transitive) into the lock, `cargo deny`, D-K4 | K0; **separate CP1 with explicit network authorisation (one online fetch)** | S |
+| K2 | KMS ABI: `KmsKeyAlgorithm::SshEd25519`, opcodes 15+ (begin/chunk/commit/abort import, sign userauth, status, delete), errors, byte fixtures; D-K5 | K0; Law-1 confirmation 1 then 2 | M |
+| K3 | Caller admission right (new `CALLER_FLAG_*`, kernel `CapSet` bit, launch row for `/bin/cellbox-ssh`, `sign-policy.py` row) | K0, K2 CP1, lock handoff for kernel permission | M-L |
+| K4 | Storage: K4a T0 (none); K4b T1 (x86 dev provider, record v2, dev root, production exclusion like `scripts/check-production-relay-image.py`) | K0, D-K1; K4b needs D-K2 | M |
+| K5 | KMS implementation: chunked import, OpenSSH v1 (none; bcrypt + AES-256-CTR), ed25519, sign with reconstruct + self-verify, replay ids, zeroize, caller checks | K1, K2 (CP2), K3 or test-hook flag, K4 | L |
+| K6 | Cellbox/vissh: `KmsClient` additions, `AgentSign` handling, `--identity`, passphrase lease, lift `publickey_unavailable`, reopen pipeline exec and non-UTF-8 stdin | K5, K3 | M |
+| K7 | Admin import surface (non-CLI credential owner) | K2, K5, D-K3 | S-M |
+| K8 | QEMU evidence: login to a controlled OpenSSH with a KMS key; negatives; no key bytes in serial/logs; reboot persistence (T1); rollback shown as unprotected | K6, K7 | M |
+| K9 | T2: adopt `260826-1605` P1-P6, ADR-0006 GO, SSH leaf in the authority protocol, crash-safe store | external; separate program | L |
+| X | `261025-cellosfs-crash-safety` P1-P7 (own CP1s) | own CP1s | L; parallel track |
+
+Critical path: K0 -> K2 CP1 -> K1 -> K3 -> K5 -> K6 -> K8. T0 can ship without K4b and without X.
+
+## What this charter does not authorize
+
+Any source edit, KMS or kernel change, key generation, network fetch (including `bcrypt-pbkdf`), image/signing change, VM run, lock release, or a production/physical/crash-durability claim. Documentation completion unlocks nothing (`cell-contract-0024-locks.md:300`).
+
+## Next concrete step
+
+K0: write the contract delta and submit [lock-adoption-draft.md](lock-adoption-draft.md) for approval, then request the CP1 for K2 (ABI design) and, separately, K1 (dependency fetch).
