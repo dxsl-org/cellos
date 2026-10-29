@@ -1,0 +1,18 @@
+{
+  "status": "Preexisting authorized source plus explicitly approved private echo edge; no clean HEAD claim.",
+  "original_sha256": {
+    "kernel/src/loader/launch_profile/mod.rs": "f99eb3bd59f26b7a7e88c94e5a52d20f9b8992388506e2a949a3adbb746a84ab",
+    "kernel/src/loader/launch_profile/profiles.rs": "3c8a6fdd6c3b359b48a27e85f05c2023c13e785167a425aaed98f3326679c157",
+    "kernel/src/loader/launch_profile/targets.rs": "8892a225c501e1c0ee9cec390a410c6cd9fb325db09f04043c6e214444ffd3f2",
+    "kernel/src/loader/launch_profile/tests.rs": "8a5f7c7092c6be5b151623396676803becaeed8a340b1ed170188ac5ed51817f",
+    "libs/api/src/abi/cell_session.rs": "1e2d2e7364ff248721a74fd436cdca1bf5f48afdaceb92f557cd8525e5f60bea"
+  },
+  "approved_amendment": "phase-04-s3-output-negative-grant-amendment.md (user approved 2026-10-22)",
+  "sha256": {
+    "kernel/src/loader/launch_profile/mod.rs": "f99eb3bd59f26b7a7e88c94e5a52d20f9b8992388506e2a949a3adbb746a84ab",
+    "kernel/src/loader/launch_profile/profiles.rs": "cd51eb0a41abe091e3077b8848e6cbc5f9f70f7be9d3e310970da244dc50ec54",
+    "kernel/src/loader/launch_profile/targets.rs": "8892a225c501e1c0ee9cec390a410c6cd9fb325db09f04043c6e214444ffd3f2",
+    "kernel/src/loader/launch_profile/tests.rs": "a60748c827fd44a68befdb0f503cd7f7bad0fd6457efcdf742de6cae31848d47",
+    "libs/api/src/abi/cell_session.rs": "1e2d2e7364ff248721a74fd436cdca1bf5f48afdaceb92f557cd8525e5f60bea"
+  }
+}

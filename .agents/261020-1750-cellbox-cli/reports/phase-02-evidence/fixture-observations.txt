@@ -1,0 +1,72 @@
+USER: P02 START
+USER: P02 PASS two-session-routing
+USER: P02 PASS two-session-no-leak
+USER: P02 PASS resize-owner
+USER: P02 PASS resize-control-frame
+USER: P02 PASS resize-isolated
+USER: P02 PASS non-utf8-cwd-refused-before-launch
+USER: P02 PASS argv-limit-refused-before-launch
+USER: P02C ctx|argc=4|argv=["ctx", "", "two words", "héllo"]|cwd=/|cwdgrant=true|env=A=1;EMPTY=;Z=last;
+USER: P02 PASS foreground-spawn
+USER: P02 PASS foreground-activation
+USER: P02 PASS context-exact-at-first-instruction
+USER: P02 PASS stderr-separate-from-stdout
+USER: P02C ctx text epoch=2 seq=3
+USER: P02 PASS typed-input-to-foreground-only
+USER: P02 PASS end-input-half-close
+USER: P02C ctx eof
+USER: P02 PASS eof-reaches-child-outputs-preserved
+USER: P02 PASS foreground-restored-after-exit
+USER: P02 PASS baseline-input-after-restore
+USER: PANIC: Application crashed!
+USER: P02 PASS fault-restores-foreground-and-mode
+USER: P02C raw lease acquired=true
+USER: PANIC: Application crashed!
+USER: P02 PASS raw-mode-fault-restores-foreground-and-mode
+USER: P02C timeout status=Some(TimedOut)
+USER: P02 PASS timeout-restores-foreground-and-mode
+USER: P02C hang ready
+USER: P02 PASS cancel-restores-foreground
+USER: P02 PASS cancel-other-session-unaffected
+USER: P02C hang ready
+USER: P02 PASS ctrl-c-restores-foreground
+USER: P02 PASS ctrl-c-other-session-unaffected
+USER: P02 PASS non-utf8-nul-bytes-preserved
+USER: P02 PASS partial-write-bounded
+USER: P02 PASS full-ring-would-block
+USER: P02 PASS bytes-preserved-count
+USER: P02 PASS empty-nonblocking-is-would-block
+USER: P02 PASS timeout-distinct-from-eof
+USER: P02 PASS retained-duplicate-prevents-eof
+USER: P02 PASS last-writer-eof
+USER: P02 PASS closed-ref-stale
+USER: P02 PASS no-reader-write-refused
+USER: P02 PASS forged-endpoint-denied
+USER: P02 PASS descendant-spawn
+USER: P02 PASS descendant-and-duplicate-hold-writer
+USER: P02C descend grandchild committed
+USER: P02C writer gc wrote=2
+USER: P02 PASS descendant-bytes-arrive
+USER: P02 PASS eof-after-descendant-exit
+USER: PANIC: Application crashed!
+USER: P02 PASS holder-death-closes-writer
+USER: P02C blocked-writer ready
+USER: P02 PASS consumer-close-issued
+USER: P02 PASS consumer-close-reaps-blocked-producer-subtree
+USER: P02C blocked-reader ready
+USER: P02 PASS root-cancel-issued
+USER: P02 PASS root-cancel-reaps-blocked-consumer-subtree
+USER: P02 PASS cancelled-subtree-endpoints-revoked
+USER: P02 PASS unrelated-session-survives-cancel
+USER: P02C forged read_denied=true write_denied=true dup_denied=true close_denied=true cancel_denied=true
+USER: P02C forged detail read=Err(WrongOwner) dup=Err(WrongOwner)
+USER: P02 PASS foreign-child-cannot-touch-private-endpoint
+USER: P02 PASS abort-then-commit-refused
+USER: P02 PASS expired-prepare-refuses-commit
+USER: P02 NOT-EXERCISED issuer-death commit-race-wall-clock cross-process-frontend gui-bridge
+USER: P02-SESSION: PASS checks=48
+USER: P02C orphan ready
+USER: P02C orphan tick 0
+USER: P02C orphan tick 1
+USER: P02C orphan tick 2
+USER: P02C orphan tick 3

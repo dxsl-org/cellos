@@ -1,0 +1,18 @@
+{
+  "reported_by": "Main",
+  "scope": "Parent-reported final runner outcome; not a documentation-worker rerun.",
+  "runner_exit_code": 0,
+  "gates_passed": 60,
+  "gates_total": 60,
+  "children_before": 4,
+  "children_after": 4,
+  "halt_proven": true,
+  "banner_observed": false,
+  "vm_exited": false,
+  "matching_cpu_samples": [
+    14,
+    15
+  ],
+  "stable_sample_spacing_ms": 301.340651,
+  "kernel_sha256": "4772ebab4d0fc2430e16566c59039d81800cdbefb113a07ca02519c6d8110f73"
+}

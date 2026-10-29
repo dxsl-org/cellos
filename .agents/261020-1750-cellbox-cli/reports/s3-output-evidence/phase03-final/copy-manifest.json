@@ -1,0 +1,53 @@
+{
+  "source_run": "/tmp/cellbox-phase03-s3-dwarfhalt-KQ3zxfhH",
+  "sanitization": "Text source working-directory path replaced by <PRIVATE_REGRESSION_WORK>; no keys, sockets, images, executables or build tree copied.",
+  "files": {
+    "serial.log": {
+      "bytes": 263078,
+      "sha256": "945e7aaa6f1f972e05bba69f9e758c52a54200326decc889dd908b555c7ec64f",
+      "source_sha256": "945e7aaa6f1f972e05bba69f9e758c52a54200326decc889dd908b555c7ec64f",
+      "byte_identical": true
+    },
+    "pipeline-commands.json": {
+      "bytes": 294123,
+      "sha256": "cbbb885f35129faab2861e07aac0f9381f563883123e0349a2ff6efaab73767b",
+      "source_sha256": "cbbb885f35129faab2861e07aac0f9381f563883123e0349a2ff6efaab73767b",
+      "byte_identical": true
+    },
+    "final-probe.json": {
+      "bytes": 271,
+      "sha256": "863515625a0db7d73e3f6cf4f779203fe6769320ad8861a6fe60275f8fbdba88",
+      "source_sha256": "863515625a0db7d73e3f6cf4f779203fe6769320ad8861a6fe60275f8fbdba88",
+      "byte_identical": true
+    },
+    "cpu-halt-evidence.json": {
+      "bytes": 6126,
+      "sha256": "02d6f178e128dddee8aa4b33241dc93d1719eaac433707ef5abb2bdc1f3d133e",
+      "source_sha256": "02d6f178e128dddee8aa4b33241dc93d1719eaac433707ef5abb2bdc1f3d133e",
+      "byte_identical": true
+    },
+    "shutdown-symbols.json": {
+      "bytes": 755,
+      "sha256": "09037589a83bb4df611ac72d0ac413be2f3383d30b9eddd6b78f0e14458c060a",
+      "source_sha256": "09037589a83bb4df611ac72d0ac413be2f3383d30b9eddd6b78f0e14458c060a",
+      "byte_identical": true
+    },
+    "qemu-argv.txt": {
+      "bytes": 362,
+      "sha256": "d0f44be39c78799365660ee39771ff737644f1b5cae4c3bd9856bb37d535d4ae",
+      "source_sha256": "b953c6a86dc6d6402d4a6a9bbe244088bca390cfa327995890526067fc52e13d",
+      "byte_identical": false
+    },
+    "provenance.json": {
+      "bytes": 2457,
+      "sha256": "b97c8d44a1df1317c7fa487daf3618a1542e53f872f34c8d80bed2c1194d86a1",
+      "source_sha256": "b97c8d44a1df1317c7fa487daf3618a1542e53f872f34c8d80bed2c1194d86a1",
+      "byte_identical": true
+    },
+    "parent-outcome.json": {
+      "bytes": 479,
+      "sha256": "ca13b67b508ad90c430f99e345076e0aa96e2e9ba0582fceb62e971308dc8d4d",
+      "derived": "Explicit final result supplied by Main; CPU/source details independently preserved from original evidence files."
+    }
+  }
+}

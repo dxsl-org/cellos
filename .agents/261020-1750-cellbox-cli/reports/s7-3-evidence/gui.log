@@ -1,0 +1,889 @@
+64eb28f3be3d08bf2560d6eb0b58bee4a33ff8ea3439bcd5ed6e1ccc42f84a39  /home/dmin/cellos/target/x86_64-unknown-none/release/cellbox
+636497acc2bdf735471173c5c428e61d16b1d8c870935cfe868e6d0120e52fa2  /home/dmin/cellos/target/x86_64-unknown-none/release/terminal
+447d0348735a25e8b396c11c0091ff3d214b0c0b392043bb0515d4104a298e2c  /home/dmin/cellos/kernel/src/embedded-x86_64/kernel_fs.img
+==> Repository checks (no build): fake Terminal matcher, fake Files model and power actions gone, cellbox ceiling unchanged
+fake matcher check: none of 12 banned strings in 8 Terminal files
+note: Write added vs HEAD by an uncommitted pre-S1 working-tree delta (Phase 02 shell closure)
+baseline : git HEAD:cells/tools/shell/src/main.rs (32 syscalls, 6 manifest keys)
+candidate: /home/dmin/cellos/cells/tools/cellbox/src/main.rs (33 syscalls, 6 manifest keys)
+G-S1a PASS: declare_manifest and declare_syscalls sets are identical
+terminal ceiling delta (informational):
+    baseline : git HEAD:cells/apps/terminal/src/main.rs (13 syscalls, 3 manifest keys)
+    candidate: /home/dmin/cellos/cells/apps/terminal/src/main.rs (14 syscalls, 3 manifest keys)
+    G-S1a FAIL: ceiling differs from the baseline
+     - syscall ADDED vs baseline: SetTimer
+files ceiling delta (informational; C5 adds VfsMutate):
+    baseline : git HEAD:cells/apps/files/src/main.rs (13 syscalls, 3 manifest keys)
+    candidate: /home/dmin/cellos/cells/apps/files/src/main.rs (14 syscalls, 3 manifest keys)
+    G-S1a FAIL: ceiling differs from the baseline
+     - syscall ADDED vs baseline: VfsMutate
+==> Generating throw-away cell signing key (private to this run)
+key identity sha256: 6a3c027cc7b19d7d403c8a68ff53512cfa1faa891be9e125047f8d9464af2c63
+==> Building the host glyph renderer (libs/ostd TextFonts; private target dir, outside the repo tree)
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling libm v0.2.16
+   Compiling thiserror v2.0.19
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling scopeguard v1.2.0
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling byteorder v1.5.0
+   Compiling heapless v0.8.0
+   Compiling stable_deref_trait v1.2.1
+   Compiling tinyvec v1.13.3
+   Compiling foldhash v0.1.5
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling embedded-io v0.7.1
+   Compiling spin v0.9.9
+   Compiling lock_api v0.4.14
+   Compiling hashbrown v0.15.5
+   Compiling hash32 v0.3.1
+   Compiling unicode-normalization v0.1.25
+   Compiling spinning_top v0.2.5
+   Compiling linked_list_allocator v0.10.6
+   Compiling syn v3.0.3
+   Compiling syn v2.0.119
+   Compiling core_maths v0.1.1
+   Compiling ab_glyph_rasterizer v0.1.10
+   Compiling ttf-parser v0.25.1
+   Compiling postcard-derive v0.2.2
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling owned_ttf_parser v0.25.1
+   Compiling ab_glyph v0.2.32
+   Compiling cobs v0.3.0
+   Compiling postcard v1.1.3
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling phase04-gui-glyphs v0.0.0 (/tmp/cellbox-phase04-gui-kHOA/glyph-host)
+    Finished `release` profile [optimized] target(s) in 12.56s
+==> Building cells (private target dir)
+   Compiling compiler_builtins v0.1.160 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling cell-build v0.2.0 (/home/dmin/cellos/libs/cell-build)
+   Compiling thiserror v2.0.19
+   Compiling libm v0.2.16
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling heapless v0.8.0
+   Compiling rustversion v1.0.23
+   Compiling version_check v0.9.5
+   Compiling ident_case v1.0.1
+   Compiling strsim v0.11.1
+   Compiling heck v0.5.0
+   Compiling indoc v2.0.8
+   Compiling vi-compiler v0.1.0 (/home/dmin/cellos/tools/vi-compiler)
+   Compiling app-sys-tools v0.1.0 (/home/dmin/cellos/cells/tools/sys-tools)
+   Compiling driver-disk v0.1.0 (/home/dmin/cellos/cells/drivers/disk)
+   Compiling service-platform v0.1.0 (/home/dmin/cellos/cells/services/platform)
+   Compiling service-config v0.1.0 (/home/dmin/cellos/cells/services/config)
+   Compiling app-phase03-filter v0.1.0 (/home/dmin/cellos/cells/tests/phase03-filter)
+   Compiling service-vfs v0.1.0 (/home/dmin/cellos/cells/services/vfs)
+   Compiling files v0.1.0 (/home/dmin/cellos/cells/apps/files)
+   Compiling service-input v0.2.0 (/home/dmin/cellos/cells/services/input)
+   Compiling terminal v0.1.0 (/home/dmin/cellos/cells/apps/terminal)
+   Compiling desktop v0.1.0 (/home/dmin/cellos/cells/apps/desktop)
+   Compiling fb-console v0.1.0 (/home/dmin/cellos/cells/apps/fb-console)
+   Compiling app-cellbox v0.1.0 (/home/dmin/cellos/cells/tools/cellbox)
+   Compiling generic-array v0.14.7
+   Compiling service-compositor v0.1.0 (/home/dmin/cellos/cells/services/compositor)
+   Compiling viui-macros v0.2.0 (/home/dmin/cellos/libs/viui-macros)
+   Compiling syn v3.0.3
+   Compiling syn v2.0.119
+   Compiling postcard-derive v0.2.2
+   Compiling strum_macros v0.27.2
+   Compiling zerocopy-derive v0.7.35
+   Compiling enumn v0.1.14
+   Compiling darling_core v0.24.1
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling darling_macro v0.24.1
+   Compiling darling v0.24.1
+   Compiling instability v0.3.14
+   Compiling alloc v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling byteorder v1.5.0
+   Compiling scopeguard v1.2.0
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling foldhash v0.1.5
+   Compiling stable_deref_trait v1.2.1
+   Compiling tinyvec v1.13.3
+   Compiling spin v0.9.9
+   Compiling embedded-io v0.7.1
+   Compiling bitflags v2.13.1
+   Compiling memchr v2.8.3
+   Compiling allocator-api2 v0.2.21
+   Compiling foldhash v0.2.0
+   Compiling equivalent v1.0.3
+   Compiling regex-syntax v0.8.11
+   Compiling cfg-if v1.0.4
+   Compiling log v0.4.33
+   Compiling unicode-width v0.2.2
+   Compiling typenum v1.20.1
+   Compiling either v1.19.0
+   Compiling itoa v1.0.18
+   Compiling ryu v1.0.23
+   Compiling castaway v0.2.4
+   Compiling unicode-segmentation v1.13.3
+   Compiling cobs v0.3.0
+   Compiling lock_api v0.4.14
+   Compiling static_assertions v1.1.0
+   Compiling strum v0.27.2
+   Compiling cpufeatures v0.2.17
+   Compiling hashbrown v0.15.5
+   Compiling hash32 v0.3.1
+   Compiling zerocopy v0.7.35
+   Compiling cellos-fs v0.1.0 (/home/dmin/cellos/libs/cellos-fs)
+   Compiling spinning_top v0.2.5
+   Compiling linked_list_allocator v0.10.6
+   Compiling itertools v0.14.0
+   Compiling unicode-normalization v0.1.25
+   Compiling line-clipping v0.3.8
+   Compiling fatfs v0.4.0 (https://github.com/rafalh/rust-fatfs#c4b88477)
+   Compiling compact_str v0.9.1
+   Compiling core_maths v0.1.1
+   Compiling ab_glyph_rasterizer v0.1.10
+   Compiling aho-corasick v1.1.4
+   Compiling bstr v1.13.1
+   Compiling ttf-parser v0.25.1
+   Compiling hashbrown v0.16.1
+   Compiling hashbrown v0.17.1
+   Compiling virtio-drivers v0.7.5 (/home/dmin/cellos/kernel/third_party/virtio_drivers)
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling digest v0.10.7
+   Compiling sha2 v0.10.9
+   Compiling lru v0.16.4
+   Compiling kasuari v0.4.13
+   Compiling owned_ttf_parser v0.25.1
+   Compiling postcard v1.1.3
+   Compiling ab_glyph v0.2.32
+   Compiling unicode-truncate v2.0.1
+   Compiling ratatui-core v0.1.0
+   Compiling regex-automata v0.4.16
+   Compiling ratatui-widgets v0.3.0
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling text-engine v0.1.0 (/home/dmin/cellos/libs/text-engine)
+   Compiling vigrep v0.1.0 (/home/dmin/cellos/libs/vigrep)
+   Compiling terminal-sdk v0.1.0 (/home/dmin/cellos/libs/terminal)
+   Compiling viui v0.2.0 (/home/dmin/cellos/libs/viui)
+warning: unused import: `TITLE`
+ --> cells/services/compositor/src/window_decoration/raster.rs:3:57
+  |
+3 | use super::{clip_to_screen, control_rect, end, Control, TITLE};
+  |                                                         ^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `frame_id` is never read
+  --> cells/services/compositor/src/surface_table/frame.rs:16:9
+   |
+15 | pub struct Frame {
+   |            ----- field in this struct
+16 |     pub frame_id: u32,
+   |         ^^^^^^^^
+   |
+   = note: `Frame` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `view_id`, `role`, `min_w`, and `min_h` are never read
+  --> cells/services/compositor/src/surface_table/frame.rs:33:9
+   |
+32 | pub struct View {
+   |            ---- fields in this struct
+33 |     pub view_id: u32,
+   |         ^^^^^^^
+...
+38 |     pub role: SurfaceRole,
+   |         ^^^^
+39 |     pub min_w: u32,
+   |         ^^^^^
+40 |     pub min_h: u32,
+   |         ^^^^^
+   |
+   = note: `View` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: constant `INSET` is never used
+  --> cells/services/compositor/src/window_decoration.rs:12:18
+   |
+12 | pub(super) const INSET: i32 = 2;
+   |                  ^^^^^
+
+warning: field `expected` is never read
+  --> cells/services/input/src/session.rs:54:66
+   |
+53 | struct Foreground {
+   |        ---------- field in this struct
+54 |     lease: Ref, receipt: Ref, child: ChildRefV1, operation: Ref, expected: u64, next: u64,
+   |                                                                  ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling vitui v0.1.0 (/home/dmin/cellos/libs/vitui)
+warning: value assigned to `paste` is never read
+   --> cells/tools/cellbox/src/executor.rs:508:17
+    |
+508 |                 paste = false;
+    |                 ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+516 |                 paste = false;
+    |                 ------------- `paste` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: `service-compositor` (bin "service-compositor") generated 4 warnings (run `cargo fix --bin "service-compositor" -p service-compositor` to apply 1 suggestion)
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:128:24
+    |
+128 |     BackgroundPipeline(Vec<Cmd>),
+    |     ------------------ ^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+128 -     BackgroundPipeline(Vec<Cmd>),
+128 +     BackgroundPipeline(()),
+    |
+
+warning: function `run_rows` is never used
+   --> cells/tools/cellbox/src/typed.rs:881:8
+    |
+881 | pub fn run_rows(
+    |        ^^^^^^^^
+
+warning: `service-input` (bin "service-input") generated 1 warning
+warning: `app-cellbox` (bin "cellbox") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 34.06s
+   Compiling core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling app-init v0.1.0 (/home/dmin/cellos/cells/tools/init)
+   Compiling syn v3.0.3
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.19
+   Compiling compiler_builtins v0.1.160 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling alloc v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling libm v0.2.16
+   Compiling thiserror v2.0.19
+   Compiling scopeguard v1.2.0
+   Compiling byteorder v1.5.0
+   Compiling winnow v1.0.4
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling winnow v0.7.15
+   Compiling tinyvec v1.13.3
+   Compiling stable_deref_trait v1.2.1
+   Compiling foldhash v0.1.5
+   Compiling spin v0.9.9
+   Compiling embedded-io v0.7.1
+   Compiling ocel-service-proto v0.1.0 (/home/dmin/cellos/libs/ocel-service-proto)
+   Compiling cobs v0.3.0
+   Compiling lock_api v0.4.14
+   Compiling hashbrown v0.15.5
+   Compiling hash32 v0.3.1
+   Compiling heapless v0.8.0
+   Compiling spinning_top v0.2.5
+   Compiling linked_list_allocator v0.10.6
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling unicode-normalization v0.1.25
+   Compiling core_maths v0.1.1
+   Compiling ab_glyph_rasterizer v0.1.10
+   Compiling ttf-parser v0.25.1
+   Compiling owned_ttf_parser v0.25.1
+   Compiling serde_spanned v1.1.2
+   Compiling toml_datetime v0.7.5+spec-1.1.0
+   Compiling ab_glyph v0.2.32
+   Compiling toml v0.9.12+spec-1.1.0
+   Compiling postcard v1.1.3
+   Compiling ocel-pdf-proto v0.1.0 (/home/dmin/cellos/libs/ocel-pdf-proto)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling dom-arena v0.1.0 (/home/dmin/cellos/libs/dom-arena)
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling cellos-boot-config v0.1.0 (/home/dmin/cellos/libs/boot-config)
+    Finished `release` profile [optimized] target(s) in 14.64s
+==> Signing with the private key (policy check inside cellos-sign)
+NOTE: allowlist entries overdue for re-review (past `review_by`, or older than `max_age_days` when they set none):
+  app-c-math-smoke (approved 2026-07-14, 102d ago)
+  app-mlibc-smoke (approved 2026-07-14, 102d ago)
+  app-posix-shim-test (approved 2026-07-14, 102d ago)
+  audio-demo (approved 2026-07-14, 102d ago)
+  cells/demos/audio-demo/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/cfi-test/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/doom/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/tetris-c/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/tetris-lua/src/ffi.rs (approved 2026-07-14, 102d ago)
+  cells/demos/tetris-lua/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/e1000/src/controller.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/nvme/src/controller.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/nvme/src/dispatch.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/nvme/src/queue.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-blk/src/device.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-gpu/src/cursor.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-gpu/src/display.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-net/src/device.rs (approved 2026-07-14, 102d ago)
+  cells/guests/silo-guest/src/mailbox.rs (approved 2026-07-14, 102d ago)
+  cells/guests/silo-guest/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/bindings_io.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/bindings_net.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/bindings_vfs.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/ffi.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/repl_session.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/timer.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource/render.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/vmm.rs (approved 2026-07-14, 102d ago)
+  cells/services/input/src/virtio_device.rs (approved 2026-07-14, 102d ago)
+  cells/services/net/src/tls/socket.rs (approved 2026-07-14, 102d ago)
+  cells/services/net/src/tls/transport.rs (approved 2026-07-14, 102d ago)
+  cells/tests/c-math-smoke/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/tests/hypervisor-test/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/tests/mlibc-smoke/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/tests/posix-shim-test/src/main.rs (approved 2026-07-14, 102d ago)
+  cfi-test (approved 2026-07-14, 102d ago)
+  doom (approved 2026-07-14, 102d ago)
+  driver-e1000 (approved 2026-07-14, 102d ago)
+  driver-nvme (approved 2026-07-14, 102d ago)
+  driver-virtio-blk (approved 2026-07-14, 102d ago)
+  driver-virtio-gpu (approved 2026-07-14, 102d ago)
+  driver-virtio-net (approved 2026-07-14, 102d ago)
+  hypervisor-test (approved 2026-07-14, 102d ago)
+  lua (approved 2026-07-14, 102d ago)
+  service-compositor (approved 2026-07-14, 102d ago)
+  service-hypervisor (approved 2026-07-14, 102d ago)
+  service-input (approved 2026-07-14, 102d ago)
+  service-net (approved 2026-07-14, 102d ago)
+  silo-guest (approved 2026-07-14, 102d ago)
+  tetris-c (approved 2026-07-14, 102d ago)
+  tetris-lua (approved 2026-07-14, 102d ago)
+OK:   signed 13 cell(s) with the prod key after a passing F1/F5 check
+NOTE: allowlist entries overdue for re-review (past `review_by`, or older than `max_age_days` when they set none):
+  app-c-math-smoke (approved 2026-07-14, 102d ago)
+  app-mlibc-smoke (approved 2026-07-14, 102d ago)
+  app-posix-shim-test (approved 2026-07-14, 102d ago)
+  audio-demo (approved 2026-07-14, 102d ago)
+  cells/demos/audio-demo/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/cfi-test/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/doom/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/tetris-c/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/tetris-lua/src/ffi.rs (approved 2026-07-14, 102d ago)
+  cells/demos/tetris-lua/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/e1000/src/controller.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/nvme/src/controller.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/nvme/src/dispatch.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/nvme/src/queue.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-blk/src/device.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-gpu/src/cursor.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-gpu/src/display.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-net/src/device.rs (approved 2026-07-14, 102d ago)
+  cells/guests/silo-guest/src/mailbox.rs (approved 2026-07-14, 102d ago)
+  cells/guests/silo-guest/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/bindings_io.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/bindings_net.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/bindings_vfs.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/ffi.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/repl_session.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/timer.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource/render.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/vmm.rs (approved 2026-07-14, 102d ago)
+  cells/services/input/src/virtio_device.rs (approved 2026-07-14, 102d ago)
+  cells/services/net/src/tls/socket.rs (approved 2026-07-14, 102d ago)
+  cells/services/net/src/tls/transport.rs (approved 2026-07-14, 102d ago)
+  cells/tests/c-math-smoke/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/tests/hypervisor-test/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/tests/mlibc-smoke/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/tests/posix-shim-test/src/main.rs (approved 2026-07-14, 102d ago)
+  cfi-test (approved 2026-07-14, 102d ago)
+  doom (approved 2026-07-14, 102d ago)
+  driver-e1000 (approved 2026-07-14, 102d ago)
+  driver-nvme (approved 2026-07-14, 102d ago)
+  driver-virtio-blk (approved 2026-07-14, 102d ago)
+  driver-virtio-gpu (approved 2026-07-14, 102d ago)
+  driver-virtio-net (approved 2026-07-14, 102d ago)
+  hypervisor-test (approved 2026-07-14, 102d ago)
+  lua (approved 2026-07-14, 102d ago)
+  service-compositor (approved 2026-07-14, 102d ago)
+  service-hypervisor (approved 2026-07-14, 102d ago)
+  service-input (approved 2026-07-14, 102d ago)
+  service-net (approved 2026-07-14, 102d ago)
+  silo-guest (approved 2026-07-14, 102d ago)
+  tetris-c (approved 2026-07-14, 102d ago)
+  tetris-lua (approved 2026-07-14, 102d ago)
+OK:   signed 2 cell(s) with the prod key after a passing F1/F5 check
+==> Assembling private kernel_fs.img (boot config: terminal launch=click, no serial shell)
+Created FAT16 image at /tmp/cellbox-phase04-gui-kHOA/scratch/default-fs.img: 24 file(s), 6 director(ies), 24287 clusters.
+private services plan: ['compositor', 'input']
+private autoload plan: [('fb-console', '/bin/fb-console'), ('desktop', '/bin/desktop')]
+Created FAT16 image at /tmp/cellbox-phase04-gui-kHOA/embedded/kernel_fs.img: 24 file(s), 6 director(ies), 24287 clusters.
+==> Building private kernel (phase02-terminal-profile,phase03-filter-profile)
+   Compiling compiler_builtins v0.1.160 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling rustversion v1.0.23
+   Compiling serde_core v1.0.229
+   Compiling ident_case v1.0.1
+   Compiling strsim v0.11.1
+   Compiling fnv v1.0.7
+   Compiling memchr v2.8.3
+   Compiling anyhow v1.0.104
+   Compiling zmij v1.0.23
+   Compiling libc v0.2.189
+   Compiling thiserror v2.0.19
+   Compiling serde v1.0.229
+   Compiling camino v1.2.5
+   Compiling serde_json v1.0.151
+   Compiling itoa v1.0.18
+   Compiling regex-syntax v0.8.11
+   Compiling powerfmt v0.2.0
+   Compiling time-core v0.1.9
+   Compiling num_threads v0.1.7
+   Compiling deranged v0.5.8
+   Compiling num-conv v0.2.2
+   Compiling libm v0.2.16
+   Compiling hal-x86 v0.1.0 (/home/dmin/cellos/hal/arch/x86)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling crc32fast v1.5.0
+   Compiling aho-corasick v1.1.4
+   Compiling regex-automata v0.4.16
+   Compiling vergen-lib v9.1.0
+   Compiling vergen v9.1.0
+   Compiling vergen-lib v0.1.6
+   Compiling vergen-gitcl v1.0.8
+   Compiling cargo-platform v0.3.3
+   Compiling semver v1.0.28
+   Compiling syn v2.0.119
+   Compiling syn v3.0.3
+   Compiling regex v1.13.1
+   Compiling time v0.3.54
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling async-trait v0.1.91
+   Compiling darling_core v0.20.11
+   Compiling postcard-derive v0.2.2
+   Compiling zerocopy-derive v0.7.35
+   Compiling enumn v0.1.14
+   Compiling darling_macro v0.20.11
+   Compiling cargo_metadata v0.23.1
+   Compiling darling v0.20.11
+   Compiling derive_builder_core v0.20.2
+   Compiling derive_builder_macro v0.20.2
+   Compiling derive_builder v0.20.2
+   Compiling cellos-kernel v0.2.1 (/home/dmin/cellos/kernel)
+   Compiling alloc v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling bitflags v2.13.1
+   Compiling winnow v1.0.4
+   Compiling scopeguard v1.2.0
+   Compiling hal-arch-trait v0.1.0 (/home/dmin/cellos/hal/traits/arch)
+   Compiling cfg-if v1.0.4
+   Compiling critical-section v1.2.0
+   Compiling byteorder v1.5.0
+   Compiling winnow v0.7.15
+   Compiling log v0.4.33
+   Compiling volatile v0.4.6
+   Compiling const-default v1.0.0
+   Compiling zero v0.1.3
+   Compiling hal-soc-x86 v0.2.0 (/home/dmin/cellos/hal/soc/x86)
+   Compiling cellos-boards v0.2.0 (/home/dmin/cellos/boards)
+   Compiling ed25519-compact v2.3.1
+   Compiling cobs v0.3.0
+   Compiling lock_api v0.4.14
+   Compiling rlsf v0.2.3
+   Compiling xmas-elf v0.10.0
+   Compiling fatfs v0.4.0 (https://github.com/rafalh/rust-fatfs#c4b88477)
+   Compiling zerocopy v0.7.35
+   Compiling spinning_top v0.2.5
+   Compiling linked_list_allocator v0.10.6
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling hal-paging v0.1.0 (/home/dmin/cellos/hal/traits/paging)
+   Compiling hal-hypervisor v0.1.0 (/home/dmin/cellos/hal/traits/hypervisor)
+   Compiling hal-traits-mmc v0.1.0 (/home/dmin/cellos/hal/traits/mmc)
+   Compiling hal-uart v0.1.0 (/home/dmin/cellos/hal/traits/uart)
+   Compiling hal-display v0.1.0 (/home/dmin/cellos/hal/traits/display)
+   Compiling hal-interrupt v0.1.0 (/home/dmin/cellos/hal/traits/interrupt)
+   Compiling hal-timer v0.1.0 (/home/dmin/cellos/hal/traits/timer)
+   Compiling virtio-drivers v0.7.5 (/home/dmin/cellos/kernel/third_party/virtio_drivers)
+   Compiling hal-core v0.2.0 (/home/dmin/cellos/hal/core)
+   Compiling toml_datetime v0.7.5+spec-1.1.0
+   Compiling serde_spanned v1.1.2
+   Compiling toml v0.9.12+spec-1.1.0
+   Compiling postcard v1.1.3
+   Compiling cellos-boot-config v0.1.0 (/home/dmin/cellos/libs/boot-config)
+warning: field `reference` is never read
+  --> kernel/src/task/cell_session.rs:76:17
+   |
+76 | struct Intent { reference: Ref, issuer: Binding, writers: [Ref; 2] }
+   |        ------   ^^^^^^^^^
+   |        |
+   |        field in this struct
+   |
+   = note: `Intent` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `expected_epoch` and `seal_len` are never read
+  --> kernel/src/task/cell_session.rs:86:40
+   |
+85 | struct Receipt { reference: Ref, prepared: Ref, child: Child, operation: Ref, issuer: Binding,
+   |        ------- fields in this struct
+86 |     kind: u16, slot: u16, object: Ref, expected_epoch: u64, next_epoch: u64,
+   |                                        ^^^^^^^^^^^^^^
+87 |     digest: [u8; 32], seal: [u8; 256], seal_len: usize, state: u32,
+   |                                        ^^^^^^^^
+
+warning: fields `slot` and `owner_service` are never read
+  --> kernel/src/task/child_context.rs:12:9
+   |
+ 9 | pub(crate) struct Grant {
+   |                   ----- fields in this struct
+...
+12 |     pub slot: u16,
+   |         ^^^^
+13 |     pub owner_service: u64,
+   |         ^^^^^^^^^^^^^
+   |
+   = note: `Grant` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `cellos-kernel` (bin "cellos-kernel") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 28.94s
+==> Building private ISO
+[make-iso] Building BIOS+UEFI ISO: /tmp/cellbox-phase04-gui-kHOA/phase04-gui.iso
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Drive current: -outdev 'stdio:/tmp/cellbox-phase04-gui-kHOA/phase04-gui.iso'
+Media current: stdio file, overwriteable
+Media status : is blank
+Media summary: 0 sessions, 0 data blocks, 0 data,  760g free
+Added to ISO image: directory '/'='/tmp/cellbox-phase04-gui-kHOA/iso-root'
+xorriso : UPDATE :      10 files added in 1 seconds
+xorriso : UPDATE :      10 files added in 1 seconds
+ISO image produced: 9494 sectors
+Written to medium : 9494 sectors at LBA 0
+Writing to 'stdio:/tmp/cellbox-phase04-gui-kHOA/phase04-gui.iso' completed successfully.
+
+ISO_SIZE=19443712 bytes
+ISO_READY=/tmp/cellbox-phase04-gui-kHOA/phase04-gui.iso
+==> Recording provenance
+{
+ "cargo_lock_sha256": "ae625e1d2e8e8b556e71670bbb2c428483aa0c91d16cf1c3042882b2ccf45aa9",
+ "signed_cells_sha256": {
+  "app-init": "45ab413ebae40dda374f432aeaf029b6fcb59289ae35111dfbb78b93d47ceb7e",
+  "cellbox": "646d77c88b26d87b91f38b72a464f8e89640cfdcb41ea1d56b1154d8fa56e0ab",
+  "terminal": "95bde0a09fc7eafb5c2f09376793a9e5f061c65c0827fdeae5a9c919779a43c6",
+  "service-vfs": "77fa32587c160734d23162a2ba50834d817aa3644db87d09c1d6142420f26a41",
+  "service-config": "c091fbb094e432340f5870d1b23b0cbfee4203f22b2be4e247845e99100ef0d3",
+  "service-input": "ecc008ac79395d33f73c1e5b229b02a829bc637142d4ae462e45c144c928b3c3",
+  "platform": "7bb33209506d2de4e1324a60fd1517bdaf1e4a9a51b6ac7b510553f70d9a064f",
+  "service-compositor": "793ea36b2eca3a9616f1f1c20851559341b1f726f2098c6dc0f8ffbb7f6dd65b",
+  "fb-console": "0cc03b2c8cafd9e88cfe91e9667656f92ae48d7a4a98ada76c6037d07e84a460",
+  "desktop": "16d1aa6693f2860e6d39b25f9d78d78b25e8797cd72eed0f42b1a53763394c4d",
+  "files": "fd5cf49e92a1232f8aa6e0674e1614943121244557e7da2fe361d17771859781",
+  "ls": "abf4b85ca5bc24da0153a88a98b0b16fe825bd2559c86b827ef663b9a33aba5a",
+  "cat": "8fc21d7d5c1d132a47b8c6f6d2b348888d941ea4d5814ddea82d7162b5ba2763",
+  "echo": "4acd81f771784afa35723885484ca4f6f3505b4fb805121a0f00270e40782d24",
+  "phase03-filter": "b7ce7635bfa22fbb0375f4349ff930d920df376b1e715fa65261217da1927b54"
+ },
+ "init_sha256": "45ab413ebae40dda374f432aeaf029b6fcb59289ae35111dfbb78b93d47ceb7e",
+ "kernel_fs_img_sha256": "36c0ae4a43de27b457b2ab44c9aad8600caf1cf421968efcc8d41152039620d4",
+ "kernel_sha256": "d3dba6c9f29ec40ba3877916bd83c353d6c9bd0c662a98b7be15fd5bee147d54",
+ "iso_sha256": "fe1f7f4e525a8eaf42081f2f5d7109d4d7e80dad8432e3ab4cd1c352ff8ad42f",
+ "autoload_toml_sha256": "8a8f54660dc88e80f685b65fc6fbee0a7168fb5f77b551340b8f72c6605894d8",
+ "services_toml_sha256": "67c55680f0eb19d2c24c302afc9edb64f8c734d4115ceb84b38b8a8776456074",
+ "trusted_key_identity_sha256": "6a3c027cc7b19d7d403c8a68ff53512cfa1faa891be9e125047f8d9464af2c63",
+ "glyph_renderer_sha256": "f56b3aeb1e54d6a16fd5c398d5dd4420b84b37ca1060d31eb7f70c16de320036"
+}
+==> Booting private ISO and judging the GUI (owned QEMU only, networking disabled)
+PASS screen-1280x800
+PASS no-window-before-launch
+PASS window-located
+PASS GUI-2-prompt-matches-exactly
+PASS GUI-2-control-pre-launch-region-differs
+PASS GUI-2-control-wrong-prompt-differs
+PASS GUI-2-cursor-cell
+PASS GUI-3-echo-typed-line-exact
+PASS GUI-3-echo-output-exact
+PASS GUI-3-echo-control-before-frame-differs
+PASS GUI-3-echo-control-one-char-change-differs
+PASS GUI-3-echo-before-after-window-pixels-changed
+PASS GUI-3-stock-echo-typed-line-exact
+PASS GUI-3-stock-echo-output-exact
+PASS GUI-3-stock-echo-control-before-frame-differs
+PASS GUI-3-stock-echo-control-one-char-change-differs
+PASS GUI-3-stock-echo-before-after-window-pixels-changed
+PASS GUI-3-stock-ls-typed-line-exact
+PASS GUI-3-stock-ls-output-exact
+PASS GUI-3-stock-ls-control-before-frame-differs
+PASS GUI-3-stock-ls-control-one-char-change-differs
+PASS GUI-3-stock-ls-before-after-window-pixels-changed
+PASS GUI-3-stock-cat-typed-line-exact
+PASS GUI-3-stock-cat-output-exact
+PASS GUI-3-stock-cat-control-before-frame-differs
+PASS GUI-3-stock-cat-control-one-char-change-differs
+PASS GUI-3-stock-cat-before-after-window-pixels-changed
+PASS GUI-4-stderr-01-typed-line-exact
+PASS GUI-4-stderr-01-output-exact
+PASS GUI-4-stderr-01-control-before-frame-differs
+PASS GUI-4-stderr-01-control-one-char-change-differs
+PASS GUI-4-stderr-01-before-after-window-pixels-changed
+PASS GUI-4-stderr-02-typed-line-exact
+PASS GUI-4-stderr-02-output-exact
+PASS GUI-4-stderr-02-control-before-frame-differs
+PASS GUI-4-stderr-02-control-one-char-change-differs
+PASS GUI-4-stderr-02-before-after-window-pixels-changed
+PASS GUI-4-stderr-03-typed-line-exact
+PASS GUI-4-stderr-03-output-exact
+PASS GUI-4-stderr-03-control-before-frame-differs
+PASS GUI-4-stderr-03-control-one-char-change-differs
+PASS GUI-4-stderr-03-before-after-window-pixels-changed
+PASS GUI-4-stderr-04-typed-line-exact
+PASS GUI-4-stderr-04-output-exact
+PASS GUI-4-stderr-04-control-before-frame-differs
+PASS GUI-4-stderr-04-control-one-char-change-differs
+PASS GUI-4-stderr-04-before-after-window-pixels-changed
+PASS GUI-4-stderr-05-typed-line-exact
+PASS GUI-4-stderr-05-output-exact
+PASS GUI-4-stderr-05-control-before-frame-differs
+PASS GUI-4-stderr-05-control-one-char-change-differs
+PASS GUI-4-stderr-05-before-after-window-pixels-changed
+PASS GUI-4-stderr-06-typed-line-exact
+PASS GUI-4-stderr-06-output-exact
+PASS GUI-4-stderr-06-control-before-frame-differs
+PASS GUI-4-stderr-06-control-one-char-change-differs
+PASS GUI-4-stderr-06-before-after-window-pixels-changed
+PASS GUI-4-stderr-07-typed-line-exact
+PASS GUI-4-stderr-07-output-exact
+PASS GUI-4-stderr-07-control-before-frame-differs
+PASS GUI-4-stderr-07-control-one-char-change-differs
+PASS GUI-4-stderr-07-before-after-window-pixels-changed
+PASS GUI-4-stderr-08-typed-line-exact
+PASS GUI-4-stderr-08-output-exact
+PASS GUI-4-stderr-08-control-before-frame-differs
+PASS GUI-4-stderr-08-control-one-char-change-differs
+PASS GUI-4-stderr-08-before-after-window-pixels-changed
+PASS GUI-4-stderr-09-typed-line-exact
+PASS GUI-4-stderr-09-output-exact
+PASS GUI-4-stderr-09-control-before-frame-differs
+PASS GUI-4-stderr-09-control-one-char-change-differs
+PASS GUI-4-stderr-09-before-after-window-pixels-changed
+PASS GUI-4-stderr-10-typed-line-exact
+PASS GUI-4-stderr-10-output-exact
+PASS GUI-4-stderr-10-control-before-frame-differs
+PASS GUI-4-stderr-10-control-one-char-change-differs
+PASS GUI-4-stderr-10-before-after-window-pixels-changed
+PASS GUI-4-stderr-all-iterations-before-prompt
+PASS GUI-4-status-of-failure-typed-line-exact
+PASS GUI-4-status-of-failure-output-exact
+PASS GUI-4-status-of-failure-control-before-frame-differs
+PASS GUI-4-status-of-failure-control-one-char-change-differs
+PASS GUI-4-status-of-failure-before-after-window-pixels-changed
+PASS C5-1-mkdir-typed-line-exact
+PASS C5-1-mkdir-output-exact
+PASS C5-1-mkdir-control-before-frame-differs
+PASS C5-1-mkdir-control-one-char-change-differs
+PASS C5-1-mkdir-before-after-window-pixels-changed
+PASS C5-1-write-typed-line-exact
+PASS C5-1-write-output-exact
+PASS C5-1-write-control-before-frame-differs
+PASS C5-1-write-control-one-char-change-differs
+PASS C5-1-write-before-after-window-pixels-changed
+PASS C5-2-files-lists-a-txt-exact
+PASS C5-2-files-lists-a-txt-control-one-char-change-differs
+PASS C5-2-files-lists-a-txt-control-before-frame-differs
+PASS C5-3-files-mkdir-exact
+PASS C5-3-files-mkdir-control-one-char-change-differs
+PASS C5-3-files-mkdir-control-before-frame-differs
+PASS C5-3-files-copy-exact
+PASS C5-3-files-copy-control-one-char-change-differs
+PASS C5-3-files-copy-control-before-frame-differs
+PASS C5-3-files-open-c5new-exact
+PASS C5-3-files-open-c5new-control-one-char-change-differs
+PASS C5-3-files-open-c5new-control-before-frame-differs
+PASS C5-3-files-paste-exact
+PASS C5-3-files-paste-control-one-char-change-differs
+PASS C5-3-files-paste-control-before-frame-differs
+PASS C5-3-cli-ls-copy-typed-line-exact
+PASS C5-3-cli-ls-copy-output-exact
+PASS C5-3-cli-ls-copy-control-before-frame-differs
+PASS C5-3-cli-ls-copy-control-one-char-change-differs
+PASS C5-3-cli-ls-copy-before-after-window-pixels-changed
+PASS C5-3-cli-cat-copy-typed-line-exact
+PASS C5-3-cli-cat-copy-output-exact
+PASS C5-3-cli-cat-copy-control-before-frame-differs
+PASS C5-3-cli-cat-copy-control-one-char-change-differs
+PASS C5-3-cli-cat-copy-before-after-window-pixels-changed
+PASS C5-4-files-delete-file-exact
+PASS C5-4-files-delete-file-control-one-char-change-differs
+PASS C5-4-files-delete-file-control-before-frame-differs
+PASS C5-4-cli-ls-file-gone-typed-line-exact
+PASS C5-4-cli-ls-file-gone-output-exact
+PASS C5-4-cli-ls-file-gone-control-before-frame-differs
+PASS C5-4-cli-ls-file-gone-control-one-char-change-differs
+PASS C5-4-cli-ls-file-gone-before-after-window-pixels-changed
+PASS C5-4-files-up-exact
+PASS C5-4-files-up-control-one-char-change-differs
+PASS C5-4-files-up-control-before-frame-differs
+PASS C5-4-files-delete-folder-exact
+PASS C5-4-files-delete-folder-control-one-char-change-differs
+PASS C5-4-files-delete-folder-control-before-frame-differs
+PASS C5-4-cli-ls-folder-gone-typed-line-exact
+PASS C5-4-cli-ls-folder-gone-output-exact
+PASS C5-4-cli-ls-folder-gone-control-before-frame-differs
+PASS C5-4-cli-ls-folder-gone-control-one-char-change-differs
+PASS C5-4-cli-ls-folder-gone-before-after-window-pixels-changed
+PASS C5-5-files-srv-cellos-denied-exact
+PASS C5-5-files-srv-cellos-denied-control-one-char-change-differs
+PASS C5-5-files-srv-cellos-denied-control-before-frame-differs
+PASS C5-6-spotlight-shutdown-no-match-exact
+PASS C5-6-spotlight-shutdown-no-match-control-one-char-change-differs
+PASS C5-6-spotlight-shutdown-no-match-control-before-frame-differs
+PASS C5-6-spotlight-reboot-no-match-exact
+PASS C5-6-spotlight-reboot-no-match-control-one-char-change-differs
+PASS C5-6-spotlight-reboot-no-match-control-before-frame-differs
+PASS C5-6-spotlight-system-no-power-exact
+PASS C5-6-spotlight-system-no-power-control-one-char-change-differs
+PASS C5-6-spotlight-system-no-power-control-before-frame-differs
+PASS C5-6-control-removed-power-rows-would-differ
+PASS VT-1-alt-enter-typed-line-exact
+PASS VT-1-alt-enter-output-exact
+PASS VT-1-alt-enter-control-before-frame-differs
+PASS VT-1-alt-enter-control-one-char-change-differs
+PASS VT-1-alt-enter-before-after-window-pixels-changed
+PASS VT-2-alt-exit-typed-line-exact
+PASS VT-2-alt-exit-output-exact
+PASS VT-2-alt-exit-control-before-frame-differs
+PASS VT-2-alt-exit-control-one-char-change-differs
+PASS VT-2-alt-exit-before-after-window-pixels-changed
+PASS VT-3-sample-typed-line-exact
+PASS VT-3-sample-output-exact
+PASS VT-3-sample-control-before-frame-differs
+PASS VT-3-sample-control-one-char-change-differs
+PASS VT-3-sample-control-bold-dropped-differs
+PASS VT-3-sample-control-inverse-dropped-differs
+PASS VT-3-sample-before-after-window-pixels-changed
+PASS VT-4-clear-typed-line-exact
+PASS VT-4-clear-output-exact
+PASS VT-4-clear-control-before-frame-differs
+PASS VT-4-clear-control-one-char-change-differs
+PASS VT-4-clear-before-after-window-pixels-changed
+PASS S53C-cd-typed-line-exact
+PASS S53C-cd-output-exact
+PASS S53C-cd-control-before-frame-differs
+PASS S53C-cd-control-one-char-change-differs
+PASS S53C-cd-before-after-window-pixels-changed
+PASS S53C-pwd-before-close-typed-line-exact
+PASS S53C-pwd-before-close-output-exact
+PASS S53C-pwd-before-close-control-before-frame-differs
+PASS S53C-pwd-before-close-control-one-char-change-differs
+PASS S53C-pwd-before-close-before-after-window-pixels-changed
+PASS S53C-serial:frontend-released-on-window-close
+PASS S53C-serial:window-re-created-and-frontend-re-attached
+PASS S53C-serial:shell-observed-Lost(4)-and-waits
+PASS S53C-serial:shell-observed-the-re-attach
+PASS S53C-release-before-reattach
+PASS S53C-reopened-screen-exact
+PASS S53C-control-one-char-change-differs
+PASS S53C-window-same-origin
+PASS S53C-pwd-after-reattach-typed-line-exact
+PASS S53C-pwd-after-reattach-output-exact
+PASS S53C-pwd-after-reattach-control-before-frame-differs
+PASS S53C-pwd-after-reattach-control-one-char-change-differs
+PASS S53C-pwd-after-reattach-before-after-window-pixels-changed
+PASS S53C-history-recalled-exact
+PASS S53C-history-rerun-exact
+PASS S53C-control-before-frame-differs
+PASS S53C-no-second-banner
+PASS HOSTILE-0-clear-typed-line-exact
+PASS HOSTILE-0-clear-output-exact
+PASS HOSTILE-0-clear-control-before-frame-differs
+PASS HOSTILE-0-clear-control-one-char-change-differs
+PASS HOSTILE-0-clear-before-after-window-pixels-changed
+PASS HOSTILE-1-history-clear-typed-line-exact
+PASS HOSTILE-1-history-clear-output-exact
+PASS HOSTILE-1-history-clear-control-before-frame-differs
+PASS HOSTILE-1-history-clear-control-one-char-change-differs
+PASS HOSTILE-1-history-clear-before-after-window-pixels-changed
+PASS HOSTILE-2-cat-typed-line-exact
+PASS HOSTILE-2-cat-output-exact
+PASS HOSTILE-2-cat-control-before-frame-differs
+PASS HOSTILE-2-cat-control-one-char-change-differs
+PASS HOSTILE-2-cat-control-params17-bold-red-differs
+PASS HOSTILE-2-cat-before-after-window-pixels-changed
+PASS HOSTILE-3-echo-as-typed-typed-line-exact
+PASS HOSTILE-3-echo-as-typed-output-exact
+PASS HOSTILE-3-echo-as-typed-control-before-frame-differs
+PASS HOSTILE-3-echo-as-typed-control-one-char-change-differs
+PASS HOSTILE-3-echo-as-typed-before-after-window-pixels-changed
+PASS HOSTILE-4-history-typed-line-exact
+PASS HOSTILE-4-history-output-exact
+PASS HOSTILE-4-history-control-before-frame-differs
+PASS HOSTILE-4-history-control-one-char-change-differs
+PASS HOSTILE-4-history-control-history-not-cleared-differs
+PASS HOSTILE-4-history-before-after-window-pixels-changed
+PASS TOP-0-typed-line-exact
+PASS TOP-1-last-column-inked-every-row
+PASS TOP-1-control-prompt-last-column-blank
+PASS TOP-1-title-row-accent-all-cells
+PASS TOP-1-status-row-surface-all-cells
+PASS TOP-2-left-border-no-gap
+PASS TOP-2-right-border-no-gap
+PASS TOP-2-bottom-border-no-gap
+PASS TOP-2-control-scan-finds-prompt-row-gap
+PASS TOP-3-control-band-on-first-data-row
+PASS TOP-3-down-moves-band-one-row
+PASS TOP-3-enter-band-first-row
+PASS TOP-3-enter-title-region-changes
+PASS TOP-4-restored-prompt-exact
+PASS TOP-4-control-one-char-change-differs
+PASS TOP-5-status-typed-line-exact
+PASS TOP-5-status-output-exact
+PASS TOP-5-status-control-before-frame-differs
+PASS TOP-5-status-control-one-char-change-differs
+PASS TOP-5-status-before-after-window-pixels-changed
+PASS GUI-4-control-producer-still-running-before-ctrl-c
+PASS GUI-4-ctrl-c-output-stops-prompt-recovered
+PASS GUI-4-ctrl-c-status-130-exact
+PASS GUI-4-control-status-0-differs
+PASS window-close-control
+PASS no-command-uart:echo
+PASS no-command-uart:stock-echo
+PASS no-command-uart:ls-alpha
+PASS no-command-uart:ls-beta
+PASS no-command-uart:cat-one
+PASS no-command-uart:cat-two
+PASS no-command-uart:stderr
+PASS no-command-uart:ctrl-c-status
+PASS no-command-uart:typed-command
+PASS no-command-uart:shell-banner
+PASS no-command-uart:shell-prompt
+PASS no-command-uart:c5-typed-command
+PASS no-command-uart:vt-typed-command
+PASS no-command-uart:vt-sample-output
+PASS no-command-uart:vt-hostile-output
+PASS no-command-uart:hostile-echo
+PASS no-command-uart:hostile-clipboard
+PASS no-command-uart:hostile-link
+PASS no-command-uart:hostile-title
+PASS uart-terminal-ready-once
+PASS uart-s53c-one-release
+PASS uart-s53c-one-reattach
+PASS uart-s53c-shell-reattach-once
+PASS uart-files-ready-once
+PASS no-spotlight-power-claim
+PASS no-key-material-in-log
+PASS no-launch-deny
+PASS no-panic-or-fault
+PASS: 279 GUI checks
+==> Canonical artifact hashes after the run (must equal the 'before' record)
+PASS: canonical cellbox/terminal/kernel_fs.img hashes unchanged
+64eb28f3be3d08bf2560d6eb0b58bee4a33ff8ea3439bcd5ed6e1ccc42f84a39  /home/dmin/cellos/target/x86_64-unknown-none/release/cellbox
+636497acc2bdf735471173c5c428e61d16b1d8c870935cfe868e6d0120e52fa2  /home/dmin/cellos/target/x86_64-unknown-none/release/terminal
+447d0348735a25e8b396c11c0091ff3d214b0c0b392043bb0515d4104a298e2c  /home/dmin/cellos/kernel/src/embedded-x86_64/kernel_fs.img

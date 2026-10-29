@@ -1,0 +1,17 @@
+[package]
+name = "s0-subset"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+[lib]
+path = "src/lib.rs"
+[dependencies]
+grep-matcher = { package = "s0-matcher", path = "../matcher" }
+grep-regex = { package = "s0-regex", path = "../regex" }
+memchr = { version = "=2.8.3", default-features = false, features = ["alloc"] }
+aho-corasick = { version = "=1.1.4", default-features = false, features = ["perf-literal"] }
+regex-automata = { version = "=0.4.16", default-features = false, features = ["alloc", "syntax", "meta", "nfa", "hybrid", "dfa-onepass", "perf", "unicode"] }
+regex-syntax = { version = "=0.8.11", default-features = false, features = ["unicode"] }
+log = { version = "=0.4.33", default-features = false }
+bstr = { version = "=1.13.1", default-features = false, features = ["alloc"] }

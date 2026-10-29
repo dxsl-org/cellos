@@ -1,0 +1,19 @@
+#![no_std]
+extern crate alloc;
+use grep_matcher::Matcher;
+
+/// Forces codegen of the adapted grep-regex/grep-matcher path through a real
+/// line-oriented matcher build and search.
+pub fn probe(pattern: &str, haystack: &[u8]) -> Option<(usize, usize)> {
+    let m = grep_regex::RegexMatcherBuilder::new()
+        .case_smart(true)
+        .line_terminator(Some(b'\n'))
+        .build(pattern)
+        .ok()?;
+    let found = m.find(haystack).ok()??;
+    let _ = bstr::ByteSlice::find(haystack, b"x");
+    let _ = aho_corasick::AhoCorasick::new(["a", "b"]).ok()?;
+    let _ = memchr::memchr(b'\n', haystack);
+    log::trace!("probe");
+    Some((found.start(), found.end()))
+}

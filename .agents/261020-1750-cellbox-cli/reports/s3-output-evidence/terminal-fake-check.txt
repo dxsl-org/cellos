@@ -1,0 +1,2 @@
+scanned: cells/apps/terminal/Cargo.toml, cells/apps/terminal/build.rs, cells/apps/terminal/src/grid.rs, cells/apps/terminal/src/keymap.rs, cells/apps/terminal/src/main.rs, cells/apps/terminal/src/session.rs, cells/apps/terminal/src/sink.rs
+found: []

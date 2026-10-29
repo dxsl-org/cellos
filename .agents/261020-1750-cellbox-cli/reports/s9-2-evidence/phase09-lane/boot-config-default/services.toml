@@ -1,0 +1,25 @@
+# The host generator selects the entries for an image's packaging features and
+# actual artifacts. Edit these defaults, or set CELLOS_CONFIG_DIR to a directory
+# containing your own system.toml, services.toml and autoload.toml.
+version = 1
+
+# Hardware probe cells precede their consumers, but are not readiness dependencies:
+# a driver can exit normally when its hardware is absent.
+
+[[cells]]
+name = "e1000"
+path = "/bin/e1000"
+restart = "never"
+
+[[cells]]
+name = "input"
+path = "/bin/input"
+service_id = 3
+restart = "always"
+
+[[cells]]
+name = "net"
+path = "/bin/net"
+service_id = 2
+required = true
+restart = "always"

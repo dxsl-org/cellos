@@ -1,0 +1,27 @@
+{
+  "status": "private fixture provenance; not acceptance",
+  "source_head": "fabd6ab7e3f2d9ea90a931fe53b7d43e509888dd",
+  "rustc": "rustc 1.97.0-nightly (f53b654a8 2026-04-30)\nbinary: rustc\ncommit-hash: f53b654a8882fd5fc036c4ca7a4ff41ce32497a6\ncommit-date: 2026-04-30\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0-nightly\nLLVM version: 22.1.4\n",
+  "cargo_lock_sha256": "119fee53f7e9e17852435a15b829141b5a5b3fa92d324dcd3cc72346d11b8fa2",
+  "phase03_contract_sha256": "d318e63fae7da4e65ba581767f08c94cf6bb054e6cd3a4aff91169970f967c8a",
+  "kernel_features": "default+phase02-terminal-profile",
+  "signed_cells_sha256": {
+    "app-init": "2229afb9c30c7ff61639981bdbd2f95abd1cde38f14f5641de152f52510ea20e",
+    "app-shell": "8572d46d8a3094d1109f1ce40c859532c76d3708233483a25c6a198a796a510c",
+    "service-vfs": "07cf3fc8c79e034c84a518276017ad5d114d7e58d6f209717f915fbbe72da6ab",
+    "service-config": "dbc9a3fc68dea924bae6b7e509b19c44702dde5aa8550d934f57d90bf7f66620",
+    "service-input": "c8294e5d9032e797274e18f4148415b53e2c3ae89fa4ad991b21123e88dbd473",
+    "platform": "4524af837939d1f762a3ca88bd77116f56be80c2c5290da28e8ff5e4c30fd471",
+    "ls": "4d7977ac2b09f3dc4e966d4dda74936ccca5a799148be3c56e40f4f2b2db4a9e",
+    "cat": "33d46c3c9efdd7623cb8690b1255544d39003c3a84fb214f00e29baa6a9e2b89",
+    "echo": "a65c7e095e9bf0a1130f91f12e0642dad2514c8981221342018eaee5c8d2333b",
+    "ps": "c94de4da75c1ac05a94a14abe09623240a720c320ea73183e8e92da96ab4b206"
+  },
+  "init_sha256": "2229afb9c30c7ff61639981bdbd2f95abd1cde38f14f5641de152f52510ea20e",
+  "kernel_fs_img_sha256": "28645010f8f7f2d0654fa473da039928ed0e0f1ed354d1435b378a1c9d9a932a",
+  "kernel_sha256": "6f5a2b3106b032fed7f57945cf490af8e8a2784ce7ae0ef0bf501afd85f242da",
+  "iso_sha256": "36cd6b9005b2efd1ba1bb0ca05c3d4293cb9015b27b9af49534853765435fac0",
+  "trusted_key_identity_sha256": "7de0712271f48ef776cbed8972c5e7c351e0937b0f0c5bbdf34eb957ab6495c0",
+  "policy": "no /POLICY.BIN in the image; the kernel logs it absent and applies its development-permissive posture (dev-policy-key default)",
+  "signature_verification": "cellos-sign re-verifies each ELF after signing; kernel verifies at spawn (signing-required)"
+}

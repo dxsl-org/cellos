@@ -1,0 +1,678 @@
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+limine: Loading executable `boot():/boot/kernel.elf`...
+limine: Physical base:   0xe74e000
+limine: Virtual base:    0xffffffff80000000
+limine: Slide:           0x0
+limine: ELF entry point: 0xffffffff80000000
+limine: Base revision:   3
+limine: Requests count:  7
+limine: Top of HHDM:     0x40000000
+acpi: Found RSDP at 0xf52c0
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Mode was already set, perfect!
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+paging: 1GiB pages are supported!
+acpi: Found RSDP at 0xf52c0
+acpi: Found "APIC" at 0xffe21e9
+[x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64
+[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT
+[INFO] CET-IBT: unavailable
+[INFO] PKU: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[boot] kernel_phys_base=0x000000000e74e000
+[INFO] Frame allocator initialized
+[INFO] Initializing x86_64 paging (kernel PML4)...
+[INFO] x86_64 paging initialized
+[INFO] Activating x86_64 paging (mov cr3)...
+
+[kernel] x86_64 paging: PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x59000 — domain roots use tag 0 with a full CR3 flush)
+QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
+[INFO] x86 virt: root operation active (SVM)
+[INFO] Heap initialized
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] RAM Disk: read-only, 4096 KB (8192 sectors)
+[ INFO] VMware/QEMU absolute pointer enabled (EV_ABS guest pixels)
+[ INFO] UART Input Buffer Initialized
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ WARN] [x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 2 base=0x3e8 irq=4 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 3 base=0x2e8 irq=3 absent (16550 probe failed)
+[INFO] x86_64: ramdisk + UART RX IRQ initialised
+[ INFO] [pcie] ECAM fallback scan bus 0 @ 0xb0000000 (1 MiB window)
+[ INFO] [pcie] 00:00.0 vendor=8086 device=29c0 class=06:00:00 bar0=0x0
+[ INFO] [pcie] 00:01.0 vendor=1234 device=1111 class=03:00:00 bar0=0xfd000000
+[ INFO] [pcie] 00:1f.0 vendor=8086 device=2918 class=06:01:00 bar0=0x0
+[ INFO] [pcie] 00:1f.2 vendor=8086 device=2922 class=01:06:01 bar0=0x0
+[ INFO] [pcie] 00:1f.3 vendor=8086 device=2930 class=0c:05:00 bar0=0x0
+[ INFO] [pcie] ECAM scan complete: 5 device(s) found
+[ WARN] [vtd] no ACPI DMAR unit; using the board-declared q35 register base 0xfed90000 (fallback)
+[ INFO] [vtd] Intel VT-d not present (GCAP=0x0)
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 64
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [system-config] applied: logging=Info, default_cell_heap_mib=16
+[ INFO] [policy] no /POLICY.BIN in VIFS1 — absent
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] Thread 'thread' (ID 1): KStack 0x2143000-0x2155000, UStackTop 0x2169000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (no teardown for hypervisor authority)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x0000ff00 from task 9002
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000070 from task 9004
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0x215a000
+[ INFO] GRANT-RECLAIM-OWNED: PASS
+[ INFO] GRANT-RECLAIM-RECEIVED: PASS
+[ INFO] GRANT-RECLAIM-PINNED: PASS
+[INFO] grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)
+[ INFO] Thread 'thread' (ID 1): KStack 0x2143000-0x2155000, UStackTop 0x2169000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ERROR] [selftest] COMPLETION-QUEUE: FAIL — an older waiter erased its replacement
+[ERROR] [selftest] COMPLETION-QUEUE: FAIL
+[INFO] completion-queue self-test FAIL
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [x86-smp] topology online=1 processor_ids=0 qualified=yes
+[INFO] Tier 2 admission: ENABLED (development profile)
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[INFO] [boot] x86_64 Limine linear framebuffer mapped and registered
+[ INFO] [early] VIFS1-first /bin/platform <- ramdisk (38576 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x1000037E7 flags=R-X
+[ INFO] ELF LOAD: 0x1000037E8-0x100004658 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x100005250 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] ELF LOAD: 0x100106038-0x10010703C flags=R--
+[ INFO] [wx] 'platform': 6/264 cell pages lowered to read-only/execute-only
+[INFO] Platform Cell spawned (x86 PCIe ECAM scanner)
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x102000000-0x10204145A flags=R-X
+[ INFO] ELF LOAD: 0x102041460-0x10204DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10204E000-0x10204FA38 flags=RW-
+[ INFO] ELF LOAD: 0x102050000-0x102150031 flags=RW-
+[ INFO] ELF LOAD: 0x102150038-0x10215103C flags=R--
+[ INFO] [wx] 'init': 79/338 cell pages lowered to read-only/execute-only
+[ INFO] Successfully spawned init with complete root authority (tid=2)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+[ INFO] [sched] hart 0 dispatched a task
+USER: Init: Starting Cellos Orchestrator...
+[ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/block error=NotFound
+[ INFO] ELF LOAD: 0x104000000-0x104003D5A flags=R-X
+[ INFO] ELF LOAD: 0x104003D60-0x104005A00 flags=R--
+[ INFO] ELF LOAD: 0x104006000-0x1040063B8 flags=RW-
+[ INFO] ELF LOAD: 0x104007000-0x104107031 flags=RW-
+[ INFO] ELF LOAD: 0x104108000-0x10410803C flags=R--
+[ INFO] [wx] 'nvme': 7/265 cell pages lowered to read-only/execute-only
+USER: [platform] ECAM scan buses 0-255 starting
+USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
+USER: [platform] registered bus 0 device 1 function 0 class 3:0:0
+USER: [platform] registered bus 0 device 31 function 0 class 6:1:0
+USER: [platform] registered bus 0 device 31 function 2 class 1:6:1
+USER: [platform] registered bus 0 device 31 function 3 class 12:5:0
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ahci error=NotFound
+USER: [platform] ECAM scan complete
+[ INFO] Syscall::Exit: task 1 exited with code 0
+[ INFO] Syscall::Exit: task 3 exited with code 0
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (521456 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x10006643E flags=R-X
+[ INFO] ELF LOAD: 0x100066440-0x100069F90 flags=R--
+[ INFO] ELF LOAD: 0x10006A000-0x10006B808 flags=RW-
+[ INFO] ELF LOAD: 0x10006C000-0x10116C048 flags=RW-
+[ INFO] ELF LOAD: 0x10116C048-0x10116D03C flags=R--
+[ INFO] [wx] 'vfs': 107/4462 cell pages lowered to read-only/execute-only
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+[ INFO] [service-registry] 1 -> tid 4 (cell 1 gen 109)
+USER: [vfs] WARNING: FAT32 /mnt/sd mount failed
+USER: [vfs] WARNING: CellosFS open failed — volume unavailable
+USER: [vfs] WARNING: FAT32 /bin mount failed
+USER: [vfs] WARNING: CellosFS open failed — volume unavailable
+[ INFO] [loader] SpawnFromElf: /bin/e1000 (29752 bytes from grant)
+[ INFO] ELF LOAD: 0x104000000-0x10400240A flags=R-X
+[ INFO] ELF LOAD: 0x104002410-0x104003508 flags=R--
+[ INFO] ELF LOAD: 0x104004000-0x104004280 flags=RW-
+[ INFO] ELF LOAD: 0x104005000-0x1041053A1 flags=RW-
+[ INFO] ELF LOAD: 0x104106000-0x10410603C flags=R--
+[ INFO] [wx] 'e1000': 5/263 cell pages lowered to read-only/execute-only
+USER: Init: e1000 launched.
+[ INFO] [loader] SpawnFromElf: /bin/input (153440 bytes from grant)
+[ INFO] ELF LOAD: 0x106000000-0x1060191AA flags=R-X
+[ INFO] ELF LOAD: 0x1060191B0-0x10601CD20 flags=R--
+[ INFO] ELF LOAD: 0x10601D000-0x10601E0C0 flags=RW-
+[ INFO] ELF LOAD: 0x10601F000-0x10611F031 flags=RW-
+[ INFO] ELF LOAD: 0x10611F038-0x10612003C flags=R--
+[ INFO] [wx] 'input': 30/289 cell pages lowered to read-only/execute-only
+[ WARN] [input] registered input service TID 6
+USER: [input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing
+USER: [input] No VirtIO input device; relying on kernel push
+[ INFO] [service-registry] 3 -> tid 6 (cell 4 gen 111)
+USER: Init: input launched.
+[ INFO] [service-registry] 19 -> tid 2 (cell 2 gen 107)
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ai-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/vfs-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: Init: services spawned.
+USER: Init: service registry verified (init registration is publication, not application readiness).
+USER: Init: OS ready.
+[ INFO] Syscall::Exit: task 5 exited with code 0
+[ INFO] [loader] SpawnFromElf: /bin/cellbox (1271368 bytes from grant)
+[ INFO] ELF LOAD: 0x104000000-0x1040F72C6 flags=R-X
+[ INFO] ELF LOAD: 0x1040F72C8-0x10410BD10 flags=R--
+[ INFO] ELF LOAD: 0x10410C000-0x104112010 flags=RW-
+[ INFO] ELF LOAD: 0x104113000-0x1042130A2 flags=RW-
+[ INFO] ELF LOAD: 0x1042130A8-0x10421403C flags=R--
+[ INFO] [wx] 'cellbox': 269/533 cell pages lowered to read-only/execute-only
+USER: shell: starting
+USER: Init: cellbox launched.
+USER: Init: supervising services (auto-restart on crash)...
+USER: Init: service exited cleanly — policy says no restart.
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > echo 'p03-start'
+USER: p03-start
+USER: Cellos > ps --records | where tid '>=' int:0 | sort-by tid | select tid name | take 2 | to jsonl
+USER: {"tid":2,"name":"init"}
+USER: {"tid":4,"name":"vfs"}
+USER: Cellos > ps --records | where tid '>' uint:0 | sort-by tid --reverse | select tid | take 1 | to jsonl
+USER: {"tid":7}
+USER: Cellos > ps --records | where state '==' '"Running"' | select tid | take 1 > /tmp/p03.jsonl
+USER: Cellos > cat /tmp/p03.jsonl
+USER: {"cellbox":1,"value":["record",[["tid",["uint","7"]]]]}
+USER: Cellos > cat /tmp/p03.jsonl | from jsonl --typed | to text --field tid
+USER: 7
+USER: Cellos > ps --records | take 0 | to jsonl
+USER: Cellos > ls --records / | select name | take 3 | to json
+USER: [{"name":"bin"},{"name":"data"},{"name":"etc"}]
+USER: Cellos > ps --records | grep x > /tmp/p03-refused
+USER: shell: `grep` cannot consume records or bytes here: end the typed stages with `to json|jsonl|text`
+USER: Cellos > cat /tmp/p03-refused
+USER: cat: /tmp/p03-refused: No such file or directory
+USER: Cellos > ls --records | cd /tmp
+USER: shell: `cd` changes shell state and cannot run inside a pipeline
+USER: Cellos > echo 'a b' | from jsonl | to jsonl
+USER: shell: from: JSON parse error: line 1: unexpected character at byte 0
+USER: Cellos > ps --records | take 1 &
+USER: shell: background `&` is supported only for a single external command; the pipeline was not started
+USER: Cellos > ps --records | where name '>' int:1 | to jsonl
+USER: shell: where: type mismatch during comparison
+USER: Cellos > ps --records | select nosuchfield | take 1 | to jsonl
+USER: shell: select: field 'nosuchfield' not found
+USER: Cellos > top --records --frames 3 | take --frame 2 | to jsonl
+USER: {"frame":"begin","sample_id":7,"monotonic_ns":69349846270,"meta":{"schema":"top.cell.v1","provider_epoch":"18e1226095371f74","interval_ns":1004501190,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":4,"total_tasks":4,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":241848320,"mem_used_bytes":58609664,"mem_free_bytes":183238656,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":111,"root_tid":6,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1499054470,"cpu_tenths":16,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":112,"root_tid":7,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":475700800,"cpu_tenths":2,"cpu_quality":"ok","quota_bytes":18600,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":109,"root_tid":4,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":2906228790,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1089,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":387379690,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1364699,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: {"frame":"begin","sample_id":8,"monotonic_ns":70374471630,"meta":{"schema":"top.cell.v1","provider_epoch":"18e1226095371f74","interval_ns":1024625360,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":4,"total_tasks":4,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":241848320,"mem_used_bytes":58609664,"mem_free_bytes":183238656,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":111,"root_tid":6,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1516933370,"cpu_tenths":17,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":112,"root_tid":7,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":484115910,"cpu_tenths":8,"cpu_quality":"ok","quota_bytes":18600,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":109,"root_tid":4,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":2906228790,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1089,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":387379690,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1364699,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: Cellos > top --records | take 2
+USER: shell: take: input is a frame stream; use `take --frame`
+USER: Cellos > echo stfr=$?
+USER: stfr=2
+USER: Cellos > top --records --frames 2 | sort-by --frame --reverse cpu_tenths | to jsonl
+USER: {"frame":"begin","sample_id":10,"monotonic_ns":85868158940,"meta":{"schema":"top.cell.v1","provider_epoch":"18e1226095371f74","interval_ns":1000674550,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":4,"total_tasks":4,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":241848320,"mem_used_bytes":58609664,"mem_free_bytes":183238656,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":111,"root_tid":6,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1848463480,"cpu_tenths":16,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":112,"root_tid":7,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":569778160,"cpu_tenths":2,"cpu_quality":"ok","quota_bytes":18600,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":109,"root_tid":4,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":2906228790,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1089,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":387379690,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1364699,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: {"frame":"begin","sample_id":11,"monotonic_ns":86892899610,"meta":{"schema":"top.cell.v1","provider_epoch":"18e1226095371f74","interval_ns":1024740670,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":4,"total_tasks":4,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":241848320,"mem_used_bytes":58609664,"mem_free_bytes":183238656,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":111,"root_tid":6,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1868208160,"cpu_tenths":19,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":112,"root_tid":7,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":576284280,"cpu_tenths":6,"cpu_quality":"ok","quota_bytes":18600,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":109,"root_tid":4,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":2906228790,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1089,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":387379690,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1364699,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: Cellos > echo hi > /tmp/p03.txt
+USER: Cellos > cat /tmp/p03.txt
+USER: hi
+USER: Cellos > ps --records | select tid | take 500 | to jsonl
+USER: {"tid":2}
+USER: {"tid":4}
+USER: {"tid":6}
+USER: {"tid":7}
+USER: Cellos > echo x | /bin/p03-filter exit 0
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 8 exited with code 0
+USER: Cellos > echo st0=$?
+USER: st0=0
+USER: Cellos > echo x | /bin/p03-filter exit 7
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 9 exited with code 7
+USER: Cellos > echo st7=$?
+USER: st7=7
+USER: Cellos > echo x | /bin/p03-filter exit 200
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 10 exited with code 200
+USER: Cellos > echo st200=$?
+USER: st200=200
+USER: Cellos > echo x | /bin/p03-filter exit nope
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 11 exited with code 2
+USER: Cellos > echo stbad=$?
+USER: stbad=2
+USER: Cellos > echo x | /bin/p03-filter exit 7 | /bin/p03-filter cat
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x10A000000-0x10A00B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10A00B8A8-0x10A00CA90 flags=R--
+[ INFO] ELF LOAD: 0x10A00D000-0x10A00D468 flags=RW-
+[ INFO] ELF LOAD: 0x10A00E000-0x10A10E031 flags=RW-
+[ INFO] ELF LOAD: 0x10A10E038-0x10A10F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 13 exited with code 7
+[ INFO] Syscall::Exit: task 12 exited with code 0
+USER: shell: /bin/p03-filter exited with status 7
+USER: Cellos > echo stmid=$?
+USER: stmid=0
+USER: Cellos > ls --records / | select name | to jsonl | /bin/p03-filter noread
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 14 exited with code 0
+USER: Cellos > echo stnr1=$?
+USER: stnr1=0
+USER: Cellos > echo x | /bin/p03-filter noread
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 15 exited with code 0
+USER: Cellos > echo stnr2=$?
+USER: stnr2=0
+USER: Cellos > /bin/p03-filter endless | /bin/p03-filter noread
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x10A000000-0x10A00B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10A00B8A8-0x10A00CA90 flags=R--
+[ INFO] ELF LOAD: 0x10A00D000-0x10A00D468 flags=RW-
+[ INFO] ELF LOAD: 0x10A00E000-0x10A10E031 flags=RW-
+[ INFO] ELF LOAD: 0x10A10E038-0x10A10F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 16 exited with code 0
+USER: Cellos > echo stee=$?
+USER: stee=0
+USER: Cellos > /bin/p03-filter gen | /bin/p03-filter hex
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x10A000000-0x10A00B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10A00B8A8-0x10A00CA90 flags=R--
+[ INFO] ELF LOAD: 0x10A00D000-0x10A00D468 flags=RW-
+[ INFO] ELF LOAD: 0x10A00E000-0x10A10E031 flags=RW-
+[ INFO] ELF LOAD: 0x10A10E038-0x10A10F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 19 exited with code 0
+[ INFO] Syscall::Exit: task 18 exited with code 0
+USER: p03-hex len=6 hex=00ff41fe807a
+USER: Cellos > /bin/p03-filter gen | /bin/p03-filter cat | /bin/p03-filter hex
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x10A000000-0x10A00B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10A00B8A8-0x10A00CA90 flags=R--
+[ INFO] ELF LOAD: 0x10A00D000-0x10A00D468 flags=RW-
+[ INFO] ELF LOAD: 0x10A00E000-0x10A10E031 flags=RW-
+[ INFO] ELF LOAD: 0x10A10E038-0x10A10F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x10C000000-0x10C00B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10C00B8A8-0x10C00CA90 flags=R--
+[ INFO] ELF LOAD: 0x10C00D000-0x10C00D468 flags=RW-
+[ INFO] ELF LOAD: 0x10C00E000-0x10C10E031 flags=RW-
+[ INFO] ELF LOAD: 0x10C10E038-0x10C10F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 22 exited with code 0
+[ INFO] Syscall::Exit: task 21 exited with code 0
+[ INFO] Syscall::Exit: task 20 exited with code 0
+USER: p03-hex len=6 hex=00ff41fe807a
+USER: Cellos > echo abcXYZ-09 | /bin/p03-filter upper
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 23 exited with code 0
+USER: ABCXYZ-09
+USER: Cellos > ps --records | select tid | take 1 | to jsonl | /bin/p03-filter cat
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 24 exited with code 0
+USER: {"tid":2}
+USER: Cellos > /bin/p03-filter rows | from jsonl | to jsonl
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 25 exited with code 0
+USER: {"a":1}
+USER: {"a":2}
+USER: Cellos > /bin/p03-filter typed | from jsonl --typed | to text --field pid
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 26 exited with code 0
+USER: 7
+USER: 9
+USER: Cellos > echo '{"a":1}' | /bin/p03-filter cat | from jsonl | to jsonl
+USER: shell: `echo` output is bytes: `from json|jsonl` must directly follow it before any typed stage
+USER: Cellos > cat /tmp/p03.jsonl | /bin/p03-filter cat | from jsonl --typed | to text --field tid
+USER: shell: `cat` output is bytes: `from json|jsonl` must directly follow it before any typed stage
+USER: Cellos > top --records --frames 3 | to jsonl | /bin/p03-filter cat
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+USER: {"frame":"begin","sample_id":15,"monotonic_ns":214066518650,"meta":{"schema":"top.cell.v1","provider_epoch":"18e1226095371f74","interval_ns":1004240580,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":5,"total_tasks":5,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":241848320,"mem_used_bytes":60272640,"mem_free_bytes":181575680,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":109,"root_tid":4,"name":"vfs","name_truncated":false,"stUSER: ate":"Live","tasks":1,"cpu_ns":3983489350,"cpu_tenths":988,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":111,"root_tid":6,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":4691372940,"cpu_tenths":10,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":112,"root_tid":7,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1777235770,"cpu_tenths":1,"cUSER: pu_quality":"ok","quota_bytes":149663,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":387379690,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1364699,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":5,"generation":132,"root_tid":27,"name":"p03-filter","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1588030,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":936,"limit_bytes":167USER: 77216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: {"frame":"begin","sample_id":16,"monotonic_ns":215081501430,"meta":{"schema":"top.cell.v1","provider_epoch":"18e1226095371f74","interval_ns":1014982780,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":5,"total_tasks":5,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":241848320,"mem_used_bytes":60272640,"mem_free_bytes":181575680,"memory_interval":true}}
+USER: {"frame":"row","value":{"cellUSER: _id":1,"generation":109,"root_tid":4,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":4985083870,"cpu_tenths":986,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":111,"root_tid":6,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":4702252880,"cpu_tenths":10,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":112,"root_tid":7,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1779240200,"cpu_tenths":1,"cpu_quality":"ok","quota_bytes":149663,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"roUSER: ot_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":387379690,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1364699,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":5,"generation":132,"root_tid":27,"name":"p03-filter","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":2091920,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":936,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: {"frame":"begin","sample_id":17,"monotonic_[ INFO] Syscall::Exit: task 27 exited with code 0
+USER: ns":216096337760,"meta":{"schema":"top.cell.v1","provider_epoch":"18e1226095371f74","interval_ns":1014836330,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":5,"total_tasks":5,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":241848320,"mem_used_bytes":60272640,"mem_free_bytes":181575680,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":109,"root_tid":4,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":5985986750,"USER: cpu_tenths":986,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":111,"root_tid":6,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":4714061070,"cpu_tenths":11,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":112,"root_tid":7,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1781137320,"cpu_tenths":1,"cpu_quality":"ok","quota_bytes":149663,"limiUSER: t_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":387379690,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1364699,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":5,"generation":132,"root_tid":27,"name":"p03-filter","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":2320060,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":936,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unaUSER: vailable_fields":[],"dropped":0}
+USER: Cellos > cat /tmp/p03.txt | /bin/p03-filter cat
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 28 exited with code 0
+USER: hi
+USER: Cellos > echo ext-to-ext | /bin/p03-filter upper | /bin/p03-filter cat
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x10A000000-0x10A00B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10A00B8A8-0x10A00CA90 flags=R--
+[ INFO] ELF LOAD: 0x10A00D000-0x10A00D468 flags=RW-
+[ INFO] ELF LOAD: 0x10A00E000-0x10A10E031 flags=RW-
+[ INFO] ELF LOAD: 0x10A10E038-0x10A10F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 30 exited with code 0
+[ INFO] Syscall::Exit: task 29 exited with code 0
+USER: EXT-TO-EXT
+USER: Cellos > ls --records / | select name | to jsonl | /bin/p03-nosuchprog
+[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/p03-nosuchprog spawn_cap=false supervisor_cap=false
+USER: shell: cannot start /bin/p03-nosuchprog: Denied
+USER: Cellos > top --records --frames 100 | take --frame 2 | to jsonl | /bin/p03-filter cat
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+USER: {"frame":"begin","sample_id":19,"monotonic_ns":236884988790,"meta":{"schema":"top.cell.v1","provider_epoch":"18e1226095371f74","interval_ns":1004341730,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":5,"total_tasks":5,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":241848320,"mem_used_bytes":60272640,"mem_free_bytes":181575680,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":109,"root_tid":4,"name":"vfs","name_truncated":false,"stUSER: ate":"Live","tasks":1,"cpu_ns":6997701790,"cpu_tenths":985,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":111,"root_tid":6,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":5161805570,"cpu_tenths":12,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":112,"root_tid":7,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":2034212400,"cpu_tenths":1,"cUSER: pu_quality":"ok","quota_bytes":167480,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":387379690,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1364699,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":5,"generation":136,"root_tid":31,"name":"p03-filter","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1592480,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":936,"limit_bytes":167USER: 77216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: {"frame":"begin","sample_id":20,"monotonic_ns":237899702470,"meta":{"schema":"top.cell.v1","provider_epoch":"18e1226095371f74","interval_ns":1014713680,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":5,"total_tasks":5,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":241848320,"mem_used_bytes":60272640,"mem_free_bytes":181575680,"memory_interval":true}}
+USER: {"frame":"row","value":{"cellUSER: _id":1,"generation":109,"root_tid":4,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":7998307010,"cpu_tenths":986,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+[ INFO] Syscall::Exit: task 31 exited with code 0
+USER: {"frame":"row","value":{"cell_id":4,"generation":111,"root_tid":6,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":5173004890,"cpu_tenths":11,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":112,"root_tid":7,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":2036535840,"cpu_tenths":2,"cpu_quality":"ok","quota_bytes":167480,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"roUSER: ot_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":387379690,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":1364699,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":5,"generation":136,"root_tid":31,"name":"p03-filter","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":2178180,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":936,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: Cellos > top --records --frames 1000 | to jsonl | /bin/p03-filter upper
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+USER: {"FRAME":"BEGIN","SAMPLE_ID":22,"MONOTONIC_NS":247093309750,"META":{"SCHEMA":"TOP.CELL.V1","PROVIDER_EPOCH":"18E1226095371F74","INTERVAL_NS":1004328450,"ONLINE_CPUS":1,"CPU_UNIT":"CORE_TENTHS","CPU_AVAILABLE":TRUE,"TOTAL_CELLS":5,"TOTAL_TASKS":5,"GONE_CELLS":0,"GONE_TASKS":NULL,"MEM_STATE":"PRESENT","MEM_TOTAL_BYTES":241848320,"MEM_USED_BYTES":60272640,"MEM_FREE_BYTES":181575680,"MEMORY_INTERVAL":TRUE}}
+USER: {"FRAME":"ROW","VALUE":{"CELL_ID":1,"GENERATION":109,"ROOT_TID":4,"NAME":"VFS","NAME_TRUNCATED":FALSE,"STUSER: ATE":"LIVE","TASKS":1,"CPU_NS":9002911660,"CPU_TENTHS":988,"CPU_QUALITY":"OK","QUOTA_BYTES":0,"LIMIT_BYTES":16777216}}
+USER: {"FRAME":"ROW","VALUE":{"CELL_ID":4,"GENERATION":111,"ROOT_TID":6,"NAME":"INPUT","NAME_TRUNCATED":FALSE,"STATE":"LIVE","TASKS":1,"CPU_NS":5348726040,"CPU_TENTHS":9,"CPU_QUALITY":"OK","QUOTA_BYTES":0,"LIMIT_BYTES":16777216}}
+USER: {"FRAME":"ROW","VALUE":{"CELL_ID":3,"GENERATION":112,"ROOT_TID":7,"NAME":"CELLBOX","NAME_TRUNCATED":FALSE,"STATE":"LIVE","TASKS":1,"CPU_NS":2115170040,"CPU_TENTHS":1,"CPUSER: U_QUALITY":"OK","QUOTA_BYTES":165355,"LIMIT_BYTES":16777216}}
+USER: {"FRAME":"ROW","VALUE":{"CELL_ID":2,"GENERATION":107,"ROOT_TID":2,"NAME":"INIT","NAME_TRUNCATED":FALSE,"STATE":"LIVE","TASKS":1,"CPU_NS":387379690,"CPU_TENTHS":0,"CPU_QUALITY":"OK","QUOTA_BYTES":1364699,"LIMIT_BYTES":16777216}}
+USER: {"FRAME":"ROW","VALUE":{"CELL_ID":5,"GENERATION":137,"ROOT_TID":32,"NAME":"P03-FILTER","NAME_TRUNCATED":FALSE,"STATE":"LIVE","TASKS":1,"CPU_NS":1650280,"CPU_TENTHS":0,"CPU_QUALITY":"OK","QUOTA_BYTES":936,"LIMIT_BYTES":1677USER: 7216}}
+USER: {"FRAME":"END","COMPLETE":TRUE,"UNAVAILABLE_FIELDS":[],"DROPPED":0}
+USER: {"FRAME":"BEGIN","SAMPLE_ID":23,"MONOTONIC_NS":248108361150,"META":{"SCHEMA":"TOP.CELL.V1","PROVIDER_EPOCH":"18E1226095371F74","INTERVAL_NS":1015051400,"ONLINE_CPUS":1,"CPU_UNIT":"CORE_TENTHS","CPU_AVAILABLE":TRUE,"TOTAL_CELLS":5,"TOTAL_TASKS":5,"GONE_CELLS":0,"GONE_TASKS":NULL,"MEM_STATE":"PRESENT","MEM_TOTAL_BYTES":241848320,"MEM_USED_BYTES":60272640,"MEM_FREE_BYTES":181575680,"MEMORY_INTERVAL":TRUE}}
+USER: {"FRAME":"ROW","VALUE":{"CELL_USER: ID":1,"GENERATION":109,"ROOT_TID":4,"NAME":"VFS","NAME_TRUNCATED":FALSE,"STATE":"LIVE","TASKS":1,"CPU_NS":10002116880,"CPU_TENTHS":984,"CPU_QUALITY":"OK","QUOTA_BYTES":0,"LIMIT_BYTES":16777216}}
+USER: {"FRAME":"ROW","VALUE":{"CELL_ID":4,"GENERATION":111,"ROOT_TID":6,"NAME":"INPUT","NAME_TRUNCATED":FALSE,"STATE":"LIVE","TASKS":1,"CPU_NS":5361830690,"CPU_TENTHS":12,"CPU_QUALITY":"OK","QUOTA_BYTES":0,"LIMIT_BYTES":16777216}}
+USER: {"FRAME":"ROW","VALUE":{"CELL_ID":3,"GENERATION":112,"ROOT_TID":7,"NAME":"CELLBOX","NAME_TRUNCATED":FALSE,"STATE":"LIVE","TASKS":1,"CPU_NS":2117296230,"CPU_TENTHS":2,"CPU_QUALITY":"OK","QUOTA_BYTES":165355,"LIMIT_BYTES":16777216}}
+USER: {"FRAME":"ROW","VALUE":{"CELL_ID":2,"GENERATION":107,"ROUSER: OT_TID":2,"NAME":"INIT","NAME_TRUNCATED":FALSE,"STATE":"LIVE","TASKS":1,"CPU_NS":387379690,"CPU_TENTHS":0,"CPU_QUALITY":"OK","QUOTA_BYTES":1364699,"LIMIT_BYTES":16777216}}
+USER: {"FRAME":"ROW","VALUE":{"CELL_ID":5,"GENERATION":137,"ROOT_TID":32,"NAME":"P03-FILTER","NAME_TRUNCATED":FALSE,"STATE":"LIVE","TASKS":1,"CPU_NS":2265620,"CPU_TENTHS":0,"CPU_QUALITY":"OK","QUOTA_BYTES":936,"LIMIT_BYTES":16777216}}
+USER: {"FRAME":"END","COMPLETE":TRUE,"UNAVAILABLE_FIELDS":[],"DROPPED":0}
+USER: {"FRAME":"BEGIN","SAMPLE_ID":24,"MONOTONIC_USER: ^C
+USER: Cellos > echo stcc1=$?
+USER: stcc1=130
+USER: Cellos > /bin/p03-filter endless | /bin/p03-filter hex
+[ INFO] ELF LOAD: 0x108000000-0x10800B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10800B8A8-0x10800CA90 flags=R--
+[ INFO] ELF LOAD: 0x10800D000-0x10800D468 flags=RW-
+[ INFO] ELF LOAD: 0x10800E000-0x10810E031 flags=RW-
+[ INFO] ELF LOAD: 0x10810E038-0x10810F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x10A000000-0x10A00B8A2 flags=R-X
+[ INFO] ELF LOAD: 0x10A00B8A8-0x10A00CA90 flags=R--
+[ INFO] ELF LOAD: 0x10A00D000-0x10A00D468 flags=RW-
+[ INFO] ELF LOAD: 0x10A00E000-0x10A10E031 flags=RW-
+[ INFO] ELF LOAD: 0x10A10E038-0x10A10F03C flags=R--
+[ INFO] [wx] 'p03-filter': 14/272 cell pages lowered to read-only/execute-only
+USER: ^C
+USER: Cellos > echo stcc2=$?
+USER: stcc2=130
+USER: Cellos > echo after-ctrl-c
+USER: after-ctrl-c
+USER: Cellos > ps --records | select tid | take 501 | to jsonl
+USER: {"tid":2}
+USER: {"tid":4}
+USER: {"tid":6}
+USER: {"tid":7}
+USER: Cellos > ps --records | select tid name | to jsonl
+USER: {"tid":2,"name":"init"}
+USER: {"tid":4,"name":"vfs"}
+USER: {"tid":6,"name":"input"}
+USER: {"tid":7,"name":"cellbox"}
+USER: Cellos > ps --records | where name '==' '"cellbox"' | select tid name | to jsonl
+USER: {"tid":7,"name":"cellbox"}
+USER: Cellos > ls --records /bin | select name | to jsonl
+USER: {"name":"cat"}
+USER: {"name":"cellbox"}
+USER: {"name":"config"}
+USER: {"name":"e1000"}
+USER: {"name":"echo"}
+USER: {"name":"input"}
+USER: {"name":"kill"}
+USER: {"name":"ls"}
+USER: {"name":"nvme"}
+USER: {"name":"p03-filter"}
+USER: {"name":"platform"}
+USER: {"name":"ps"}
+USER: {"name":"shutdown"}
+USER: {"name":"vfs"}
+USER: Cellos > /bin/kill 6
+[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/kill spawn_cap=false supervisor_cap=false
+USER: shell: foreground preparation failed: Denied
+USER: Cellos > /bin/shell
+[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/shell spawn_cap=false supervisor_cap=false
+USER: shell: foreground preparation failed: Denied
+USER: Cellos > echo s1-alive
+USER: s1-alive
+USER: Cellos > ps --records | select tid name | take 500 | to jsonl
+USER: {"tid":2,"name":"init"}
+USER: {"tid":4,"name":"vfs"}
+USER: {"tid":6,"name":"input"}
+USER: {"tid":7,"name":"cellbox"}
+USER: Cellos > ps --records | select tid name state | take 500 | to jsonl
+USER: {"tid":2,"name":"init","state":"Waiting"}
+USER: {"tid":4,"name":"vfs","state":"Waiting"}
+USER: {"tid":6,"name":"input","state":"Ready"}
+USER: {"tid":7,"name":"cellbox","state":"Running"}
+USER: Cellos > kill 2
+USER: kill: not available from the suite shell, requires a lifecycle owner
+USER: Cellos > echo s2-kill-status=$?
+USER: s2-kill-status=1
+USER: Cellos > blktest
+[ WARN] [kernel] raw block opcode 500 denied for tid 7 (no bit 36)
+USER: blkio: denied
+USER: Cellos > snapshot
+USER: snapshot: not available from the suite shell, requires a lifecycle owner
+USER: Cellos > echo s2-snapshot-status=$?
+USER: s2-snapshot-status=1
+USER: Cellos > /bin/e1000
+[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/e1000 spawn_cap=false supervisor_cap=false
+USER: shell: foreground preparation failed: Denied
+USER: Cellos > exec /bin/e1000 --forged-privileged-mode
+[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/e1000 spawn_cap=false supervisor_cap=false
+USER: shell: foreground preparation failed: Denied
+USER: Cellos > exec /bin/kill 1 --force
+[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/kill spawn_cap=false supervisor_cap=false
+USER: shell: foreground preparation failed: Denied
+USER: Cellos > shutdown
+[ WARN] [kernel] raw opcode 502 denied for cellbox
+USER: shutdown: use /bin/shutdown
+USER: Cellos > echo s2-shutdown-status=$?
+USER: s2-shutdown-status=1
+USER: Cellos > echo s2-alive-after-shutdown
+USER: s2-alive-after-shutdown
+USER: Cellos > echo s2-alive
+USER: s2-alive
+USER: Cellos > free
+USER:               total        used        free
+USER: Mem (KiB):    236180      57240      178940
+USER: Cellos > ps --records | select tid name state | take 501 | to jsonl
+USER: {"tid":2,"name":"init","state":"Waiting"}
+USER: {"tid":4,"name":"vfs","state":"Waiting"}
+USER: {"tid":6,"name":"input","state":"Ready"}
+USER: {"tid":7,"name":"cellbox","state":"Running"}
+USER: Cellos > echo p03-end
+USER: p03-end
+USER: Cellos > /bin/shutdown
+[ INFO] ELF LOAD: 0x108000000-0x108002BEA flags=R-X
+[ INFO] ELF LOAD: 0x108002BF0-0x108003308 flags=R--
+[ INFO] ELF LOAD: 0x108004000-0x108004290 flags=RW-
+[ INFO] ELF LOAD: 0x108005000-0x108105031 flags=RW-
+[ INFO] [wx] 'shutdown': 4/262 cell pages lowered to read-only/execute-only

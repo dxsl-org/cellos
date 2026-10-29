@@ -1,0 +1,3 @@
+AC-5 requires actual stock echo nonzero exits with missing stdout, stderr or both; invalid stdout refs must be rejected by canonical admission before publication, recorded distinctly from helper execution. All negative cases require empty owned streams, no unrelated host bytes, and independent no-UART-payload checks.
+AC-4 fragmented stock ls writes use 60-byte names and separate LF across full 4096-byte rings; exact retained bytes are checked, but internal write return counts are not externally exposed and are not independently observed.
+date/env/uname/kill/shutdown/hotswap are signed and packaged but NOT launched: no broadened target admission, authority, shutdown or service mutation.

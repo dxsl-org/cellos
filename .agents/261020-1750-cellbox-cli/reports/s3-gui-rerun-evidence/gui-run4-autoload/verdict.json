@@ -1,0 +1,100 @@
+{
+  "checks": {
+    "screen-1280x800": {
+      "pass": true,
+      "detail": [
+        1280,
+        800
+      ],
+      "informational": false
+    },
+    "no-window-before-launch": {
+      "pass": false,
+      "detail": "a bg-coloured 720x480 rectangle exists before launch",
+      "informational": false
+    },
+    "run-aborted": {
+      "pass": false,
+      "detail": "no-window-before-launch: a bg-coloured 720x480 rectangle exists before launch",
+      "informational": false
+    },
+    "no-command-uart:echo": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:stock-echo": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:ls-alpha": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:ls-beta": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:cat-one": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:cat-two": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:stderr": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:ctrl-c-status": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:typed-command": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:shell-banner": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:shell-prompt": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "uart-terminal-ready-once": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "no-key-material-in-log": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "no-launch-deny": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "no-panic-or-fault": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    }
+  },
+  "notes": [],
+  "window_origin": null,
+  "scope": "private GUI Terminal proof on a private desktop image; not release acceptance"
+}

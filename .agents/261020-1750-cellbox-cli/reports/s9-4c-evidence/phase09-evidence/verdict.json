@@ -1,0 +1,132 @@
+{
+  "checks": {
+    "driver-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:shell-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-conf": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-refusals": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-changed-host-key": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-first-trust-no": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-first-trust-paste-refused": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-first-trust-yes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-first-trust-known-after": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-wrong-password": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-exec-bytes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-exec-stdin-eof": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-exec-signal": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-pty-shell": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-pty-resize": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-pty-escape-disconnect": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-shell-alive": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:session-a-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-unexpected-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "no-FAIL-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "driver-final-verdict": {
+      "pass": true,
+      "detail": ""
+    },
+    "boot-ceiling-selftest-pass": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-cellbox-ssh-edge-error": {
+      "pass": true,
+      "detail": ""
+    },
+    "sshd-saw-guest-connections": {
+      "pass": true,
+      "detail": "['172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1']"
+    },
+    "sshd-accepted-password-six": {
+      "pass": true,
+      "detail": "['Accepted password for tester from 172.17.0.1 port 43010 ssh2', 'Accepted password for tester from 172.17.0.1 port 43022 ssh2', 'Accepted password for tester from 172.17.0.1 port 54028 ssh2', 'Accepted password for tester from 172.17.0.1 port 54032 ssh2', 'Accepted password for tester from 172.17.0.1 port 42328 ssh2', 'Accepted password for tester from 172.17.0.1 port 42336 ssh2']"
+    },
+    "sshd-failed-password-once": {
+      "pass": true,
+      "detail": "['Failed password for tester from 172.17.0.1 port 54020 ssh2']"
+    },
+    "trust-store-volume-mounted": {
+      "pass": true,
+      "detail": ""
+    },
+    "password-not-on-serial": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-weak-entropy": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-key-material-in-log": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-panic": {
+      "pass": true,
+      "detail": ""
+    },
+    "qemu-one-user-netdev-no-forward": {
+      "pass": true,
+      "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-Y12o/serial.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-Y12o/phase09.iso -boot d -no-reboot -netdev user,id=net0 -device e1000,netdev=net0 -drive file=/tmp/cellbox-phase09-Y12o/trust-fixture.img,if=none,format=raw,id=p09fx -device nvme,drive=p09fx,serial=cellosp09\n"
+    }
+  }
+}

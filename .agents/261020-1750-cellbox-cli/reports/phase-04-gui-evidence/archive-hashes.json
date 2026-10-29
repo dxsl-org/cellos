@@ -1,0 +1,562 @@
+{
+  "scope": "Hash inventory of already archived sanitized GUI evidence; original private run directories deleted by parent. Not an original-to-copy equivalence verification. No original copy manifests were supplied.",
+  "excluded_artifacts": "No private key/seed, socket, VM disk/ISO, executable or build tree is copied by this documentation update. Existing PNG framebuffer screenshots are evidence, not boot/disk images.",
+  "files": {
+    "run1-stderr-after-prompt-defect/boot-config/autoload.toml": {
+      "bytes": 271,
+      "sha256": "8a8f54660dc88e80f685b65fc6fbee0a7168fb5f77b551340b8f72c6605894d8"
+    },
+    "run1-stderr-after-prompt-defect/boot-config/services.toml": {
+      "bytes": 553,
+      "sha256": "67c55680f0eb19d2c24c302afc9edb64f8c734d4115ceb84b38b8a8776456074"
+    },
+    "run1-stderr-after-prompt-defect/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "run1-stderr-after-prompt-defect/canonical-after.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "run1-stderr-after-prompt-defect/canonical-before.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "run1-stderr-after-prompt-defect/cellbox-ceiling.txt": {
+      "bytes": 337,
+      "sha256": "c469d1cbe6ffac24aedb5fe76b35fea18ab5fb3687b865c61a640b427b3e7d16"
+    },
+    "run1-stderr-after-prompt-defect/fat-layout.txt": {
+      "bytes": 3120,
+      "sha256": "32a762072fc1040a68381567adef6a3c9e765637513eb2a7a2db0bfb1c16bdc0"
+    },
+    "run1-stderr-after-prompt-defect/product-source-digests.json": {
+      "bytes": 561,
+      "sha256": "6033bf28fac68b305fd210cba51c7e22bd00465f85d3565d269c1f5a4f6b51be"
+    },
+    "run1-stderr-after-prompt-defect/provenance.json": {
+      "bytes": 2751,
+      "sha256": "fc9cf88f49784d87e7ca4c93d773f6275329b75f5c709bc3e360c3a7631cf7b5"
+    },
+    "run1-stderr-after-prompt-defect/qemu-argv.txt": {
+      "bytes": 353,
+      "sha256": "efff09565188106157f49bf5701e5ab25527780a0e9a77ebbe9e573c6729f95a"
+    },
+    "run1-stderr-after-prompt-defect/screens/01-desktop-before-terminal.png": {
+      "bytes": 146294,
+      "sha256": "68065db101a0d1b96d38498b0ebe54e3ebbc0f40629e67ad574b0865e846a232"
+    },
+    "run1-stderr-after-prompt-defect/screens/02-prompt.png": {
+      "bytes": 105274,
+      "sha256": "dd3fe98d43a32d80f6918f87a6c93667bb16f672369c32cca7c08ae263915f87"
+    },
+    "run1-stderr-after-prompt-defect/screens/03-GUI-3-echo-typed.png": {
+      "bytes": 106318,
+      "sha256": "1fe58560a975a25759cde5b0897d1434d0e4639027cde07b4f6fc667d3e8453d"
+    },
+    "run1-stderr-after-prompt-defect/screens/04-GUI-3-echo-after.png": {
+      "bytes": 108657,
+      "sha256": "09a7ee564d877df55fd6172cb7a83aba47c20bf8418ce0edc7319068e6374a6c"
+    },
+    "run1-stderr-after-prompt-defect/screens/05-GUI-3-stock-echo-typed.png": {
+      "bytes": 110580,
+      "sha256": "6fdab3ae4dd4513381952ba202674a28f153607396792e356d96a69274f02200"
+    },
+    "run1-stderr-after-prompt-defect/screens/06-GUI-3-stock-echo-after.png": {
+      "bytes": 112887,
+      "sha256": "2bc3b65be920ee4640456ddd84db51f26700dd857804fc06441024976eeb7203"
+    },
+    "run1-stderr-after-prompt-defect/screens/07-GUI-3-stock-ls-typed.png": {
+      "bytes": 114521,
+      "sha256": "d9b09a50a6b0fdbe808c72d97064e0dd36fe7efc16fc54eb0e99a009f09a4d3c"
+    },
+    "run1-stderr-after-prompt-defect/screens/08-GUI-3-stock-ls-after.png": {
+      "bytes": 117890,
+      "sha256": "d9388e801959f17961f3488b62969cefd8de37a43ff25e1360424c1535c623ee"
+    },
+    "run1-stderr-after-prompt-defect/screens/09-GUI-3-stock-cat-typed.png": {
+      "bytes": 119997,
+      "sha256": "5e98d35db3bb6e8c50f36e98e2dce0f7f3227b21f4a32ebefb98595d90b5a4f4"
+    },
+    "run1-stderr-after-prompt-defect/screens/10-GUI-3-stock-cat-after.png": {
+      "bytes": 124563,
+      "sha256": "29727f2e3d35c091c74b32e7daff7930ae5e4586940da2d93d6157978d24e461"
+    },
+    "run1-stderr-after-prompt-defect/screens/11-GUI-4-stderr-typed.png": {
+      "bytes": 125788,
+      "sha256": "3df7e15cb458b6b2f95af41acf265d0e5bd5911d408fbc8f3baa200e4537bc4a"
+    },
+    "run1-stderr-after-prompt-defect/screens/12-timeout-gui-4-stderr-output.png": {
+      "bytes": 129093,
+      "sha256": "535ec235c1f83eb95edd42e32f8015c57e93577bf06e6e50db1fdf6e22101699"
+    },
+    "run1-stderr-after-prompt-defect/serial.log": {
+      "bytes": 15398,
+      "sha256": "dfb71988ffe0de07296c74c44f9841d40af9e4f97d456c5fcab8bd2d2de459a9"
+    },
+    "run1-stderr-after-prompt-defect/serial.raw.log": {
+      "bytes": 15398,
+      "sha256": "dfb71988ffe0de07296c74c44f9841d40af9e4f97d456c5fcab8bd2d2de459a9"
+    },
+    "run1-stderr-after-prompt-defect/terminal-ceiling-delta.txt": {
+      "bytes": 260,
+      "sha256": "88c1aec3a5490145b44f678396ea396db802efaa919b57dde81f149fb5be3ddb"
+    },
+    "run1-stderr-after-prompt-defect/verdict.json": {
+      "bytes": 6708,
+      "sha256": "bffe018f799cfadc87b370817ce44d37ca0701166c7782effd163d00291dd997"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/boot-config/autoload.toml": {
+      "bytes": 271,
+      "sha256": "8a8f54660dc88e80f685b65fc6fbee0a7168fb5f77b551340b8f72c6605894d8"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/boot-config/services.toml": {
+      "bytes": 553,
+      "sha256": "67c55680f0eb19d2c24c302afc9edb64f8c734d4115ceb84b38b8a8776456074"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/canonical-after.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/canonical-before.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/cellbox-ceiling.txt": {
+      "bytes": 337,
+      "sha256": "c469d1cbe6ffac24aedb5fe76b35fea18ab5fb3687b865c61a640b427b3e7d16"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/fat-layout.txt": {
+      "bytes": 3120,
+      "sha256": "a191aea54402466182a80a3cc8479097c5d37aa0f54d1955edccbed0e96499ed"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/product-source-digests.json": {
+      "bytes": 561,
+      "sha256": "6033bf28fac68b305fd210cba51c7e22bd00465f85d3565d269c1f5a4f6b51be"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/provenance.json": {
+      "bytes": 2751,
+      "sha256": "00142016a77c473d79ac15402ae48f340bf1fec3c42b621ca19b683763cf65e2"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/qemu-argv.txt": {
+      "bytes": 353,
+      "sha256": "efff09565188106157f49bf5701e5ab25527780a0e9a77ebbe9e573c6729f95a"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/01-desktop-before-terminal.png": {
+      "bytes": 146390,
+      "sha256": "8590c406212116746ac6997c11114f2ffb91b222b4315ec81b45e97338e4616e"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/02-prompt.png": {
+      "bytes": 105323,
+      "sha256": "7de9b76280cff148cb6471c0398d2852c9d292ca1ba1aa24adb9fd958a187404"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/03-GUI-3-echo-typed.png": {
+      "bytes": 106414,
+      "sha256": "8b5c4146193d63f2e37ca25a99eb07195a6b25638743dae4631668af6df402b5"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/04-GUI-3-echo-after.png": {
+      "bytes": 108742,
+      "sha256": "15496c3a54665f5fa50794a7761029957d2ae916595080cb50f03c3d66550098"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/05-GUI-3-stock-echo-typed.png": {
+      "bytes": 110327,
+      "sha256": "5aad157fc2a333dc561a32c17ee0cdcc8b724354acb7328b89ba31a97271be60"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/06-GUI-3-stock-echo-after.png": {
+      "bytes": 113049,
+      "sha256": "f2ac7d8a6a17519ec3f676a6bde558c21fdd5f6d1a89523da9338cf40018f532"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/07-GUI-3-stock-ls-typed.png": {
+      "bytes": 114514,
+      "sha256": "949db7f3dfbefacd62de848cacb83ffab9452d0f5acc0a25cc3f148529915961"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/08-GUI-3-stock-ls-after.png": {
+      "bytes": 118296,
+      "sha256": "ac7fd02e02e7e72236a20540ed08bd8bbb62e747db20d36788786101d448be48"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/09-GUI-3-stock-cat-typed.png": {
+      "bytes": 120165,
+      "sha256": "615201924324b7f00dba912d735e28f50522653284867b8547c5028ecace690e"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/10-GUI-3-stock-cat-after.png": {
+      "bytes": 124391,
+      "sha256": "8f5fbabbf6dd331aaa908c3fe664b5b19a4d11b852ea5bad3068abadf1017835"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/11-GUI-4-stderr-typed.png": {
+      "bytes": 125884,
+      "sha256": "7a7ab402296db4e6917aba8c27b6c474f96e6da9d169d61eff3fcbc9a693c1a6"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/12-GUI-4-stderr-after.png": {
+      "bytes": 129610,
+      "sha256": "36a2a5a19ab97652c8903de3462fdc62eaa72deffffd014c283806615c506930"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/13-GUI-4-status-of-failure-typed.png": {
+      "bytes": 130590,
+      "sha256": "f25143ef7de212245a46d167868b53c78171e8817cb69a2688b1e6f09f272dc9"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/14-GUI-4-status-of-failure-after.png": {
+      "bytes": 132428,
+      "sha256": "a4419d8fd6427c5791a6e3af135d63295c058728986f93fcc628ba073a684341"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/screens/15-timeout-ctrl-c-producer-output-visible.png": {
+      "bytes": 137619,
+      "sha256": "aca5be9f53e36aaa1e0da08fa3afc77f7c1ee90ac848055cd396a2c1431c201b"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/serial.log": {
+      "bytes": 15496,
+      "sha256": "f43069cffff882eb9dfe2467f0f2df2043e05743956d4aa44619e1145bce4522"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/serial.raw.log": {
+      "bytes": 15496,
+      "sha256": "f43069cffff882eb9dfe2467f0f2df2043e05743956d4aa44619e1145bce4522"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/terminal-ceiling-delta.txt": {
+      "bytes": 260,
+      "sha256": "88c1aec3a5490145b44f678396ea396db802efaa919b57dde81f149fb5be3ddb"
+    },
+    "run2-runner-defect-ctrl-c-command-oom/verdict.json": {
+      "bytes": 8496,
+      "sha256": "a9614958e32a24c2b772335fc2e8c49a6f7e02644777c4851bfdf231e50308d2"
+    },
+    "run3-pass/boot-config/autoload.toml": {
+      "bytes": 271,
+      "sha256": "8a8f54660dc88e80f685b65fc6fbee0a7168fb5f77b551340b8f72c6605894d8"
+    },
+    "run3-pass/boot-config/services.toml": {
+      "bytes": 553,
+      "sha256": "67c55680f0eb19d2c24c302afc9edb64f8c734d4115ceb84b38b8a8776456074"
+    },
+    "run3-pass/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "run3-pass/canonical-after.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "run3-pass/canonical-before.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "run3-pass/cellbox-ceiling.txt": {
+      "bytes": 337,
+      "sha256": "c469d1cbe6ffac24aedb5fe76b35fea18ab5fb3687b865c61a640b427b3e7d16"
+    },
+    "run3-pass/fat-layout.txt": {
+      "bytes": 3214,
+      "sha256": "38e5513ffe01cdfd8ccfadc16b3ac98e85f09f20be5614c72c5958452c0c97b3"
+    },
+    "run3-pass/product-source-digests.json": {
+      "bytes": 561,
+      "sha256": "6033bf28fac68b305fd210cba51c7e22bd00465f85d3565d269c1f5a4f6b51be"
+    },
+    "run3-pass/provenance.json": {
+      "bytes": 2864,
+      "sha256": "f67916a8ede2f6cc9ff99680e3c9ac224bb332cc909e3b23a40433d744752813"
+    },
+    "run3-pass/qemu-argv.txt": {
+      "bytes": 353,
+      "sha256": "efff09565188106157f49bf5701e5ab25527780a0e9a77ebbe9e573c6729f95a"
+    },
+    "run3-pass/screens/01-desktop-before-terminal.png": {
+      "bytes": 146233,
+      "sha256": "bdc87a74f904b9a0520151e295669d671e21751db7f40a8399763a3e2bef5e2a"
+    },
+    "run3-pass/screens/02-prompt.png": {
+      "bytes": 105224,
+      "sha256": "1e2e5d9adcf4badb5b1202e5bb4f46f57a3064a3c2cd1ffa9f4f9104c3941377"
+    },
+    "run3-pass/screens/03-GUI-3-echo-typed.png": {
+      "bytes": 106536,
+      "sha256": "7e39d2484e08f62573fe88fd4c28011810efe6799c6dff10efe38f734f6c6ecf"
+    },
+    "run3-pass/screens/04-GUI-3-echo-after.png": {
+      "bytes": 108740,
+      "sha256": "b863ba8a8fdb8d0c42d638064e7343a8444175d9ca17ccf5a659bded836c613d"
+    },
+    "run3-pass/screens/05-GUI-3-stock-echo-typed.png": {
+      "bytes": 110466,
+      "sha256": "ec74291fd7def5f4d7ae8a238731c651f12678d46a1994664bd710045242de70"
+    },
+    "run3-pass/screens/06-GUI-3-stock-echo-after.png": {
+      "bytes": 113156,
+      "sha256": "e8bdb450ee459c674739d3b32d030d296b58b31dac752923a20438b79b71dd78"
+    },
+    "run3-pass/screens/07-GUI-3-stock-ls-typed.png": {
+      "bytes": 114618,
+      "sha256": "b9f403d816d5e3eb0959576e5b7e69dd89db9efe36b24dc991c9a73eae258383"
+    },
+    "run3-pass/screens/08-GUI-3-stock-ls-after.png": {
+      "bytes": 118301,
+      "sha256": "ddf36b1da48d112c5cc976294e81629615e155c9c2480a34e73a3819fd80207a"
+    },
+    "run3-pass/screens/09-GUI-3-stock-cat-typed.png": {
+      "bytes": 119860,
+      "sha256": "1ed91f87b96d6a55c5664188535cbbf7b01bae1124cdc592cae5439d99575617"
+    },
+    "run3-pass/screens/10-GUI-3-stock-cat-after.png": {
+      "bytes": 124699,
+      "sha256": "4b7806c14b2af990ee439af3ff3dd6f40549ed5f061bab08ce217a510f4b95db"
+    },
+    "run3-pass/screens/11-GUI-4-stderr-typed.png": {
+      "bytes": 125896,
+      "sha256": "d4ec292a00300155fdc7ed2600ee6c4c086c39859e8561403b7998a249d6eae1"
+    },
+    "run3-pass/screens/12-GUI-4-stderr-after.png": {
+      "bytes": 129486,
+      "sha256": "52e6d8a292fad348530d42ce934108d175c9f8b78b0970e47a8325d8e1db2b96"
+    },
+    "run3-pass/screens/13-GUI-4-status-of-failure-typed.png": {
+      "bytes": 130755,
+      "sha256": "bb98d31dfafbcc268ab639962c0e8b74f066e202fc6e637cdbf86cd616f4712f"
+    },
+    "run3-pass/screens/14-GUI-4-status-of-failure-after.png": {
+      "bytes": 132461,
+      "sha256": "44fddc4362543be29de76dfd1b2dbd13dd70ccb5af3d712dbeb1e6f848056e83"
+    },
+    "run3-pass/screens/15-ctrl-c-producer-flowing.png": {
+      "bytes": 190916,
+      "sha256": "bf1c598743b89d9a29c76753d8fb3e60d6fcd880b95cc1a2708fd1ed8e8f79c5"
+    },
+    "run3-pass/screens/16-ctrl-c-producer-flowing-later.png": {
+      "bytes": 194489,
+      "sha256": "048a529cdd1cbfb0a13f605c24d8d0e758daea305408e0fe58bc243ab2da186e"
+    },
+    "run3-pass/screens/17-ctrl-c-recovered.png": {
+      "bytes": 192027,
+      "sha256": "989b85a92b43acf788243c22e0bb038bb1c785a710a252f80106a7d08142e2fc"
+    },
+    "run3-pass/screens/18-ctrl-c-status.png": {
+      "bytes": 187937,
+      "sha256": "bc3fd67cec2d089f9638871bd444561c78ecb2e9028e04e75da3622df6f50308"
+    },
+    "run3-pass/screens/19-window-closed.png": {
+      "bytes": 136747,
+      "sha256": "658f44cec6af9041d3793d547c16d352854d14ddb3870bd26f7702bd98bc8d1a"
+    },
+    "run3-pass/serial.log": {
+      "bytes": 15881,
+      "sha256": "c75650809733c69b31d4a7fd6048f1b77e7385c230f909ab549dd557a7b6c21c"
+    },
+    "run3-pass/serial.raw.log": {
+      "bytes": 15881,
+      "sha256": "c75650809733c69b31d4a7fd6048f1b77e7385c230f909ab549dd557a7b6c21c"
+    },
+    "run3-pass/terminal-ceiling-delta.txt": {
+      "bytes": 260,
+      "sha256": "88c1aec3a5490145b44f678396ea396db802efaa919b57dde81f149fb5be3ddb"
+    },
+    "run3-pass/verdict.json": {
+      "bytes": 9104,
+      "sha256": "58a9bcc9376205ec3234b0e5ea94c4a0df4cd6c7e5194a2480bd16f73e359872"
+    },
+    "run4-drain-order/boot-config/autoload.toml": {
+      "bytes": 271,
+      "sha256": "8a8f54660dc88e80f685b65fc6fbee0a7168fb5f77b551340b8f72c6605894d8"
+    },
+    "run4-drain-order/boot-config/services.toml": {
+      "bytes": 553,
+      "sha256": "67c55680f0eb19d2c24c302afc9edb64f8c734d4115ceb84b38b8a8776456074"
+    },
+    "run4-drain-order/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "run4-drain-order/canonical-after.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "run4-drain-order/canonical-before.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "run4-drain-order/cellbox-ceiling.txt": {
+      "bytes": 337,
+      "sha256": "c469d1cbe6ffac24aedb5fe76b35fea18ab5fb3687b865c61a640b427b3e7d16"
+    },
+    "run4-drain-order/fat-layout.txt": {
+      "bytes": 3214,
+      "sha256": "877bb6290bd61384009e0d55fb92150006e3bf25316872270871d191d75032ee"
+    },
+    "run4-drain-order/product-source-digests.json": {
+      "bytes": 561,
+      "sha256": "9849fb3e7fd9c95131867bb3a719030c99c0a08c04d46fa7c9d0607911eb2dda"
+    },
+    "run4-drain-order/provenance.json": {
+      "bytes": 2864,
+      "sha256": "80038f97c0cc6f0a57a68fc6b00fdd388f7159df98dd690a40d338717af756cb"
+    },
+    "run4-drain-order/qemu-argv.txt": {
+      "bytes": 353,
+      "sha256": "efff09565188106157f49bf5701e5ab25527780a0e9a77ebbe9e573c6729f95a"
+    },
+    "run4-drain-order/screens/01-desktop-before-terminal.png": {
+      "bytes": 146233,
+      "sha256": "bdc87a74f904b9a0520151e295669d671e21751db7f40a8399763a3e2bef5e2a"
+    },
+    "run4-drain-order/screens/02-prompt.png": {
+      "bytes": 105224,
+      "sha256": "1e2e5d9adcf4badb5b1202e5bb4f46f57a3064a3c2cd1ffa9f4f9104c3941377"
+    },
+    "run4-drain-order/screens/03-GUI-3-echo-typed.png": {
+      "bytes": 106536,
+      "sha256": "7e39d2484e08f62573fe88fd4c28011810efe6799c6dff10efe38f734f6c6ecf"
+    },
+    "run4-drain-order/screens/04-GUI-3-echo-after.png": {
+      "bytes": 108740,
+      "sha256": "b863ba8a8fdb8d0c42d638064e7343a8444175d9ca17ccf5a659bded836c613d"
+    },
+    "run4-drain-order/screens/05-GUI-3-stock-echo-typed.png": {
+      "bytes": 110466,
+      "sha256": "ec74291fd7def5f4d7ae8a238731c651f12678d46a1994664bd710045242de70"
+    },
+    "run4-drain-order/screens/06-GUI-3-stock-echo-after.png": {
+      "bytes": 113156,
+      "sha256": "e8bdb450ee459c674739d3b32d030d296b58b31dac752923a20438b79b71dd78"
+    },
+    "run4-drain-order/screens/07-GUI-3-stock-ls-typed.png": {
+      "bytes": 114618,
+      "sha256": "b9f403d816d5e3eb0959576e5b7e69dd89db9efe36b24dc991c9a73eae258383"
+    },
+    "run4-drain-order/screens/08-GUI-3-stock-ls-after.png": {
+      "bytes": 118301,
+      "sha256": "ddf36b1da48d112c5cc976294e81629615e155c9c2480a34e73a3819fd80207a"
+    },
+    "run4-drain-order/screens/09-GUI-3-stock-cat-typed.png": {
+      "bytes": 119860,
+      "sha256": "1ed91f87b96d6a55c5664188535cbbf7b01bae1124cdc592cae5439d99575617"
+    },
+    "run4-drain-order/screens/10-GUI-3-stock-cat-after.png": {
+      "bytes": 124699,
+      "sha256": "4b7806c14b2af990ee439af3ff3dd6f40549ed5f061bab08ce217a510f4b95db"
+    },
+    "run4-drain-order/screens/11-GUI-4-stderr-01-typed.png": {
+      "bytes": 125896,
+      "sha256": "d4ec292a00300155fdc7ed2600ee6c4c086c39859e8561403b7998a249d6eae1"
+    },
+    "run4-drain-order/screens/12-GUI-4-stderr-01-after.png": {
+      "bytes": 129486,
+      "sha256": "52e6d8a292fad348530d42ce934108d175c9f8b78b0970e47a8325d8e1db2b96"
+    },
+    "run4-drain-order/screens/13-GUI-4-stderr-02-typed.png": {
+      "bytes": 130958,
+      "sha256": "8999f6a14455f7d16bc76eca4f57c3bd7c190b19f7370c93c921121e52c94d35"
+    },
+    "run4-drain-order/screens/14-GUI-4-stderr-02-after.png": {
+      "bytes": 134614,
+      "sha256": "1059bc5aebe07d0e8866530d7fa2ea7200dbeb5ef271ad8deeb44af2373c7b52"
+    },
+    "run4-drain-order/screens/15-GUI-4-stderr-03-typed.png": {
+      "bytes": 136147,
+      "sha256": "569c10785ac2a01a02889fca64d84f952884ca54a3b0fa1f06916cab4f716fbe"
+    },
+    "run4-drain-order/screens/16-GUI-4-stderr-03-after.png": {
+      "bytes": 139421,
+      "sha256": "9321c4fc316c34046c6e7ebdfaaa4adb0a55c43fb1b08d555e3655cae21f15e3"
+    },
+    "run4-drain-order/screens/17-GUI-4-stderr-04-typed.png": {
+      "bytes": 140746,
+      "sha256": "9bc727e592c6f139b634c3e320dee125bab66db1fe3e153c69273362215fa9b9"
+    },
+    "run4-drain-order/screens/18-GUI-4-stderr-04-after.png": {
+      "bytes": 144611,
+      "sha256": "e7c7970a3e9489472aef4c334a332566c82f9f382543c349edc3089ad3b85db1"
+    },
+    "run4-drain-order/screens/19-GUI-4-stderr-05-typed.png": {
+      "bytes": 145858,
+      "sha256": "5b76b1135ed8ad63793a47bd6e51d5ec938a328f81e43c3c474dd2446e9e171f"
+    },
+    "run4-drain-order/screens/20-GUI-4-stderr-05-after.png": {
+      "bytes": 149342,
+      "sha256": "37f3df4c87ed8d424abc0c4781799b6488a943409fa50d26f1597a440a321bc6"
+    },
+    "run4-drain-order/screens/21-GUI-4-stderr-06-typed.png": {
+      "bytes": 150713,
+      "sha256": "605327d59db01938d5900ed16fb50e9ee7c850aa83df46a5d0b534e59e8517bf"
+    },
+    "run4-drain-order/screens/22-GUI-4-stderr-06-after.png": {
+      "bytes": 154666,
+      "sha256": "239ad6d2788007fd45c4990f72febb4517752cac031393cac38e25bc9d824270"
+    },
+    "run4-drain-order/screens/23-GUI-4-stderr-07-typed.png": {
+      "bytes": 155925,
+      "sha256": "a21a1218c427c1f894333f6f3f303c0c77df1affa191b71d526e54e80676b1f1"
+    },
+    "run4-drain-order/screens/24-GUI-4-stderr-07-after.png": {
+      "bytes": 154139,
+      "sha256": "0a5fae1c15a3915f390bff7d2d19d7875faefe378b63b16c14ec9a1e7e85a4d5"
+    },
+    "run4-drain-order/screens/25-GUI-4-stderr-08-typed.png": {
+      "bytes": 155605,
+      "sha256": "e43d6c36c1e8beaf5337d05365d9487e1a619671aaab4700b0cab3dcf04b0ea2"
+    },
+    "run4-drain-order/screens/26-GUI-4-stderr-08-after.png": {
+      "bytes": 155313,
+      "sha256": "61e881c2f6db4ff3890f5649f6c81bebf813164938d8fa1b6ec0f4551828ce52"
+    },
+    "run4-drain-order/screens/27-GUI-4-stderr-09-typed.png": {
+      "bytes": 156557,
+      "sha256": "0911b70c56e85119f9dd512e188281d537fca3ff79e97e6367000d3a575d4c7e"
+    },
+    "run4-drain-order/screens/28-GUI-4-stderr-09-after.png": {
+      "bytes": 156128,
+      "sha256": "ca75895e8a5f306d5e65029d5c36e9e755e83a3897b5fe4db0f06ef65cb58dd9"
+    },
+    "run4-drain-order/screens/29-GUI-4-stderr-10-typed.png": {
+      "bytes": 157465,
+      "sha256": "c425898e4469b754fb6e57819f580d78c9d5225d8848c5eca9d31208d8b797ec"
+    },
+    "run4-drain-order/screens/30-GUI-4-stderr-10-after.png": {
+      "bytes": 161158,
+      "sha256": "b4c015eb8da4e27ff74ec80f3c641ab3d7aa9c696cc7027e937c5af15572cf92"
+    },
+    "run4-drain-order/screens/31-GUI-4-status-of-failure-typed.png": {
+      "bytes": 162096,
+      "sha256": "c729284d8dc85c7eda7da4f7499284f3221b9a8a45f2f8dffbfc13a134709cec"
+    },
+    "run4-drain-order/screens/32-GUI-4-status-of-failure-after.png": {
+      "bytes": 161441,
+      "sha256": "2c3b6a358affa533b10e4c23b930f15dbd521d68edb6b53d844c120fade8ddeb"
+    },
+    "run4-drain-order/screens/33-ctrl-c-producer-flowing.png": {
+      "bytes": 194814,
+      "sha256": "f41583ce55b1adc18d880e57aeabf7894dbaac121c13d065c9b714846b212063"
+    },
+    "run4-drain-order/screens/34-ctrl-c-producer-flowing-later.png": {
+      "bytes": 196951,
+      "sha256": "a12e0c327edd0bfb404ffb7197872a3e5018f58f63f538dcb61a0a71f87fe817"
+    },
+    "run4-drain-order/screens/35-ctrl-c-recovered.png": {
+      "bytes": 190546,
+      "sha256": "23de5907dd8ca19a928737d07ce55b6c1c9c032dbabbacb4edf23bb52cf2a415"
+    },
+    "run4-drain-order/screens/36-ctrl-c-status.png": {
+      "bytes": 186063,
+      "sha256": "7b173f2a950f8a5baf0e64881f0389451d91a946a2a7b85fa77afb711b079c7c"
+    },
+    "run4-drain-order/screens/37-window-closed.png": {
+      "bytes": 136638,
+      "sha256": "f59bdd9a87525b4781261fda6568ce79be1a67d8543941b8cb455f5af4168da4"
+    },
+    "run4-drain-order/serial.log": {
+      "bytes": 18833,
+      "sha256": "ab03f5b33f4166e50d62c1899c9e74b16728351cc4cd0472af9b642289ad68a2"
+    },
+    "run4-drain-order/serial.raw.log": {
+      "bytes": 18833,
+      "sha256": "ab03f5b33f4166e50d62c1899c9e74b16728351cc4cd0472af9b642289ad68a2"
+    },
+    "run4-drain-order/terminal-ceiling-delta.txt": {
+      "bytes": 260,
+      "sha256": "88c1aec3a5490145b44f678396ea396db802efaa919b57dde81f149fb5be3ddb"
+    },
+    "run4-drain-order/verdict.json": {
+      "bytes": 16361,
+      "sha256": "38ef2dd7d1606e3c88fbf938e715dac328f58df264a9af399644f22738517960"
+    }
+  }
+}

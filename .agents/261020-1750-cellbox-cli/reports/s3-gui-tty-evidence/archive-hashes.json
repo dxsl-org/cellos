@@ -1,0 +1,1313 @@
+{
+  "scope": "Integrity inventory of the saved sanitized tty-merge evidence; no original-to-copy equivalence claim. Parent verified counts from archived raw logs.",
+  "files": {
+    "exit-codes-gui.txt": {
+      "bytes": 140,
+      "sha256": "d8108fe5206b12076cbb27cd72199f061102fa79e3d3925ca5f0391b9a36b1b3"
+    },
+    "exit-codes-reg.txt": {
+      "bytes": 61,
+      "sha256": "5f88f91c8f7969d216c7994e6784cedde5b207d2b536384315856fac047c03cb"
+    },
+    "gui-run1-click/boot-config/autoload.toml": {
+      "bytes": 271,
+      "sha256": "8a8f54660dc88e80f685b65fc6fbee0a7168fb5f77b551340b8f72c6605894d8"
+    },
+    "gui-run1-click/boot-config/services.toml": {
+      "bytes": 553,
+      "sha256": "67c55680f0eb19d2c24c302afc9edb64f8c734d4115ceb84b38b8a8776456074"
+    },
+    "gui-run1-click/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "gui-run1-click/canonical-after.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run1-click/canonical-before.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run1-click/cellbox-ceiling.txt": {
+      "bytes": 337,
+      "sha256": "c469d1cbe6ffac24aedb5fe76b35fea18ab5fb3687b865c61a640b427b3e7d16"
+    },
+    "gui-run1-click/fat-layout.txt": {
+      "bytes": 3220,
+      "sha256": "00937385c414e59b6ec8de6a4e5e377e47f3338ebad148292d16ac014c7abe77"
+    },
+    "gui-run1-click/product-source-digests.json": {
+      "bytes": 561,
+      "sha256": "df797157c68d357d06de83a655f8d8407aa9874b6d5756dd6c49734b6ac58b2b"
+    },
+    "gui-run1-click/provenance.json": {
+      "bytes": 2864,
+      "sha256": "3de35f2f6f77cc1c890d5112043f9690b63e4bd1bb251b5e83e96f7286624a65"
+    },
+    "gui-run1-click/qemu-argv.txt": {
+      "bytes": 353,
+      "sha256": "efff09565188106157f49bf5701e5ab25527780a0e9a77ebbe9e573c6729f95a"
+    },
+    "gui-run1-click/screens/01-desktop-before-terminal.png": {
+      "bytes": 144569,
+      "sha256": "884d37dfcf1c5d8cf6d5e24c1eda30f7c05637cfb7a81ccc49cdea902db13416"
+    },
+    "gui-run1-click/screens/02-prompt.png": {
+      "bytes": 103833,
+      "sha256": "a628762742047fd933ad7ca46ef50e7d484d4a69868b11d0c7231c6538cd33c3"
+    },
+    "gui-run1-click/screens/03-GUI-3-echo-typed.png": {
+      "bytes": 104844,
+      "sha256": "eea5a67862b2f572560b81490ad171028a56ddad97132ab1cbba7f6c233739f0"
+    },
+    "gui-run1-click/screens/04-GUI-3-echo-after.png": {
+      "bytes": 107129,
+      "sha256": "0a693cbf7272a569aee63d6ef6f9bdcb7cd2721bfafe7e6af758919cdfd0361a"
+    },
+    "gui-run1-click/screens/05-GUI-3-stock-echo-typed.png": {
+      "bytes": 108965,
+      "sha256": "899f9c11d57e461d935635bf3882c9e00a68ad923d0e98056d4fcb1711e6fb1c"
+    },
+    "gui-run1-click/screens/06-GUI-3-stock-echo-after.png": {
+      "bytes": 111228,
+      "sha256": "e6f503c208a28a36fd9529f0347667fe80b7f8b9bef55c26dcce7f645cf53a79"
+    },
+    "gui-run1-click/screens/07-GUI-3-stock-ls-typed.png": {
+      "bytes": 112511,
+      "sha256": "b86ea8ba27c0b4466223d209f0f3fa10696bb08814592540f3e5fd1226866a04"
+    },
+    "gui-run1-click/screens/08-GUI-3-stock-ls-after.png": {
+      "bytes": 116612,
+      "sha256": "1f43ca92f15fe1cc92bf1fbd8bd05a5a1f728ea840df6eaab72b3a010c91e976"
+    },
+    "gui-run1-click/screens/09-GUI-3-stock-cat-typed.png": {
+      "bytes": 118440,
+      "sha256": "f7fb17620922c34d8a8689bdd84eb4db26180245528f50ec1f102763804bbced"
+    },
+    "gui-run1-click/screens/10-GUI-3-stock-cat-after.png": {
+      "bytes": 122913,
+      "sha256": "8f14056e19bcf2fca044dc3485a647f5a685bde8c0cc4c1e1cf40ef1b73f690f"
+    },
+    "gui-run1-click/screens/11-GUI-4-stderr-01-typed.png": {
+      "bytes": 124417,
+      "sha256": "e7cea7028aa615f864cecf704d8d8df3b399b8981a31679c470182df1c2128b2"
+    },
+    "gui-run1-click/screens/12-GUI-4-stderr-01-after.png": {
+      "bytes": 128141,
+      "sha256": "007b3ec43020780b2620985623a31cbbe4b7b463f9001eaae8e58abb41c974d4"
+    },
+    "gui-run1-click/screens/13-GUI-4-stderr-02-typed.png": {
+      "bytes": 128897,
+      "sha256": "7a30de65aa6b4a08071889178d116b02a75aba4ec75b4a45b857a6e7914b928c"
+    },
+    "gui-run1-click/screens/14-GUI-4-stderr-02-after.png": {
+      "bytes": 132676,
+      "sha256": "6d5399a77d5d8cf4cae9cbc1499184f4d0e37f89af0173a90afd9a13a285a45d"
+    },
+    "gui-run1-click/screens/15-GUI-4-stderr-03-typed.png": {
+      "bytes": 134330,
+      "sha256": "1a5c30d38cb36ad48e2e40c73199de3f3f5a74c7df5a13ada6d02b52e27de50b"
+    },
+    "gui-run1-click/screens/16-GUI-4-stderr-03-after.png": {
+      "bytes": 138070,
+      "sha256": "97642f6119d5f984ef6fe44910e4603f653ac514d725b54126a4e868778bb9cb"
+    },
+    "gui-run1-click/screens/17-GUI-4-stderr-04-typed.png": {
+      "bytes": 138935,
+      "sha256": "e279a4d0ee6242cebd12b238378b32527d8b200e1675b700fbbf17c6a5555ae9"
+    },
+    "gui-run1-click/screens/18-GUI-4-stderr-04-after.png": {
+      "bytes": 142862,
+      "sha256": "0d7226a4a1612d2950e0debdabd78e8ef89b6aa7866e3d6728feb009cb8636da"
+    },
+    "gui-run1-click/screens/19-GUI-4-stderr-05-typed.png": {
+      "bytes": 144316,
+      "sha256": "879ec65e0ebaebc04931960d211e69188979899e697012774a8781159c52853d"
+    },
+    "gui-run1-click/screens/20-GUI-4-stderr-05-after.png": {
+      "bytes": 147874,
+      "sha256": "0a785cde03929da1205971a9dd65e3ed4d2a4d5ce117a19e549c057811a93de9"
+    },
+    "gui-run1-click/screens/21-GUI-4-stderr-06-typed.png": {
+      "bytes": 149151,
+      "sha256": "0c6e6e2ccb55b1484bfaca839937c3b7b7d3bfa669ba073007e64b9648f83f37"
+    },
+    "gui-run1-click/screens/22-GUI-4-stderr-06-after.png": {
+      "bytes": 152907,
+      "sha256": "de9831de4fdb5f78b6432899559852e90bb2024a162fd42fac3f5a9f82956001"
+    },
+    "gui-run1-click/screens/23-GUI-4-stderr-07-typed.png": {
+      "bytes": 154395,
+      "sha256": "1c4e41f14cab373aa10f4babc4f4b923f05b6f8efb4fa74590c39f4af968e5ec"
+    },
+    "gui-run1-click/screens/24-GUI-4-stderr-07-after.png": {
+      "bytes": 152719,
+      "sha256": "05e8a336e48a555c872d2b9cb2b4122fcd433f379e629acb9fe4c69c6604e895"
+    },
+    "gui-run1-click/screens/25-GUI-4-stderr-08-typed.png": {
+      "bytes": 153977,
+      "sha256": "f7a1c53aef6ed38e17b20d57231129a23924d73708d723ff0f6317ac16aabc8c"
+    },
+    "gui-run1-click/screens/26-GUI-4-stderr-08-after.png": {
+      "bytes": 153447,
+      "sha256": "4e6496dfc4debc6c636631c84b14d3de53e4476151084531bf9276ad7f9e70f4"
+    },
+    "gui-run1-click/screens/27-GUI-4-stderr-09-typed.png": {
+      "bytes": 154827,
+      "sha256": "e5050833985b1112fe170b2b070337ee0d001105907e39d1d77f237e2a139df0"
+    },
+    "gui-run1-click/screens/28-GUI-4-stderr-09-after.png": {
+      "bytes": 154701,
+      "sha256": "8dd6faf590fcddaab1a0f74257524571c2d568692545dd31d31425ba40d85d61"
+    },
+    "gui-run1-click/screens/29-GUI-4-stderr-10-typed.png": {
+      "bytes": 155746,
+      "sha256": "2f2acd149c60b27b1c36131ad55e50c40b55c6c3b97a8c8369000adddcc0a4f6"
+    },
+    "gui-run1-click/screens/30-GUI-4-stderr-10-after.png": {
+      "bytes": 159373,
+      "sha256": "f84f6e20bb0e154f4263c2f138eadf079f0569297ead392ec816c3ea79a8d8be"
+    },
+    "gui-run1-click/screens/31-GUI-4-status-of-failure-typed.png": {
+      "bytes": 160433,
+      "sha256": "59e7a4ffaa9adb16fb3394388ebd81b154379b1037e97345cc98ad5096128261"
+    },
+    "gui-run1-click/screens/32-GUI-4-status-of-failure-after.png": {
+      "bytes": 159585,
+      "sha256": "64957eb466b85643ca95b6466b951a4d635ec314ea7406af72555b8329f28ecd"
+    },
+    "gui-run1-click/screens/33-ctrl-c-producer-flowing.png": {
+      "bytes": 194561,
+      "sha256": "92d95f656ebe7d96691380a42c38a158bed81d3cf95958f8f2512fbde3e82332"
+    },
+    "gui-run1-click/screens/34-ctrl-c-producer-flowing-later.png": {
+      "bytes": 190675,
+      "sha256": "a47b4ef3882ae217636b5fd00cf713c9401f58e7304cb175da7614b9fcde3919"
+    },
+    "gui-run1-click/screens/35-ctrl-c-recovered.png": {
+      "bytes": 191199,
+      "sha256": "b970ec0fa67f079c3143d9c7d45a0c46a544f4f5b5548efda2072100dcdac9d1"
+    },
+    "gui-run1-click/screens/36-ctrl-c-status.png": {
+      "bytes": 186386,
+      "sha256": "de8a48b67e668bde56d95f55afd25b601983012f555d5d9905c1e6fe8fc81ded"
+    },
+    "gui-run1-click/screens/37-window-closed.png": {
+      "bytes": 134851,
+      "sha256": "b92d934fa2ae901a99ab1e92f8b1cc7d5b8ca0c35b3377101b642a7578daf62b"
+    },
+    "gui-run1-click/serial.log": {
+      "bytes": 18840,
+      "sha256": "702d57c64677c3eb89e0588125492bada9b4c63a41fdf92fe104f351de58cc15"
+    },
+    "gui-run1-click/serial.raw.log": {
+      "bytes": 18840,
+      "sha256": "702d57c64677c3eb89e0588125492bada9b4c63a41fdf92fe104f351de58cc15"
+    },
+    "gui-run1-click/terminal-ceiling-delta.txt": {
+      "bytes": 260,
+      "sha256": "88c1aec3a5490145b44f678396ea396db802efaa919b57dde81f149fb5be3ddb"
+    },
+    "gui-run1-click/verdict.json": {
+      "bytes": 16361,
+      "sha256": "4ac710f799459ee6f254048d0aef3f4578c2169eeab47ce601e06f546a3d2403"
+    },
+    "gui-run1-click.runner.log": {
+      "bytes": 33201,
+      "sha256": "b5f8928e84348e39d1d517450f983fcb6aead6f1d951b0371851a18bc619af1e"
+    },
+    "gui-run2-click/boot-config/autoload.toml": {
+      "bytes": 271,
+      "sha256": "8a8f54660dc88e80f685b65fc6fbee0a7168fb5f77b551340b8f72c6605894d8"
+    },
+    "gui-run2-click/boot-config/services.toml": {
+      "bytes": 553,
+      "sha256": "67c55680f0eb19d2c24c302afc9edb64f8c734d4115ceb84b38b8a8776456074"
+    },
+    "gui-run2-click/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "gui-run2-click/canonical-after.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run2-click/canonical-before.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run2-click/cellbox-ceiling.txt": {
+      "bytes": 337,
+      "sha256": "c469d1cbe6ffac24aedb5fe76b35fea18ab5fb3687b865c61a640b427b3e7d16"
+    },
+    "gui-run2-click/fat-layout.txt": {
+      "bytes": 3220,
+      "sha256": "5a636d9fa18719969d39c95828fbc251a872e73b47b6ce52b27dc19aa469a7c7"
+    },
+    "gui-run2-click/product-source-digests.json": {
+      "bytes": 561,
+      "sha256": "df797157c68d357d06de83a655f8d8407aa9874b6d5756dd6c49734b6ac58b2b"
+    },
+    "gui-run2-click/provenance.json": {
+      "bytes": 2864,
+      "sha256": "34bb59cdaa33738aae4f8923b44998e6ced2db6f42a6beb8fb693ead0a7d877d"
+    },
+    "gui-run2-click/qemu-argv.txt": {
+      "bytes": 353,
+      "sha256": "efff09565188106157f49bf5701e5ab25527780a0e9a77ebbe9e573c6729f95a"
+    },
+    "gui-run2-click/screens/01-desktop-before-terminal.png": {
+      "bytes": 146434,
+      "sha256": "701e33693f0da9df9b43a6865047495c8f7665c9f8f852ccc97d71188e0a62e1"
+    },
+    "gui-run2-click/screens/02-prompt.png": {
+      "bytes": 105212,
+      "sha256": "3b23fbb6e6e13c5482c157d67771a5f0258962cdea940223b14a3a690c415b54"
+    },
+    "gui-run2-click/screens/03-GUI-3-echo-typed.png": {
+      "bytes": 106353,
+      "sha256": "255a5f0cf0b0fca0c76d8b0c24e7f260d036053590aef46942a1a3787286c1cf"
+    },
+    "gui-run2-click/screens/04-GUI-3-echo-after.png": {
+      "bytes": 108719,
+      "sha256": "b993b145133b86479dc51d686d83613f1b1cb47af483aea9b2459b653548d9f3"
+    },
+    "gui-run2-click/screens/05-GUI-3-stock-echo-typed.png": {
+      "bytes": 110582,
+      "sha256": "0dc2330e15605c3c0c7e07199dac873e6dfec6fb9c622d9c8f2497da2d257ee2"
+    },
+    "gui-run2-click/screens/06-GUI-3-stock-echo-after.png": {
+      "bytes": 113285,
+      "sha256": "30bbbf70fbbd7890228c27a188ca1cc2c3ffe66c83b0a67aabce7251b0ded415"
+    },
+    "gui-run2-click/screens/07-GUI-3-stock-ls-typed.png": {
+      "bytes": 114521,
+      "sha256": "d9b09a50a6b0fdbe808c72d97064e0dd36fe7efc16fc54eb0e99a009f09a4d3c"
+    },
+    "gui-run2-click/screens/08-GUI-3-stock-ls-after.png": {
+      "bytes": 118203,
+      "sha256": "07dea85ee4b60a9f45bd0467fa9e82d4b60bd5c4fe81118b74db8b82f413446e"
+    },
+    "gui-run2-click/screens/09-GUI-3-stock-cat-typed.png": {
+      "bytes": 120116,
+      "sha256": "c3163cdd78c395395dd1fba3b44b91fc9853a85c13e2846102d2c5009671d84c"
+    },
+    "gui-run2-click/screens/10-GUI-3-stock-cat-after.png": {
+      "bytes": 124530,
+      "sha256": "8a021b33b4a5224b059d04c4900dd335cb10786a40ae89e61365cacad1755ad6"
+    },
+    "gui-run2-click/screens/11-GUI-4-stderr-01-typed.png": {
+      "bytes": 125930,
+      "sha256": "7301491a3669999bca022374cfaa6a0bd6f3bc684f24285520a826217df7161a"
+    },
+    "gui-run2-click/screens/12-GUI-4-stderr-01-after.png": {
+      "bytes": 129501,
+      "sha256": "31a869bd0d01bd7822a4674c1e3a038178c40a98edc32c7b304eb37824f2ffd1"
+    },
+    "gui-run2-click/screens/13-GUI-4-stderr-02-typed.png": {
+      "bytes": 131060,
+      "sha256": "d3704287566b9e28d1be1ff0ab1e13250922f10986cd3ac720664c0775807543"
+    },
+    "gui-run2-click/screens/14-GUI-4-stderr-02-after.png": {
+      "bytes": 134420,
+      "sha256": "8704b0f85e10f183a88f7a244fb5ab971c32ef2833f0a91c19978679a8a1e696"
+    },
+    "gui-run2-click/screens/15-GUI-4-stderr-03-typed.png": {
+      "bytes": 135920,
+      "sha256": "cf36a561a275c7ae82cba07c4e87b595ffe620b8dacc600622f238e60b945aa8"
+    },
+    "gui-run2-click/screens/16-GUI-4-stderr-03-after.png": {
+      "bytes": 139639,
+      "sha256": "2644451245ef699d45d28e3f62fcdfb10764fa035cd04d1e9cadb20abce2ba14"
+    },
+    "gui-run2-click/screens/17-GUI-4-stderr-04-typed.png": {
+      "bytes": 140849,
+      "sha256": "0c05fb42b9275fd24a923755c7834f1ab411e780ed7122dabed5b0edee6e0b01"
+    },
+    "gui-run2-click/screens/18-GUI-4-stderr-04-after.png": {
+      "bytes": 144294,
+      "sha256": "e9ba350810e82366f9ac6d17747026813e2de7c54e87973ec7ee9eb1a23ec355"
+    },
+    "gui-run2-click/screens/19-GUI-4-stderr-05-typed.png": {
+      "bytes": 145903,
+      "sha256": "9da3e7f9a18ffa9813c566986b42928e9c248626b04a76c8de1c702676321b35"
+    },
+    "gui-run2-click/screens/20-GUI-4-stderr-05-after.png": {
+      "bytes": 149658,
+      "sha256": "d12cf031fc930d0026ccb59cf234207631ea7ba1aee9c481c86b134df5cef6f5"
+    },
+    "gui-run2-click/screens/21-GUI-4-stderr-06-typed.png": {
+      "bytes": 150755,
+      "sha256": "e237ded418857db6316b721253a802f255b64abc32d175b9e3bc97ec81e94f7c"
+    },
+    "gui-run2-click/screens/22-GUI-4-stderr-06-after.png": {
+      "bytes": 154526,
+      "sha256": "523d0cbf7e246482cbff84290497eb5646db0f341f51251d4317d82a7f58e7bd"
+    },
+    "gui-run2-click/screens/23-GUI-4-stderr-07-typed.png": {
+      "bytes": 156173,
+      "sha256": "9ca57c27db52a20e8798d00adc71885c4f2d3f8d8a135270abd3c0b3ccbbc3e4"
+    },
+    "gui-run2-click/screens/24-GUI-4-stderr-07-after.png": {
+      "bytes": 154453,
+      "sha256": "b0348a25741183389e7fd07b43790e8742725aaab958febff7a01784d159bf85"
+    },
+    "gui-run2-click/screens/25-GUI-4-stderr-08-typed.png": {
+      "bytes": 155570,
+      "sha256": "3120e2ef5ced1fe6249e26e795e8973dc72441830c27e1eeefa3b414ac9985fd"
+    },
+    "gui-run2-click/screens/26-GUI-4-stderr-08-after.png": {
+      "bytes": 155114,
+      "sha256": "59e2f26ab06a90492a45a57ad103d9bcd446282c82689fd8be48e7bd6de50e51"
+    },
+    "gui-run2-click/screens/27-GUI-4-stderr-09-typed.png": {
+      "bytes": 156634,
+      "sha256": "965425b3e138988378c42dc12432f7a132870f3837c23ac56ba62aa044612283"
+    },
+    "gui-run2-click/screens/28-GUI-4-stderr-09-after.png": {
+      "bytes": 156346,
+      "sha256": "0b9cc2e2d531be84ed1fb6d31a4b47af18ea38ea7dcb1ee35d12f8e997a71d44"
+    },
+    "gui-run2-click/screens/29-GUI-4-stderr-10-typed.png": {
+      "bytes": 157233,
+      "sha256": "60929e5739afe6fd782c632bc10ab2cc891c4c18166791c642ac495da07e6797"
+    },
+    "gui-run2-click/screens/30-GUI-4-stderr-10-after.png": {
+      "bytes": 160779,
+      "sha256": "0ffba25d872d3564c05c21e8c9e28e225bff0db1fe5d1044c5e5e17c637d4ac0"
+    },
+    "gui-run2-click/screens/31-GUI-4-status-of-failure-typed.png": {
+      "bytes": 162039,
+      "sha256": "91a432688b7c489673d16e950c081e7dce4bed7040c3082d801a2e04ec6f44f5"
+    },
+    "gui-run2-click/screens/32-GUI-4-status-of-failure-after.png": {
+      "bytes": 161270,
+      "sha256": "a01fcbaeaa4a23f668eefd591e09c1d33b89132a286398f576a99abc9778bb1c"
+    },
+    "gui-run2-click/screens/33-ctrl-c-producer-flowing.png": {
+      "bytes": 192963,
+      "sha256": "dbb15a58a3711adceead0102ade407bb6ab6fe6e205f58f0a9af25a8bf658613"
+    },
+    "gui-run2-click/screens/34-ctrl-c-producer-flowing-later.png": {
+      "bytes": 197317,
+      "sha256": "bdcaa3e7fee8a8750a3d9997071f5d129925c0c2b0c3c23a38d453ae1568c095"
+    },
+    "gui-run2-click/screens/35-ctrl-c-recovered.png": {
+      "bytes": 195354,
+      "sha256": "af6510e3b4451938f1346d073dd432d96a63d4548c871325b3b7b30163db1147"
+    },
+    "gui-run2-click/screens/36-ctrl-c-status.png": {
+      "bytes": 191263,
+      "sha256": "e6d522918bce467351ffdb7d9382325fbef0caca99c3790ba60cd0e7f935a0bc"
+    },
+    "gui-run2-click/screens/37-window-closed.png": {
+      "bytes": 136585,
+      "sha256": "c9c9dedc53cd871d41b766373d890886c5753764012bfa3a9e497dd46c645fe6"
+    },
+    "gui-run2-click/serial.log": {
+      "bytes": 18833,
+      "sha256": "bdad27b7cab1fb037e91c9c803f9a62bbf0a5cc4741b8a33b96d483a76065bbc"
+    },
+    "gui-run2-click/serial.raw.log": {
+      "bytes": 18833,
+      "sha256": "bdad27b7cab1fb037e91c9c803f9a62bbf0a5cc4741b8a33b96d483a76065bbc"
+    },
+    "gui-run2-click/terminal-ceiling-delta.txt": {
+      "bytes": 260,
+      "sha256": "88c1aec3a5490145b44f678396ea396db802efaa919b57dde81f149fb5be3ddb"
+    },
+    "gui-run2-click/verdict.json": {
+      "bytes": 16361,
+      "sha256": "16d3be0e07394e94f4a76c0dc44b93cbc1ff4ab65aa8868cf4ec8910bddc54a9"
+    },
+    "gui-run2-click.runner.log": {
+      "bytes": 33097,
+      "sha256": "d87fa1ddfa90d2de221394e6312a341f9d8c46681cd32ca0d92df26e09169efc"
+    },
+    "gui-run3-click/boot-config/autoload.toml": {
+      "bytes": 271,
+      "sha256": "8a8f54660dc88e80f685b65fc6fbee0a7168fb5f77b551340b8f72c6605894d8"
+    },
+    "gui-run3-click/boot-config/services.toml": {
+      "bytes": 553,
+      "sha256": "67c55680f0eb19d2c24c302afc9edb64f8c734d4115ceb84b38b8a8776456074"
+    },
+    "gui-run3-click/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "gui-run3-click/canonical-after.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run3-click/canonical-before.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run3-click/cellbox-ceiling.txt": {
+      "bytes": 337,
+      "sha256": "c469d1cbe6ffac24aedb5fe76b35fea18ab5fb3687b865c61a640b427b3e7d16"
+    },
+    "gui-run3-click/fat-layout.txt": {
+      "bytes": 3220,
+      "sha256": "b3e5f902ce7c9bf3cf057b5738314a4d398b44589369fe2022ea9675056490c7"
+    },
+    "gui-run3-click/product-source-digests.json": {
+      "bytes": 561,
+      "sha256": "df797157c68d357d06de83a655f8d8407aa9874b6d5756dd6c49734b6ac58b2b"
+    },
+    "gui-run3-click/provenance.json": {
+      "bytes": 2864,
+      "sha256": "de64c9c2e0df3111394348d6d1762b7303282a0bb7ef373b5426c959d169c715"
+    },
+    "gui-run3-click/qemu-argv.txt": {
+      "bytes": 353,
+      "sha256": "efff09565188106157f49bf5701e5ab25527780a0e9a77ebbe9e573c6729f95a"
+    },
+    "gui-run3-click/screens/01-desktop-before-terminal.png": {
+      "bytes": 146368,
+      "sha256": "cdc6e4bf80978c6bca75fae54cec2d3512d5d8d7c4271911f9400b90b46eb405"
+    },
+    "gui-run3-click/screens/02-prompt.png": {
+      "bytes": 105155,
+      "sha256": "49ba80b2c6c214cd6a723171cbd2101e39ae875a3004d2d0c355bab23a426190"
+    },
+    "gui-run3-click/screens/03-GUI-3-echo-typed.png": {
+      "bytes": 106289,
+      "sha256": "4326f64ce91cf66637b24e967a83148c6ebbd13adeb5fbb3b4f429e6b37eefb6"
+    },
+    "gui-run3-click/screens/04-GUI-3-echo-after.png": {
+      "bytes": 108491,
+      "sha256": "a6f12f14f61f0fa1d44706f4f56c90545ae5b6442ce6b705a3bc186655a9b407"
+    },
+    "gui-run3-click/screens/05-GUI-3-stock-echo-typed.png": {
+      "bytes": 110545,
+      "sha256": "04dde646f4dc184b7bfc494e5b15e7fcda5f588c88812ee4c26db830085d595e"
+    },
+    "gui-run3-click/screens/06-GUI-3-stock-echo-after.png": {
+      "bytes": 113288,
+      "sha256": "d67d9d7d390673f154501754b923764b0cda0c8d545ac733c79dc09348bd0345"
+    },
+    "gui-run3-click/screens/07-GUI-3-stock-ls-typed.png": {
+      "bytes": 114202,
+      "sha256": "9188530f4b26005675ec273faa43d7a6d65867b0d646cd729ff571e574e1ae71"
+    },
+    "gui-run3-click/screens/08-GUI-3-stock-ls-after.png": {
+      "bytes": 117928,
+      "sha256": "25a9914be9da0a707694054e8a6f9e1e44b93fe3bea6367df7a6484675da291c"
+    },
+    "gui-run3-click/screens/09-GUI-3-stock-cat-typed.png": {
+      "bytes": 120104,
+      "sha256": "f11c67506c82ebfbb97f648ffa91cab02af23e37fbe824f3127653cfe89cca20"
+    },
+    "gui-run3-click/screens/10-GUI-3-stock-cat-after.png": {
+      "bytes": 124563,
+      "sha256": "29727f2e3d35c091c74b32e7daff7930ae5e4586940da2d93d6157978d24e461"
+    },
+    "gui-run3-click/screens/11-GUI-4-stderr-01-typed.png": {
+      "bytes": 126021,
+      "sha256": "ef634ac316ac6e20ff3a80fb0dc39592841d64d22d2701f05c38be94a764c4ad"
+    },
+    "gui-run3-click/screens/12-GUI-4-stderr-01-after.png": {
+      "bytes": 129196,
+      "sha256": "2a62cd0740f5bb54e22ebca8eb397367edddcd6964d67ecfcb3471bd8d8d3912"
+    },
+    "gui-run3-click/screens/13-GUI-4-stderr-02-typed.png": {
+      "bytes": 130837,
+      "sha256": "eb56a1b2c177656877034d2cc4b6e69c1d3e767ad2a47836250b53ce9535826a"
+    },
+    "gui-run3-click/screens/14-GUI-4-stderr-02-after.png": {
+      "bytes": 134592,
+      "sha256": "243423c5ab908e554aa33976aa074163e2b82b730d5952cc38497602150c73ad"
+    },
+    "gui-run3-click/screens/15-GUI-4-stderr-03-typed.png": {
+      "bytes": 135802,
+      "sha256": "5da8f3ce0775e8304518aee0118e0a9a2ddcab2d077550193220a8719202c702"
+    },
+    "gui-run3-click/screens/16-GUI-4-stderr-03-after.png": {
+      "bytes": 139560,
+      "sha256": "1abfb1684874a4698cba9a862a57b6e08b5575e5cfb865d6124ab2a25e5b2de5"
+    },
+    "gui-run3-click/screens/17-GUI-4-stderr-04-typed.png": {
+      "bytes": 140718,
+      "sha256": "63b6112faea0504a0e8210f54f95be657605df2ed57f5cb3604054d8c394b1bd"
+    },
+    "gui-run3-click/screens/18-GUI-4-stderr-04-after.png": {
+      "bytes": 144488,
+      "sha256": "d3d727222c1f5a31eafa653d3ac2f53462bd16b846d2f3550ff02813bbfc4b64"
+    },
+    "gui-run3-click/screens/19-GUI-4-stderr-05-typed.png": {
+      "bytes": 146111,
+      "sha256": "b1b12c49de20b5292073adfc2ef2006b054d988de2d5f60759ecd78444b8add6"
+    },
+    "gui-run3-click/screens/20-GUI-4-stderr-05-after.png": {
+      "bytes": 149923,
+      "sha256": "48d67ac6fb3df8faf6401180dd2d26f4509ce4c4dd023060b1326e083afa5bdc"
+    },
+    "gui-run3-click/screens/21-GUI-4-stderr-06-typed.png": {
+      "bytes": 150889,
+      "sha256": "5d47713a714ec5e8c0aa79ef1e843f820e08d8896f3a20e5e4491aae39014485"
+    },
+    "gui-run3-click/screens/22-GUI-4-stderr-06-after.png": {
+      "bytes": 154578,
+      "sha256": "dd125f2529c8da127a5f56548fab0fc8d29be679d8e1c02c83e109ff5aec8f4b"
+    },
+    "gui-run3-click/screens/23-GUI-4-stderr-07-typed.png": {
+      "bytes": 156213,
+      "sha256": "a0ca13dc5ac4725edf55ae127622f5a65d572f51c167f28d6c98e41055615425"
+    },
+    "gui-run3-click/screens/24-GUI-4-stderr-07-after.png": {
+      "bytes": 154513,
+      "sha256": "242e8d80a18f4cdf60694283da83a0e26c0cf4e4d480fdf81217ccaea16710bd"
+    },
+    "gui-run3-click/screens/25-GUI-4-stderr-08-typed.png": {
+      "bytes": 155388,
+      "sha256": "5e7e64bac4d10072b7106427b94ea3a5811f8d5f8852b06fe83be094386127c2"
+    },
+    "gui-run3-click/screens/26-GUI-4-stderr-08-after.png": {
+      "bytes": 154931,
+      "sha256": "424c79cf362f99206c665b0360647a48622e5de444e3b53343ea71e22a852e93"
+    },
+    "gui-run3-click/screens/27-GUI-4-stderr-09-typed.png": {
+      "bytes": 156560,
+      "sha256": "783d5ed4600bbeb799fadd1b6673e949a63e16b33e2d9d9712ef5a0c8238f075"
+    },
+    "gui-run3-click/screens/28-GUI-4-stderr-09-after.png": {
+      "bytes": 156243,
+      "sha256": "a208493f43ed58778a64667700f593f7063e1b5c81b6ef605d3be456e63b3365"
+    },
+    "gui-run3-click/screens/29-GUI-4-stderr-10-typed.png": {
+      "bytes": 157368,
+      "sha256": "b5fbb0e4faca803664cd81663053473fad553394e190b8e4cbf12358bffe6a36"
+    },
+    "gui-run3-click/screens/30-GUI-4-stderr-10-after.png": {
+      "bytes": 160913,
+      "sha256": "8d6e801103029819d3fd0d6428f190ad8e87c1d1e2c9e3235f830ad41bb87f6b"
+    },
+    "gui-run3-click/screens/31-GUI-4-status-of-failure-typed.png": {
+      "bytes": 162177,
+      "sha256": "90147096268ad2aaa80f94f107d4ab40e9fcd4ead8ead49b21ebf172d7e3441e"
+    },
+    "gui-run3-click/screens/32-GUI-4-status-of-failure-after.png": {
+      "bytes": 161335,
+      "sha256": "b7af048804cbbf7acbbbb699d8a8a98e59486eaea03f5a4c53843de183a14481"
+    },
+    "gui-run3-click/screens/33-ctrl-c-producer-flowing.png": {
+      "bytes": 191845,
+      "sha256": "9bb51ebbd5ede16522624cd4aed98d82e5018dd36cc05c084e51f0b55b95a55d"
+    },
+    "gui-run3-click/screens/34-ctrl-c-producer-flowing-later.png": {
+      "bytes": 191567,
+      "sha256": "b58ceef535eae1845140d9a1b67edaaf21bc5e25a6c15d536f785e6007cb8170"
+    },
+    "gui-run3-click/screens/35-ctrl-c-recovered.png": {
+      "bytes": 190713,
+      "sha256": "053a1f9b3e0446fc41f3080a45963b768658a41b16acc73afc005fae49f79856"
+    },
+    "gui-run3-click/screens/36-ctrl-c-status.png": {
+      "bytes": 186120,
+      "sha256": "f6b29edcc9c6b13a5a17e68590f5619bbf15264b1fb341090538daba3f0cbc8c"
+    },
+    "gui-run3-click/screens/37-window-closed.png": {
+      "bytes": 136907,
+      "sha256": "b9560974ccc895998e7f3410c6209acf34002241fdaec6ef32c2a8a8e0267acc"
+    },
+    "gui-run3-click/serial.log": {
+      "bytes": 18833,
+      "sha256": "bdad27b7cab1fb037e91c9c803f9a62bbf0a5cc4741b8a33b96d483a76065bbc"
+    },
+    "gui-run3-click/serial.raw.log": {
+      "bytes": 18833,
+      "sha256": "bdad27b7cab1fb037e91c9c803f9a62bbf0a5cc4741b8a33b96d483a76065bbc"
+    },
+    "gui-run3-click/terminal-ceiling-delta.txt": {
+      "bytes": 260,
+      "sha256": "88c1aec3a5490145b44f678396ea396db802efaa919b57dde81f149fb5be3ddb"
+    },
+    "gui-run3-click/verdict.json": {
+      "bytes": 16361,
+      "sha256": "fb929d7ad19499544bf3cfe404a743db161cb82d0cda859c29e82ced5d2e6d3c"
+    },
+    "gui-run3-click.runner.log": {
+      "bytes": 33096,
+      "sha256": "2314d07db6c174392b803fd39d651419ebe03980021e602be920d9f9c16b4795"
+    },
+    "gui-run4-click/boot-config/autoload.toml": {
+      "bytes": 271,
+      "sha256": "8a8f54660dc88e80f685b65fc6fbee0a7168fb5f77b551340b8f72c6605894d8"
+    },
+    "gui-run4-click/boot-config/services.toml": {
+      "bytes": 553,
+      "sha256": "67c55680f0eb19d2c24c302afc9edb64f8c734d4115ceb84b38b8a8776456074"
+    },
+    "gui-run4-click/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "gui-run4-click/canonical-after.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run4-click/canonical-before.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run4-click/cellbox-ceiling.txt": {
+      "bytes": 337,
+      "sha256": "c469d1cbe6ffac24aedb5fe76b35fea18ab5fb3687b865c61a640b427b3e7d16"
+    },
+    "gui-run4-click/fat-layout.txt": {
+      "bytes": 3220,
+      "sha256": "d1435e57a613d4760477f643f700df7d2cba18b833608ab7ff5cf28e36a75fe9"
+    },
+    "gui-run4-click/product-source-digests.json": {
+      "bytes": 561,
+      "sha256": "df797157c68d357d06de83a655f8d8407aa9874b6d5756dd6c49734b6ac58b2b"
+    },
+    "gui-run4-click/provenance.json": {
+      "bytes": 2864,
+      "sha256": "5d487e6c41527f4a479a2bab075f63170b75d8aa880c03e32d3eda4712ec69e2"
+    },
+    "gui-run4-click/qemu-argv.txt": {
+      "bytes": 353,
+      "sha256": "efff09565188106157f49bf5701e5ab25527780a0e9a77ebbe9e573c6729f95a"
+    },
+    "gui-run4-click/screens/01-desktop-before-terminal.png": {
+      "bytes": 146368,
+      "sha256": "cdc6e4bf80978c6bca75fae54cec2d3512d5d8d7c4271911f9400b90b46eb405"
+    },
+    "gui-run4-click/screens/02-prompt.png": {
+      "bytes": 105155,
+      "sha256": "49ba80b2c6c214cd6a723171cbd2101e39ae875a3004d2d0c355bab23a426190"
+    },
+    "gui-run4-click/screens/03-GUI-3-echo-typed.png": {
+      "bytes": 106289,
+      "sha256": "4326f64ce91cf66637b24e967a83148c6ebbd13adeb5fbb3b4f429e6b37eefb6"
+    },
+    "gui-run4-click/screens/04-GUI-3-echo-after.png": {
+      "bytes": 108491,
+      "sha256": "a6f12f14f61f0fa1d44706f4f56c90545ae5b6442ce6b705a3bc186655a9b407"
+    },
+    "gui-run4-click/screens/05-GUI-3-stock-echo-typed.png": {
+      "bytes": 110545,
+      "sha256": "04dde646f4dc184b7bfc494e5b15e7fcda5f588c88812ee4c26db830085d595e"
+    },
+    "gui-run4-click/screens/06-GUI-3-stock-echo-after.png": {
+      "bytes": 113288,
+      "sha256": "d67d9d7d390673f154501754b923764b0cda0c8d545ac733c79dc09348bd0345"
+    },
+    "gui-run4-click/screens/07-GUI-3-stock-ls-typed.png": {
+      "bytes": 114202,
+      "sha256": "9188530f4b26005675ec273faa43d7a6d65867b0d646cd729ff571e574e1ae71"
+    },
+    "gui-run4-click/screens/08-GUI-3-stock-ls-after.png": {
+      "bytes": 117897,
+      "sha256": "8b1de058927d2ad93171620354f5bcfbfe39e94203c8ff822f8b17e693957070"
+    },
+    "gui-run4-click/screens/09-GUI-3-stock-cat-typed.png": {
+      "bytes": 120208,
+      "sha256": "3eba2a8eb09072ec36484aa75be5dcd8bdc7862bb65e8828950b9102d0f2b81b"
+    },
+    "gui-run4-click/screens/10-GUI-3-stock-cat-after.png": {
+      "bytes": 124621,
+      "sha256": "bb6bb4f96780b5d8cf59f4bc2a9edfed89e1df0f6b8743ee11108174e7ba4831"
+    },
+    "gui-run4-click/screens/11-GUI-4-stderr-01-typed.png": {
+      "bytes": 125808,
+      "sha256": "391a79178b54b4ab4a86523494a2655b5b6a558d145e6c9a4840a70a46689bf8"
+    },
+    "gui-run4-click/screens/12-GUI-4-stderr-01-after.png": {
+      "bytes": 129686,
+      "sha256": "fcc13f94d248da6b5106ad65b4e196c3ddd0f5999dfb473e462474c44623d698"
+    },
+    "gui-run4-click/screens/13-GUI-4-stderr-02-typed.png": {
+      "bytes": 131066,
+      "sha256": "b4243cdc33fd80a1f8eac7e27edc0faf9a9590f33b55f5f328b498b5940d247f"
+    },
+    "gui-run4-click/screens/14-GUI-4-stderr-02-after.png": {
+      "bytes": 134744,
+      "sha256": "790b85df8418360d09c9848f6c00508cd8ab514ec732eb537c4519578cdae875"
+    },
+    "gui-run4-click/screens/15-GUI-4-stderr-03-typed.png": {
+      "bytes": 135590,
+      "sha256": "ec822d1a998012b4ca907e6bb2f8cc4131b67b4505e29a56d5aa532383b22694"
+    },
+    "gui-run4-click/screens/16-GUI-4-stderr-03-after.png": {
+      "bytes": 139529,
+      "sha256": "82f09c980f2f42aab9d3705e5c522a1fd0efce7a7fccae1ecb05ca289fce8b2d"
+    },
+    "gui-run4-click/screens/17-GUI-4-stderr-04-typed.png": {
+      "bytes": 140948,
+      "sha256": "e41b5b7f91eab2ece4bc0f1f0e268c753c954ad4b652782c477bbd9fbe32273f"
+    },
+    "gui-run4-click/screens/18-GUI-4-stderr-04-after.png": {
+      "bytes": 144532,
+      "sha256": "3f1d0f3cc51eb665bc0e9d9e50b1845a3f00ec479164056fc4a3792817a7bc89"
+    },
+    "gui-run4-click/screens/19-GUI-4-stderr-05-typed.png": {
+      "bytes": 145574,
+      "sha256": "5bfff8445509dde4bd29bc0af3ef8e574351b1b6be9bb7e8ee9a62fd7ee1f459"
+    },
+    "gui-run4-click/screens/20-GUI-4-stderr-05-after.png": {
+      "bytes": 149536,
+      "sha256": "afdecfd60d3a060ee39182c2a1065d3a91fd4e4b1fcf638d6654ef195dcecec5"
+    },
+    "gui-run4-click/screens/21-GUI-4-stderr-06-typed.png": {
+      "bytes": 150913,
+      "sha256": "56ff2b1c8cb3f8ac98788f4afcb52eadf47498f5424d34584d06518bc479241c"
+    },
+    "gui-run4-click/screens/22-GUI-4-stderr-06-after.png": {
+      "bytes": 154477,
+      "sha256": "abb7283647ba73bdab8bb9e3b8313b6c72e8640b7bb04435ec4597546266b4b3"
+    },
+    "gui-run4-click/screens/23-GUI-4-stderr-07-typed.png": {
+      "bytes": 155856,
+      "sha256": "fe0c8c8f417c7d3471a469820852b050bcee6ab69d0e088f2f5fa39f45918cb0"
+    },
+    "gui-run4-click/screens/24-GUI-4-stderr-07-after.png": {
+      "bytes": 154136,
+      "sha256": "a22f1e55a24f8ca57a61eb1e640c896d95194193440542ddca1c56973ed7840f"
+    },
+    "gui-run4-click/screens/25-GUI-4-stderr-08-typed.png": {
+      "bytes": 155813,
+      "sha256": "2c716ef6a4ae00f24230884ec5cbffcf3bf6c9182fdbbad7c3bc1f234d27fb43"
+    },
+    "gui-run4-click/screens/26-GUI-4-stderr-08-after.png": {
+      "bytes": 155230,
+      "sha256": "3211e9b09125af9721ecf8fb0823b432e8a296a9eb26fa0b7da9d4b9ed057dda"
+    },
+    "gui-run4-click/screens/27-GUI-4-stderr-09-typed.png": {
+      "bytes": 156304,
+      "sha256": "f5e28f9d450e7ef6cb46150593ea8fe3b5854f3baf9dbb51c4af48f91f7def94"
+    },
+    "gui-run4-click/screens/28-GUI-4-stderr-09-after.png": {
+      "bytes": 156244,
+      "sha256": "3af9a811bb4d295d6c0a7eea4011501a0a307554530fe77bfd1d8f571b05a97b"
+    },
+    "gui-run4-click/screens/29-GUI-4-stderr-10-typed.png": {
+      "bytes": 157663,
+      "sha256": "f8c8837a6c4fd24dbc76adb4c907a4a7602ff30cb3c38860b74273f5d5ab86be"
+    },
+    "gui-run4-click/screens/30-GUI-4-stderr-10-after.png": {
+      "bytes": 161072,
+      "sha256": "e76f3ac48411d07cbedddd5940c4a7ea76fd7c855bad1c68acf8f2953f0db49e"
+    },
+    "gui-run4-click/screens/31-GUI-4-status-of-failure-typed.png": {
+      "bytes": 162144,
+      "sha256": "99beaf8949263ee8be07b2abcdf8b478af4cd3f3ad9bc7a9657ba21b6e5b7e36"
+    },
+    "gui-run4-click/screens/32-GUI-4-status-of-failure-after.png": {
+      "bytes": 161041,
+      "sha256": "b7678fb1403b034d8677a262196b906fc20107b390a28e7ddaffa27be3a29363"
+    },
+    "gui-run4-click/screens/33-ctrl-c-producer-flowing.png": {
+      "bytes": 195430,
+      "sha256": "32898bfe651c5a07f03ad0e85f9890db17fd158639be8653464867336997cb7a"
+    },
+    "gui-run4-click/screens/34-ctrl-c-producer-flowing-later.png": {
+      "bytes": 192972,
+      "sha256": "759bc9e7137f5d78ca4e4cd1efc02295b796c2ffae9977fbb4b7e2420da2f913"
+    },
+    "gui-run4-click/screens/35-ctrl-c-recovered.png": {
+      "bytes": 191187,
+      "sha256": "3d3f6fa5a73eae758a7f9cfb1b58c31cbaae1ae4dbcb9434ced47174122e4889"
+    },
+    "gui-run4-click/screens/36-ctrl-c-status.png": {
+      "bytes": 186857,
+      "sha256": "5abd1a595903840a227d7ba9d4773340efe2870c6d0ba19331a97e9903e52973"
+    },
+    "gui-run4-click/screens/37-window-closed.png": {
+      "bytes": 136679,
+      "sha256": "fbf1963a7354dae1a8cba00737281af1c4143eb471ed3381a17ef68239b22570"
+    },
+    "gui-run4-click/serial.log": {
+      "bytes": 18833,
+      "sha256": "aad46872355f71062a4891d7bd926a3be7348f23ac353e57369310859f7719bb"
+    },
+    "gui-run4-click/serial.raw.log": {
+      "bytes": 18833,
+      "sha256": "aad46872355f71062a4891d7bd926a3be7348f23ac353e57369310859f7719bb"
+    },
+    "gui-run4-click/terminal-ceiling-delta.txt": {
+      "bytes": 260,
+      "sha256": "88c1aec3a5490145b44f678396ea396db802efaa919b57dde81f149fb5be3ddb"
+    },
+    "gui-run4-click/verdict.json": {
+      "bytes": 16361,
+      "sha256": "b4e37b0b3bc13bba12d0e9452547dc872b0d6c301b89144bc5b66e0b798b2512"
+    },
+    "gui-run4-click.runner.log": {
+      "bytes": 33096,
+      "sha256": "32c4ab65f61a5162802e17a1cfd9fd5cc9efac577ac1a4bea09aea6ae6e6e2b5"
+    },
+    "gui-run5-click/boot-config/autoload.toml": {
+      "bytes": 271,
+      "sha256": "8a8f54660dc88e80f685b65fc6fbee0a7168fb5f77b551340b8f72c6605894d8"
+    },
+    "gui-run5-click/boot-config/services.toml": {
+      "bytes": 553,
+      "sha256": "67c55680f0eb19d2c24c302afc9edb64f8c734d4115ceb84b38b8a8776456074"
+    },
+    "gui-run5-click/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "gui-run5-click/canonical-after.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run5-click/canonical-before.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run5-click/cellbox-ceiling.txt": {
+      "bytes": 337,
+      "sha256": "c469d1cbe6ffac24aedb5fe76b35fea18ab5fb3687b865c61a640b427b3e7d16"
+    },
+    "gui-run5-click/fat-layout.txt": {
+      "bytes": 3220,
+      "sha256": "15a6c15fc3b3aecb84707b89c2d90000b3aa2ffd953abafb95edcc2173b5322e"
+    },
+    "gui-run5-click/product-source-digests.json": {
+      "bytes": 561,
+      "sha256": "df797157c68d357d06de83a655f8d8407aa9874b6d5756dd6c49734b6ac58b2b"
+    },
+    "gui-run5-click/provenance.json": {
+      "bytes": 2864,
+      "sha256": "469e327d1a3301f02b41f0e04146e49797c1abd06fb6ae91d038188e46212f4b"
+    },
+    "gui-run5-click/qemu-argv.txt": {
+      "bytes": 353,
+      "sha256": "efff09565188106157f49bf5701e5ab25527780a0e9a77ebbe9e573c6729f95a"
+    },
+    "gui-run5-click/screens/01-desktop-before-terminal.png": {
+      "bytes": 146233,
+      "sha256": "bdc87a74f904b9a0520151e295669d671e21751db7f40a8399763a3e2bef5e2a"
+    },
+    "gui-run5-click/screens/02-prompt.png": {
+      "bytes": 105224,
+      "sha256": "1e2e5d9adcf4badb5b1202e5bb4f46f57a3064a3c2cd1ffa9f4f9104c3941377"
+    },
+    "gui-run5-click/screens/03-GUI-3-echo-typed.png": {
+      "bytes": 106536,
+      "sha256": "7e39d2484e08f62573fe88fd4c28011810efe6799c6dff10efe38f734f6c6ecf"
+    },
+    "gui-run5-click/screens/04-GUI-3-echo-after.png": {
+      "bytes": 108740,
+      "sha256": "b863ba8a8fdb8d0c42d638064e7343a8444175d9ca17ccf5a659bded836c613d"
+    },
+    "gui-run5-click/screens/05-GUI-3-stock-echo-typed.png": {
+      "bytes": 110466,
+      "sha256": "ec74291fd7def5f4d7ae8a238731c651f12678d46a1994664bd710045242de70"
+    },
+    "gui-run5-click/screens/06-GUI-3-stock-echo-after.png": {
+      "bytes": 113156,
+      "sha256": "e8bdb450ee459c674739d3b32d030d296b58b31dac752923a20438b79b71dd78"
+    },
+    "gui-run5-click/screens/07-GUI-3-stock-ls-typed.png": {
+      "bytes": 114618,
+      "sha256": "b9f403d816d5e3eb0959576e5b7e69dd89db9efe36b24dc991c9a73eae258383"
+    },
+    "gui-run5-click/screens/08-GUI-3-stock-ls-after.png": {
+      "bytes": 118301,
+      "sha256": "ddf36b1da48d112c5cc976294e81629615e155c9c2480a34e73a3819fd80207a"
+    },
+    "gui-run5-click/screens/09-GUI-3-stock-cat-typed.png": {
+      "bytes": 119860,
+      "sha256": "1ed91f87b96d6a55c5664188535cbbf7b01bae1124cdc592cae5439d99575617"
+    },
+    "gui-run5-click/screens/10-GUI-3-stock-cat-after.png": {
+      "bytes": 124699,
+      "sha256": "4b7806c14b2af990ee439af3ff3dd6f40549ed5f061bab08ce217a510f4b95db"
+    },
+    "gui-run5-click/screens/11-GUI-4-stderr-01-typed.png": {
+      "bytes": 125896,
+      "sha256": "d4ec292a00300155fdc7ed2600ee6c4c086c39859e8561403b7998a249d6eae1"
+    },
+    "gui-run5-click/screens/12-GUI-4-stderr-01-after.png": {
+      "bytes": 129486,
+      "sha256": "52e6d8a292fad348530d42ce934108d175c9f8b78b0970e47a8325d8e1db2b96"
+    },
+    "gui-run5-click/screens/13-GUI-4-stderr-02-typed.png": {
+      "bytes": 130958,
+      "sha256": "8999f6a14455f7d16bc76eca4f57c3bd7c190b19f7370c93c921121e52c94d35"
+    },
+    "gui-run5-click/screens/14-GUI-4-stderr-02-after.png": {
+      "bytes": 134614,
+      "sha256": "1059bc5aebe07d0e8866530d7fa2ea7200dbeb5ef271ad8deeb44af2373c7b52"
+    },
+    "gui-run5-click/screens/15-GUI-4-stderr-03-typed.png": {
+      "bytes": 136147,
+      "sha256": "569c10785ac2a01a02889fca64d84f952884ca54a3b0fa1f06916cab4f716fbe"
+    },
+    "gui-run5-click/screens/16-GUI-4-stderr-03-after.png": {
+      "bytes": 139421,
+      "sha256": "9321c4fc316c34046c6e7ebdfaaa4adb0a55c43fb1b08d555e3655cae21f15e3"
+    },
+    "gui-run5-click/screens/17-GUI-4-stderr-04-typed.png": {
+      "bytes": 140746,
+      "sha256": "9bc727e592c6f139b634c3e320dee125bab66db1fe3e153c69273362215fa9b9"
+    },
+    "gui-run5-click/screens/18-GUI-4-stderr-04-after.png": {
+      "bytes": 144611,
+      "sha256": "e7c7970a3e9489472aef4c334a332566c82f9f382543c349edc3089ad3b85db1"
+    },
+    "gui-run5-click/screens/19-GUI-4-stderr-05-typed.png": {
+      "bytes": 145858,
+      "sha256": "5b76b1135ed8ad63793a47bd6e51d5ec938a328f81e43c3c474dd2446e9e171f"
+    },
+    "gui-run5-click/screens/20-GUI-4-stderr-05-after.png": {
+      "bytes": 149342,
+      "sha256": "37f3df4c87ed8d424abc0c4781799b6488a943409fa50d26f1597a440a321bc6"
+    },
+    "gui-run5-click/screens/21-GUI-4-stderr-06-typed.png": {
+      "bytes": 150713,
+      "sha256": "605327d59db01938d5900ed16fb50e9ee7c850aa83df46a5d0b534e59e8517bf"
+    },
+    "gui-run5-click/screens/22-GUI-4-stderr-06-after.png": {
+      "bytes": 154666,
+      "sha256": "239ad6d2788007fd45c4990f72febb4517752cac031393cac38e25bc9d824270"
+    },
+    "gui-run5-click/screens/23-GUI-4-stderr-07-typed.png": {
+      "bytes": 155925,
+      "sha256": "a21a1218c427c1f894333f6f3f303c0c77df1affa191b71d526e54e80676b1f1"
+    },
+    "gui-run5-click/screens/24-GUI-4-stderr-07-after.png": {
+      "bytes": 154139,
+      "sha256": "0a5fae1c15a3915f390bff7d2d19d7875faefe378b63b16c14ec9a1e7e85a4d5"
+    },
+    "gui-run5-click/screens/25-GUI-4-stderr-08-typed.png": {
+      "bytes": 155605,
+      "sha256": "e43d6c36c1e8beaf5337d05365d9487e1a619671aaab4700b0cab3dcf04b0ea2"
+    },
+    "gui-run5-click/screens/26-GUI-4-stderr-08-after.png": {
+      "bytes": 155313,
+      "sha256": "61e881c2f6db4ff3890f5649f6c81bebf813164938d8fa1b6ec0f4551828ce52"
+    },
+    "gui-run5-click/screens/27-GUI-4-stderr-09-typed.png": {
+      "bytes": 156557,
+      "sha256": "0911b70c56e85119f9dd512e188281d537fca3ff79e97e6367000d3a575d4c7e"
+    },
+    "gui-run5-click/screens/28-GUI-4-stderr-09-after.png": {
+      "bytes": 156128,
+      "sha256": "ca75895e8a5f306d5e65029d5c36e9e755e83a3897b5fe4db0f06ef65cb58dd9"
+    },
+    "gui-run5-click/screens/29-GUI-4-stderr-10-typed.png": {
+      "bytes": 157465,
+      "sha256": "c425898e4469b754fb6e57819f580d78c9d5225d8848c5eca9d31208d8b797ec"
+    },
+    "gui-run5-click/screens/30-GUI-4-stderr-10-after.png": {
+      "bytes": 161158,
+      "sha256": "b4c015eb8da4e27ff74ec80f3c641ab3d7aa9c696cc7027e937c5af15572cf92"
+    },
+    "gui-run5-click/screens/31-GUI-4-status-of-failure-typed.png": {
+      "bytes": 162096,
+      "sha256": "c729284d8dc85c7eda7da4f7499284f3221b9a8a45f2f8dffbfc13a134709cec"
+    },
+    "gui-run5-click/screens/32-GUI-4-status-of-failure-after.png": {
+      "bytes": 161441,
+      "sha256": "2c3b6a358affa533b10e4c23b930f15dbd521d68edb6b53d844c120fade8ddeb"
+    },
+    "gui-run5-click/screens/33-ctrl-c-producer-flowing.png": {
+      "bytes": 191990,
+      "sha256": "9a0cee9c95e3c1f1e179440409bb9442b554df18ea8bbb7c93fe90715844d21b"
+    },
+    "gui-run5-click/screens/34-ctrl-c-producer-flowing-later.png": {
+      "bytes": 194367,
+      "sha256": "d46a13eb25f2470e4e38d977a8f6f875b360ccebdc5d7f2da607ac4fce86eb8d"
+    },
+    "gui-run5-click/screens/35-ctrl-c-recovered.png": {
+      "bytes": 193860,
+      "sha256": "d6b737200bdc6d3826375870348f8665ae52e9499d8356fdb436d9fa7e43900e"
+    },
+    "gui-run5-click/screens/36-ctrl-c-status.png": {
+      "bytes": 189062,
+      "sha256": "eaf4f1971032cd5f23df961871c5d96664a4ea41ae5d61213d9fcf61cac977e1"
+    },
+    "gui-run5-click/screens/37-window-closed.png": {
+      "bytes": 136638,
+      "sha256": "f59bdd9a87525b4781261fda6568ce79be1a67d8543941b8cb455f5af4168da4"
+    },
+    "gui-run5-click/serial.log": {
+      "bytes": 18833,
+      "sha256": "bdad27b7cab1fb037e91c9c803f9a62bbf0a5cc4741b8a33b96d483a76065bbc"
+    },
+    "gui-run5-click/serial.raw.log": {
+      "bytes": 18833,
+      "sha256": "bdad27b7cab1fb037e91c9c803f9a62bbf0a5cc4741b8a33b96d483a76065bbc"
+    },
+    "gui-run5-click/terminal-ceiling-delta.txt": {
+      "bytes": 260,
+      "sha256": "88c1aec3a5490145b44f678396ea396db802efaa919b57dde81f149fb5be3ddb"
+    },
+    "gui-run5-click/verdict.json": {
+      "bytes": 16361,
+      "sha256": "948a0fc11353ab3c7ea499122674db9a5db58f7f64b69338d9b99efef6bd81a6"
+    },
+    "gui-run5-click.runner.log": {
+      "bytes": 33096,
+      "sha256": "35657b9375f1d0d1752912af9051e87c22770f23e7c2191877b3010c40fc5745"
+    },
+    "gui-run6-autoload/boot-config/autoload.toml": {
+      "bytes": 373,
+      "sha256": "2aa331ebd505a86c0a8361c29883f15f22340da9f9b73f3a83e85405c08c8ab5"
+    },
+    "gui-run6-autoload/boot-config/services.toml": {
+      "bytes": 553,
+      "sha256": "67c55680f0eb19d2c24c302afc9edb64f8c734d4115ceb84b38b8a8776456074"
+    },
+    "gui-run6-autoload/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "gui-run6-autoload/canonical-after.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run6-autoload/canonical-before.txt": {
+      "bytes": 380,
+      "sha256": "29128c30fb84b7b24f0bbf5f3914fa6941b40e813e3338d68837883a91bcb74c"
+    },
+    "gui-run6-autoload/cellbox-ceiling.txt": {
+      "bytes": 337,
+      "sha256": "c469d1cbe6ffac24aedb5fe76b35fea18ab5fb3687b865c61a640b427b3e7d16"
+    },
+    "gui-run6-autoload/fat-layout.txt": {
+      "bytes": 3220,
+      "sha256": "1639d94fcbd4ce8d64dd02532cf8f0ca020bbfecb38aeba4f5a600824de599c7"
+    },
+    "gui-run6-autoload/product-source-digests.json": {
+      "bytes": 561,
+      "sha256": "df797157c68d357d06de83a655f8d8407aa9874b6d5756dd6c49734b6ac58b2b"
+    },
+    "gui-run6-autoload/provenance.json": {
+      "bytes": 2867,
+      "sha256": "97703f1ed0e6edcfa222409448aa285c7ab6b11c488f582bd22cbf2cd26cfb03"
+    },
+    "gui-run6-autoload/qemu-argv.txt": {
+      "bytes": 353,
+      "sha256": "efff09565188106157f49bf5701e5ab25527780a0e9a77ebbe9e573c6729f95a"
+    },
+    "gui-run6-autoload/screens/01-desktop-before-terminal.png": {
+      "bytes": 102368,
+      "sha256": "9e3b83e8d68fb8ba6491d048b8143202f6e21281a1cf4d19ef483836490668b1"
+    },
+    "gui-run6-autoload/screens/02-prompt.png": {
+      "bytes": 102368,
+      "sha256": "9e3b83e8d68fb8ba6491d048b8143202f6e21281a1cf4d19ef483836490668b1"
+    },
+    "gui-run6-autoload/screens/03-GUI-3-echo-typed.png": {
+      "bytes": 103792,
+      "sha256": "cde50767aec3aefd923c474b05590d3eb1a1439d81d440a46e7144656b56ac6d"
+    },
+    "gui-run6-autoload/screens/04-GUI-3-echo-after.png": {
+      "bytes": 106167,
+      "sha256": "29c5a1d8322fac0c5d96a682164c9ac8eae7483b22fa77e279afb9960e900b2f"
+    },
+    "gui-run6-autoload/screens/05-GUI-3-stock-echo-typed.png": {
+      "bytes": 107804,
+      "sha256": "e442526baba2504cb5131c9c4d443e06ae008729a891ebf4f0545318b03987c1"
+    },
+    "gui-run6-autoload/screens/06-GUI-3-stock-echo-after.png": {
+      "bytes": 110639,
+      "sha256": "bfabe5702110aa59e3bcd22a960b1f6c2efa7f1b2e974dd0e76994362ffd7335"
+    },
+    "gui-run6-autoload/screens/07-GUI-3-stock-ls-typed.png": {
+      "bytes": 112158,
+      "sha256": "ba5b758a8dcf66a75e97eec442581f0f337a2fb62bf0d4af4a7d133c430e70f3"
+    },
+    "gui-run6-autoload/screens/08-GUI-3-stock-ls-after.png": {
+      "bytes": 115952,
+      "sha256": "c91304ceed8c17d02c358819605987b10276fc1c6bd40d680b905e5604302834"
+    },
+    "gui-run6-autoload/screens/09-GUI-3-stock-cat-typed.png": {
+      "bytes": 117566,
+      "sha256": "fbeb0654b02768224bd28bbd58598eed362cdaca56b643d760c9620159740529"
+    },
+    "gui-run6-autoload/screens/10-GUI-3-stock-cat-after.png": {
+      "bytes": 122176,
+      "sha256": "38adc2e3cf2f1e9d8b65aee3f57852024209f7af82f1a77319abe5a735b6320b"
+    },
+    "gui-run6-autoload/screens/11-GUI-4-stderr-01-typed.png": {
+      "bytes": 123600,
+      "sha256": "22540961139f60a6ab6014815703d8104423b4313d1f3678b6b81b89ee246910"
+    },
+    "gui-run6-autoload/screens/12-GUI-4-stderr-01-after.png": {
+      "bytes": 127140,
+      "sha256": "12fbe8b6ee97e38d7b451e6d5e9072a24edea3159da0f21ac0a0c6209d2a3da3"
+    },
+    "gui-run6-autoload/screens/13-GUI-4-stderr-02-typed.png": {
+      "bytes": 128397,
+      "sha256": "8bb190e8ad0de8b6bc88d6192a3c25deddf3b08e4d5645dc58e6033c3276af4e"
+    },
+    "gui-run6-autoload/screens/14-GUI-4-stderr-02-after.png": {
+      "bytes": 132420,
+      "sha256": "d4fdf8bb85c6ee9eb983fbb21d680d8c0afe16eeefa69287c89a7be441eb10df"
+    },
+    "gui-run6-autoload/screens/15-GUI-4-stderr-03-typed.png": {
+      "bytes": 133764,
+      "sha256": "4979b97f911079097cca719759becefd1b6a86bf141230e0910f98698975219c"
+    },
+    "gui-run6-autoload/screens/16-GUI-4-stderr-03-after.png": {
+      "bytes": 137438,
+      "sha256": "69cb66e16f4931136c8feb4171295bbf7e5ffaed7d9f4e1b6525f46f1a67cd91"
+    },
+    "gui-run6-autoload/screens/17-GUI-4-stderr-04-typed.png": {
+      "bytes": 138262,
+      "sha256": "098e74b53e4782f1dea3bfa9972896ebd9df0e8f2e41784cd442f9e7364adcfe"
+    },
+    "gui-run6-autoload/screens/18-GUI-4-stderr-04-after.png": {
+      "bytes": 142168,
+      "sha256": "36df9a0dfd4efba33ba01a37fd9ea668286185a8c49c5f9dbf6c4ebb1833456b"
+    },
+    "gui-run6-autoload/screens/19-GUI-4-stderr-05-typed.png": {
+      "bytes": 143603,
+      "sha256": "107c40653a15f375cd23a57cfe1e6e8228b470799a89e7f56a25fb491ffc4509"
+    },
+    "gui-run6-autoload/screens/20-GUI-4-stderr-05-after.png": {
+      "bytes": 147227,
+      "sha256": "2a7c10aaa08f13e5988ea7d66ac90397447c5b76f6ac2fabc0f2aaf914dda7e1"
+    },
+    "gui-run6-autoload/screens/21-GUI-4-stderr-06-typed.png": {
+      "bytes": 148175,
+      "sha256": "04a8f67f26a2592485d654b495e5f36b446752cf923441ae2eadda462062eebe"
+    },
+    "gui-run6-autoload/screens/22-GUI-4-stderr-06-after.png": {
+      "bytes": 151910,
+      "sha256": "12f95fc8ed9745bd08b63380b1af3e88676910b1d0aeb296e8aaf823da73dd45"
+    },
+    "gui-run6-autoload/screens/23-GUI-4-stderr-07-typed.png": {
+      "bytes": 153243,
+      "sha256": "1b2a8d4c00e2a8f88f1f5e5e8d420fa31aa7ea2bcad8c20e21d5c65caad934da"
+    },
+    "gui-run6-autoload/screens/24-GUI-4-stderr-07-after.png": {
+      "bytes": 151543,
+      "sha256": "d4577c824cf24a58b473bdf9ee963448e1301011e72c1cb022821ad7bef38830"
+    },
+    "gui-run6-autoload/screens/25-GUI-4-stderr-08-typed.png": {
+      "bytes": 152841,
+      "sha256": "e0b6a8a13ea4a9bb0d0e005125df61f10063268fa399349ed3b6896f963c4feb"
+    },
+    "gui-run6-autoload/screens/26-GUI-4-stderr-08-after.png": {
+      "bytes": 152308,
+      "sha256": "e18341462d1672183e031a8809c1343db7d7d0a3a3e1f0acae503e17e6280a6c"
+    },
+    "gui-run6-autoload/screens/27-GUI-4-stderr-09-typed.png": {
+      "bytes": 153790,
+      "sha256": "04f7b900dd20abb7b8ec6caa654a2d8cf877025735e1ad48fef0144ae343df60"
+    },
+    "gui-run6-autoload/screens/28-GUI-4-stderr-09-after.png": {
+      "bytes": 153540,
+      "sha256": "588a17c67efb0011c461c48f287a5f7616b725c83a532ae859856cf41d843971"
+    },
+    "gui-run6-autoload/screens/29-GUI-4-stderr-10-typed.png": {
+      "bytes": 154803,
+      "sha256": "264b08650ea64bb3f8e6529d6c93c832457701d8f36b7782ae7190f05f1527a3"
+    },
+    "gui-run6-autoload/screens/30-GUI-4-stderr-10-after.png": {
+      "bytes": 158513,
+      "sha256": "68944fc6752764435b085ea9e50db158d0ed4c0cd12894285ab38b31559bede8"
+    },
+    "gui-run6-autoload/screens/31-GUI-4-status-of-failure-typed.png": {
+      "bytes": 159631,
+      "sha256": "b0369839fa3dd5cf3aa3adc8ab9ee7ceb5d85ace75a91cfe08a3033f4f0af1d7"
+    },
+    "gui-run6-autoload/screens/32-GUI-4-status-of-failure-after.png": {
+      "bytes": 158842,
+      "sha256": "f9d285bad9016311f2c93afc8283c1ca400c034fca24fb7fd2270a5932fa5666"
+    },
+    "gui-run6-autoload/screens/33-ctrl-c-producer-flowing.png": {
+      "bytes": 189105,
+      "sha256": "0718c5d2d070667aaa6aa63b3ecd03d4cc1a7a0711b89121f4ec3c2730aa7518"
+    },
+    "gui-run6-autoload/screens/34-ctrl-c-producer-flowing-later.png": {
+      "bytes": 188727,
+      "sha256": "c19d894533afc3ff9d07368923fbad8300d7b7c1826701123e37c5676b41300c"
+    },
+    "gui-run6-autoload/screens/35-ctrl-c-recovered.png": {
+      "bytes": 187819,
+      "sha256": "ade960bcf2f75543af40cc87087f626d94d84c48aee6ce1e5c8b940f6228b7eb"
+    },
+    "gui-run6-autoload/screens/36-ctrl-c-status.png": {
+      "bytes": 183555,
+      "sha256": "c2ba038d56016186249a08de404e5ec3fcbdd67537ee6d49f26acdf66e6a32b3"
+    },
+    "gui-run6-autoload/screens/37-window-closed.png": {
+      "bytes": 135916,
+      "sha256": "036e51ec38f2519c5b50180e3b6c0c4516810e146cc2ac47f114b35273304806"
+    },
+    "gui-run6-autoload/serial.log": {
+      "bytes": 18795,
+      "sha256": "12b420ae64f4e4ca43ebd97a2b53999ef458fdf36047d39e57daafe1286975f3"
+    },
+    "gui-run6-autoload/serial.raw.log": {
+      "bytes": 18795,
+      "sha256": "12b420ae64f4e4ca43ebd97a2b53999ef458fdf36047d39e57daafe1286975f3"
+    },
+    "gui-run6-autoload/terminal-ceiling-delta.txt": {
+      "bytes": 260,
+      "sha256": "88c1aec3a5490145b44f678396ea396db802efaa919b57dde81f149fb5be3ddb"
+    },
+    "gui-run6-autoload/verdict.json": {
+      "bytes": 16377,
+      "sha256": "a34d78d9ea608103a7ba24f5da673d448c52b25cb6171cc9de844e4678fc16b8"
+    },
+    "gui-run6-autoload.runner.log": {
+      "bytes": 33137,
+      "sha256": "fa1ba203476f2b96dd9d05d9f76c57ca647ff455e24817fe1219a40cd34d6212"
+    },
+    "host-tests.log": {
+      "bytes": 87989,
+      "sha256": "97128bfba88d5ac77f70e69e691da76f01452dac99271147b97ea4abd1e6572b"
+    },
+    "p02/provenance.json": {
+      "bytes": 2454,
+      "sha256": "1f34592b5691f7effd5def85b0b0ff6b6b7614508287e1d87d5ab4d521452b89"
+    },
+    "p02/serial.log": {
+      "bytes": 38625,
+      "sha256": "442eb1fc41463a1964887fba86d80779148484aba9c924a74e46e6a4fb4a87d6"
+    },
+    "p02.runner.log": {
+      "bytes": 20261,
+      "sha256": "de9308dbcb3eae374d382f159ac950ae1e2853b95314e175cdb0f8cb4d6e9cf3"
+    },
+    "p03/cpu-halt-evidence.json": {
+      "bytes": 6880,
+      "sha256": "997d7ea8dde041e7ece0930dc45452aa6050b2be703f4018799691ac188291d9"
+    },
+    "p03/final-probe.json": {
+      "bytes": 271,
+      "sha256": "2b8d53045f336962a209f07256ec31071e7ed2305404e342b780bd434a760a70"
+    },
+    "p03/provenance.json": {
+      "bytes": 2457,
+      "sha256": "197ec151881ae1f1cde25d1e21921b346c2053bce1f06859e8933f4cddc4398f"
+    },
+    "p03/serial.log": {
+      "bytes": 263087,
+      "sha256": "0e8867e040e2a4c71bff7b2028cb8d9b8f413b162bb9a685f05b26a946b775ff"
+    },
+    "p03.runner.log": {
+      "bytes": 21948,
+      "sha256": "0da04e86ee0f22d374d88a03b5207606ff9932382946d417743b93e8282c859f"
+    },
+    "s3/provenance.json": {
+      "bytes": 3626,
+      "sha256": "ddd49bda76e0493765234c0bb85d233ef0585b9133ec95f445624fc04d22875e"
+    },
+    "s3/serial.log": {
+      "bytes": 325028,
+      "sha256": "74438f48e91626b55c730181f1f342009dd4901149d49df1c49da760c1dcad22"
+    },
+    "s3.runner.log": {
+      "bytes": 31376,
+      "sha256": "31e0712234ea50499f43e4a19de6e761b3f25d50f43341347e316c0bf44f6cdb"
+    },
+    "sign-tests.log": {
+      "bytes": 7013,
+      "sha256": "aff26511b5d91913f7763758c3015f69ddcaeb8eaab13d7537704a99562273a3"
+    }
+  }
+}

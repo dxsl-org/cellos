@@ -1,0 +1,730 @@
+==> Repository checks (no build): fake Terminal matcher gone, cellbox ceiling unchanged
+fake matcher check: none of 12 banned strings in 7 Terminal files
+note: Write added vs HEAD by an uncommitted pre-S1 working-tree delta (Phase 02 shell closure)
+baseline : git HEAD:cells/tools/shell/src/main.rs (32 syscalls, 6 manifest keys)
+candidate: /home/dmin/cellos/cells/tools/cellbox/src/main.rs (33 syscalls, 6 manifest keys)
+G-S1a PASS: declare_manifest and declare_syscalls sets are identical
+terminal ceiling delta (informational):
+    baseline : git HEAD:cells/apps/terminal/src/main.rs (13 syscalls, 3 manifest keys)
+    candidate: /home/dmin/cellos/cells/apps/terminal/src/main.rs (14 syscalls, 3 manifest keys)
+    G-S1a FAIL: ceiling differs from the baseline
+     - syscall ADDED vs baseline: SetTimer
+==> Generating throw-away cell signing key (private to this run)
+key identity sha256: 0c532dca0cf7921105c9e2cab4c00bc4bbe75216425deb8feb67e3edf3df5533
+==> Building cells (private target dir)
+   Compiling compiler_builtins v0.1.160 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling cell-build v0.2.0 (/home/dmin/cellos/libs/cell-build)
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling libm v0.2.16
+   Compiling serde_core v1.0.229
+   Compiling thiserror v2.0.19
+   Compiling serde v1.0.229
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling heapless v0.8.0
+   Compiling version_check v0.9.5
+   Compiling vi-compiler v0.1.0 (/home/dmin/cellos/tools/vi-compiler)
+   Compiling app-sys-tools v0.1.0 (/home/dmin/cellos/cells/tools/sys-tools)
+   Compiling driver-disk v0.1.0 (/home/dmin/cellos/cells/drivers/disk)
+   Compiling terminal v0.1.0 (/home/dmin/cellos/cells/apps/terminal)
+   Compiling app-phase03-filter v0.1.0 (/home/dmin/cellos/cells/tests/phase03-filter)
+   Compiling service-platform v0.1.0 (/home/dmin/cellos/cells/services/platform)
+   Compiling service-config v0.1.0 (/home/dmin/cellos/cells/services/config)
+   Compiling driver-nvme v0.1.0 (/home/dmin/cellos/cells/drivers/nvme)
+   Compiling app-cellbox v0.1.0 (/home/dmin/cellos/cells/tools/cellbox)
+   Compiling service-input v0.2.0 (/home/dmin/cellos/cells/services/input)
+   Compiling app-phase04-terminal-driver v0.1.0 (/home/dmin/cellos/cells/tests/phase04-terminal-driver)
+   Compiling service-vfs v0.1.0 (/home/dmin/cellos/cells/services/vfs)
+   Compiling driver-e1000 v0.1.0 (/home/dmin/cellos/cells/drivers/e1000)
+   Compiling generic-array v0.14.7
+   Compiling viui-macros v0.2.0 (/home/dmin/cellos/libs/viui-macros)
+   Compiling syn v2.0.119
+   Compiling syn v3.0.3
+   Compiling postcard-derive v0.2.2
+   Compiling zerocopy-derive v0.7.35
+   Compiling enumn v0.1.14
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling alloc v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling byteorder v1.5.0
+   Compiling scopeguard v1.2.0
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling tinyvec v1.13.3
+   Compiling foldhash v0.1.5
+   Compiling stable_deref_trait v1.2.1
+   Compiling embedded-io v0.7.1
+   Compiling spin v0.9.9
+   Compiling typenum v1.20.1
+   Compiling bitflags v2.13.1
+   Compiling regex-syntax v0.8.11
+   Compiling log v0.4.33
+   Compiling cpufeatures v0.2.17
+   Compiling cfg-if v1.0.4
+   Compiling cellos-fs v0.1.0 (/home/dmin/cellos/libs/cellos-fs)
+   Compiling lock_api v0.4.14
+   Compiling cobs v0.3.0
+   Compiling hashbrown v0.15.5
+   Compiling fatfs v0.4.0 (https://github.com/rafalh/rust-fatfs#c4b88477)
+   Compiling hash32 v0.3.1
+   Compiling zerocopy v0.7.35
+   Compiling spinning_top v0.2.5
+   Compiling linked_list_allocator v0.10.6
+   Compiling unicode-normalization v0.1.25
+   Compiling virtio-drivers v0.7.5 (/home/dmin/cellos/kernel/third_party/virtio_drivers)
+   Compiling core_maths v0.1.1
+   Compiling ab_glyph_rasterizer v0.1.10
+   Compiling ttf-parser v0.25.1
+   Compiling regex-automata v0.4.16
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling digest v0.10.7
+   Compiling sha2 v0.10.9
+   Compiling owned_ttf_parser v0.25.1
+   Compiling ab_glyph v0.2.32
+   Compiling postcard v1.1.3
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling text-engine v0.1.0 (/home/dmin/cellos/libs/text-engine)
+   Compiling terminal-sdk v0.1.0 (/home/dmin/cellos/libs/terminal)
+   Compiling viui v0.2.0 (/home/dmin/cellos/libs/viui)
+warning: field `expected` is never read
+  --> cells/services/input/src/session.rs:40:66
+   |
+39 | struct Foreground {
+   |        ---------- field in this struct
+40 |     lease: Ref, receipt: Ref, child: ChildRefV1, operation: Ref, expected: u64, next: u64,
+   |                                                                  ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `paste` is never read
+   --> cells/tools/cellbox/src/executor.rs:415:17
+    |
+415 |                 paste = false;
+    |                 ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+427 |                 paste = false;
+    |                 ------------- `paste` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:128:24
+    |
+128 |     BackgroundPipeline(Vec<Cmd>),
+    |     ------------------ ^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+128 -     BackgroundPipeline(Vec<Cmd>),
+128 +     BackgroundPipeline(()),
+    |
+
+warning: `service-input` (bin "service-input") generated 1 warning
+warning: `app-cellbox` (bin "cellbox") generated 2 warnings
+    Finished `release` profile [optimized] target(s) in 33.79s
+   Compiling core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling app-init v0.1.0 (/home/dmin/cellos/cells/tools/init)
+   Compiling compiler_builtins v0.1.160 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling alloc v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling libm v0.2.16
+   Compiling thiserror v2.0.19
+   Compiling scopeguard v1.2.0
+   Compiling byteorder v1.5.0
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling winnow v1.0.4
+   Compiling winnow v0.7.15
+   Compiling tinyvec v1.13.3
+   Compiling foldhash v0.1.5
+   Compiling stable_deref_trait v1.2.1
+   Compiling spin v0.9.9
+   Compiling embedded-io v0.7.1
+   Compiling ocel-service-proto v0.1.0 (/home/dmin/cellos/libs/ocel-service-proto)
+   Compiling lock_api v0.4.14
+   Compiling cobs v0.3.0
+   Compiling hashbrown v0.15.5
+   Compiling hash32 v0.3.1
+   Compiling heapless v0.8.0
+   Compiling spinning_top v0.2.5
+   Compiling linked_list_allocator v0.10.6
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling unicode-normalization v0.1.25
+   Compiling core_maths v0.1.1
+   Compiling ab_glyph_rasterizer v0.1.10
+   Compiling ttf-parser v0.25.1
+   Compiling toml_datetime v0.7.5+spec-1.1.0
+   Compiling serde_spanned v1.1.2
+   Compiling owned_ttf_parser v0.25.1
+   Compiling ab_glyph v0.2.32
+   Compiling toml v0.9.12+spec-1.1.0
+   Compiling postcard v1.1.3
+   Compiling ocel-pdf-proto v0.1.0 (/home/dmin/cellos/libs/ocel-pdf-proto)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling dom-arena v0.1.0 (/home/dmin/cellos/libs/dom-arena)
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling cellos-boot-config v0.1.0 (/home/dmin/cellos/libs/boot-config)
+    Finished `release` profile [optimized] target(s) in 20.13s
+==> Signing with the private key after the F1/F5 policy check
+NOTE: allowlist entries overdue for re-review (past `review_by`, or older than `max_age_days` when they set none):
+  app-c-math-smoke (approved 2026-07-14, 100d ago)
+  app-mlibc-smoke (approved 2026-07-14, 100d ago)
+  app-posix-shim-test (approved 2026-07-14, 100d ago)
+  audio-demo (approved 2026-07-14, 100d ago)
+  cells/demos/audio-demo/src/main.rs (approved 2026-07-14, 100d ago)
+  cells/demos/cfi-test/src/main.rs (approved 2026-07-14, 100d ago)
+  cells/demos/doom/src/main.rs (approved 2026-07-14, 100d ago)
+  cells/demos/tetris-c/src/main.rs (approved 2026-07-14, 100d ago)
+  cells/demos/tetris-lua/src/ffi.rs (approved 2026-07-14, 100d ago)
+  cells/demos/tetris-lua/src/main.rs (approved 2026-07-14, 100d ago)
+  cells/drivers/e1000/src/controller.rs (approved 2026-07-14, 100d ago)
+  cells/drivers/nvme/src/controller.rs (approved 2026-07-14, 100d ago)
+  cells/drivers/nvme/src/dispatch.rs (approved 2026-07-14, 100d ago)
+  cells/drivers/nvme/src/queue.rs (approved 2026-07-14, 100d ago)
+  cells/drivers/virtio-blk/src/device.rs (approved 2026-07-14, 100d ago)
+  cells/drivers/virtio-gpu/src/cursor.rs (approved 2026-07-14, 100d ago)
+  cells/drivers/virtio-gpu/src/display.rs (approved 2026-07-14, 100d ago)
+  cells/drivers/virtio-net/src/device.rs (approved 2026-07-14, 100d ago)
+  cells/guests/silo-guest/src/mailbox.rs (approved 2026-07-14, 100d ago)
+  cells/guests/silo-guest/src/main.rs (approved 2026-07-14, 100d ago)
+  cells/runtimes/lua/src/bindings_io.rs (approved 2026-07-14, 100d ago)
+  cells/runtimes/lua/src/bindings_net.rs (approved 2026-07-14, 100d ago)
+  cells/runtimes/lua/src/bindings_vfs.rs (approved 2026-07-14, 100d ago)
+  cells/runtimes/lua/src/ffi.rs (approved 2026-07-14, 100d ago)
+  cells/runtimes/lua/src/main.rs (approved 2026-07-14, 100d ago)
+  cells/runtimes/lua/src/repl_session.rs (approved 2026-07-14, 100d ago)
+  cells/services/hypervisor/src/timer.rs (approved 2026-07-14, 100d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource.rs (approved 2026-07-14, 100d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource/render.rs (approved 2026-07-14, 100d ago)
+  cells/services/hypervisor/src/vmm.rs (approved 2026-07-14, 100d ago)
+  cells/services/input/src/virtio_device.rs (approved 2026-07-14, 100d ago)
+  cells/services/net/src/tls/socket.rs (approved 2026-07-14, 100d ago)
+  cells/services/net/src/tls/transport.rs (approved 2026-07-14, 100d ago)
+  cells/tests/c-math-smoke/src/main.rs (approved 2026-07-14, 100d ago)
+  cells/tests/hypervisor-test/src/main.rs (approved 2026-07-14, 100d ago)
+  cells/tests/mlibc-smoke/src/main.rs (approved 2026-07-14, 100d ago)
+  cells/tests/posix-shim-test/src/main.rs (approved 2026-07-14, 100d ago)
+  cfi-test (approved 2026-07-14, 100d ago)
+  doom (approved 2026-07-14, 100d ago)
+  driver-e1000 (approved 2026-07-14, 100d ago)
+  driver-nvme (approved 2026-07-14, 100d ago)
+  driver-virtio-blk (approved 2026-07-14, 100d ago)
+  driver-virtio-gpu (approved 2026-07-14, 100d ago)
+  driver-virtio-net (approved 2026-07-14, 100d ago)
+  hypervisor-test (approved 2026-07-14, 100d ago)
+  lua (approved 2026-07-14, 100d ago)
+  service-compositor (approved 2026-07-14, 100d ago)
+  service-hypervisor (approved 2026-07-14, 100d ago)
+  service-input (approved 2026-07-14, 100d ago)
+  service-net (approved 2026-07-14, 100d ago)
+  silo-guest (approved 2026-07-14, 100d ago)
+  tetris-c (approved 2026-07-14, 100d ago)
+  tetris-lua (approved 2026-07-14, 100d ago)
+OK:   signed 21 cell(s) with the prod key after a passing F1/F5 check
+==> Assembling private kernel_fs.img (boot config: the driver replaces the serial shell)
+Created FAT16 image at /tmp/cellbox-phase04-IwUSpsEd/scratch/default-fs.img: 283 file(s), 6 director(ies), 16159 clusters.
+private autoload plan: [('phase04-terminal-driver', '/bin/phase04-terminal-driver'), ('p04-legacy-free', '/bin/free')]
+Created FAT16 image at /tmp/cellbox-phase04-IwUSpsEd/embedded/kernel_fs.img: 283 file(s), 6 director(ies), 16159 clusters.
+==> Building private kernel (phase02-terminal-profile,phase03-filter-profile,phase04-driver-profile)
+    Blocking waiting for file lock on package cache
+   Compiling compiler_builtins v0.1.160 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling rustversion v1.0.23
+   Compiling strsim v0.11.1
+   Compiling ident_case v1.0.1
+   Compiling fnv v1.0.7
+   Compiling serde_core v1.0.229
+   Compiling memchr v2.8.3
+   Compiling zmij v1.0.23
+   Compiling anyhow v1.0.104
+   Compiling thiserror v2.0.19
+   Compiling libc v0.2.189
+   Compiling serde_json v1.0.151
+   Compiling camino v1.2.5
+   Compiling serde v1.0.229
+   Compiling regex-syntax v0.8.11
+   Compiling itoa v1.0.18
+   Compiling powerfmt v0.2.0
+   Compiling num_threads v0.1.7
+   Compiling deranged v0.5.8
+   Compiling num-conv v0.2.2
+   Compiling time-core v0.1.9
+   Compiling libm v0.2.16
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling hal-x86 v0.1.0 (/home/dmin/cellos/hal/arch/x86)
+   Compiling crc32fast v1.5.0
+   Compiling aho-corasick v1.1.4
+   Compiling regex-automata v0.4.16
+   Compiling syn v2.0.119
+   Compiling syn v3.0.3
+   Compiling vergen-lib v9.1.0
+   Compiling vergen-lib v0.1.6
+   Compiling vergen v9.1.0
+   Compiling vergen-gitcl v1.0.8
+   Compiling time v0.3.54
+   Compiling semver v1.0.28
+   Compiling cargo-platform v0.3.3
+   Compiling regex v1.13.1
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling async-trait v0.1.91
+   Compiling darling_core v0.20.11
+   Compiling postcard-derive v0.2.2
+   Compiling zerocopy-derive v0.7.35
+   Compiling enumn v0.1.14
+   Compiling darling_macro v0.20.11
+   Compiling darling v0.20.11
+   Compiling derive_builder_core v0.20.2
+   Compiling cargo_metadata v0.23.1
+   Compiling derive_builder_macro v0.20.2
+   Compiling derive_builder v0.20.2
+   Compiling cellos-kernel v0.2.1 (/home/dmin/cellos/kernel)
+   Compiling alloc v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling bitflags v2.13.1
+   Compiling winnow v1.0.4
+   Compiling scopeguard v1.2.0
+   Compiling volatile v0.4.6
+   Compiling critical-section v1.2.0
+   Compiling winnow v0.7.15
+   Compiling log v0.4.33
+   Compiling cfg-if v1.0.4
+   Compiling hal-arch-trait v0.1.0 (/home/dmin/cellos/hal/traits/arch)
+   Compiling byteorder v1.5.0
+   Compiling zero v0.1.3
+   Compiling const-default v1.0.0
+   Compiling cellos-boards v0.2.0 (/home/dmin/cellos/boards)
+   Compiling ed25519-compact v2.3.1
+   Compiling hal-soc-x86 v0.2.0 (/home/dmin/cellos/hal/soc/x86)
+   Compiling cobs v0.3.0
+   Compiling lock_api v0.4.14
+   Compiling xmas-elf v0.10.0
+   Compiling rlsf v0.2.3
+   Compiling fatfs v0.4.0 (https://github.com/rafalh/rust-fatfs#c4b88477)
+   Compiling spinning_top v0.2.5
+   Compiling zerocopy v0.7.35
+   Compiling linked_list_allocator v0.10.6
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling hal-paging v0.1.0 (/home/dmin/cellos/hal/traits/paging)
+   Compiling hal-hypervisor v0.1.0 (/home/dmin/cellos/hal/traits/hypervisor)
+   Compiling hal-uart v0.1.0 (/home/dmin/cellos/hal/traits/uart)
+   Compiling hal-display v0.1.0 (/home/dmin/cellos/hal/traits/display)
+   Compiling hal-interrupt v0.1.0 (/home/dmin/cellos/hal/traits/interrupt)
+   Compiling hal-timer v0.1.0 (/home/dmin/cellos/hal/traits/timer)
+   Compiling hal-traits-mmc v0.1.0 (/home/dmin/cellos/hal/traits/mmc)
+   Compiling hal-core v0.2.0 (/home/dmin/cellos/hal/core)
+   Compiling virtio-drivers v0.7.5 (/home/dmin/cellos/kernel/third_party/virtio_drivers)
+   Compiling serde_spanned v1.1.2
+   Compiling toml_datetime v0.7.5+spec-1.1.0
+   Compiling toml v0.9.12+spec-1.1.0
+   Compiling postcard v1.1.3
+   Compiling cellos-boot-config v0.1.0 (/home/dmin/cellos/libs/boot-config)
+warning: field `reference` is never read
+  --> kernel/src/task/cell_session.rs:75:17
+   |
+75 | struct Intent { reference: Ref, issuer: Binding, writers: [Ref; 2] }
+   |        ------   ^^^^^^^^^
+   |        |
+   |        field in this struct
+   |
+   = note: `Intent` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `object`, `expected_epoch`, and `seal_len` are never read
+  --> kernel/src/task/cell_session.rs:84:27
+   |
+83 | struct Receipt { reference: Ref, prepared: Ref, child: Child, operation: Ref, issuer: Binding,
+   |        ------- fields in this struct
+84 |     kind: u16, slot: u16, object: Ref, expected_epoch: u64, next_epoch: u64,
+   |                           ^^^^^^       ^^^^^^^^^^^^^^
+85 |     digest: [u8; 32], seal: [u8; 256], seal_len: usize, state: u32,
+   |                                        ^^^^^^^^
+
+warning: fields `slot` and `owner_service` are never read
+  --> kernel/src/task/child_context.rs:10:9
+   |
+ 7 | pub(crate) struct Grant {
+   |                   ----- fields in this struct
+...
+10 |     pub slot: u16,
+   |         ^^^^
+11 |     pub owner_service: u64,
+   |         ^^^^^^^^^^^^^
+   |
+   = note: `Grant` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `cellos-kernel` (bin "cellos-kernel") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 42.46s
+==> Building private ISO
+[make-iso] Building BIOS+UEFI ISO: /tmp/cellbox-phase04-IwUSpsEd/phase04.iso
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Drive current: -outdev 'stdio:/tmp/cellbox-phase04-IwUSpsEd/phase04.iso'
+Media current: stdio file, overwriteable
+Media status : is blank
+Media summary: 0 sessions, 0 data blocks, 0 data,  777g free
+Added to ISO image: directory '/'='/tmp/cellbox-phase04-IwUSpsEd/iso-root'
+xorriso : UPDATE :      10 files added in 1 seconds
+xorriso : UPDATE :      10 files added in 1 seconds
+ISO image produced: 7427 sectors
+Written to medium : 7427 sectors at LBA 0
+Writing to 'stdio:/tmp/cellbox-phase04-IwUSpsEd/phase04.iso' completed successfully.
+
+ISO_SIZE=15210496 bytes
+ISO_READY=/tmp/cellbox-phase04-IwUSpsEd/phase04.iso
+==> Recording provenance
+{
+ "cargo_lock_sha256": "f73f85ac0fb47825898734b23df186a1a639422a79fc7cc2b8049ffc30bac1e2",
+ "signed_cells_sha256": {
+  "app-init": "18575ef6b08a9129aea92f089b448877e2163f68aa194ca641f6936112a02ef7",
+  "cellbox": "2bdb433274e22e859effd4c95889fca051bc27789f14bf1f3979ce878b8a2b3e",
+  "service-vfs": "b5cda4184993325432f1831a21dae3da29cb829c7122ff25dd4f4979078002d6",
+  "service-config": "a5cad7e53b10635ad47bda34e3672804ad267f82ce1c4db941d000d5176f301e",
+  "service-input": "6347fcb6522a2ec7a90ef1be72290c94943510670826c2e8b2587f419f6f5779",
+  "platform": "d38fb637c49937082a7b80519047ecb3c164afebcb9226f5719f9cee942e201c",
+  "driver-nvme": "69b05eb366a49a6bafe770a72288150e92d73664ac1a91ce94fbd413764237b7",
+  "driver-e1000": "a6c69daa04de9817ef3d59fa614225d0097e70d09a22bbc8b12d4c4a1e86ac85",
+  "ls": "67dc3031175f9e9818ee3be16eba6ce33b243ad09ca7fa59bc09c3a3d9bfe932",
+  "cat": "83bd15888e7ce821755a8605e7df881bd1318cfcda8873a0d7af6e21a5d0f24e",
+  "echo": "102eeca387bf47c401285bbb4381d78238cd01545f947b983a0a05d6c2bb0956",
+  "ps": "1fab3e819dd91e52bd381f5546c802ff3d91149a376361e10d88d65b8785eb3c",
+  "free": "043d4ed5be0ea43ac39c95aab55a33c5784baf3a1035f82936e94fcf114e1f9c",
+  "date": "16a02364e1eb539a51685ef8550e9fb7d67380086a29eae9a439658ee9b85fb9",
+  "env": "e37917cfe62f6b8a7f4927a7e6837e73fb27c9f33a6681cd26b722dcd410143c",
+  "uname": "60f3eb39f3c118b51d23a7f0ae6ce8bf0cec928cb384bf4e9a1fad986cfc4a72",
+  "kill": "e3eb1baa3d4a21a2f13e20436d6a4edb96aecd63aa392ef93c04e7ea50eb3f53",
+  "shutdown": "ac12af8f56183a7591a617777f9d570d80240488cd47b7546abcb1e519810473",
+  "hotswap": "8e7bd4962225769488d5e845e91fb6fc85cbc18da58fc99bb462cf163e1c6bcc",
+  "phase04-terminal-driver": "edd7af709c1852a6278b3b9507e4163ed069409af4c9b290c48aad71b59c51da",
+  "phase03-filter": "f908a8bb919f6022a0c7bb222de5fd5f30bc59b8898725304dfd6fc395f9bc11"
+ },
+ "init_sha256": "18575ef6b08a9129aea92f089b448877e2163f68aa194ca641f6936112a02ef7",
+ "kernel_fs_img_sha256": "898162cb34457f5c30a5e64826a10d7326d003f67b8fb05199e1a9ab788f45e9",
+ "kernel_sha256": "01c98f732597327bf7e7a78c743a510b0b929b0b31a81fe0e96069b20f486acf",
+ "iso_sha256": "5300aaa906d35a677ed61ab40163b86849a7ab92d613b6fb053c24e5b57b55e3",
+ "autoload_toml_sha256": "3bf9750d9cf6ea4c213d55a16c781b177580ab860251f7c28640ec5ca643e54d",
+ "trusted_key_identity_sha256": "0c532dca0cf7921105c9e2cab4c00bc4bbe75216425deb8feb67e3edf3df5533",
+ "output_fixtures_sha256": "72acac32306d35bf1d4330ad150b88e8a0eb714e6f4863ae5b38137e31ef5f88",
+ "acceptance_limits_sha256": "bd473f99e144ac9b1bf1e8a5d17fd49959baafb8f620d5ad7976f6cd0ba69532"
+}
+==> Booting private ISO (owned QEMU process only, networking disabled)
+QEMU run: driver-verdict
+==> Evaluating driver observations
+PASS driver-started
+PASS marker:shell-prompt
+PASS marker:builtin-echo
+PASS marker:builtin-pwd
+PASS marker:builtin-free
+PASS marker:builtin-date-changes
+PASS marker:builtin-ps-records
+PASS marker:typed-pipeline
+PASS marker:typed-pipeline-empty
+PASS marker:file-create-ls
+PASS marker:file-cat-roundtrip
+PASS marker:external-echo
+PASS marker:external-ls
+PASS marker:external-cat
+PASS marker:external-stdout-not-stderr
+PASS marker:external-ls-stderr
+PASS marker:external-free
+PASS marker:stock-full-ring-drain-exact
+PASS marker:stock-downstream-close-recovers
+PASS marker:stock-full-ring-cancel
+PASS marker:stock-fragmented-ring-drain-exact
+PASS marker:stock-full-ring-host-close
+PASS marker:negative-missing-stdout
+PASS marker:negative-missing-stderr
+PASS marker:negative-missing-both
+PASS marker:negative-invalid-stdout
+PASS marker:negative-grants-host-isolation
+PASS marker:external-filter-single
+PASS marker:external-filter-pipeline
+PASS marker:external-filter-exact-bytes
+PASS marker:exit-status
+PASS marker:exit-status-external-7
+PASS marker:exit-status-unknown-program
+PASS marker:ctrl-c-recovers
+PASS marker:ctrl-c-output-stops
+PASS marker:ctrl-c-status-130
+PASS marker:ctrl-c-shell-alive
+PASS marker:ctrl-c-external-pipeline
+PASS marker:ctrl-c-idle-prompt
+PASS marker:resize-accepted
+PASS marker:ps-reflects-new-shell
+PASS marker:two-hosts-independent-output
+PASS marker:two-hosts-independent-state
+PASS marker:two-hosts-independent-stderr
+PASS marker:two-hosts-independent-resize
+PASS marker:two-hosts-independent-exit
+PASS marker:two-hosts-close
+PASS marker:child-exit-then-close
+PASS marker:relaunch-after-exit
+PASS marker:repeat-open-close
+PASS marker:repeat-no-leak
+PASS marker:cancel-child
+PASS marker:session-a-close
+PASS host-evidence-framing
+PASS host-exact:echo.stdout
+PASS host-exact:echo.stderr
+PASS host-exact:ls-error.stdout
+PASS host-exact:ls-error.stderr
+PASS host-exact:cat.stdout
+PASS host-exact:cat.stderr
+PASS host-exact:large-cat.stdout
+PASS host-exact:large-cat.stderr
+PASS host-exact:pressure-ls.stdout
+PASS host-exact:pressure-ls.stderr
+PASS host-exact:host-a.stdout
+PASS host-exact:host-a.stderr
+PASS host-exact:host-b.stdout
+PASS host-exact:host-b.stderr
+PASS host-exact:host-a-error.stdout
+PASS host-exact:host-a-error.stderr
+PASS host-exact:host-b-error.stdout
+PASS host-exact:host-b-error.stderr
+PASS host-exact:negative-missing-stdout.stdout
+PASS host-exact:negative-missing-stdout.stderr
+PASS host-exact:negative-missing-stderr.stdout
+PASS host-exact:negative-missing-stderr.stderr
+PASS host-exact:negative-missing-both.stdout
+PASS host-exact:negative-missing-both.stderr
+PASS host-exact:negative-invalid-stdout.stdout
+PASS host-exact:negative-invalid-stdout.stderr
+PASS host-exact:ls.stdout
+PASS host-exact:ls.stderr
+PASS host-free-accounting
+PASS host-free-stderr-empty
+PASS no-command-uart:echo
+PASS no-command-uart:status-probe
+PASS no-command-uart:ls-alpha
+PASS no-command-uart:ls-beta
+PASS no-command-uart:partial-write-ls
+PASS no-command-uart:host-a
+PASS no-command-uart:host-b
+PASS no-command-uart:ls-error
+PASS no-command-uart:host-a-error
+PASS no-command-uart:host-b-error
+PASS no-command-uart:legacy-s3-ls-error
+PASS no-command-uart:after-close
+PASS no-binary-chunk-uart:0
+PASS no-binary-chunk-uart:1
+PASS no-binary-chunk-uart:2
+PASS no-binary-chunk-uart:3
+PASS no-binary-chunk-uart:4
+PASS no-binary-chunk-uart:5
+PASS no-binary-chunk-uart:6
+PASS no-binary-chunk-uart:7
+PASS no-binary-chunk-uart:8
+PASS no-binary-chunk-uart:9
+PASS no-binary-chunk-uart:10
+PASS no-binary-chunk-uart:11
+PASS no-binary-chunk-uart:12
+PASS no-binary-chunk-uart:13
+PASS no-binary-chunk-uart:14
+PASS no-binary-chunk-uart:15
+PASS no-binary-chunk-uart:16
+PASS no-binary-chunk-uart:17
+PASS no-binary-chunk-uart:18
+PASS no-binary-chunk-uart:19
+PASS no-binary-chunk-uart:20
+PASS no-binary-chunk-uart:21
+PASS no-binary-chunk-uart:22
+PASS no-binary-chunk-uart:23
+PASS no-binary-chunk-uart:24
+PASS no-binary-chunk-uart:25
+PASS no-binary-chunk-uart:26
+PASS no-binary-chunk-uart:27
+PASS no-binary-chunk-uart:28
+PASS no-binary-chunk-uart:29
+PASS no-binary-chunk-uart:30
+PASS no-binary-chunk-uart:31
+PASS no-binary-chunk-uart:32
+PASS no-binary-chunk-uart:33
+PASS no-binary-chunk-uart:34
+PASS no-binary-chunk-uart:35
+PASS no-binary-chunk-uart:36
+PASS no-binary-chunk-uart:37
+PASS no-binary-chunk-uart:38
+PASS no-binary-chunk-uart:39
+PASS no-binary-chunk-uart:40
+PASS no-binary-chunk-uart:41
+PASS no-binary-chunk-uart:42
+PASS no-binary-chunk-uart:43
+PASS no-binary-chunk-uart:44
+PASS no-binary-chunk-uart:45
+PASS no-binary-chunk-uart:46
+PASS no-binary-chunk-uart:47
+PASS no-binary-chunk-uart:48
+PASS no-binary-chunk-uart:49
+PASS no-binary-chunk-uart:50
+PASS no-binary-chunk-uart:51
+PASS no-binary-chunk-uart:52
+PASS no-binary-chunk-uart:53
+PASS no-binary-chunk-uart:54
+PASS no-binary-chunk-uart:55
+PASS no-binary-chunk-uart:56
+PASS no-binary-chunk-uart:57
+PASS no-binary-chunk-uart:58
+PASS no-binary-chunk-uart:59
+PASS no-binary-chunk-uart:60
+PASS no-binary-chunk-uart:61
+PASS no-binary-chunk-uart:62
+PASS no-binary-chunk-uart:63
+PASS no-binary-chunk-uart:64
+PASS no-binary-chunk-uart:65
+PASS no-binary-chunk-uart:66
+PASS no-binary-chunk-uart:67
+PASS no-binary-chunk-uart:68
+PASS no-binary-chunk-uart:69
+PASS no-binary-chunk-uart:70
+PASS no-binary-chunk-uart:71
+PASS no-binary-chunk-uart:72
+PASS no-binary-chunk-uart:73
+PASS no-binary-chunk-uart:74
+PASS no-binary-chunk-uart:75
+PASS no-binary-chunk-uart:76
+PASS no-binary-chunk-uart:77
+PASS no-binary-chunk-uart:78
+PASS no-binary-chunk-uart:79
+PASS no-binary-chunk-uart:80
+PASS no-binary-chunk-uart:81
+PASS no-binary-chunk-uart:82
+PASS no-binary-chunk-uart:83
+PASS no-binary-chunk-uart:84
+PASS no-binary-chunk-uart:85
+PASS no-binary-chunk-uart:86
+PASS no-binary-chunk-uart:87
+PASS no-binary-chunk-uart:88
+PASS no-binary-chunk-uart:89
+PASS no-binary-chunk-uart:90
+PASS no-binary-chunk-uart:91
+PASS no-binary-chunk-uart:92
+PASS no-binary-chunk-uart:93
+PASS no-binary-chunk-uart:94
+PASS no-binary-chunk-uart:95
+PASS no-binary-chunk-uart:96
+PASS no-binary-chunk-uart:97
+PASS no-binary-chunk-uart:98
+PASS no-binary-chunk-uart:99
+PASS no-binary-chunk-uart:100
+PASS no-binary-chunk-uart:101
+PASS no-binary-chunk-uart:102
+PASS no-binary-chunk-uart:103
+PASS no-binary-chunk-uart:104
+PASS no-binary-chunk-uart:105
+PASS no-binary-chunk-uart:106
+PASS no-binary-chunk-uart:107
+PASS no-binary-chunk-uart:108
+PASS no-binary-chunk-uart:109
+PASS no-binary-chunk-uart:110
+PASS no-binary-chunk-uart:111
+PASS no-binary-chunk-uart:112
+PASS no-binary-chunk-uart:113
+PASS no-binary-chunk-uart:114
+PASS no-binary-chunk-uart:115
+PASS no-binary-chunk-uart:116
+PASS no-binary-chunk-uart:117
+PASS no-binary-chunk-uart:118
+PASS no-binary-chunk-uart:119
+PASS no-binary-chunk-uart:120
+PASS no-binary-chunk-uart:121
+PASS no-binary-chunk-uart:122
+PASS no-binary-chunk-uart:123
+PASS no-binary-chunk-uart:124
+PASS no-binary-chunk-uart:125
+PASS no-binary-chunk-uart:126
+PASS no-binary-chunk-uart:127
+PASS no-binary-chunk-uart:128
+PASS no-binary-chunk-uart:129
+PASS no-binary-chunk-uart:130
+PASS no-binary-chunk-uart:131
+PASS no-binary-chunk-uart:132
+PASS no-binary-chunk-uart:133
+PASS no-binary-chunk-uart:134
+PASS no-binary-chunk-uart:135
+PASS no-binary-chunk-uart:136
+PASS no-binary-chunk-uart:137
+PASS no-binary-chunk-uart:138
+PASS no-binary-chunk-uart:139
+PASS no-binary-chunk-uart:140
+PASS no-binary-chunk-uart:141
+PASS no-binary-chunk-uart:142
+PASS no-binary-chunk-uart:143
+PASS no-binary-chunk-uart:144
+PASS no-binary-chunk-uart:145
+PASS no-binary-chunk-uart:146
+PASS no-binary-chunk-uart:147
+PASS no-binary-chunk-uart:148
+PASS no-binary-chunk-uart:149
+PASS no-binary-chunk-uart:150
+PASS no-binary-chunk-uart:151
+PASS no-binary-chunk-uart:152
+PASS no-binary-chunk-uart:153
+PASS no-binary-chunk-uart:154
+PASS no-binary-chunk-uart:155
+PASS no-binary-chunk-uart:156
+PASS no-binary-chunk-uart:157
+PASS no-binary-chunk-uart:158
+PASS no-binary-chunk-uart:159
+PASS no-binary-chunk-uart:160
+PASS no-binary-chunk-uart:161
+PASS no-binary-chunk-uart:162
+PASS no-binary-chunk-uart:163
+PASS no-binary-chunk-uart:164
+PASS no-binary-chunk-uart:165
+PASS no-binary-chunk-uart:166
+PASS no-binary-chunk-uart:167
+PASS no-binary-chunk-uart:168
+PASS no-binary-chunk-uart:169
+PASS no-binary-chunk-uart:170
+PASS no-binary-chunk-uart:171
+PASS no-binary-chunk-uart:172
+PASS no-binary-chunk-uart:173
+PASS no-binary-chunk-uart:174
+PASS no-binary-chunk-uart:175
+PASS no-binary-chunk-uart:176
+PASS no-binary-chunk-uart:177
+PASS no-binary-chunk-uart:178
+PASS no-binary-chunk-uart:179
+PASS no-binary-chunk-uart:180
+PASS no-binary-chunk-uart:181
+PASS no-binary-chunk-uart:182
+PASS no-binary-chunk-uart:183
+PASS no-binary-chunk-uart:184
+PASS no-binary-chunk-uart:185
+PASS no-binary-chunk-uart:186
+PASS no-binary-chunk-uart:187
+PASS no-binary-chunk-uart:188
+PASS no-binary-chunk-uart:189
+PASS no-binary-chunk-uart:190
+PASS no-binary-chunk-uart:191
+PASS no-binary-chunk-uart:192
+PASS no-negative-payload-uart
+PASS invalid-ref-admission-not-helper
+PASS stock-negative-published-nonzero:negative-missing-stdout
+PASS stock-negative-published-nonzero:negative-missing-stderr
+PASS stock-negative-published-nonzero:negative-missing-both
+PASS stock-stop-before-write-deadline:stock-close
+PASS stock-stop-before-write-deadline:stock-cancel
+PASS legacy-no-context-free-uart-once
+PASS legacy-no-context-free-header-once
+PASS unchanged-vfs-log-uart
+PASS unchanged-input-log-uart
+PASS no-unexpected-markers
+PASS no-FAIL-markers
+PASS driver-final-verdict
+PASS no-unexpected-launch-deny
+PASS unknown-program-denied
+PASS no-panic
+PASS no-shell-prompt-on-uart
+PASS no-key-material-in-log
+PASS: 308 Phase04 S3-output runtime checks (52 driver markers); GUI/regression evidence remains separate

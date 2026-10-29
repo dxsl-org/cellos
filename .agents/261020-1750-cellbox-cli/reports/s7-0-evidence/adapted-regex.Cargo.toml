@@ -1,0 +1,15 @@
+[package]
+name = "s0-regex"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+[lib]
+name = "grep_regex"
+path = "src/lib.rs"
+[dependencies]
+bstr = { version = "=1.13.1", default-features = false, features = ["alloc"] }
+grep-matcher = { package = "s0-matcher", path = "../matcher" }
+log = { version = "=0.4.33", default-features = false }
+regex-automata = { version = "=0.4.16", default-features = false, features = ["alloc", "syntax", "meta", "nfa", "hybrid", "dfa-onepass", "perf", "unicode"] }
+regex-syntax = { version = "=0.8.11", default-features = false, features = ["unicode"] }

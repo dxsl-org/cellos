@@ -1,0 +1,294 @@
+{
+  "channel": "owned private Unix QMP; read-only HMP info registers -a",
+  "kernel_sha256": "4772ebab4d0fc2430e16566c59039d81800cdbefb113a07ca02519c6d8110f73",
+  "samples": [
+    {
+      "phase": "before-command",
+      "monotonic_ns": 122360268467330,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff8006ab18",
+          "rflags": "0x97",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360278675744,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff8003a019",
+          "rflags": "0x2",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360279620495,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0x104066004",
+          "rflags": "0x283",
+          "hlt": 0,
+          "if_set": true,
+          "cpl": 3
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360280318979,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff800685f0",
+          "rflags": "0x2",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360281061100,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff800148e0",
+          "rflags": "0x2",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360281743167,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0x104066004",
+          "rflags": "0x283",
+          "hlt": 0,
+          "if_set": true,
+          "cpl": 3
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360282687981,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff800a0f34",
+          "rflags": "0x2",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360283379912,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff800148e0",
+          "rflags": "0x6",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360284104163,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff80014730",
+          "rflags": "0x16",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360288970161,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff800c7f53",
+          "rflags": "0x6",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360289917466,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff800c7f4a",
+          "rflags": "0x6",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360292263181,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff800c7f4a",
+          "rflags": "0x6",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360294153927,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff800c7f53",
+          "rflags": "0x6",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360295045487,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff800c7f4d",
+          "rflags": "0x6",
+          "hlt": 0,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360596458219,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff80039571",
+          "rflags": "0x46",
+          "hlt": 1,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    },
+    {
+      "phase": "after-command",
+      "monotonic_ns": 122360897798870,
+      "query_status": {
+        "status": "running",
+        "running": true
+      },
+      "cpus": [
+        {
+          "cpu_index": 0,
+          "rip": "0xffffffff80039571",
+          "rflags": "0x46",
+          "hlt": 1,
+          "if_set": false,
+          "cpl": 0
+        }
+      ]
+    }
+  ]
+}

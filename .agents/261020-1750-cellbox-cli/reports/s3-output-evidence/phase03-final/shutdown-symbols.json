@@ -1,0 +1,21 @@
+{
+  "kernel_sha256": "4772ebab4d0fc2430e16566c59039d81800cdbefb113a07ca02519c6d8110f73",
+  "source_sha256": "86f36a5260d406d41c03644fa18e3491253275a423f701673ce05709ba295cd3",
+  "source_mapping": "readelf --wide --debug-dump=decodedline; exact source/header/HLT address",
+  "loops": [
+    {
+      "symbol": "cellos_kernel::task::syscall::handle_syscall_inner",
+      "source": "kernel/src/task/syscall.rs:7887",
+      "hlt_rip": "0xffffffff80039570",
+      "post_hlt_rip": "0xffffffff80039571",
+      "instructions": [
+        "0xffffffff80039570: hlt",
+        "0xffffffff80039571: jmp 0xffffffff80039570"
+      ],
+      "line_table_row": {
+        "source": "kernel/src/task/syscall.rs:7887",
+        "address": "0xffffffff80039570"
+      }
+    }
+  ]
+}

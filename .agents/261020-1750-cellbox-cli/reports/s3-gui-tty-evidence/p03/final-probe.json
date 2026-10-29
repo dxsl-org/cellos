@@ -1,0 +1,15 @@
+{
+  "command_sent": true,
+  "worker_load_seen": true,
+  "line_seen": false,
+  "vm_exited": false,
+  "exit_code": null,
+  "prompt_after_line": false,
+  "prompt_after_command": false,
+  "halt_proven": true,
+  "matching_cpu_samples": [
+    16,
+    17
+  ],
+  "error": null
+}

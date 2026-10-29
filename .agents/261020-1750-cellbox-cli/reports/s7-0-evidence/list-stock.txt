@@ -1,0 +1,21 @@
+aho-corasick@1.1.4 (2): Unlicense, MIT
+bstr@1.13.0 (2): MIT, Apache-2.0
+cfg-if@1.0.4 (2): MIT, Apache-2.0
+crossbeam-deque@0.8.7 (2): MIT, Apache-2.0
+crossbeam-epoch@0.9.20 (2): MIT, Apache-2.0
+crossbeam-utils@0.8.22 (2): MIT, Apache-2.0
+encoding_rs@0.8.35 (3): Apache-2.0, MIT, BSD-3-Clause
+encoding_rs_io@0.1.7 (2): MIT, Apache-2.0
+globset@0.4.19 (2): Unlicense, MIT
+grep-matcher@0.1.9 (2): Unlicense, MIT
+grep-regex@0.1.14 (2): Unlicense, MIT
+grep-searcher@0.1.17 (2): Unlicense, MIT
+ignore@0.4.29 (2): Unlicense, MIT
+log@0.4.33 (2): MIT, Apache-2.0
+memchr@2.8.3 (2): Unlicense, MIT
+memmap2@0.9.11 (2): MIT, Apache-2.0
+regex-automata@0.4.15 (2): MIT, Apache-2.0
+regex-syntax@0.8.11 (2): MIT, Apache-2.0
+s0-stock@0.0.0 (1): MIT
+same-file@1.0.6 (2): Unlicense, MIT
+walkdir@2.5.0 (2): Unlicense, MIT

@@ -1,0 +1,70 @@
+{
+  "sanitization": "Text source working-directory path replaced by <PRIVATE_REGRESSION_WORK>; no private keys, images, sockets or executables copied.",
+  "files": {
+    "phase02-normal/serial.log": {
+      "bytes": 38625,
+      "sha256": "5ea4bab4825282ec1cf0a9adff1988c111c88f47c4cc36d57fdd20f53ba6a3cf",
+      "source_sha256": "5ea4bab4825282ec1cf0a9adff1988c111c88f47c4cc36d57fdd20f53ba6a3cf"
+    },
+    "phase02-normal/provenance.json": {
+      "bytes": 2454,
+      "sha256": "2c524f5b1e68e24e970d299d9356666bf17268d0e2728d461a9602e70eb0c0b7",
+      "source_sha256": "2c524f5b1e68e24e970d299d9356666bf17268d0e2728d461a9602e70eb0c0b7"
+    },
+    "phase02-normal/qemu-argv.txt": {
+      "bytes": 281,
+      "sha256": "672fc2c92f1340fa5f5caea161f3d7058dd71336ebafd5c44465f43e1b8e970b",
+      "source_sha256": "fd0d1285fceb38ad297f21e2fc38871a592e3afa2b718baaa8688add7c5c640d"
+    },
+    "phase02-normal/serial-extras.json": {
+      "bytes": 44,
+      "sha256": "d05e7dfed1b3902f15c5c440ac4aece1af09beac703536af8e0081eb88972d5f",
+      "source_sha256": "d05e7dfed1b3902f15c5c440ac4aece1af09beac703536af8e0081eb88972d5f"
+    },
+    "phase02-normal/rm-i.json": {
+      "bytes": 128,
+      "sha256": "4108addab36c4a9f99bab525d39e11074d16ae188fc3e02daebe133999b406cf",
+      "source_sha256": "4108addab36c4a9f99bab525d39e11074d16ae188fc3e02daebe133999b406cf"
+    },
+    "phase02-normal/shell-loop.json": {
+      "bytes": 12,
+      "sha256": "2a5dd77e74a3cce6e232bf011ce144725987dafe69736ba97af4c98393222c5b",
+      "source_sha256": "2a5dd77e74a3cce6e232bf011ce144725987dafe69736ba97af4c98393222c5b"
+    },
+    "phase02-normal/orphan-ticks.json": {
+      "bytes": 165,
+      "sha256": "31d11ed486f59e5eefb0339869ed55c9abee3c6c65683c0102d710264ae1af03",
+      "source_sha256": "31d11ed486f59e5eefb0339869ed55c9abee3c6c65683c0102d710264ae1af03"
+    },
+    "phase02-normal/runner-summary.txt": {
+      "bytes": 134,
+      "sha256": "c88fb9eb03d9a3bcefc592175b18fc32572611d69c466c86c75d1e017ee53353",
+      "derived": "Selected runner outcome lines, not a rerun."
+    },
+    "phase02-kernel/serial.log": {
+      "bytes": 20096,
+      "sha256": "775352191ea2dc96a1bae1a2c8781e4fd94eb0d5985d694f1ac53fed0d0edd7e",
+      "source_sha256": "775352191ea2dc96a1bae1a2c8781e4fd94eb0d5985d694f1ac53fed0d0edd7e"
+    },
+    "phase02-kernel/provenance.json": {
+      "bytes": 2440,
+      "sha256": "022c3a66ee796cb9eb019f47a1a9956cca641dad7ac588b035dfdf7a3e897dd8",
+      "source_sha256": "022c3a66ee796cb9eb019f47a1a9956cca641dad7ac588b035dfdf7a3e897dd8"
+    },
+    "phase02-kernel/qemu-argv.txt": {
+      "bytes": 281,
+      "sha256": "672fc2c92f1340fa5f5caea161f3d7058dd71336ebafd5c44465f43e1b8e970b",
+      "source_sha256": "76ec30bc6821d772d3234cc603e6ff5a5a21e93ef39930ff3c57c49bc48c5748"
+    },
+    "phase02-kernel/runner-summary.txt": {
+      "bytes": 111,
+      "sha256": "0daa15dc42d85e091b3fbe74987772daccea1f2dbbbf080cc854c33d279bf6ef",
+      "derived": "Selected runner outcome lines, not a rerun."
+    },
+    "host-test-results.txt": {
+      "bytes": 1875,
+      "sha256": "b9043453347fe6caefe32ef7fb2db4fe3fd3ad27ef3a63d9cb41358cda5ddf41",
+      "derived": "Selected headings and test result lines from artifact://1244."
+    }
+  }
+}

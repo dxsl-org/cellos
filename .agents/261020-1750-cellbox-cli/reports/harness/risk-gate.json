@@ -1,0 +1,1 @@
+{"highRisk":true,"reasons":["Whole-plan launch authority, public ABI, signing and migration changes require retained exact-surface approvals; this run performs preparation only"],"autoStopRequired":true,"humanApproved":false,"largeDiff":false}

@@ -1,0 +1,8 @@
+# Applications start after the configured required services are ready.
+version = 1
+
+[[cells]]
+name = "phase04-terminal-driver"
+path = "/bin/phase04-terminal-driver"
+after = ["input", "net"]
+restart = "never"

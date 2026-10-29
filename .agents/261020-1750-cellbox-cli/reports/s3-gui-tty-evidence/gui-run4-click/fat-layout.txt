@@ -1,0 +1,77 @@
+Checking: /tmp/cellbox-phase04-gui-pUU0R2Rk/embedded/kernel_fs.img
+Size: 8388608 bytes (8192 KB)
+Sig: 55aa (should be 55aa)
+FS type: b'  FAT16 '
+BPS=512 SPC=1 RES=1 FAT_CNT=2 ROOT_ENT=512 FAT_SZ=96
+Root dir at 98816, Data area at 115200
+  --- root ---
+    LFN[1] 'bin'
+    SFN BIN~1         -> LFN 'bin'  attr=10 clus=2 sz=0
+    LFN[1] 'etc'
+    SFN ETC~1         -> LFN 'etc'  attr=10 clus=4 sz=0
+    LFN[1] 'gui-list'
+    SFN GUI-LI~1      -> LFN 'gui-list'  attr=10 clus=6 sz=0
+    LFN[1] 'gui-text'
+    SFN GUI-TE~1      -> LFN 'gui-text'  attr=10 clus=7 sz=0
+bin dir (SFN='BIN~1') at cluster 2, offset 115200
+  --- /bin ---
+    SFN .                    attr=10 clus=2 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'vfs'
+    SFN VFS~1         -> LFN 'vfs'  attr=20 clus=8 sz=520736
+    LFN[1] 'config'
+    SFN CONFIG~1      -> LFN 'config'  attr=20 clus=1026 sz=42992
+    LFN[1] 'input'
+    SFN INPUT~1       -> LFN 'input'  attr=20 clus=1110 sz=131952
+    LFN[1] 'platform'
+    SFN PLATFO~1      -> LFN 'platform'  attr=20 clus=1368 sz=38576
+    LFN[1] 'compositor'
+    SFN COMPOS~1      -> LFN 'compositor'  attr=20 clus=1444 sz=107904
+    LFN[1] 'fb-console'
+    SFN FB-CON~1      -> LFN 'fb-console'  attr=20 clus=1655 sz=584272
+    LFN[1] 'desktop'
+    SFN DESKTO~1      -> LFN 'desktop'  attr=20 clus=2797 sz=1160272
+    LFN[1] 'ls'
+    SFN LS~1          -> LFN 'ls'  attr=20 clus=5064 sz=30376
+    LFN[1] 'cat'
+    SFN CAT~1         -> LFN 'cat'  attr=20 clus=5124 sz=30416
+    LFN[1] 'echo'
+    SFN ECHO~1        -> LFN 'echo'  attr=20 clus=5184 sz=30376
+    LFN[1] 'p03-filter'
+    SFN P03-FI~1      -> LFN 'p03-filter'  attr=20 clus=5244 sz=38624
+    LFN[1] 'cellbox'
+    SFN CELLBO~1      -> LFN 'cellbox'  attr=20 clus=5320 sz=1218760
+    LFN[1] 'terminal'
+    SFN TERMIN~1      -> LFN 'terminal'  attr=20 clus=7701 sz=647280
+etc dir (SFN='ETC~1') at cluster 4, offset 116224
+  --- /etc ---
+    SFN .                    attr=10 clus=4 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellos'
+    SFN CELLOS~1      -> LFN 'cellos'  attr=10 clus=5 sz=0
+cellos dir (SFN='CELLOS~1') at cluster 5, offset 116736
+  --- /etc/cellos ---
+    SFN .                    attr=10 clus=5 sz=0
+    SFN ..                   attr=10 clus=4 sz=0
+    LFN[1] 'system.toml'
+    SFN SYSTEM~1.TOM  -> LFN 'system.toml'  attr=20 clus=8969 sz=128
+    LFN[2] ''
+    LFN[1] 'services.toml'
+    SFN SERVIC~1.TOM  -> LFN 'services.toml'  attr=20 clus=8970 sz=553
+    LFN[2] ''
+    LFN[1] 'autoload.toml'
+    SFN AUTOLO~1.TOM  -> LFN 'autoload.toml'  attr=20 clus=8972 sz=271
+gui-list dir (SFN='GUI-LI~1') at cluster 6, offset 117248
+  --- /gui-list ---
+    SFN .                    attr=10 clus=6 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'alpha-entry'
+    SFN ALPHA-~1      -> LFN 'alpha-entry'  attr=20 clus=8966 sz=32
+    LFN[1] 'beta-entry'
+    SFN BETA-E~1      -> LFN 'beta-entry'  attr=20 clus=8967 sz=32
+gui-text dir (SFN='GUI-TE~1') at cluster 7, offset 117760
+  --- /gui-text ---
+    SFN .                    attr=10 clus=7 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'note.txt'
+    SFN NOTE~1.TXT    -> LFN 'note.txt'  attr=20 clus=8968 sz=34

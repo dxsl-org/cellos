@@ -1,0 +1,1250 @@
+{
+  "checks": {
+    "driver-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:shell-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:builtin-echo": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:builtin-pwd": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:builtin-free": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:builtin-date-changes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:builtin-ps-records": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:typed-pipeline": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:typed-pipeline-empty": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:file-create-ls": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:file-cat-roundtrip": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-echo": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-ls": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-cat": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-stdout-not-stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-ls-stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-free": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:stock-full-ring-drain-exact": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:stock-downstream-close-recovers": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:stock-full-ring-cancel": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:stock-fragmented-ring-drain-exact": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:stock-full-ring-host-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:negative-missing-stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:negative-missing-stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:negative-missing-both": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:negative-invalid-stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:negative-grants-host-isolation": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-filter-single": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-filter-pipeline": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-filter-exact-bytes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:exit-status": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:exit-status-external-7": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:exit-status-unknown-program": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-recovers": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-output-stops": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-status-130": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-shell-alive": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-external-pipeline": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-idle-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:resize-accepted": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ps-reflects-new-shell": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-independent-output": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-independent-state": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-independent-stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-independent-resize": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-independent-exit": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:child-exit-then-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:relaunch-after-exit": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:repeat-open-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:repeat-no-leak": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:cancel-child": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:session-a-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-evidence-framing": {
+      "pass": true,
+      "detail": []
+    },
+    "host-exact:echo.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:echo.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:ls-error.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:ls-error.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:cat.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:cat.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:large-cat.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:large-cat.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:pressure-ls.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:pressure-ls.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-a.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-a.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-b.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-b.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-a-error.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-a-error.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-b-error.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-b-error.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-stdout.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-stdout.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-stderr.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-stderr.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-both.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-both.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-invalid-stdout.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-invalid-stdout.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:ls.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:ls.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-free-accounting": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-free-stderr-empty": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:echo": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:status-probe": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:ls-alpha": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:ls-beta": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:partial-write-ls": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:host-a": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:host-b": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:ls-error": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:host-a-error": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:host-b-error": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:legacy-s3-ls-error": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:after-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:0": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:1": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:2": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:3": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:4": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:5": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:6": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:7": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:8": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:9": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:10": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:11": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:12": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:13": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:14": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:15": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:16": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:17": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:18": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:19": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:20": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:21": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:22": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:23": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:24": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:25": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:26": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:27": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:28": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:29": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:30": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:31": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:32": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:33": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:34": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:35": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:36": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:37": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:38": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:39": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:40": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:41": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:42": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:43": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:44": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:45": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:46": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:47": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:48": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:49": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:50": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:51": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:52": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:53": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:54": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:55": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:56": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:57": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:58": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:59": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:60": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:61": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:62": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:63": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:64": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:65": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:66": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:67": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:68": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:69": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:70": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:71": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:72": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:73": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:74": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:75": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:76": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:77": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:78": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:79": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:80": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:81": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:82": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:83": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:84": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:85": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:86": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:87": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:88": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:89": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:90": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:91": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:92": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:93": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:94": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:95": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:96": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:97": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:98": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:99": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:100": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:101": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:102": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:103": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:104": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:105": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:106": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:107": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:108": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:109": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:110": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:111": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:112": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:113": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:114": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:115": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:116": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:117": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:118": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:119": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:120": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:121": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:122": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:123": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:124": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:125": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:126": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:127": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:128": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:129": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:130": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:131": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:132": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:133": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:134": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:135": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:136": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:137": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:138": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:139": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:140": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:141": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:142": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:143": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:144": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:145": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:146": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:147": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:148": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:149": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:150": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:151": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:152": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:153": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:154": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:155": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:156": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:157": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:158": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:159": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:160": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:161": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:162": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:163": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:164": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:165": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:166": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:167": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:168": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:169": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:170": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:171": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:172": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:173": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:174": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:175": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:176": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:177": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:178": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:179": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:180": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:181": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:182": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:183": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:184": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:185": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:186": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:187": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:188": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:189": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:190": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:191": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:192": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-negative-payload-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "invalid-ref-admission-not-helper": {
+      "pass": true,
+      "detail": ""
+    },
+    "stock-negative-published-nonzero:negative-missing-stdout": {
+      "pass": true,
+      "detail": [
+        "1"
+      ]
+    },
+    "stock-negative-published-nonzero:negative-missing-stderr": {
+      "pass": true,
+      "detail": [
+        "1"
+      ]
+    },
+    "stock-negative-published-nonzero:negative-missing-both": {
+      "pass": true,
+      "detail": [
+        "1"
+      ]
+    },
+    "stock-stop-before-write-deadline:stock-close": {
+      "pass": true,
+      "detail": [
+        "120"
+      ]
+    },
+    "stock-stop-before-write-deadline:stock-cancel": {
+      "pass": true,
+      "detail": [
+        "41"
+      ]
+    },
+    "legacy-no-context-free-uart-once": {
+      "pass": true,
+      "detail": [
+        "USER: Mem (KiB):    237796      62084      175712"
+      ]
+    },
+    "legacy-no-context-free-header-once": {
+      "pass": true,
+      "detail": ""
+    },
+    "unchanged-vfs-log-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "unchanged-input-log-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-unexpected-markers": {
+      "pass": true,
+      "detail": []
+    },
+    "no-FAIL-markers": {
+      "pass": true,
+      "detail": []
+    },
+    "driver-final-verdict": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-unexpected-launch-deny": {
+      "pass": true,
+      "detail": []
+    },
+    "unknown-program-denied": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-panic": {
+      "pass": true,
+      "detail": []
+    },
+    "no-shell-prompt-on-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-key-material-in-log": {
+      "pass": true,
+      "detail": ""
+    }
+  },
+  "scope": "private S3-output stock runtime gates; GUI and independent Phase02/03 regressions remain separate",
+  "coverage_notes": "AC-5 requires actual stock echo nonzero exits with missing stdout, stderr or both; invalid stdout refs must be rejected by canonical admission before publication, recorded distinctly from helper execution. All negative cases require empty owned streams, no unrelated host bytes, and independent no-UART-payload checks.\nAC-4 fragmented stock ls writes use 60-byte names and separate LF across full 4096-byte rings; exact retained bytes are checked, but internal write return counts are not externally exposed and are not independently observed.\ndate/env/uname/kill/shutdown/hotswap are signed and packaged but NOT launched: no broadened target admission, authority, shutdown or service mutation.\n"
+}

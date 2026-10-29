@@ -1,0 +1,832 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded getopts v0.2.24
+  Downloaded adler2 v2.0.1
+  Downloaded rustc-literal-escaper v0.0.7
+  Downloaded foldhash v0.2.0
+  Downloaded rustc-demangle v0.1.27
+  Downloaded miniz_oxide v0.8.9
+  Downloaded addr2line v0.25.1
+  Downloaded memchr v2.7.6
+  Downloaded hashbrown v0.17.0
+  Downloaded gimli v0.32.3
+  Downloaded object v0.37.3
+  Downloaded libc v0.2.185
+   Compiling compiler_builtins v0.1.160 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling crossbeam-utils v0.8.22
+   Compiling crossbeam-epoch v0.9.20
+   Compiling crossbeam-deque v0.8.7
+   Compiling alloc v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling memchr v2.8.3
+   Compiling regex-syntax v0.8.11
+   Compiling log v0.4.33
+   Compiling cfg-if v1.0.4
+   Compiling same-file v1.0.6
+   Compiling memmap2 v0.9.11
+error[E0463]: can't find crate for `std`
+  |
+  = note: the `x86_64-unknown-none` target may not support the standard library
+  = note: `std` is required by `same_file` because it does not declare `#![no_std]`
+  = help: consider building the standard library from source with `cargo build -Zbuild-std`
+
+error[E0463]: can't find crate for `std`
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.22/src/lib.rs:43:1
+   |
+43 | extern crate std;
+   | ^^^^^^^^^^^^^^^^^ can't find crate
+   |
+   = note: the `x86_64-unknown-none` target may not support the standard library
+   = help: consider building the standard library from source with `cargo build -Zbuild-std`
+
+   Compiling encoding_rs v0.8.35
+error[E0463]: can't find crate for `std`
+  |
+  = note: the `x86_64-unknown-none` target may not support the standard library
+  = note: `std` is required by `memmap2` because it does not declare `#![no_std]`
+  = help: consider building the standard library from source with `cargo build -Zbuild-std`
+
+error[E0463]: can't find crate for `std`
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memchr-2.8.3/src/lib.rs:198:1
+    |
+198 | extern crate std;
+    | ^^^^^^^^^^^^^^^^^ can't find crate
+    |
+    = note: the `x86_64-unknown-none` target may not support the standard library
+    = help: consider building the standard library from source with `cargo build -Zbuild-std`
+
+For more information about this error, try `rustc --explain E0463`.
+error: could not compile `crossbeam-utils` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `memchr` (lib) due to 1 previous error
+error: cannot resolve a prelude import
+
+error[E0463]: can't find crate for `std`
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/lib.rs:74:5
+   |
+74 | use std::fs::File;
+   |     ^^^ can't find crate
+   |
+   = note: the `x86_64-unknown-none` target may not support the standard library
+   = help: consider building the standard library from source with `cargo build -Zbuild-std`
+
+error[E0463]: can't find crate for `std`
+ --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/stub.rs:1:5
+  |
+1 | use std::fs::File;
+  |     ^^^ can't find crate
+  |
+  = note: the `x86_64-unknown-none` target may not support the standard library
+  = help: consider building the standard library from source with `cargo build -Zbuild-std`
+
+error[E0463]: can't find crate for `std`
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/regex-syntax-0.8.11/src/lib.rs:176:1
+    |
+176 | extern crate std;
+    | ^^^^^^^^^^^^^^^^^ can't find crate
+    |
+    = note: the `x86_64-unknown-none` target may not support the standard library
+    = help: consider building the standard library from source with `cargo build -Zbuild-std`
+
+error: cannot find attribute `derive` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/lib.rs:108:3
+    |
+108 | #[derive(Debug, Eq, PartialEq, Hash)]
+    |   ^^^^^^
+    |
+help: consider importing this attribute macro
+    |
+ 74 + use core::derive;
+    |
+
+error: cannot find macro `unreachable` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/unknown.rs:46:9
+   |
+46 |         unreachable!(ERROR_MESSAGE);
+   |         ^^^^^^^^^^^
+   |
+help: consider importing this macro
+   |
+ 1 + use core::unreachable;
+   |
+
+error: cannot find attribute `derive` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:155:3
+    |
+155 | #[derive(Clone, Debug, Default)]
+    |   ^^^^^^
+    |
+help: consider importing this attribute macro
+    |
+ 63 + use core::derive;
+    |
+
+error: cannot find macro `unreachable` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/unknown.rs:42:9
+   |
+42 |         unreachable!(ERROR_MESSAGE);
+   |         ^^^^^^^^^^^
+   |
+help: consider importing this macro
+   |
+ 1 + use core::unreachable;
+   |
+
+error: cannot find macro `unreachable` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/unknown.rs:16:9
+   |
+16 |         unreachable!(ERROR_MESSAGE);
+   |         ^^^^^^^^^^^
+   |
+help: consider importing this macro
+   |
+ 1 + use core::unreachable;
+   |
+
+error: cannot find attribute `derive` in this scope
+ --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/unknown.rs:9:3
+  |
+9 | #[derive(Debug, Hash)]
+  |   ^^^^^^
+  |
+help: consider importing this attribute macro
+  |
+1 + use core::derive;
+  |
+
+error: could not compile `regex-syntax` (lib) due to 1 previous error
+error[E0405]: cannot find trait `Eq` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/unknown.rs:12:6
+   |
+12 | impl Eq for Handle {}
+   |      ^^ not found in this scope
+   |
+help: consider importing this trait
+   |
+ 1 + use core::cmp::Eq;
+   |
+
+error[E0405]: cannot find trait `PartialEq` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/unknown.rs:14:6
+   |
+14 | impl PartialEq for Handle {
+   |      ^^^^^^^^^ not found in this scope
+   |
+help: consider importing this trait
+   |
+ 1 + use core::cmp::PartialEq;
+   |
+
+error[E0405]: cannot find trait `AsRef` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/unknown.rs:21:25
+   |
+21 |     pub fn from_path<P: AsRef<Path>>(_p: P) -> io::Result<Handle> {
+   |                         ^^^^^ not found in this scope
+   |
+help: consider importing this trait
+   |
+ 1 + use core::convert::AsRef;
+   |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Err` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/unknown.rs:51:5
+   |
+51 |     Err(io::Error::new(io::ErrorKind::Other, ERROR_MESSAGE))
+   |     ^^^ not found in this scope
+   |
+help: consider importing this tuple variant
+   |
+ 1 + use core::result::Result::Err;
+   |
+
+error[E0405]: cannot find trait `AsRef` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/lib.rs:145:25
+    |
+145 |     pub fn from_path<P: AsRef<Path>>(p: P) -> io::Result<Handle> {
+    |                         ^^^^^ not found in this scope
+    |
+help: consider importing this trait
+    |
+ 74 + use core::convert::AsRef;
+    |
+
+error[E0405]: cannot find trait `AsRef` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/lib.rs:372:8
+    |
+372 |     P: AsRef<Path>,
+    |        ^^^^^ not found in this scope
+    |
+help: consider importing this trait
+    |
+ 74 + use core::convert::AsRef;
+    |
+
+error[E0405]: cannot find trait `AsRef` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/lib.rs:373:8
+    |
+373 |     Q: AsRef<Path>,
+    |        ^^^^^ not found in this scope
+    |
+help: consider importing this trait
+    |
+ 74 + use core::convert::AsRef;
+    |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/same-file-1.0.6/src/lib.rs:375:5
+    |
+375 |     Ok(Handle::from_path(path1)? == Handle::from_path(path2)?)
+    |     ^^ not found in this scope
+    |
+help: consider importing this tuple variant
+    |
+ 74 + use core::result::Result::Ok;
+    |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Err` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/stub.rs:13:9
+   |
+13 |         Err(io::ErrorKind::Unsupported.into())
+   |         ^^^ not found in this scope
+   |
+help: consider importing this tuple variant
+   |
+ 1 + use core::result::Result::Err;
+   |
+
+error[E0425]: cannot find type `Option` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/stub.rs:42:52
+   |
+42 |     pub fn map_anon(_: usize, _: bool, _: bool, _: Option<u8>, _: bool) -> io::Result<MmapInner> {
+   |                                                    ^^^^^^ not found in this scope
+   |
+help: consider importing this enum
+   |
+ 1 + use core::option::Option;
+   |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/stub.rs:83:5
+   |
+83 |     Ok(file.metadata()?.len())
+   |     ^^ not found in this scope
+   |
+help: consider importing this tuple variant
+   |
+ 1 + use core::result::Result::Ok;
+   |
+
+error[E0425]: cannot find type `Option` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:158:10
+    |
+158 |     len: Option<usize>,
+    |          ^^^^^^ not found in this scope
+    |
+help: consider importing this enum
+    |
+ 63 + use core::option::Option;
+    |
+
+error[E0425]: cannot find type `Option` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:159:11
+    |
+159 |     huge: Option<u8>,
+    |           ^^^^^^ not found in this scope
+    |
+help: consider importing this enum
+    |
+ 63 + use core::option::Option;
+    |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Some` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:243:20
+    |
+243 |         self.len = Some(len);
+    |                    ^^^^ not found in this scope
+    |
+help: consider importing this tuple variant
+    |
+ 63 + use core::option::Option::Some;
+    |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Err` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:255:20
+    |
+255 |             return Err(Error::new(
+    |                    ^^^ not found in this scope
+    |
+help: consider importing this tuple variant
+    |
+ 63 + use core::result::Result::Err;
+    |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:261:9
+    |
+261 |         Ok(len as usize)
+    |         ^^ not found in this scope
+    |
+help: consider importing this tuple variant
+    |
+ 63 + use core::result::Result::Ok;
+    |
+
+error[E0531]: cannot find tuple struct or tuple variant `Some` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:266:26
+    |
+266 |         let len = if let Some(len) = self.len {
+    |                          ^^^^ not found in this scope
+    |
+help: consider importing this tuple variant
+    |
+ 63 + use core::option::Option::Some;
+    |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Err` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:273:24
+    |
+273 |                 return Err(Error::new(
+    |                        ^^^ not found in this scope
+    |
+help: consider importing this tuple variant
+    |
+ 63 + use core::result::Result::Err;
+    |
+
+error[E0425]: cannot find type `Option` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:327:39
+    |
+327 |     pub fn huge(&mut self, page_bits: Option<u8>) -> &mut Self {
+    |                                       ^^^^^^ not found in this scope
+    |
+help: consider importing this enum
+    |
+ 63 + use core::option::Option;
+    |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Some` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:328:21
+    |
+328 |         self.huge = Some(page_bits.unwrap_or(0));
+    |                     ^^^^ not found in this scope
+    |
+help: consider importing this tuple variant
+    |
+ 63 + use core::option::Option::Some;
+    |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:804:9
+    |
+804 |         Ok(MmapMut { inner: self.inner })
+    |         ^^ not found in this scope
+    |
+help: consider importing this tuple variant
+    |
+ 63 + use core::result::Result::Ok;
+    |
+
+error[E0405]: cannot find trait `AsRef` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:927:6
+    |
+927 | impl AsRef<[u8]> for Mmap {
+    |      ^^^^^ not found in this scope
+    |
+help: consider importing this trait
+    |
+ 63 + use core::convert::AsRef;
+    |
+
+error[E0405]: cannot find trait `From` in this scope
+    --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:1188:6
+     |
+1188 | impl From<Mmap> for MmapRaw {
+     |      ^^^^ not found in this scope
+     |
+help: consider importing this trait
+     |
+  63 + use core::convert::From;
+     |
+
+error[E0405]: cannot find trait `From` in this scope
+    --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:1194:6
+     |
+1194 | impl From<MmapMut> for MmapRaw {
+     |      ^^^^ not found in this scope
+     |
+help: consider importing this trait
+     |
+  63 + use core::convert::From;
+     |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+    --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:1390:9
+     |
+1390 |         Ok(Mmap { inner: self.inner })
+     |         ^^ not found in this scope
+     |
+help: consider importing this tuple variant
+     |
+  63 + use core::result::Result::Ok;
+     |
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+    --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:1409:9
+     |
+1409 |         Ok(Mmap { inner: self.inner })
+     |         ^^ not found in this scope
+     |
+help: consider importing this tuple variant
+     |
+  63 + use core::result::Result::Ok;
+     |
+
+error[E0405]: cannot find trait `AsRef` in this scope
+    --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:1529:6
+     |
+1529 | impl AsRef<[u8]> for MmapMut {
+     |      ^^^^^ not found in this scope
+     |
+help: consider importing this trait
+     |
+  63 + use core::convert::AsRef;
+     |
+
+error[E0405]: cannot find trait `AsMut` in this scope
+    --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memmap2-0.9.11/src/lib.rs:1536:6
+     |
+1536 | impl AsMut<[u8]> for MmapMut {
+     |      ^^^^^ not found in this scope
+     |
+help: consider importing this trait
+     |
+  63 + use core::convert::AsMut;
+     |
+
+Some errors have detailed explanations: E0405, E0425, E0463, E0531.
+Some errors have detailed explanations: E0405, E0425, E0463.
+For more information about an error, try `rustc --explain E0405`.
+error: could not compile `memmap2` (lib) due to 24 previous errors
+error: could not compile `same-file` (lib) due to 16 previous errors
+   Compiling encoding_rs_io v0.1.7
+error[E0463]: can't find crate for `std`
+  |
+  = note: the `x86_64-unknown-none` target may not support the standard library
+  = note: `std` is required by `encoding_rs_io` because it does not declare `#![no_std]`
+  = help: consider building the standard library from source with `cargo build -Zbuild-std`
+
+error: cannot find macro `format` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:571:23
+    |
+571 |             let msg = format!("Some(<Decoder for {}>)", d.encoding().name());
+    |                       ^^^^^^
+
+error: cannot find macro `assert` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:536:13
+    |
+536 |             assert!(
+    |             ^^^^^^
+
+error: cannot find macro `assert` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:475:9
+    |
+475 |         assert!(buf.len() < 4, "have a small caller buffer");
+    |         ^^^^^^
+
+error: cannot find macro `format` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:155:23
+    |
+155 |             let msg = format!(
+    |                       ^^^^^^
+
+error: cannot find macro `vec` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:137:37
+    |
+137 |         self.build_with_buffer(rdr, vec![0; 8 * (1 << 10)]).unwrap()
+    |                                     ^^^
+
+error: cannot find attribute `derive` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:103:3
+    |
+103 | #[derive(Clone, Debug)]
+    |   ^^^^^^
+
+error: cannot find attribute `derive` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:179:3
+    |
+179 | #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    |   ^^^^^^
+
+error: cannot find attribute `derive` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:106:3
+    |
+106 | #[derive(Debug)]
+    |   ^^^^^^
+
+error: cannot find macro `assert_eq` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:71:13
+   |
+71 |             assert_eq!(
+   |             ^^^^^^^^^
+
+error: cannot find macro `assert` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:66:13
+   |
+66 |             assert!(src.is_empty(), "src must be empty when last==true");
+   |             ^^^^^^
+
+error: cannot find macro `assert` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:64:9
+   |
+64 |         assert!(self.as_slice().is_empty(), "transcoder has unconsumed bytes");
+   |         ^^^^^^
+
+error: cannot find attribute `derive` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:25:3
+   |
+25 | #[derive(Clone, Debug)]
+   |   ^^^^^^
+
+error[E0425]: cannot find type `Option` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:110:10
+    |
+110 |     bom: Option<PossibleBom>,
+    |          ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `None` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:120:50
+    |
+120 |         BomPeeker { rdr: rdr, strip: false, bom: None, nread: 0 }
+    |                                                  ^^^^ not found in this scope
+
+error[E0425]: cannot find value `None` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:125:49
+    |
+125 |         BomPeeker { rdr: rdr, strip: true, bom: None, nread: 0 }
+    |                                                 ^^^^ not found in this scope
+
+error[E0531]: cannot find tuple struct or tuple variant `Some` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:135:16
+    |
+135 |         if let Some(bom) = self.bom {
+    |                ^^^^ not found in this scope
+
+error[E0425]: cannot find type `Option` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:210:31
+    |
+210 |     pub fn encoding(&self) -> Option<&'static Encoding> {
+    |                               ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `None` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:213:20
+    |
+213 |             return None;
+    |                    ^^^^ not found in this scope
+
+error[E0531]: cannot find tuple struct or tuple variant `Some` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:215:16
+    |
+215 |         if let Some((enc, _)) = Encoding::for_bom(bom) {
+    |                ^^^^ not found in this scope
+
+error[E0425]: cannot find value `None` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:218:9
+    |
+218 |         None
+    |         ^^^^ not found in this scope
+
+error[E0531]: cannot find tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:232:13
+    |
+232 |             Ok(0) => break,
+    |             ^^ not found in this scope
+
+error[E0531]: cannot find tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:233:13
+    |
+233 |             Ok(n) => {
+    |             ^^ not found in this scope
+
+error[E0531]: cannot find tuple struct or tuple variant `Err` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:238:13
+    |
+238 |             Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+    |             ^^^ not found in this scope
+
+error[E0531]: cannot find tuple struct or tuple variant `Err` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:239:13
+    |
+239 |             Err(e) => return Err(e),
+    |             ^^^ not found in this scope
+
+error[E0425]: cannot find type `Option` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:105:15
+    |
+105 |     encoding: Option<&'static Encoding>,
+    |               ^^^^^^ not found in this scope
+
+error[E0405]: cannot find trait `Default` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:112:6
+    |
+112 | impl Default for DecodeReaderBytesBuilder {
+    |      ^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `None` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:127:23
+    |
+127 |             encoding: None,
+    |                       ^^^^ not found in this scope
+
+error[E0425]: cannot find type `Vec` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:136:70
+    |
+136 |     pub fn build<R: io::Read>(&self, rdr: R) -> DecodeReaderBytes<R, Vec<u8>> {
+    |                                                                      ^^^ not found in this scope
+
+error[E0405]: cannot find trait `AsMut` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:149:46
+    |
+149 |     pub fn build_with_buffer<R: io::Read, B: AsMut<[u8]>>(
+    |                                              ^^^^^ not found in this scope
+
+error[E0425]: cannot find type `Option` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:196:19
+    |
+196 |         encoding: Option<&'static Encoding>,
+    |                   ^^^^^^ not found in this scope
+
+error[E0425]: cannot find type `Option` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:361:14
+    |
+361 |     decoder: Option<Decoder>,
+    |              ^^^^^^ not found in this scope
+
+error[E0405]: cannot find trait `AsMut` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:383:22
+    |
+383 | impl<R: io::Read, B: AsMut<[u8]>> io::Read for DecodeReaderBytes<R, B> {
+    |                      ^^^^^ not found in this scope
+
+error[E0425]: cannot find type `Vec` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:394:40
+    |
+394 | impl<R: io::Read> DecodeReaderBytes<R, Vec<u8>> {
+    |                                        ^^^ not found in this scope
+
+error[E0425]: cannot find type `Vec` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:410:48
+    |
+410 |     pub fn new(rdr: R) -> DecodeReaderBytes<R, Vec<u8>> {
+    |                                                ^^^ not found in this scope
+
+error[E0405]: cannot find trait `AsMut` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:415:22
+    |
+415 | impl<R: io::Read, B: AsMut<[u8]>> DecodeReaderBytes<R, B> {
+    |                      ^^^^^ not found in this scope
+
+error[E0531]: cannot find tuple struct or tuple variant `Some` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:508:16
+    |
+508 |         if let Some(encoding) = bom.encoding() {
+    |                ^^^^ not found in this scope
+
+error[E0531]: cannot find tuple struct or tuple variant `Some` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:570:16
+    |
+570 |         if let Some(ref d) = self.decoder {
+    |                ^^^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:91:20
+   |
+91 |             return Ok(0);
+   |                    ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+  --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:99:9
+   |
+99 |         Ok(count)
+   |         ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:136:20
+    |
+136 |             return Ok(bom);
+    |                    ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Some` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:140:20
+    |
+140 |         self.bom = Some(PossibleBom::new());
+    |                    ^^^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Some` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:145:20
+    |
+145 |         self.bom = Some(PossibleBom { bytes: buf, len: bom_len });
+    |                    ^^^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:146:9
+    |
+146 |         Ok(self.bom.unwrap())
+    |         ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:164:24
+    |
+164 |                 return Ok(len);
+    |                        ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:169:9
+    |
+169 |         Ok(nread)
+    |         ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Some` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:216:20
+    |
+216 |             return Some(enc);
+    |                    ^^^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Err` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:239:30
+    |
+239 |             Err(e) => return Err(e),
+    |                              ^^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/util.rs:242:5
+    |
+242 |     Ok(nread)
+    |     ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Err` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:159:20
+    |
+159 |             return Err(io::Error::new(io::ErrorKind::Other, msg));
+    |                    ^^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:174:9
+    |
+174 |         Ok(DecodeReaderBytes {
+    |         ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:429:20
+    |
+429 |             return Ok(0);
+    |                    ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:436:20
+    |
+436 |             return Ok(nwrite);
+    |                    ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:455:24
+    |
+455 |                 return Ok(nout);
+    |                        ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:467:24
+    |
+467 |                 return Ok(nout);
+    |                        ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:504:20
+    |
+504 |             return Ok(());
+    |                    ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:512:24
+    |
+512 |                 return Ok(());
+    |                        ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Some` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:514:28
+    |
+514 |             self.decoder = Some(encoding.new_decoder_with_bom_removal());
+    |                            ^^^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:516:9
+    |
+516 |         Ok(())
+    |         ^^ not found in this scope
+
+error[E0425]: cannot find function, tuple struct or tuple variant `Ok` in this scope
+   --> /tmp/p07-s0/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs_io-0.1.7/src/lib.rs:553:9
+    |
+553 |         Ok(())
+    |         ^^ not found in this scope
+
+error: could not compile `encoding_rs_io` (lib) due to 61 previous errors

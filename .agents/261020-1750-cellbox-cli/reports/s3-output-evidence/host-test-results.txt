@@ -1,0 +1,21 @@
+Source: artifact://1244; final host suite recorded by Main, not rerun by documentation worker.
+     Running unittests src/lib.rs (/tmp/cellos-s3-output-final-host/x86_64-unknown-linux-gnu/debug/deps/api-6a8538955cb114fe)
+test result: ok. 128 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/main.rs (/tmp/cellos-s3-output-final-host/x86_64-unknown-linux-gnu/debug/deps/cellbox-cdd5383af2b4e545)
+test result: ok. 79 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+     Running unittests src/lib.rs (/tmp/cellos-s3-output-final-host/x86_64-unknown-linux-gnu/debug/deps/ostd-9cefb32da80f3b90)
+test result: ok. 59 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (/tmp/cellos-s3-output-final-host/x86_64-unknown-linux-gnu/debug/deps/terminal_sdk-98bfb822f68991d2)
+test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+     Running unittests src/lib.rs (/tmp/cellos-s3-output-final-host/x86_64-unknown-linux-gnu/debug/deps/text_engine-e350b230aa3a27b5)
+test result: ok. 74 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+   Doc-tests api
+test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   Doc-tests ostd
+test result: ok. 19 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.05s
+   Doc-tests terminal_sdk
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   Doc-tests text_engine
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

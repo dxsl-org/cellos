@@ -1,0 +1,288 @@
+==> Repository check: cellbox ceiling = shell ceiling + approved deltas
+note: GetRandom added vs baseline by an approved delta
+note: Write added vs baseline by an approved delta
+baseline : git HEAD:cells/tools/shell/src/main.rs (32 syscalls, 6 manifest keys)
+candidate: /home/dmin/cellos/cells/tools/cellbox/src/main.rs (34 syscalls, 6 manifest keys)
+G-S1a PASS: declare_manifest and declare_syscalls sets are identical
+==> Generating throw-away cell signing key (private to this run)
+key identity sha256: 5aa0667f4c04d20415c256be6196ffb31eb16778d912a67a5547479674be03c2
+==> Building cells (private target dir)
+   Compiling app-sys-tools v0.1.0 (/home/dmin/cellos/cells/tools/sys-tools)
+   Compiling sunset v0.6.0 (/home/dmin/cellos/third_party/sunset)
+   Compiling driver-disk v0.1.0 (/home/dmin/cellos/cells/drivers/disk)
+   Compiling driver-e1000 v0.1.0 (/home/dmin/cellos/cells/drivers/e1000)
+   Compiling service-vfs v0.1.0 (/home/dmin/cellos/cells/services/vfs)
+   Compiling service-net v0.1.0 (/home/dmin/cellos/cells/services/net)
+   Compiling driver-nvme v0.1.0 (/home/dmin/cellos/cells/drivers/nvme)
+   Compiling service-platform v0.1.0 (/home/dmin/cellos/cells/services/platform)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling app-cellbox v0.1.0 (/home/dmin/cellos/cells/tools/cellbox)
+   Compiling service-config v0.1.0 (/home/dmin/cellos/cells/services/config)
+   Compiling cellos-fs v0.1.0 (/home/dmin/cellos/libs/cellos-fs)
+   Compiling service-input v0.2.0 (/home/dmin/cellos/cells/services/input)
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling text-engine v0.1.0 (/home/dmin/cellos/libs/text-engine)
+   Compiling vissh v0.1.0 (/home/dmin/cellos/libs/vissh)
+   Compiling terminal-sdk v0.1.0 (/home/dmin/cellos/libs/terminal)
+   Compiling vitui v0.1.0 (/home/dmin/cellos/libs/vitui)
+warning: unused import: `alloc::vec`
+  --> cells/services/net/src/dns.rs:17:5
+   |
+17 | use alloc::vec;
+   |     ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `LOOP_TRACE_INTERVAL_TICKS` is never used
+  --> cells/services/net/src/service-runtime.rs:50:7
+   |
+50 | const LOOP_TRACE_INTERVAL_TICKS: u64 = 2_000 * MTIME_TICKS_PER_MS;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `remove_owner` is never used
+   --> cells/services/net/src/socket_table.rs:204:12
+    |
+ 48 | impl SocketTable {
+    | ---------------- method in this implementation
+...
+204 |     pub fn remove_owner(&mut self, owner: SocketOwner, sockets: &mut smoltcp::iface::SocketSet<'_>) {
+    |            ^^^^^^^^^^^^
+
+warning: function `validity_window` is never used
+  --> cells/services/net/src/tls/clock.rs:27:8
+   |
+27 | pub fn validity_window() -> Option<(u64, u64)> {
+   |        ^^^^^^^^^^^^^^^
+
+warning: method `is_empty` is never used
+   --> cells/services/net/src/tls/dispatch.rs:100:12
+    |
+ 99 | impl TlsPending {
+    | --------------- method in this implementation
+100 |     pub fn is_empty(&self) -> bool {
+    |            ^^^^^^^^
+
+warning: field `handle` is never read
+  --> cells/services/net/src/tls/socket.rs:56:9
+   |
+51 | pub struct TlsSocketEntry {
+   |            -------------- field in this struct
+...
+56 |     pub handle: SocketHandle,
+   |         ^^^^^^
+
+warning: field `expected` is never read
+  --> cells/services/input/src/session.rs:56:66
+   |
+55 | struct Foreground {
+   |        ---------- field in this struct
+56 |     lease: Ref, receipt: Ref, child: ChildRefV1, operation: Ref, expected: u64, next: u64,
+   |                                                                  ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `paste` is never read
+   --> cells/tools/cellbox/src/executor.rs:630:17
+    |
+630 |                 paste = false;
+    |                 ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+638 |                 paste = false;
+    |                 ------------- `paste` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:128:24
+    |
+128 |     BackgroundPipeline(Vec<Cmd>),
+    |     ------------------ ^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+128 -     BackgroundPipeline(Vec<Cmd>),
+128 +     BackgroundPipeline(()),
+    |
+
+warning: function `run_rows` is never used
+   --> cells/tools/cellbox/src/typed.rs:889:8
+    |
+889 | pub fn run_rows(
+    |        ^^^^^^^^
+
+warning: `service-input` (bin "service-input") generated 1 warning
+warning: `service-net` (bin "service-net") generated 6 warnings (run `cargo fix --bin "service-net" -p service-net` to apply 1 suggestion)
+warning: `app-cellbox` (bin "cellbox") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 20.60s
+   Compiling app-phase04-terminal-driver v0.1.0 (/home/dmin/cellos/cells/tests/phase04-terminal-driver)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling terminal-sdk v0.1.0 (/home/dmin/cellos/libs/terminal)
+    Finished `release` profile [optimized] target(s) in 4.17s
+   Compiling app-init v0.1.0 (/home/dmin/cellos/cells/tools/init)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling cellos-boot-config v0.1.0 (/home/dmin/cellos/libs/boot-config)
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+    Finished `release` profile [optimized] target(s) in 4.29s
+==> Starting the disposable OpenSSH fixture
+fixture: cellbox-p09-sshd-618244-12805 127.0.0.1:45611 SHA256:R2m3o+wbYs0BuK3877Mgn3pP7RVdmeKcapL3AzeAw7A OpenSSH_9.9p2, OpenSSL 3.3.7 7 Apr 2026
+==> Signing with the private key
+NOTE: allowlist entries overdue for re-review (past `review_by`, or older than `max_age_days` when they set none):
+  app-c-math-smoke (approved 2026-07-14, 103d ago)
+  app-mlibc-smoke (approved 2026-07-14, 103d ago)
+  app-posix-shim-test (approved 2026-07-14, 103d ago)
+  audio-demo (approved 2026-07-14, 103d ago)
+  cells/demos/audio-demo/src/main.rs (approved 2026-07-14, 103d ago)
+  cells/demos/cfi-test/src/main.rs (approved 2026-07-14, 103d ago)
+  cells/demos/doom/src/main.rs (approved 2026-07-14, 103d ago)
+  cells/demos/tetris-c/src/main.rs (approved 2026-07-14, 103d ago)
+  cells/demos/tetris-lua/src/ffi.rs (approved 2026-07-14, 103d ago)
+  cells/demos/tetris-lua/src/main.rs (approved 2026-07-14, 103d ago)
+  cells/drivers/e1000/src/controller.rs (approved 2026-07-14, 103d ago)
+  cells/drivers/nvme/src/controller.rs (approved 2026-07-14, 103d ago)
+  cells/drivers/nvme/src/dispatch.rs (approved 2026-07-14, 103d ago)
+  cells/drivers/nvme/src/queue.rs (approved 2026-07-14, 103d ago)
+  cells/drivers/virtio-blk/src/device.rs (approved 2026-07-14, 103d ago)
+  cells/drivers/virtio-gpu/src/cursor.rs (approved 2026-07-14, 103d ago)
+  cells/drivers/virtio-gpu/src/display.rs (approved 2026-07-14, 103d ago)
+  cells/drivers/virtio-net/src/device.rs (approved 2026-07-14, 103d ago)
+  cells/guests/silo-guest/src/mailbox.rs (approved 2026-07-14, 103d ago)
+  cells/guests/silo-guest/src/main.rs (approved 2026-07-14, 103d ago)
+  cells/runtimes/lua/src/bindings_io.rs (approved 2026-07-14, 103d ago)
+  cells/runtimes/lua/src/bindings_net.rs (approved 2026-07-14, 103d ago)
+  cells/runtimes/lua/src/bindings_vfs.rs (approved 2026-07-14, 103d ago)
+  cells/runtimes/lua/src/ffi.rs (approved 2026-07-14, 103d ago)
+  cells/runtimes/lua/src/main.rs (approved 2026-07-14, 103d ago)
+  cells/runtimes/lua/src/repl_session.rs (approved 2026-07-14, 103d ago)
+  cells/services/hypervisor/src/timer.rs (approved 2026-07-14, 103d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource.rs (approved 2026-07-14, 103d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource/render.rs (approved 2026-07-14, 103d ago)
+  cells/services/hypervisor/src/vmm.rs (approved 2026-07-14, 103d ago)
+  cells/services/input/src/virtio_device.rs (approved 2026-07-14, 103d ago)
+  cells/services/net/src/tls/socket.rs (approved 2026-07-14, 103d ago)
+  cells/services/net/src/tls/transport.rs (approved 2026-07-14, 103d ago)
+  cells/tests/c-math-smoke/src/main.rs (approved 2026-07-14, 103d ago)
+  cells/tests/hypervisor-test/src/main.rs (approved 2026-07-14, 103d ago)
+  cells/tests/mlibc-smoke/src/main.rs (approved 2026-07-14, 103d ago)
+  cells/tests/posix-shim-test/src/main.rs (approved 2026-07-14, 103d ago)
+  cfi-test (approved 2026-07-14, 103d ago)
+  doom (approved 2026-07-14, 103d ago)
+  driver-e1000 (approved 2026-07-14, 103d ago)
+  driver-nvme (approved 2026-07-14, 103d ago)
+  driver-virtio-blk (approved 2026-07-14, 103d ago)
+  driver-virtio-gpu (approved 2026-07-14, 103d ago)
+  driver-virtio-net (approved 2026-07-14, 103d ago)
+  hypervisor-test (approved 2026-07-14, 103d ago)
+  lua (approved 2026-07-14, 103d ago)
+  service-compositor (approved 2026-07-14, 103d ago)
+  service-hypervisor (approved 2026-07-14, 103d ago)
+  service-input (approved 2026-07-14, 103d ago)
+  service-net (approved 2026-07-14, 103d ago)
+  silo-guest (approved 2026-07-14, 103d ago)
+  tetris-c (approved 2026-07-14, 103d ago)
+  tetris-lua (approved 2026-07-14, 103d ago)
+OK:   signed 11 cell(s) with the prod key after a passing F1/F5 check
+==> Assembling private kernel_fs.img (boot config: the driver replaces the serial shell)
+Created FAT16 image at /tmp/cellbox-phase09-Y12o/scratch/default-fs.img: 15 file(s), 4 director(ies), 24287 clusters.
+private autoload plan: [('phase04-terminal-driver', '/bin/phase04-terminal-driver')]
+Created FAT16 image at /tmp/cellbox-phase09-Y12o/embedded/kernel_fs.img: 15 file(s), 4 director(ies), 24287 clusters.
+==> Writing the trust-store fixture disk (P1 config, P5 /srv trust store)
+[mkfat32] /tmp/cellbox-phase09-Y12o/trust-fixture.img: base=LBA 2048, 524288 sectors, 130554 data clusters (FAT32), FATsz32=1020, data start=LBA 4120
+CellosFS fresh-blank /tmp/cellbox-phase09-Y12o/trust-fixture.img verified; receipt /tmp/cellbox-phase09-Y12o/srv-receipt.json
+trust fixture: /tmp/cellbox-phase09-Y12o/trust-fixture.img (10.0.2.2:45611 exact, host:45611 mismatched)
+==> Building private kernel (phase02-terminal-profile,phase04-driver-profile)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling cellos-kernel v0.2.1 (/home/dmin/cellos/kernel)
+   Compiling cellos-boot-config v0.1.0 (/home/dmin/cellos/libs/boot-config)
+warning: field `reference` is never read
+  --> kernel/src/task/cell_session.rs:76:17
+   |
+76 | struct Intent { reference: Ref, issuer: Binding, writers: [Ref; 2] }
+   |        ------   ^^^^^^^^^
+   |        |
+   |        field in this struct
+   |
+   = note: `Intent` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `expected_epoch` and `seal_len` are never read
+  --> kernel/src/task/cell_session.rs:86:40
+   |
+85 | struct Receipt { reference: Ref, prepared: Ref, child: Child, operation: Ref, issuer: Binding,
+   |        ------- fields in this struct
+86 |     kind: u16, slot: u16, object: Ref, expected_epoch: u64, next_epoch: u64,
+   |                                        ^^^^^^^^^^^^^^
+87 |     digest: [u8; 32], seal: [u8; 256], seal_len: usize, state: u32,
+   |                                        ^^^^^^^^
+
+warning: fields `slot` and `owner_service` are never read
+  --> kernel/src/task/child_context.rs:12:9
+   |
+ 9 | pub(crate) struct Grant {
+   |                   ----- fields in this struct
+...
+12 |     pub slot: u16,
+   |         ^^^^
+13 |     pub owner_service: u64,
+   |         ^^^^^^^^^^^^^
+   |
+   = note: `Grant` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `cellos-kernel` (bin "cellos-kernel") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 15.58s
+[make-iso] Building BIOS+UEFI ISO: /tmp/cellbox-phase09-Y12o/phase09.iso
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Drive current: -outdev 'stdio:/tmp/cellbox-phase09-Y12o/phase09.iso'
+Media current: stdio file, overwriteable
+Media status : is blank
+Media summary: 0 sessions, 0 data blocks, 0 data,  705g free
+Added to ISO image: directory '/'='/tmp/cellbox-phase09-Y12o/iso-root'
+xorriso : UPDATE :      10 files added in 1 seconds
+xorriso : UPDATE :      10 files added in 1 seconds
+ISO image produced: 9505 sectors
+Written to medium : 9505 sectors at LBA 0
+Writing to 'stdio:/tmp/cellbox-phase09-Y12o/phase09.iso' completed successfully.
+
+ISO_SIZE=19466240 bytes
+ISO_READY=/tmp/cellbox-phase09-Y12o/phase09.iso
+==> Booting private ISO (one user netdev, no restrict, no forwards)
+QEMU run: driver-verdict
+==> Evaluating
+P04 INFO ssh-network-ready lines=1
+PASS driver-started
+PASS marker:shell-prompt
+PASS marker:ssh-conf
+PASS marker:ssh-refusals
+PASS marker:ssh-unknown-host
+PASS marker:ssh-changed-host-key
+PASS marker:ssh-wrong-password
+PASS marker:ssh-exec-bytes
+PASS marker:ssh-exec-stdin-eof
+PASS marker:ssh-exec-signal
+PASS marker:ssh-pty-shell
+PASS marker:ssh-pty-resize
+PASS marker:ssh-pty-escape-disconnect
+PASS marker:ssh-shell-alive
+PASS marker:session-a-close
+PASS no-unexpected-markers
+PASS no-FAIL-markers
+PASS driver-final-verdict
+PASS boot-ceiling-selftest-pass
+PASS no-cellbox-ssh-edge-error
+PASS sshd-saw-guest-connections
+PASS sshd-accepted-password-four
+PASS sshd-failed-password-once
+PASS trust-store-volume-mounted
+PASS password-not-on-serial
+PASS no-weak-entropy
+PASS no-key-material-in-log
+PASS no-panic
+PASS qemu-one-user-netdev-no-forward
+PASS: 29 Phase09 ssh lane checks (14 driver markers)

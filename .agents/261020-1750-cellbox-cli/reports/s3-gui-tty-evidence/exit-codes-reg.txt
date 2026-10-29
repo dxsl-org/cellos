@@ -1,0 +1,6 @@
+host exit=0
+sign exit=0
+s3 exit=0
+p03 exit=0
+p02 exit=0
+done

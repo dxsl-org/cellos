@@ -1,0 +1,97 @@
+ M .agents/failure-history.jsonl
+ M CHANGELOG.md
+ M Cargo.lock
+ M build/x86-iso-root/boot/kernel.elf
+ M cells/apps/chrome/src/main.rs
+ M cells/apps/desktop/src/main.rs
+ M cells/apps/files/src/main.rs
+ M cells/apps/ocel/src/main.rs
+ M cells/apps/terminal/src/main.rs
+ M cells/services/input/src/dispatcher.rs
+ M cells/services/input/src/main.rs
+ M cells/services/net/src/dns.rs
+ M cells/services/net/src/dns/tests.rs
+ M docs/decisions/0018-cell-native-portability-and-runtime-profiles.md
+ M docs/decisions/0022-intel-x86-64-c2c-only-direction.md
+ M docs/decisions/0024-cell-kernel-authority-contract.md
+ M docs/decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md
+ M docs/specs/11-shell.md
+ M docs/system-architecture.md
+ M hal/arch/x86/src/x86_64.rs
+ M hal/arch/x86/src/x86_64/paging.rs
+ M hal/arch/x86/src/x86_64/vmx.rs
+ M hal/arch/x86/src/x86_64/world_switch.rs
+ M kernel/src/embedded-x86_64/kernel_fs.img
+ M kernel/src/hypervisor/svm_registry.rs
+ M kernel/src/main.rs
+ M kernel/src/task/drivers/ps2_keyboard.rs
+ M scripts/package-desktop-x86.py
+ M scripts/unsafe-allowlist.toml
+?? .agents/261019-1534-vfs-storage-search-research/
+?? .agents/logs/261019-1310-unified-desktop-phase01.md
+?? .agents/logs/261019-1310-unified-desktop-plan.md
+?? apps/
+?? build/chrome-app.ext4
+?? build/linux-base.ext4
+?? build/repeat-default-desktop.ppm
+?? build/repeat-final-boot.ppm
+?? build/repeat-final-deleted.ppm
+?? build/repeat-final-release.ppm
+?? build/repeat-final-typed.ppm
+?? build/repeat-focus.ppm
+?? build/repeat-held-a.ppm
+?? build/repeat-held-backspace.ppm
+?? build/repeat-initial.ppm
+?? build/repeat-modifiers.ppm
+?? build/repeat-ocel-ready.ppm
+?? build/repeat-ocel.ppm
+?? build/repeat-released.ppm
+?? build/repeat-shortcut.ppm
+?? build/repeat-spotlight.ppm
+?? build/screen-after.png
+?? build/screen-after.ppm
+?? build/screen-before.ppm
+?? build/screen-chrome-run-final.png
+?? build/screen-chrome-run-final.ppm
+?? build/screen-chrome-run.png
+?? build/screen-chrome-run.ppm
+?? build/screen-chrome-success.png
+?? build/screen-chrome-success.ppm
+?? build/screen-chrome.png
+?? build/screen-chrome.ppm
+?? build/screen-chrome2.png
+?? build/screen-chrome2.ppm
+?? build/screen-chrome3.png
+?? build/screen-chrome3.ppm
+?? build/screen-files-clean.png
+?? build/screen-files-clean.ppm
+?? build/screen-haiku-desktop.ppm
+?? build/screen-haiku-terminal.ppm
+?? build/screen-live.png
+?? build/screen-live.ppm
+?? build/screen-ocel-exit.png
+?? build/screen-ocel-exit.ppm
+?? build/screen-ocel-running.png
+?? build/screen-ocel-running.ppm
+?? build/screen-ocel.png
+?? build/screen-ocel.ppm
+?? build/screen-spotlight-ontop.ppm
+?? build/screen-taskbar.png
+?? build/screen-taskbar.ppm
+?? build/screen-tb-clicked.ppm
+?? build/screen-terminal-haiku.png
+?? build/screen-terminal-haiku.ppm
+?? build/screen-terminal-vector.png
+?? build/screen-terminal-vector.ppm
+?? build/screen-test.png
+?? build/screen-test.ppm
+?? cells/apps/chrome/build.rs
+?? cells/apps/vm-runner/
+?? cells/services/input/src/key_repeat.rs
+?? hal/arch/x86/src/x86_64/vmcs.rs
+?? hal/arch/x86/src/x86_64/vmx_vcpu.rs
+?? scripts/build-chrome-app.sh
+?? scripts/build-linux-base-image.sh
+fabd6ab7e3f2d9ea90a931fe53b7d43e509888dd
+rustc 1.97.0-nightly (f53b654a8 2026-04-30)
+cargo 1.97.0-nightly (eb9b60f1f 2026-04-24)

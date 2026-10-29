@@ -1,0 +1,2 @@
+atomic publication cases: 37 pass: 37
+KERNEL REGRESSION CASES PASS (test-hooks image; not CP2, not acceptance)

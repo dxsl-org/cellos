@@ -1,0 +1,786 @@
+{
+ "slice": "S7-0",
+ "date": "2026-10-24",
+ "decisions": "D71-1..4",
+ "upstream": {
+  "repo": "https://github.com/BurntSushi/ripgrep",
+  "tag": "15.2.0",
+  "tag_object": "6ec72defacfb042f203ca0b4bf2513a0a5505a7e",
+  "commit": "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
+  "commit_tree": "c743701524f65f036cf174d6551918be7dfc0d40",
+  "commit_date": "2026-07-15T12:00:11-04:00",
+  "tag_signature": "git verify-tag: Good signature, RSA key 2D8111E141151C072EE9AB9DB2E3A4923F8B0D44 (Andrew Gallant), key from https://github.com/BurntSushi.gpg sha256 b3c8f72b080d4cdea2b9d8dbcafdb7ef1f6f0480f8c25eabe689bf1d21c292af; GitHub API verification.verified=true reason=valid",
+  "codeload_tarball": {
+   "url": "https://codeload.github.com/BurntSushi/ripgrep/tar.gz/refs/tags/15.2.0",
+   "sha256": "7605249d3eb0d5f170e3414498e3344e26b1e7a147aec518b57090b80036a562",
+   "bytes": 606519,
+   "equals_git_tree": true
+  },
+  "root_licences": {
+   "COPYING": {
+    "sha256": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+    "git_blob": "bb9c20a094e41b7632d63bcff20c0b4b95e80777"
+   },
+   "LICENSE-MIT": {
+    "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+    "git_blob": "3b0a5dc09c1e16357459ddc9182a50f360f3cdba"
+   },
+   "UNLICENSE": {
+    "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+    "git_blob": "68a49daad8ff7e35068f2b7a97d643aab440eaec"
+   }
+  },
+  "root_licences_git_archive_sha256": "b630a8a1ec978da5240deff79ffe75ac4eba297559cb41898c548d1b79bf72cd",
+  "git_archive_note": "git archive --format=tar 15.2.0 crates/<dir> (git 2.43.0; commit mtime, reproducible across two runs)"
+ },
+ "components": {
+  "grep-matcher": {
+   "version": "0.1.9",
+   "tag_dir": "crates/matcher",
+   "git_tree": "bd1982fd593b135cc6e4e75ced071e397e78fb2a",
+   "git_archive_sha256": "b600916d2bb96f1f3b9889d595e54e43b1979d6d55923ddb4b13c2ef319bc872",
+   "content_manifest_sha256": "faf35ab8344a0383066d429f8f138766a7028bac10824eefef67c83a48a24b21",
+   "cratesio_crate_sha256": "f9417543f4870fc8f1c8e1af870afae2431007626d9e703fce6471c468d33847",
+   "cratesio_vs_tag": "identical except cargo-normalised Cargo.toml (Cargo.toml.orig identical) and .cargo_vcs_info.json",
+   "license": "Unlicense OR MIT",
+   "edition": "2024"
+  },
+  "grep-regex": {
+   "version": "0.1.14",
+   "tag_dir": "crates/regex",
+   "git_tree": "76f2f7c089049876ff796360791869ab44a65a4d",
+   "git_archive_sha256": "2ab1dd668f74ed53ad46cdf9375128b941fbd1bac39604e8eb5d54c2eb12d851",
+   "content_manifest_sha256": "278a843f45b4591a7d41886bbffc9504a28390a522d2fe91023bf9d4cfdc41aa",
+   "cratesio_crate_sha256": "0ce0c256c3ad82bcc07b812c15a45ec1d398122e8e15124f96695234db7112ef",
+   "cratesio_vs_tag": "identical except cargo-normalised Cargo.toml (Cargo.toml.orig identical) and .cargo_vcs_info.json",
+   "license": "Unlicense OR MIT",
+   "edition": "2024"
+  },
+  "grep-searcher": {
+   "version": "0.1.17",
+   "tag_dir": "crates/searcher",
+   "git_tree": "164ee165e4931d7ea3b4efa9c0e09f70964f3791",
+   "git_archive_sha256": "3f839ee1099f318da25f7a2349077123ccc302826d374e7f7daee4b0ed489fa4",
+   "content_manifest_sha256": "47d6fdf56e43249155c9e3c302b4b6ace4de03ea3e0c9f6bc651a916809bbf93",
+   "cratesio_crate_sha256": "72348823a0eafc4bc2e9051064f28b5b42cc100b571b3a35d67918d711efcbc6",
+   "cratesio_vs_tag": "identical except cargo-normalised Cargo.toml (Cargo.toml.orig identical) and .cargo_vcs_info.json",
+   "license": "Unlicense OR MIT",
+   "edition": "2024"
+  },
+  "globset": {
+   "version": "0.4.19",
+   "tag_dir": "crates/globset",
+   "git_tree": "c1854ec9d72167cb5a2bf9475385559be4dd5b95",
+   "git_archive_sha256": "05507e3ce451f097d158f791a2faa6aaa6f9475447e9165a50d4851db2de8800",
+   "content_manifest_sha256": "b5ba1612bd7cce2fee3aad95865773e6be3fdf821272a8b32e0056da6de7267f",
+   "cratesio_crate_sha256": "e47d37d2ae4464254884b60ab7071be2b876a9c35b696bd018ddcc76847309cd",
+   "cratesio_vs_tag": "identical except cargo-normalised Cargo.toml (Cargo.toml.orig identical) and .cargo_vcs_info.json",
+   "license": "Unlicense OR MIT",
+   "edition": "2024"
+  },
+  "ignore": {
+   "version": "0.4.29",
+   "tag_dir": "crates/ignore",
+   "git_tree": "dd67b14626394247389479589eeabd9429323abb",
+   "git_archive_sha256": "31aa0ab735f11a7274d5033e2db69eda3d0cb5a22b7a9192c8e70cb8c77d16f0",
+   "content_manifest_sha256": "0213d2df3fe318cd0188736ebe803afa1dce5b8cbb4280151b5b03e760dbebeb",
+   "cratesio_crate_sha256": "d4ffa3a0547a138e59ddd6fa3b7c672ed47e6ad6a3cd177984ff1116aa5ba742",
+   "cratesio_vs_tag": "identical except cargo-normalised Cargo.toml (Cargo.toml.orig identical) and .cargo_vcs_info.json",
+   "license": "Unlicense OR MIT",
+   "edition": "2024"
+  }
+ },
+ "bstr": {
+  "version": "1.13.1",
+  "crate_sha256": "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f",
+  "index_cksum": "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f",
+  "vcs_sha1": "134195be38c7c9a4887980fd0f6f8bae042dd91e",
+  "license": "MIT OR Apache-2.0",
+  "rust_version": "1.65",
+  "edition": "2021",
+  "features_selected": [
+   "alloc"
+  ],
+  "LICENSE_MIT_sha256": "6b7374c39a57e57fc2c38eb529c4c88340152b10f51dd5ae2d819dfa67f61715",
+  "LICENSE_APACHE_sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+  "COPYING_sha256": "68653aaa727a2bfa31b7a751e31701ce33c49d695c12dd291a07d1c54da4c14b"
+ },
+ "reference_rg": {
+  "binary_sha256": "f1ae3ea62707860ddfd1a50c1b28a4525baf84df3d68561684a73723c1f9a918",
+  "bytes": 27237200,
+  "version": "ripgrep 15.2.0 (rev e89fff89ac)\n\nfeatures:-pcre2\nsimd(compile):+SSE2,-SSSE3,-AVX2\nsimd(runtime):+SSE2,+SSSE3,+AVX2\n\nPCRE2 is not available in this build of ripgrep.",
+  "build": "CARGO_HOME=/tmp/p07-s0/cargo-home cargo +stable build --release --locked (rustc 1.92.0 ded5c06cf 2025-12-08), Cargo.lock unchanged",
+  "lock_sha256": "7a7d39cda8a03930e578f1dbb724e055771901842eca239e03b01e19da946a64",
+  "lock_differs_from_port": [
+   "bstr 1.13.0 (port 1.13.1)",
+   "regex-automata 0.4.15 (port 0.4.16)"
+  ]
+ },
+ "advisory_db": {
+  "path": "~/.cargo/advisory-dbs/advisory-db-3157b0e258782691",
+  "commit": "640bf5a9f06e66d8721e8772766531fe77c8630d",
+  "date": "2026-10-22T12:49:47+02:00"
+ },
+ "files": [
+  {
+   "crate": "matcher",
+   "file": "Cargo.toml",
+   "lines": 25,
+   "nontest": 25,
+   "sha256": "f85335baacf1571e7187c15aa2ecb1270f832c7c1514e33c4225ca2d4d5826ba",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "matcher",
+   "file": "LICENSE-MIT",
+   "lines": 21,
+   "nontest": 21,
+   "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+   "header": "MENTION:License",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "matcher",
+   "file": "README.md",
+   "lines": 29,
+   "nontest": 29,
+   "sha256": "c14e2251a0164b86e8e9d232c547651d750c635d7ac8e7b29bae3247e5473e82",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "matcher",
+   "file": "UNLICENSE",
+   "lines": 24,
+   "nontest": 24,
+   "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+   "header": "MENTION:copyright",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "matcher",
+   "file": "src/interpolate.rs",
+   "lines": 331,
+   "nontest": 144,
+   "sha256": "00b130d37cf2ca685e25f10201f37aa332f5d4cdfe04fe59b00df24a3be1e3a4",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "matcher",
+   "file": "src/lib.rs",
+   "lines": 1379,
+   "nontest": 1379,
+   "sha256": "98f194a9cd6a5db50fdd08fe20913f6865bd78b8760236d50395155121ea806e",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "matcher",
+   "file": "tests/test_matcher.rs",
+   "lines": 232,
+   "nontest": 232,
+   "sha256": "daaff26c1359e5b18b5df6262c3404ae50cfa50c03ba35a3bb61e498d08b2643",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "port-tests"
+  },
+  {
+   "crate": "matcher",
+   "file": "tests/tests.rs",
+   "lines": 3,
+   "nontest": 3,
+   "sha256": "a6a20ad15557f2c485f45bf0f1b4afdb1a5b6c3839a4db44c93ee1470db92670",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "port-tests"
+  },
+  {
+   "crate": "matcher",
+   "file": "tests/util.rs",
+   "lines": 96,
+   "nontest": 96,
+   "sha256": "a7dcad0b540de203b1bae0332d2ec46b7bb6df5f69487b74892ef0e470d56fc0",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "port-tests"
+  },
+  {
+   "crate": "regex",
+   "file": "Cargo.toml",
+   "lines": 21,
+   "nontest": 21,
+   "sha256": "2da48951703c48138a063bcfc8cb5d5748f03c7fedf3443ed0d0bfde24a870e9",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "regex",
+   "file": "LICENSE-MIT",
+   "lines": 21,
+   "nontest": 21,
+   "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+   "header": "MENTION:License",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "regex",
+   "file": "README.md",
+   "lines": 28,
+   "nontest": 28,
+   "sha256": "ace5a38c993db0a725edd69233d6692761779531c5582c3dc07f5f94f8e03eb0",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "regex",
+   "file": "UNLICENSE",
+   "lines": 24,
+   "nontest": 24,
+   "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+   "header": "MENTION:copyright",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "regex",
+   "file": "src/ast.rs",
+   "lines": 216,
+   "nontest": 145,
+   "sha256": "9e45d49f5a06afc87a492b86845a32055e4a7e448474f98990c8d27fb034a9b8",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "regex",
+   "file": "src/ban.rs",
+   "lines": 83,
+   "nontest": 54,
+   "sha256": "9ea2fd822d4e4445df3c54a3081fce35bc2d7b839cc19985aa984e6062d06459",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "regex",
+   "file": "src/config.rs",
+   "lines": 356,
+   "nontest": 356,
+   "sha256": "8af11cac22616a5227542beead8d7ee9fb62c208a5cfc9923c07186eae1fd9cb",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "regex",
+   "file": "src/error.rs",
+   "lines": 94,
+   "nontest": 94,
+   "sha256": "af7b8bfe1575546a9a31780c009bbf315a81a02f823099da34f106e416743ffd",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "regex",
+   "file": "src/lib.rs",
+   "lines": 18,
+   "nontest": 18,
+   "sha256": "1aaa3edac9982c2aea9522c0381a17a6204f826419d58876531fb9de4b13e22a",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "regex",
+   "file": "src/literal.rs",
+   "lines": 1016,
+   "nontest": 640,
+   "sha256": "f1746f2df93ba9defed55f36ad0f7cd5dada16a7fa881f80193f8d98948c981f",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "regex",
+   "file": "src/matcher.rs",
+   "lines": 670,
+   "nontest": 552,
+   "sha256": "a98966ab3326c1ff8121987222f602dc8d861b627fbb4f9fa804667ca643065f",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "regex",
+   "file": "src/non_matching.rs",
+   "lines": 159,
+   "nontest": 82,
+   "sha256": "197c6a6e372644a8942f503848d7d1c7749dbbe9694fb6e65073c62cf92a9769",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "regex",
+   "file": "src/strip.rs",
+   "lines": 170,
+   "nontest": 120,
+   "sha256": "f799bbc604e6a306070f8acdf612f396c7ae230d755e2fb98efdad61367ee7ac",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "searcher",
+   "file": "Cargo.toml",
+   "lines": 32,
+   "nontest": 32,
+   "sha256": "0f0753b7dd0c0543773c6d6ff4ddce5a8d5d69c2717151016dbf8e79a408f2d3",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "searcher",
+   "file": "LICENSE-MIT",
+   "lines": 21,
+   "nontest": 21,
+   "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+   "header": "MENTION:License",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "searcher",
+   "file": "README.md",
+   "lines": 30,
+   "nontest": 30,
+   "sha256": "4f336034cdbcc9ff88e0db69b34813eebf0a13881705b8f63e9ccc3db3f290eb",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "searcher",
+   "file": "UNLICENSE",
+   "lines": 24,
+   "nontest": 24,
+   "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+   "header": "MENTION:copyright",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "searcher",
+   "file": "examples/search-stdin.rs",
+   "lines": 34,
+   "nontest": 34,
+   "sha256": "1651e1603c3cfb1f02ed6234f231a9a1ed368dbede94d0e0914cd8a0c804d33c",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "drop"
+  },
+  {
+   "crate": "searcher",
+   "file": "src/lib.rs",
+   "lines": 106,
+   "nontest": 106,
+   "sha256": "7b6c771a3d3e5c40dabe776ea0d8b5af9dbacd84508b9e367bd93ede032f968d",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "searcher",
+   "file": "src/line_buffer.rs",
+   "lines": 965,
+   "nontest": 553,
+   "sha256": "b5f96b093387ca9aacaf3660b2b0be8741cbb01a50076162ebeb413395a7fb10",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "searcher",
+   "file": "src/lines.rs",
+   "lines": 466,
+   "nontest": 198,
+   "sha256": "37ec6404ed642b0692a726e21313acadae8ca4202da859d6421d5dfd44594bc1",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "searcher",
+   "file": "src/macros.rs",
+   "lines": 25,
+   "nontest": 25,
+   "sha256": "8514cf191aef22ad187ffe84d48f2edf1e9e7df04e963d8ad8026f5137ed17c2",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "searcher",
+   "file": "src/searcher/core.rs",
+   "lines": 713,
+   "nontest": 713,
+   "sha256": "7f3fd0976fc91e8aca2eaa07b423ab2a6ad919984b261604d35d715fa02ab3ef",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "searcher",
+   "file": "src/searcher/glue.rs",
+   "lines": 1549,
+   "nontest": 352,
+   "sha256": "c2a6d3055a7a2e69a7208113e837eec247d30a43e0c96029aad307f83632fb02",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt (drop path/file/mmap paths)"
+  },
+  {
+   "crate": "searcher",
+   "file": "src/searcher/mmap.rs",
+   "lines": 124,
+   "nontest": 124,
+   "sha256": "403f00eca491e20ef654d0bd6572acccb07c546489054bc514adf528afee8a2c",
+   "header": "none",
+   "unsafe": 2,
+   "disp": "drop"
+  },
+  {
+   "crate": "searcher",
+   "file": "src/searcher/mod.rs",
+   "lines": 1088,
+   "nontest": 1045,
+   "sha256": "6ae846df42f0868385bc54ef728db822c86f20f6d6457777d8f8058fc4c67bf0",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt (drop encoding/BOM, mmap, search_path/search_file)"
+  },
+  {
+   "crate": "searcher",
+   "file": "src/sink.rs",
+   "lines": 663,
+   "nontest": 663,
+   "sha256": "703f25a0f08dac9a39742cabc029a332c7e027d9356980d6ffeec34f68953657",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "searcher",
+   "file": "src/testutil.rs",
+   "lines": 797,
+   "nontest": 725,
+   "sha256": "34055e71ee830bdc897686554a3be65499150e1d67a7d4cde45d7bf9aa9e9e2b",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "port-tests (test-only helper)"
+  },
+  {
+   "crate": "globset",
+   "file": "COPYING",
+   "lines": 3,
+   "nontest": 3,
+   "sha256": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "globset",
+   "file": "Cargo.toml",
+   "lines": 49,
+   "nontest": 49,
+   "sha256": "a30097a90d753c2a2f7567343651c2ad1ebba98ae1b0db74d6d5d90fa87dc52f",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "globset",
+   "file": "LICENSE-MIT",
+   "lines": 21,
+   "nontest": 21,
+   "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+   "header": "MENTION:License",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "globset",
+   "file": "README.md",
+   "lines": 119,
+   "nontest": 119,
+   "sha256": "f521ea13d4b8622f86998487e6a00ec12663dbe0a59a6c9e13ef44ece0284332",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "globset",
+   "file": "UNLICENSE",
+   "lines": 24,
+   "nontest": 24,
+   "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+   "header": "MENTION:copyright",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "globset",
+   "file": "benches/bench.rs",
+   "lines": 113,
+   "nontest": 113,
+   "sha256": "05a00ec1b35dbd7a202e280e862a784b3a972574b19201ef66ac7980521ce4ac",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "drop"
+  },
+  {
+   "crate": "globset",
+   "file": "src/fnv.rs",
+   "lines": 30,
+   "nontest": 30,
+   "sha256": "bf67b20b542db2a159f91da8b980fca27d93253a8fafaee7173d6493de985bd8",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "globset",
+   "file": "src/glob.rs",
+   "lines": 1686,
+   "nontest": 1077,
+   "sha256": "d230e938384da768864b4aff78836271c1e923ee9f1ffae2d9319fed8bb2ccb4",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "globset",
+   "file": "src/lib.rs",
+   "lines": 1307,
+   "nontest": 1133,
+   "sha256": "7e34c24673ee164d779de7d0efdaf97f19176f9e0bfc71e0842345ef76f0a38a",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "globset",
+   "file": "src/pathutil.rs",
+   "lines": 141,
+   "nontest": 78,
+   "sha256": "5780ad5ec2bc89a42201a1532295e06a90f493929583c453f135759b39a70fa5",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "globset",
+   "file": "src/serde_impl.rs",
+   "lines": 128,
+   "nontest": 76,
+   "sha256": "4fdc2b4a456fd9ffbe4555d27c760861adaec2ed2524a5f4149ebe827d4779f1",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "drop"
+  },
+  {
+   "crate": "ignore",
+   "file": "COPYING",
+   "lines": 3,
+   "nontest": 3,
+   "sha256": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "ignore",
+   "file": "Cargo.toml",
+   "lines": 44,
+   "nontest": 44,
+   "sha256": "2a4f8d8405bf0c922357ea3200d29e5adef45c813bd582a23081e51f4906ca83",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "ignore",
+   "file": "LICENSE-MIT",
+   "lines": 21,
+   "nontest": 21,
+   "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+   "header": "MENTION:License",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "ignore",
+   "file": "README.md",
+   "lines": 59,
+   "nontest": 59,
+   "sha256": "fad351a4d6dad422368750be404b7a419bc9f6ab5acc86934edb3502fba2029d",
+   "header": "MENTION:license",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "ignore",
+   "file": "UNLICENSE",
+   "lines": 24,
+   "nontest": 24,
+   "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+   "header": "MENTION:copyright",
+   "unsafe": 0,
+   "disp": "metadata/licence"
+  },
+  {
+   "crate": "ignore",
+   "file": "examples/walk.rs",
+   "lines": 64,
+   "nontest": 64,
+   "sha256": "801b849ef589050878e02cd2367fb856bbe55197cab28e1978acbe8b74539379",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "drop"
+  },
+  {
+   "crate": "ignore",
+   "file": "src/default_types.rs",
+   "lines": 378,
+   "nontest": 347,
+   "sha256": "7ed94507d800e77a98795fe0c50e1a05a16612d71bacfbb287fc3930bcc10ba9",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "drop"
+  },
+  {
+   "crate": "ignore",
+   "file": "src/dir.rs",
+   "lines": 1608,
+   "nontest": 1110,
+   "sha256": "eba78b3b22cfeeb8847a1daa6055ac6bd137262c827626f431ff4a13a8c260ba",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt (precedence logic only; re-expressed for serial walker)"
+  },
+  {
+   "crate": "ignore",
+   "file": "src/gitignore.rs",
+   "lines": 883,
+   "nontest": 703,
+   "sha256": "928d8bb106bc408e4b9b6208b3ae8e31e669cf70e9a3d8c7eb5113e968c85161",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "ignore",
+   "file": "src/lib.rs",
+   "lines": 547,
+   "nontest": 486,
+   "sha256": "ffd28ee1f7da906b3e6fb0a3b07af754844851f20ccb7766eee9b6231f5bfdf9",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt (error types only)"
+  },
+  {
+   "crate": "ignore",
+   "file": "src/overrides.rs",
+   "lines": 293,
+   "nontest": 185,
+   "sha256": "4283fd4dc169476a580ea1e393b1b125a357cda4c1862293800097bd91acb69e",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "ignore",
+   "file": "src/pathutil.rs",
+   "lines": 142,
+   "nontest": 142,
+   "sha256": "d0fb48f0ff1d2e0ff0462bf7b8ee80f7133f2fffaac299bef966b821ee42f442",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "adapt"
+  },
+  {
+   "crate": "ignore",
+   "file": "src/types.rs",
+   "lines": 584,
+   "nontest": 494,
+   "sha256": "a8d515917dbcf21f6d92f42d9dacb75013a71c91394dfd68677c5d1c15cda706",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "drop"
+  },
+  {
+   "crate": "ignore",
+   "file": "src/walk.rs",
+   "lines": 2607,
+   "nontest": 2115,
+   "sha256": "cfa0b97e6332212b19dc973ec532a4564cb302398bbc1862680ad82e4d0afcf3",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "drop"
+  },
+  {
+   "crate": "ignore",
+   "file": "tests/gitignore_matched_path_or_any_parents_tests.gitignore",
+   "lines": 216,
+   "nontest": 216,
+   "sha256": "3895c935f76a57928cc12284dfff406693b7666c0ffce9b8676c6c1976debe2d",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "port-tests (fixture)"
+  },
+  {
+   "crate": "ignore",
+   "file": "tests/gitignore_matched_path_or_any_parents_tests.rs",
+   "lines": 318,
+   "nontest": 318,
+   "sha256": "1a38fdb4ba4b555debca6587fd14f69468ef93c37d14992dd90374b2e160232c",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "port-tests"
+  },
+  {
+   "crate": "ignore",
+   "file": "tests/gitignore_skip_bom.gitignore",
+   "lines": 2,
+   "nontest": 2,
+   "sha256": "efe6f6479615a9f83b6c080e3fe9c55e4702e9d3c9ad2c49354c4b78fa79e64b",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "port-tests (fixture)"
+  },
+  {
+   "crate": "ignore",
+   "file": "tests/gitignore_skip_bom.rs",
+   "lines": 17,
+   "nontest": 17,
+   "sha256": "93b70f641a87f2c1efb78f93f50b81d69a1c50bdc1b302e8c502f8071a12cb93",
+   "header": "none",
+   "unsafe": 0,
+   "disp": "port-tests"
+  }
+ ]
+}

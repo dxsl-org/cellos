@@ -1,0 +1,18 @@
+[package]
+name = "s0-stock"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+grep-matcher = { path = "../../src/crates/matcher" }
+grep-regex = { path = "../../src/crates/regex" }
+grep-searcher = { path = "../../src/crates/searcher" }
+globset = { path = "../../src/crates/globset" }
+ignore = { path = "../../src/crates/ignore" }
+
+[workspace]

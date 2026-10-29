@@ -1,0 +1,53 @@
+[graph]
+targets = [
+  { triple = "riscv64gc-unknown-none-elf" },
+  { triple = "aarch64-unknown-none" },
+  { triple = "x86_64-unknown-none" },
+]
+
+[advisories]
+db-path = "/home/dmin/.cargo/advisory-dbs"
+version = 2
+# yanked crates are denied by default in 0.15+
+# unmaintained/unsound: "all" = check all deps, "workspace" = workspace only
+unmaintained = "all"
+ignore = [
+  # ttf-parser: author declared it unmaintained, no safe upgrade exists yet.
+  # skrifa is a different API surface — migrating ViUI's font rendering is a
+  # real engineering task, not a CI fix. Revisit when skrifa is evaluated.
+  { id = "RUSTSEC-2026-0192", reason = "no safe upgrade available; migration to skrifa is a separate task" },
+  # rsa (Marvin timing sidechannel) comes in via embedded-tls for TLS
+  # certificate SIGNATURE VERIFICATION only — a public-key operation. The
+  # Marvin attack requires an RSA private-key decryption timing oracle, which
+  # Cellos never exposes (no RSA private keys, no RSA decryption service).
+  # No fixed rsa release exists; revisit when RustCrypto ships one.
+  { id = "RUSTSEC-2023-0071", reason = "rsa used only for TLS cert signature verification (public-key op); no private-key decryption oracle exists in Cellos; no fixed release available" },
+]
+
+[licenses]
+confidence-threshold = 0.93
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MPL-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "0BSD",
+  "Zlib",
+]
+
+[[licenses.exceptions]]
+allow = ["GPL-2.0-only"]
+name = "doom"
+
+[[licenses.exceptions]]
+# redoxfs uses license-file; vendored in third_party/ under MIT
+allow = ["MIT"]
+name = "redoxfs"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"

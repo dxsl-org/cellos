@@ -1,0 +1,1 @@
+qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb -m 256M -display none -chardev socket,id=ser0,path=$WORK/sock/serial.sock,server=on,wait=off -serial chardev:ser0 -qmp unix:$WORK/sock/qmp.sock,server=on,wait=off -monitor none -cdrom $WORK/phase04-gui.iso -boot d -no-reboot -nic none -device virtio-keyboard-pci -device virtio-tablet-pci

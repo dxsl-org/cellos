@@ -1,0 +1,1 @@
+fixture: cellbox-p09-sshd-850486-7987 127.0.0.1:45591 rekey 127.0.0.1:44691 SHA256:uCAALTeTQM/QJIVmNEXWl1WCIvhQ+RSqSdqOHrkmWUc OpenSSH_9.9p2, OpenSSL 3.3.7 7 Apr 2026

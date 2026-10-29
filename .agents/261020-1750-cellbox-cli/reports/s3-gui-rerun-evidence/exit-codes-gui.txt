@@ -1,0 +1,5 @@
+gui-run1-click exit=1
+gui-run2-click exit=0
+gui-run3-click exit=1
+gui-run4-autoload exit=1
+done

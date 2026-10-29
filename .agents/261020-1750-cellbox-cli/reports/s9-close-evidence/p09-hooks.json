@@ -1,0 +1,174 @@
+[
+  {
+    "case": "ssh-fault-before-request",
+    "point": "before-request",
+    "action": "kill",
+    "seen": 1792938261.8954735,
+    "fixture": {
+      "argv": [
+        "docker",
+        "exec",
+        "cellbox-p09-sshd-850486-7987"
+      ],
+      "rc": 0,
+      "stdout": "killed 78 sshd-session: tester [priv]                                \nkilled 80 sshd-session: tester                                       \n",
+      "stderr": "",
+      "started": 1792938261.8954775,
+      "ended": 1792938261.981734
+    }
+  },
+  {
+    "case": "ssh-fault-before-request",
+    "point": "restore",
+    "action": "none",
+    "seen": 1792938266.9665127,
+    "fixture": null
+  },
+  {
+    "case": "ssh-fault-may-have-run",
+    "point": "may-have-run",
+    "action": "kill",
+    "seen": 1792938272.2496724,
+    "fixture": {
+      "argv": [
+        "docker",
+        "exec",
+        "cellbox-p09-sshd-850486-7987"
+      ],
+      "rc": 0,
+      "stdout": "killed 96 sshd-session: tester [priv]                                \nkilled 98 sshd-session: tester                                       \n",
+      "stderr": "",
+      "started": 1792938272.2496753,
+      "ended": 1792938272.3545575
+    }
+  },
+  {
+    "case": "ssh-fault-may-have-run",
+    "point": "restore",
+    "action": "none",
+    "seen": 1792938277.3326504,
+    "fixture": null
+  },
+  {
+    "case": "ssh-fault-accepted",
+    "point": "accepted",
+    "action": "kill",
+    "seen": 1792938282.7158573,
+    "fixture": {
+      "argv": [
+        "docker",
+        "exec",
+        "cellbox-p09-sshd-850486-7987"
+      ],
+      "rc": 0,
+      "stdout": "killed 114 sshd-session: tester [priv]                                \nkilled 116 sshd-session: tester@notty                                 \n",
+      "stderr": "",
+      "started": 1792938282.7158594,
+      "ended": 1792938282.8074632
+    }
+  },
+  {
+    "case": "ssh-fault-accepted",
+    "point": "restore",
+    "action": "none",
+    "seen": 1792938282.8730314,
+    "fixture": null
+  },
+  {
+    "case": "ssh-fault-exit-before-drain",
+    "point": "exit-before-drain",
+    "action": "kill",
+    "seen": 1792938288.2357883,
+    "fixture": {
+      "argv": [
+        "docker",
+        "exec",
+        "cellbox-p09-sshd-850486-7987"
+      ],
+      "rc": 0,
+      "stdout": "killed 135 sshd-session: tester [priv]                                \nkilled 137 sshd-session: tester@notty                                 \n",
+      "stderr": "",
+      "started": 1792938288.2357912,
+      "ended": 1792938288.323483
+    }
+  },
+  {
+    "case": "ssh-fault-exit-before-drain",
+    "point": "restore",
+    "action": "none",
+    "seen": 1792938288.383319,
+    "fixture": null
+  },
+  {
+    "case": "ssh-timeout-request",
+    "point": "before-request",
+    "action": "pause",
+    "seen": 1792938446.060008,
+    "fixture": {
+      "argv": [
+        "docker",
+        "pause",
+        "cellbox-p09-sshd-850486-7987"
+      ],
+      "rc": 0,
+      "stdout": "cellbox-p09-sshd-850486-7987\n",
+      "stderr": "",
+      "started": 1792938446.0600128,
+      "ended": 1792938446.0944235
+    }
+  },
+  {
+    "case": "ssh-timeout-request",
+    "point": "restore",
+    "action": "unpause",
+    "seen": 1792938476.1265523,
+    "fixture": {
+      "argv": [
+        "docker",
+        "unpause",
+        "cellbox-p09-sshd-850486-7987"
+      ],
+      "rc": 0,
+      "stdout": "cellbox-p09-sshd-850486-7987\n",
+      "stderr": "",
+      "started": 1792938476.126554,
+      "ended": 1792938476.149536
+    }
+  },
+  {
+    "case": "ssh-timeout-kex",
+    "point": "rekey-start",
+    "action": "pause",
+    "seen": 1792938501.3458269,
+    "fixture": {
+      "argv": [
+        "docker",
+        "pause",
+        "cellbox-p09-sshd-850486-7987"
+      ],
+      "rc": 0,
+      "stdout": "cellbox-p09-sshd-850486-7987\n",
+      "stderr": "",
+      "started": 1792938501.34583,
+      "ended": 1792938501.3785198
+    }
+  },
+  {
+    "case": "ssh-timeout-kex",
+    "point": "restore",
+    "action": "unpause",
+    "seen": 1792938531.4246008,
+    "fixture": {
+      "argv": [
+        "docker",
+        "unpause",
+        "cellbox-p09-sshd-850486-7987"
+      ],
+      "rc": 0,
+      "stdout": "cellbox-p09-sshd-850486-7987\n",
+      "stderr": "",
+      "started": 1792938531.4246032,
+      "ended": 1792938531.4475555
+    }
+  }
+]

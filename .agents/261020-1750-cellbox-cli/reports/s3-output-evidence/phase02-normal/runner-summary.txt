@@ -1,0 +1,2 @@
+orphan ticks: 4 last-tick-age-before-end: 13.612746477127075
+PHASE02 PRIVATE FIXTURE: observations complete (not CP2, not acceptance)

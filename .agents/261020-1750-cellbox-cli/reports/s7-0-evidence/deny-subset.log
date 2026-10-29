@@ -1,0 +1,77 @@
+warning[license-exception-not-encountered]: license exception was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:44:9
+   │
+44 │ name = "doom"
+   │         ━━━━ unmatched license exception
+
+warning[license-exception-not-encountered]: license exception was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:49:9
+   │
+49 │ name = "redoxfs"
+   │         ━━━━━━━ unmatched license exception
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:38:4
+   │
+38 │   "0BSD",
+   │    ━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:32:4
+   │
+32 │   "Apache-2.0 WITH LLVM-exception",
+   │    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:34:4
+   │
+34 │   "BSD-2-Clause",
+   │    ━━━━━━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:35:4
+   │
+35 │   "BSD-3-Clause",
+   │    ━━━━━━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:36:4
+   │
+36 │   "ISC",
+   │    ━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:33:4
+   │
+33 │   "MPL-2.0",
+   │    ━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:37:4
+   │
+37 │   "Unicode-3.0",
+   │    ━━━━━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:39:4
+   │
+39 │   "Zlib",
+   │    ━━━━ unmatched license allowance
+
+warning[advisory-not-detected]: advisory was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:24:11
+   │
+24 │   { id = "RUSTSEC-2023-0071", reason = "rsa used only for TLS cert signature verification (public-key op); no private-key decryption oracle exists in Cellos; no fixed release available" },
+   │           ━━━━━━━━━━━━━━━━━             ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ignore reason
+   │           │                              
+   │           no crate matched advisory criteria
+
+warning[advisory-not-detected]: advisory was not encountered
+   ┌─ /tmp/p07-s0/probe/deny.toml:18:11
+   │
+18 │   { id = "RUSTSEC-2026-0192", reason = "no safe upgrade available; migration to skrifa is a separate task" },
+   │           ━━━━━━━━━━━━━━━━━             ───────────────────────────────────────────────────────────────── ignore reason
+   │           │                              
+   │           no crate matched advisory criteria
+
+advisories ok, licenses ok

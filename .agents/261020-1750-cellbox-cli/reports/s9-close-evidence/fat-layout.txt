@@ -1,0 +1,64 @@
+Checking: /tmp/cellbox-phase09-Y12o/embedded/kernel_fs.img
+Size: 12582912 bytes (12288 KB)
+Sig: 55aa (should be 55aa)
+FS type: b'  FAT16 '
+BPS=512 SPC=1 RES=1 FAT_CNT=2 ROOT_ENT=512 FAT_SZ=128
+Root dir at 131584, Data area at 147968
+  --- root ---
+    LFN[1] 'bin'
+    SFN BIN~1         -> LFN 'bin'  attr=10 clus=2 sz=0
+    LFN[1] 'etc'
+    SFN ETC~1         -> LFN 'etc'  attr=10 clus=4 sz=0
+    LFN[1] 'p09'
+    SFN P09~1         -> LFN 'p09'  attr=10 clus=6 sz=0
+bin dir (SFN='BIN~1') at cluster 2, offset 147968
+  --- /bin ---
+    SFN .                    attr=10 clus=2 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellbox'
+    SFN CELLBO~1      -> LFN 'cellbox'  attr=20 clus=7 sz=3081696
+    LFN[1] 'vfs'
+    SFN VFS~1         -> LFN 'vfs'  attr=20 clus=6026 sz=613528
+    LFN[1] 'config'
+    SFN CONFIG~1      -> LFN 'config'  attr=20 clus=7225 sz=42992
+    LFN[1] 'input'
+    SFN INPUT~1       -> LFN 'input'  attr=20 clus=7309 sz=167328
+    LFN[1] 'platform'
+    SFN PLATFO~1      -> LFN 'platform'  attr=20 clus=7636 sz=38576
+    LFN[1] 'nvme'
+    SFN NVME~1        -> LFN 'nvme'  attr=20 clus=7712 sz=40280
+    LFN[1] 'e1000'
+    SFN E1000~1       -> LFN 'e1000'  attr=20 clus=7791 sz=29752
+    LFN[1] 'net'
+    SFN NET~1         -> LFN 'net'  attr=20 clus=7850 sz=491208
+    LFN[1] 'echo'
+    SFN ECHO~1        -> LFN 'echo'  attr=20 clus=8810 sz=30376
+    LFN[2] 'nal-driver'
+    LFN[1] 'phase04-termi'
+    SFN PHASE0~1      -> LFN 'phase04-terminal-driver'  attr=20 clus=8870 sz=193808
+    LFN[1] 'cellbox-ssh'
+    SFN CELLBO~2      -> LFN 'cellbox-ssh'  attr=20 clus=9249 sz=3081696
+etc dir (SFN='ETC~1') at cluster 4, offset 148992
+  --- /etc ---
+    SFN .                    attr=10 clus=4 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellos'
+    SFN CELLOS~1      -> LFN 'cellos'  attr=10 clus=5 sz=0
+cellos dir (SFN='CELLOS~1') at cluster 5, offset 149504
+  --- /etc/cellos ---
+    SFN .                    attr=10 clus=5 sz=0
+    SFN ..                   attr=10 clus=4 sz=0
+    LFN[1] 'system.toml'
+    SFN SYSTEM~1.TOM  -> LFN 'system.toml'  attr=20 clus=15269 sz=128
+    LFN[2] ''
+    LFN[1] 'services.toml'
+    SFN SERVIC~1.TOM  -> LFN 'services.toml'  attr=20 clus=15270 sz=619
+    LFN[2] ''
+    LFN[1] 'autoload.toml'
+    SFN AUTOLO~1.TOM  -> LFN 'autoload.toml'  attr=20 clus=15272 sz=208
+p09 dir (SFN='P09~1') at cluster 6, offset 150016
+  --- /p09 ---
+    SFN .                    attr=10 clus=6 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'ssh.conf'
+    SFN SSH~1.CON     -> LFN 'ssh.conf'  attr=20 clus=15268 sz=87

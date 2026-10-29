@@ -1,0 +1,225 @@
+==> Generating throw-away cell signing key (private to this run)
+key identity sha256: c8025f61c331a1059055edbc8fbad4ce504b6c334f9c86c0716d3e696d458d50
+==> Building cells (private target dir)
+   Compiling app-sys-tools v0.1.0 (/home/dmin/cellos/cells/tools/sys-tools)
+   Compiling driver-disk v0.1.0 (/home/dmin/cellos/cells/drivers/disk)
+   Compiling service-vfs v0.1.0 (/home/dmin/cellos/cells/services/vfs)
+   Compiling service-platform v0.1.0 (/home/dmin/cellos/cells/services/platform)
+   Compiling app-phase02-session-parent v0.1.0 (/home/dmin/cellos/cells/tests/phase02-session-parent)
+   Compiling driver-e1000 v0.1.0 (/home/dmin/cellos/cells/drivers/e1000)
+   Compiling service-input v0.2.0 (/home/dmin/cellos/cells/services/input)
+   Compiling service-config v0.1.0 (/home/dmin/cellos/cells/services/config)
+   Compiling driver-nvme v0.1.0 (/home/dmin/cellos/cells/drivers/nvme)
+   Compiling app-phase02-session-child v0.1.0 (/home/dmin/cellos/cells/tests/phase02-session-child)
+   Compiling app-cellbox v0.1.0 (/home/dmin/cellos/cells/tools/cellbox)
+warning: value assigned to `last` is never read
+   --> cells/tests/phase02-session-parent/src/main.rs:419:20
+    |
+419 |     let mut last = String::from("no query");
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+423 |                 last = format!("state={} holders={} children={}", state.state, state.holders, state.children);
+    |                 ---- `last` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `expected` is never read
+  --> cells/services/input/src/session.rs:54:66
+   |
+53 | struct Foreground {
+   |        ---------- field in this struct
+54 |     lease: Ref, receipt: Ref, child: ChildRefV1, operation: Ref, expected: u64, next: u64,
+   |                                                                  ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `paste` is never read
+   --> cells/tools/cellbox/src/executor.rs:508:17
+    |
+508 |                 paste = false;
+    |                 ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+516 |                 paste = false;
+    |                 ------------- `paste` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:128:24
+    |
+128 |     BackgroundPipeline(Vec<Cmd>),
+    |     ------------------ ^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+128 -     BackgroundPipeline(Vec<Cmd>),
+128 +     BackgroundPipeline(()),
+    |
+
+warning: function `run_rows` is never used
+   --> cells/tools/cellbox/src/typed.rs:885:8
+    |
+885 | pub fn run_rows(
+    |        ^^^^^^^^
+
+warning: `app-phase02-session-parent` (bin "phase02-session-parent") generated 1 warning
+warning: `service-input` (bin "service-input") generated 1 warning
+warning: `app-cellbox` (bin "cellbox") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 14.39s
+   Compiling app-init v0.1.0 (/home/dmin/cellos/cells/tools/init)
+    Finished `release` profile [optimized] target(s) in 2.50s
+==> Signing with the development key (kernel regression lane, private cells)
+NOTE: allowlist entries overdue for re-review (past `review_by`, or older than `max_age_days` when they set none):
+  app-c-math-smoke (approved 2026-07-14, 102d ago)
+  app-mlibc-smoke (approved 2026-07-14, 102d ago)
+  app-posix-shim-test (approved 2026-07-14, 102d ago)
+  audio-demo (approved 2026-07-14, 102d ago)
+  cells/demos/audio-demo/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/cfi-test/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/doom/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/tetris-c/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/demos/tetris-lua/src/ffi.rs (approved 2026-07-14, 102d ago)
+  cells/demos/tetris-lua/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/e1000/src/controller.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/nvme/src/controller.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/nvme/src/dispatch.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/nvme/src/queue.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-blk/src/device.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-gpu/src/cursor.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-gpu/src/display.rs (approved 2026-07-14, 102d ago)
+  cells/drivers/virtio-net/src/device.rs (approved 2026-07-14, 102d ago)
+  cells/guests/silo-guest/src/mailbox.rs (approved 2026-07-14, 102d ago)
+  cells/guests/silo-guest/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/bindings_io.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/bindings_net.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/bindings_vfs.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/ffi.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/runtimes/lua/src/repl_session.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/timer.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource/render.rs (approved 2026-07-14, 102d ago)
+  cells/services/hypervisor/src/vmm.rs (approved 2026-07-14, 102d ago)
+  cells/services/input/src/virtio_device.rs (approved 2026-07-14, 102d ago)
+  cells/services/net/src/tls/socket.rs (approved 2026-07-14, 102d ago)
+  cells/services/net/src/tls/transport.rs (approved 2026-07-14, 102d ago)
+  cells/tests/c-math-smoke/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/tests/hypervisor-test/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/tests/mlibc-smoke/src/main.rs (approved 2026-07-14, 102d ago)
+  cells/tests/posix-shim-test/src/main.rs (approved 2026-07-14, 102d ago)
+  cfi-test (approved 2026-07-14, 102d ago)
+  doom (approved 2026-07-14, 102d ago)
+  driver-e1000 (approved 2026-07-14, 102d ago)
+  driver-nvme (approved 2026-07-14, 102d ago)
+  driver-virtio-blk (approved 2026-07-14, 102d ago)
+  driver-virtio-gpu (approved 2026-07-14, 102d ago)
+  driver-virtio-net (approved 2026-07-14, 102d ago)
+  hypervisor-test (approved 2026-07-14, 102d ago)
+  lua (approved 2026-07-14, 102d ago)
+  service-compositor (approved 2026-07-14, 102d ago)
+  service-hypervisor (approved 2026-07-14, 102d ago)
+  service-input (approved 2026-07-14, 102d ago)
+  service-net (approved 2026-07-14, 102d ago)
+  silo-guest (approved 2026-07-14, 102d ago)
+  tetris-c (approved 2026-07-14, 102d ago)
+  tetris-lua (approved 2026-07-14, 102d ago)
+OK:   signed 13 cell(s) with the dev key after a passing F1/F5 check
+==> Assembling private kernel_fs.img
+Created FAT16 image at /tmp/cellbox-phase02-pecG/embedded/kernel_fs.img: 16 file(s), 3 director(ies), 16159 clusters.
+autoload plan: cellbox -> /bin/cellbox args ['sh']
+==> Building private kernel (test-hooks)
+   Compiling hal-x86 v0.1.0 (/home/dmin/cellos/hal/arch/x86)
+   Compiling qemu-exit v4.0.0
+   Compiling cellos-kernel v0.2.1 (/home/dmin/cellos/kernel)
+   Compiling hal-core v0.2.0 (/home/dmin/cellos/hal/core)
+warning: field `reference` is never read
+  --> kernel/src/task/cell_session.rs:76:17
+   |
+76 | struct Intent { reference: Ref, issuer: Binding, writers: [Ref; 2] }
+   |        ------   ^^^^^^^^^
+   |        |
+   |        field in this struct
+   |
+   = note: `Intent` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `expected_epoch` and `seal_len` are never read
+  --> kernel/src/task/cell_session.rs:86:40
+   |
+85 | struct Receipt { reference: Ref, prepared: Ref, child: Child, operation: Ref, issuer: Binding,
+   |        ------- fields in this struct
+86 |     kind: u16, slot: u16, object: Ref, expected_epoch: u64, next_epoch: u64,
+   |                                        ^^^^^^^^^^^^^^
+87 |     digest: [u8; 32], seal: [u8; 256], seal_len: usize, state: u32,
+   |                                        ^^^^^^^^
+
+warning: fields `slot` and `owner_service` are never read
+  --> kernel/src/task/child_context.rs:12:9
+   |
+ 9 | pub(crate) struct Grant {
+   |                   ----- fields in this struct
+...
+12 |     pub slot: u16,
+   |         ^^^^
+13 |     pub owner_service: u64,
+   |         ^^^^^^^^^^^^^
+   |
+   = note: `Grant` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `cellos-kernel` (bin "cellos-kernel") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 16.48s
+==> Building private ISO
+[make-iso] Building BIOS+UEFI ISO: /tmp/cellbox-phase02-pecG/phase02.iso
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Drive current: -outdev 'stdio:/tmp/cellbox-phase02-pecG/phase02.iso'
+Media current: stdio file, overwriteable
+Media status : is blank
+Media summary: 0 sessions, 0 data blocks, 0 data,  733g free
+Added to ISO image: directory '/'='/tmp/cellbox-phase02-pecG/iso-root'
+xorriso : UPDATE :      10 files added in 1 seconds
+xorriso : UPDATE :      10 files added in 1 seconds
+ISO image produced: 7664 sectors
+Written to medium : 7664 sectors at LBA 0
+Writing to 'stdio:/tmp/cellbox-phase02-pecG/phase02.iso' completed successfully.
+
+ISO_SIZE=15695872 bytes
+ISO_READY=/tmp/cellbox-phase02-pecG/phase02.iso
+==> Recording provenance
+{
+ "cargo_lock_sha256": "ae625e1d2e8e8b556e71670bbb2c428483aa0c91d16cf1c3042882b2ccf45aa9",
+ "annex_sha256": "73bc7483ae6d05d6435c27f12a1c2890e3b550e63666b4339ed75f9b8371ae67",
+ "amendment_sha256": "ae6be1c39453287d19cf7027681f5e24c19b112cad387b3f0ff919c80aa676e0",
+ "signed_cells_sha256": {
+  "app-init": "e163a82972719caace10133cdaef76ef29120e1777dbcf14aa635a1df2401720",
+  "cellbox": "9b73546b20321455671e26fa99fa1fb460f8e7a269cfbd53eb1f54504366cff6",
+  "service-vfs": "cc8726320473d38ade9116b12b40b67c81b0fbaf1c40c4620f1d9374c9a23233",
+  "service-config": "c413ade941ee4950d901b8833b2b9d6aefd92c40e4480b5fe25f8e0de3cf958a",
+  "service-input": "23f93102c1be995690d55760cf4eacafc08f63bf971128cfcacde17c744b25bf",
+  "platform": "5b952f844e8fddffb37b12e7d3c27aa387ca12eafef78e54d64565f5f396ab60",
+  "ls": "3ad0955a206b04fe08ee2b4e2bb7758615e75f2b49e887586831ecb889823125",
+  "cat": "d3cbf511b1d5f268bd6b83d3880f981551da215d4229d2b7b614bb0a865d9887",
+  "echo": "11ca7104cf05915f9298ce3961d47a8a8781a2246187a75b39d7061d261417ed",
+  "ps": "2f08731dcd2721d0b6d85e6423c20433e011c48a1d901336ae10704ee31f0b8a",
+  "phase02-session-parent": "060df9c2e72e43b151eb28bb18646f217fa8e0d0943e15e3b7318765294e40d4",
+  "phase02-session-child": "9cc8c0de2dfa1da412d5bea7914bef1ad98a99c6b90136f8d4be4a45db5e4c24"
+ },
+ "init_sha256": "e163a82972719caace10133cdaef76ef29120e1777dbcf14aa635a1df2401720",
+ "kernel_fs_img_sha256": "e618cd61d42909acfe9cdbfe246a54418c0a974da255bb51c86785a6e1218719",
+ "kernel_sha256": "e6b7be9de3f26712e7935976da41d33ab030a66d6d7a64a13135a94952426d84",
+ "iso_sha256": "bfa0fd41ab6e9aceb5007cb78f42a6deca574f728d26be791231561ea7faface",
+ "trusted_key_identity_sha256": "c8025f61c331a1059055edbc8fbad4ce504b6c334f9c86c0716d3e696d458d50"
+}
+[mkfat32] /tmp/cellbox-phase02-pecG/rg-fixture.img: base=LBA 2048, 524288 sectors, 130554 data clusters (FAT32), FATsz32=1020, data start=LBA 4120
+CellosFS fresh-blank /tmp/cellbox-phase02-pecG/rg-fixture.img verified; receipt /tmp/cellbox-phase02-pecG/evidence/srv-receipt.json
+rg fixture: /tmp/cellbox-phase02-pecG/rg-fixture.img (135 files), expectations /tmp/cellbox-phase02-pecG/evidence/rg-fixture-expected.json
+==> Booting private ISO (owned QEMU process only, networking disabled)
+==> Evaluating serial observations
+atomic publication cases: 39 pass: 39
+vfs self-test markers: 7 of 7
+VFS SELFTEST PASS (S7-2 dir-page + S8-2 save markers; test-hooks image; not acceptance)
+KERNEL REGRESSION CASES PASS (test-hooks image; not CP2, not acceptance)

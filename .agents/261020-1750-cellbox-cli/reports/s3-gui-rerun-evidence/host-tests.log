@@ -1,0 +1,2077 @@
+    Blocking waiting for file lock on package cache
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling libm v0.2.16
+   Compiling serde_core v1.0.229
+   Compiling thiserror v2.0.19
+   Compiling serde v1.0.229
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling scopeguard v1.2.0
+   Compiling heapless v0.8.0
+   Compiling byteorder v1.5.0
+   Compiling stable_deref_trait v1.2.1
+   Compiling tinyvec v1.13.3
+   Compiling foldhash v0.1.5
+   Compiling spin v0.9.9
+   Compiling embedded-io v0.7.1
+   Compiling regex-syntax v0.8.11
+   Compiling cell-build v0.2.0 (/home/dmin/cellos/libs/cell-build)
+   Compiling vi-compiler v0.1.0 (/home/dmin/cellos/tools/vi-compiler)
+   Compiling lock_api v0.4.14
+   Compiling hashbrown v0.15.5
+   Compiling hash32 v0.3.1
+   Compiling unicode-normalization v0.1.25
+   Compiling spinning_top v0.2.5
+   Compiling linked_list_allocator v0.10.6
+   Compiling terminal v0.1.0 (/home/dmin/cellos/cells/apps/terminal)
+   Compiling app-cellbox v0.1.0 (/home/dmin/cellos/cells/tools/cellbox)
+   Compiling viui-macros v0.2.0 (/home/dmin/cellos/libs/viui-macros)
+   Compiling regex-automata v0.4.16
+   Compiling syn v3.0.3
+   Compiling syn v2.0.119
+   Compiling core_maths v0.1.1
+   Compiling ab_glyph_rasterizer v0.1.10
+   Compiling ttf-parser v0.25.1
+   Compiling owned_ttf_parser v0.25.1
+   Compiling ab_glyph v0.2.32
+   Compiling postcard-derive v0.2.2
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling cobs v0.3.0
+   Compiling postcard v1.1.3
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling text-engine v0.1.0 (/home/dmin/cellos/libs/text-engine)
+   Compiling terminal-sdk v0.1.0 (/home/dmin/cellos/libs/terminal)
+   Compiling viui v0.2.0 (/home/dmin/cellos/libs/viui)
+warning: unused import: `shell::ViShell`
+   --> cells/tools/cellbox/src/main.rs:116:5
+    |
+116 | use shell::ViShell;
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `paste` is never read
+   --> cells/tools/cellbox/src/executor.rs:360:17
+    |
+360 |                 paste = false;
+    |                 ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+372 |                 paste = false;
+    |                 ------------- `paste` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `cmd_pwd` is never used
+  --> cells/tools/cellbox/src/cmd_cwd.rs:24:8
+   |
+24 | pub fn cmd_pwd(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+   |        ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `cmd_cd` is never used
+  --> cells/tools/cellbox/src/cmd_cwd.rs:31:8
+   |
+31 | pub fn cmd_cd(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+   |        ^^^^^^
+
+warning: function `stat_file_vfs` is never used
+  --> cells/tools/cellbox/src/cmd_fs.rs:25:15
+   |
+25 | pub(crate) fn stat_file_vfs(path: &str) -> Option<(usize, bool)> {
+   |               ^^^^^^^^^^^^^
+
+warning: function `read_file_bytes` is never used
+  --> cells/tools/cellbox/src/cmd_fs.rs:34:4
+   |
+34 | fn read_file_bytes(path: &str) -> ViResult<Vec<u8>> {
+   |    ^^^^^^^^^^^^^^^
+
+warning: function `collect_lines` is never used
+  --> cells/tools/cellbox/src/cmd_fs.rs:50:4
+   |
+50 | fn collect_lines(data: &[u8]) -> Vec<&str> {
+   |    ^^^^^^^^^^^^^
+
+warning: function `vfs_req_ok` is never used
+  --> cells/tools/cellbox/src/cmd_fs.rs:56:4
+   |
+56 | fn vfs_req_ok(req: &api::ipc::VfsRequest<'_>) -> bool {
+   |    ^^^^^^^^^^
+
+warning: function `cmd_wc` is never used
+  --> cells/tools/cellbox/src/cmd_fs.rs:79:8
+   |
+79 | pub fn cmd_wc(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+   |        ^^^^^^
+
+warning: function `cmd_head` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:112:8
+    |
+112 | pub fn cmd_head(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^
+
+warning: function `cmd_tail` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:149:8
+    |
+149 | pub fn cmd_tail(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^
+
+warning: function `resolve_shell_path` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:187:15
+    |
+187 | pub(crate) fn resolve_shell_path(path: &str) -> String {
+    |               ^^^^^^^^^^^^^^^^^^
+
+warning: function `cmd_mkdir` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:237:8
+    |
+237 | pub fn cmd_mkdir(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^^
+
+warning: function `cmd_rmdir` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:292:8
+    |
+292 | pub fn cmd_rmdir(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^^
+
+warning: function `cmd_rm` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:365:8
+    |
+365 | pub fn cmd_rm(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^
+
+warning: function `cmd_touch` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:458:8
+    |
+458 | pub fn cmd_touch(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^^
+
+warning: function `is_directory_target` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:480:4
+    |
+480 | fn is_directory_target(resolved: &str) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `copy_single_file` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:493:4
+    |
+493 | fn copy_single_file(src: &str, dst: &str) -> bool {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `copy_dir_recursive` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:504:4
+    |
+504 | fn copy_dir_recursive(src: &str, dst: &str) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `cmd_mv` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:532:8
+    |
+532 | pub fn cmd_mv(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^
+
+warning: function `cmd_cp` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:614:8
+    |
+614 | pub fn cmd_cp(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^
+
+warning: function `rm_recursive` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:683:8
+    |
+683 | pub fn rm_recursive(path: &str) -> bool {
+    |        ^^^^^^^^^^^^
+
+warning: function `write_file` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:689:8
+    |
+689 | pub fn write_file(path: &str, content: &[u8]) -> bool {
+    |        ^^^^^^^^^^
+
+warning: function `append_file` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:695:8
+    |
+695 | pub fn append_file(path: &str, content: &[u8]) -> bool {
+    |        ^^^^^^^^^^^
+
+warning: function `vfs_write_chunked` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:703:8
+    |
+703 | pub fn vfs_write_chunked(path: &str, data: &[u8], append: bool) -> bool {
+    |        ^^^^^^^^^^^^^^^^^
+
+warning: function `cmd_vwrite` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:722:8
+    |
+722 | pub fn cmd_vwrite(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^^^
+
+warning: function `cmd_vappend` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:740:8
+    |
+740 | pub fn cmd_vappend(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^^^^
+
+warning: function `read_file_vfs_exact` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:766:4
+    |
+766 | fn read_file_vfs_exact(path: &str, file_len: usize, out: &mut [u8]) -> ViResult<usize> {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_file_vfs_result` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:787:15
+    |
+787 | pub(crate) fn read_file_vfs_result(path: &str, out: &mut [u8]) -> ViResult<usize> {
+    |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_file_vfs_known_size` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:793:15
+    |
+793 | pub(crate) fn read_file_vfs_known_size(path: &str, size: usize, out: &mut [u8]) -> ViResult<usize> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CAT_READ_MAX` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:812:18
+    |
+812 | pub(crate) const CAT_READ_MAX: usize = 1024 * 1024;
+    |                  ^^^^^^^^^^^^
+
+warning: function `read_path_bytes_exact` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:818:15
+    |
+818 | pub(crate) fn read_path_bytes_exact(resolved: &str) -> Result<Vec<u8>, &'static str> {
+    |               ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `cmd_vcat` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:854:8
+    |
+854 | pub fn cmd_vcat(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^
+
+warning: function `cmd_find` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:879:8
+    |
+879 | pub fn cmd_find(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^
+
+warning: constant `FIND_MAX_DEPTH` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:894:7
+    |
+894 | const FIND_MAX_DEPTH: usize = 16;
+    |       ^^^^^^^^^^^^^^
+
+warning: function `find_recursive` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:896:4
+    |
+896 | fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize, vfs_tid: usize) {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `cmd_uniq` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:980:8
+    |
+980 | pub fn cmd_uniq(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^
+
+warning: function `cmd_sort` is never used
+    --> cells/tools/cellbox/src/cmd_fs.rs:1015:8
+     |
+1015 | pub fn cmd_sort(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+     |        ^^^^^^^^
+
+warning: function `cmd_tee` is never used
+    --> cells/tools/cellbox/src/cmd_fs.rs:1048:8
+     |
+1048 | pub fn cmd_tee(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+     |        ^^^^^^^
+
+warning: function `cmd_awk` is never used
+    --> cells/tools/cellbox/src/cmd_fs.rs:1097:8
+     |
+1097 | pub fn cmd_awk<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+     |        ^^^^^^^
+
+warning: function `cmd_uname` is never used
+ --> cells/tools/cellbox/src/cmd_sys.rs:9:8
+  |
+9 | pub fn cmd_uname(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+  |        ^^^^^^^^^
+
+warning: function `decimal` is never used
+  --> cells/tools/cellbox/src/cmd_sys.rs:44:4
+   |
+44 | fn decimal(mut value: u64, buffer: &mut [u8; 20]) -> &str {
+   |    ^^^^^^^
+
+warning: function `cmd_free` is never used
+  --> cells/tools/cellbox/src/cmd_sys.rs:58:8
+   |
+58 | pub fn cmd_free(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+   |        ^^^^^^^^
+
+warning: function `cmd_env` is never used
+  --> cells/tools/cellbox/src/cmd_sys.rs:91:8
+   |
+91 | pub fn cmd_env(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+   |        ^^^^^^^
+
+warning: function `cmd_uptime` is never used
+   --> cells/tools/cellbox/src/cmd_sys.rs:101:8
+    |
+101 | pub fn cmd_uptime(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^^^
+
+warning: function `cmd_shutdown` is never used
+   --> cells/tools/cellbox/src/cmd_sys.rs:111:8
+    |
+111 | pub fn cmd_shutdown() -> i32 {
+    |        ^^^^^^^^^^^^
+
+warning: function `cmd_sleep` is never used
+   --> cells/tools/cellbox/src/cmd_sys.rs:121:8
+    |
+121 | pub fn cmd_sleep(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^^
+
+warning: function `cmd_blkio_test` is never used
+   --> cells/tools/cellbox/src/cmd_sys.rs:151:8
+    |
+151 | pub fn cmd_blkio_test(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^^^^^^^
+
+warning: function `cmd_ifconfig` is never used
+   --> cells/tools/cellbox/src/cmd_sys.rs:180:8
+    |
+180 | pub fn cmd_ifconfig(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^^^^^
+
+warning: function `epoch_to_datetime` is never used
+   --> cells/tools/cellbox/src/cmd_sys.rs:219:4
+    |
+219 | fn epoch_to_datetime(mut secs: u64) -> (u64, u8, u8, u8, u8, u8) {
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `pad2` is never used
+   --> cells/tools/cellbox/src/cmd_sys.rs:259:4
+    |
+259 | fn pad2(buf: &mut [u8; 2], n: u8) -> &str {
+    |    ^^^^
+
+warning: function `cmd_date` is never used
+   --> cells/tools/cellbox/src/cmd_sys.rs:268:8
+    |
+268 | pub fn cmd_date(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^
+
+warning: function `cmd_help` is never used
+ --> cells/tools/cellbox/src/commands.rs:6:8
+  |
+6 | pub fn cmd_help() -> ViResult<()> {
+  |        ^^^^^^^^
+
+warning: function `cmd_clear` is never used
+  --> cells/tools/cellbox/src/commands.rs:29:8
+   |
+29 | pub fn cmd_clear() -> ViResult<()> {
+   |        ^^^^^^^^^
+
+warning: function `cmd_exec` is never used
+  --> cells/tools/cellbox/src/commands.rs:35:8
+   |
+35 | pub fn cmd_exec(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+   |        ^^^^^^^^
+
+warning: function `exec_load_and_spawn` is never used
+  --> cells/tools/cellbox/src/commands.rs:76:4
+   |
+76 | fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_argv: &[String]) -> ViResult<()> {
+   |    ^^^^^^^^^^^^^^^^^^^
+
+warning: fields `is_dir` and `size` are never read
+   --> cells/tools/cellbox/src/commands.rs:134:16
+    |
+132 | pub(crate) struct LsEntry {
+    |                   ------- fields in this struct
+133 |     pub(crate) name: alloc::string::String,
+134 |     pub(crate) is_dir: bool,
+    |                ^^^^^^
+135 |     /// `None` when the size was not requested or the backend could not report it.
+136 |     pub(crate) size: Option<u64>,
+    |                ^^^^
+
+warning: function `ls_collect` is never used
+   --> cells/tools/cellbox/src/commands.rs:161:15
+    |
+161 | pub(crate) fn ls_collect(
+    |               ^^^^^^^^^^
+
+warning: function `cmd_ls` is never used
+   --> cells/tools/cellbox/src/commands.rs:300:8
+    |
+300 | pub fn cmd_ls(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^
+
+warning: function `cmd_cat` is never used
+   --> cells/tools/cellbox/src/commands.rs:350:8
+    |
+350 | pub fn cmd_cat(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^
+
+warning: function `state_order` is never used
+   --> cells/tools/cellbox/src/commands.rs:450:4
+    |
+450 | fn state_order(state: usize) -> usize {
+    |    ^^^^^^^^^^^
+
+warning: function `cmd_ps` is never used
+   --> cells/tools/cellbox/src/commands.rs:460:8
+    |
+460 | pub fn cmd_ps(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^
+
+warning: function `expand_echo_escapes` is never used
+   --> cells/tools/cellbox/src/commands.rs:528:4
+    |
+528 | fn expand_echo_escapes(s: &str) -> alloc::string::String {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `cmd_echo` is never used
+   --> cells/tools/cellbox/src/commands.rs:556:8
+    |
+556 | pub fn cmd_echo(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    |        ^^^^^^^^
+
+warning: function `cmd_top` is never used
+   --> cells/tools/cellbox/src/commands.rs:592:8
+    |
+592 | pub fn cmd_top<'a>(args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+    |        ^^^^^^^
+
+warning: constant `REFUSED_STATUS` is never used
+   --> cells/tools/cellbox/src/commands.rs:599:11
+    |
+599 | pub const REFUSED_STATUS: i32 = 1;
+    |           ^^^^^^^^^^^^^^
+
+warning: function `cmd_kill` is never used
+   --> cells/tools/cellbox/src/commands.rs:603:8
+    |
+603 | pub fn cmd_kill() -> i32 {
+    |        ^^^^^^^^
+
+warning: function `cmd_snapshot` is never used
+   --> cells/tools/cellbox/src/commands.rs:610:8
+    |
+610 | pub fn cmd_snapshot() -> i32 {
+    |        ^^^^^^^^^^^^
+
+warning: function `open` is never used
+  --> cells/tools/cellbox/src/context_session.rs:51:8
+   |
+51 | pub fn open() -> Result<Option<TerminalSession>, Status> {
+   |        ^^^^
+
+warning: function `ensure_default_cwd` is never used
+  --> cells/tools/cellbox/src/context_session.rs:80:8
+   |
+80 | pub fn ensure_default_cwd() -> Result<(), Status> {
+   |        ^^^^^^^^^^^^^^^^^^
+
+warning: static `RAW_INPUT` is never used
+  --> cells/tools/cellbox/src/executor.rs:49:8
+   |
+49 | static RAW_INPUT: ostd::sync::Mutex<Option<RawInput>> = ostd::sync::Mutex::new(None);
+   |        ^^^^^^^^^
+
+warning: function `start_serial_session` is never used
+  --> cells/tools/cellbox/src/executor.rs:67:8
+   |
+67 | pub fn start_serial_session() -> Result<(), Status> {
+   |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `start_context_session` is never used
+  --> cells/tools/cellbox/src/executor.rs:81:8
+   |
+81 | pub fn start_context_session(mut session: TerminalSession) -> Result<(), Status> {
+   |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `close_session` is never used
+  --> cells/tools/cellbox/src/executor.rs:92:8
+   |
+92 | pub fn close_session() -> Result<(), Status> {
+   |        ^^^^^^^^^^^^^
+
+warning: function `next_session_event` is never used
+   --> cells/tools/cellbox/src/executor.rs:110:4
+    |
+110 | fn next_session_event(session: &mut TerminalSession, deadline_ns: u64) -> Result<terminal_sdk::input::Event, Status> {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: method `take` is never used
+   --> cells/tools/cellbox/src/executor.rs:291:8
+    |
+285 | impl Wiped {
+    | ---------- method in this implementation
+...
+291 |     fn take(&mut self) -> String { core::mem::take(&mut self.0) }
+    |        ^^^^
+
+warning: struct `ScrubbedEvent` is never constructed
+   --> cells/tools/cellbox/src/executor.rs:298:8
+    |
+298 | struct ScrubbedEvent(terminal_sdk::input::Event);
+    |        ^^^^^^^^^^^^^
+
+warning: function `terminal_read_line` is never used
+   --> cells/tools/cellbox/src/executor.rs:305:8
+    |
+305 | pub fn terminal_read_line(history: &mut Vec<String>) -> Result<Option<String>, Status> {
+    |        ^^^^^^^^^^^^^^^^^^
+
+warning: enum `SecretEnd` is never used
+   --> cells/tools/cellbox/src/executor.rs:381:6
+    |
+381 | enum SecretEnd {
+    |      ^^^^^^^^^
+
+warning: function `read_secret_events` is never used
+   --> cells/tools/cellbox/src/executor.rs:387:4
+    |
+387 | fn read_secret_events(session: &mut TerminalSession, line: &mut Wiped) -> Result<SecretEnd, Status> {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `terminal_read_secret` is never used
+   --> cells/tools/cellbox/src/executor.rs:420:8
+    |
+420 | pub fn terminal_read_secret() -> Result<Option<String>, Status> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: method `read` is never used
+   --> cells/tools/cellbox/src/executor.rs:498:12
+    |
+464 | impl TerminalKeys {
+    | ----------------- method in this implementation
+...
+498 |     pub fn read(&mut self, deadline_ns: u64) -> Result<Option<TerminalKey>, Status> {
+    |            ^^^^
+
+warning: enum `PromptLine` is never used
+   --> cells/tools/cellbox/src/executor.rs:516:10
+    |
+516 | pub enum PromptLine {
+    |          ^^^^^^^^^^
+
+warning: function `terminal_prompt_line` is never used
+   --> cells/tools/cellbox/src/executor.rs:576:8
+    |
+576 | pub fn terminal_prompt_line() -> Result<PromptLine, Status> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `shell_stdin` is never used
+   --> cells/tools/cellbox/src/executor.rs:622:8
+    |
+622 | pub fn shell_stdin() -> Vec<u8> {
+    |        ^^^^^^^^^^^
+
+warning: function `execute` is never used
+   --> cells/tools/cellbox/src/executor.rs:821:8
+    |
+821 | pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
+    |        ^^^^^^^
+
+warning: function `reject_line` is never used
+   --> cells/tools/cellbox/src/executor.rs:942:4
+    |
+942 | fn reject_line(reason: &str) -> i32 {
+    |    ^^^^^^^^^^^
+
+warning: function `stage_input` is never used
+   --> cells/tools/cellbox/src/executor.rs:952:4
+    |
+952 | fn stage_input(cmd: &Cmd) -> Result<StageIn, ()> {
+    |    ^^^^^^^^^^^
+
+warning: function `exec_simple` is never used
+   --> cells/tools/cellbox/src/executor.rs:973:4
+    |
+973 | fn exec_simple(cmd: &Cmd, jobs: &mut Jobs) -> i32 {
+    |    ^^^^^^^^^^^
+
+warning: function `exec_pipeline` is never used
+    --> cells/tools/cellbox/src/executor.rs:1002:4
+     |
+1002 | fn exec_pipeline(cmds: &[Cmd], jobs: &mut Jobs) -> i32 {
+     |    ^^^^^^^^^^^^^
+
+warning: function `run_byte_chain` is never used
+    --> cells/tools/cellbox/src/executor.rs:1032:4
+     |
+1032 | fn run_byte_chain(cmds: &[Cmd], mut stdin_data: Vec<u8>, jobs: &mut Jobs, statuses: &mut Vec<i32>) -> i32 {
+     |    ^^^^^^^^^^^^^^
+
+warning: function `capture_cmd` is never used
+    --> cells/tools/cellbox/src/executor.rs:1056:4
+     |
+1056 | fn capture_cmd(cmd: &Cmd, stdin: &[u8], jobs: &mut Jobs) -> (Vec<u8>, i32) {
+     |    ^^^^^^^^^^^
+
+warning: function `fail_member` is never used
+    --> cells/tools/cellbox/src/executor.rs:1063:4
+     |
+1063 | fn fail_member(members: &mut [(String, i32)], stage: usize, status: i32) -> i32 {
+     |    ^^^^^^^^^^^
+
+warning: function `exec_typed` is never used
+    --> cells/tools/cellbox/src/executor.rs:1073:4
+     |
+1073 | fn exec_typed(plan: &TypedPlan, cmds: &[Cmd], stages: &[StageIn], jobs: &mut Jobs) -> i32 {
+     |    ^^^^^^^^^^
+
+warning: function `exec_bytes` is never used
+    --> cells/tools/cellbox/src/executor.rs:1084:4
+     |
+1084 | fn exec_bytes(plan: &BytePlan, cmds: &[Cmd], stages: &[StageIn], jobs: &mut Jobs) -> i32 {
+     |    ^^^^^^^^^^
+
+warning: function `run_bytes` is never used
+    --> cells/tools/cellbox/src/executor.rs:1097:4
+     |
+1097 | fn run_bytes(
+     |    ^^^^^^^^^
+
+warning: function `byte_head` is never used
+    --> cells/tools/cellbox/src/executor.rs:1146:4
+     |
+1146 | fn byte_head(plan: &TypedPlan, cmds: &[Cmd], jobs: &mut Jobs) -> Result<(Vec<u8>, usize), i32> {
+     |    ^^^^^^^^^
+
+warning: function `run_typed` is never used
+    --> cells/tools/cellbox/src/executor.rs:1163:4
+     |
+1163 | fn run_typed(
+     |    ^^^^^^^^^
+
+warning: function `exec_cmd` is never used
+    --> cells/tools/cellbox/src/executor.rs:1341:4
+     |
+1341 | fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
+     |    ^^^^^^^^
+
+warning: function `case_matches` is never used
+    --> cells/tools/cellbox/src/executor.rs:1505:4
+     |
+1505 | fn case_matches(pattern: &str, value: &str) -> bool {
+     |    ^^^^^^^^^^^^
+
+warning: function `usize_key` is never used
+    --> cells/tools/cellbox/src/executor.rs:1513:4
+     |
+1513 | fn usize_key(n: usize) -> String {
+     |    ^^^^^^^^^
+
+warning: function `i32_to_str` is never used
+    --> cells/tools/cellbox/src/executor.rs:1523:4
+     |
+1523 | fn i32_to_str(n: i32) -> &'static str {
+     |    ^^^^^^^^^^
+
+warning: function `dispatch_builtin` is never used
+    --> cells/tools/cellbox/src/executor.rs:1545:4
+     |
+1545 | fn dispatch_builtin(prog: &str, args: &[String], jobs: &mut Jobs) -> i32 {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `print_jobs` is never used
+    --> cells/tools/cellbox/src/executor.rs:1704:4
+     |
+1704 | fn print_jobs(jobs: &Jobs) {
+     |    ^^^^^^^^^^
+
+warning: function `cmd_test` is never used
+    --> cells/tools/cellbox/src/executor.rs:1737:4
+     |
+1737 | fn cmd_test(args: &[&str]) -> ViResult<()> {
+     |    ^^^^^^^^
+
+warning: function `cmd_read` is never used
+    --> cells/tools/cellbox/src/executor.rs:1807:4
+     |
+1807 | fn cmd_read(args: &[&str]) -> ViResult<()> {
+     |    ^^^^^^^^
+
+warning: function `cmd_source` is never used
+    --> cells/tools/cellbox/src/executor.rs:1854:4
+     |
+1854 | fn cmd_source(args: &[String], jobs: &mut Jobs) -> ViResult<()> {
+     |    ^^^^^^^^^^
+
+warning: function `spawn_external` is never used
+    --> cells/tools/cellbox/src/executor.rs:1885:4
+     |
+1885 | fn spawn_external(prog: &str, args: &[String]) -> i32 {
+     |    ^^^^^^^^^^^^^^
+
+warning: function `cmd_hv` is never used
+    --> cells/tools/cellbox/src/executor.rs:2007:4
+     |
+2007 | fn cmd_hv(args: &[String]) -> i32 {
+     |    ^^^^^^
+
+warning: function `cmd_grep_args` is never used
+    --> cells/tools/cellbox/src/executor.rs:2047:4
+     |
+2047 | fn cmd_grep_args(args: &[String]) -> i32 {
+     |    ^^^^^^^^^^^^^
+
+warning: function `cmd_sed_args` is never used
+    --> cells/tools/cellbox/src/executor.rs:2051:4
+     |
+2051 | fn cmd_sed_args(args: &[String]) -> i32 {
+     |    ^^^^^^^^^^^^
+
+warning: function `cmd_awk_args` is never used
+    --> cells/tools/cellbox/src/executor.rs:2084:4
+     |
+2084 | fn cmd_awk_args(args: &[String]) -> i32 {
+     |    ^^^^^^^^^^^^
+
+warning: function `read_utility_text` is never used
+    --> cells/tools/cellbox/src/executor.rs:2135:4
+     |
+2135 | fn read_utility_text(name: &str, path: Option<&str>) -> Result<String, i32> {
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: enum `UtilityReadError` is never used
+    --> cells/tools/cellbox/src/executor.rs:2177:6
+     |
+2177 | enum UtilityReadError {
+     |      ^^^^^^^^^^^^^^^^
+
+warning: function `read_path_bytes` is never used
+    --> cells/tools/cellbox/src/executor.rs:2183:4
+     |
+2183 | fn read_path_bytes(path: &str) -> Result<Vec<u8>, UtilityReadError> {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `spawn_context_external` is never used
+    --> cells/tools/cellbox/src/executor.rs:2466:4
+     |
+2466 | fn spawn_context_external(prog: &str, args: &[String]) -> i32 {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `spawn_serial_foreground` is never used
+    --> cells/tools/cellbox/src/executor.rs:2486:4
+     |
+2486 | fn spawn_serial_foreground(prog: &str, args: &[String]) -> i32 {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `EXT_CANCEL_STOP` is never used
+    --> cells/tools/cellbox/src/executor.rs:2596:7
+     |
+2596 | const EXT_CANCEL_STOP: u32 = 2;
+     |       ^^^^^^^^^^^^^^^
+
+warning: struct `StartFailure` is never constructed
+    --> cells/tools/cellbox/src/executor.rs:2599:8
+     |
+2599 | struct StartFailure {
+     |        ^^^^^^^^^^^^
+
+warning: function `setup_failure` is never used
+    --> cells/tools/cellbox/src/executor.rs:2604:4
+     |
+2604 | fn setup_failure(status: Status) -> StartFailure {
+     |    ^^^^^^^^^^^^^
+
+warning: struct `ExtStage` is never constructed
+    --> cells/tools/cellbox/src/executor.rs:2609:8
+     |
+2609 | struct ExtStage {
+     |        ^^^^^^^^
+
+warning: struct `ExtRun` is never constructed
+    --> cells/tools/cellbox/src/executor.rs:2625:8
+     |
+2625 | struct ExtRun {
+     |        ^^^^^^
+
+warning: multiple associated items are never used
+    --> cells/tools/cellbox/src/executor.rs:2665:8
+     |
+2656 | impl ExtRun {
+     | ----------- associated items in this implementation
+...
+2665 |     fn start(commands: &[StageIn], with_input: bool) -> Result<ExtRun, StartFailure> {
+     |        ^^^^^
+...
+2709 |     fn stream(&self) -> Result<(Endpoint, Endpoint), Status> {
+     |        ^^^^^^
+...
+2714 |     fn release(&mut self, endpoint: Option<Endpoint>) {
+     |        ^^^^^^^
+...
+2721 |     fn launch(&mut self, commands: &[StageIn], cwd: &str, with_input: bool) -> Result<(), StartFailure> {
+     |        ^^^^^^
+...
+2823 |     fn set_feed(&mut self, bytes: Vec<u8>) {
+     |        ^^^^^^^^
+...
+2835 |     fn set_rows(&mut self, rows: typed::RowFeed) {
+     |        ^^^^^^^^
+...
+2840 |     fn take_row_failure(&mut self) -> Option<typed::RunFailure> {
+     |        ^^^^^^^^^^^^^^^^
+...
+2844 |     fn close_rows(&mut self) {
+     |        ^^^^^^^^^^
+...
+2853 |     fn refill(&mut self) -> Result<bool, StreamStop> {
+     |        ^^^^^^
+...
+2883 |     fn close_input(&mut self) {
+     |        ^^^^^^^^^^^
+...
+2891 |     fn close_output(&mut self) {
+     |        ^^^^^^^^^^^^
+...
+2897 |     fn close_errors(&mut self) {
+     |        ^^^^^^^^^^^^
+...
+2908 |     fn feed_step(&mut self) -> Result<bool, StreamStop> {
+     |        ^^^^^^^^^
+...
+2949 |     fn forward_terminal(&mut self, bytes: &[u8], diagnostic: bool) -> Result<(), StreamStop> {
+     |        ^^^^^^^^^^^^^^^^
+...
+2970 |     fn drain_errors(&mut self) -> bool {
+     |        ^^^^^^^^^^^^
+...
+3002 |     fn poll_interrupt(&mut self) {
+     |        ^^^^^^^^^^^^^^
+...
+3030 |     fn step(&mut self) -> Result<bool, StreamStop> {
+     |        ^^^^
+...
+3044 |     fn pause(&mut self, progress: bool) {
+     |        ^^^^^
+...
+3059 |     fn read_output(&mut self, out: &mut [u8]) -> Result<Option<usize>, StreamStop> {
+     |        ^^^^^^^^^^^
+...
+3098 |     fn close_consumer(&mut self) {
+     |        ^^^^^^^^^^^^^^
+...
+3103 |     fn settle(&mut self) -> Result<(), StreamStop> {
+     |        ^^^^^^
+...
+3115 |     fn conclude(&mut self) -> Vec<i32> {
+     |        ^^^^^^^^
+...
+3129 |     fn reap(&mut self, cancel: bool) {
+     |        ^^^^
+...
+3188 |     fn interrupted(&self) -> bool {
+     |        ^^^^^^^^^^^
+...
+3194 |     fn not_started(&self) -> usize {
+     |        ^^^^^^^^^^^
+...
+3200 |     fn was_cancelled(&self) -> bool {
+     |        ^^^^^^^^^^^^^
+
+warning: struct `ChildBytes` is never constructed
+    --> cells/tools/cellbox/src/executor.rs:3212:8
+     |
+3212 | struct ChildBytes(alloc::rc::Rc<core::cell::RefCell<ExtRun>>);
+     |        ^^^^^^^^^^
+
+warning: function `drive_external_sink` is never used
+    --> cells/tools/cellbox/src/executor.rs:3230:4
+     |
+3230 | fn drive_external_sink(
+     |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `settle_external_segment` is never used
+    --> cells/tools/cellbox/src/executor.rs:3266:4
+     |
+3266 | fn settle_external_segment(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `JobState` is never used
+ --> cells/tools/cellbox/src/jobs.rs:7:10
+  |
+7 | pub enum JobState {
+  |          ^^^^^^^^
+
+warning: struct `Job` is never constructed
+  --> cells/tools/cellbox/src/jobs.rs:14:8
+   |
+14 | struct Job {
+   |        ^^^
+
+warning: struct `JobView` is never constructed
+  --> cells/tools/cellbox/src/jobs.rs:23:12
+   |
+23 | pub struct JobView<'a> {
+   |            ^^^^^^^
+
+warning: struct `Jobs` is never constructed
+  --> cells/tools/cellbox/src/jobs.rs:33:12
+   |
+33 | pub struct Jobs {
+   |            ^^^^
+
+warning: associated items `new`, `add`, `set_state`, `complete`, `reap_done`, and `list` are never used
+  --> cells/tools/cellbox/src/jobs.rs:39:12
+   |
+38 | impl Jobs {
+   | --------- associated items in this implementation
+39 |     pub fn new() -> Self {
+   |            ^^^
+...
+47 |     pub fn add(&mut self, name: &str) -> usize {
+   |            ^^^
+...
+61 |     pub fn set_state(&mut self, id: usize, state: JobState) {
+   |            ^^^^^^^^^
+...
+68 |     pub fn complete(&mut self, id: usize, status: i32, members: Vec<(String, i32)>) {
+   |            ^^^^^^^^
+...
+78 |     pub fn reap_done(&mut self) {
+   |            ^^^^^^^^^
+...
+83 |     pub fn list(&self) -> impl Iterator<Item = JobView<'_>> {
+   |            ^^^^
+
+warning: constant `PS_USAGE` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:18:7
+   |
+18 | const PS_USAGE: &str = "Usage: ps --records [-p TID]";
+   |       ^^^^^^^^
+
+warning: constant `LS_USAGE` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:19:7
+   |
+19 | const LS_USAGE: &str = "Usage: ls --records [-a] [PATH]";
+   |       ^^^^^^^^
+
+warning: constant `TOP_USAGE` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:20:7
+   |
+20 | const TOP_USAGE: &str =
+   |       ^^^^^^^^^
+
+warning: constant `PS_WINDOW_TICKS` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:24:7
+   |
+24 | const PS_WINDOW_TICKS: u64 = TIMER_HZ / 10;
+   |       ^^^^^^^^^^^^^^^
+
+warning: function `row_producer` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:29:8
+   |
+29 | pub fn row_producer(argv: &[String]) -> Option<Result<Box<dyn RowSource>, i32>> {
+   |        ^^^^^^^^^^^^
+
+warning: function `read_file_bytes_exact` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:48:8
+   |
+48 | pub fn read_file_bytes_exact(path: &str) -> Result<Vec<u8>, i32> {
+   |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `field` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:59:4
+   |
+59 | fn field(name: &str, value: Value) -> (String, Value) {
+   |    ^^^^^
+
+warning: function `process_value` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:64:4
+   |
+64 | fn process_value(row: TopRow) -> Value {
+   |    ^^^^^^^^^^^^^
+
+warning: function `source_error` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:77:4
+   |
+77 | fn source_error(message: &str) -> PipelineError {
+   |    ^^^^^^^^^^^^
+
+warning: function `sample` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:81:4
+   |
+81 | fn sample() -> Result<Vec<ProcessInfoV2>, PipelineError> {
+   |    ^^^^^^
+
+warning: struct `PsSource` is never constructed
+  --> cells/tools/cellbox/src/native_rows.rs:87:8
+   |
+87 | struct PsSource {
+   |        ^^^^^^^^
+
+warning: associated items `from_args` and `fill` are never used
+   --> cells/tools/cellbox/src/native_rows.rs:94:8
+    |
+ 93 | impl PsSource {
+    | ------------- associated items in this implementation
+ 94 |     fn from_args(args: &[&str]) -> Result<Box<dyn RowSource>, &'static str> {
+    |        ^^^^^^^^^
+...
+119 |     fn fill(&mut self) -> Result<(), PipelineError> {
+    |        ^^^^
+
+warning: struct `LsSource` is never constructed
+   --> cells/tools/cellbox/src/native_rows.rs:149:8
+    |
+149 | struct LsSource {
+    |        ^^^^^^^^
+
+warning: associated items `from_args` and `fill` are never used
+   --> cells/tools/cellbox/src/native_rows.rs:157:8
+    |
+156 | impl LsSource {
+    | ------------- associated items in this implementation
+157 |     fn from_args(args: &[&str]) -> Result<Box<dyn RowSource>, &'static str> {
+    |        ^^^^^^^^^
+...
+177 |     fn fill(&mut self) -> Result<(), PipelineError> {
+    |        ^^^^
+
+warning: struct `TopSource` is never constructed
+   --> cells/tools/cellbox/src/native_rows.rs:214:8
+    |
+214 | struct TopSource {
+    |        ^^^^^^^^^
+
+warning: associated items `from_args` and `next_frame` are never used
+   --> cells/tools/cellbox/src/native_rows.rs:225:8
+    |
+224 | impl TopSource {
+    | -------------- associated items in this implementation
+225 |     fn from_args(args: &[&str]) -> Result<Box<dyn RowSource>, &'static str> {
+    |        ^^^^^^^^^
+...
+263 |     fn next_frame(&mut self) -> Result<(), PipelineError> {
+    |        ^^^^^^^^^^
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:130:16
+    |
+130 |     Background(Cmd),
+    |     ---------- ^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+130 -     Background(Cmd),
+130 +     Background(()),
+    |
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:133:13
+    |
+133 |     Invalid(&'static str),
+    |     ------- ^^^^^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+133 -     Invalid(&'static str),
+133 +     Invalid(()),
+    |
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:135:14
+    |
+135 |     Sequence(Vec<Ast>),
+    |     -------- ^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+135 -     Sequence(Vec<Ast>),
+135 +     Sequence(()),
+    |
+
+warning: fields `0` and `1` are never read
+   --> cells/tools/cellbox/src/parser.rs:137:9
+    |
+137 |     And(alloc::boxed::Box<Ast>, alloc::boxed::Box<Ast>),
+    |     --- ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     fields in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the fields to be of unit type to suppress this warning while preserving the field numbering, or remove the fields
+    |
+137 -     And(alloc::boxed::Box<Ast>, alloc::boxed::Box<Ast>),
+137 +     And((), ()),
+    |
+
+warning: fields `0` and `1` are never read
+   --> cells/tools/cellbox/src/parser.rs:139:8
+    |
+139 |     Or(alloc::boxed::Box<Ast>, alloc::boxed::Box<Ast>),
+    |     -- ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     fields in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the fields to be of unit type to suppress this warning while preserving the field numbering, or remove the fields
+    |
+139 -     Or(alloc::boxed::Box<Ast>, alloc::boxed::Box<Ast>),
+139 +     Or((), ()),
+    |
+
+warning: fields `cond` and `body` are never read
+   --> cells/tools/cellbox/src/parser.rs:142:9
+    |
+141 |     While {
+    |     ----- fields in this variant
+142 |         cond: alloc::boxed::Box<Ast>,
+    |         ^^^^
+143 |         body: alloc::boxed::Box<Ast>,
+    |         ^^^^
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `name` and `body` are never read
+   --> cells/tools/cellbox/src/parser.rs:150:9
+    |
+149 |     FuncDef {
+    |     ------- fields in this variant
+150 |         name: alloc::string::String,
+    |         ^^^^
+151 |         body: alloc::string::String,
+    |         ^^^^
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `expr` and `arms` are never read
+   --> cells/tools/cellbox/src/parser.rs:161:9
+    |
+160 |     Case {
+    |     ---- fields in this variant
+161 |         expr: alloc::string::String,
+    |         ^^^^
+162 |         arms: alloc::vec::Vec<(alloc::string::String, alloc::boxed::Box<Ast>)>,
+    |         ^^^^
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `var`, `words`, and `body` are never read
+   --> cells/tools/cellbox/src/parser.rs:169:9
+    |
+168 |     For {
+    |     --- fields in this variant
+169 |         var: alloc::string::String,
+    |         ^^^
+170 |         words: alloc::vec::Vec<alloc::string::String>,
+    |         ^^^^^
+171 |         body: alloc::boxed::Box<Ast>,
+    |         ^^^^
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `cond`, `then_b`, and `else_b` are never read
+   --> cells/tools/cellbox/src/parser.rs:177:9
+    |
+176 |     If {
+    |     -- fields in this variant
+177 |         cond: alloc::boxed::Box<Ast>,
+    |         ^^^^
+178 |         then_b: alloc::boxed::Box<Ast>,
+    |         ^^^^^^
+179 |         else_b: Option<alloc::boxed::Box<Ast>>,
+    |         ^^^^^^
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: constant `MAX_FUNS` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:23:7
+   |
+23 | const MAX_FUNS: usize = 8;
+   |       ^^^^^^^^
+
+warning: constant `BODY_LIMIT` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:26:7
+   |
+26 | const BODY_LIMIT: usize = 479;
+   |       ^^^^^^^^^^
+
+warning: static `STDIN` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:34:8
+   |
+34 | static STDIN: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+   |        ^^^^^
+
+warning: static `EXIT_REQUEST` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:37:8
+   |
+37 | static EXIT_REQUEST: Mutex<Option<i32>> = Mutex::new(None);
+   |        ^^^^^^^^^^^^
+
+warning: static `LOOP_SIGNAL` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:38:8
+   |
+38 | static LOOP_SIGNAL: Mutex<LoopSignal> = Mutex::new(LoopSignal::None);
+   |        ^^^^^^^^^^^
+
+warning: static `BG_SPAWN` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:39:8
+   |
+39 | static BG_SPAWN: AtomicBool = AtomicBool::new(false);
+   |        ^^^^^^^^
+
+warning: function `write_out_bytes` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:81:8
+   |
+81 | pub fn write_out_bytes(bytes: &[u8]) {
+   |        ^^^^^^^^^^^^^^^
+
+warning: function `set_stdin` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:130:8
+    |
+130 | pub fn set_stdin(data: &[u8]) {
+    |        ^^^^^^^^^
+
+warning: function `clear_stdin` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:136:8
+    |
+136 | pub fn clear_stdin() {
+    |        ^^^^^^^^^^^
+
+warning: function `stdin_bytes` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:145:8
+    |
+145 | pub fn stdin_bytes() -> Vec<u8> {
+    |        ^^^^^^^^^^^
+
+warning: function `unset_var` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:160:8
+    |
+160 | pub fn unset_var(key: &str) {
+    |        ^^^^^^^^^
+
+warning: function `set_status` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:175:8
+    |
+175 | pub fn set_status(code: i32) {
+    |        ^^^^^^^^^^
+
+warning: function `define_function` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:181:8
+    |
+181 | pub fn define_function(name: &str, body: &str) {
+    |        ^^^^^^^^^^^^^^^
+
+warning: enum `LoopSignal` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:201:10
+    |
+201 | pub enum LoopSignal {
+    |          ^^^^^^^^^^
+
+warning: function `set_loop_signal` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:207:8
+    |
+207 | pub fn set_loop_signal(signal: LoopSignal) {
+    |        ^^^^^^^^^^^^^^^
+
+warning: function `take_loop_signal` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:212:8
+    |
+212 | pub fn take_loop_signal() -> LoopSignal {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: function `request_exit` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:217:8
+    |
+217 | pub fn request_exit(code: i32) {
+    |        ^^^^^^^^^^^^
+
+warning: function `take_exit_request` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:223:8
+    |
+223 | pub fn take_exit_request() -> Option<i32> {
+    |        ^^^^^^^^^^^^^^^^^
+
+warning: function `bg_spawn` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:235:8
+    |
+235 | pub fn bg_spawn() -> bool {
+    |        ^^^^^^^^
+
+warning: function `set_bg_spawn` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:239:8
+    |
+239 | pub fn set_bg_spawn(value: bool) {
+    |        ^^^^^^^^^^^^
+
+warning: function `run` is never used
+  --> cells/tools/cellbox/src/text_tools/grep.rs:15:8
+   |
+15 | pub fn run(args: &[String]) -> i32 {
+   |        ^^^
+
+warning: function `parse_error` is never used
+  --> cells/tools/cellbox/src/text_tools/grep.rs:36:4
+   |
+36 | fn parse_error(err: ParseError) -> i32 {
+   |    ^^^^^^^^^^^
+
+warning: function `print_error` is never used
+  --> cells/tools/cellbox/src/text_tools/grep.rs:40:4
+   |
+40 | fn print_error(message: &str) -> i32 {
+   |    ^^^^^^^^^^^
+
+warning: constant `GREP_MAX_DEPTH` is never used
+  --> cells/tools/cellbox/src/text_tools/grep/io.rs:11:7
+   |
+11 | const GREP_MAX_DEPTH: usize = 16;
+   |       ^^^^^^^^^^^^^^
+
+warning: enum `ReadError` is never used
+  --> cells/tools/cellbox/src/text_tools/grep/io.rs:17:10
+   |
+17 | pub enum ReadError {
+   |          ^^^^^^^^^
+
+warning: method `message` is never used
+  --> cells/tools/cellbox/src/text_tools/grep/io.rs:25:12
+   |
+24 | impl ReadError {
+   | -------------- method in this implementation
+25 |     pub fn message(self) -> &'static str {
+   |            ^^^^^^^
+
+warning: function `load_inputs` is never used
+  --> cells/tools/cellbox/src/text_tools/grep/io.rs:35:8
+   |
+35 | pub fn load_inputs(cfg: &Config) -> Result<Vec<LoadedInput>, String> {
+   |        ^^^^^^^^^^^
+
+warning: function `read_text_file` is never used
+  --> cells/tools/cellbox/src/text_tools/grep/io.rs:67:8
+   |
+67 | pub fn read_text_file(path: &str) -> Result<String, ReadError> {
+   |        ^^^^^^^^^^^^^^
+
+warning: function `walk_path` is never used
+  --> cells/tools/cellbox/src/text_tools/grep/io.rs:74:4
+   |
+74 | fn walk_path(
+   |    ^^^^^^^^^
+
+warning: function `read_path_bytes` is never used
+ --> cells/tools/cellbox/src/text_tools/grep/io/read.rs:8:15
+  |
+8 | pub(super) fn read_path_bytes(path: &str) -> Result<Vec<u8>, ReadError> {
+  |               ^^^^^^^^^^^^^^^
+
+warning: struct `DirEntry` is never constructed
+ --> cells/tools/cellbox/src/text_tools/grep/io/vfs.rs:9:19
+  |
+9 | pub(super) struct DirEntry {
+  |                   ^^^^^^^^
+
+warning: function `stat_path` is never used
+  --> cells/tools/cellbox/src/text_tools/grep/io/vfs.rs:14:15
+   |
+14 | pub(super) fn stat_path(path: &str) -> Result<Option<bool>, String> {
+   |               ^^^^^^^^^
+
+warning: function `list_dir` is never used
+  --> cells/tools/cellbox/src/text_tools/grep/io/vfs.rs:32:15
+   |
+32 | pub(super) fn list_dir(path: &str) -> Result<Vec<DirEntry>, String> {
+   |               ^^^^^^^^
+
+warning: function `request_vfs` is never used
+  --> cells/tools/cellbox/src/text_tools/grep/io/vfs.rs:70:4
+   |
+70 | fn request_vfs<'a>(len: usize, send: &[u8], recv: &'a mut [u8]) -> Result<&'a [u8], String> {
+   |    ^^^^^^^^^^^
+
+warning: function `join_path` is never used
+  --> cells/tools/cellbox/src/text_tools/grep/io/vfs.rs:84:15
+   |
+84 | pub(super) fn join_path(dir: &str, name: &str) -> String {
+   |               ^^^^^^^^^
+
+warning: function `cmd_top` is never used
+  --> cells/tools/cellbox/src/top.rs:17:8
+   |
+17 | pub fn cmd_top(args: core::str::SplitWhitespace<'_>) -> ViResult<()> {
+   |        ^^^^^^^
+
+warning: function `run_top` is never used
+  --> cells/tools/cellbox/src/top.rs:29:4
+   |
+29 | fn run_top(options: TopOptions) -> ViResult<()> {
+   |    ^^^^^^^
+
+warning: function `sample_processes` is never used
+  --> cells/tools/cellbox/src/top.rs:52:15
+   |
+52 | pub(crate) fn sample_processes() -> ViResult<Vec<ProcessInfoV2>> {
+   |               ^^^^^^^^^^^^^^^^
+
+warning: function `wait_ticks` is never used
+  --> cells/tools/cellbox/src/top.rs:61:15
+   |
+61 | pub(crate) fn wait_ticks(ticks: u64) {
+   |               ^^^^^^^^^^
+
+warning: constant `KEY_POLL_TICKS` is never used
+  --> cells/tools/cellbox/src/top.rs:70:7
+   |
+70 | const KEY_POLL_TICKS: u64 = TIMER_HZ / 50;
+   |       ^^^^^^^^^^^^^^
+
+warning: function `quit_requested` is never used
+  --> cells/tools/cellbox/src/top.rs:75:4
+   |
+75 | fn quit_requested(keys: &mut TerminalKeys) -> bool {
+   |    ^^^^^^^^^^^^^^
+
+warning: function `wait_for_next_sample` is never used
+   --> cells/tools/cellbox/src/top.rs:100:4
+    |
+100 | fn wait_for_next_sample(delay_ticks: u64, batch: bool, keys: &mut TerminalKeys) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `render_frame` is never used
+ --> cells/tools/cellbox/src/top/render.rs:5:8
+  |
+5 | pub fn render_frame(rows: &[TopRow], sort: SortKey, batch: bool, remaining: usize) {
+  |        ^^^^^^^^^^^^
+
+warning: constant `CLEAR_SCREEN` is never used
+  --> cells/tools/cellbox/src/top/render.rs:50:11
+   |
+50 | pub const CLEAR_SCREEN: &str = "\x1b[2J\x1b[1;1H";
+   |           ^^^^^^^^^^^^
+
+warning: function `might_be_typed` is never used
+   --> cells/tools/cellbox/src/typed.rs:174:8
+    |
+174 | pub fn might_be_typed(first: &str, args: &[&str]) -> bool {
+    |        ^^^^^^^^^^^^^^
+
+warning: function `rows_from_bytes` is never used
+   --> cells/tools/cellbox/src/typed.rs:658:8
+    |
+658 | pub fn rows_from_bytes(format: &Format, bytes: &[u8]) -> Result<Box<dyn RowSource>, PipelineError> {
+    |        ^^^^^^^^^^^^^^^
+
+warning: methods `remove` and `expand` are never used
+  --> cells/tools/cellbox/src/aliases.rs:29:12
+   |
+15 | impl Aliases {
+   | ------------ methods in this implementation
+...
+29 |     pub fn remove(&mut self, name: &str) -> bool {
+   |            ^^^^^^
+...
+37 |     pub fn expand(&self, line: &str) -> Option<String> {
+   |            ^^^^^^
+
+warning: struct `AsyncStdin` is never constructed
+ --> cells/tools/cellbox/src/async_utils.rs:8:12
+  |
+8 | pub struct AsyncStdin;
+  |            ^^^^^^^^^^
+
+warning: associated items `read_line`, `handle_tab`, and `clear_line` are never used
+   --> cells/tools/cellbox/src/async_utils.rs:22:18
+    |
+ 10 | impl AsyncStdin {
+    | --------------- associated items in this implementation
+...
+ 22 |     pub async fn read_line(
+    |                  ^^^^^^^^^
+...
+257 |     fn handle_tab(buffer: &mut Vec<u8>) {
+    |        ^^^^^^^^^^
+...
+314 |     fn clear_line(current: &[u8]) {
+    |        ^^^^^^^^^^
+
+warning: struct `ConfigClient` is never constructed
+  --> cells/tools/cellbox/src/config_client.rs:18:12
+   |
+18 | pub struct ConfigClient {
+   |            ^^^^^^^^^^^^
+
+warning: associated functions `new` and `endpoint` are never used
+  --> cells/tools/cellbox/src/config_client.rs:24:12
+   |
+23 | impl ConfigClient {
+   | ----------------- associated functions in this implementation
+24 |     pub fn new() -> Self {
+   |            ^^^
+...
+30 |     fn endpoint() -> Option<usize> {
+   |        ^^^^^^^^
+
+warning: struct `ViShell` is never constructed
+  --> cells/tools/cellbox/src/shell.rs:14:12
+   |
+14 | pub struct ViShell<'a> {
+   |            ^^^^^^^
+
+warning: associated items `new`, `run`, and `dispatch` are never used
+  --> cells/tools/cellbox/src/shell.rs:31:12
+   |
+30 | impl<'a> ViShell<'a> {
+   | -------------------- associated items in this implementation
+31 |     pub fn new() -> Self {
+   |            ^^^
+...
+42 |     pub async fn run(&mut self) {
+   |                  ^^^
+...
+99 |     pub async fn dispatch(&mut self, line: &str) -> ViResult<()> {
+   |                  ^^^^^^^^
+
+warning: `app-cellbox` (bin "cellbox" test) generated 210 warnings (run `cargo fix --bin "cellbox" -p app-cellbox --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 28.73s
+     Running unittests src/lib.rs (/tmp/cellbox-rerun-host/x86_64-unknown-linux-gnu/debug/deps/api-6a8538955cb114fe)
+
+running 128 tests
+test abi::caller_identity::tests::cell_zero_is_rejected ... ok
+test abi::caller_identity::tests::flags_round_trip ... ok
+test abi::caller_identity::tests::identity_is_read_from_the_tail_not_the_head ... ok
+test abi::caller_identity::tests::short_buffer_yields_no_identity ... ok
+test abi::caller_identity::tests::trailer_round_trips ... ok
+test abi::caller_identity::tests::untagged_tail_is_not_an_identity ... ok
+test abi::cell_owner::tests::request_preserves_full_identity_words ... ok
+test abi::cell_session::tests::cursors_reject_overflow_and_leave_failed_write_position_unchanged ... ok
+test abi::cell_owner::tests::record_is_fixed_and_rejects_invalid_values ... ok
+test abi::cell_session::tests::header_only_encoding_allows_the_bounded_body_to_follow ... ok
+test abi::cell_session::tests::malformed_zero_correlation_is_echoed_but_never_admitted_as_a_request ... ok
+test abi::cell_session::tests::query_child_selector_and_24_byte_result_body_codec ... ok
+test abi::cell_session::tests::request_header_rejects_short_trailing_reserved_flags_and_zero_id ... ok
+test abi::cell_session::tests::references_have_fixed_little_endian_bytes_and_exact_lengths ... ok
+test abi::cell_session::tests::short_result_advertises_required_size_without_payload ... ok
+test abi::completion::tests::accepts_legacy_unspecified_source ... ok
+test abi::completion::tests::encoded_length_is_fixed_and_arch_independent ... ok
+test abi::completion::tests::rejects_a_buffer_the_kernel_never_wrote ... ok
+test abi::completion::tests::rejects_a_short_buffer_instead_of_reading_past_it ... ok
+test abi::completion::tests::rejects_a_record_with_an_invalid_source_word ... ok
+test abi::completion::tests::rejects_an_unknown_version ... ok
+test abi::completion::tests::rejects_zero_multi_bit_and_unknown_submission_masks ... ok
+test abi::completion::tests::round_trips_a_negative_result ... ok
+test abi::completion::tests::round_trips_every_field ... ok
+test abi::completion::tests::source_uses_the_reserved_word_without_moving_result ... ok
+test abi::dir_handles_tests::a_non_empty_set_must_name_its_source ... ok
+test abi::dir_handles_tests::a_full_set_is_accepted ... ok
+test abi::dir_handles_tests::a_repeated_handle_fails_the_whole_set ... ok
+test abi::dir_handles_tests::a_short_buffer_yields_nothing ... ok
+test abi::dir_handles_tests::a_stale_buffer_is_not_an_attestation ... ok
+test abi::dir_handles_tests::empty_attestation_round_trips_without_a_spawner ... ok
+test abi::dir_handles_tests::entries_past_count_are_ignored_not_smuggled ... ok
+test abi::dir_handles_tests::zero_is_not_a_handle ... ok
+test abi::hypervisor::tests::hypervisor_service_id_is_stable ... ok
+test abi::manifest_compat_tests::deterministic_mutation_corpus_is_bounded_and_panic_free ... ok
+test abi::manifest_compat_tests::every_flag_round_trips_in_its_supported_version ... ok
+test abi::manifest_compat_tests::v2_layout_and_aliases_remain_byte_identical ... ok
+test abi::dir_handles_tests::an_over_long_count_fails_rather_than_truncating ... ok
+test abi::manifest_compat_tests::parser_requires_exact_versioned_record_boundaries ... ok
+test abi::manifest_tests::parser_preserves_i2c_and_spi_bits ... ok
+test abi::manifest_tests::hardware_bus_flags_are_distinct_and_queryable ... ok
+test abi::manifest_tests::protection_class_aliases_match_legacy_tier_constants ... ok
+test abi::service_binding::tests::record_is_fixed_and_rejects_invalid_values ... ok
+test abi::service_binding::tests::short_slice_is_never_a_partial_binding ... ok
+test abi::syscall_tests::allowlist::declare_syscalls_bits_are_stable ... ok
+test abi::syscall_tests::allowlist::syscall_set_all_permits_everything ... ok
+test abi::syscall_tests::allowlist::declare_syscalls_with_vfs_mutate ... ok
+test abi::dir_handles_tests::a_wrong_version_record_is_not_reinterpreted ... ok
+test abi::dir_handles_tests::an_over_long_encoded_count_is_rejected ... ok
+test abi::syscall_tests::allowlist::syscall_set_with_adds_bit ... ok
+test abi::dir_handles_tests::attestation_round_trips ... ok
+test abi::dir_handles_tests::cell_zero_is_rejected ... ok
+test abi::syscall_tests::tests::all_cases_are_non_unknown ... ok
+test abi::dir_handles_tests::builder_refuses_more_than_the_bound ... ok
+test abi::syscall_tests::tests::appended_opcodes_do_not_collide_with_shipped_ids ... ok
+test abi::syscall_tests::tests::completion_source_bits_are_stable_and_disjoint ... ok
+test abi::dir_handles_tests::empty_carrier_yields_empty_set ... ok
+test abi::manifest_tests::protection_class_accessor_matches_tier_accessor_and_layout ... ok
+test abi::syscall_tests::allowlist::syscall_set_does_not_permit_unset ... ok
+test abi::syscall_tests::tests::wait_completion_shares_the_wait_for_event_authority ... ok
+test abi::syscall_tests::allowlist::syscall_set_empty_permits_nothing ... ok
+test abi::dir_handles_tests::an_unknown_version_is_never_interpreted ... ok
+test abi::dir_handles_tests::handles_round_trip_in_order ... ok
+test abi::syscall_tests::tests::all_known_ids_decode_to_correct_variant ... ok
+test abi::syscall_tests::tests::fstat_uses_bit_61_without_moving_existing_high_bits ... ok
+test abi::syscall_tests::tests::fstat_v1_defaults_and_field_values_are_stable ... ok
+test abi::syscall_tests::tests::fstat_v1_layout_and_values_are_stable ... ok
+test abi::syscall_tests::tests::hotswap_ready_and_snapshot_preserve_legacy_bit_32 ... ok
+test abi::syscall_tests::tests::ipc_opcodes_and_existing_authority_bits_are_stable ... ok
+test services::dir_name_tests::a_backslash_is_a_separator_here_even_though_no_backend_treats_it_as_one ... ok
+test services::dir_name_tests::a_doubled_or_trailing_separator_is_rejected_rather_than_collapsed ... ok
+test services::dir_name_tests::a_directory_request_fits_the_ipc_buffer_with_room_to_spare ... ok
+test abi::syscall_tests::tests::lookup_bound_shares_open_lookup_authority ... ok
+test services::dir_name_tests::a_handle_encodes_as_its_inner_value_and_survives_a_round_trip ... ok
+test services::dir_name_tests::a_plain_name_is_accepted_unchanged ... ok
+test services::dir_name_tests::a_relative_root_path_is_rejected ... ok
+test services::dir_name_tests::an_empty_name_is_rejected ... ok
+test services::dir_name_tests::an_absolute_path_is_not_a_component ... ok
+test services::dir_name_tests::an_embedded_traversal_is_rejected ... ok
+test services::dir_name_tests::an_over_long_root_path_is_rejected ... ok
+test abi::service_binding::tests::every_zero_field_denies_the_binding ... ok
+test abi::syscall_tests::tests::session_transport_is_owner_gated_without_a_new_manifest_bit ... ok
+test abi::syscall_tests::tests::display_cache_operations_use_new_disjoint_allowlist_bits ... ok
+test abi::syscall_tests::tests::ipc_status_encoding_is_fixed_width ... ok
+test abi::syscall_tests::tests::usb_hid_producer_shares_driver_registration_authority ... ok
+test abi::syscall_tests::tests::vendor_device_query_shares_pcie_driver_authority ... ok
+test services::dir_name_tests::current_directory_is_rejected ... ok
+test abi::syscall_tests::tests::known_variants_have_stable_discriminants ... ok
+test services::dir_name_tests::a_name_longer_than_the_limit_is_rejected_rather_than_truncated ... ok
+test services::dir_name_tests::a_nested_root_path_is_accepted ... ok
+test abi::syscall_tests::allowlist::syscall_set_always_permitted_syscalls ... ok
+test services::dir_name_tests::every_path_naming_request_is_classified_as_path_addressed ... ok
+test services::dir_name_tests::file_handle_response_stays_appended_and_round_trips ... ok
+test services::dir_name_tests::file_handle_variants_append_after_the_directory_capability_slice ... ok
+test services::dir_name_tests::a_nul_byte_is_rejected_because_a_c_backend_would_stop_reading_there ... ok
+test services::dir_name_tests::joining_adds_exactly_one_component ... ok
+test services::dir_name_tests::legitimate_multibyte_names_still_work ... ok
+test services::dir_name_tests::names_that_merely_start_with_dots_are_ordinary_names ... ok
+test services::dir_name_tests::traversal_inside_a_root_path_is_rejected ... ok
+test abi::syscall_tests::tests::mem_info_v1_layout_is_stable ... ok
+test abi::syscall_tests::tests::no_two_known_ids_map_to_same_variant ... ok
+test services::dir_name_tests::control_bytes_and_delete_are_rejected ... ok
+test abi::syscall_tests::tests::process_info_layouts_are_stable ... ok
+test abi::syscall_tests::tests::unknown_id_decodes_to_unknown_variant ... ok
+test services::dir_name_tests::no_handle_addressed_request_is_classified_as_path_addressed ... ok
+test services::dir_name_tests::odd_utf8_never_becomes_a_separator ... ok
+test services::dir_name_tests::parent_is_rejected ... ok
+test services::dir_name_tests::rename_variant_appends_at_end_and_round_trips ... ok
+test services::dir_name_tests::repeated_parent_is_rejected_as_a_separator_not_as_traversal ... ok
+test services::ipc::session_wire_tests::existing_vfs_tail_and_path_semantics_are_unchanged ... ok
+test services::ipc::session_wire_tests::legacy_input_records_keep_their_complete_postcard_bytes ... ok
+test services::ring_channel::tests::test_spsc_ring_empty_pop ... ok
+test services::dir_name_tests::the_existing_variants_keep_their_discriminants ... ok
+test services::ring_channel::tests::test_spsc_ring_full ... ok
+test services::ring_channel::tests::test_spsc_ring_oversize ... ok
+test services::ring_channel::tests::test_spsc_ring_push_pop_exact ... ok
+test services::ipc::session_wire_tests::new_envelopes_append_and_borrow_without_consuming_receive_padding ... ok
+test services::session::tests::fragmented_serial_and_escape_deadlines_are_canonical ... ok
+test services::dir_name_tests::the_max_inline_file_read_reply_fits_inside_the_ipc_buffer ... ok
+test services::session::tests::frames_reject_bad_flags_lengths_and_payloads ... ok
+test services::session::tests::key_namespace_preserves_frozen_raw_bytes ... ok
+test services::ring_channel::tests::test_spsc_ring_wraparound ... ok
+test services::session::tests::malformed_controls_paste_and_source_end_do_not_guess_actions ... ok
+test services::session::tests::raw_lf_is_control_j_and_cr_is_enter ... ok
+test services::session::tests::paste_text_and_aborted_paste_controls_are_wiped ... ok
+test services::session::tests::no_partial_sequence_byte_survives_a_completed_or_rejected_sequence ... ok
+test services::dir_name_tests::the_root_itself_is_a_valid_root_path ... ok
+test services::session::tests::every_named_key_and_modifier_roundtrips_through_the_shared_grammar ... ok
+
+test result: ok. 128 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/contract_test.rs (/tmp/cellbox-rerun-host/x86_64-unknown-linux-gnu/debug/deps/contract_test-7f6f0e04b1d14e2e)
+
+running 2 tests
+test test_vi_state_transfer_roundtrip ... ok
+test test_vi_vm_runtime_lifecycle ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/tmp/cellbox-rerun-host/x86_64-unknown-linux-gnu/debug/deps/cellbox-cdd5383af2b4e545)
+
+running 79 tests
+test cmd_sys::tests::invalid_zero_sized_or_overflowing_frame_snapshot_is_rejected ... ok
+test commands::ls_tests::a_name_from_a_second_mount_is_not_listed_twice ... ok
+test cmd_sys::tests::valid_frame_snapshot_survives_independent_kib_flooring ... ok
+test context_session::tests::only_an_unset_cwd_defaults_to_the_root ... ok
+test context_session::tests::only_denied_selects_the_legacy_launch ... ok
+test context_session::tests::run_shell_binds_the_context_before_any_serial_path ... ok
+test context_session::tests::waiting_yields_first_then_sleeps_a_tick ... ok
+test executor::tests::builtin_output_stays_on_the_capture_stack_when_no_serial_session_is_active ... ok
+test executor::tests::external_commands_resolve_to_bin_or_keep_an_absolute_path ... ok
+test context_session::tests::context_externals_use_the_pipeline_not_foreground_authority ... ok
+test executor::tests::mixed_quote_expansion_is_segment_local ... ok
+test executor::tests::prompt_line_editing_is_echo_driven_bounded_and_cancellable ... ok
+test context_session::tests::context_shell_holds_the_raw_lease_and_reads_events_only_through_the_wrapper ... ok
+test executor::tests::single_key_classification_ignores_pastes_releases_and_unmapped_keys ... ok
+test executor::tests::terminal_forwarding_does_not_relabel_endpoint_errors_as_ctrl_c ... ok
+test executor::tests::terminal_forwarding_observes_interrupt_while_the_sink_stays_full ... ok
+test executor::tests::terminal_forwarding_retries_only_the_unsent_binary_suffix ... ok
+test ledger::tests::builtin_entries_equal_the_executor_builtins ... ok
+test ledger::tests::counts_match_the_s2_gate ... ok
+test ledger::tests::effect_denied_builtins_are_exactly_the_proven_ones ... ok
+test ledger::tests::catalog_table_is_generated_from_the_ledger ... ok
+test ledger::tests::every_effect_denied_entry_names_a_runner_check_that_exists ... ok
+test ledger::tests::every_refused_entry_names_a_runner_check_that_exists ... ok
+test ledger::tests::every_separate_elf_is_a_retained_worker_and_never_in_the_suite ... ok
+test ledger::tests::no_surface_name_pair_appears_twice ... ok
+test executor::tests::serial_dispatch_no_longer_refuses_top_or_rm_interactive ... ok
+test ledger::tests::refused_builtins_are_exactly_the_proven_ones ... ok
+test parser::tests::parse_mixed_quote_segments ... ok
+test parser::tests::parse_background ... ok
+test parser::tests::parse_quote_metadata ... ok
+test parser::tests::parse_redirect_append ... ok
+test parser::tests::parse_redirect_out ... ok
+test parser::tests::parse_simple ... ok
+test ledger::tests::tool_entries_equal_the_cargo_bin_lists ... ok
+test parser::tests::parse_sequence ... ok
+test parser::typed_syntax_tests::unquoted_operator_remains_a_redirect ... ok
+test parser::typed_syntax_tests::misplaced_background_marker_is_invalid ... ok
+test typed::tests::earlier_stage_failures_are_listed_unless_the_shell_cancelled ... ok
+test typed::tests::bytes_into_a_row_stage_need_from ... ok
+test typed::tests::external_byte_pipelines ... ok
+test parser::typed_syntax_tests::background_marker_on_a_pipeline_is_kept_not_ignored ... ok
+test typed::tests::external_stage_cannot_both_start_and_end_a_typed_pipeline ... ok
+test typed::tests::external_pipelines_refuse_bad_forms_before_effects ... ok
+test parser::typed_syntax_tests::empty_pipeline_stage_is_invalid ... ok
+test parser::tests::parse_pipeline ... ok
+test parser::tests::parse_empty_quoted_words ... ok
+test typed::tests::external_tail_after_to_is_admitted_with_a_redirect ... ok
+test parser::typed_syntax_tests::redirect_without_target_is_invalid ... ok
+test parser::tests::parse_empty ... ok
+test typed::tests::jsonl_lines_split_across_chunks_decode_incrementally ... ok
+test typed::tests::from_redirect_heads_a_typed_pipeline ... ok
+test typed::tests::json_document_is_decoded_at_end_of_stream ... ok
+test typed::tests::externals_stay_refused_without_a_terminal_session ... ok
+test typed::tests::more_than_sixteen_stages_are_refused ... ok
+test parser::typed_syntax_tests::single_quoted_json_literal_keeps_double_quotes ... ok
+test typed::tests::plain_byte_pipelines_stay_legacy ... ok
+test typed::tests::argv_limit_matches_the_child_context_bound ... ok
+test typed::tests::redirect_rules_for_typed_pipelines ... ok
+test typed::tests::reaped_statuses ... ok
+test typed::tests::row_failure_is_attributed_and_returns_no_bytes ... ok
+test typed::tests::row_feed_failure_names_its_stage_and_closes_the_producer ... ok
+test typed::tests::row_feed_pulls_only_what_the_consumer_takes ... ok
+test typed::tests::rows_into_a_byte_command_need_an_explicit_to ... ok
+test typed::tests::row_feed_streams_the_same_bytes_as_run_rows ... ok
+test typed::tests::background_refusals ... ok
+test typed::tests::stream_failure_and_interrupt_surface_as_row_errors ... ok
+test typed::tests::table_aligns_columns_and_is_not_json ... ok
+test typed::tests::external_head_must_be_followed_by_from ... ok
+test typed::tests::stateful_and_session_stages_are_refused_before_effects ... ok
+test typed::tests::take_closes_the_producer_after_n_rows ... ok
+test typed::tests::take_stops_an_endless_producer ... ok
+test typed::tests::empty_stream_yields_no_jsonl_rows ... ok
+test parser::typed_syntax_tests::quoted_comparison_operators_stay_arguments ... ok
+test typed::tests::malformed_line_aborts_and_closes_the_producer ... ok
+test typed::tests::take_zero_never_pulls ... ok
+test typed::tests::to_feeds_builtin_byte_consumers_only ... ok
+test typed::tests::upstream_cancel_at_spawn_is_a_finished_consumer ... ok
+test typed::tests::typed_pipeline_is_admitted_with_producer_head ... ok
+test typed::tests::overlong_unterminated_line_is_refused ... ok
+
+test result: ok. 79 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/tmp/cellbox-rerun-host/x86_64-unknown-linux-gnu/debug/deps/ostd-9cefb32da80f3b90)
+
+running 59 tests
+test actor::supervisor::tests::abnormal_exit_restarts_transient_child ... ok
+test actor::supervisor::tests::backoff_grows_exponentially_and_saturates_at_the_cap ... ok
+test actor::supervisor::tests::intensity_gives_up_on_the_sixth_abnormal_exit_inside_one_window ... ok
+test actor::supervisor::tests::clean_exit_leaves_transient_child_down ... ok
+test actor::supervisor::tests::backoff_defers_the_respawn_until_the_timer_elapses ... ok
+test actor::supervisor::tests::strategy_scope_is_declaration_ordered ... ok
+test actor::supervisor::tests::policy_matrix_follows_spec_12_4_3 ... ok
+test app::tests::cap_revoked_envelope_decodes_to_the_revoked_mask ... ok
+test actor::supervisor::tests::window_rollover_resets_the_restart_budget ... ok
+test app::tests::truncated_cap_revoked_envelope_is_not_decoded ... ok
+test args::tests::legacy_argv_remains_whitespace_separated ... ok
+test clients::vfs::read_file::tests::bounds::cleanup_closes_directories_after_close_file_error ... ok
+test args::tests::structured_argv_preserves_spaces_and_empty_items ... ok
+test clients::vfs::read_file::tests::bounds::read_accepts_exact_limit_after_empty_probe ... ok
+test clients::vfs::read_file::tests::bounds::cleanup_closes_file_after_read_error ... ok
+test clients::vfs::read_file::tests::bounds::read_chunks_until_short_reply_and_closes_handles ... ok
+test clients::vfs::read_file::tests::bounds::read_falls_back_to_the_requested_bound_without_a_stat ... ok
+test clients::vfs::read_file::tests::bounds::read_refuses_to_grow_past_bound_and_still_closes_handles ... ok
+test clients::vfs::read_file::tests::bounds::read_reserves_the_buffer_from_the_file_size ... ok
+test clients::vfs::read_file::tests::bounds::read_uses_requested_bound_for_followup_chunks ... ok
+test clients::vfs::read_file::tests::bounds::wire_error_codes_map_to_typed_errors ... ok
+test clients::vfs::read_file::tests::path::parse_rejects_non_absolute_or_root_only_path ... ok
+test clients::vfs::read_file::tests::path::parse_splits_parent_directories_and_file_name ... ok
+test io::output_tests::committed_context_requires_both_output_grants ... ok
+test io::output_tests::empty_output_never_calls_owner_and_deadlines_are_bounded ... ok
+test font_atlas::tests::clipping_preserves_outside_pixels_and_stride_padding ... ok
+test font_atlas::size_tests::invalid_sizes_are_rejected_before_raster_allocation ... ok
+test font_atlas::tests::bundled_faces_cover_vietnamese_and_keep_terminal_fixed_pitch ... ok
+test font_atlas::tests::coverage_composes_straight_alpha_without_dark_fringes ... ok
+test io::output_tests::invalid_progress_stops_without_replaying ... ok
+test io::output_tests::legacy_rejects_binary_output_without_logging ... ok
+test io::output_tests::partial_writes_preserve_bytes_and_one_absolute_deadline ... ok
+test ipc::tests::masked_receive_rejects_unrelated_death_instead_of_decoding_reason ... ok
+test font_atlas::tests::decomposed_vietnamese_measures_and_paints_identically ... ok
+test mmio::tests::overflow_offset_rejected ... ok
+test mmio::tests::rejects_oob_read ... ok
+test mmio::tests::round_trip_u8 ... ok
+test session::tests::sha256_matches_fips_vectors ... ok
+test session::tests::write_stream_encodes_exact_correlated_mutation_and_partial_progress ... ok
+test session::tests::write_stream_rejects_invalid_inputs_before_calling_owner ... ok
+test io::output_tests::only_denied_context_read_selects_legacy_output ... ok
+test session::tests::zeroize_vec_wipes_spare_capacity_and_truncates ... ok
+test io::output_tests::errors_after_committed_prefix_are_not_retried ... ok
+test ipc::tests::exact_completion_preserves_reply_length_and_terminal_outcomes ... ok
+test syscall::tests::snapshot_result_decoder_preserves_denial_and_oom ... ok
+test syscall::tests::spawn_result_decoder_preserves_additive_oom ... ok
+test mmio::tests::rejects_oob_write ... ok
+test syscall::tests::wait_completion_decoder_distinguishes_raw_zero_record_and_invalid_results ... ok
+test tls::tests::parse_reply_negative_cases ... ok
+test tls::tests::parse_reply_valid_and_trailing_zeros ... ok
+test mmio::tests::round_trip_u32 ... ok
+test session::tests::scrub_wipes_on_drop_and_derefs_as_slice ... ok
+test session::tests::write_stream_preserves_owner_and_transport_errors ... ok
+test session::tests::zeroize_deque_wipes_both_halves ... ok
+test session::tests::write_stream_requires_exact_reply_and_positive_bounded_progress ... ok
+test session::tests::zeroize_deque_front_removes_and_wipes_only_the_prefix ... ok
+test session::tests::zeroize_overwrites_every_byte ... ok
+test session::tests::zeroize_string_wipes_text_and_stays_valid ... ok
+test font_atlas::cache_tests::long_unicode_stream_reclaims_cache_and_shares_missing_glyph ... ok
+
+test result: ok. 59 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/cluster-endpoint.rs (/tmp/cellbox-rerun-host/x86_64-unknown-linux-gnu/debug/deps/cluster_endpoint-c38bd0f6af72a6a7)
+
+running 7 tests
+test cell_endpoint_requires_an_explicit_locality_branch ... ok
+test a_failed_exchange_is_stale_when_the_descriptor_no_longer_matches ... ok
+test remote_call_fails_explicitly_without_broker_contact ... ok
+test local_endpoint_rejects_zero_tid ... ok
+test remote_endpoint_preserves_authenticated_metadata ... ok
+test remote_endpoint_rejects_zero_identity ... ok
+test local_endpoint_tid_only_constructor_claims_no_provider_identity ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/tmp/cellbox-rerun-host/x86_64-unknown-linux-gnu/debug/deps/terminal-8ff55d410e187147)
+
+running 33 tests
+test grid::tests::test_grid_backspace_and_clear ... ok
+test keymap::tests::ctrl_c_is_the_exact_logical_key_the_input_service_treats_as_interrupt ... ok
+test keymap::tests::idle_keys_restart_or_close_only_on_press ... ok
+test keymap::tests::modifiers_map_to_session_bits_and_named_repeat_policy ... ok
+test session::drain_order_tests::drain_error_is_propagated_and_empty_streams_report_nothing ... ok
+test session::tests::grid_dims_follow_the_window_and_stay_inside_the_session_limits ... ok
+test keymap::tests::alt_chords_and_unencodable_ctrl_combinations ... ok
+test session::tests::pump_and_input_without_a_host_do_nothing ... ok
+test sink::tests::controls_inside_csi_execute_and_invalid_bytes_abandon_it ... ok
+test session::tests::resize_without_a_session_only_resizes_the_grid ... ok
+test sink::tests::csi_is_clamped_and_cannot_swallow_following_text ... ok
+test session::tests::notices_start_on_their_own_row ... ok
+test sink::tests::long_output_scrolls_into_the_grid_without_panicking ... ok
+test grid::tests::test_grid_resize ... ok
+test sink::tests::csi_sequences_are_skipped_even_when_split_across_chunks ... ok
+test sink::tests::other_controls_and_del_are_ignored ... ok
+test sink::tests::reset_drops_a_half_parsed_sequence ... ok
+test sink::tests::the_shell_erase_idiom_removes_the_character ... ok
+test keymap::tests::printable_text_is_submitted_as_text_including_repeat ... ok
+test sink::tests::utf8_scalars_survive_chunk_boundaries ... ok
+test sink::tests::osc_ends_at_bel_or_st_and_may_be_split ... ok
+test session::tests::a_new_session_has_no_fabricated_screen_content ... ok
+test keymap::tests::named_keys_use_the_frozen_codes ... ok
+test sink::tests::osc_is_clamped_and_an_unterminated_one_does_not_eat_everything ... ok
+test sink::tests::invalid_utf8_becomes_replacement_without_losing_the_next_byte ... ok
+test sink::tests::plain_text_cr_lf_backspace_and_tab ... ok
+test grid::tests::test_grid_write_and_scroll ... ok
+test sink::tests::two_byte_and_intermediate_escapes_are_consumed ... ok
+test keymap::tests::every_mapped_key_is_accepted_by_the_session_validator ... ok
+test session::drain_order_tests::diagnostic_is_drawn_before_the_prompt_that_followed_it ... ok
+test keymap::tests::release_meta_and_control_characters_submit_nothing ... ok
+test tests::terminal_app_sizes_the_grid_from_the_window_and_tracks_resize ... ok
+test session::tests::faults_become_a_visible_notice_and_enter_retries_only_when_not_running ... ok
+
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/tmp/cellbox-rerun-host/x86_64-unknown-linux-gnu/debug/deps/terminal_sdk-98bfb822f68991d2)
+
+running 49 tests
+test host::tests::finish_maps_live_child_to_running_and_refusals_to_errors ... ok
+test host::tests::phase_enforces_one_child_and_closed_refusal ... ok
+test pipe_child::tests::a_lone_stage_hangs_from_the_root ... ok
+test pipe_child::tests::child_status_decodes_the_24_byte_record ... ok
+test pipe_child::tests::child_status_refuses_malformed_records ... ok
+test host::tests::drain_is_bounded_and_empty_reads_are_zero ... ok
+test pipe_child::tests::argv_over_512_bytes_is_refused ... ok
+test host::tests::reap_yields_then_sleeps_then_gives_up_boundedly ... ok
+test pipe_child::tests::cwd_over_4096_bytes_is_refused ... ok
+test pipe_child::tests::environment_over_4096_bytes_or_64_entries_is_refused ... ok
+test pipe_child::tests::maximum_context_fits_the_prepare_child_window ... ok
+test pipe_child::tests::non_utf8_cwd_needs_an_explicit_source ... ok
+test pipe_child::tests::nul_bytes_and_empty_or_oversize_paths_are_malformed ... ok
+test pipe_child::tests::rings_nest_outward_toward_the_last_stage ... ok
+test pipe_child::tests::the_largest_pipeline_needs_thirty_one_operations_below_its_root ... ok
+test pipe_child::tests::wait_deadline_is_bounded_and_overflow_checked ... ok
+test pipe_child::tests::context_length_matches_the_session_formula ... ok
+test pipe_child::tests::every_stage_is_below_every_ring_it_touches_and_the_root_is_never_cancelled_by_one ... ok
+test pipe_child::tests::losing_a_consumer_cancels_only_what_is_upstream_of_it ... ok
+test pipe_child::tests::wait_pacing_yields_first_then_sleeps ... ok
+test raw_input::tests::ctrl_c_byte_is_an_interrupt_and_other_controls_are_not ... ok
+test raw_input::tests::the_lease_requests_raw_and_bracketed_paste_only ... ok
+test tests::control_decoder_rejects_wrong_epoch_malformed_and_oversize_without_delivery ... ok
+test raw_input::tests::typed_text_enter_backspace_and_arrows_match_the_canonical_codes ... ok
+test tests::consumed_text_is_wiped_in_place_and_other_events_are_untouched ... ok
+test tests::control_decoder_reassembles_frames_and_preserves_owner_sequence ... ok
+test tests::named_shortcuts_and_character_modifiers_are_exact ... ok
+test tests::immutable_context_rejects_malformed_environment_and_duplicate_slots ... ok
+test raw_input::tests::a_bracketed_paste_is_inert_text_between_markers ... ok
+test tests::fragmented_paste_preserves_provenance_and_cr_lf ... ok
+test tests::control_event_payload_lengths_are_exact_not_prefix_decodes ... ok
+test tests::deadline_overflow_is_rejected_without_an_action ... ok
+test tests::decoder_failure_discards_pending_bytes_and_decodes_the_next_input_cleanly ... ok
+test tests::fragmented_keys_and_ambiguous_alt_prefixes_do_not_lose_following_bytes ... ok
+test tests::immutable_context_roundtrips_exact_argv_raw_cwd_and_sorted_environment ... ok
+test tests::escape_deadline_is_receipt_relative_monotonic_and_not_extended ... ok
+test tests::compatibility_viewport_constructor_rejects_invalid_dimensions - should panic ... ok
+test tests::c0_aliases_do_not_normalize_backspace_or_newline ... ok
+test tests::release_and_repeat_are_typed_without_expanding_repeat_counts ... ok
+test tests::event_decode_validates_key_namespace_state_and_payload_limits ... ok
+test tests::screen_controls_keep_the_profile_bytes ... ok
+test tests::key_action_scrub_wipes_text_and_paste_only ... ok
+test tests::every_navigation_and_function_modifier_has_the_frozen_bytes ... ok
+test tests::control_decoder_clear_discards_a_partial_frame ... ok
+test tests::unknown_and_noncanonical_controls_never_guess_keys ... ok
+test tests::viewport_refuses_invalid_dimensions_instead_of_clamping ... ok
+test tests::unsupported_actions_never_append_even_an_escape_prefix ... ok
+test tests::utf8_and_chunk_boundaries_preserve_actions ... ok
+test tests::paste_is_validated_atomically_and_includes_the_full_64k_payload ... ok
+
+test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running unittests src/lib.rs (/tmp/cellbox-rerun-host/x86_64-unknown-linux-gnu/debug/deps/text_engine-e350b230aa3a27b5)
+
+running 74 tests
+test args::tests::arg_cursor_walks_once_and_then_reports_exhaustion ... ok
+test args::tests::legacy_parts_preserve_argv_boundaries_and_empty_values ... ok
+test awk::lexer::tests::rejects_field_index_past_the_supported_range ... ok
+test awk::lexer::tests::tokenizes_fields_and_ops ... ok
+test awk::parser::tests::keeps_regex_filter_raw ... ok
+test awk::parser::tests::parses_filter_and_print ... ok
+test awk::tests::detects_real_programs ... ok
+test awk::tests::executes_numeric_filter ... ok
+test awk::tests::reports_divide_by_zero ... ok
+test editor::tests::test_buffer_crlf_and_trailing_newline_preservation ... ok
+test editor::tests::test_clipboard_copy_paste ... ok
+test editor::tests::test_insert_delete_and_dirty_flag ... ok
+test editor::tests::test_search_and_go_to_line ... ok
+test editor::tests::test_undo_redo_cycle ... ok
+test grep::parse::tests::empty_pattern_file_is_rejected ... ok
+test grep::parse::tests::pattern_file_read_failure_surfaces_the_reader_reason ... ok
+test grep::parse::tests::pattern_file_reader_supplies_one_pattern_per_record ... ok
+test grep::parse::tests::rejects_pattern_before_copying_beyond_limit ... ok
+test grep::tests::grep_counts_per_input_and_reports_no_match ... ok
+test grep::tests::aggregate_input_budget_rejects_the_first_excess_byte ... ok
+test grep::tests::grep_exact_line_uses_ascii_matching ... ok
+test grep::tests::grep_prefixes_multiple_files ... ok
+test grep::tests::grep_quiet_suppresses_output ... ok
+test grep::tests::grep_reports_invalid_pattern_as_error ... ok
+test grep::tests::grep_rejects_unknown_flags ... ok
+test grep::tests::grep_regex_and_invert_compose ... ok
+test pipeline::stage_tests::numeric_comparison_is_exact_and_never_coerces_floats ... ok
+test pipeline::stage_tests::row_stage_refuses_byte_conversions ... ok
+test pipeline::stage_tests::parse_stage_rejects_bad_arguments ... ok
+test pipeline::stage_tests::select_projects_in_argument_order_and_errors_close_upstream ... ok
+test pipeline::stage_tests::sort_rejects_heterogeneous_and_missing_keys_before_emitting ... ok
+test pipeline::stage_tests::stage_sequence_admission ... ok
+test pipeline::stage_tests::sort_is_stable_null_first_and_reversible ... ok
+test pipeline::stage_tests::null_is_not_zero_and_never_orders ... ok
+test pipeline::stage_tests::text_encoding_is_exact_and_refuses_tables ... ok
+test pipeline::stage_tests::consumer_close_propagates_through_chain ... ok
+test pipeline::stage_tests::take_zero_closes_immediately_without_pulling ... ok
+test pipeline::stage_tests::typed_decoder_is_strict_and_plain_decoder_is_not_tagged ... ok
+test pipeline::stage_tests::parse_stage_accepts_exact_vocabulary ... ok
+test pipeline::stage_tests::take_closes_upstream_without_extra_pull ... ok
+test pipeline::stage_tests::decoder_preserves_numeric_and_null_distinctions ... ok
+test pipeline::stage_tests::typed_depth_budget_matches_value_depth ... ok
+test pipeline::stage_tests::ordinary_encoding_refuses_lossy_values_and_keeps_float_identity ... ok
+test pipeline::stage_tests::where_error_aborts_and_closes ... ok
+test pipeline::stage_tests::where_literal_typing ... ok
+test pipeline::tests::test_value_comparison_order ... ok
+test pipeline::tests::test_where_filter_and_sort ... ok
+test pipeline::stage_tests::typed_roundtrip_preserves_every_variant ... ok
+test records::tests::bounded_input_accepts_exact_limit ... ok
+test records::tests::bounded_input_rejects_before_growth ... ok
+test search::tests::test_search_bytes_fixed_and_submatches ... ok
+test sed::parser::tests::parses_numeric_and_regex_addresses ... ok
+test sed::parser::tests::rejects_unsupported_and_multicommand_scripts ... ok
+test pipeline::tests::test_select_transform ... ok
+test pipeline::stage_tests::strict_decoder_rejects ... ok
+test sed::parser::tests::parses_substitute_flags_and_alt_delimiter ... ok
+test top::tests::mem_sort_uses_owned_bytes_and_hides_dead_by_default ... ok
+test pipeline::stage_tests::jsonl_framing_rules ... ok
+test sed::pattern::tests::literal_replace_honors_global_flag ... ok
+test top::tests::cpu_sort_uses_delta_and_clamps_to_100_percent ... ok
+test top::tests::test_cell_records_aggregation_and_shared_heap ... ok
+test search::tests::test_binary_file_detection ... ok
+test top::tests::format_bytes_uses_binary_units ... ok
+test sed::replacement::tests::decodes_escaped_delimiter_backslash_and_match ... ok
+test top::tests::parse_batch_defaults_to_single_sample_when_count_missing ... ok
+test pipeline::tests::test_typed_json_serialization ... ok
+test sed::pattern::tests::regex_replace_supports_matched_expansion ... ok
+test sed::tests::substitutes_and_expands_match ... ok
+test search::tests::test_multi_chunk_large_file_streaming ... ok
+test top::tests::parse_supports_sort_count_delay_and_show_all ... ok
+test top::tests::show_all_keeps_dead_rows_and_name_sort_is_ascending ... ok
+test sed::tests::supports_numeric_print ... ok
+test sed::tests::supports_address_print_and_delete ... ok
+test pipeline::stage_tests::sort_caps_row_count_and_payload_and_never_waits_on_endless_input ... ok
+
+test result: ok. 74 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests api
+
+running 4 tests
+test libs/api/src/abi/syscall.rs - abi::syscall::SyscallSet (line 869) ... ignored
+test libs/api/src/abi/syscall.rs - abi::syscall::VFS_MUTATE_DECLARATION_BIT (line 923) ... ignored
+test libs/api/src/services/cluster.rs - services::cluster::declare_cluster (line 211) ... ignored
+test libs/api/src/services/serde_helpers.rs - services::serde_helpers::impl_state_transfer (line 153) ... ignored
+
+test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ostd
+
+running 21 tests
+test libs/ostd/src/entry.rs - entry::cell_main (line 33) ... ignored
+test libs/ostd/src/lib.rs - dma (line 137) ... ignored
+test libs/ostd/src/service.rs - service::lookup (line 28) - compile ... ok
+test libs/ostd/src/font_atlas.rs - font_atlas::GlyphAtlas (line 64) - compile ... ok
+test libs/ostd/src/lib.rs - clients (line 139) - compile ... ok
+test libs/ostd/src/args.rs - args::args (line 58) - compile ... ok
+test libs/ostd/src/lib.rs - dispatch (line 135) - compile ... ok
+test libs/ostd/src/lib.rs - grant (line 62) - compile ... ok
+test libs/ostd/src/service.rs - service::ServiceRef (line 62) - compile ... ok
+test libs/ostd/src/lib.rs - app (line 134) - compile ... ok
+test libs/ostd/src/lib.rs - run_app (line 164) - compile ... ok
+test libs/ostd/src/runtime.rs - runtime::service_entry (line 401) - compile ... ok
+test libs/ostd/src/lib.rs - clients (line 151) - compile ... ok
+test libs/ostd/src/hotswap.rs - hotswap::ViStateTransfer (line 174) - compile ... ok
+test libs/ostd/src/lib.rs - tls (line 88) - compile ... ok
+test libs/ostd/src/lib.rs - font (line 100) - compile ... ok
+test libs/ostd/src/lib.rs - input (line 120) - compile ... ok
+test libs/ostd/src/lib.rs - display (line 93) - compile ... ok
+test libs/ostd/src/runtime.rs - runtime::app_entry (line 229) - compile ... ok
+test libs/ostd/src/lib.rs - runtime (line 146) - compile ... ok
+test libs/ostd/src/runtime.rs - runtime::CellRuntime (line 146) - compile ... ok
+
+test result: ok. 19 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+   Doc-tests terminal_sdk
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests text_engine
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

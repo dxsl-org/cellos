@@ -1,0 +1,329 @@
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+limine: Loading executable `boot():/boot/kernel.elf`...
+limine: Physical base:   0xf011000
+limine: Virtual base:    0xffffffff80000000
+limine: Slide:           0x0
+limine: ELF entry point: 0xffffffff80000000
+limine: Base revision:   3
+limine: Requests count:  7
+limine: Top of HHDM:     0x40000000
+acpi: Found RSDP at 0xf52c0
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Mode was already set, perfect!
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+paging: 1GiB pages are supported!
+acpi: Found RSDP at 0xf52c0
+acpi: Found "APIC" at 0xffe21e9
+[x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64
+[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT
+[INFO] CET-IBT: unavailable
+[INFO] PKU: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[boot] kernel_phys_base=0x000000000f011000
+[INFO] Frame allocator initialized
+[INFO] Initializing x86_64 paging (kernel PML4)...
+[INFO] x86_64 paging initialized
+[INFO] Activating x86_64 paging (mov cr3)...
+
+[kernel] x86_64 paging: PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x59000 — domain roots use tag 0 with a full CR3 flush)
+QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
+[INFO] x86 virt: root operation active (SVM)
+[INFO] Heap initialized
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] RAM Disk: read-only, 4096 KB (8192 sectors)
+[ INFO] VMware/QEMU absolute pointer enabled (EV_ABS guest pixels)
+[ INFO] UART Input Buffer Initialized
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ WARN] [x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 2 base=0x3e8 irq=4 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 3 base=0x2e8 irq=3 absent (16550 probe failed)
+[INFO] x86_64: ramdisk + UART RX IRQ initialised
+[ INFO] [pcie] ECAM fallback scan bus 0 @ 0xb0000000 (1 MiB window)
+[ INFO] [pcie] 00:00.0 vendor=8086 device=29c0 class=06:00:00 bar0=0x0
+[ INFO] [pcie] 00:01.0 vendor=1234 device=1111 class=03:00:00 bar0=0xfd000000
+[ INFO] [pcie] 00:1f.0 vendor=8086 device=2918 class=06:01:00 bar0=0x0
+[ INFO] [pcie] 00:1f.2 vendor=8086 device=2922 class=01:06:01 bar0=0x0
+[ INFO] [pcie] 00:1f.3 vendor=8086 device=2930 class=0c:05:00 bar0=0x0
+[ INFO] [pcie] ECAM scan complete: 5 device(s) found
+[ WARN] [vtd] no ACPI DMAR unit; using the board-declared q35 register base 0xfed90000 (fallback)
+[ INFO] [vtd] Intel VT-d not present (GCAP=0x0)
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 64
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [system-config] applied: logging=Info, default_cell_heap_mib=16
+[ INFO] [policy] no /POLICY.BIN in VIFS1 — absent
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] [selftest] DEATH-SUBSCRIBER-QUOTA: PASS pairs=32 duplicates=8 owner 0->0->0 exit 0->0
+[INFO] death-subscriber quota self-test PASS
+[INFO] [selftest] PCIE-BAR-WINDOW: PASS (bounded, aligned, overflow-safe)
+[ INFO] === ELF Loader Tests ===
+[ INFO]   [ok] empty path rejected
+[ INFO]   [ok] path without leading '/' rejected
+[ INFO]   [ok] path longer than MAX_CELL_PATH rejected
+[ INFO]   [ok] well-formed path passes format validation
+[ERROR] ELF: PIE extent 0x100000001..0x102000001 exceeds reserved 32 MiB slot
+[ERROR] ELF: PIE extent 0x100000000..0x108000000 exceeds reserved 32 MiB slot
+[ INFO]   [ok] PIE slot boundaries reject oversized images before mapping
+[ INFO]   [ok] forged "/bin/vfs" name → /mem/vfs
+[ INFO]   [ok] every label component is non-empty and separator-free
+[ INFO]   [ok] no forged name selects a path-derived capability
+[ INFO]   [ok] 300-char name truncated to 69 bytes
+[ INFO]   [ok] empty .rela.dyn → Ok
+[ERROR] [reloc] .rela.dyn size 7 not a multiple of Rela64 size 24
+[ INFO]   [ok] non-multiple rela size → InvalidInput
+[ERROR] [reloc] too many relocations: 65537 > 65536
+[ INFO]   [ok] 65537 entries (> 65536) → InvalidInput
+[ERROR] [reloc] unsupported relocation type 255
+[ INFO]   [ok] unknown reloc type 0xFF → NotSupported
+[ INFO]   [ok] R_RISCV_NONE → no-op, Ok
+[ INFO]   [ok] R_RISCV_RELATIVE patched 0xFFFF800000146000 → 0xFFFF800000146400
+[ INFO]   [ok] relocation target outside owned pages rejected
+[ INFO]   [ok] relocation target in owned-page hole rejected
+[ INFO]   [ok] cross-page relocation word rejected
+[ INFO]   [ok] overflowing relocation target rejected
+[ INFO]   [ok] CellManifest is 16 bytes (v2)
+[ INFO]   [ok] valid v2 manifest parses with correct flags + protection class
+[ INFO]   [ok] v1 manifest upcasts to v2 with PROTECTION_CLASS_LEGACY
+[ INFO]   [ok] bad magic rejected
+[ INFO]   [ok] short slice rejected (both v1 floor and v2 16-byte floor)
+[ INFO]   [ok] bad version rejected
+[ INFO]   [ok] reserved flag bits rejected
+[ INFO]   [ok] v2 reserved fields (cap_args_off, reserved) rejected when non-zero
+[ INFO]   [ok] out-of-range tier values rejected
+[ INFO]   [ok] PROTECTION_CLASS_LEGACY parses as a valid native v2 class (tier-less constructor output)
+[ INFO]   [ok] network=false → no NetworkCap granted
+[ INFO]   [ok] manifest-section admission corpus
+[ INFO]   [ok] opcode 61 → ForceExit
+[ INFO]   [ok] ForceExit allowlist_bit = None
+[ INFO]   [ok] signing::self_test() passed
+[ INFO]   [ok] extract_sig(&[]) → None
+[ INFO]   [ok] extract_sig(non-elf) → None
+[ INFO]   [ok] extract_sig(constructed elf) → Some([0xAB; 64])
+[ INFO]   [ok] extract_sig tolerates unrelated non-UTF-8 section name
+[ INFO]   [ok] extract_sig rejects NOBITS signature declaration
+[ INFO]   [ok] signing_required() -> true (Tier 1 SAS admission gate active)
+[ INFO]   [ok] CELLOS-LOADER-SIG-001: metadata and segment mutations rejected
+[ERROR] [wx] refusing to spawn 'selftest': page 0x5000 is W+X after the boundary merge — two PT_LOADs with different permissions share it; align the segments to 4 KiB
+[ERROR] ELF: rejecting spawn — PT_LOAD #0 at 0x1000 declares W+X; writable code is refused (split the segment or drop PF_X in the linker script)
+[ INFO] [wx] self-tests PASSED
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [wx] 'atomic-unaligned': 79/338 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [wx] 'atomic-unaligned': 79/338 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [wx] 'atomic-unaligned': 79/338 cell pages lowered to read-only/execute-only
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [wx] 'atomic-unaligned': 79/338 cell pages lowered to read-only/execute-only
+[ INFO] ATOMIC_PUBLICATION_ALIGNMENT: PASS
+[ERROR] Stack alloc failed: cell quota table exhausted (max=64)
+[ INFO] ATOMIC_PUBLICATION_CELL_ID_REUSE: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_FIXTURE_ROUNDTRIP: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-00: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-01: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-02: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-03: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [wx] 'atomic-denial': 79/338 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-04: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-RF: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-RM: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-RW: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-FA: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   refused: spawn
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-05: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-06: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [wx] 'init': 79/338 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-07: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [wx] 'init': 79/338 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-08: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (520736 bytes)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-09: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-10: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3)
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] ELF LOAD: 0x100000000-0x10004145A flags=R-X
+[ INFO] ELF LOAD: 0x100041460-0x10004DFC0 flags=R--
+[ INFO] ELF LOAD: 0x10004E000-0x10004FA38 flags=RW-
+[ INFO] ELF LOAD: 0x100050000-0x100150031 flags=RW-
+[ INFO] ELF LOAD: 0x100150038-0x10015103C flags=R--
+[ INFO] [wx] 'platform': 79/338 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-11: PASS
+[ WARN] [measure] log full (2 entries, 254 promised) — aggregate still advancing
+[ INFO] ATOMIC_PUBLICATION_AP-PM: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PR: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PT: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PA: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PH: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PL: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PU: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PS: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PC: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PF: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PK: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PB: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PE: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PI: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PQ: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PX: PASS
+[ WARN] [kernel] raw opcode 502 denied for <unknown>
+[ INFO] ATOMIC_PUBLICATION_AP-PZ: PASS
+[ INFO] ATOMIC_PUBLICATION_ARMING: PASS
+[ INFO] [selftest] ELF-LOADER: PASS
+[ INFO] Thread 'thread' (ID 1): KStack 0x2143000-0x2155000, UStackTop 0x2167000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (no teardow

@@ -1,0 +1,303 @@
+{
+  "checks": {
+    "screen-1280x800": {
+      "pass": true,
+      "detail": [
+        1280,
+        800
+      ],
+      "informational": false
+    },
+    "no-window-before-launch": {
+      "pass": true,
+      "detail": "a bg-coloured 720x480 rectangle exists before launch",
+      "informational": false
+    },
+    "window-located": {
+      "pass": true,
+      "detail": "origin=(140, 100)",
+      "informational": false
+    },
+    "GUI-2-prompt-matches-exactly": {
+      "pass": true,
+      "detail": "diff=0 (expect_screen)",
+      "informational": false
+    },
+    "GUI-2-control-pre-launch-region-differs": {
+      "pass": true,
+      "detail": "345474 differing pixels",
+      "informational": false
+    },
+    "GUI-2-control-wrong-prompt-differs": {
+      "pass": true,
+      "detail": "65 differing pixels",
+      "informational": false
+    },
+    "GUI-2-cursor-cell": {
+      "pass": true,
+      "detail": [
+        9,
+        2
+      ],
+      "informational": false
+    },
+    "GUI-3-echo-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-3-echo-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['gui-proof-1']",
+      "informational": false
+    },
+    "GUI-3-echo-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          2
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-3-echo-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "59 differing pixels",
+      "informational": false
+    },
+    "GUI-3-echo-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "1532 pixels changed",
+      "informational": false
+    },
+    "GUI-3-stock-echo-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-3-stock-echo-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['gui-proof-ext']",
+      "informational": false
+    },
+    "GUI-3-stock-echo-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          4
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-3-stock-echo-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "54 differing pixels",
+      "informational": false
+    },
+    "GUI-3-stock-echo-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "1944 pixels changed",
+      "informational": false
+    },
+    "GUI-3-stock-ls-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-3-stock-ls-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['.', '..', 'alpha-entry', 'beta-entry']",
+      "informational": false
+    },
+    "GUI-3-stock-ls-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          6
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-3-stock-ls-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "46 differing pixels",
+      "informational": false
+    },
+    "GUI-3-stock-ls-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "2081 pixels changed",
+      "informational": false
+    },
+    "GUI-3-stock-cat-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-3-stock-cat-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['gui-cat-line-one', 'gui-cat-line-two']",
+      "informational": false
+    },
+    "GUI-3-stock-cat-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          11
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-3-stock-cat-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "60 differing pixels",
+      "informational": false
+    },
+    "GUI-3-stock-cat-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "2849 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-01-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-01-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['ls: /gui-missing: no such directory']",
+      "informational": false
+    },
+    "GUI-4-stderr-01-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          14
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-4-stderr-01-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "GUI-4-stderr-01-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "2659 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-02-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-02-output-exact": {
+      "pass": false,
+      "detail": "no acceptable exact screen",
+      "informational": false
+    },
+    "INFO-GUI-4-stderr-02-observed": {
+      "pass": false,
+      "detail": "unclassified final screen {'cursor': (9, 18), 'diff': None}",
+      "informational": true
+    },
+    "run-aborted": {
+      "pass": false,
+      "detail": "timeout waiting for GUI-4-stderr-02: output",
+      "informational": false
+    },
+    "no-command-uart:echo": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:stock-echo": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:ls-alpha": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:ls-beta": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:cat-one": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:cat-two": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:stderr": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:ctrl-c-status": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:typed-command": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:shell-banner": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:shell-prompt": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "uart-terminal-ready-once": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "no-key-material-in-log": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "no-launch-deny": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "no-panic-or-fault": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    }
+  },
+  "notes": [
+    "GUI-4-stderr-02: last observation {0: {'cursor': (9, 18), 'diff': 2628, 'max': 209}}"
+  ],
+  "window_origin": [
+    140,
+    100
+  ],
+  "scope": "private GUI Terminal proof on a private desktop image; not release acceptance"
+}
