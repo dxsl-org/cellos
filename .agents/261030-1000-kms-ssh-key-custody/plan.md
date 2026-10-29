@@ -67,3 +67,6 @@ Approved: [contract delta](contract-delta-import-surface.md) (no CLI import comm
 ## Next concrete step
 
 After K0 approval: CP1 for K2 (KMS ABI design, decides D-K5) and, separately, CP1 for K1 (dependency fetch, decides D-K4, needs explicit network authorisation).
+
+## Authorizations log
+- 2026-10-30 (user): "đồng ý tiếp tục, cho phép mạng". Interpreted narrowly: (1) proceed to the K2 CP1 draft (document only); (2) network use is permitted **only for read-only dependency evidence gathering for K1** (crates.io download of `bcrypt-pbkdf` and the `ssh-key` encryption feature graph into a scratch directory outside the repo, plus advisory/license checks). It does **not** authorize editing `Cargo.lock`, `Cargo.toml`, `deny.toml`, `vendor/`, any source, keys, server exposure or inbound connections; those wait for the K1 CP1 (which carries the D-K4 decision and the exact lock diff).
