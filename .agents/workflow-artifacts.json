@@ -1,7 +1,1 @@
-{
-  "artifactDir": ".agents/260927-0739-kernel-architecture-repair/reports/harness",
-  "planPath": ".agents/260927-0739-kernel-architecture-repair",
-  "skill": "hc-cook",
-  "mode": "interactive",
-  "updatedAt": "2026-09-27T10:10:00+07:00"
-}
+{"artifactDir":".agents/261020-1750-cellbox-cli/reports/harness","planPath":".agents/261020-1750-cellbox-cli","skill":"hc-cook","mode":"auto","updatedAt":"2026-10-20T00:00:00Z"}

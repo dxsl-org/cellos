@@ -96,6 +96,118 @@ Old `[in-progress]`, `next` and unchecked entries below are historical diagnosti
 not automatic permission to resume. Preserve source/tests/evidence; do not erase
 unresolved defects or rerun them just to reconfirm recorded failures.
 
+## Khắc phục bảo mật & hiệu năng (audit 2026-10-21) — chờ cellbox-cli xong
+
+[blocked] **Toàn bộ mục dưới đây chỉ bắt đầu sau khi session viết lại hệ thống command
+([ADR-0028](../docs/decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md),
+[261020-1750-cellbox-cli](261020-1750-cellbox-cli/)) đóng.** Lý do: cả hai cùng chạm
+`kernel/src/task/syscall.rs` (allowlist, `ShmMap`, `GpuFlush`) và các service `net`/`vfs`/`sshd`;
+làm song song sẽ xung đột. Nguồn: audit đọc-only 4 agent (kernel boundary, services/supply chain,
+perf hot-path, kiến trúc); các cite dòng theo tree ngày 2026-10-21, cần đọc lại trước khi sửa.
+Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-rng/socket CapId/Spectre/VMX đã ghi ở đó).
+
+**Đợt 1 — Critical/High, sửa trước:**
+- [ ] **sshd xác thực mọi credential:** `cells/services/sshd/src/session.rs:199-208` gửi
+  `USERAUTH_SUCCESS` vô điều kiện. Cần public-key auth thật với authorized keys được provision;
+  chỉ vào `ActiveSession` sau khi verify.
+- [ ] **sshd private key hard-code:** `cells/services/sshd/src/kex.rs:32-37` (seed host key Ed25519 literal),
+  `kex.rs:99-104` (`StaticSecret` X25519 tĩnh dùng cho mọi handshake). Host key qua KMS/sealed storage;
+  X25519 ephemeral mới mỗi handshake từ `GetRandom`.
+- [ ] **`Shutdown` (502), `BlkRead/BlkWrite` (500/501) bỏ qua allowlist:** `syscall_to_vi` trả `None`
+  (`kernel/src/task/syscall.rs:4149-4150`) nên `:4308-4324` không chặn; `:7821-7855` tắt máy ngay.
+  Cấp bit allowlist riêng + capability power/raw-block không thể delegate.
+- [ ] **`ShmMap`/`ShmAlloc` không owner-bind, không quota:** `syscall.rs:5450-5494` — `target_pid: _`,
+  chỉ check membership `SHM_HANDLES`, handle = địa chỉ vật lý đoán được; `ShmAlloc` bỏ `size`, không free.
+  Lưu record (owner, generation, recipient, rights, revoked), tính vào cell quota, thu hồi khi cell retire.
+- [ ] **`GpuFlush` deref con trỏ user chưa validate:** `syscall.rs:7168-7171` `from_raw_parts(data_ptr, data_len)`
+  sau check số học; nhánh driver forward raw address (`:7153`). Đọc qua `TaskCopyView` hoặc grant pinned
+  có owner-check, gửi grant id thay địa chỉ.
+- [ ] **PTE cài trước khi reserve ledger → mapping mồ côi khi lỗi:** `kernel/src/memory/address_space.rs:713-756,
+  847-877, 1100-1137`. Reserve ledger/rollback trước khi đổi page table, hoặc unmap + TLB invalidate trên mọi nhánh lỗi.
+- [ ] **httpd `GET /files/...` không auth + VFS root rule `allow_read_all: true`:**
+  `cells/services/httpd/src/router.rs:20-43`, `reactor.rs:512-538`, `cells/services/vfs/src/access/rules.rs:94-104`.
+  Giới hạn document-root; thay global read rule bằng capability theo caller.
+- [ ] **`L2Send/L2Recv` và `MulticastJoin/Leave` không kiểm tra caller/cap:**
+  `cells/services/net/src/handlers.rs:200-249` (ai cũng inject/drain frame thô), `:178-190` (`cap_id: _`).
+  Yêu cầu binding hypervisor sống hoặc capability raw-L2; multicast refcount theo socket owner.
+- [ ] **Supply chain:** `cells/services/vfs/Cargo.toml:13-18` `fatfs` git không `rev`; `deny.toml` thiếu `[sources]`;
+  `.github/workflows/release.yml:14-25,43-47` `dtolnay/rust-toolchain@master` với `contents: write`;
+  `Dockerfile:1-9` `ubuntu:latest` + `curl | sh`. Pin SHA/digest, commit lockfile, deny unknown git sources.
+- [ ] **Non-x86: MMIO VirtIO/ECAM/peripheral map `USER` lúc boot** (`kernel/src/memory/paging.rs:212-346`) và
+  **stack RWX** trên RISC-V/AArch64 (`paging.rs:1241-1260`). Ưu tiên thấp hơn vì ADR-0022 chỉ x86, nhưng phải
+  sửa trước khi mở lại bất kỳ lane ARM/RISC-V nào.
+
+**Đợt 2 — Medium bảo mật:**
+- [ ] ELF segment chồng page merge flag bằng `|` không re-check W^X → RWX page (`kernel/src/loader/elf.rs:232-263`).
+- [ ] CSpace `expiry` lưu nhưng không enforce ở `verify_ticket`/`park_file`/derive (`kernel/src/cell/cspace.rs:439-579, 727-767`).
+- [ ] `RunVcpu`/`VcpuRegs` forward raw pointer sau `validate_user_buf` (`syscall.rs:8784-8821`) → dùng struct kernel-local + `TaskCopyView`.
+- [ ] Audit ring drop lặng lẽ; không có caller của `drain()`/`dropped_count()` (`kernel/src/audit.rs:157-220`).
+  Thêm drain interface có quyền + event synthetic ghi số record đã mất.
+- [ ] Beacon replay: `boot_epoch = uptime`, state không persist (`cells/services/net-broker/src/local_runtime.rs:68-89`,
+  `beacon.rs:408-471`).
+- [ ] sshd một client pre-auth chiếm slot duy nhất + `rx_buf` không giới hạn (`sshd/src/main.rs:54-116`, `session.rs:52-82`).
+- [ ] Allowlist unsafe hết hạn chỉ report, không fail (`scripts/cellos_sign/policy.py:62-74,158-170`;
+  entries `scripts/unsafe-allowlist.toml` approved 2026-07-14 với `max_age_days = 90`). Làm stale = violation trong `--strict`.
+- [ ] Docs lệch code: `docs/security-model.md:45` nói `signing-required` off mặc định, `kernel/Cargo.toml:70` default **có**;
+  `plan-portfolio.md:20-23` vs `:44-49` mâu thuẫn trạng thái 10 pha ADR-0024.
+
+**Đợt 3 — Hiệu năng (làm benchmark harness trước; `evidence/benchmark-std-parity-*.json` là `fixture_only`, chỉ đo syscall-yield):**
+- [ ] x86 TLB: `kernel/src/memory/tlb_shootdown.rs:359-389` bỏ range, gọi `tlb_flush_all()` cho mọi thay đổi; remote ack
+  busy-spin tới 2×10⁹ TSC (`:227-252, 313`). → `invlpg`/`INVPCID` theo địa chỉ; defer frame reuse qua `deferred_release`.
+- [ ] Scheduler tick hart 0 giữ `SCHEDULER` (IRQ tắt, `sync.rs:25-53`) quét toàn bộ `tasks` 3–4 lần + `collect()` allocate
+  (`kernel/src/task/scheduler.rs:1918-2221`). → index deadline/heartbeat/poll; làm việc ngoài lock.
+- [ ] Frame allocator: `find_free_run` O(F×N), `find_free` quét từng bit, dưới `FRAME_ALLOCATOR` lock
+  (`kernel/src/memory/frame.rs:155-237, 451-570`). → `trailing_zeros` + bitmap tầng 2 hoặc buddy.
+- [ ] Recv copy payload vào `Vec` tạm dưới `SCHEDULER` rồi copy lần 2 ra user (`syscall.rs:2625-2671, 4510-4675`).
+- [ ] `async_ipc.rs:63-89, 338-342, 480-493`: `Vec::remove`/`position` dưới `SCHEDULER` → slab theo token.
+- [ ] User-copy probe: `ledger.lock().iter().find_map` mỗi page → O(N·L) (`address_space.rs:541-549`).
+- [ ] VFS LRU touch `retain()` O(n) mỗi hit (`cells/services/vfs/src/page_cache.rs:88-113`).
+- [ ] `FatFile` re-open + seek từ đầu mỗi `read` dưới FS spinlock (`kernel/src/fs/fat.rs:224-275, 350-400`).
+- [ ] Net: maintenance wake cố định 10 tick ≈ 100 ms (`cells/services/net/src/service-runtime.rs:31-41`) → deadline từ
+  smoltcp `poll_at` + NIC IRQ; `Box<[u8]>` mới mỗi frame RX/TX (`interface.rs:560-574, 697-705`) → frame pool.
+
+**Kiến trúc (không có fix đơn lẻ, ghi để không quên):** `syscall.rs` 10 023 dòng / `snapshot.rs` 228 KB (x86
+`kernel_image()` trả `None`) / `cell_session.rs` 109 KB; CI chỉ build default features, không có matrix cho
+`--no-default-features --features production-relay-image` (`.github/workflows/ci.yml:164-259`); provenance
+`kernel/src/embedded-*/kernel_fs.img` mâu thuẫn giữa `kernel/build.rs:166-175` (gitignored) và
+`scripts/build-x86_64-c2c-lifecycle-ci.sh:11-14` (committed).
+
+## Rust `std::thread`/`std::sync` trên Cellos — thread = kernel task cùng Cell (nghiên cứu 2026-10-21)
+
+[blocked] Chờ session cellbox-cli đóng (cùng lý do với mục audit ở trên: chạm `syscall.rs`, loader, `libs/api`).
+Báo cáo: [research-261021-1540-std-threads-cell-vs-os-thread.md](reports/research-261021-1540-std-threads-cell-vs-os-thread.md).
+Quyết định: **Cell không thay OS thread** (Cell = authority/recovery/CSpace/quota; `std::sync` cần heap + atomic chung;
+`FutexWait` key có generation nên by design không wake xuyên Cell Tier‑2, `kernel/src/task/futex.rs:1-12`). Triển khai
+theo mẫu Hermit (`sys/thread/hermit.rs` + `sys/sync/futex/hermit.rs`) / Motor OS. Actor/C2C (ADR‑0021) là tầng trên `std`.
+Substrate kernel đã có: `Spawn=5` (task cùng Cell, `scheduler.rs:929-968`), `FutexWait=17`/`FutexWake=18`, `Wait=8`,
+`SetTlsBase=9`; `libs/port-platform/cellos_pthread.c` đã dùng đúng bộ này. Thiếu: PAL, `PT_TLS`, số hart.
+
+- [ ] **PAL `library/std/src/sys/thread/cellos.rs`** (sửa `patches/rust-std-cellos.patch:747-758`, hiện `Thread = unsupported`):
+  `Thread::new` = `Box<ThreadInit>` → `sys_spawn(thread_start, ptr)`; `thread_start` chạy `init.init()()`,
+  `thread_local::destructors::run()`, `rt::thread_cleanup()`, `sys_exit(0)`; `join` = `Wait=8`; `sleep` = TIMER completion
+  (không busy-yield); `available_parallelism` = số hart — **cần syscall/`MemInfo` trả số hart** (hiện hard-code 1, patch `:450-452`).
+- [ ] **`sys/sync/futex/cellos.rs`**: `futex_wait(&AtomicU32, expected, timeout)` → `FutexWait=17` (Duration→tick, 0 = vô hạn;
+  `ValueMismatch`→`true`, `TimedOut`→`false`); `futex_wake` → `FutexWake=18(count=1)`; `futex_wake_all` → `count=0`.
+  Thêm `target_os = "cellos"` vào nhánh futex của `sys/sync/{mutex,condvar,rwlock,once}/mod.rs` và `thread_parking`.
+  **Không viết Mutex/Condvar riêng.**
+- [ ] **TLS**: loader expose `PT_TLS` (size/align/init image/tbss) qua launch profile (hiện không có, `docs/guides/tier1b-c-zig.md:332-335`);
+  runtime user cấp block per-thread (+ TCB self-pointer cho x86_64 variant II) và gọi `SetTlsBase` đầu `thread_start`;
+  `target_thread_local = true` trong `targets/*.json` → std dùng `thread_local/native` (bỏ `no_threads`, patch `:763-787`).
+  Không đi đường key-based `thread_local/os`.
+- [ ] **Kernel**: xem lại `MAX_THREADS_PER_CELL = 32` (`scheduler.rs:9-22`) và ràng buộc stack contiguous `STACK_PAGES+1`
+  (đã ghi ở risk register D5); xác nhận Tier‑2 Cell spawn thread (map stack vào domain, clone PKU) và `Wait=8` trả về khi
+  worker bị kernel kill (cần cho `thread::scope`).
+- [ ] **Witness `tests/rust-std-promotion`**: `thread::scope` + `Arc<Mutex<Vec>>` + `Condvar` + `thread_local!` destructor
+  + 32 create/join vòng; đối chiếu `cells/tests/c-pthread/src/witness.c`.
+- [ ] **Docs**: ADR mới "std threads = intra‑Cell kernel tasks; Cells are not threads"; bỏ invariant
+  `available_parallelism = 1` ở `docs/roadmap/runtime-and-platform-tracks.md:131-134`; mở class B (OS threads) của
+  ADR‑0018 §2.2 sang L1 khi PAL + TLS xong.
+- [ ] **POSIX theo sau (ADR‑0018, không mở rộng phạm vi)**: khi TLS + futex PAL xong → mở rộng `cellos_pthread.c`
+  (rwlock, barrier, `pthread_key`, detach, `__thread` C) và bật pthread trong mlibc `vicell` (thay futex yield-spin
+  `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:58-86`); `poll`/`select` → `WaitCompletion` khi có IPC source;
+  `fork`/`dlopen`/`mprotect`/signals/`mmap(MAP_SHARED)` giữ `ENOSYS` → Tier 3.
+
+
 ## Historical backlog and evidence — subject to the current queue
 - [resolved] **Lane `Tier 3 x86 VirtIO E2E + Persistence` flaky (~1/3 lượt CI)** — chuỗi nhân quả đọc được từ artifact
   `x86-tier3-virtio-e2e-1` của run đỏ: (1) `vtd_iova_to_slpte … slpte=0x0 (iova=0x7ffdd0c0, write=0)` cho `dev=00:02:00` (đúng BDF NVMe)
