@@ -1,0 +1,14 @@
+# Host-only helper for scripts/qemu-phase04-gui-test.sh. The runner copies this
+# template into its private work directory with @ROOT@ replaced, so nothing is
+# built inside (or written to) the repository tree. Own [workspace] root: this
+# crate is never a member of the cell workspace.
+[package]
+name = "phase04-gui-glyphs"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ostd = { path = "@ROOT@/libs/ostd" }
+
+[workspace]

@@ -405,6 +405,14 @@ class ComparatorContractTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(records, [expected])
 
+    def test_serial_parser_rejoins_a_record_a_kernel_line_interrupted(self) -> None:
+        expected = {"name": "context_switch", "n": 1000, "min": 1, "p50": 2, "p99": 3, "max": 4}
+        text = json.dumps(expected, separators=(",", ":"))
+        raw = f"USER: {text[:20]}\n[ INFO] kernel line\n[ WARN] another\nUSER+ {text[20:]}\n"
+        records, errors = BENCH.parse_guest_output(raw)
+        self.assertEqual(errors, [])
+        self.assertEqual(records, [expected])
+
 
 if __name__ == "__main__":
     unittest.main()

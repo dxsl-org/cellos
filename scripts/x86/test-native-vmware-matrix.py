@@ -17,8 +17,19 @@ VM = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VM)
 
 def serial_lines(raw):
-    return [line.strip().removeprefix("USER: ")
-            for line in raw.decode(errors="replace").splitlines() if line.strip()]
+    """Stripped Cell/kernel lines of a serial capture, `USER: ` removed. A `USER+ ` line
+    is the rest of a Cell line a kernel log line interrupted (kernel `ConsoleLine`
+    contract): it is joined onto that Cell line first instead of standing alone."""
+    joined, last_cell = [], None
+    for line in raw.decode(errors="replace").splitlines():
+        if line.startswith("USER+ ") and last_cell is not None:
+            joined[last_cell] += line[len("USER+ "):]
+            continue
+        if line.startswith(("USER: ", "USER+ ")):
+            last_cell = len(joined)
+            line = "USER: " + line[len("USER+ "):]
+        joined.append(line)
+    return [line.strip().removeprefix("USER: ") for line in joined if line.strip()]
 
 def ahci_ready(line):
     match = re.fullmatch(

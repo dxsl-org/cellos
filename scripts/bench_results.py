@@ -147,12 +147,33 @@ def _exact_keys(record: dict[str, Any], expected: set[str], label: str, errors: 
         errors.append(f"{label} fields must be {sorted(expected)}, got {sorted(actual)}")
 
 
+def _cell_lines(raw: str) -> list[tuple[int, str]]:
+    """Physical serial lines with Cell lines rejoined, as ``(raw line number, text)``.
+
+    A ``USER+ `` line continues the Cell line that a kernel log line interrupted
+    (kernel ``ConsoleLine`` contract), so it is appended to the last ``USER: ``/
+    ``USER+ `` line instead of standing alone.
+    """
+    lines: list[list[Any]] = []
+    last_cell: int | None = None
+    for line_number, line in enumerate(raw.splitlines(), 1):
+        if line.startswith("USER+ ") and last_cell is not None:
+            lines[last_cell][1] += line[len("USER+ "):]
+            continue
+        if line.startswith(("USER: ", "USER+ ")):
+            last_cell = len(lines)
+        lines.append([line_number, line])
+    return [(number, text) for number, text in lines]
+
+
 def parse_guest_output(raw: str) -> tuple[list[dict[str, Any]], list[str]]:
     """Extract strict JSON objects from a multiplexed serial transcript.
 
-    Cellos prefixes userspace output with ``USER:`` and kernel diagnostics may
-    share the remainder of the same physical line.  The JSON object itself is
-    still parsed strictly; only transport text before and after it is ignored.
+    Cellos prefixes userspace output with ``USER:``; a kernel diagnostic that
+    interrupts it moves the rest of the Cell line to a ``USER+ `` line, which is
+    rejoined first (older images let kernel text share the remainder of the
+    physical line instead).  The JSON object itself is still parsed strictly;
+    only transport text before and after it is ignored.
     """
     records: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -161,7 +182,7 @@ def parse_guest_output(raw: str) -> tuple[list[dict[str, Any]], list[str]]:
         parse_float=_finite_float,
         object_pairs_hook=_unique_object,
     )
-    for line_number, line in enumerate(raw.splitlines(), 1):
+    for line_number, line in _cell_lines(raw):
         object_start = line.find("{")
         if object_start < 0:
             continue

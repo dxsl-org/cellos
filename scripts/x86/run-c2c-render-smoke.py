@@ -21,6 +21,20 @@ DOMAIN_ADMISSION = (
 SHARED_REFUSAL = 'c2c-render: TIER2 SHARED OUTPUT REFUSED'
 
 
+def cell_lines(text):
+    """Serial lines with `USER: ` removed; a `USER+ ` line (the rest of a Cell line a
+    kernel log line interrupted, kernel `ConsoleLine` contract) is joined onto it."""
+    lines, last_cell = [], None
+    for line in text.splitlines():
+        if line.startswith('USER+ ') and last_cell is not None:
+            lines[last_cell] += line[len('USER+ '):]
+            continue
+        if line.startswith(('USER: ', 'USER+ ')):
+            last_cell, line = len(lines), line[len('USER: '):]
+        lines.append(line)
+    return lines
+
+
 def parse_processor_ids(value):
     if value == '-':
         return set()
@@ -70,7 +84,7 @@ def check_render_output(output, width, height, samples, depth, tile_size, worker
     header = None
     rows = {}
     records = {mode: {} for mode in expected_modes if mode != 'baseline'}
-    lines = [line.removeprefix('USER: ') for line in text.splitlines()]
+    lines = cell_lines(text)
     for line in lines:
         if not line.startswith('c2c-render: worker '):
             continue
