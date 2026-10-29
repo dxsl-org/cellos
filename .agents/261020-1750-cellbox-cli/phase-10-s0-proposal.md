@@ -3057,3 +3057,28 @@ Host tests, run once at the end (`logs/p2-*.log`): `test_cellos_sign.py` **71 OK
 - *(Historical, superseded by the S10-5 CP1/CP2 below.)* **S10-5 remained blocked** after the limited-result CP2: CBX27/criterion4 were unmet and its own explicit promotion approval had not been given.
 - **S10-5 CP1 APPROVED by the user 2026-10-29 (relayed by Main): DS5-1 (promote while CBX-27/Phase 10 criterion 4 stay unmet), DS5-2 (desktop profile), DS5-3 (copy the qualified desktop kernel; G3 by content plus ELF binding), DS5-4 (S10-2b scope A), all as recommended.** Execution was authorised exactly as written in S10-5.5 (P0–P9, then V1–V7), stopping on any hash mismatch, lane/L6 failure or unexpected guard behaviour. No stage, commit, push or tag; the user's `kernel/src/main.rs` VMX edit and the protected `build/` stayed untouched. **CBX-27/criterion 4 stay unmet.**
 - **S10-5 CP2 GRANTED by the user 2026-10-29 (relayed by Main):** accepts S10-5.13 including deviations 1–8 and acknowledges the new `command-catalog.md` digest `f06f38ce…`. Nothing further is requested for S10-5. Unchanged/not approved: CBX-27 unmet, CBX-23/24/25 partial, Phase 10 criteria 1 and 4 open, no physical/VMX/production/remote claim, no cloud formats, non-Intel recipes refused. Commit is a separate step.
+
+## 6. S10-6 CBX-27 disposition — CP1 DRAFT (status AWAITING CP1; design only, nothing run, built, edited in source or committed)
+
+**Row text (acceptance.md CBX-27):** "Measured before/after executable/image sizes, startup, memory and bounded long-stream behavior are recorded with feature/image provenance; no unsupported universal optimization claim." Phase 10 criterion 4 adds "equivalent feature sets" and "host/QEMU/physical ceilings distinguished".
+
+**Evidence already retained (S10-4.8..S10-4.17, CP2-accepted at stated ceilings):** static footprint (B2 scoped-signing 980,528 B / unsigned 994,064 B vs. promoted desktop six binaries 3,261,680 B, +2,267,616 B, non-equivalent feature sets), six untraced startup/idle/top runs, headless controlled stream/cancel, observed partial allocator/stack-write bounds (fg 67,544 B, bg 25,272 B; stack write-attempt pages [45057,49152] B), mapped backing 10,199,040 B (not RSS), Terminal `feed` ledger finite-stream proof.
+
+**Missing and why it is not reachable by more observer work:**
+| Element | Blocker |
+|---|---|
+| RSS/residency | no guest-side provider; needs kernel/ABI change (protected, separate CP) |
+| Exact stack / kernel-stack peak | needs instrumentation not present in the qualified bytes; write-attempt bounds only |
+| Matched historical runtime comparator | B2 workspace source absent (`vm-runner` member); only static comparator exists |
+| Full-workload peaks, remaining phases | schedule stops at latent `Surface.status()` st=N defect; S10-4 reruns not authorized |
+
+**Options (decision DS6-1):**
+- **A. Keep unmet (recommended default, no work).** Row stays unmet; S10-4 stays closed partial. Honest, zero risk; CBX-27 blocks Phase 10 criteria 1 and 4 indefinitely.
+- **B. Disposition: accept as "recorded with provenance at stated ceiling".** Documentation only. The row's literal text asks for recording with provenance and no universal claim; both hold. Mark CBX-27 `met-at-ceiling` listing every null metric (RSS, exact/kernel stack, comparator, full-workload peaks) explicitly and keep criterion 4 "equivalent feature sets" unchecked or reworded by your explicit decision. Risk: it reads as scope reduction of "memory ... measured" and needs your explicit approval; nothing is silently narrowed. Criterion 4 and CBX-01..29 criterion 1 would still stay open because CBX-23/24/25 are partial.
+- **C. New measurement program.** Separate CP1s for (i) a guest-side RSS/stack provider (kernel/ABI delta, protected paths, new candidate build/qualification), (ii) recovering or reconstructing the B2 source, (iii) fixing the `Surface.status()` schedule defect and one new observed run. Largest cost; only C can honestly close the memory half.
+
+**Requested:** DS6-1 choice. Under B, approval also covers editing only `acceptance.md`, `phase-10-qualification.md` criteria text, `plan.md`/portfolio rows and CHANGELOG wording; no VM, code, rerun, commit or push. Nothing here is approved until you answer.
+
+- **Status 2026-10-29:** CBX-27 remains **UNMET** until DS6-1 is answered.
+
+- **DS6-1 answered by the user 2026-10-29: option A. CBX-27 stays UNMET; S10-4 stays closed partial; no further work, VM run or doc change authorized.**
