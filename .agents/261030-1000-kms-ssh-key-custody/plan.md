@@ -1,6 +1,6 @@
 ---
 title: "KMS SSH key custody (KSSH): ed25519 keys in KMS for outbound Cellbox SSH publickey auth"
-status: charter-approved-docs-only
+status: k0-documents-drafted-awaiting-approval
 priority: P2
 created: 2026-10-30
 origin: "Cellbox Phase 09 S9-5 (deferred by D79-14, 2026-10-25); Phase 10 S10-10 decision D10-2 = E (user, 2026-10-30)"
@@ -60,6 +60,10 @@ Critical path: K0 -> K2 CP1 -> K1 -> K3 -> K5 -> K6 -> K8. T0 can ship without K
 
 Any source edit, KMS or kernel change, key generation, network fetch (including `bcrypt-pbkdf`), image/signing change, VM run, lock release, or a production/physical/crash-durability claim. Documentation completion unlocks nothing (`cell-contract-0024-locks.md:300`).
 
+## K0 status (2026-10-30)
+
+Drafted, awaiting user approval: [contract delta](contract-delta-import-surface.md) (no CLI import command; import is a credential-owner path; unlock model left to K2) and [lock-adoption packet](lock-adoption-draft.md) with its open items resolved (CellosFS plan has no lock row; census composition; promoted image has no `/bin/kms` so T0 needs an image delta). K0 is complete only when the user approves both.
+
 ## Next concrete step
 
-K0: write the contract delta and submit [lock-adoption-draft.md](lock-adoption-draft.md) for approval, then request the CP1 for K2 (ABI design) and, separately, K1 (dependency fetch).
+After K0 approval: CP1 for K2 (KMS ABI design, decides D-K5) and, separately, CP1 for K1 (dependency fetch, decides D-K4, needs explicit network authorisation).

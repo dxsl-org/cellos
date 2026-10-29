@@ -15,3 +15,12 @@ Purpose: name the locked relations and protected paths each KSSH slice would tou
 | image/signing/CI | `kernel/src/main.rs`, `build/`, the S10 546-path census (KMS files appear in `build/*manifest*.json`; which one is the S10 census was not checked) | S10 preservation rules | any image build |
 
 Open items for K0: state the `261025-cellosfs-crash-safety` lock owner; identify the S10 census manifest before any image work; confirm whether the canonical image ships `/bin/kms`.
+
+## K0 resolution of the open items (read-only checks, 2026-10-30)
+
+1. **Lock owner of `261025-cellosfs-crash-safety`:** the plan is **not named anywhere in `cell-contract-0024-locks.md`** (grep: no match), so its owner under the lock is unrecorded. Decision for KSSH: T0/T1 do not claim crash durability and do not depend on that plan (D-K2), therefore KSSH requests **no** lock relation for it. Any later "survives power loss" or T2 claim must first get the plan's owner recorded by the controlling plan (inferred mapping: P06, durable logical state).
+2. **S10 census:** the 546-path census is the Cellbox S10 `protected_paths` record (build `*.iso`/`*.qcow2` fixtures, the 469 canonical files, the retained candidate and `kernel/src/main.rs`; file size + sha256 per path, as saved in the S10-9 `census-before/after.json`). `cells/services/kms/**` and other source trees are **not** in it. Consequence: editing KMS source does not change the census, but any KSSH image build rewrites canonical paths and so needs its own preservation rule and a S10-5-style promotion CP1/CP2 (G2b, G3 and the assembler pin stay in force).
+3. **Canonical image content:** `mdir ::/bin` of the promoted `kernel_fs.img` (3848cefb…, 25,165,824 B) lists cellbox, vfs, config, input, net, platform, the drivers, ls/cat/echo/ps/kill/shutdown and tier2 fixtures; **no `/bin/kms`** (0 matches), and `boot-config/services.toml` does not start KMS. A T0 proof therefore needs an image delta (add KMS, a net-broker if the admission list requires it, launch/policy rows) as well as source changes; this is not a drop-in on the promoted bytes.
+4. **Admission reality:** KMS admits only net, net-broker and supervisor callers; the kernel caller trailer has no path, so `/bin/cellbox-ssh` needs the new kernel-attested flag (K3). The "test-hook flag" alternative in the plan's K5 entry exists only for host/lane tests, never for the promoted image.
+
+Submission status: **DRAFT, not submitted, not approved.** No lock row is changed by this packet.
