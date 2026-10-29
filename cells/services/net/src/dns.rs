@@ -81,7 +81,8 @@ impl Resolver {
     /// Install the DNS socket in the interface's socket set.
     pub fn install(sockets: &mut SocketSet<'_>) -> Self {
         let server = SLIRP_DNS_SERVER;
-        let handle = sockets.add(dns::Socket::new(&[ip_address(server)], vec![]));
+        let queries: alloc::vec::Vec<_> = (0..32).map(|_| None).collect();
+        let handle = sockets.add(dns::Socket::new(&[ip_address(server)], queries));
         Self { handle, server }
     }
 
