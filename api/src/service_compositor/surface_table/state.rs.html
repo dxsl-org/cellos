@@ -88,37 +88,38 @@
 <a href=#88 id=88 data-nosnippet>88</a>
 <a href=#89 id=89 data-nosnippet>89</a>    <span class="doccomment">/// True only for a visible interactive surface.
 <a href=#90 id=90 data-nosnippet>90</a>    </span><span class="kw">pub fn </span>accepts_input(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#91 id=91 data-nosnippet>91</a>        <span class="self">self</span>.role == SurfaceRole::Interactive &amp;&amp; <span class="self">self</span>.is_visible_for_paint()
-<a href=#92 id=92 data-nosnippet>92</a>    }
-<a href=#93 id=93 data-nosnippet>93</a>
-<a href=#94 id=94 data-nosnippet>94</a>    <span class="doccomment">/// Background surfaces are deliberately outside the window-manager state machine.
-<a href=#95 id=95 data-nosnippet>95</a>    </span><span class="kw">pub fn </span>is_window_managed(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#96 id=96 data-nosnippet>96</a>        <span class="self">self</span>.role == SurfaceRole::Interactive
-<a href=#97 id=97 data-nosnippet>97</a>    }
-<a href=#98 id=98 data-nosnippet>98</a>
-<a href=#99 id=99 data-nosnippet>99</a>    <span class="doccomment">/// Move a normal surface and retain that position for a later restore.
-<a href=#100 id=100 data-nosnippet>100</a>    </span><span class="kw">pub fn </span>move_to(<span class="kw-2">&amp;mut </span><span class="self">self</span>, x: i32, y: i32) {
-<a href=#101 id=101 data-nosnippet>101</a>        <span class="self">self</span>.x = x;
-<a href=#102 id=102 data-nosnippet>102</a>        <span class="self">self</span>.y = y;
-<a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">if </span><span class="self">self</span>.state == api::display::WindowState::Normal {
-<a href=#104 id=104 data-nosnippet>104</a>            <span class="self">self</span>.normal_rect.x = x;
-<a href=#105 id=105 data-nosnippet>105</a>            <span class="self">self</span>.normal_rect.y = y;
-<a href=#106 id=106 data-nosnippet>106</a>        }
-<a href=#107 id=107 data-nosnippet>107</a>    }
-<a href=#108 id=108 data-nosnippet>108</a>
-<a href=#109 id=109 data-nosnippet>109</a>    <span class="doccomment">/// Clear the damage accumulator after a flush.
-<a href=#110 id=110 data-nosnippet>110</a>    </span><span class="kw">pub fn </span>clear_damage(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#111 id=111 data-nosnippet>111</a>        <span class="self">self</span>.damage = <span class="prelude-val">None</span>;
-<a href=#112 id=112 data-nosnippet>112</a>    }
-<a href=#113 id=113 data-nosnippet>113</a>
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="doccomment">/// Bounding rect of this surface on screen.
-<a href=#115 id=115 data-nosnippet>115</a>    </span><span class="kw">pub fn </span>screen_rect(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Rect {
-<a href=#116 id=116 data-nosnippet>116</a>        Rect {
-<a href=#117 id=117 data-nosnippet>117</a>            x: <span class="self">self</span>.x,
-<a href=#118 id=118 data-nosnippet>118</a>            y: <span class="self">self</span>.y,
-<a href=#119 id=119 data-nosnippet>119</a>            w: <span class="self">self</span>.w,
-<a href=#120 id=120 data-nosnippet>120</a>            h: <span class="self">self</span>.h,
-<a href=#121 id=121 data-nosnippet>121</a>        }
-<a href=#122 id=122 data-nosnippet>122</a>    }
-<a href=#123 id=123 data-nosnippet>123</a>}
+<a href=#91 id=91 data-nosnippet>91</a>        (<span class="self">self</span>.role == SurfaceRole::Interactive || <span class="self">self</span>.role == SurfaceRole::Panel)
+<a href=#92 id=92 data-nosnippet>92</a>            &amp;&amp; <span class="self">self</span>.is_visible_for_paint()
+<a href=#93 id=93 data-nosnippet>93</a>    }
+<a href=#94 id=94 data-nosnippet>94</a>
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="doccomment">/// Background surfaces are deliberately outside the window-manager state machine.
+<a href=#96 id=96 data-nosnippet>96</a>    </span><span class="kw">pub fn </span>is_window_managed(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="self">self</span>.role == SurfaceRole::Interactive
+<a href=#98 id=98 data-nosnippet>98</a>    }
+<a href=#99 id=99 data-nosnippet>99</a>
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="doccomment">/// Move a normal surface and retain that position for a later restore.
+<a href=#101 id=101 data-nosnippet>101</a>    </span><span class="kw">pub fn </span>move_to(<span class="kw-2">&amp;mut </span><span class="self">self</span>, x: i32, y: i32) {
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="self">self</span>.x = x;
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="self">self</span>.y = y;
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">if </span><span class="self">self</span>.state == api::display::WindowState::Normal {
+<a href=#105 id=105 data-nosnippet>105</a>            <span class="self">self</span>.normal_rect.x = x;
+<a href=#106 id=106 data-nosnippet>106</a>            <span class="self">self</span>.normal_rect.y = y;
+<a href=#107 id=107 data-nosnippet>107</a>        }
+<a href=#108 id=108 data-nosnippet>108</a>    }
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a>    <span class="doccomment">/// Clear the damage accumulator after a flush.
+<a href=#111 id=111 data-nosnippet>111</a>    </span><span class="kw">pub fn </span>clear_damage(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="self">self</span>.damage = <span class="prelude-val">None</span>;
+<a href=#113 id=113 data-nosnippet>113</a>    }
+<a href=#114 id=114 data-nosnippet>114</a>
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="doccomment">/// Bounding rect of this surface on screen.
+<a href=#116 id=116 data-nosnippet>116</a>    </span><span class="kw">pub fn </span>screen_rect(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Rect {
+<a href=#117 id=117 data-nosnippet>117</a>        Rect {
+<a href=#118 id=118 data-nosnippet>118</a>            x: <span class="self">self</span>.x,
+<a href=#119 id=119 data-nosnippet>119</a>            y: <span class="self">self</span>.y,
+<a href=#120 id=120 data-nosnippet>120</a>            w: <span class="self">self</span>.w,
+<a href=#121 id=121 data-nosnippet>121</a>            h: <span class="self">self</span>.h,
+<a href=#122 id=122 data-nosnippet>122</a>        }
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>}
 </code></pre></div></section></main></body></html>

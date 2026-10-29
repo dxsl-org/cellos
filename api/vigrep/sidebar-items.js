@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["glob","ignore","io","matcher","regex","searcher","walk"]};

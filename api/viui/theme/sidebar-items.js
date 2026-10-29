@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"static":["DARK_THEME"],"struct":["DarkTheme","KioskTheme","LightTheme","RobotTheme"],"trait":["ViTheme"]};
+window.SIDEBAR_ITEMS = {"enum":["SystemPalette"],"fn":["theme_for_palette"],"static":["DARK_THEME","LIGHT_THEME","PAPER_THEME"],"struct":["DarkTheme","KioskTheme","LightTheme","PaperTheme","RobotTheme","ThemePreferenceState"],"trait":["ViTheme"]};

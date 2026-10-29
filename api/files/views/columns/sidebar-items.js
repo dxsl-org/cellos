@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["COLUMN_W","ROW_H"],"fn":["handle_click","render"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["draw_label","fill_rect","stroke_rect"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["RG_PROFILE"],"enum":["StdinInput"],"fn":["build_matcher","build_searcher","build_walk","producer","roots","stderr_report","stdin_producer","usage_error"],"mod":["args","source","text","tree"],"struct":["RgProfile"]};

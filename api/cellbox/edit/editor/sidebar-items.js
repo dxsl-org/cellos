@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_PATH","SESSION_LOST"],"enum":["Mode","PromptKind","SaveResult","Step"],"fn":["cell_width","describe","refusal"],"struct":["Editor"],"trait":["Store"]};

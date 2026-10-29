@@ -1,0 +1,175 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A trait that defines how results from searchers are handled."><title>Sink in vigrep::searcher - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="vigrep" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc trait"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Sink</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../vigrep/index.html">vigrep</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Sink</a></h2><h3><a href="#required-associated-types">Required Associated Types</a></h3><ul class="block"><li><a href="#associatedtype.Error" title="Error">Error</a></li></ul><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.matched" title="matched">matched</a></li></ul><h3><a href="#provided-methods">Provided Methods</a></h3><ul class="block"><li><a href="#method.begin" title="begin">begin</a></li><li><a href="#method.binary_data" title="binary_data">binary_data</a></li><li><a href="#method.context" title="context">context</a></li><li><a href="#method.context_break" title="context_break">context_break</a></li><li><a href="#method.finish" title="finish">finish</a></li></ul><h3><a href="#foreign-impls">Implementations on Foreign Types</a></h3><ul class="block"><li><a href="#impl-Sink-for-%26mut+S" title="&#38;&#39;a mut S">&#38;&#39;a mut S</a></li><li><a href="#impl-Sink-for-Box%3CS%3E" title="Box&#60;S&#62;">Box&#60;S&#62;</a></li></ul><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In vigrep::<wbr>searcher</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">vigrep</a>::<wbr><a href="index.html">searcher</a></div><h1>Trait <span class="trait">Sink</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/vigrep/searcher/sink.rs.html#110-231">Source</a> </span></div><pre class="rust item-decl"><code>pub trait Sink {
+    type <a href="#associatedtype.Error" class="associatedtype">Error</a>: <a class="trait" href="trait.SinkError.html" title="trait vigrep::searcher::SinkError">SinkError</a>;
+
+    // Required method
+    fn <a href="#tymethod.matched" class="fn">matched</a>(
+        &amp;mut self,
+        _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+        _mat: &amp;<a class="struct" href="struct.SinkMatch.html" title="struct vigrep::searcher::SinkMatch">SinkMatch</a>&lt;'_&gt;,
+    ) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;;
+
+    // Provided methods
+    fn <a href="#method.context" class="fn">context</a>(
+        &amp;mut self,
+        _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+        _context: &amp;<a class="struct" href="struct.SinkContext.html" title="struct vigrep::searcher::SinkContext">SinkContext</a>&lt;'_&gt;,
+    ) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.context_break" class="fn">context_break</a>(
+        &amp;mut self,
+        _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    ) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.binary_data" class="fn">binary_data</a>(
+        &amp;mut self,
+        _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+        _binary_byte_offset: u64,
+    ) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.begin" class="fn">begin</a>(&amp;mut self, _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.finish" class="fn">finish</a>(
+        &amp;mut self,
+        _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+        _: &amp;<a class="struct" href="struct.SinkFinish.html" title="struct vigrep::searcher::SinkFinish">SinkFinish</a>,
+    ) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt; { ... }
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A trait that defines how results from searchers are handled.</p>
+<p>In this crate, a searcher follows the “push” model. What that means is that
+the searcher drives execution, and pushes results back to the caller. This
+is in contrast to a “pull” model where the caller drives execution and
+takes results as they need them. These are also known as “internal” and
+“external” iteration strategies, respectively.</p>
+<p>For a variety of reasons, including the complexity of the searcher
+implementation, this crate chooses the “push” or “internal” model of
+execution. Thus, in order to act on search results, callers must provide
+an implementation of this trait to a searcher, and the searcher is then
+responsible for calling the methods on this trait.</p>
+<p>This trait defines several behaviors:</p>
+<ul>
+<li>What to do when a match is found. Callers must provide this.</li>
+<li>What to do when an error occurs. Callers must provide this via the
+<a href="trait.SinkError.html" title="trait vigrep::searcher::SinkError"><code>SinkError</code></a> trait. Generally, callers can just use <code>std::io::Error</code> for
+this, which already implements <code>SinkError</code>.</li>
+<li>What to do when a contextual line is found. By default, these are
+ignored.</li>
+<li>What to do when a gap between contextual lines has been found. By
+default, this is ignored.</li>
+<li>What to do when a search has started. By default, this does nothing.</li>
+<li>What to do when a search has finished successfully. By default, this does
+nothing.</li>
+</ul>
+<p>Callers must, at minimum, specify the behavior when an error occurs and
+the behavior when a match occurs. The rest is optional. For each behavior,
+callers may report an error (say, if writing the result to another
+location failed) or simply return <code>false</code> if they want the search to stop
+(e.g., when implementing a cap on the number of search results to show).</p>
+<p>When errors are reported (whether in the searcher or in the implementation
+of <code>Sink</code>), then searchers quit immediately without calling <code>finish</code>.</p>
+<p>For simpler uses of <code>Sink</code>, callers may elect to use one of
+the more convenient but less flexible implementations in the
+<a href="sinks/index.html" title="mod vigrep::searcher::sinks"><code>sinks</code></a> module.</p>
+</div></details><h2 id="required-associated-types" class="section-header">Required Associated Types<a href="#required-associated-types" class="anchor">§</a></h2><div class="methods"><details class="toggle" open><summary><section id="associatedtype.Error" class="method"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#117">Source</a><h4 class="code-header">type <a href="#associatedtype.Error" class="associatedtype">Error</a>: <a class="trait" href="trait.SinkError.html" title="trait vigrep::searcher::SinkError">SinkError</a></h4></section></summary><div class="docblock"><p>The type of an error that should be reported by a searcher.</p>
+<p>Errors of this type are not only returned by the methods on this
+trait, but the constructors defined in <code>SinkError</code> are also used in
+the searcher implementation itself. e.g., When a I/O error occurs when
+reading data from a file.</p>
+</div></details></div><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.matched" class="method"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#132-136">Source</a><h4 class="code-header">fn <a href="#tymethod.matched" class="fn">matched</a>(
+    &amp;mut self,
+    _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    _mat: &amp;<a class="struct" href="struct.SinkMatch.html" title="struct vigrep::searcher::SinkMatch">SinkMatch</a>&lt;'_&gt;,
+) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>This method is called whenever a match is found.</p>
+<p>If multi line is enabled on the searcher, then the match reported here
+may span multiple lines and it may include multiple matches. When multi
+line is disabled, then the match is guaranteed to span exactly one
+non-empty line (where a single line is, at minimum, a line terminator).</p>
+<p>If this returns <code>true</code>, then searching continues. If this returns
+<code>false</code>, then searching is stopped immediately and <code>finish</code> is called.</p>
+<p>If this returns an error, then searching is stopped immediately,
+<code>finish</code> is not called and the error is bubbled back up to the caller
+of the searcher.</p>
+</div></details></div><h2 id="provided-methods" class="section-header">Provided Methods<a href="#provided-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="method.context" class="method"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#151-157">Source</a><h4 class="code-header">fn <a href="#method.context" class="fn">context</a>(
+    &amp;mut self,
+    _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    _context: &amp;<a class="struct" href="struct.SinkContext.html" title="struct vigrep::searcher::SinkContext">SinkContext</a>&lt;'_&gt;,
+) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>This method is called whenever a context line is found, and is optional
+to implement. By default, it does nothing and returns <code>true</code>.</p>
+<p>In all cases, the context given is guaranteed to span exactly one
+non-empty line (where a single line is, at minimum, a line terminator).</p>
+<p>If this returns <code>true</code>, then searching continues. If this returns
+<code>false</code>, then searching is stopped immediately and <code>finish</code> is called.</p>
+<p>If this returns an error, then searching is stopped immediately,
+<code>finish</code> is not called and the error is bubbled back up to the caller
+of the searcher.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.context_break" class="method"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#175-180">Source</a><h4 class="code-header">fn <a href="#method.context_break" class="fn">context_break</a>(&amp;mut self, _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>This method is called whenever a break in contextual lines is found,
+and is optional to implement. By default, it does nothing and returns
+<code>true</code>.</p>
+<p>A break can only occur when context reporting is enabled (that is,
+either or both of <code>before_context</code> or <code>after_context</code> are greater than
+<code>0</code>). More precisely, a break occurs between non-contiguous groups of
+lines.</p>
+<p>If this returns <code>true</code>, then searching continues. If this returns
+<code>false</code>, then searching is stopped immediately and <code>finish</code> is called.</p>
+<p>If this returns an error, then searching is stopped immediately,
+<code>finish</code> is not called and the error is bubbled back up to the caller
+of the searcher.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.binary_data" class="method"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#196-202">Source</a><h4 class="code-header">fn <a href="#method.binary_data" class="fn">binary_data</a>(
+    &amp;mut self,
+    _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    _binary_byte_offset: u64,
+) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>This method is called whenever binary detection is enabled and binary
+data is found. If binary data is found, then this is called at least
+once for the first occurrence with the absolute byte offset at which
+the binary data begins.</p>
+<p>If this returns <code>true</code>, then searching continues. If this returns
+<code>false</code>, then searching is stopped immediately and <code>finish</code> is called.</p>
+<p>If this returns an error, then searching is stopped immediately,
+<code>finish</code> is not called and the error is bubbled back up to the caller
+of the searcher.</p>
+<p>By default, it does nothing and returns <code>true</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.begin" class="method"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#214-216">Source</a><h4 class="code-header">fn <a href="#method.begin" class="fn">begin</a>(&amp;mut self, _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>This method is called when a search has begun, before any search is
+executed. By default, this does nothing.</p>
+<p>If this returns <code>true</code>, then searching continues. If this returns
+<code>false</code>, then searching is stopped immediately and <code>finish</code> is called.</p>
+<p>If this returns an error, then searching is stopped immediately,
+<code>finish</code> is not called and the error is bubbled back up to the caller
+of the searcher.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.finish" class="method"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#224-230">Source</a><h4 class="code-header">fn <a href="#method.finish" class="fn">finish</a>(
+    &amp;mut self,
+    _searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    _: &amp;<a class="struct" href="struct.SinkFinish.html" title="struct vigrep::searcher::SinkFinish">SinkFinish</a>,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>This method is called when a search has completed. By default, this
+does nothing.</p>
+<p>If this returns an error, the error is bubbled back up to the caller of
+the searcher.</p>
+</div></details></div><h2 id="foreign-impls" class="section-header">Implementations on Foreign Types<a href="#foreign-impls" class="anchor">§</a></h2><details class="toggle implementors-toggle"><summary><section id="impl-Sink-for-%26mut+S" class="impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#233-284">Source</a><a href="#impl-Sink-for-%26mut+S" class="anchor">§</a><h3 class="code-header">impl&lt;'a, S: <a class="trait" href="trait.Sink.html" title="trait vigrep::searcher::Sink">Sink</a>&gt; <a class="trait" href="trait.Sink.html" title="trait vigrep::searcher::Sink">Sink</a> for &amp;'a mut S</h3></section></summary><div class="impl-items"><section id="associatedtype.Error-1" class="associatedtype trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#234">Source</a><a href="#associatedtype.Error-1" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.Error" class="associatedtype">Error</a> = &lt;S as <a class="trait" href="trait.Sink.html" title="trait vigrep::searcher::Sink">Sink</a>&gt;::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a></h4></section><section id="method.matched" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#237-243">Source</a><a href="#method.matched" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.matched" class="fn">matched</a>(
+    &amp;mut self,
+    searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    mat: &amp;<a class="struct" href="struct.SinkMatch.html" title="struct vigrep::searcher::SinkMatch">SinkMatch</a>&lt;'_&gt;,
+) -&gt; Result&lt;bool, S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section><section id="method.context-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#246-252">Source</a><a href="#method.context-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.context" class="fn">context</a>(
+    &amp;mut self,
+    searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    context: &amp;<a class="struct" href="struct.SinkContext.html" title="struct vigrep::searcher::SinkContext">SinkContext</a>&lt;'_&gt;,
+) -&gt; Result&lt;bool, S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section><section id="method.context_break-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#255-260">Source</a><a href="#method.context_break-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.context_break" class="fn">context_break</a>(&amp;mut self, searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>) -&gt; Result&lt;bool, S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section><section id="method.binary_data-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#263-269">Source</a><a href="#method.binary_data-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.binary_data" class="fn">binary_data</a>(
+    &amp;mut self,
+    searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    binary_byte_offset: u64,
+) -&gt; Result&lt;bool, S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section><section id="method.begin-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#272-274">Source</a><a href="#method.begin-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.begin" class="fn">begin</a>(&amp;mut self, searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>) -&gt; Result&lt;bool, S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section><section id="method.finish-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#277-283">Source</a><a href="#method.finish-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.finish" class="fn">finish</a>(
+    &amp;mut self,
+    searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    sink_finish: &amp;<a class="struct" href="struct.SinkFinish.html" title="struct vigrep::searcher::SinkFinish">SinkFinish</a>,
+) -&gt; Result&lt;(), S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Sink-for-Box%3CS%3E" class="impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#286-337">Source</a><a href="#impl-Sink-for-Box%3CS%3E" class="anchor">§</a><h3 class="code-header">impl&lt;S: <a class="trait" href="trait.Sink.html" title="trait vigrep::searcher::Sink">Sink</a> + ?Sized&gt; <a class="trait" href="trait.Sink.html" title="trait vigrep::searcher::Sink">Sink</a> for Box&lt;S&gt;</h3></section></summary><div class="impl-items"><section id="associatedtype.Error-2" class="associatedtype trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#287">Source</a><a href="#associatedtype.Error-2" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.Error" class="associatedtype">Error</a> = &lt;S as <a class="trait" href="trait.Sink.html" title="trait vigrep::searcher::Sink">Sink</a>&gt;::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a></h4></section><section id="method.matched-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#290-296">Source</a><a href="#method.matched-1" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.matched" class="fn">matched</a>(
+    &amp;mut self,
+    searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    mat: &amp;<a class="struct" href="struct.SinkMatch.html" title="struct vigrep::searcher::SinkMatch">SinkMatch</a>&lt;'_&gt;,
+) -&gt; Result&lt;bool, S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section><section id="method.context-2" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#299-305">Source</a><a href="#method.context-2" class="anchor">§</a><h4 class="code-header">fn <a href="#method.context" class="fn">context</a>(
+    &amp;mut self,
+    searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    context: &amp;<a class="struct" href="struct.SinkContext.html" title="struct vigrep::searcher::SinkContext">SinkContext</a>&lt;'_&gt;,
+) -&gt; Result&lt;bool, S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section><section id="method.context_break-2" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#308-313">Source</a><a href="#method.context_break-2" class="anchor">§</a><h4 class="code-header">fn <a href="#method.context_break" class="fn">context_break</a>(&amp;mut self, searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>) -&gt; Result&lt;bool, S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section><section id="method.binary_data-2" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#316-322">Source</a><a href="#method.binary_data-2" class="anchor">§</a><h4 class="code-header">fn <a href="#method.binary_data" class="fn">binary_data</a>(
+    &amp;mut self,
+    searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    binary_byte_offset: u64,
+) -&gt; Result&lt;bool, S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section><section id="method.begin-2" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#325-327">Source</a><a href="#method.begin-2" class="anchor">§</a><h4 class="code-header">fn <a href="#method.begin" class="fn">begin</a>(&amp;mut self, searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>) -&gt; Result&lt;bool, S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section><section id="method.finish-2" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#330-336">Source</a><a href="#method.finish-2" class="anchor">§</a><h4 class="code-header">fn <a href="#method.finish" class="fn">finish</a>(
+    &amp;mut self,
+    searcher: &amp;<a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a>,
+    sink_finish: &amp;<a class="struct" href="struct.SinkFinish.html" title="struct vigrep::searcher::SinkFinish">SinkFinish</a>,
+) -&gt; Result&lt;(), S::<a class="associatedtype" href="trait.Sink.html#associatedtype.Error" title="type vigrep::searcher::Sink::Error">Error</a>&gt;</h4></section></div></details><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><div class="negative-marker"></div><details class="toggle implementors-toggle"><summary><section id="impl-Sink-for-Bytes%3CF%3E" class="impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#653-673">Source</a><a href="#impl-Sink-for-Bytes%3CF%3E" class="anchor">§</a><h3 class="code-header">impl&lt;F&gt; <a class="trait" href="trait.Sink.html" title="trait vigrep::searcher::Sink">Sink</a> for <a class="struct" href="sinks/struct.Bytes.html" title="struct vigrep::searcher::sinks::Bytes">Bytes</a>&lt;F&gt;<div class="where">where
+    F: FnMut(u64, &amp;[u8]) -&gt; Result&lt;bool, <a class="struct" href="../io/struct.Error.html" title="struct vigrep::io::Error">Error</a>&gt;,</div></h3></section></summary><div class="impl-items"><section id="associatedtype.Error-3" class="associatedtype trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#657">Source</a><a href="#associatedtype.Error-3" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.Error" class="associatedtype">Error</a> = <a class="struct" href="../io/struct.Error.html" title="struct vigrep::io::Error">Error</a></h4></section></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Sink-for-Lossy%3CF%3E" class="impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#603-633">Source</a><a href="#impl-Sink-for-Lossy%3CF%3E" class="anchor">§</a><h3 class="code-header">impl&lt;F&gt; <a class="trait" href="trait.Sink.html" title="trait vigrep::searcher::Sink">Sink</a> for <a class="struct" href="sinks/struct.Lossy.html" title="struct vigrep::searcher::sinks::Lossy">Lossy</a>&lt;F&gt;<div class="where">where
+    F: FnMut(u64, &amp;str) -&gt; Result&lt;bool, <a class="struct" href="../io/struct.Error.html" title="struct vigrep::io::Error">Error</a>&gt;,</div></h3></section></summary><div class="impl-items"><section id="associatedtype.Error-4" class="associatedtype trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#607">Source</a><a href="#associatedtype.Error-4" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.Error" class="associatedtype">Error</a> = <a class="struct" href="../io/struct.Error.html" title="struct vigrep::io::Error">Error</a></h4></section></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Sink-for-UTF8%3CF%3E" class="impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#555-579">Source</a><a href="#impl-Sink-for-UTF8%3CF%3E" class="anchor">§</a><h3 class="code-header">impl&lt;F&gt; <a class="trait" href="trait.Sink.html" title="trait vigrep::searcher::Sink">Sink</a> for <a class="struct" href="sinks/struct.UTF8.html" title="struct vigrep::searcher::sinks::UTF8">UTF8</a>&lt;F&gt;<div class="where">where
+    F: FnMut(u64, &amp;str) -&gt; Result&lt;bool, <a class="struct" href="../io/struct.Error.html" title="struct vigrep::io::Error">Error</a>&gt;,</div></h3></section></summary><div class="impl-items"><section id="associatedtype.Error-5" class="associatedtype trait-impl"><a class="src rightside" href="../../src/vigrep/searcher/sink.rs.html#559">Source</a><a href="#associatedtype.Error-5" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.Error" class="associatedtype">Error</a> = <a class="struct" href="../io/struct.Error.html" title="struct vigrep::io::Error">Error</a></h4></section></div></details></div><script src="../../trait.impl/vigrep/searcher/sink/trait.Sink.js" data-ignore-extern-crates="alloc" async></script></section></div></main></body></html>

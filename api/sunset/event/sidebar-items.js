@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CliEvent","Event","ServEvent"],"struct":["Banner","CheckHostkey","RequestPassword","RequestPubkey","RequestSign","RequestUsername","ServEnvironmentRequest","ServExecRequest","ServFirstAuth","ServHostkeys","ServOpenSession","ServPasswordAuth","ServPtyRequest","ServPubkeyAuth","ServShellRequest"]};

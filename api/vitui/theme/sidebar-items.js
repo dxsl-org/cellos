@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ANSI16","CANVAS_MARKER","CHART_MARKER","HIGHLIGHT_SYMBOL"],"enum":["Border","ColorMode"],"fn":["nearest_16","nearest_256"],"struct":["Palette","Rgb","Theme"]};

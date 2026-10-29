@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_SHELL_KEY","SYSTEM_KEYS"],"fn":["admit","shell_key_admitted"]};

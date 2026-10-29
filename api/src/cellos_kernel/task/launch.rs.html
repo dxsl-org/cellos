@@ -323,4 +323,164 @@
 <a href=#323 id=323 data-nosnippet>323</a>    sched.push_ready(tid);
 <a href=#324 id=324 data-nosnippet>324</a>    <span class="prelude-val">Ok</span>((tid, load_base))
 <a href=#325 id=325 data-nosnippet>325</a>}
+<a href=#326 id=326 data-nosnippet>326</a>
+<a href=#327 id=327 data-nosnippet>327</a><span class="doccomment">/// Creator-quota claim for resources a prepared child will retain or briefly
+<a href=#328 id=328 data-nosnippet>328</a>/// occupy. It is charged to the creator's exact live Cell before preparation
+<a href=#329 id=329 data-nosnippet>329</a>/// succeeds and refunded exactly once when the preparation is dropped; a
+<a href=#330 id=330 data-nosnippet>330</a>/// successful commit transfers the retained portion (the historical measurement
+<a href=#331 id=331 data-nosnippet>331</a>/// entry and its path) to the retained log owner instead of refunding it.
+<a href=#332 id=332 data-nosnippet>332</a></span><span class="kw">struct </span>PublicationClaim {
+<a href=#333 id=333 data-nosnippet>333</a>    cell: usize,
+<a href=#334 id=334 data-nosnippet>334</a>    retained: usize,
+<a href=#335 id=335 data-nosnippet>335</a>    transient: usize,
+<a href=#336 id=336 data-nosnippet>336</a>    armed: bool,
+<a href=#337 id=337 data-nosnippet>337</a>}
+<a href=#338 id=338 data-nosnippet>338</a><span class="kw">impl </span>PublicationClaim {
+<a href=#339 id=339 data-nosnippet>339</a>    <span class="kw">fn </span>charge(cell: usize, retained: usize, transient: usize) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, ViError&gt; {
+<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span>total = retained.checked_add(transient).ok_or(ViError::OutOfMemory)<span class="question-mark">?</span>;
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">if </span>!<span class="kw">crate</span>::memory::cell_quota::charge(cell, total) {
+<a href=#342 id=342 data-nosnippet>342</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::OutOfMemory);
+<a href=#343 id=343 data-nosnippet>343</a>        }
+<a href=#344 id=344 data-nosnippet>344</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ cell, retained, transient, armed: <span class="bool-val">true </span>})
+<a href=#345 id=345 data-nosnippet>345</a>    }
+<a href=#346 id=346 data-nosnippet>346</a>    <span class="doccomment">/// Commit: the queue slot is consumed by the runnable task, so only that
+<a href=#347 id=347 data-nosnippet>347</a>    /// transient part is refunded; the retained log history stays attributed.
+<a href=#348 id=348 data-nosnippet>348</a>    </span><span class="kw">fn </span>transfer(<span class="kw-2">mut </span><span class="self">self</span>) {
+<a href=#349 id=349 data-nosnippet>349</a>        <span class="kw">crate</span>::memory::cell_quota::refund(<span class="self">self</span>.cell, <span class="self">self</span>.transient);
+<a href=#350 id=350 data-nosnippet>350</a>        <span class="self">self</span>.armed = <span class="bool-val">false</span>;
+<a href=#351 id=351 data-nosnippet>351</a>    }
+<a href=#352 id=352 data-nosnippet>352</a>}
+<a href=#353 id=353 data-nosnippet>353</a><span class="kw">impl </span>Drop <span class="kw">for </span>PublicationClaim {
+<a href=#354 id=354 data-nosnippet>354</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">if </span><span class="self">self</span>.armed {
+<a href=#356 id=356 data-nosnippet>356</a>            <span class="kw">crate</span>::memory::cell_quota::refund(<span class="self">self</span>.cell, <span class="self">self</span>.retained + <span class="self">self</span>.transient);
+<a href=#357 id=357 data-nosnippet>357</a>        }
+<a href=#358 id=358 data-nosnippet>358</a>    }
+<a href=#359 id=359 data-nosnippet>359</a>}
+<a href=#360 id=360 data-nosnippet>360</a>
+<a href=#361 id=361 data-nosnippet>361</a><span class="doccomment">/// The task, quota, CSpace, measurement-log and ready-queue slots remain
+<a href=#362 id=362 data-nosnippet>362</a>/// detached promises until the single session owner transaction commits. This
+<a href=#363 id=363 data-nosnippet>363</a>/// is not a second live-owner table: the Cell owner slot is `Reserved`, which
+<a href=#364 id=364 data-nosnippet>364</a>/// no resolve/watch path can observe as live.
+<a href=#365 id=365 data-nosnippet>365</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>SessionPublication {
+<a href=#366 id=366 data-nosnippet>366</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) task: alloc::boxed::Box&lt;<span class="kw">super</span>::Task&gt;,
+<a href=#367 id=367 data-nosnippet>367</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) owner: api::cell_owner::CellOwner,
+<a href=#368 id=368 data-nosnippet>368</a>    state: TaskLaunchState,
+<a href=#369 id=369 data-nosnippet>369</a>    quota: <span class="kw">crate</span>::memory::cell_quota::QuotaReservation,
+<a href=#370 id=370 data-nosnippet>370</a>    authority: <span class="kw">crate</span>::cell::cspace::AuthorityReservation,
+<a href=#371 id=371 data-nosnippet>371</a>    measurement: <span class="kw">crate</span>::measurement_log::PublicationReservation,
+<a href=#372 id=372 data-nosnippet>372</a>    ready: <span class="kw">super</span>::hart_local::ready::PublicationReservation,
+<a href=#373 id=373 data-nosnippet>373</a>    claim: PublicationClaim,
+<a href=#374 id=374 data-nosnippet>374</a>}
+<a href=#375 id=375 data-nosnippet>375</a><span class="kw">impl </span>SessionPublication {
+<a href=#376 id=376 data-nosnippet>376</a>    <span class="doccomment">/// Every fallible allocation, quota, owner-slot, log and ready-queue claim
+<a href=#377 id=377 data-nosnippet>377</a>    /// happens here; `publish` allocates nothing and cannot fail.
+<a href=#378 id=378 data-nosnippet>378</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>reserve(sched: <span class="kw-2">&amp;mut </span><span class="kw">super</span>::scheduler::Scheduler,
+<a href=#379 id=379 data-nosnippet>379</a>        prepared: <span class="kw">super</span>::PreparedElfTask, state: TaskLaunchState) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, ViError&gt; {
+<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(caller) = state.caller.as_ref() <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::PermissionDenied); };
+<a href=#381 id=381 data-nosnippet>381</a>        <span class="kw">if </span>!authority_is_current(sched, caller) {
+<a href=#382 id=382 data-nosnippet>382</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::PermissionDenied);
+<a href=#383 id=383 data-nosnippet>383</a>        }
+<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">let </span>(creator, creator_generation) = sched.tasks.get(<span class="kw-2">&amp;</span>caller.tid)
+<a href=#385 id=385 data-nosnippet>385</a>            .map(|t| (t.cell_id.<span class="number">0 </span><span class="kw">as </span>usize, t.cell_generation))
+<a href=#386 id=386 data-nosnippet>386</a>            .ok_or(ViError::PermissionDenied)<span class="question-mark">?</span>;
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="comment">// A session child is an ordinary governed path launch: never a boot
+<a href=#388 id=388 data-nosnippet>388</a>        // singleton, domain, hotswap replacement, or service route publisher.
+<a href=#389 id=389 data-nosnippet>389</a>        </span><span class="kw">if </span>prepared.requested_cell_id() != CellId(<span class="number">0</span>) || state.is_domain || state.platform.is_some()
+<a href=#390 id=390 data-nosnippet>390</a>            || state.replacement.is_some() || state.routes.block_io || state.routes.input {
+<a href=#391 id=391 data-nosnippet>391</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::PermissionDenied);
+<a href=#392 id=392 data-nosnippet>392</a>        }
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#394 id=394 data-nosnippet>394</a>        </span><span class="kw">if </span>state.routes.development_silo { <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::PermissionDenied); }
+<a href=#395 id=395 data-nosnippet>395</a>        <span class="comment">// Heap bookkeeping for the unpublished task is kernel memory, exactly as
+<a href=#396 id=396 data-nosnippet>396</a>        // in `publish_prepared`; per-principal accounting is the explicit claim.
+<a href=#397 id=397 data-nosnippet>397</a>        </span><span class="kw">let </span>_kernel_alloc = <span class="kw">super</span>::scheduler::KernelAllocationContext::enter();
+<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">let </span>tid = sched.next_task_id;
+<a href=#399 id=399 data-nosnippet>399</a>        <span class="kw">let </span>next = tid.checked_add(<span class="number">1</span>).ok_or(ViError::OutOfMemory)<span class="question-mark">?</span>;
+<a href=#400 id=400 data-nosnippet>400</a>        <span class="kw">let </span>quota = <span class="kw">crate</span>::memory::cell_quota::QuotaReservation::reserve_next(state.quota_limit)<span class="question-mark">?</span>;
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="kw">let </span>cell = quota.cell_id();
+<a href=#402 id=402 data-nosnippet>402</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>task, <span class="kw">_</span>) = prepared.into_task(tid, cell)<span class="question-mark">?</span>;
+<a href=#403 id=403 data-nosnippet>403</a>        task.root_tid = tid;
+<a href=#404 id=404 data-nosnippet>404</a>        task.syscall_allowlist = state.syscall_allowlist;
+<a href=#405 id=405 data-nosnippet>405</a>        task.cluster_mode = state.cluster_mode;
+<a href=#406 id=406 data-nosnippet>406</a>        task.cluster_id = state.cluster_id;
+<a href=#407 id=407 data-nosnippet>407</a>        task.priority = state.priority;
+<a href=#408 id=408 data-nosnippet>408</a>        task.pku_key = state.pku_key;
+<a href=#409 id=409 data-nosnippet>409</a>        task.pku_value = state.pku_value;
+<a href=#410 id=410 data-nosnippet>410</a>        task.is_critical = state.is_critical;
+<a href=#411 id=411 data-nosnippet>411</a>        state.granted.apply_to(<span class="kw-2">&amp;mut </span>task);
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#413 id=413 data-nosnippet>413</a>        </span>{ task.development_silo_registration_cap = state.routes.development_silo
+<a href=#414 id=414 data-nosnippet>414</a>            .then(<span class="kw">super</span>::cap::DevelopmentSiloRegistrationCap::new); }
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">let </span>owner = api::cell_owner::CellOwner::new(cell.<span class="number">0</span>, task.cell_generation, tid <span class="kw">as </span>u64);
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">let </span>authority = <span class="kw">crate</span>::cell::cspace::AuthorityReservation::reserve(cell, owner.generation, state.granted)<span class="question-mark">?</span>;
+<a href=#417 id=417 data-nosnippet>417</a>        <span class="kw">let </span>path_len = state.measurement.as_ref().map_or(<span class="number">0</span>, |m| m.path.len());
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="kw">let </span>claim = PublicationClaim::charge(creator,
+<a href=#419 id=419 data-nosnippet>419</a>            <span class="kw">crate</span>::measurement_log::PublicationReservation::ENTRY_BYTES + path_len,
+<a href=#420 id=420 data-nosnippet>420</a>            <span class="kw">super</span>::hart_local::ready::PublicationReservation::SLOT_BYTES)<span class="question-mark">?</span>;
+<a href=#421 id=421 data-nosnippet>421</a>        <span class="kw">let </span>measurement = <span class="kw">crate</span>::measurement_log::PublicationReservation::reserve(
+<a href=#422 id=422 data-nosnippet>422</a>            (creator <span class="kw">as </span>u64, creator_generation))<span class="question-mark">?</span>;
+<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">let </span>ready = <span class="kw">super</span>::hart_local::ready::PublicationReservation::reserve(state.priority)<span class="question-mark">?</span>;
+<a href=#424 id=424 data-nosnippet>424</a>        sched.reserve_session_owner(owner)<span class="question-mark">?</span>;
+<a href=#425 id=425 data-nosnippet>425</a>        sched.next_task_id = next;
+<a href=#426 id=426 data-nosnippet>426</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ task, owner, state, quota, authority, measurement, ready, claim })
+<a href=#427 id=427 data-nosnippet>427</a>    }
+<a href=#428 id=428 data-nosnippet>428</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>current(<span class="kw-2">&amp;</span><span class="self">self</span>, sched: <span class="kw-2">&amp;</span><span class="kw">super</span>::scheduler::Scheduler) -&gt; bool {
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">if </span>!sched.session_owner_reserved(<span class="self">self</span>.owner)
+<a href=#430 id=430 data-nosnippet>430</a>            || <span class="self">self</span>.state.caller.as_ref().is_none_or(|a| !authority_is_current(sched, a)) {
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#432 id=432 data-nosnippet>432</a>        }
+<a href=#433 id=433 data-nosnippet>433</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(caller) = <span class="self">self</span>.state.caller.as_ref().and_then(|a| sched.tasks.get(<span class="kw-2">&amp;</span>a.tid)) <span class="kw">else </span>{ <span class="kw">return </span><span class="bool-val">false</span>; };
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(measurement) = <span class="self">self</span>.state.measurement.as_ref() <span class="kw">else </span>{ <span class="kw">return </span><span class="bool-val">false</span>; };
+<a href=#435 id=435 data-nosnippet>435</a>        <span class="kw">let </span>state = <span class="kw">crate</span>::loader::launch_profile::CallerLaunchState { name: <span class="kw-2">&amp;</span>caller.name,
+<a href=#436 id=436 data-nosnippet>436</a>            has_spawn: caller.spawn_cap.is_some(), has_supervisor: caller.supervisor_cap.is_some() };
+<a href=#437 id=437 data-nosnippet>437</a>        <span class="kw">crate</span>::loader::launch_profile::authorize(state, <span class="kw">crate</span>::loader::launch_profile::LaunchRoute::Path,
+<a href=#438 id=438 data-nosnippet>438</a>            <span class="kw-2">&amp;</span>measurement.path).is_some_and(|profile| <span class="self">self</span>.state.granted.intersect(profile.child_ceiling)
+<a href=#439 id=439 data-nosnippet>439</a>                == <span class="self">self</span>.state.granted &amp;&amp; (!profile.requires_lifecycle_authority || caller.spawn_cap.is_some()))
+<a href=#440 id=440 data-nosnippet>440</a>    }
+<a href=#441 id=441 data-nosnippet>441</a>    <span class="doccomment">/// Final publication. Called with every owner check already passed, under
+<a href=#442 id=442 data-nosnippet>442</a>    /// SCHEDULER, and performs no allocation: capacity for the task row, CSpace
+<a href=#443 id=443 data-nosnippet>443</a>    /// row, log entry and ready entry was promised in `reserve`.
+<a href=#444 id=444 data-nosnippet>444</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>publish(<span class="kw-2">mut </span><span class="self">self</span>, sched: <span class="kw-2">&amp;mut </span><span class="kw">super</span>::scheduler::Scheduler) {
+<a href=#445 id=445 data-nosnippet>445</a>        <span class="kw">let </span>tid = <span class="self">self</span>.owner.root_tid <span class="kw">as </span>usize;
+<a href=#446 id=446 data-nosnippet>446</a>        <span class="attr">#[cfg(cellos_p01_trace)]
+<a href=#447 id=447 data-nosnippet>447</a>        </span>{
+<a href=#448 id=448 data-nosnippet>448</a>            <span class="kw">crate</span>::memory::heap::p01_owner::adopt_task(<span class="kw-2">&amp;</span><span class="self">self</span>.task);
+<a href=#449 id=449 data-nosnippet>449</a>            <span class="kw">crate</span>::memory::heap::p01_owner::task_backing(<span class="kw-2">&amp;</span><span class="self">self</span>.task);
+<a href=#450 id=450 data-nosnippet>450</a>        }
+<a href=#451 id=451 data-nosnippet>451</a>        <span class="self">self</span>.authority.commit();
+<a href=#452 id=452 data-nosnippet>452</a>        sched.tasks.publish_reserved(tid, <span class="self">self</span>.task);
+<a href=#453 id=453 data-nosnippet>453</a>        sched.publish_session_owner(<span class="self">self</span>.owner);
+<a href=#454 id=454 data-nosnippet>454</a>        <span class="self">self</span>.quota.commit();
+<a href=#455 id=455 data-nosnippet>455</a>        <span class="kw">crate</span>::loader::commit_launch_routes(tid, CellId(<span class="self">self</span>.owner.cell_id), <span class="self">self</span>.state.routes);
+<a href=#456 id=456 data-nosnippet>456</a>        <span class="attr">#[cfg(cellos_p01_trace)]
+<a href=#457 id=457 data-nosnippet>457</a>        </span>{
+<a href=#458 id=458 data-nosnippet>458</a>            <span class="kw">let </span>task = sched.tasks.get_mut(<span class="kw-2">&amp;</span>tid).expect(<span class="string">"committed publication"</span>);
+<a href=#459 id=459 data-nosnippet>459</a>            <span class="kw">let </span>diagnostic_owner = <span class="kw">crate</span>::p01_measurement::Owner::of(task);
+<a href=#460 id=460 data-nosnippet>460</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(measurement) = <span class="self">self</span>.state.measurement.as_ref() {
+<a href=#461 id=461 data-nosnippet>461</a>                <span class="kw">if </span><span class="self">self</span>.state.bootstrap_init {
+<a href=#462 id=462 data-nosnippet>462</a>                    <span class="kw">crate</span>::p01_measurement::arm(diagnostic_owner, measurement.digest);
+<a href=#463 id=463 data-nosnippet>463</a>                } <span class="kw">else </span>{
+<a href=#464 id=464 data-nosnippet>464</a>                    <span class="kw">crate</span>::p01_measurement::publication(diagnostic_owner, <span class="self">self</span>.state.trace, measurement.digest);
+<a href=#465 id=465 data-nosnippet>465</a>                }
+<a href=#466 id=466 data-nosnippet>466</a>            }
+<a href=#467 id=467 data-nosnippet>467</a>            <span class="kw">crate</span>::memory::heap::p01_owner::bind(<span class="self">self</span>.state.trace, diagnostic_owner);
+<a href=#468 id=468 data-nosnippet>468</a>            <span class="kw">crate</span>::p01_resources::published(task);
+<a href=#469 id=469 data-nosnippet>469</a>        }
+<a href=#470 id=470 data-nosnippet>470</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(measurement) = <span class="self">self</span>.state.measurement.take() {
+<a href=#471 id=471 data-nosnippet>471</a>            <span class="self">self</span>.measurement.commit(tid, measurement.path, measurement.digest);
+<a href=#472 id=472 data-nosnippet>472</a>        }
+<a href=#473 id=473 data-nosnippet>473</a>        <span class="kw">crate</span>::audit::log_event(
+<a href=#474 id=474 data-nosnippet>474</a>            <span class="kw">crate</span>::audit::AuditEvent::CellSpawn,
+<a href=#475 id=475 data-nosnippet>475</a>            <span class="kw-2">&amp;</span><span class="kw">crate</span>::audit::encode_u32x2(tid <span class="kw">as </span>u32, <span class="number">0</span>),
+<a href=#476 id=476 data-nosnippet>476</a>        );
+<a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">crate</span>::loader::observe_pre_ready(sched, tid);
+<a href=#478 id=478 data-nosnippet>478</a>        <span class="comment">// The notification follows the reservation's pinned destination, not
+<a href=#479 id=479 data-nosnippet>479</a>        // whichever hart happens to commit or whatever RT hart is online now.
+<a href=#480 id=480 data-nosnippet>480</a>        </span><span class="kw">let </span>(hart, priority) = <span class="self">self</span>.ready.destination();
+<a href=#481 id=481 data-nosnippet>481</a>        <span class="self">self</span>.ready.commit(tid);
+<a href=#482 id=482 data-nosnippet>482</a>        <span class="self">self</span>.claim.transfer();
+<a href=#483 id=483 data-nosnippet>483</a>        sched.pend_preempt_on_hart(hart, priority);
+<a href=#484 id=484 data-nosnippet>484</a>    }
+<a href=#485 id=485 data-nosnippet>485</a>}
 </code></pre></div></section></main></body></html>

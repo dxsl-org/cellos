@@ -1,0 +1,74 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="This crate provides an implementation of line oriented search, with optional support for multi-line search."><title>vigrep::searcher - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="vigrep" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module searcher</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../vigrep/index.html">vigrep</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module searcher</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#brief-overview" title="Brief overview">Brief overview</a></li><li><a href="#example" title="Example">Example</a></li></ul><h3><a href="#modules">Module Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#traits" title="Traits">Traits</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate vigrep</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">vigrep</a></div><h1>Module <span>searcher</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/vigrep/searcher/mod.rs.html#6-112">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>This crate provides an implementation of line oriented search, with optional
+support for multi-line search.</p>
+<h2 id="brief-overview"><a class="doc-anchor" href="#brief-overview">§</a>Brief overview</h2>
+<p>The principle type in this crate is a <a href="struct.Searcher.html" title="struct vigrep::searcher::Searcher"><code>Searcher</code></a>, which can be configured
+and built by a <a href="struct.SearcherBuilder.html" title="struct vigrep::searcher::SearcherBuilder"><code>SearcherBuilder</code></a>. A <code>Searcher</code> is responsible for reading
+bytes from a source (e.g., a file), executing a search of those bytes using
+a <code>Matcher</code> (e.g., a regex) and then reporting the results of that search to
+a <a href="trait.Sink.html" title="trait vigrep::searcher::Sink"><code>Sink</code></a> (e.g., stdout). The <code>Searcher</code> itself is principally responsible
+for managing the consumption of bytes from a source and applying a <code>Matcher</code>
+over those bytes in an efficient way. The <code>Searcher</code> is also responsible for
+inverting a search, counting lines, reporting contextual lines, detecting
+binary data and even deciding whether or not to use memory maps.</p>
+<p>A <code>Matcher</code> (which is defined in the
+<a href="https://crates.io/crates/grep-matcher"><code>grep-matcher</code></a> crate) is a trait
+for describing the lowest levels of pattern search in a generic way. The
+interface itself is very similar to the interface of a regular expression.
+For example, the <a href="https://crates.io/crates/grep-regex"><code>grep-regex</code></a>
+crate provides an implementation of the <code>Matcher</code> trait using Rust’s
+<a href="https://crates.io/crates/regex"><code>regex</code></a> crate.</p>
+<p>Finally, a <code>Sink</code> describes how callers receive search results produced by a
+<code>Searcher</code>. This includes routines that are called at the beginning and end of
+a search, in addition to routines that are called when matching or contextual
+lines are found by the <code>Searcher</code>. Implementations of <code>Sink</code> can be trivially
+simple, or extraordinarily complex, such as the <code>Standard</code> printer found in
+the <a href="https://crates.io/crates/grep-printer"><code>grep-printer</code></a> crate, which
+effectively implements grep-like output. This crate also provides convenience
+<code>Sink</code> implementations in the <a href="sinks/index.html" title="mod vigrep::searcher::sinks"><code>sinks</code></a> sub-module for easy searching with
+closures.</p>
+<h2 id="example"><a class="doc-anchor" href="#example">§</a>Example</h2>
+<p>This example shows how to execute the searcher and read the search results
+using the <a href="sinks/struct.UTF8.html" title="struct vigrep::searcher::sinks::UTF8"><code>UTF8</code></a> implementation of <code>Sink</code>.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>{
+    vigrep::matcher::Matcher,
+    vigrep::regex::RegexMatcher,
+    vigrep::searcher::Searcher,
+    vigrep::searcher::sinks::UTF8,
+};
+
+<span class="kw">const </span>SHERLOCK: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[u8] = <span class="string">b"\
+For the Doctor Watsons of this world, as opposed to the Sherlock
+Holmeses, success in the province of detective work must always
+be, to a very large extent, the result of luck. Sherlock Holmes
+can extract a clew from a wisp of straw or a flake of cigar ash;
+but Doctor Watson has to have it taken out for him and dusted,
+and exhibited clearly, with a label attached.
+"</span>;
+
+<span class="kw">let </span>matcher = RegexMatcher::new(<span class="string">r"Doctor \w+"</span>)<span class="question-mark">?</span>;
+<span class="kw">let </span><span class="kw-2">mut </span>matches: Vec&lt;(u64, String)&gt; = <span class="macro">vec!</span>[];
+Searcher::new().search_slice(<span class="kw-2">&amp;</span>matcher, SHERLOCK, UTF8(|lnum, line| {
+    <span class="comment">// We are guaranteed to find a match, so the unwrap is OK.
+    </span><span class="kw">let </span>mymatch = matcher.find(line.as_bytes())<span class="question-mark">?</span>.unwrap();
+    matches.push((lnum, line[mymatch].to_string()));
+    <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
+}))<span class="question-mark">?</span>;
+
+<span class="macro">assert_eq!</span>(matches.len(), <span class="number">2</span>);
+<span class="macro">assert_eq!</span>(
+    matches[<span class="number">0</span>],
+    (<span class="number">1</span>, <span class="string">"Doctor Watsons"</span>.to_string())
+);
+<span class="macro">assert_eq!</span>(
+    matches[<span class="number">1</span>],
+    (<span class="number">5</span>, <span class="string">"Doctor Watson"</span>.to_string())
+);
+</code></pre></div>
+<p>vigrep: upstream’s <code>examples/search-stdin.rs</code> is not ported; there is no
+stdin, file or memory-map entry point. Search a slice with
+<a href="struct.Searcher.html#method.search_slice" title="method vigrep::searcher::Searcher::search_slice"><code>Searcher::search_slice</code></a> or any <a href="../io/trait.Read.html" title="trait vigrep::io::Read"><code>crate::io::Read</code></a> with
+<a href="struct.Searcher.html#method.search_reader" title="method vigrep::searcher::Searcher::search_reader"><code>Searcher::search_reader</code></a>.</p>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="sinks/index.html" title="mod vigrep::searcher::sinks">sinks</a></dt><dd>A collection of convenience implementations of <code>Sink</code>.</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.BinaryDetection.html" title="struct vigrep::searcher::BinaryDetection">Binary<wbr>Detection</a></dt><dd>The behavior of binary detection while searching.</dd><dt><a class="struct" href="struct.LineIter.html" title="struct vigrep::searcher::LineIter">Line<wbr>Iter</a></dt><dd>An iterator over lines in a particular slice of bytes.</dd><dt><a class="struct" href="struct.LineStep.html" title="struct vigrep::searcher::LineStep">Line<wbr>Step</a></dt><dd>An explicit iterator over lines in a particular slice of bytes.</dd><dt><a class="struct" href="struct.Searcher.html" title="struct vigrep::searcher::Searcher">Searcher</a></dt><dd>A searcher executes searches over a haystack and writes results to a caller
+provided sink.</dd><dt><a class="struct" href="struct.SearcherBuilder.html" title="struct vigrep::searcher::SearcherBuilder">Searcher<wbr>Builder</a></dt><dd>A builder for configuring a searcher.</dd><dt><a class="struct" href="struct.SinkContext.html" title="struct vigrep::searcher::SinkContext">Sink<wbr>Context</a></dt><dd>A type that describes a contextual line reported by a searcher.</dd><dt><a class="struct" href="struct.SinkFinish.html" title="struct vigrep::searcher::SinkFinish">Sink<wbr>Finish</a></dt><dd>Summary data reported at the end of a search.</dd><dt><a class="struct" href="struct.SinkMatch.html" title="struct vigrep::searcher::SinkMatch">Sink<wbr>Match</a></dt><dd>A type that describes a match reported by a searcher.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.ConfigError.html" title="enum vigrep::searcher::ConfigError">Config<wbr>Error</a></dt><dd>An error that can occur when building a searcher.</dd><dt><a class="enum" href="enum.SinkContextKind.html" title="enum vigrep::searcher::SinkContextKind">Sink<wbr>Context<wbr>Kind</a></dt><dd>The type of context reported by a searcher.</dd></dl><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><dl class="item-table"><dt><a class="trait" href="trait.Sink.html" title="trait vigrep::searcher::Sink">Sink</a></dt><dd>A trait that defines how results from searchers are handled.</dd><dt><a class="trait" href="trait.SinkError.html" title="trait vigrep::searcher::SinkError">Sink<wbr>Error</a></dt><dd>A trait that describes errors that can be reported by searchers and
+implementations of <code>Sink</code>.</dd></dl></section></div></main></body></html>

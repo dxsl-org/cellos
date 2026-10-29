@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DRAIN_FRAMES","MAX_COLS","MAX_ROWS","MIN_COLS","MIN_ROWS","SHELL_ARGV","SHELL_ENV","SHELL_PATH"],"enum":["RunState"],"fn":["drain"],"struct":["TerminalSession"],"trait":["Streams"]};

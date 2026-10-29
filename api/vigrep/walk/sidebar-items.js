@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Begun","BinaryMode","EntryKind","FileOutcome","Handle","ResumeError","SearchFileError","Step","SubmatchError","WalkErrorKind","WalkEvent"],"fn":["line_submatches"],"struct":["DirEntry","FileSearch","FileState","PageInfo","ResumableSearch","WalkBuilder","WalkError","WalkLimits","WalkStats","Walker"],"trait":["ResumeInput","ViSearchTree"]};

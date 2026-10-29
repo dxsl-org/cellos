@@ -56,276 +56,379 @@
 <a href=#56 id=56 data-nosnippet>56</a>    <span class="kw">if </span>a.eq_ignore_ascii_case(b) {
 <a href=#57 id=57 data-nosnippet>57</a>        <span class="kw">return </span><span class="bool-val">true</span>;
 <a href=#58 id=58 data-nosnippet>58</a>    }
-<a href=#59 id=59 data-nosnippet>59</a>    registrable_domain(a).eq_ignore_ascii_case(registrable_domain(b))
-<a href=#60 id=60 data-nosnippet>60</a>}
-<a href=#61 id=61 data-nosnippet>61</a>
-<a href=#62 id=62 data-nosnippet>62</a><span class="kw">fn </span>is_ip_or_single_label(host: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#63 id=63 data-nosnippet>63</a>    !host.contains(<span class="string">'.'</span>) || host.bytes().all(|b| b.is_ascii_digit() || b == <span class="string">b'.' </span>|| b == <span class="string">b':'</span>)
-<a href=#64 id=64 data-nosnippet>64</a>}
-<a href=#65 id=65 data-nosnippet>65</a>
-<a href=#66 id=66 data-nosnippet>66</a><span class="kw">pub fn </span>registrable_domain(host: <span class="kw-2">&amp;</span>str) -&gt; <span class="kw-2">&amp;</span>str {
-<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">let </span>host = host.trim().trim_end_matches(<span class="string">'.'</span>);
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">if </span>is_ip_or_single_label(host) {
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">return </span>host;
-<a href=#70 id=70 data-nosnippet>70</a>    }
-<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">let </span><span class="kw-2">mut </span>dot_indices = [<span class="number">0usize</span>; <span class="number">16</span>];
-<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">let </span><span class="kw-2">mut </span>count = <span class="number">0</span>;
-<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">for </span>(i, c) <span class="kw">in </span>host.char_indices() {
-<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">if </span>c == <span class="string">'.' </span>&amp;&amp; count &lt; dot_indices.len() {
-<a href=#75 id=75 data-nosnippet>75</a>            dot_indices[count] = i;
-<a href=#76 id=76 data-nosnippet>76</a>            count += <span class="number">1</span>;
-<a href=#77 id=77 data-nosnippet>77</a>        }
-<a href=#78 id=78 data-nosnippet>78</a>    }
-<a href=#79 id=79 data-nosnippet>79</a>    <span class="kw">if </span>count == <span class="number">0 </span>{
-<a href=#80 id=80 data-nosnippet>80</a>        <span class="kw">return </span>host;
-<a href=#81 id=81 data-nosnippet>81</a>    }
-<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">if </span>count &gt;= <span class="number">2 </span>{
-<a href=#83 id=83 data-nosnippet>83</a>        <span class="kw">let </span>last_dot = dot_indices[count - <span class="number">1</span>];
-<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">let </span>second_last_dot = dot_indices[count - <span class="number">2</span>];
-<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">let </span>tld = <span class="kw-2">&amp;</span>host[last_dot + <span class="number">1</span>..];
-<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">let </span>sld = <span class="kw-2">&amp;</span>host[second_last_dot + <span class="number">1</span>..last_dot];
-<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">if </span><span class="macro">matches!</span>(tld, <span class="string">"vn" </span>| <span class="string">"uk" </span>| <span class="string">"jp" </span>| <span class="string">"au" </span>| <span class="string">"br" </span>| <span class="string">"nz"</span>)
-<a href=#88 id=88 data-nosnippet>88</a>            &amp;&amp; <span class="macro">matches!</span>(sld, <span class="string">"com" </span>| <span class="string">"net" </span>| <span class="string">"org" </span>| <span class="string">"edu" </span>| <span class="string">"gov" </span>| <span class="string">"co"</span>)
-<a href=#89 id=89 data-nosnippet>89</a>        {
-<a href=#90 id=90 data-nosnippet>90</a>            <span class="kw">if </span>count &gt;= <span class="number">3 </span>{
-<a href=#91 id=91 data-nosnippet>91</a>                <span class="kw">let </span>third_last_dot = dot_indices[count - <span class="number">3</span>];
-<a href=#92 id=92 data-nosnippet>92</a>                <span class="kw">return </span><span class="kw-2">&amp;</span>host[third_last_dot + <span class="number">1</span>..];
-<a href=#93 id=93 data-nosnippet>93</a>            } <span class="kw">else </span>{
-<a href=#94 id=94 data-nosnippet>94</a>                <span class="kw">return </span>host;
-<a href=#95 id=95 data-nosnippet>95</a>            }
-<a href=#96 id=96 data-nosnippet>96</a>        }
-<a href=#97 id=97 data-nosnippet>97</a>    }
-<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">let </span>prev_idx = <span class="kw">if </span>count &gt;= <span class="number">2 </span>{ dot_indices[count - <span class="number">2</span>] } <span class="kw">else </span>{ <span class="number">0 </span>};
-<a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">if </span>count &gt;= <span class="number">2 </span>{
-<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw-2">&amp;</span>host[prev_idx + <span class="number">1</span>..]
-<a href=#101 id=101 data-nosnippet>101</a>    } <span class="kw">else </span>{
-<a href=#102 id=102 data-nosnippet>102</a>        host
-<a href=#103 id=103 data-nosnippet>103</a>    }
-<a href=#104 id=104 data-nosnippet>104</a>}
-<a href=#105 id=105 data-nosnippet>105</a>
-<a href=#106 id=106 data-nosnippet>106</a><span class="kw">pub fn </span>resolve(base: <span class="kw-2">&amp;</span>str, reference: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;String, String&gt; {
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">let </span>reference = reference.trim();
-<a href=#108 id=108 data-nosnippet>108</a>    <span class="kw">if </span>reference.len() &gt; <span class="number">2048 </span>|| reference.bytes().any(|b| b &lt; <span class="number">32 </span>|| b == <span class="number">127</span>) { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Invalid/overlong resource URL"</span>.into()); }
-<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw">let </span>base = base.split(<span class="string">'#'</span>).next().unwrap_or(base);
-<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span>(base_scheme, base_rest) = base.split_once(<span class="string">"://"</span>).ok_or(<span class="string">"Missing base URL scheme"</span>)<span class="question-mark">?</span>;
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(base_scheme, <span class="string">"http" </span>| <span class="string">"https" </span>| <span class="string">"gemini" </span>| <span class="string">"file"</span>) { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Unsupported resource scheme"</span>.into()); }
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">let </span>base_split = base_rest.find(|c| c == <span class="string">'/' </span>|| c == <span class="string">'?'</span>).unwrap_or(base_rest.len());
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">let </span>base_authority = <span class="kw-2">&amp;</span>base_rest[..base_split];
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">let </span>base_origin = <span class="macro">format!</span>(<span class="string">"{}://{}"</span>, base_scheme, base_authority);
-<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">let </span>base_path = <span class="kw-2">&amp;</span>base_rest[base_split..];
-<a href=#116 id=116 data-nosnippet>116</a>
-<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">let </span>abs_ref = <span class="kw">if </span>reference.starts_with(<span class="string">"//"</span>) {
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"{}:{}"</span>, base_scheme, reference))
-<a href=#119 id=119 data-nosnippet>119</a>    } <span class="kw">else if </span>reference.contains(<span class="string">"://"</span>) {
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="prelude-val">Some</span>(String::from(reference))
-<a href=#121 id=121 data-nosnippet>121</a>    } <span class="kw">else </span>{
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="prelude-val">None
-<a href=#123 id=123 data-nosnippet>123</a>    </span>};
-<a href=#124 id=124 data-nosnippet>124</a>
-<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(target_url) = abs_ref {
-<a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">let </span>(target_scheme, target_rest) = target_url.split_once(<span class="string">"://"</span>).ok_or(<span class="string">"Invalid resource URL"</span>)<span class="question-mark">?</span>;
-<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">if </span>base_scheme == <span class="string">"https" </span>&amp;&amp; target_scheme == <span class="string">"http" </span>{
-<a href=#128 id=128 data-nosnippet>128</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Insecure mixed content blocked"</span>.into());
-<a href=#129 id=129 data-nosnippet>129</a>        }
-<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">if </span>base_scheme == <span class="string">"file" </span>&amp;&amp; target_scheme != <span class="string">"file" </span>{
-<a href=#131 id=131 data-nosnippet>131</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Local document cannot load network resources"</span>.into());
-<a href=#132 id=132 data-nosnippet>132</a>        }
-<a href=#133 id=133 data-nosnippet>133</a>        <span class="kw">let </span>target_split = target_rest.find(|c| c == <span class="string">'/' </span>|| c == <span class="string">'?'</span>).unwrap_or(target_rest.len());
-<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">let </span>target_authority = <span class="kw-2">&amp;</span>target_rest[..target_split];
-<a href=#135 id=135 data-nosnippet>135</a>        <span class="kw">if </span>!is_same_site(base_authority, target_authority) {
-<a href=#136 id=136 data-nosnippet>136</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Cross-site resources are not supported"</span>.into());
-<a href=#137 id=137 data-nosnippet>137</a>        }
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="kw">let </span>target_origin = <span class="macro">format!</span>(<span class="string">"{}://{}"</span>, target_scheme, target_authority);
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">let </span>raw_path = <span class="kw-2">&amp;</span>target_rest[target_split..];
-<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw">let </span>raw_path = raw_path.split(<span class="string">'#'</span>).next().unwrap_or(raw_path);
-<a href=#141 id=141 data-nosnippet>141</a>        <span class="kw">let </span>(path, query) = raw_path.split_once(<span class="string">'?'</span>).map(|(p, q)| (p, <span class="prelude-val">Some</span>(q))).unwrap_or((raw_path, <span class="prelude-val">None</span>));
-<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">let </span><span class="kw-2">mut </span>parts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = Vec::new();
-<a href=#143 id=143 data-nosnippet>143</a>        <span class="kw">for </span>part <span class="kw">in </span>path.split(<span class="string">'/'</span>) { <span class="kw">match </span>part { <span class="string">"" </span>| <span class="string">"." </span>=&gt; {}, <span class="string">".." </span>=&gt; { parts.pop(); }, <span class="kw">_ </span>=&gt; parts.push(part) } }
-<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span>trailing = path.ends_with(<span class="string">'/'</span>) &amp;&amp; !parts.is_empty();
-<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">let </span><span class="kw-2">mut </span>result = <span class="macro">format!</span>(<span class="string">"{}/{}{}"</span>, target_origin, parts.join(<span class="string">"/"</span>), <span class="kw">if </span>trailing { <span class="string">"/" </span>} <span class="kw">else </span>{ <span class="string">"" </span>});
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(query) = query { result.push(<span class="string">'?'</span>); result.push_str(query); }
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(result);
-<a href=#148 id=148 data-nosnippet>148</a>    }
-<a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">if </span>reference.split(<span class="string">'/'</span>).next().unwrap_or(<span class="string">""</span>).contains(<span class="string">':'</span>) {
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Unsupported resource URL"</span>.into());
-<a href=#152 id=152 data-nosnippet>152</a>    }
-<a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">let </span>reference = reference.split(<span class="string">'#'</span>).next().unwrap_or(reference);
-<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">let </span>base_resource_path = base_path;
-<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">let </span>base_path = base_path.split(<span class="string">'?'</span>).next().unwrap_or(base_path);
-<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">let </span>joined = <span class="kw">if </span>reference.is_empty() { String::from(base_resource_path) }
-<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">else if </span>reference.starts_with(<span class="string">'/'</span>) { String::from(reference) }
-<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">else if </span>reference.starts_with(<span class="string">'?'</span>) { <span class="macro">format!</span>(<span class="string">"{}{}"</span>, <span class="kw">if </span>base_path.is_empty() { <span class="string">"/" </span>} <span class="kw">else </span>{ base_path }, reference) }
-<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">else </span>{ <span class="macro">format!</span>(<span class="string">"{}/{}"</span>, base_path.rsplit_once(<span class="string">'/'</span>).map(|(dir, <span class="kw">_</span>)| dir).unwrap_or(<span class="string">""</span>), reference) };
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">let </span>(path, query) = joined.split_once(<span class="string">'?'</span>).map(|(p,q)| (p,<span class="prelude-val">Some</span>(q))).unwrap_or((<span class="kw-2">&amp;</span>joined,<span class="prelude-val">None</span>));
-<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">let </span><span class="kw-2">mut </span>parts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = Vec::new();
-<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">for </span>part <span class="kw">in </span>path.split(<span class="string">'/'</span>) { <span class="kw">match </span>part { <span class="string">"" </span>| <span class="string">"." </span>=&gt; {}, <span class="string">".." </span>=&gt; { parts.pop(); }, <span class="kw">_ </span>=&gt; parts.push(part) } }
-<a href=#163 id=163 data-nosnippet>163</a>    <span class="kw">let </span>trailing = path.ends_with(<span class="string">'/'</span>) &amp;&amp; !parts.is_empty();
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">let </span><span class="kw-2">mut </span>result = <span class="macro">format!</span>(<span class="string">"{}/{}{}"</span>, base_origin, parts.join(<span class="string">"/"</span>), <span class="kw">if </span>trailing { <span class="string">"/" </span>} <span class="kw">else </span>{ <span class="string">"" </span>});
-<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(query) = query { result.push(<span class="string">'?'</span>); result.push_str(query); }
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="prelude-val">Ok</span>(result)
-<a href=#167 id=167 data-nosnippet>167</a>}
-<a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a><span class="kw">fn </span>cached(url: <span class="kw-2">&amp;</span>str, limit: usize) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;Vec&lt;u8&gt;&gt;, String&gt; {
-<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">let </span>active = ACTIVE.lock();
-<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">let </span>entry = active.entries.iter().find(|entry| entry.url == url).ok_or_else(|| <span class="macro">format!</span>(<span class="string">"Resource was not prefetched: {}"</span>, url))<span class="question-mark">?</span>;
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">let </span>bytes = entry.data.as_ref().map_err(Clone::clone)<span class="question-mark">?</span>;
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">if </span>bytes.len() &gt; limit { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Resource exceeds type-specific byte budget"</span>.into()); }
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="prelude-val">Ok</span>(bytes.clone())
-<a href=#175 id=175 data-nosnippet>175</a>}
-<a href=#176 id=176 data-nosnippet>176</a><span class="kw">pub fn </span>load_text(base: <span class="kw-2">&amp;</span>str, reference: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;String, String&gt; {
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">let </span>url = resolve(base, reference)<span class="question-mark">?</span>;
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span>bytes = cached(<span class="kw-2">&amp;</span>url, MAX_CSS_BYTES)<span class="question-mark">?</span>;
-<a href=#179 id=179 data-nosnippet>179</a>    core::str::from_utf8(<span class="kw-2">&amp;</span>bytes).map(String::from).map_err(|<span class="kw">_</span>| <span class="string">"Resource is not UTF-8"</span>.into())
-<a href=#180 id=180 data-nosnippet>180</a>}
-<a href=#181 id=181 data-nosnippet>181</a><span class="kw">pub fn </span>load_binary(base: <span class="kw-2">&amp;</span>str, reference: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;Vec&lt;u8&gt;&gt;, String&gt; { cached(<span class="kw-2">&amp;</span>resolve(base, reference)<span class="question-mark">?</span>, MAX_ENCODED_IMAGE_BYTES) }
-<a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>local_path(url: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;String, String&gt; {
-<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span>path = url.strip_prefix(<span class="string">"file://"</span>).unwrap_or(url);
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">if </span>path.contains(<span class="string">"://"</span>) { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Unsupported local URL scheme"</span>.into()); }
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">if </span>url.starts_with(<span class="string">"file://"</span>) &amp;&amp; !path.starts_with(<span class="string">'/'</span>) { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"File URL must use an absolute local path; remote authorities unsupported"</span>.into()); }
-<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">let </span>path = path.split(|c| c == <span class="string">'?' </span>|| c == <span class="string">'#'</span>).next().unwrap_or(path);
-<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">if </span>path.is_empty() || path.len() &gt; <span class="number">2048 </span>{ <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Invalid file path"</span>.into()); }
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">let </span><span class="kw-2">mut </span>decoded = Vec::with_capacity(path.len()); <span class="kw">let </span>bytes = path.as_bytes(); <span class="kw">let </span><span class="kw-2">mut </span>index = <span class="number">0</span>;
-<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">while </span>index &lt; bytes.len() {
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>byte = <span class="kw">if </span>bytes[index] == <span class="string">b'%' </span>{
-<a href=#192 id=192 data-nosnippet>192</a>            <span class="kw">if </span>index + <span class="number">2 </span>&gt;= bytes.len() { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Invalid file URL escape"</span>.into()); }
-<a href=#193 id=193 data-nosnippet>193</a>            <span class="kw">let </span>hex = core::str::from_utf8(<span class="kw-2">&amp;</span>bytes[index + <span class="number">1</span>..index + <span class="number">3</span>]).map_err(|<span class="kw">_</span>| <span class="string">"Invalid file URL escape"</span>)<span class="question-mark">?</span>;
-<a href=#194 id=194 data-nosnippet>194</a>            index += <span class="number">3</span>; u8::from_str_radix(hex, <span class="number">16</span>).map_err(|<span class="kw">_</span>| <span class="string">"Invalid file URL escape"</span>)<span class="question-mark">?
-<a href=#195 id=195 data-nosnippet>195</a>        </span>} <span class="kw">else </span>{ <span class="kw">let </span>byte = bytes[index]; index += <span class="number">1</span>; byte };
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">if </span>byte == <span class="number">0 </span>|| byte &lt; <span class="number">32 </span>|| byte == <span class="number">127 </span>{ <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Invalid file path character"</span>.into()); } decoded.push(byte);
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>    String::from_utf8(decoded).map_err(|<span class="kw">_</span>| <span class="string">"File path is not UTF-8"</span>.into())
-<a href=#199 id=199 data-nosnippet>199</a>}
-<a href=#200 id=200 data-nosnippet>200</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>read_local(url: <span class="kw-2">&amp;</span>str, limit: usize) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, String&gt; {
-<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">let </span>path = local_path(url)<span class="question-mark">?</span>;
-<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">let </span><span class="kw-2">mut </span>file = ostd::fs::File::open(<span class="kw-2">&amp;</span>path).map_err(|<span class="kw">_</span>| <span class="macro">format!</span>(<span class="string">"Cannot open {}"</span>, path))<span class="question-mark">?</span>;
-<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new(); <span class="kw">let </span><span class="kw-2">mut </span>chunk = [<span class="number">0u8</span>; <span class="number">4096</span>];
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">loop </span>{
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let </span>count = file.read(<span class="kw-2">&amp;mut </span>chunk).map_err(|<span class="kw">_</span>| <span class="macro">format!</span>(<span class="string">"Cannot read {}"</span>, path))<span class="question-mark">?</span>;
-<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">if </span>count == <span class="number">0 </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(bytes); }
-<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw">if </span>count &gt; limit.saturating_sub(bytes.len()) { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(<span class="string">"File exceeds {} byte budget"</span>, limit)); }
-<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span>needed = bytes.len() + count;
-<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">if </span>needed &gt; bytes.capacity() {
-<a href=#210 id=210 data-nosnippet>210</a>            <span class="kw">let </span>capacity = needed.next_power_of_two().min(limit);
-<a href=#211 id=211 data-nosnippet>211</a>            bytes.reserve_exact(capacity - bytes.len());
-<a href=#212 id=212 data-nosnippet>212</a>        }
-<a href=#213 id=213 data-nosnippet>213</a>        bytes.extend_from_slice(<span class="kw-2">&amp;</span>chunk[..count]);
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span>a_lower; <span class="kw">let </span>b_lower;
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">let </span>a = <span class="kw">if </span>a.bytes().any(|b| b.is_ascii_uppercase()) { a_lower = a.to_ascii_lowercase(); a_lower.as_str() } <span class="kw">else </span>{ a };
+<a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">let </span>b = <span class="kw">if </span>b.bytes().any(|b| b.is_ascii_uppercase()) { b_lower = b.to_ascii_lowercase(); b_lower.as_str() } <span class="kw">else </span>{ b };
+<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">match </span>(registrable_domain(a), registrable_domain(b)) { (<span class="prelude-val">Some</span>(a),<span class="prelude-val">Some</span>(b)) =&gt; a == b, <span class="kw">_ </span>=&gt; <span class="bool-val">false </span>}
+<a href=#63 id=63 data-nosnippet>63</a>}
+<a href=#64 id=64 data-nosnippet>64</a>
+<a href=#65 id=65 data-nosnippet>65</a><span class="kw">fn </span>is_multi_part_suffix(sld: <span class="kw-2">&amp;</span>str, tld: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">if </span><span class="macro">matches!</span>((sld, tld),
+<a href=#67 id=67 data-nosnippet>67</a>        (<span class="string">"github"</span>, <span class="string">"io"</span>) | (<span class="string">"gitlab"</span>, <span class="string">"io"</span>) | (<span class="string">"pages"</span>, <span class="string">"dev"</span>) | (<span class="string">"workers"</span>, <span class="string">"dev"</span>)
+<a href=#68 id=68 data-nosnippet>68</a>        | (<span class="string">"vercel"</span>, <span class="string">"app"</span>) | (<span class="string">"netlify"</span>, <span class="string">"app"</span>) | (<span class="string">"appspot"</span>, <span class="string">"com"</span>)
+<a href=#69 id=69 data-nosnippet>69</a>        | (<span class="string">"azurewebsites"</span>, <span class="string">"net"</span>) | (<span class="string">"herokuapp"</span>, <span class="string">"com"</span>) | (<span class="string">"myshopify"</span>, <span class="string">"com"</span>)
+<a href=#70 id=70 data-nosnippet>70</a>    ) {
+<a href=#71 id=71 data-nosnippet>71</a>        <span class="kw">return </span><span class="bool-val">true</span>;
+<a href=#72 id=72 data-nosnippet>72</a>    }
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">if </span>tld.len() == <span class="number">2 </span>&amp;&amp; tld.bytes().all(|b| b.is_ascii_alphabetic()) {
+<a href=#74 id=74 data-nosnippet>74</a>        <span class="macro">matches!</span>(sld,
+<a href=#75 id=75 data-nosnippet>75</a>            <span class="string">"co" </span>| <span class="string">"com" </span>| <span class="string">"net" </span>| <span class="string">"org" </span>| <span class="string">"edu" </span>| <span class="string">"gov" </span>| <span class="string">"ac" </span>| <span class="string">"mil"
+<a href=#76 id=76 data-nosnippet>76</a>            </span>| <span class="string">"nic" </span>| <span class="string">"res" </span>| <span class="string">"gen" </span>| <span class="string">"int" </span>| <span class="string">"biz" </span>| <span class="string">"info" </span>| <span class="string">"pro"
+<a href=#77 id=77 data-nosnippet>77</a>            </span>| <span class="string">"gob" </span>| <span class="string">"asso" </span>| <span class="string">"nom" </span>| <span class="string">"ltd" </span>| <span class="string">"plc" </span>| <span class="string">"ne" </span>| <span class="string">"or" </span>| <span class="string">"go" </span>| <span class="string">"in" </span>| <span class="string">"me"
+<a href=#78 id=78 data-nosnippet>78</a>        </span>)
+<a href=#79 id=79 data-nosnippet>79</a>    } <span class="kw">else </span>{
+<a href=#80 id=80 data-nosnippet>80</a>        <span class="bool-val">false
+<a href=#81 id=81 data-nosnippet>81</a>    </span>}
+<a href=#82 id=82 data-nosnippet>82</a>}
+<a href=#83 id=83 data-nosnippet>83</a>
+<a href=#84 id=84 data-nosnippet>84</a><span class="doccomment">/// Public-suffix-aware registrable domain (eTLD+1). Public suffixes (e.g. `co.in`,
+<a href=#85 id=85 data-nosnippet>85</a>/// `com`, `github.io`) have no registrant label and return `None`.
+<a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">pub fn </span>registrable_domain(host: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt; {
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">let </span>host = host.trim().trim_end_matches(<span class="string">'.'</span>);
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">if </span>host.is_empty() || host.bytes().all(|b| b.is_ascii_digit() || b == <span class="string">b'.' </span>|| b == <span class="string">b':'</span>) {
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#90 id=90 data-nosnippet>90</a>    }
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">let </span><span class="kw-2">mut </span>dot_indices = [<span class="number">0usize</span>; <span class="number">16</span>];
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">let </span><span class="kw-2">mut </span>count = <span class="number">0</span>;
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">for </span>(i, c) <span class="kw">in </span>host.char_indices() {
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">if </span>c == <span class="string">'.' </span>&amp;&amp; count &lt; dot_indices.len() {
+<a href=#95 id=95 data-nosnippet>95</a>            dot_indices[count] = i;
+<a href=#96 id=96 data-nosnippet>96</a>            count += <span class="number">1</span>;
+<a href=#97 id=97 data-nosnippet>97</a>        }
+<a href=#98 id=98 data-nosnippet>98</a>    }
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">if </span>count == <span class="number">0 </span>{
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#101 id=101 data-nosnippet>101</a>    }
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">if </span>count &gt;= <span class="number">2 </span>{
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">let </span>last_dot = dot_indices[count - <span class="number">1</span>];
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">let </span>second_last_dot = dot_indices[count - <span class="number">2</span>];
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">let </span>sld = <span class="kw-2">&amp;</span>host[second_last_dot + <span class="number">1</span>..last_dot];
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">let </span>tld = <span class="kw-2">&amp;</span>host[last_dot + <span class="number">1</span>..];
+<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">if </span>is_multi_part_suffix(sld, tld) {
+<a href=#108 id=108 data-nosnippet>108</a>            <span class="kw">return if </span>count &gt;= <span class="number">3 </span>{
+<a href=#109 id=109 data-nosnippet>109</a>                <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>host[dot_indices[count - <span class="number">3</span>] + <span class="number">1</span>..])
+<a href=#110 id=110 data-nosnippet>110</a>            } <span class="kw">else </span>{
+<a href=#111 id=111 data-nosnippet>111</a>                <span class="prelude-val">Some</span>(host)
+<a href=#112 id=112 data-nosnippet>112</a>            };
+<a href=#113 id=113 data-nosnippet>113</a>        }
+<a href=#114 id=114 data-nosnippet>114</a>    }
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">let </span>dot = dot_indices[count - <span class="number">1</span>];
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">let </span>sld = <span class="kw">if </span>count &gt;= <span class="number">2 </span>{ <span class="kw-2">&amp;</span>host[dot_indices[count - <span class="number">2</span>] + <span class="number">1</span>..dot] } <span class="kw">else </span>{ <span class="kw-2">&amp;</span>host[..dot] };
+<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">let </span>tld = <span class="kw-2">&amp;</span>host[dot + <span class="number">1</span>..];
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">if </span>is_multi_part_suffix(sld, tld) {
+<a href=#119 id=119 data-nosnippet>119</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#120 id=120 data-nosnippet>120</a>    }
+<a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">if </span>count == <span class="number">1 </span>{
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="prelude-val">Some</span>(host)
+<a href=#123 id=123 data-nosnippet>123</a>    } <span class="kw">else </span>{
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>host[dot_indices[count - <span class="number">2</span>] + <span class="number">1</span>..])
+<a href=#125 id=125 data-nosnippet>125</a>    }
+<a href=#126 id=126 data-nosnippet>126</a>}
+<a href=#127 id=127 data-nosnippet>127</a>
+<a href=#128 id=128 data-nosnippet>128</a><span class="kw">pub fn </span>resolve(base: <span class="kw-2">&amp;</span>str, reference: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;String, String&gt; {
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">let </span>reference = reference.trim();
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">if </span>reference.len() &gt; <span class="number">2048 </span>|| reference.bytes().any(|b| b &lt; <span class="number">32 </span>|| b == <span class="number">127</span>) { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Invalid/overlong resource URL"</span>.into()); }
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">let </span>base = base.split(<span class="string">'#'</span>).next().unwrap_or(base);
+<a href=#132 id=132 data-nosnippet>132</a>    <span class="kw">let </span>(base_scheme, base_rest) = base.split_once(<span class="string">"://"</span>).ok_or(<span class="string">"Missing base URL scheme"</span>)<span class="question-mark">?</span>;
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(base_scheme, <span class="string">"http" </span>| <span class="string">"https" </span>| <span class="string">"gemini" </span>| <span class="string">"file"</span>) { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Unsupported resource scheme"</span>.into()); }
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">let </span>base_split = base_rest.find(|c| c == <span class="string">'/' </span>|| c == <span class="string">'?'</span>).unwrap_or(base_rest.len());
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">let </span>base_authority = <span class="kw-2">&amp;</span>base_rest[..base_split];
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">let </span>base_origin = <span class="macro">format!</span>(<span class="string">"{}://{}"</span>, base_scheme, base_authority);
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="kw">let </span>base_path = <span class="kw-2">&amp;</span>base_rest[base_split..];
+<a href=#138 id=138 data-nosnippet>138</a>
+<a href=#139 id=139 data-nosnippet>139</a>    <span class="kw">let </span>abs_ref = <span class="kw">if </span>reference.starts_with(<span class="string">"//"</span>) {
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"{}:{}"</span>, base_scheme, reference))
+<a href=#141 id=141 data-nosnippet>141</a>    } <span class="kw">else if </span>reference.contains(<span class="string">"://"</span>) {
+<a href=#142 id=142 data-nosnippet>142</a>        <span class="prelude-val">Some</span>(String::from(reference))
+<a href=#143 id=143 data-nosnippet>143</a>    } <span class="kw">else </span>{
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="prelude-val">None
+<a href=#145 id=145 data-nosnippet>145</a>    </span>};
+<a href=#146 id=146 data-nosnippet>146</a>
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(target_url) = abs_ref {
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">let </span>(target_scheme, target_rest) = target_url.split_once(<span class="string">"://"</span>).ok_or(<span class="string">"Invalid resource URL"</span>)<span class="question-mark">?</span>;
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">if </span>!<span class="macro">matches!</span>(target_scheme, <span class="string">"http" </span>| <span class="string">"https" </span>| <span class="string">"gemini" </span>| <span class="string">"file"</span>)
+<a href=#150 id=150 data-nosnippet>150</a>            || base_scheme == <span class="string">"file" </span>&amp;&amp; target_scheme != <span class="string">"file"
+<a href=#151 id=151 data-nosnippet>151</a>            </span>|| base_scheme != <span class="string">"file" </span>&amp;&amp; target_scheme == <span class="string">"file"
+<a href=#152 id=152 data-nosnippet>152</a>            </span>|| (base_scheme == <span class="string">"gemini"</span>) != (target_scheme == <span class="string">"gemini"</span>) {
+<a href=#153 id=153 data-nosnippet>153</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Unsupported resource protocol change"</span>.into());
+<a href=#154 id=154 data-nosnippet>154</a>        }
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">if </span>base_scheme == <span class="string">"https" </span>&amp;&amp; target_scheme == <span class="string">"http" </span>{
+<a href=#156 id=156 data-nosnippet>156</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Insecure mixed content blocked"</span>.into());
+<a href=#157 id=157 data-nosnippet>157</a>        }
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">if </span>base_scheme == <span class="string">"file" </span>&amp;&amp; target_scheme != <span class="string">"file" </span>{
+<a href=#159 id=159 data-nosnippet>159</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Local document cannot load network resources"</span>.into());
+<a href=#160 id=160 data-nosnippet>160</a>        }
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>target_split = target_rest.find(|c| c == <span class="string">'/' </span>|| c == <span class="string">'?'</span>).unwrap_or(target_rest.len());
+<a href=#162 id=162 data-nosnippet>162</a>        <span class="kw">let </span>target_authority = <span class="kw-2">&amp;</span>target_rest[..target_split];
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">if </span>!is_same_site(base_authority, target_authority) {
+<a href=#164 id=164 data-nosnippet>164</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Cross-site resources are not supported"</span>.into());
+<a href=#165 id=165 data-nosnippet>165</a>        }
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">let </span>target_origin = <span class="macro">format!</span>(<span class="string">"{}://{}"</span>, target_scheme, target_authority);
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">let </span>raw_path = <span class="kw-2">&amp;</span>target_rest[target_split..];
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">let </span>raw_path = raw_path.split(<span class="string">'#'</span>).next().unwrap_or(raw_path);
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span>(path, query) = raw_path.split_once(<span class="string">'?'</span>).map(|(p, q)| (p, <span class="prelude-val">Some</span>(q))).unwrap_or((raw_path, <span class="prelude-val">None</span>));
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span><span class="kw-2">mut </span>parts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = Vec::new();
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">for </span>part <span class="kw">in </span>path.split(<span class="string">'/'</span>) { <span class="kw">match </span>part { <span class="string">"" </span>| <span class="string">"." </span>=&gt; {}, <span class="string">".." </span>=&gt; { parts.pop(); }, <span class="kw">_ </span>=&gt; parts.push(part) } }
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">let </span>trailing = path.ends_with(<span class="string">'/'</span>) &amp;&amp; !parts.is_empty();
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="kw">let </span><span class="kw-2">mut </span>result = <span class="macro">format!</span>(<span class="string">"{}/{}{}"</span>, target_origin, parts.join(<span class="string">"/"</span>), <span class="kw">if </span>trailing { <span class="string">"/" </span>} <span class="kw">else </span>{ <span class="string">"" </span>});
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(query) = query { result.push(<span class="string">'?'</span>); result.push_str(query); }
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(result);
+<a href=#176 id=176 data-nosnippet>176</a>    }
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">if </span>reference.split(<span class="string">'/'</span>).next().unwrap_or(<span class="string">""</span>).contains(<span class="string">':'</span>) {
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Unsupported resource URL"</span>.into());
+<a href=#180 id=180 data-nosnippet>180</a>    }
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>reference = reference.split(<span class="string">'#'</span>).next().unwrap_or(reference);
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>base_resource_path = base_path;
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">let </span>base_path = base_path.split(<span class="string">'?'</span>).next().unwrap_or(base_path);
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span>joined = <span class="kw">if </span>reference.is_empty() { String::from(base_resource_path) }
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">else if </span>reference.starts_with(<span class="string">'/'</span>) { String::from(reference) }
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">else if </span>reference.starts_with(<span class="string">'?'</span>) { <span class="macro">format!</span>(<span class="string">"{}{}"</span>, <span class="kw">if </span>base_path.is_empty() { <span class="string">"/" </span>} <span class="kw">else </span>{ base_path }, reference) }
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">else </span>{ <span class="macro">format!</span>(<span class="string">"{}/{}"</span>, base_path.rsplit_once(<span class="string">'/'</span>).map(|(dir, <span class="kw">_</span>)| dir).unwrap_or(<span class="string">""</span>), reference) };
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">let </span>(path, query) = joined.split_once(<span class="string">'?'</span>).map(|(p,q)| (p,<span class="prelude-val">Some</span>(q))).unwrap_or((<span class="kw-2">&amp;</span>joined,<span class="prelude-val">None</span>));
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">let </span><span class="kw-2">mut </span>parts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = Vec::new();
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">for </span>part <span class="kw">in </span>path.split(<span class="string">'/'</span>) { <span class="kw">match </span>part { <span class="string">"" </span>| <span class="string">"." </span>=&gt; {}, <span class="string">".." </span>=&gt; { parts.pop(); }, <span class="kw">_ </span>=&gt; parts.push(part) } }
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw">let </span>trailing = path.ends_with(<span class="string">'/'</span>) &amp;&amp; !parts.is_empty();
+<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">let </span><span class="kw-2">mut </span>result = <span class="macro">format!</span>(<span class="string">"{}/{}{}"</span>, base_origin, parts.join(<span class="string">"/"</span>), <span class="kw">if </span>trailing { <span class="string">"/" </span>} <span class="kw">else </span>{ <span class="string">"" </span>});
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(query) = query { result.push(<span class="string">'?'</span>); result.push_str(query); }
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="prelude-val">Ok</span>(result)
+<a href=#195 id=195 data-nosnippet>195</a>}
+<a href=#196 id=196 data-nosnippet>196</a><span class="doccomment">/// Resolve a hyperlink target (&lt;a href="..."&gt;) against the base document URL.
+<a href=#197 id=197 data-nosnippet>197</a>/// Unlike sub-resource resolution, hyperlinks are unrestricted navigation targets
+<a href=#198 id=198 data-nosnippet>198</a>/// and MUST preserve cross-site links, anchors, and queries.
+<a href=#199 id=199 data-nosnippet>199</a></span><span class="kw">pub fn </span>resolve_hyperlink(base: <span class="kw-2">&amp;</span>str, reference: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+<a href=#200 id=200 data-nosnippet>200</a>    <span class="kw">let </span>reference = reference.trim();
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">if </span>reference.is_empty() || reference.starts_with(<span class="string">"javascript:"</span>) {
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#203 id=203 data-nosnippet>203</a>    }
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">if </span>reference.starts_with(<span class="string">'#'</span>) {
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let </span>base_no_hash = base.split(<span class="string">'#'</span>).next().unwrap_or(base);
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"{}{}"</span>, base_no_hash, reference));
+<a href=#207 id=207 data-nosnippet>207</a>    }
+<a href=#208 id=208 data-nosnippet>208</a>    <span class="kw">if </span>reference.contains(<span class="string">"://"</span>) {
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(String::from(reference));
+<a href=#210 id=210 data-nosnippet>210</a>    }
+<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">if </span>reference.starts_with(<span class="string">"//"</span>) {
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">let </span>scheme = base.split(<span class="string">"://"</span>).next().unwrap_or(<span class="string">"https"</span>);
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"{}:{}"</span>, scheme, reference));
 <a href=#214 id=214 data-nosnippet>214</a>    }
-<a href=#215 id=215 data-nosnippet>215</a>}
-<a href=#216 id=216 data-nosnippet>216</a>
-<a href=#217 id=217 data-nosnippet>217</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Reference { <span class="kw">pub </span>url: String, <span class="kw">pub </span>image: bool }
-<a href=#218 id=218 data-nosnippet>218</a><span class="kw">fn </span>push_reference(refs: <span class="kw-2">&amp;mut </span>Vec&lt;Reference&gt;, base: <span class="kw-2">&amp;</span>str, reference: <span class="kw-2">&amp;</span>str, image: bool) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(url) = resolve(base, reference) <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(()); }; <span class="comment">// Cross-origin references are deliberately not fetched.
-<a href=#220 id=220 data-nosnippet>220</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(index) = refs.iter().position(|item| item.url == url) {
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">if </span>image &amp;&amp; !refs[index].image {
-<a href=#222 id=222 data-nosnippet>222</a>            <span class="kw">if </span>refs.iter().filter(|item| item.image).count() &gt;= <span class="kw">crate</span>::budget::MAX_IMAGES { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Document exceeds image resource budget"</span>.into()); }
-<a href=#223 id=223 data-nosnippet>223</a>            refs[index].image = <span class="bool-val">true</span>;
-<a href=#224 id=224 data-nosnippet>224</a>        }
-<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#226 id=226 data-nosnippet>226</a>    }
-<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">if </span>refs.len() &gt;= MAX_REFERENCES { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Document exceeds resource reference budget"</span>.into()); }
-<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">if </span>image &amp;&amp; refs.iter().filter(|item| item.image).count() &gt;= <span class="kw">crate</span>::budget::MAX_IMAGES { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Document exceeds image resource budget"</span>.into()); }
-<a href=#229 id=229 data-nosnippet>229</a>    refs.push(Reference { url, image }); <span class="prelude-val">Ok</span>(())
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">let </span>(base_scheme, base_rest) = base.split_once(<span class="string">"://"</span>)<span class="question-mark">?</span>;
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">let </span>base_split = base_rest.find(|c| c == <span class="string">'/' </span>|| c == <span class="string">'?'</span>).unwrap_or(base_rest.len());
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="kw">let </span>base_authority = <span class="kw-2">&amp;</span>base_rest[..base_split];
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">let </span>base_origin = <span class="macro">format!</span>(<span class="string">"{}://{}"</span>, base_scheme, base_authority);
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">let </span>base_path = <span class="kw-2">&amp;</span>base_rest[base_split..];
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">let </span>base_path = base_path.split(<span class="string">'?'</span>).next().unwrap_or(base_path);
+<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">let </span>joined = <span class="kw">if </span>reference.starts_with(<span class="string">'/'</span>) {
+<a href=#222 id=222 data-nosnippet>222</a>        <span class="macro">format!</span>(<span class="string">"{}{}"</span>, base_origin, reference)
+<a href=#223 id=223 data-nosnippet>223</a>    } <span class="kw">else if </span>reference.starts_with(<span class="string">'?'</span>) {
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="macro">format!</span>(<span class="string">"{}{}{}"</span>, base_origin, <span class="kw">if </span>base_path.is_empty() { <span class="string">"/" </span>} <span class="kw">else </span>{ base_path }, reference)
+<a href=#225 id=225 data-nosnippet>225</a>    } <span class="kw">else </span>{
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">let </span>dir = base_path.rsplit_once(<span class="string">'/'</span>).map(|(d, <span class="kw">_</span>)| d).unwrap_or(<span class="string">""</span>);
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="macro">format!</span>(<span class="string">"{}/{}/{}"</span>, base_origin, dir, reference)
+<a href=#228 id=228 data-nosnippet>228</a>    };
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="prelude-val">Some</span>(joined)
 <a href=#230 id=230 data-nosnippet>230</a>}
-<a href=#231 id=231 data-nosnippet>231</a><span class="doccomment">/// Discover only references the supported format actually activates.
-<a href=#232 id=232 data-nosnippet>232</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>references(base: <span class="kw-2">&amp;</span>str, content: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Reference&gt;, String&gt; {
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">let </span><span class="kw-2">mut </span>refs = Vec::new();
-<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">match </span><span class="kw">crate</span>::parser::DocFormat::detect_from_url_or_content(base, content) {
-<a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">crate</span>::parser::DocFormat::Html =&gt; {
-<a href=#236 id=236 data-nosnippet>236</a>            <span class="kw">for </span>(reference, image) <span class="kw">in </span><span class="kw">crate</span>::parser::html::resource_references_checked(content)<span class="question-mark">? </span>{
-<a href=#237 id=237 data-nosnippet>237</a>                push_reference(<span class="kw-2">&amp;mut </span>refs, base, <span class="kw-2">&amp;</span>reference, image)<span class="question-mark">?</span>;
-<a href=#238 id=238 data-nosnippet>238</a>            }
-<a href=#239 id=239 data-nosnippet>239</a>        }
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw">crate</span>::parser::DocFormat::Markdown =&gt; {
-<a href=#241 id=241 data-nosnippet>241</a>            <span class="kw">let </span><span class="kw-2">mut </span>fence: <span class="prelude-ty">Option</span>&lt;char&gt; = <span class="prelude-val">None</span>;
-<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">for </span>line <span class="kw">in </span>content.lines() {
-<a href=#243 id=243 data-nosnippet>243</a>                <span class="kw">let </span>line = line.trim();
-<a href=#244 id=244 data-nosnippet>244</a>                <span class="kw">if </span>line.starts_with(<span class="string">"```"</span>) || line.starts_with(<span class="string">"~~~"</span>) {
-<a href=#245 id=245 data-nosnippet>245</a>                    <span class="kw">let </span>marker = line.chars().next().unwrap();
-<a href=#246 id=246 data-nosnippet>246</a>                    <span class="kw">if </span>fence == <span class="prelude-val">Some</span>(marker) { fence = <span class="prelude-val">None</span>; }
-<a href=#247 id=247 data-nosnippet>247</a>                    <span class="kw">else if </span>fence.is_none() { fence = <span class="prelude-val">Some</span>(marker); }
-<a href=#248 id=248 data-nosnippet>248</a>                    <span class="kw">continue</span>;
-<a href=#249 id=249 data-nosnippet>249</a>                }
-<a href=#250 id=250 data-nosnippet>250</a>                <span class="kw">if </span>fence.is_some() || !line.starts_with(<span class="string">"!["</span>) || !line.ends_with(<span class="string">')'</span>) { <span class="kw">continue</span>; }
-<a href=#251 id=251 data-nosnippet>251</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(end) = line.find(<span class="string">"]("</span>) { push_reference(<span class="kw-2">&amp;mut </span>refs, base, <span class="kw-2">&amp;</span>line[end + <span class="number">2</span>..line.len() - <span class="number">1</span>], <span class="bool-val">true</span>)<span class="question-mark">?</span>; }
-<a href=#252 id=252 data-nosnippet>252</a>            }
-<a href=#253 id=253 data-nosnippet>253</a>        }
-<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw">_ </span>=&gt; {},
-<a href=#255 id=255 data-nosnippet>255</a>    }
-<a href=#256 id=256 data-nosnippet>256</a>    <span class="prelude-val">Ok</span>(refs)
-<a href=#257 id=257 data-nosnippet>257</a>}
-<a href=#258 id=258 data-nosnippet>258</a>
-<a href=#259 id=259 data-nosnippet>259</a><span class="attr">#[cfg(test)]
-<a href=#260 id=260 data-nosnippet>260</a></span><span class="kw">mod </span>tests {
-<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#262 id=262 data-nosnippet>262</a>    <span class="attr">#[test]
-<a href=#263 id=263 data-nosnippet>263</a>    </span><span class="kw">fn </span>discovery_admits_reference_boundary_and_rejects_excess() {
-<a href=#264 id=264 data-nosnippet>264</a>        <span class="kw">let </span>html = (<span class="number">0</span>..MAX_REFERENCES).map(|index| <span class="macro">format!</span>(<span class="string">"&lt;link rel='stylesheet' href='/s{index}.css'&gt;"</span>)).collect::&lt;String&gt;();
-<a href=#265 id=265 data-nosnippet>265</a>        <span class="macro">assert_eq!</span>(references(<span class="string">"https://example.test/index.html"</span>, <span class="kw-2">&amp;</span>html).unwrap().len(), MAX_REFERENCES);
-<a href=#266 id=266 data-nosnippet>266</a>        <span class="kw">let </span>excess = (<span class="number">0</span>..=MAX_REFERENCES).map(|index| <span class="macro">format!</span>(<span class="string">"&lt;link rel='stylesheet' href='/s{index}.css'&gt;"</span>)).collect::&lt;String&gt;();
-<a href=#267 id=267 data-nosnippet>267</a>        <span class="macro">assert!</span>(references(<span class="string">"https://example.test/index.html"</span>, <span class="kw-2">&amp;</span>excess).is_err());
-<a href=#268 id=268 data-nosnippet>268</a>    }
-<a href=#269 id=269 data-nosnippet>269</a>    <span class="attr">#[test]
-<a href=#270 id=270 data-nosnippet>270</a>    </span><span class="kw">fn </span>resource_storage_enforces_profile_byte_boundaries() {
-<a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">let </span><span class="kw-2">mut </span>bundle = ResourceBundle::default();
-<a href=#272 id=272 data-nosnippet>272</a>        <span class="macro">assert!</span>(bundle.insert(<span class="string">"file:///exact.css"</span>.into(), <span class="prelude-val">Ok</span>(<span class="macro">alloc::vec!</span>[<span class="string">b' '</span>; MAX_CSS_BYTES]), <span class="bool-val">false</span>).is_ok());
-<a href=#273 id=273 data-nosnippet>273</a>        <span class="macro">assert!</span>(bundle.insert(<span class="string">"file:///excess.css"</span>.into(), <span class="prelude-val">Ok</span>(<span class="macro">alloc::vec!</span>[<span class="string">b' '</span>; MAX_CSS_BYTES + <span class="number">1</span>]), <span class="bool-val">false</span>).is_err());
-<a href=#274 id=274 data-nosnippet>274</a>        <span class="kw">let </span>overhead = core::mem::size_of::&lt;Vec&lt;u8&gt;&gt;() + <span class="number">2 </span>* core::mem::size_of::&lt;usize&gt;();
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="kw">while </span>bundle.remaining_bytes() &gt;= overhead {
-<a href=#276 id=276 data-nosnippet>276</a>            <span class="kw">let </span>payload = (bundle.remaining_bytes() - overhead).min(MAX_CSS_BYTES);
-<a href=#277 id=277 data-nosnippet>277</a>            bundle.insert(<span class="macro">format!</span>(<span class="string">"file:///{}.css"</span>, bundle.entries.len()), <span class="prelude-val">Ok</span>(<span class="macro">alloc::vec!</span>[<span class="number">0</span>; payload]), <span class="bool-val">false</span>).unwrap();
-<a href=#278 id=278 data-nosnippet>278</a>        }
-<a href=#279 id=279 data-nosnippet>279</a>        <span class="macro">assert_eq!</span>(bundle.remaining_bytes(), <span class="number">0</span>);
-<a href=#280 id=280 data-nosnippet>280</a>        <span class="macro">assert!</span>(bundle.insert(<span class="string">"file:///overflow.css"</span>.into(), <span class="prelude-val">Ok</span>(Vec::new()), <span class="bool-val">false</span>).is_err());
-<a href=#281 id=281 data-nosnippet>281</a>    }
-<a href=#282 id=282 data-nosnippet>282</a>    <span class="attr">#[test] </span><span class="kw">fn </span>resolution_preserves_queries_not_fragments_and_origin() {
-<a href=#283 id=283 data-nosnippet>283</a>        <span class="macro">assert_eq!</span>(resolve(<span class="string">"https://example.com/a/b.html?q=1#x"</span>, <span class="string">"../js/app.js?v=2"</span>).unwrap(), <span class="string">"https://example.com/js/app.js?v=2"</span>);
-<a href=#284 id=284 data-nosnippet>284</a>        <span class="macro">assert_eq!</span>(resolve(<span class="string">"file:///data/web/index.html"</span>, <span class="string">"./style.css"</span>).unwrap(), <span class="string">"file:///data/web/style.css"</span>);
-<a href=#285 id=285 data-nosnippet>285</a>        <span class="macro">assert_eq!</span>(resolve(<span class="string">"https://example.com"</span>, <span class="string">"?q=1"</span>).unwrap(), <span class="string">"https://example.com/?q=1"</span>);
-<a href=#286 id=286 data-nosnippet>286</a>        <span class="kw">for </span>url <span class="kw">in </span>[<span class="string">"https://example.com.evil/x"</span>, <span class="string">"https://evil/x"</span>, <span class="string">"//evil/x"</span>, <span class="string">"javascript:alert(1)"</span>, <span class="string">"data:text/plain,x"</span>] { <span class="macro">assert!</span>(resolve(<span class="string">"https://example.com/a.html"</span>, url).is_err()); }
-<a href=#287 id=287 data-nosnippet>287</a>        <span class="macro">assert_eq!</span>(resolve(<span class="string">"https://tuoitre.vn/"</span>, <span class="string">"https://cdn2.tuoitre.vn/img.jpg"</span>).unwrap(), <span class="string">"https://cdn2.tuoitre.vn/img.jpg"</span>);
-<a href=#288 id=288 data-nosnippet>288</a>        <span class="macro">assert_eq!</span>(resolve(<span class="string">"https://tuoitre.vn/"</span>, <span class="string">"//static-tuoitre.tuoitre.vn/logo.png"</span>).unwrap(), <span class="string">"https://static-tuoitre.tuoitre.vn/logo.png"</span>);
-<a href=#289 id=289 data-nosnippet>289</a>        <span class="macro">assert!</span>(resolve(<span class="string">"https://tuoitre.vn/"</span>, <span class="string">"https://evil.com/img.jpg"</span>).is_err());
-<a href=#290 id=290 data-nosnippet>290</a>        <span class="macro">assert!</span>(resolve(<span class="string">"https://tuoitre.vn/"</span>, <span class="string">"https://tuoitre.vn.evil.com/img.jpg"</span>).is_err());
-<a href=#291 id=291 data-nosnippet>291</a>        <span class="macro">assert!</span>(resolve(<span class="string">"https://tuoitre.vn/"</span>, <span class="string">"http://cdn2.tuoitre.vn/insecure.jpg"</span>).is_err());
-<a href=#292 id=292 data-nosnippet>292</a>    }
-<a href=#293 id=293 data-nosnippet>293</a>    <span class="attr">#[test] </span><span class="kw">fn </span>local_paths_strip_url_suffix_before_decoding() {
-<a href=#294 id=294 data-nosnippet>294</a>        <span class="macro">assert_eq!</span>(local_path(<span class="string">"file:///data/a%20b.md?q=x#toc"</span>).unwrap(), <span class="string">"/data/a b.md"</span>);
-<a href=#295 id=295 data-nosnippet>295</a>        <span class="macro">assert_eq!</span>(local_path(<span class="string">"/data/a%3Fb.md#toc"</span>).unwrap(), <span class="string">"/data/a?b.md"</span>);
-<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">for </span>path <span class="kw">in </span>[<span class="string">"file://remote/file"</span>, <span class="string">"file:///a%00b"</span>, <span class="string">"file:///a%ZZ"</span>] { <span class="macro">assert!</span>(local_path(path).is_err()); }
-<a href=#297 id=297 data-nosnippet>297</a>    }
-<a href=#298 id=298 data-nosnippet>298</a>    <span class="attr">#[test] </span><span class="kw">fn </span>static_resources_are_deduplicated_and_cross_origin_excluded() {
-<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">let </span>refs = references(<span class="string">"https://host/a/index.html"</span>, <span class="string">"&lt;!-- &lt;img src='ignored'&gt; --&gt;&lt;img src='../pic.png'&gt;&lt;script src=app.js&gt;&lt;/script&gt;&lt;link rel='stylesheet' href='s.css'&gt;&lt;img src='https://evil/pic'&gt;&lt;img src='../pic.png'&gt; ![p](other.jpg)"</span>).unwrap();
-<a href=#300 id=300 data-nosnippet>300</a>        <span class="macro">assert_eq!</span>(refs.len(), <span class="number">3</span>); <span class="macro">assert_eq!</span>(refs[<span class="number">0</span>].url, <span class="string">"https://host/pic.png"</span>);
-<a href=#301 id=301 data-nosnippet>301</a>        <span class="macro">assert_eq!</span>(refs.iter().filter(|r| r.image).count(), <span class="number">1</span>);
-<a href=#302 id=302 data-nosnippet>302</a>        <span class="kw">let </span>refs = references(<span class="string">"https://host/a/readme.md"</span>, <span class="string">"```\n![inert](bad.png)\n```\n~~~html\n&lt;img src='bad.png'&gt;\n~~~\n![active](good.png)\n"</span>).unwrap();
-<a href=#303 id=303 data-nosnippet>303</a>        <span class="macro">assert_eq!</span>(refs.len(), <span class="number">1</span>); <span class="macro">assert_eq!</span>(refs[<span class="number">0</span>].url, <span class="string">"https://host/a/good.png"</span>);
-<a href=#304 id=304 data-nosnippet>304</a>    }
-<a href=#305 id=305 data-nosnippet>305</a>    <span class="attr">#[test] </span><span class="kw">fn </span>cache_missing_and_error_are_not_truncated_success() {
-<a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">let </span><span class="kw-2">mut </span>bundle = ResourceBundle::default();
-<a href=#307 id=307 data-nosnippet>307</a>        bundle.insert(<span class="string">"https://host/a"</span>.into(), <span class="prelude-val">Err</span>(<span class="string">"Truncated response"</span>.into()), <span class="bool-val">false</span>).unwrap();
-<a href=#308 id=308 data-nosnippet>308</a>        <span class="macro">assert!</span>(bundle.resident_bytes() &gt; <span class="number">0</span>);
-<a href=#309 id=309 data-nosnippet>309</a>        <span class="macro">assert_eq!</span>(bundle.warnings().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(), <span class="macro">alloc::vec!</span>[<span class="string">"Truncated response"</span>]);
-<a href=#310 id=310 data-nosnippet>310</a>    }
-<a href=#311 id=311 data-nosnippet>311</a>    <span class="attr">#[test]
-<a href=#312 id=312 data-nosnippet>312</a>    </span><span class="kw">fn </span>decoded_resource_budget_is_preflighted_and_shared_bytes_are_not_cloned() {
-<a href=#313 id=313 data-nosnippet>313</a>        <span class="kw">let </span><span class="kw-2">mut </span>header = <span class="macro">alloc::vec!</span>[<span class="number">0</span>; <span class="number">26</span>]; header[..<span class="number">2</span>].copy_from_slice(<span class="string">b"BM"</span>);
-<a href=#314 id=314 data-nosnippet>314</a>        header[<span class="number">18</span>..<span class="number">22</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1024i32</span>.to_le_bytes());
-<a href=#315 id=315 data-nosnippet>315</a>        header[<span class="number">22</span>..<span class="number">26</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1024i32</span>.to_le_bytes());
-<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">let </span><span class="kw-2">mut </span>bundle = ResourceBundle::default();
-<a href=#317 id=317 data-nosnippet>317</a>        bundle.insert(<span class="string">"file:///one.bmp"</span>.into(), <span class="prelude-val">Ok</span>(header.clone()), <span class="bool-val">true</span>).unwrap();
-<a href=#318 id=318 data-nosnippet>318</a>        <span class="macro">assert_eq!</span>(bundle.estimated_decoded_bytes().unwrap(), <span class="number">4 </span>* <span class="number">1024 </span>* <span class="number">1024</span>);
-<a href=#319 id=319 data-nosnippet>319</a>        <span class="kw">let </span>bytes = bundle.entries[<span class="number">0</span>].data.as_ref().unwrap();
-<a href=#320 id=320 data-nosnippet>320</a>        <span class="kw">let </span>shared = bytes.clone(); <span class="macro">assert!</span>(Arc::ptr_eq(bytes, <span class="kw-2">&amp;</span>shared));
-<a href=#321 id=321 data-nosnippet>321</a>        <span class="kw">let </span>image_bytes = <span class="kw">crate</span>::budget::image_bytes(<span class="kw-2">&amp;</span>header).unwrap();
-<a href=#322 id=322 data-nosnippet>322</a>        <span class="kw">let </span>admitted = <span class="kw">crate</span>::budget::MAX_IMAGE_TOTAL_BYTES / image_bytes;
-<a href=#323 id=323 data-nosnippet>323</a>        <span class="kw">for </span>index <span class="kw">in </span><span class="number">1</span>..admitted {
-<a href=#324 id=324 data-nosnippet>324</a>            bundle.insert(<span class="macro">format!</span>(<span class="string">"file:///{index}.bmp"</span>), <span class="prelude-val">Ok</span>(header.clone()), <span class="bool-val">true</span>).unwrap();
-<a href=#325 id=325 data-nosnippet>325</a>        }
-<a href=#326 id=326 data-nosnippet>326</a>        <span class="macro">assert_eq!</span>(bundle.estimated_decoded_bytes().unwrap(), admitted * image_bytes);
-<a href=#327 id=327 data-nosnippet>327</a>        bundle.insert(<span class="string">"file:///excess.bmp"</span>.into(), <span class="prelude-val">Ok</span>(header), <span class="bool-val">true</span>).unwrap();
-<a href=#328 id=328 data-nosnippet>328</a>        <span class="macro">assert!</span>(bundle.estimated_decoded_bytes().is_err());
-<a href=#329 id=329 data-nosnippet>329</a>    }
-<a href=#330 id=330 data-nosnippet>330</a>}
+<a href=#231 id=231 data-nosnippet>231</a>
+<a href=#232 id=232 data-nosnippet>232</a><span class="kw">fn </span>cached(url: <span class="kw-2">&amp;</span>str, limit: usize) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;Vec&lt;u8&gt;&gt;, String&gt; {
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">let </span>active = ACTIVE.lock();
+<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">let </span>entry = active.entries.iter().find(|entry| entry.url == url).ok_or_else(|| <span class="macro">format!</span>(<span class="string">"Resource was not prefetched: {}"</span>, url))<span class="question-mark">?</span>;
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="kw">let </span>bytes = entry.data.as_ref().map_err(Clone::clone)<span class="question-mark">?</span>;
+<a href=#236 id=236 data-nosnippet>236</a>    <span class="kw">if </span>bytes.len() &gt; limit { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Resource exceeds type-specific byte budget"</span>.into()); }
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="prelude-val">Ok</span>(bytes.clone())
+<a href=#238 id=238 data-nosnippet>238</a>}
+<a href=#239 id=239 data-nosnippet>239</a><span class="kw">pub fn </span>load_text(base: <span class="kw-2">&amp;</span>str, reference: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;String, String&gt; {
+<a href=#240 id=240 data-nosnippet>240</a>    <span class="kw">let </span>url = resolve(base, reference)<span class="question-mark">?</span>;
+<a href=#241 id=241 data-nosnippet>241</a>    <span class="kw">let </span>bytes = cached(<span class="kw-2">&amp;</span>url, MAX_CSS_BYTES)<span class="question-mark">?</span>;
+<a href=#242 id=242 data-nosnippet>242</a>    core::str::from_utf8(<span class="kw-2">&amp;</span>bytes).map(String::from).map_err(|<span class="kw">_</span>| <span class="string">"Resource is not UTF-8"</span>.into())
+<a href=#243 id=243 data-nosnippet>243</a>}
+<a href=#244 id=244 data-nosnippet>244</a><span class="kw">pub fn </span>load_binary(base: <span class="kw-2">&amp;</span>str, reference: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;Vec&lt;u8&gt;&gt;, String&gt; { cached(<span class="kw-2">&amp;</span>resolve(base, reference)<span class="question-mark">?</span>, MAX_ENCODED_IMAGE_BYTES) }
+<a href=#245 id=245 data-nosnippet>245</a>
+<a href=#246 id=246 data-nosnippet>246</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>local_path(url: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;String, String&gt; {
+<a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">let </span>path = url.strip_prefix(<span class="string">"file://"</span>).unwrap_or(url);
+<a href=#248 id=248 data-nosnippet>248</a>    <span class="kw">if </span>path.contains(<span class="string">"://"</span>) { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Unsupported local URL scheme"</span>.into()); }
+<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">if </span>url.starts_with(<span class="string">"file://"</span>) &amp;&amp; !path.starts_with(<span class="string">'/'</span>) { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"File URL must use an absolute local path; remote authorities unsupported"</span>.into()); }
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">let </span>path = path.split(|c| c == <span class="string">'?' </span>|| c == <span class="string">'#'</span>).next().unwrap_or(path);
+<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">if </span>path.is_empty() || path.len() &gt; <span class="number">2048 </span>{ <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Invalid file path"</span>.into()); }
+<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">let </span><span class="kw-2">mut </span>decoded = Vec::with_capacity(path.len()); <span class="kw">let </span>bytes = path.as_bytes(); <span class="kw">let </span><span class="kw-2">mut </span>index = <span class="number">0</span>;
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">while </span>index &lt; bytes.len() {
+<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw">let </span>byte = <span class="kw">if </span>bytes[index] == <span class="string">b'%' </span>{
+<a href=#255 id=255 data-nosnippet>255</a>            <span class="kw">if </span>index + <span class="number">2 </span>&gt;= bytes.len() { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Invalid file URL escape"</span>.into()); }
+<a href=#256 id=256 data-nosnippet>256</a>            <span class="kw">let </span>hex = core::str::from_utf8(<span class="kw-2">&amp;</span>bytes[index + <span class="number">1</span>..index + <span class="number">3</span>]).map_err(|<span class="kw">_</span>| <span class="string">"Invalid file URL escape"</span>)<span class="question-mark">?</span>;
+<a href=#257 id=257 data-nosnippet>257</a>            index += <span class="number">3</span>; u8::from_str_radix(hex, <span class="number">16</span>).map_err(|<span class="kw">_</span>| <span class="string">"Invalid file URL escape"</span>)<span class="question-mark">?
+<a href=#258 id=258 data-nosnippet>258</a>        </span>} <span class="kw">else </span>{ <span class="kw">let </span>byte = bytes[index]; index += <span class="number">1</span>; byte };
+<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">if </span>byte == <span class="number">0 </span>|| byte &lt; <span class="number">32 </span>|| byte == <span class="number">127 </span>{ <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Invalid file path character"</span>.into()); } decoded.push(byte);
+<a href=#260 id=260 data-nosnippet>260</a>    }
+<a href=#261 id=261 data-nosnippet>261</a>    String::from_utf8(decoded).map_err(|<span class="kw">_</span>| <span class="string">"File path is not UTF-8"</span>.into())
+<a href=#262 id=262 data-nosnippet>262</a>}
+<a href=#263 id=263 data-nosnippet>263</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>read_local(url: <span class="kw-2">&amp;</span>str, limit: usize) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, String&gt; {
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">let </span>path = local_path(url)<span class="question-mark">?</span>;
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">let </span><span class="kw-2">mut </span>file = ostd::fs::File::open(<span class="kw-2">&amp;</span>path).map_err(|<span class="kw">_</span>| <span class="macro">format!</span>(<span class="string">"Cannot open {}"</span>, path))<span class="question-mark">?</span>;
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new(); <span class="kw">let </span><span class="kw-2">mut </span>chunk = [<span class="number">0u8</span>; <span class="number">4096</span>];
+<a href=#267 id=267 data-nosnippet>267</a>    <span class="kw">loop </span>{
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span>count = file.read(<span class="kw-2">&amp;mut </span>chunk).map_err(|<span class="kw">_</span>| <span class="macro">format!</span>(<span class="string">"Cannot read {}"</span>, path))<span class="question-mark">?</span>;
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">if </span>count == <span class="number">0 </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(bytes); }
+<a href=#270 id=270 data-nosnippet>270</a>        <span class="kw">if </span>count &gt; limit.saturating_sub(bytes.len()) { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(<span class="string">"File exceeds {} byte budget"</span>, limit)); }
+<a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">let </span>needed = bytes.len() + count;
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">if </span>needed &gt; bytes.capacity() {
+<a href=#273 id=273 data-nosnippet>273</a>            <span class="kw">let </span>capacity = needed.next_power_of_two().min(limit);
+<a href=#274 id=274 data-nosnippet>274</a>            bytes.reserve_exact(capacity - bytes.len());
+<a href=#275 id=275 data-nosnippet>275</a>        }
+<a href=#276 id=276 data-nosnippet>276</a>        bytes.extend_from_slice(<span class="kw-2">&amp;</span>chunk[..count]);
+<a href=#277 id=277 data-nosnippet>277</a>    }
+<a href=#278 id=278 data-nosnippet>278</a>}
+<a href=#279 id=279 data-nosnippet>279</a>
+<a href=#280 id=280 data-nosnippet>280</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Reference { <span class="kw">pub </span>url: String, <span class="kw">pub </span>image: bool }
+<a href=#281 id=281 data-nosnippet>281</a><span class="kw">fn </span>is_noise_script_url(url: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#282 id=282 data-nosnippet>282</a>    <span class="kw">let </span>lower = url.to_ascii_lowercase();
+<a href=#283 id=283 data-nosnippet>283</a>    lower.contains(<span class="string">"analytics"</span>)
+<a href=#284 id=284 data-nosnippet>284</a>        || lower.contains(<span class="string">"tracker"</span>)
+<a href=#285 id=285 data-nosnippet>285</a>        || lower.contains(<span class="string">"tracking"</span>)
+<a href=#286 id=286 data-nosnippet>286</a>        || lower.contains(<span class="string">"telemetry"</span>)
+<a href=#287 id=287 data-nosnippet>287</a>        || lower.contains(<span class="string">"gtag"</span>)
+<a href=#288 id=288 data-nosnippet>288</a>        || lower.contains(<span class="string">"facebook"</span>)
+<a href=#289 id=289 data-nosnippet>289</a>        || lower.contains(<span class="string">"doubleclick"</span>)
+<a href=#290 id=290 data-nosnippet>290</a>        || lower.contains(<span class="string">"adservice"</span>)
+<a href=#291 id=291 data-nosnippet>291</a>        || lower.contains(<span class="string">"criteo"</span>)
+<a href=#292 id=292 data-nosnippet>292</a>        || lower.contains(<span class="string">"clarity"</span>)
+<a href=#293 id=293 data-nosnippet>293</a>        || lower.contains(<span class="string">"hotjar"</span>)
+<a href=#294 id=294 data-nosnippet>294</a>}
+<a href=#295 id=295 data-nosnippet>295</a>
+<a href=#296 id=296 data-nosnippet>296</a><span class="kw">fn </span>push_reference(refs: <span class="kw-2">&amp;mut </span>Vec&lt;Reference&gt;, base: <span class="kw-2">&amp;</span>str, reference: <span class="kw-2">&amp;</span>str, image: bool) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#297 id=297 data-nosnippet>297</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(url) = resolve(base, reference) <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(()); }; <span class="comment">// Cross-origin references are deliberately not fetched.
+<a href=#298 id=298 data-nosnippet>298</a>    </span><span class="kw">if </span>!image &amp;&amp; is_noise_script_url(<span class="kw-2">&amp;</span>url) {
+<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#300 id=300 data-nosnippet>300</a>    }
+<a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(index) = refs.iter().position(|item| item.url == url) {
+<a href=#302 id=302 data-nosnippet>302</a>        <span class="kw">if </span>image &amp;&amp; !refs[index].image {
+<a href=#303 id=303 data-nosnippet>303</a>            <span class="kw">if </span>refs.iter().filter(|item| item.image).count() &gt;= <span class="kw">crate</span>::budget::MAX_IMAGES { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Document exceeds image resource budget"</span>.into()); }
+<a href=#304 id=304 data-nosnippet>304</a>            refs[index].image = <span class="bool-val">true</span>;
+<a href=#305 id=305 data-nosnippet>305</a>        }
+<a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#307 id=307 data-nosnippet>307</a>    }
+<a href=#308 id=308 data-nosnippet>308</a>    <span class="kw">if </span>refs.len() &gt;= MAX_REFERENCES { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Document exceeds resource reference budget"</span>.into()); }
+<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">if </span>image &amp;&amp; refs.iter().filter(|item| item.image).count() &gt;= <span class="kw">crate</span>::budget::MAX_IMAGES { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Document exceeds image resource budget"</span>.into()); }
+<a href=#310 id=310 data-nosnippet>310</a>    refs.push(Reference { url, image }); <span class="prelude-val">Ok</span>(())
+<a href=#311 id=311 data-nosnippet>311</a>}
+<a href=#312 id=312 data-nosnippet>312</a><span class="doccomment">/// Discover only references the supported format actually activates.
+<a href=#313 id=313 data-nosnippet>313</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>references(base: <span class="kw-2">&amp;</span>str, content: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Reference&gt;, String&gt; {
+<a href=#314 id=314 data-nosnippet>314</a>    <span class="kw">let </span><span class="kw-2">mut </span>refs = Vec::new();
+<a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">match </span><span class="kw">crate</span>::parser::DocFormat::detect_from_url_or_content(base, content) {
+<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">crate</span>::parser::DocFormat::Html =&gt; {
+<a href=#317 id=317 data-nosnippet>317</a>            <span class="kw">for </span>(reference, image) <span class="kw">in </span><span class="kw">crate</span>::parser::html::resource_references_checked(content)<span class="question-mark">? </span>{
+<a href=#318 id=318 data-nosnippet>318</a>                push_reference(<span class="kw-2">&amp;mut </span>refs, base, <span class="kw-2">&amp;</span>reference, image)<span class="question-mark">?</span>;
+<a href=#319 id=319 data-nosnippet>319</a>            }
+<a href=#320 id=320 data-nosnippet>320</a>        }
+<a href=#321 id=321 data-nosnippet>321</a>        <span class="kw">crate</span>::parser::DocFormat::Markdown =&gt; {
+<a href=#322 id=322 data-nosnippet>322</a>            <span class="kw">let </span><span class="kw-2">mut </span>fence: <span class="prelude-ty">Option</span>&lt;char&gt; = <span class="prelude-val">None</span>;
+<a href=#323 id=323 data-nosnippet>323</a>            <span class="kw">for </span>line <span class="kw">in </span>content.lines() {
+<a href=#324 id=324 data-nosnippet>324</a>                <span class="kw">let </span>line = line.trim();
+<a href=#325 id=325 data-nosnippet>325</a>                <span class="kw">if </span>line.starts_with(<span class="string">"```"</span>) || line.starts_with(<span class="string">"~~~"</span>) {
+<a href=#326 id=326 data-nosnippet>326</a>                    <span class="kw">let </span>marker = line.chars().next().unwrap();
+<a href=#327 id=327 data-nosnippet>327</a>                    <span class="kw">if </span>fence == <span class="prelude-val">Some</span>(marker) { fence = <span class="prelude-val">None</span>; }
+<a href=#328 id=328 data-nosnippet>328</a>                    <span class="kw">else if </span>fence.is_none() { fence = <span class="prelude-val">Some</span>(marker); }
+<a href=#329 id=329 data-nosnippet>329</a>                    <span class="kw">continue</span>;
+<a href=#330 id=330 data-nosnippet>330</a>                }
+<a href=#331 id=331 data-nosnippet>331</a>                <span class="kw">if </span>fence.is_some() || !line.starts_with(<span class="string">"!["</span>) || !line.ends_with(<span class="string">')'</span>) { <span class="kw">continue</span>; }
+<a href=#332 id=332 data-nosnippet>332</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(end) = line.find(<span class="string">"]("</span>) { push_reference(<span class="kw-2">&amp;mut </span>refs, base, <span class="kw-2">&amp;</span>line[end + <span class="number">2</span>..line.len() - <span class="number">1</span>], <span class="bool-val">true</span>)<span class="question-mark">?</span>; }
+<a href=#333 id=333 data-nosnippet>333</a>            }
+<a href=#334 id=334 data-nosnippet>334</a>        }
+<a href=#335 id=335 data-nosnippet>335</a>        <span class="kw">_ </span>=&gt; {},
+<a href=#336 id=336 data-nosnippet>336</a>    }
+<a href=#337 id=337 data-nosnippet>337</a>    <span class="prelude-val">Ok</span>(refs)
+<a href=#338 id=338 data-nosnippet>338</a>}
+<a href=#339 id=339 data-nosnippet>339</a>
+<a href=#340 id=340 data-nosnippet>340</a><span class="attr">#[cfg(test)]
+<a href=#341 id=341 data-nosnippet>341</a></span><span class="kw">mod </span>tests {
+<a href=#342 id=342 data-nosnippet>342</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#343 id=343 data-nosnippet>343</a>    <span class="attr">#[test]
+<a href=#344 id=344 data-nosnippet>344</a>    </span><span class="kw">fn </span>discovery_admits_reference_boundary_and_rejects_excess() {
+<a href=#345 id=345 data-nosnippet>345</a>        <span class="kw">let </span>html = (<span class="number">0</span>..MAX_REFERENCES).map(|index| <span class="macro">format!</span>(<span class="string">"&lt;link rel='stylesheet' href='/s{index}.css'&gt;"</span>)).collect::&lt;String&gt;();
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="macro">assert_eq!</span>(references(<span class="string">"https://example.test/index.html"</span>, <span class="kw-2">&amp;</span>html).unwrap().len(), MAX_REFERENCES);
+<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">let </span>excess = (<span class="number">0</span>..=MAX_REFERENCES).map(|index| <span class="macro">format!</span>(<span class="string">"&lt;link rel='stylesheet' href='/s{index}.css'&gt;"</span>)).collect::&lt;String&gt;();
+<a href=#348 id=348 data-nosnippet>348</a>        <span class="macro">assert!</span>(references(<span class="string">"https://example.test/index.html"</span>, <span class="kw-2">&amp;</span>excess).is_err());
+<a href=#349 id=349 data-nosnippet>349</a>    }
+<a href=#350 id=350 data-nosnippet>350</a>    <span class="attr">#[test]
+<a href=#351 id=351 data-nosnippet>351</a>    </span><span class="kw">fn </span>resource_storage_enforces_profile_byte_boundaries() {
+<a href=#352 id=352 data-nosnippet>352</a>        <span class="kw">let </span><span class="kw-2">mut </span>bundle = ResourceBundle::default();
+<a href=#353 id=353 data-nosnippet>353</a>        <span class="macro">assert!</span>(bundle.insert(<span class="string">"file:///exact.css"</span>.into(), <span class="prelude-val">Ok</span>(<span class="macro">alloc::vec!</span>[<span class="string">b' '</span>; MAX_CSS_BYTES]), <span class="bool-val">false</span>).is_ok());
+<a href=#354 id=354 data-nosnippet>354</a>        <span class="macro">assert!</span>(bundle.insert(<span class="string">"file:///excess.css"</span>.into(), <span class="prelude-val">Ok</span>(<span class="macro">alloc::vec!</span>[<span class="string">b' '</span>; MAX_CSS_BYTES + <span class="number">1</span>]), <span class="bool-val">false</span>).is_err());
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">let </span>overhead = core::mem::size_of::&lt;Vec&lt;u8&gt;&gt;() + <span class="number">2 </span>* core::mem::size_of::&lt;usize&gt;();
+<a href=#356 id=356 data-nosnippet>356</a>        <span class="kw">while </span>bundle.remaining_bytes() &gt;= overhead {
+<a href=#357 id=357 data-nosnippet>357</a>            <span class="kw">let </span>payload = (bundle.remaining_bytes() - overhead).min(MAX_CSS_BYTES);
+<a href=#358 id=358 data-nosnippet>358</a>            bundle.insert(<span class="macro">format!</span>(<span class="string">"file:///{}.css"</span>, bundle.entries.len()), <span class="prelude-val">Ok</span>(<span class="macro">alloc::vec!</span>[<span class="number">0</span>; payload]), <span class="bool-val">false</span>).unwrap();
+<a href=#359 id=359 data-nosnippet>359</a>        }
+<a href=#360 id=360 data-nosnippet>360</a>        <span class="macro">assert_eq!</span>(bundle.remaining_bytes(), <span class="number">0</span>);
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="macro">assert!</span>(bundle.insert(<span class="string">"file:///overflow.css"</span>.into(), <span class="prelude-val">Ok</span>(Vec::new()), <span class="bool-val">false</span>).is_err());
+<a href=#362 id=362 data-nosnippet>362</a>    }
+<a href=#363 id=363 data-nosnippet>363</a>    <span class="attr">#[test] </span><span class="kw">fn </span>resolution_preserves_queries_not_fragments_and_origin() {
+<a href=#364 id=364 data-nosnippet>364</a>        <span class="macro">assert_eq!</span>(resolve(<span class="string">"https://example.com/a/b.html?q=1#x"</span>, <span class="string">"../js/app.js?v=2"</span>).unwrap(), <span class="string">"https://example.com/js/app.js?v=2"</span>);
+<a href=#365 id=365 data-nosnippet>365</a>        <span class="macro">assert_eq!</span>(resolve(<span class="string">"file:///data/web/index.html"</span>, <span class="string">"./style.css"</span>).unwrap(), <span class="string">"file:///data/web/style.css"</span>);
+<a href=#366 id=366 data-nosnippet>366</a>        <span class="macro">assert_eq!</span>(resolve(<span class="string">"https://example.com"</span>, <span class="string">"?q=1"</span>).unwrap(), <span class="string">"https://example.com/?q=1"</span>);
+<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">for </span>url <span class="kw">in </span>[<span class="string">"https://example.com.evil/x"</span>, <span class="string">"https://evil/x"</span>, <span class="string">"//evil/x"</span>, <span class="string">"javascript:alert(1)"</span>, <span class="string">"data:text/plain,x"</span>] { <span class="macro">assert!</span>(resolve(<span class="string">"https://example.com/a.html"</span>, url).is_err()); }
+<a href=#368 id=368 data-nosnippet>368</a>        <span class="macro">assert_eq!</span>(resolve(<span class="string">"https://tuoitre.vn/"</span>, <span class="string">"https://cdn2.tuoitre.vn/img.jpg"</span>).unwrap(), <span class="string">"https://cdn2.tuoitre.vn/img.jpg"</span>);
+<a href=#369 id=369 data-nosnippet>369</a>        <span class="macro">assert_eq!</span>(resolve(<span class="string">"https://tuoitre.vn/"</span>, <span class="string">"//static-tuoitre.tuoitre.vn/logo.png"</span>).unwrap(), <span class="string">"https://static-tuoitre.tuoitre.vn/logo.png"</span>);
+<a href=#370 id=370 data-nosnippet>370</a>        <span class="macro">assert!</span>(resolve(<span class="string">"https://tuoitre.vn/"</span>, <span class="string">"https://evil.com/img.jpg"</span>).is_err());
+<a href=#371 id=371 data-nosnippet>371</a>        <span class="macro">assert!</span>(resolve(<span class="string">"https://tuoitre.vn/"</span>, <span class="string">"https://tuoitre.vn.evil.com/img.jpg"</span>).is_err());
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="macro">assert!</span>(resolve(<span class="string">"https://tuoitre.vn/"</span>, <span class="string">"http://cdn2.tuoitre.vn/insecure.jpg"</span>).is_err());
+<a href=#373 id=373 data-nosnippet>373</a>        <span class="macro">assert!</span>(resolve(<span class="string">"https://host/index.html"</span>, <span class="string">"file://host/private.txt"</span>).is_err());
+<a href=#374 id=374 data-nosnippet>374</a>        <span class="macro">assert!</span>(resolve(<span class="string">"file:///data/index.html"</span>, <span class="string">"https://host/script.js"</span>).is_err());
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="macro">assert!</span>(resolve(<span class="string">"https://host/index.html"</span>, <span class="string">"gemini://host/private"</span>).is_err());
+<a href=#376 id=376 data-nosnippet>376</a>    }
+<a href=#377 id=377 data-nosnippet>377</a>    <span class="attr">#[test] </span><span class="kw">fn </span>local_paths_strip_url_suffix_before_decoding() {
+<a href=#378 id=378 data-nosnippet>378</a>        <span class="macro">assert_eq!</span>(local_path(<span class="string">"file:///data/a%20b.md?q=x#toc"</span>).unwrap(), <span class="string">"/data/a b.md"</span>);
+<a href=#379 id=379 data-nosnippet>379</a>        <span class="macro">assert_eq!</span>(local_path(<span class="string">"/data/a%3Fb.md#toc"</span>).unwrap(), <span class="string">"/data/a?b.md"</span>);
+<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">for </span>path <span class="kw">in </span>[<span class="string">"file://remote/file"</span>, <span class="string">"file:///a%00b"</span>, <span class="string">"file:///a%ZZ"</span>] { <span class="macro">assert!</span>(local_path(path).is_err()); }
+<a href=#381 id=381 data-nosnippet>381</a>    }
+<a href=#382 id=382 data-nosnippet>382</a>    <span class="attr">#[test] </span><span class="kw">fn </span>static_resources_are_deduplicated_and_cross_origin_excluded() {
+<a href=#383 id=383 data-nosnippet>383</a>        <span class="kw">let </span>refs = references(<span class="string">"https://host/a/index.html"</span>, <span class="string">"&lt;!-- &lt;img src='ignored'&gt; --&gt;&lt;img src='../pic.png'&gt;&lt;script src=app.js&gt;&lt;/script&gt;&lt;link rel='stylesheet' href='s.css'&gt;&lt;img src='https://evil/pic'&gt;&lt;img src='../pic.png'&gt; ![p](other.jpg)"</span>).unwrap();
+<a href=#384 id=384 data-nosnippet>384</a>        <span class="macro">assert_eq!</span>(refs.len(), <span class="number">3</span>); <span class="macro">assert_eq!</span>(refs[<span class="number">0</span>].url, <span class="string">"https://host/pic.png"</span>);
+<a href=#385 id=385 data-nosnippet>385</a>        <span class="macro">assert_eq!</span>(refs.iter().filter(|r| r.image).count(), <span class="number">1</span>);
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">let </span>refs = references(<span class="string">"https://host/a/readme.md"</span>, <span class="string">"```\n![inert](bad.png)\n```\n~~~html\n&lt;img src='bad.png'&gt;\n~~~\n![active](good.png)\n"</span>).unwrap();
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="macro">assert_eq!</span>(refs.len(), <span class="number">1</span>); <span class="macro">assert_eq!</span>(refs[<span class="number">0</span>].url, <span class="string">"https://host/a/good.png"</span>);
+<a href=#388 id=388 data-nosnippet>388</a>    }
+<a href=#389 id=389 data-nosnippet>389</a>    <span class="attr">#[test] </span><span class="kw">fn </span>cache_missing_and_error_are_not_truncated_success() {
+<a href=#390 id=390 data-nosnippet>390</a>        <span class="kw">let </span><span class="kw-2">mut </span>bundle = ResourceBundle::default();
+<a href=#391 id=391 data-nosnippet>391</a>        bundle.insert(<span class="string">"https://host/a"</span>.into(), <span class="prelude-val">Err</span>(<span class="string">"Truncated response"</span>.into()), <span class="bool-val">false</span>).unwrap();
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="macro">assert!</span>(bundle.resident_bytes() &gt; <span class="number">0</span>);
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="macro">assert_eq!</span>(bundle.warnings().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(), <span class="macro">alloc::vec!</span>[<span class="string">"Truncated response"</span>]);
+<a href=#394 id=394 data-nosnippet>394</a>    }
+<a href=#395 id=395 data-nosnippet>395</a>    <span class="attr">#[test]
+<a href=#396 id=396 data-nosnippet>396</a>    </span><span class="kw">fn </span>test_hyperlink_resolution_preserves_cross_site_and_anchors() {
+<a href=#397 id=397 data-nosnippet>397</a>        <span class="macro">assert_eq!</span>(
+<a href=#398 id=398 data-nosnippet>398</a>            resolve_hyperlink(<span class="string">"https://news.ycombinator.com/news"</span>, <span class="string">"https://github.com/rust-lang/rust"</span>),
+<a href=#399 id=399 data-nosnippet>399</a>            <span class="prelude-val">Some</span>(String::from(<span class="string">"https://github.com/rust-lang/rust"</span>))
+<a href=#400 id=400 data-nosnippet>400</a>        );
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="macro">assert_eq!</span>(
+<a href=#402 id=402 data-nosnippet>402</a>            resolve_hyperlink(<span class="string">"https://news.ycombinator.com/news"</span>, <span class="string">"/item?id=123"</span>),
+<a href=#403 id=403 data-nosnippet>403</a>            <span class="prelude-val">Some</span>(String::from(<span class="string">"https://news.ycombinator.com/item?id=123"</span>))
+<a href=#404 id=404 data-nosnippet>404</a>        );
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="macro">assert_eq!</span>(
+<a href=#406 id=406 data-nosnippet>406</a>            resolve_hyperlink(<span class="string">"https://example.com/article"</span>, <span class="string">"#comments"</span>),
+<a href=#407 id=407 data-nosnippet>407</a>            <span class="prelude-val">Some</span>(String::from(<span class="string">"https://example.com/article#comments"</span>))
+<a href=#408 id=408 data-nosnippet>408</a>        );
+<a href=#409 id=409 data-nosnippet>409</a>        <span class="macro">assert_eq!</span>(
+<a href=#410 id=410 data-nosnippet>410</a>            resolve_hyperlink(<span class="string">"https://example.com/article"</span>, <span class="string">"javascript:void(0)"</span>),
+<a href=#411 id=411 data-nosnippet>411</a>            <span class="prelude-val">None
+<a href=#412 id=412 data-nosnippet>412</a>        </span>);
+<a href=#413 id=413 data-nosnippet>413</a>    }
+<a href=#414 id=414 data-nosnippet>414</a>    <span class="attr">#[test]
+<a href=#415 id=415 data-nosnippet>415</a>    </span><span class="kw">fn </span>decoded_resource_budget_is_preflighted_and_shared_bytes_are_not_cloned() {
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">let </span><span class="kw-2">mut </span>header = <span class="macro">alloc::vec!</span>[<span class="number">0</span>; <span class="number">26</span>]; header[..<span class="number">2</span>].copy_from_slice(<span class="string">b"BM"</span>);
+<a href=#417 id=417 data-nosnippet>417</a>        header[<span class="number">18</span>..<span class="number">22</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1024i32</span>.to_le_bytes());
+<a href=#418 id=418 data-nosnippet>418</a>        header[<span class="number">22</span>..<span class="number">26</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1024i32</span>.to_le_bytes());
+<a href=#419 id=419 data-nosnippet>419</a>        <span class="kw">let </span><span class="kw-2">mut </span>bundle = ResourceBundle::default();
+<a href=#420 id=420 data-nosnippet>420</a>        bundle.insert(<span class="string">"file:///one.bmp"</span>.into(), <span class="prelude-val">Ok</span>(header.clone()), <span class="bool-val">true</span>).unwrap();
+<a href=#421 id=421 data-nosnippet>421</a>        <span class="macro">assert_eq!</span>(bundle.estimated_decoded_bytes().unwrap(), <span class="number">4 </span>* <span class="number">1024 </span>* <span class="number">1024</span>);
+<a href=#422 id=422 data-nosnippet>422</a>        <span class="kw">let </span>bytes = bundle.entries[<span class="number">0</span>].data.as_ref().unwrap();
+<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">let </span>shared = bytes.clone(); <span class="macro">assert!</span>(Arc::ptr_eq(bytes, <span class="kw-2">&amp;</span>shared));
+<a href=#424 id=424 data-nosnippet>424</a>        <span class="kw">let </span>image_bytes = <span class="kw">crate</span>::budget::image_bytes(<span class="kw-2">&amp;</span>header).unwrap();
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="kw">let </span>admitted = <span class="kw">crate</span>::budget::MAX_IMAGE_TOTAL_BYTES / image_bytes;
+<a href=#426 id=426 data-nosnippet>426</a>        <span class="kw">for </span>index <span class="kw">in </span><span class="number">1</span>..admitted {
+<a href=#427 id=427 data-nosnippet>427</a>            bundle.insert(<span class="macro">format!</span>(<span class="string">"file:///{index}.bmp"</span>), <span class="prelude-val">Ok</span>(header.clone()), <span class="bool-val">true</span>).unwrap();
+<a href=#428 id=428 data-nosnippet>428</a>        }
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="macro">assert_eq!</span>(bundle.estimated_decoded_bytes().unwrap(), admitted * image_bytes);
+<a href=#430 id=430 data-nosnippet>430</a>        bundle.insert(<span class="string">"file:///excess.bmp"</span>.into(), <span class="prelude-val">Ok</span>(header), <span class="bool-val">true</span>).unwrap();
+<a href=#431 id=431 data-nosnippet>431</a>        <span class="macro">assert!</span>(bundle.estimated_decoded_bytes().is_err());
+<a href=#432 id=432 data-nosnippet>432</a>    }
+<a href=#433 id=433 data-nosnippet>433</a>}
 </code></pre></div></section></main></body></html>

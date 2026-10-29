@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["ack_tids","ack_uint","boolean","cpu_sum","exit_gone_tasks","exit_retains_cpu","frames","key_count","last_ack","quota_once","raw","relaunch_sequence","text","trunc_counts","uint"],"struct":["CellRow","Ident","RecFrame","TaskRow"]};

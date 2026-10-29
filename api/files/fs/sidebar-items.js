@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["COPY_READ_MAX","PREVIEW_READ_MAX","WRITE_CHUNK"],"enum":["FsError"],"fn":["copy_entry","copy_file","copy_tree","create_file","inside","join","move_entry","parent","parse_list","read_file","remove_entry","resolve","validate_name","write_chunked"],"struct":["DirEntry","Vfs"],"trait":["FileSystem"],"type":["FsResult"]};

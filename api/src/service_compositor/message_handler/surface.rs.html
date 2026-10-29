@@ -96,95 +96,101 @@
 <a href=#96 id=96 data-nosnippet>96</a>            w: surface.w,
 <a href=#97 id=97 data-nosnippet>97</a>            h: surface.h,
 <a href=#98 id=98 data-nosnippet>98</a>        });
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">if </span>surface.is_window_managed() {
-<a href=#100 id=100 data-nosnippet>100</a>            mark_dirty(
-<a href=#101 id=101 data-nosnippet>101</a>                dirty,
-<a href=#102 id=102 data-nosnippet>102</a>                window_decoration::bounds(old_rect),
-<a href=#103 id=103 data-nosnippet>103</a>                window_decoration::bounds(surface.screen_rect()),
-<a href=#104 id=104 data-nosnippet>104</a>            );
-<a href=#105 id=105 data-nosnippet>105</a>        }
-<a href=#106 id=106 data-nosnippet>106</a>    }
-<a href=#107 id=107 data-nosnippet>107</a>}
-<a href=#108 id=108 data-nosnippet>108</a>
-<a href=#109 id=109 data-nosnippet>109</a><span class="kw">fn </span>raise_surface(
-<a href=#110 id=110 data-nosnippet>110</a>    buf: <span class="kw-2">&amp;</span>[u8; <span class="number">512</span>],
-<a href=#111 id=111 data-nosnippet>111</a>    sender: usize,
-<a href=#112 id=112 data-nosnippet>112</a>    input: <span class="kw-2">&amp;mut </span>InputState,
-<a href=#113 id=113 data-nosnippet>113</a>    table: <span class="kw-2">&amp;mut </span>SurfaceTable,
-<a href=#114 id=114 data-nosnippet>114</a>    z_order: <span class="kw-2">&amp;mut </span>ZOrder,
-<a href=#115 id=115 data-nosnippet>115</a>    dirty: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;Rect&gt;,
-<a href=#116 id=116 data-nosnippet>116</a>) {
-<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">if </span>buf.len() &lt; <span class="number">9 </span>{
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">return</span>;
-<a href=#119 id=119 data-nosnippet>119</a>    }
-<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">let </span>cap = u64::from_le_bytes(buf[<span class="number">1</span>..<span class="number">9</span>].try_into().unwrap());
-<a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">if </span>!table
-<a href=#122 id=122 data-nosnippet>122</a>        .get(cap)
-<a href=#123 id=123 data-nosnippet>123</a>        .is_some_and(|s| s.owner == sender &amp;&amp; s.role == SurfaceRole::Interactive)
-<a href=#124 id=124 data-nosnippet>124</a>    {
-<a href=#125 id=125 data-nosnippet>125</a>        <span class="kw">return</span>;
-<a href=#126 id=126 data-nosnippet>126</a>    }
-<a href=#127 id=127 data-nosnippet>127</a>    z_order.raise(cap);
-<a href=#128 id=128 data-nosnippet>128</a>    input.set_focus(sender, <span class="prelude-val">Some</span>(cap));
-<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(surface) = table.get_mut(cap) {
-<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">let </span>full = Rect {
-<a href=#131 id=131 data-nosnippet>131</a>            x: <span class="number">0</span>,
-<a href=#132 id=132 data-nosnippet>132</a>            y: <span class="number">0</span>,
-<a href=#133 id=133 data-nosnippet>133</a>            w: surface.w,
-<a href=#134 id=134 data-nosnippet>134</a>            h: surface.h,
-<a href=#135 id=135 data-nosnippet>135</a>        };
-<a href=#136 id=136 data-nosnippet>136</a>        surface.damage = <span class="prelude-val">Some</span>(<span class="kw">match </span>surface.damage {
-<a href=#137 id=137 data-nosnippet>137</a>            <span class="prelude-val">Some</span>(damage) =&gt; damage.union(<span class="kw-2">&amp;</span>full),
-<a href=#138 id=138 data-nosnippet>138</a>            <span class="prelude-val">None </span>=&gt; full,
-<a href=#139 id=139 data-nosnippet>139</a>        });
-<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw">if </span>surface.is_window_managed() {
-<a href=#141 id=141 data-nosnippet>141</a>            <span class="kw">let </span>decoration = window_decoration::bounds(surface.screen_rect());
-<a href=#142 id=142 data-nosnippet>142</a>            <span class="kw-2">*</span>dirty = <span class="prelude-val">Some</span>(<span class="kw">match </span>dirty.take() {
-<a href=#143 id=143 data-nosnippet>143</a>                <span class="prelude-val">Some</span>(acc) =&gt; acc.union(<span class="kw-2">&amp;</span>decoration),
-<a href=#144 id=144 data-nosnippet>144</a>                <span class="prelude-val">None </span>=&gt; decoration,
-<a href=#145 id=145 data-nosnippet>145</a>            });
-<a href=#146 id=146 data-nosnippet>146</a>        }
-<a href=#147 id=147 data-nosnippet>147</a>    }
-<a href=#148 id=148 data-nosnippet>148</a>}
-<a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a><span class="kw">fn </span>destroy_surface(
-<a href=#151 id=151 data-nosnippet>151</a>    buf: <span class="kw-2">&amp;</span>[u8; <span class="number">512</span>],
-<a href=#152 id=152 data-nosnippet>152</a>    sender: usize,
-<a href=#153 id=153 data-nosnippet>153</a>    input: <span class="kw-2">&amp;mut </span>InputState,
-<a href=#154 id=154 data-nosnippet>154</a>    table: <span class="kw-2">&amp;mut </span>SurfaceTable,
-<a href=#155 id=155 data-nosnippet>155</a>    z_order: <span class="kw-2">&amp;mut </span>ZOrder,
-<a href=#156 id=156 data-nosnippet>156</a>    dirty: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;Rect&gt;,
-<a href=#157 id=157 data-nosnippet>157</a>) {
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">if </span>buf.len() &lt; <span class="number">9 </span>{
-<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">return</span>;
-<a href=#160 id=160 data-nosnippet>160</a>    }
-<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">let </span>cap = u64::from_le_bytes(buf[<span class="number">1</span>..<span class="number">9</span>].try_into().unwrap());
-<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">if </span>!table
-<a href=#163 id=163 data-nosnippet>163</a>        .get(cap)
-<a href=#164 id=164 data-nosnippet>164</a>        .is_some_and(|surface| surface.owner == sender)
-<a href=#165 id=165 data-nosnippet>165</a>    {
-<a href=#166 id=166 data-nosnippet>166</a>        sys_send(sender, <span class="string">b"\x01"</span>);
-<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">return</span>;
-<a href=#168 id=168 data-nosnippet>168</a>    }
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">let </span>freed_rect = table
-<a href=#170 id=170 data-nosnippet>170</a>        .get(cap)
-<a href=#171 id=171 data-nosnippet>171</a>        .map(|surface| window_decoration::bounds(surface.screen_rect()));
-<a href=#172 id=172 data-nosnippet>172</a>    input.remove_surface(cap);
-<a href=#173 id=173 data-nosnippet>173</a>    z_order.remove(cap);
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">let _ </span>= table.remove(cap);
-<a href=#175 id=175 data-nosnippet>175</a>    sys_send(sender, <span class="string">b"\x00"</span>);
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(rect) = freed_rect {
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw-2">*</span>dirty = <span class="prelude-val">Some</span>(<span class="kw">match </span>dirty.take() {
-<a href=#178 id=178 data-nosnippet>178</a>            <span class="prelude-val">Some</span>(acc) =&gt; acc.union(<span class="kw-2">&amp;</span>rect),
-<a href=#179 id=179 data-nosnippet>179</a>            <span class="prelude-val">None </span>=&gt; rect,
-<a href=#180 id=180 data-nosnippet>180</a>        });
-<a href=#181 id=181 data-nosnippet>181</a>    }
-<a href=#182 id=182 data-nosnippet>182</a>}
-<a href=#183 id=183 data-nosnippet>183</a>
-<a href=#184 id=184 data-nosnippet>184</a><span class="kw">fn </span>mark_dirty(dirty: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;Rect&gt;, old: Rect, new: Rect) {
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw-2">*</span>dirty = <span class="prelude-val">Some</span>(<span class="kw">match </span>dirty.take() {
-<a href=#186 id=186 data-nosnippet>186</a>        <span class="prelude-val">Some</span>(acc) =&gt; acc.union(<span class="kw-2">&amp;</span>old).union(<span class="kw-2">&amp;</span>new),
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="prelude-val">None </span>=&gt; old.union(<span class="kw-2">&amp;</span>new),
-<a href=#188 id=188 data-nosnippet>188</a>    });
-<a href=#189 id=189 data-nosnippet>189</a>}
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">let </span>old_region = <span class="kw">if </span>surface.is_window_managed() {
+<a href=#100 id=100 data-nosnippet>100</a>            window_decoration::bounds(old_rect)
+<a href=#101 id=101 data-nosnippet>101</a>        } <span class="kw">else </span>{
+<a href=#102 id=102 data-nosnippet>102</a>            old_rect
+<a href=#103 id=103 data-nosnippet>103</a>        };
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">let </span>new_region = <span class="kw">if </span>surface.is_window_managed() {
+<a href=#105 id=105 data-nosnippet>105</a>            window_decoration::bounds(surface.screen_rect())
+<a href=#106 id=106 data-nosnippet>106</a>        } <span class="kw">else </span>{
+<a href=#107 id=107 data-nosnippet>107</a>            surface.screen_rect()
+<a href=#108 id=108 data-nosnippet>108</a>        };
+<a href=#109 id=109 data-nosnippet>109</a>        mark_dirty(dirty, old_region, new_region);
+<a href=#110 id=110 data-nosnippet>110</a>    }
+<a href=#111 id=111 data-nosnippet>111</a>}
+<a href=#112 id=112 data-nosnippet>112</a>
+<a href=#113 id=113 data-nosnippet>113</a><span class="kw">fn </span>raise_surface(
+<a href=#114 id=114 data-nosnippet>114</a>    buf: <span class="kw-2">&amp;</span>[u8; <span class="number">512</span>],
+<a href=#115 id=115 data-nosnippet>115</a>    sender: usize,
+<a href=#116 id=116 data-nosnippet>116</a>    input: <span class="kw-2">&amp;mut </span>InputState,
+<a href=#117 id=117 data-nosnippet>117</a>    table: <span class="kw-2">&amp;mut </span>SurfaceTable,
+<a href=#118 id=118 data-nosnippet>118</a>    z_order: <span class="kw-2">&amp;mut </span>ZOrder,
+<a href=#119 id=119 data-nosnippet>119</a>    dirty: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;Rect&gt;,
+<a href=#120 id=120 data-nosnippet>120</a>) {
+<a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">if </span>buf.len() &lt; <span class="number">9 </span>{
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">return</span>;
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">let </span>cap = u64::from_le_bytes(buf[<span class="number">1</span>..<span class="number">9</span>].try_into().unwrap());
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">if </span>!table
+<a href=#126 id=126 data-nosnippet>126</a>        .get(cap)
+<a href=#127 id=127 data-nosnippet>127</a>        .is_some_and(|s| s.owner == sender &amp;&amp; (s.role == SurfaceRole::Interactive || s.role == SurfaceRole::Panel))
+<a href=#128 id=128 data-nosnippet>128</a>    {
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">return</span>;
+<a href=#130 id=130 data-nosnippet>130</a>    }
+<a href=#131 id=131 data-nosnippet>131</a>    z_order.raise(cap);
+<a href=#132 id=132 data-nosnippet>132</a>    input.set_focus(sender, <span class="prelude-val">Some</span>(cap));
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(surface) = table.get_mut(cap) {
+<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">let </span>full = Rect {
+<a href=#135 id=135 data-nosnippet>135</a>            x: <span class="number">0</span>,
+<a href=#136 id=136 data-nosnippet>136</a>            y: <span class="number">0</span>,
+<a href=#137 id=137 data-nosnippet>137</a>            w: surface.w,
+<a href=#138 id=138 data-nosnippet>138</a>            h: surface.h,
+<a href=#139 id=139 data-nosnippet>139</a>        };
+<a href=#140 id=140 data-nosnippet>140</a>        surface.damage = <span class="prelude-val">Some</span>(<span class="kw">match </span>surface.damage {
+<a href=#141 id=141 data-nosnippet>141</a>            <span class="prelude-val">Some</span>(damage) =&gt; damage.union(<span class="kw-2">&amp;</span>full),
+<a href=#142 id=142 data-nosnippet>142</a>            <span class="prelude-val">None </span>=&gt; full,
+<a href=#143 id=143 data-nosnippet>143</a>        });
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span>region = <span class="kw">if </span>surface.is_window_managed() {
+<a href=#145 id=145 data-nosnippet>145</a>            window_decoration::bounds(surface.screen_rect())
+<a href=#146 id=146 data-nosnippet>146</a>        } <span class="kw">else </span>{
+<a href=#147 id=147 data-nosnippet>147</a>            surface.screen_rect()
+<a href=#148 id=148 data-nosnippet>148</a>        };
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw-2">*</span>dirty = <span class="prelude-val">Some</span>(<span class="kw">match </span>dirty.take() {
+<a href=#150 id=150 data-nosnippet>150</a>            <span class="prelude-val">Some</span>(acc) =&gt; acc.union(<span class="kw-2">&amp;</span>region),
+<a href=#151 id=151 data-nosnippet>151</a>            <span class="prelude-val">None </span>=&gt; region,
+<a href=#152 id=152 data-nosnippet>152</a>        });
+<a href=#153 id=153 data-nosnippet>153</a>    }
+<a href=#154 id=154 data-nosnippet>154</a>}
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a><span class="kw">fn </span>destroy_surface(
+<a href=#157 id=157 data-nosnippet>157</a>    buf: <span class="kw-2">&amp;</span>[u8; <span class="number">512</span>],
+<a href=#158 id=158 data-nosnippet>158</a>    sender: usize,
+<a href=#159 id=159 data-nosnippet>159</a>    input: <span class="kw-2">&amp;mut </span>InputState,
+<a href=#160 id=160 data-nosnippet>160</a>    table: <span class="kw-2">&amp;mut </span>SurfaceTable,
+<a href=#161 id=161 data-nosnippet>161</a>    z_order: <span class="kw-2">&amp;mut </span>ZOrder,
+<a href=#162 id=162 data-nosnippet>162</a>    dirty: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;Rect&gt;,
+<a href=#163 id=163 data-nosnippet>163</a>) {
+<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">if </span>buf.len() &lt; <span class="number">9 </span>{
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">return</span>;
+<a href=#166 id=166 data-nosnippet>166</a>    }
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>cap = u64::from_le_bytes(buf[<span class="number">1</span>..<span class="number">9</span>].try_into().unwrap());
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">if </span>!table
+<a href=#169 id=169 data-nosnippet>169</a>        .get(cap)
+<a href=#170 id=170 data-nosnippet>170</a>        .is_some_and(|surface| surface.owner == sender)
+<a href=#171 id=171 data-nosnippet>171</a>    {
+<a href=#172 id=172 data-nosnippet>172</a>        sys_send(sender, <span class="string">b"\x01"</span>);
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="kw">return</span>;
+<a href=#174 id=174 data-nosnippet>174</a>    }
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">let </span>freed_rect = table
+<a href=#176 id=176 data-nosnippet>176</a>        .get(cap)
+<a href=#177 id=177 data-nosnippet>177</a>        .map(|surface| window_decoration::bounds(surface.screen_rect()));
+<a href=#178 id=178 data-nosnippet>178</a>    input.remove_surface(cap);
+<a href=#179 id=179 data-nosnippet>179</a>    z_order.remove(cap);
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">let _ </span>= table.remove(cap);
+<a href=#181 id=181 data-nosnippet>181</a>    sys_send(sender, <span class="string">b"\x00"</span>);
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(rect) = freed_rect {
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw-2">*</span>dirty = <span class="prelude-val">Some</span>(<span class="kw">match </span>dirty.take() {
+<a href=#184 id=184 data-nosnippet>184</a>            <span class="prelude-val">Some</span>(acc) =&gt; acc.union(<span class="kw-2">&amp;</span>rect),
+<a href=#185 id=185 data-nosnippet>185</a>            <span class="prelude-val">None </span>=&gt; rect,
+<a href=#186 id=186 data-nosnippet>186</a>        });
+<a href=#187 id=187 data-nosnippet>187</a>    }
+<a href=#188 id=188 data-nosnippet>188</a>}
+<a href=#189 id=189 data-nosnippet>189</a>
+<a href=#190 id=190 data-nosnippet>190</a><span class="kw">fn </span>mark_dirty(dirty: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;Rect&gt;, old: Rect, new: Rect) {
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw-2">*</span>dirty = <span class="prelude-val">Some</span>(<span class="kw">match </span>dirty.take() {
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="prelude-val">Some</span>(acc) =&gt; acc.union(<span class="kw-2">&amp;</span>old).union(<span class="kw-2">&amp;</span>new),
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="prelude-val">None </span>=&gt; old.union(<span class="kw-2">&amp;</span>new),
+<a href=#194 id=194 data-nosnippet>194</a>    });
+<a href=#195 id=195 data-nosnippet>195</a>}
 </code></pre></div></section></main></body></html>

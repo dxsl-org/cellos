@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["NOTICE_MAX"],"enum":["EventKind"],"struct":["ControlDecoder","Event"]};

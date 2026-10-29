@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_DOM_DEPTH","MAX_DOM_NODES","MAX_SELECTOR_BYTES","MAX_TABLE_CELLS","MAX_TABLE_ROWS","MAX_TABS"],"fn":["image_bytes","rawtext_close_chars","rawtext_end","validate_css","validate_html","validate_markdown","validate_text"],"mod":["profile"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_DOM_DEPTH","MAX_SELECTOR_BYTES","MAX_TABLE_CELLS","MAX_TABLE_ROWS","MAX_TABS"],"fn":["image_bytes","rawtext_close_chars","rawtext_end","validate_css","validate_html","validate_markdown","validate_text"],"mod":["profile"]};

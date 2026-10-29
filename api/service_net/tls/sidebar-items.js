@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["clock","dispatch","provider","rng","roots","socket","transport"]};
+window.SIDEBAR_ITEMS = {"mod":["clock","dispatch","provider","qemu_time","rng","roots","socket","transport"]};

@@ -118,22 +118,41 @@
 <a href=#118 id=118 data-nosnippet>118</a>    VfsResponse::Data(<span class="kw-2">&amp;</span>resp_buf[..read])
 <a href=#119 id=119 data-nosnippet>119</a>}
 <a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a><span class="kw">pub fn </span>close_file&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#122 id=122 data-nosnippet>122</a>    vfs: <span class="kw-2">&amp;mut </span>VfsManager,
-<a href=#123 id=123 data-nosnippet>123</a>    caller: Caller,
-<a href=#124 id=124 data-nosnippet>124</a>    file: ViVfsFileHandle,
-<a href=#125 id=125 data-nosnippet>125</a>) -&gt; VfsResponse&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">if </span>vfs.files.close(caller, file) {
-<a href=#127 id=127 data-nosnippet>127</a>        VfsResponse::Ok
-<a href=#128 id=128 data-nosnippet>128</a>    } <span class="kw">else </span>{
-<a href=#129 id=129 data-nosnippet>129</a>        VfsResponse::Err(ERR_HANDLE)
+<a href=#121 id=121 data-nosnippet>121</a><span class="doccomment">/// `FileHandleState`: re-authorizes the handle's path like a read, then reports
+<a href=#122 id=122 data-nosnippet>122</a>/// the current size and whether a mutation reached the path since `OpenFileAt`.
+<a href=#123 id=123 data-nosnippet>123</a>/// A path that is no longer a regular file is `ERR_IO`.
+<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">pub fn </span>file_state&lt;<span class="lifetime">'a</span>&gt;(vfs: <span class="kw-2">&amp;</span>VfsManager, caller: Caller, file: ViVfsFileHandle) -&gt; VfsResponse&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">let </span><span class="prelude-val">Some</span>((path, modified)) = vfs.files.state_of(caller, file) <span class="kw">else </span>{
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">return </span>VfsResponse::Err(ERR_HANDLE);
+<a href=#127 id=127 data-nosnippet>127</a>    };
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">if </span>!vfs.access.can_read(caller, path) {
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">return </span>VfsResponse::Err(ERR_DENIED);
 <a href=#130 id=130 data-nosnippet>130</a>    }
-<a href=#131 id=131 data-nosnippet>131</a>}
-<a href=#132 id=132 data-nosnippet>132</a>
-<a href=#133 id=133 data-nosnippet>133</a><span class="kw">fn </span>file_err(err: FileHandleError) -&gt; u8 {
-<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">match </span>err {
-<a href=#135 id=135 data-nosnippet>135</a>        FileHandleError::UnknownHandle =&gt; ERR_HANDLE,
-<a href=#136 id=136 data-nosnippet>136</a>        FileHandleError::TooManyHandles | FileHandleError::Exhausted =&gt; ERR_QUOTA,
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">if </span>!vfs.healthy(path) {
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">return </span>VfsResponse::Err(ERR_IO);
+<a href=#133 id=133 data-nosnippet>133</a>    }
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">match </span>vfs.stat(path) {
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="prelude-val">Some</span>((size, <span class="bool-val">false</span>)) =&gt; VfsResponse::FileState { size, modified },
+<a href=#136 id=136 data-nosnippet>136</a>        <span class="kw">_ </span>=&gt; VfsResponse::Err(ERR_IO),
 <a href=#137 id=137 data-nosnippet>137</a>    }
 <a href=#138 id=138 data-nosnippet>138</a>}
+<a href=#139 id=139 data-nosnippet>139</a>
+<a href=#140 id=140 data-nosnippet>140</a><span class="kw">pub fn </span>close_file&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#141 id=141 data-nosnippet>141</a>    vfs: <span class="kw-2">&amp;mut </span>VfsManager,
+<a href=#142 id=142 data-nosnippet>142</a>    caller: Caller,
+<a href=#143 id=143 data-nosnippet>143</a>    file: ViVfsFileHandle,
+<a href=#144 id=144 data-nosnippet>144</a>) -&gt; VfsResponse&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">if </span>vfs.files.close(caller, file) {
+<a href=#146 id=146 data-nosnippet>146</a>        VfsResponse::Ok
+<a href=#147 id=147 data-nosnippet>147</a>    } <span class="kw">else </span>{
+<a href=#148 id=148 data-nosnippet>148</a>        VfsResponse::Err(ERR_HANDLE)
+<a href=#149 id=149 data-nosnippet>149</a>    }
+<a href=#150 id=150 data-nosnippet>150</a>}
+<a href=#151 id=151 data-nosnippet>151</a>
+<a href=#152 id=152 data-nosnippet>152</a><span class="kw">fn </span>file_err(err: FileHandleError) -&gt; u8 {
+<a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">match </span>err {
+<a href=#154 id=154 data-nosnippet>154</a>        FileHandleError::UnknownHandle =&gt; ERR_HANDLE,
+<a href=#155 id=155 data-nosnippet>155</a>        FileHandleError::TooManyHandles | FileHandleError::Exhausted =&gt; ERR_QUOTA,
+<a href=#156 id=156 data-nosnippet>156</a>    }
+<a href=#157 id=157 data-nosnippet>157</a>}
 </code></pre></div></section></main></body></html>

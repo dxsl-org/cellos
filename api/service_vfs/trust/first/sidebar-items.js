@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["LIFETIME_NS","MAX_CHALLENGES","MAX_PER_CALLER","TRUST_DIR"],"fn":["challenge","commit","current","fingerprint","persist","principal"],"mod":["owner"],"struct":["Challenge","Challenges"]};

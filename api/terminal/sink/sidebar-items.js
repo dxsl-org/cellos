@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_CONTROL","MAX_PARAMS","MAX_STRING"],"enum":["State"],"fn":["control","dispatch"],"struct":["ByteSink","Csi"]};

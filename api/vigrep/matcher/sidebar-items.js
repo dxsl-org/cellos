@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["LineMatchKind"],"struct":["ByteSet","LineTerminator","Match","NoCaptures","NoError"],"trait":["Captures","Matcher"]};

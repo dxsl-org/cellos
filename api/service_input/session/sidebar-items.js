@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONTROL_LIMIT","INPUT_LIMIT","MODE_MASK","RAW_LIMIT","ZERO"],"fn":["compositor_registered","dimensions","now","now_ns","principal","reserve","reserved","retained","secret_bearing","wipe"],"mod":["sys","trust"],"struct":["Attachment","Event","Fence","Foreground","Frontend","Mode","Outcome","Paste","PendingPoll","Secret","Session","Sessions"]};

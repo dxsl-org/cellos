@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FRAME_LEN","SCHEMA","TEXT_MAX","VERSION"],"enum":["Dispatch","Mode","Outcome","Phase"],"fn":["last_frame"],"struct":["CompletionV1","Text"]};

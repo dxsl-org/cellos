@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["BinOverlay"]};
+window.SIDEBAR_ITEMS = {"constant":["STORE_PHASE"],"struct":["BinOverlay"]};

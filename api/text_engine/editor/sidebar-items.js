@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_BYTES","MAX_CLIPBOARD","MAX_LINES","MAX_QUERY","MAX_UNDO_BYTES","MAX_UNDO_GROUPS","TAB_STOP"],"enum":["EditError","Ending","Found","OpenError"],"mod":["highlight"],"struct":["EditBuffer","Line","Pos"]};

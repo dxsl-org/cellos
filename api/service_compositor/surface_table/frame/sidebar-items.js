@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_FRAMES","MAX_VIEWS_PER_FRAME"],"fn":["calculate_snap_rect"],"struct":["Frame","FrameRegistry","View"]};

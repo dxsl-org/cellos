@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DocFormat"],"fn":["parse_content","parse_content_with_base","parse_content_with_base_checked","validate_images"],"mod":["css","html","markdown","readability","syntax","web"]};
+window.SIDEBAR_ITEMS = {"enum":["DocFormat"],"fn":["parse_content","parse_content_with_base","parse_content_with_base_checked","validate_images"],"mod":["css","feed","html","markdown","readability","syntax","web"]};

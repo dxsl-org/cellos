@@ -426,4 +426,84 @@
 <a href=#426 id=426 data-nosnippet>426</a>        }
 <a href=#427 id=427 data-nosnippet>427</a>    }
 <a href=#428 id=428 data-nosnippet>428</a>}
+<a href=#429 id=429 data-nosnippet>429</a>
+<a href=#430 id=430 data-nosnippet>430</a><span class="doccomment">/// Session transport uses this same bounded ring owner, but never installs a
+<a href=#431 id=431 data-nosnippet>431</a>/// legacy PipeHandle in any task's legacy table. All calls hold SCHEDULER.
+<a href=#432 id=432 data-nosnippet>432</a></span><span class="kw">fn </span>session_wake(sched: <span class="kw-2">&amp;mut </span><span class="kw">super</span>::scheduler::Scheduler, tid: usize) {
+<a href=#433 id=433 data-nosnippet>433</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>tid) {
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="kw">if </span><span class="macro">matches!</span>(task.state, <span class="kw">super</span>::tcb::TaskState::PipeRead { .. }
+<a href=#435 id=435 data-nosnippet>435</a>            | <span class="kw">super</span>::tcb::TaskState::PipeWrite { .. }) {
+<a href=#436 id=436 data-nosnippet>436</a>            task.state = <span class="kw">super</span>::tcb::TaskState::Ready;
+<a href=#437 id=437 data-nosnippet>437</a>            sched.push_ready(tid);
+<a href=#438 id=438 data-nosnippet>438</a>        }
+<a href=#439 id=439 data-nosnippet>439</a>    }
+<a href=#440 id=440 data-nosnippet>440</a>}
+<a href=#441 id=441 data-nosnippet>441</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>session_read(sched: <span class="kw-2">&amp;mut </span><span class="kw">super</span>::scheduler::Scheduler, handle: PipeHandle,
+<a href=#442 id=442 data-nosnippet>442</a>    dst: <span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Option</span>&lt;ReadOutcome&gt; {
+<a href=#443 id=443 data-nosnippet>443</a>    <span class="kw">let </span><span class="kw-2">mut </span>pipes = PIPES.lock();
+<a href=#444 id=444 data-nosnippet>444</a>    <span class="kw">let </span>pipe = pipes.get_mut(<span class="kw-2">&amp;</span>handle.pipe)<span class="question-mark">?</span>;
+<a href=#445 id=445 data-nosnippet>445</a>    <span class="kw">if </span>!pipe.is_empty() {
+<a href=#446 id=446 data-nosnippet>446</a>        <span class="kw">let </span>count = pipe.read(dst);
+<a href=#447 id=447 data-nosnippet>447</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(tid) = pipe.write_waiters.pop_front() { session_wake(sched, tid); }
+<a href=#448 id=448 data-nosnippet>448</a>        <span class="prelude-val">Some</span>(ReadOutcome::Read(count))
+<a href=#449 id=449 data-nosnippet>449</a>    } <span class="kw">else if </span>pipe.writers == <span class="number">0 </span>{ <span class="prelude-val">Some</span>(ReadOutcome::Eof) }
+<a href=#450 id=450 data-nosnippet>450</a>    <span class="kw">else </span>{ <span class="prelude-val">Some</span>(ReadOutcome::Empty) }
+<a href=#451 id=451 data-nosnippet>451</a>}
+<a href=#452 id=452 data-nosnippet>452</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>session_write(sched: <span class="kw-2">&amp;mut </span><span class="kw">super</span>::scheduler::Scheduler, handle: PipeHandle,
+<a href=#453 id=453 data-nosnippet>453</a>    src: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Option</span>&lt;WriteOutcome&gt; {
+<a href=#454 id=454 data-nosnippet>454</a>    <span class="kw">let </span><span class="kw-2">mut </span>pipes = PIPES.lock();
+<a href=#455 id=455 data-nosnippet>455</a>    <span class="kw">let </span>pipe = pipes.get_mut(<span class="kw-2">&amp;</span>handle.pipe)<span class="question-mark">?</span>;
+<a href=#456 id=456 data-nosnippet>456</a>    <span class="kw">if </span>pipe.readers == <span class="number">0 </span>{ <span class="kw">return </span><span class="prelude-val">Some</span>(WriteOutcome::NoReader); }
+<a href=#457 id=457 data-nosnippet>457</a>    <span class="kw">if </span>pipe.is_full() { <span class="kw">return </span><span class="prelude-val">Some</span>(WriteOutcome::Full); }
+<a href=#458 id=458 data-nosnippet>458</a>    <span class="kw">let </span>count = pipe.write(src);
+<a href=#459 id=459 data-nosnippet>459</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>(tid) = pipe.read_waiters.pop_front() { session_wake(sched, tid); }
+<a href=#460 id=460 data-nosnippet>460</a>    <span class="prelude-val">Some</span>(WriteOutcome::Wrote(count))
+<a href=#461 id=461 data-nosnippet>461</a>}
+<a href=#462 id=462 data-nosnippet>462</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>session_counts(handle: PipeHandle) -&gt; <span class="prelude-ty">Option</span>&lt;(usize, usize)&gt; {
+<a href=#463 id=463 data-nosnippet>463</a>    PIPES.lock().get(<span class="kw-2">&amp;</span>handle.pipe).map(|p| (p.readers, p.writers))
+<a href=#464 id=464 data-nosnippet>464</a>}
+<a href=#465 id=465 data-nosnippet>465</a><span class="doccomment">/// Discard buffered bytes and wake writers blocked on a now-empty ring.
+<a href=#466 id=466 data-nosnippet>466</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>session_flush(sched: <span class="kw-2">&amp;mut </span><span class="kw">super</span>::scheduler::Scheduler, handle: PipeHandle) -&gt; bool {
+<a href=#467 id=467 data-nosnippet>467</a>    <span class="kw">let </span><span class="kw-2">mut </span>pipes = PIPES.lock();
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(pipe) = pipes.get_mut(<span class="kw-2">&amp;</span>handle.pipe) <span class="kw">else </span>{ <span class="kw">return </span><span class="bool-val">false</span>; };
+<a href=#469 id=469 data-nosnippet>469</a>    pipe.head = <span class="number">0</span>;
+<a href=#470 id=470 data-nosnippet>470</a>    pipe.len = <span class="number">0</span>;
+<a href=#471 id=471 data-nosnippet>471</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>(tid) = pipe.write_waiters.pop_front() { session_wake(sched, tid); }
+<a href=#472 id=472 data-nosnippet>472</a>    <span class="bool-val">true
+<a href=#473 id=473 data-nosnippet>473</a></span>}
+<a href=#474 id=474 data-nosnippet>474</a><span class="doccomment">/// Wake every task parked on this ring so it rechecks its typed endpoint state
+<a href=#475 id=475 data-nosnippet>475</a>/// (closed, revoked or cancelled). A revoked holder is not necessarily the last
+<a href=#476 id=476 data-nosnippet>476</a>/// end, so end-count transitions alone cannot cover it.
+<a href=#477 id=477 data-nosnippet>477</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>session_wake_all(sched: <span class="kw-2">&amp;mut </span><span class="kw">super</span>::scheduler::Scheduler, handle: PipeHandle) {
+<a href=#478 id=478 data-nosnippet>478</a>    <span class="kw">let </span><span class="kw-2">mut </span>pipes = PIPES.lock();
+<a href=#479 id=479 data-nosnippet>479</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(pipe) = pipes.get_mut(<span class="kw-2">&amp;</span>handle.pipe) <span class="kw">else </span>{ <span class="kw">return</span>; };
+<a href=#480 id=480 data-nosnippet>480</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>(tid) = pipe.read_waiters.pop_front() { session_wake(sched, tid); }
+<a href=#481 id=481 data-nosnippet>481</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>(tid) = pipe.write_waiters.pop_front() { session_wake(sched, tid); }
+<a href=#482 id=482 data-nosnippet>482</a>}
+<a href=#483 id=483 data-nosnippet>483</a><span class="doccomment">/// A retired Cell can no longer be refunded: its quota row is deregistered and
+<a href=#484 id=484 data-nosnippet>484</a>/// the CellId may be reissued, so rings it created must not refund a successor.
+<a href=#485 id=485 data-nosnippet>485</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>disown_cell(cell: usize) {
+<a href=#486 id=486 data-nosnippet>486</a>    <span class="kw">for </span>pipe <span class="kw">in </span>PIPES.lock().values_mut() {
+<a href=#487 id=487 data-nosnippet>487</a>        <span class="kw">if </span>pipe.owner_cell == cell { pipe.owner_cell = <span class="number">0</span>; }
+<a href=#488 id=488 data-nosnippet>488</a>    }
+<a href=#489 id=489 data-nosnippet>489</a>}
+<a href=#490 id=490 data-nosnippet>490</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>session_close(sched: <span class="kw-2">&amp;mut </span><span class="kw">super</span>::scheduler::Scheduler, handle: PipeHandle) -&gt; bool {
+<a href=#491 id=491 data-nosnippet>491</a>    <span class="kw">let </span><span class="kw-2">mut </span>pipes = PIPES.lock();
+<a href=#492 id=492 data-nosnippet>492</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(pipe) = pipes.get_mut(<span class="kw-2">&amp;</span>handle.pipe) <span class="kw">else </span>{ <span class="kw">return </span><span class="bool-val">false</span>; };
+<a href=#493 id=493 data-nosnippet>493</a>    <span class="kw">match </span>handle.end {
+<a href=#494 id=494 data-nosnippet>494</a>        PipeEnd::Read =&gt; { <span class="macro">assert!</span>(pipe.readers != <span class="number">0</span>); pipe.readers -= <span class="number">1</span>; },
+<a href=#495 id=495 data-nosnippet>495</a>        PipeEnd::Write =&gt; { <span class="macro">assert!</span>(pipe.writers != <span class="number">0</span>); pipe.writers -= <span class="number">1</span>; },
+<a href=#496 id=496 data-nosnippet>496</a>    }
+<a href=#497 id=497 data-nosnippet>497</a>    <span class="kw">let </span>final_reader = pipe.readers == <span class="number">0</span>;
+<a href=#498 id=498 data-nosnippet>498</a>    <span class="kw">if </span>final_reader || pipe.writers == <span class="number">0 </span>{
+<a href=#499 id=499 data-nosnippet>499</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(tid) = pipe.read_waiters.pop_front() { session_wake(sched, tid); }
+<a href=#500 id=500 data-nosnippet>500</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(tid) = pipe.write_waiters.pop_front() { session_wake(sched, tid); }
+<a href=#501 id=501 data-nosnippet>501</a>    }
+<a href=#502 id=502 data-nosnippet>502</a>    <span class="kw">if </span>pipe.readers == <span class="number">0 </span>&amp;&amp; pipe.writers == <span class="number">0 </span>{
+<a href=#503 id=503 data-nosnippet>503</a>        <span class="kw">let </span>pipe = pipes.remove(<span class="kw-2">&amp;</span>handle.pipe).expect(<span class="string">"locked ring disappeared"</span>);
+<a href=#504 id=504 data-nosnippet>504</a>        drop(pipes);
+<a href=#505 id=505 data-nosnippet>505</a>        release_pipe(pipe);
+<a href=#506 id=506 data-nosnippet>506</a>    }
+<a href=#507 id=507 data-nosnippet>507</a>    final_reader
+<a href=#508 id=508 data-nosnippet>508</a>}
 </code></pre></div></section></main></body></html>

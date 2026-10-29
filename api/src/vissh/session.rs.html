@@ -1,0 +1,530 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `libs/vissh/src/session.rs`."><title>session.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="vissh" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">vissh/</div>session.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! One connection, one session channel (command-contracts §4.2/§4.3): host trust before
+<a href=#2 id=2 data-nosnippet>2</a>//! any credential, password authentication, then a PTY shell or one exec command.
+<a href=#3 id=3 data-nosnippet>3</a>//!
+<a href=#4 id=4 data-nosnippet>4</a>//! S9-6: the rekey policy is the embedder's ([`RekeyPolicy`]); every KEX (the first and
+<a href=#5 id=5 data-nosnippet>5</a>//! each rekey, from either side) must finish within its deadline; a rekey's host key must
+<a href=#6 id=6 data-nosnippet>6</a>//! be exactly the one accepted at the first KEX and is never offered to the trust store
+<a href=#7 id=7 data-nosnippet>7</a>//! again; the session's lifecycle is reported to [`Local::progress`] write-ahead, so a
+<a href=#8 id=8 data-nosnippet>8</a>//! request frame is never handed to the transport before `MayHaveRun` is recorded.
+<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span>alloc::string::String;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>alloc::vec::Vec;
+<a href=#11 id=11 data-nosnippet>11</a>
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>sunset::packets::WinChange;
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>sunset::{ChanData, ChanHandle, CliEvent, CliSessionExit, Client, Event, PubKey, Pty, RekeyLimits, Runner};
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>zeroize::Zeroize;
+<a href=#15 id=15 data-nosnippet>15</a>
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::client::{pump, ClientError, HostKey, Transport, TransportError, RECV_CHUNK};
+<a href=#17 id=17 data-nosnippet>17</a>
+<a href=#18 id=18 data-nosnippet>18</a><span class="doccomment">/// D03 trust lookup result (abi-vfs-telemetry §4), and the end of a first-trust
+<a href=#19 id=19 data-nosnippet>19</a>/// confirmation.
+<a href=#20 id=20 data-nosnippet>20</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">pub enum </span>Trust {
+<a href=#22 id=22 data-nosnippet>22</a>    KnownExact,
+<a href=#23 id=23 data-nosnippet>23</a>    Unknown,
+<a href=#24 id=24 data-nosnippet>24</a>    Mismatch,
+<a href=#25 id=25 data-nosnippet>25</a>    Denied,
+<a href=#26 id=26 data-nosnippet>26</a>    Unavailable,
+<a href=#27 id=27 data-nosnippet>27</a>    <span class="doccomment">/// The user refused the unknown key (or the confirmation was cancelled).
+<a href=#28 id=28 data-nosnippet>28</a>    </span>Refused,
+<a href=#29 id=29 data-nosnippet>29</a>    <span class="doccomment">/// The confirmation's time ran out.
+<a href=#30 id=30 data-nosnippet>30</a>    </span>Expired,
+<a href=#31 id=31 data-nosnippet>31</a>    <span class="doccomment">/// This terminal cannot run a trusted confirmation (no interactive frontend).
+<a href=#32 id=32 data-nosnippet>32</a>    </span>NoConfirmation,
+<a href=#33 id=33 data-nosnippet>33</a>}
+<a href=#34 id=34 data-nosnippet>34</a>
+<a href=#35 id=35 data-nosnippet>35</a><span class="doccomment">/// What the session runs.
+<a href=#36 id=36 data-nosnippet>36</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq)]
+<a href=#37 id=37 data-nosnippet>37</a></span><span class="kw">pub enum </span>Mode {
+<a href=#38 id=38 data-nosnippet>38</a>    <span class="doccomment">/// PTY shell with `TERM` and the terminal size at start.
+<a href=#39 id=39 data-nosnippet>39</a>    </span>Pty { term: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str, rows: u16, cols: u16 },
+<a href=#40 id=40 data-nosnippet>40</a>    <span class="doccomment">/// One non-PTY command string, sent byte-for-byte.
+<a href=#41 id=41 data-nosnippet>41</a>    </span>Exec(String),
+<a href=#42 id=42 data-nosnippet>42</a>}
+<a href=#43 id=43 data-nosnippet>43</a>
+<a href=#44 id=44 data-nosnippet>44</a><span class="doccomment">/// One unit of local input for the channel.
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="attr">#[derive(Debug, PartialEq, Eq)]
+<a href=#46 id=46 data-nosnippet>46</a></span><span class="kw">pub enum </span>Input {
+<a href=#47 id=47 data-nosnippet>47</a>    <span class="doccomment">/// `n` bytes were written to the buffer.
+<a href=#48 id=48 data-nosnippet>48</a>    </span>Data(usize),
+<a href=#49 id=49 data-nosnippet>49</a>    <span class="doccomment">/// Nothing available now.
+<a href=#50 id=50 data-nosnippet>50</a>    </span>Idle,
+<a href=#51 id=51 data-nosnippet>51</a>    <span class="doccomment">/// End of local input: send channel EOF once.
+<a href=#52 id=52 data-nosnippet>52</a>    </span>Eof,
+<a href=#53 id=53 data-nosnippet>53</a>    <span class="doccomment">/// The local user asked to disconnect (`~.`).
+<a href=#54 id=54 data-nosnippet>54</a>    </span>Disconnect,
+<a href=#55 id=55 data-nosnippet>55</a>}
+<a href=#56 id=56 data-nosnippet>56</a>
+<a href=#57 id=57 data-nosnippet>57</a><span class="doccomment">/// Session phase (`phase` of the completion record, §4.3). `Connect` is the embedder's
+<a href=#58 id=58 data-nosnippet>58</a>/// own phase until the host key is offered.
+<a href=#59 id=59 data-nosnippet>59</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#60 id=60 data-nosnippet>60</a></span><span class="kw">pub enum </span>Phase {
+<a href=#61 id=61 data-nosnippet>61</a>    Trust,
+<a href=#62 id=62 data-nosnippet>62</a>    Auth,
+<a href=#63 id=63 data-nosnippet>63</a>    Request,
+<a href=#64 id=64 data-nosnippet>64</a>    Running,
+<a href=#65 id=65 data-nosnippet>65</a>}
+<a href=#66 id=66 data-nosnippet>66</a>
+<a href=#67 id=67 data-nosnippet>67</a><span class="doccomment">/// Named points of the session an embedder may observe (and, in a fault-injection
+<a href=#68 id=68 data-nosnippet>68</a>/// build, hold): see [`Local::checkpoint`].
+<a href=#69 id=69 data-nosnippet>69</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#70 id=70 data-nosnippet>70</a></span><span class="kw">pub enum </span>Point {
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="doccomment">/// Authenticated; the channel open and the request are not sent yet.
+<a href=#72 id=72 data-nosnippet>72</a>    </span>BeforeRequest,
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="doccomment">/// The request frame exists (`MayHaveRun` is recorded) and is next to be written to
+<a href=#74 id=74 data-nosnippet>74</a>    /// the transport. A hold here writes nothing: an interruption during it leaves the
+<a href=#75 id=75 data-nosnippet>75</a>    /// request unsent while the record already says it may have run.
+<a href=#76 id=76 data-nosnippet>76</a>    </span>RequestSent,
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="doccomment">/// The server accepted the request.
+<a href=#78 id=78 data-nosnippet>78</a>    </span>Accepted,
+<a href=#79 id=79 data-nosnippet>79</a>    <span class="doccomment">/// The remote exit status (or signal) arrived; channel output may still be pending.
+<a href=#80 id=80 data-nosnippet>80</a>    </span>ExitStatus,
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="doccomment">/// A rekey (a KEX after the first) started, from either side; the peer's KEX packets
+<a href=#82 id=82 data-nosnippet>82</a>    /// are not processed during a hold.
+<a href=#83 id=83 data-nosnippet>83</a>    </span>RekeyStart,
+<a href=#84 id=84 data-nosnippet>84</a>}
+<a href=#85 id=85 data-nosnippet>85</a>
+<a href=#86 id=86 data-nosnippet>86</a><span class="doccomment">/// The rekey and KEX-deadline policy. [`RekeyPolicy::PRODUCTION`] is the contract
+<a href=#87 id=87 data-nosnippet>87</a>/// (§4.2): rekey at the first of one hour since NEWKEYS, 1 GiB or 2^30 packets per
+<a href=#88 id=88 data-nosnippet>88</a>/// direction; every KEX finishes within 30 seconds.
+<a href=#89 id=89 data-nosnippet>89</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#90 id=90 data-nosnippet>90</a></span><span class="kw">pub struct </span>RekeyPolicy {
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">pub </span>max_age_ms: u64,
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">pub </span>limits: RekeyLimits,
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">pub </span>kex_ms: u64,
+<a href=#94 id=94 data-nosnippet>94</a>}
+<a href=#95 id=95 data-nosnippet>95</a>
+<a href=#96 id=96 data-nosnippet>96</a><span class="kw">impl </span>RekeyPolicy {
+<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">pub const </span>PRODUCTION: <span class="self">Self </span>= <span class="self">Self </span>{ max_age_ms: <span class="number">3_600_000</span>, limits: RekeyLimits::PRODUCTION, kex_ms: <span class="number">30_000 </span>};
+<a href=#98 id=98 data-nosnippet>98</a>}
+<a href=#99 id=99 data-nosnippet>99</a>
+<a href=#100 id=100 data-nosnippet>100</a><span class="doccomment">/// The local side of the session.
+<a href=#101 id=101 data-nosnippet>101</a></span><span class="kw">pub trait </span>Local {
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="doccomment">/// Decide on the server's host key. Only `KnownExact` lets the session continue.
+<a href=#103 id=103 data-nosnippet>103</a>    </span><span class="kw">fn </span>trust(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>HostKey) -&gt; Trust;
+<a href=#104 id=104 data-nosnippet>104</a>    <span class="doccomment">/// Called only when `trust` answered `Unknown`, before anything else is sent: run the
+<a href=#105 id=105 data-nosnippet>105</a>    /// first-trust confirmation. `KnownExact` (the key is now stored) lets the session
+<a href=#106 id=106 data-nosnippet>106</a>    /// continue; any other answer ends it with that answer.
+<a href=#107 id=107 data-nosnippet>107</a>    </span><span class="kw">fn </span>confirm_unknown(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>HostKey) -&gt; Trust;
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="doccomment">/// Ask once for the password, after the host key was trusted. Write it into
+<a href=#109 id=109 data-nosnippet>109</a>    /// `secret` and return true, or return false to cancel. `secret` is wiped after use.
+<a href=#110 id=110 data-nosnippet>110</a>    </span><span class="kw">fn </span>password(<span class="kw-2">&amp;mut </span><span class="self">self</span>, secret: <span class="kw-2">&amp;mut </span>String) -&gt; bool;
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="doccomment">/// Fill `buf` with local input.
+<a href=#112 id=112 data-nosnippet>112</a>    </span><span class="kw">fn </span>input(<span class="kw-2">&amp;mut </span><span class="self">self</span>, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; Input;
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="doccomment">/// Remote standard output (or, in PTY mode, the whole terminal output).
+<a href=#114 id=114 data-nosnippet>114</a>    </span><span class="kw">fn </span>stdout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>[u8]);
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="doccomment">/// Remote extended data type 1 (exec mode only).
+<a href=#116 id=116 data-nosnippet>116</a>    </span><span class="kw">fn </span>stderr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>[u8]);
+<a href=#117 id=117 data-nosnippet>117</a>    <span class="doccomment">/// A new terminal size since the last call, if any (PTY mode).
+<a href=#118 id=118 data-nosnippet>118</a>    </span><span class="kw">fn </span>resized(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;(u16, u16)&gt;;
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="doccomment">/// The session entered `phase` with `dispatch` (write-ahead: `MayHaveRun` is reported
+<a href=#120 id=120 data-nosnippet>120</a>    /// before the request frame exists).
+<a href=#121 id=121 data-nosnippet>121</a>    </span><span class="kw">fn </span>progress(<span class="kw-2">&amp;mut </span><span class="self">self</span>, phase: Phase, dispatch: Dispatch);
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="doccomment">/// The session reached `point`. The answer is how long to hold there, in ms, while
+<a href=#123 id=123 data-nosnippet>123</a>    /// only the transport is serviced (no packet is processed; at
+<a href=#124 id=124 data-nosnippet>124</a>    /// [`Point::RequestSent`] not even the request is written). Production answers 0.
+<a href=#125 id=125 data-nosnippet>125</a>    </span><span class="kw">fn </span>checkpoint(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _point: Point) -&gt; u64 {
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="number">0
+<a href=#127 id=127 data-nosnippet>127</a>    </span>}
+<a href=#128 id=128 data-nosnippet>128</a>}
+<a href=#129 id=129 data-nosnippet>129</a>
+<a href=#130 id=130 data-nosnippet>130</a><span class="doccomment">/// `dispatch` of the completion record (§4.3).
+<a href=#131 id=131 data-nosnippet>131</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#132 id=132 data-nosnippet>132</a></span><span class="kw">pub enum </span>Dispatch {
+<a href=#133 id=133 data-nosnippet>133</a>    NotSent,
+<a href=#134 id=134 data-nosnippet>134</a>    MayHaveRun,
+<a href=#135 id=135 data-nosnippet>135</a>    Accepted,
+<a href=#136 id=136 data-nosnippet>136</a>}
+<a href=#137 id=137 data-nosnippet>137</a>
+<a href=#138 id=138 data-nosnippet>138</a><span class="attr">#[derive(Debug, Clone, PartialEq, Eq)]
+<a href=#139 id=139 data-nosnippet>139</a></span><span class="kw">pub enum </span>Ending {
+<a href=#140 id=140 data-nosnippet>140</a>    RemoteExit(u32),
+<a href=#141 id=141 data-nosnippet>141</a>    RemoteSignal(String),
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="doccomment">/// The host key was not accepted (`Trust` other than `KnownExact`), or a rekey
+<a href=#143 id=143 data-nosnippet>143</a>    /// offered a key other than the one accepted first (`Mismatch`).
+<a href=#144 id=144 data-nosnippet>144</a>    </span>HostKey(Trust, HostKey),
+<a href=#145 id=145 data-nosnippet>145</a>    <span class="doccomment">/// Authentication was refused or cancelled.
+<a href=#146 id=146 data-nosnippet>146</a>    </span>Auth,
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="doccomment">/// The server refused the shell/exec request.
+<a href=#148 id=148 data-nosnippet>148</a>    </span>RequestRefused,
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="doccomment">/// The local user disconnected.
+<a href=#150 id=150 data-nosnippet>150</a>    </span>Disconnected,
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="doccomment">/// The connection ended without an exit status or signal.
+<a href=#152 id=152 data-nosnippet>152</a>    </span>Unknown,
+<a href=#153 id=153 data-nosnippet>153</a>    <span class="doccomment">/// A phase, KEX or overall deadline passed.
+<a href=#154 id=154 data-nosnippet>154</a>    </span>TimedOut,
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="doccomment">/// The transport ended (closed or failed) before the session completed.
+<a href=#156 id=156 data-nosnippet>156</a>    </span>TransportLost,
+<a href=#157 id=157 data-nosnippet>157</a>    Error(String),
+<a href=#158 id=158 data-nosnippet>158</a>}
+<a href=#159 id=159 data-nosnippet>159</a>
+<a href=#160 id=160 data-nosnippet>160</a><span class="doccomment">/// High-water marks of the session's local buffers (bytes).
+<a href=#161 id=161 data-nosnippet>161</a></span><span class="attr">#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+<a href=#162 id=162 data-nosnippet>162</a></span><span class="kw">pub struct </span>Peaks {
+<a href=#163 id=163 data-nosnippet>163</a>    <span class="doccomment">/// Inbound transport bytes not yet taken by the SSH core (allocation high-water).
+<a href=#164 id=164 data-nosnippet>164</a>    </span><span class="kw">pub </span>pending: usize,
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="doccomment">/// Largest channel read handed to the local side.
+<a href=#166 id=166 data-nosnippet>166</a>    </span><span class="kw">pub </span>chunk: usize,
+<a href=#167 id=167 data-nosnippet>167</a>}
+<a href=#168 id=168 data-nosnippet>168</a>
+<a href=#169 id=169 data-nosnippet>169</a><span class="attr">#[derive(Debug, Clone, PartialEq, Eq)]
+<a href=#170 id=170 data-nosnippet>170</a></span><span class="kw">pub struct </span>Outcome {
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">pub </span>dispatch: Dispatch,
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">pub </span>ending: Ending,
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">pub </span>stdout_complete: bool,
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">pub </span>stderr_complete: bool,
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="doccomment">/// Completed rekeys (key exchanges after the first).
+<a href=#176 id=176 data-nosnippet>176</a>    </span><span class="kw">pub </span>rekeys: u32,
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">pub </span>peaks: Peaks,
+<a href=#178 id=178 data-nosnippet>178</a>}
+<a href=#179 id=179 data-nosnippet>179</a>
+<a href=#180 id=180 data-nosnippet>180</a><span class="kw">impl </span>Outcome {
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="doccomment">/// Local shell status (§4.3): the remote status when 0..=255, otherwise 255.
+<a href=#182 id=182 data-nosnippet>182</a>    </span><span class="kw">pub fn </span>status(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; i32 {
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">match </span><span class="self">self</span>.ending {
+<a href=#184 id=184 data-nosnippet>184</a>            Ending::RemoteExit(n) <span class="kw">if </span>n &lt;= <span class="number">255 </span>=&gt; n <span class="kw">as </span>i32,
+<a href=#185 id=185 data-nosnippet>185</a>            <span class="kw">_ </span>=&gt; <span class="number">255</span>,
+<a href=#186 id=186 data-nosnippet>186</a>        }
+<a href=#187 id=187 data-nosnippet>187</a>    }
+<a href=#188 id=188 data-nosnippet>188</a>}
+<a href=#189 id=189 data-nosnippet>189</a>
+<a href=#190 id=190 data-nosnippet>190</a><span class="doccomment">/// Largest channel data read at once (§4.2: chunks of at most 16 KiB).
+<a href=#191 id=191 data-nosnippet>191</a></span><span class="kw">pub const </span>CHUNK: usize = <span class="number">16 </span>* <span class="number">1024</span>;
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a><span class="kw">pub fn </span>run&lt;T: Transport, L: Local&gt;(t: <span class="kw-2">&amp;mut </span>T, local: <span class="kw-2">&amp;mut </span>L, user: <span class="kw-2">&amp;</span>str, mode: <span class="kw-2">&amp;</span>Mode, policy: <span class="kw-2">&amp;</span>RekeyPolicy) -&gt; Outcome {
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">let </span><span class="kw-2">mut </span>runner: Runner&lt;<span class="lifetime">'static</span>, Client&gt; = Runner::new_client_owned();
+<a href=#195 id=195 data-nosnippet>195</a>    runner.set_rekey_limits(policy.limits);
+<a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">let </span><span class="kw-2">mut </span>state = State {
+<a href=#197 id=197 data-nosnippet>197</a>        dispatch: Dispatch::NotSent, chan: <span class="prelude-val">None</span>, exit: <span class="prelude-val">None</span>, password_asked: <span class="bool-val">false</span>, eof_sent: <span class="bool-val">false</span>,
+<a href=#198 id=198 data-nosnippet>198</a>        host: <span class="prelude-val">None</span>, clock: RekeyClock::default(), peaks: Peaks::default(),
+<a href=#199 id=199 data-nosnippet>199</a>    };
+<a href=#200 id=200 data-nosnippet>200</a>    <span class="kw">let </span>ending = drive(<span class="kw-2">&amp;mut </span>runner, t, local, user, mode, policy, <span class="kw-2">&amp;mut </span>state).unwrap_or_else(|e| <span class="kw">match </span>e {
+<a href=#201 id=201 data-nosnippet>201</a>        ClientError::Transport(TransportError::TimedOut) =&gt; Ending::TimedOut,
+<a href=#202 id=202 data-nosnippet>202</a>        ClientError::Transport(<span class="kw">_</span>) | ClientError::Ended =&gt; Ending::TransportLost,
+<a href=#203 id=203 data-nosnippet>203</a>        ClientError::Protocol(sunset::Error::NoAuthMethods) =&gt; Ending::Auth,
+<a href=#204 id=204 data-nosnippet>204</a>        other =&gt; Ending::Error(<span class="macro">alloc::format!</span>(<span class="string">"{other}"</span>)),
+<a href=#205 id=205 data-nosnippet>205</a>    });
+<a href=#206 id=206 data-nosnippet>206</a>    <span class="comment">// An exit status that arrived before the transport ended stands; the incomplete
+<a href=#207 id=207 data-nosnippet>207</a>    // output is reported by `stdout_complete`.
+<a href=#208 id=208 data-nosnippet>208</a>    </span><span class="kw">let </span>ending = <span class="kw">match </span>(ending, state.exit.take()) {
+<a href=#209 id=209 data-nosnippet>209</a>        (Ending::Unknown | Ending::TransportLost, <span class="prelude-val">Some</span>(exit)) =&gt; exit,
+<a href=#210 id=210 data-nosnippet>210</a>        (ending, <span class="kw">_</span>) =&gt; ending,
+<a href=#211 id=211 data-nosnippet>211</a>    };
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">let </span>complete = state.chan.as_ref().is_some_and(|c| runner.is_channel_eof(c));
+<a href=#213 id=213 data-nosnippet>213</a>    Outcome {
+<a href=#214 id=214 data-nosnippet>214</a>        dispatch: state.dispatch, ending, stdout_complete: complete, stderr_complete: complete,
+<a href=#215 id=215 data-nosnippet>215</a>        rekeys: runner.newkeys_count().saturating_sub(<span class="number">1</span>), peaks: state.peaks,
+<a href=#216 id=216 data-nosnippet>216</a>    }
+<a href=#217 id=217 data-nosnippet>217</a>}
+<a href=#218 id=218 data-nosnippet>218</a>
+<a href=#219 id=219 data-nosnippet>219</a><span class="kw">struct </span>State {
+<a href=#220 id=220 data-nosnippet>220</a>    dispatch: Dispatch,
+<a href=#221 id=221 data-nosnippet>221</a>    chan: <span class="prelude-ty">Option</span>&lt;ChanHandle&gt;,
+<a href=#222 id=222 data-nosnippet>222</a>    exit: <span class="prelude-ty">Option</span>&lt;Ending&gt;,
+<a href=#223 id=223 data-nosnippet>223</a>    password_asked: bool,
+<a href=#224 id=224 data-nosnippet>224</a>    eof_sent: bool,
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="doccomment">/// The host key accepted at the first KEX; every rekey must offer exactly it.
+<a href=#226 id=226 data-nosnippet>226</a>    </span>host: <span class="prelude-ty">Option</span>&lt;HostKey&gt;,
+<a href=#227 id=227 data-nosnippet>227</a>    clock: RekeyClock,
+<a href=#228 id=228 data-nosnippet>228</a>    peaks: Peaks,
+<a href=#229 id=229 data-nosnippet>229</a>}
+<a href=#230 id=230 data-nosnippet>230</a>
+<a href=#231 id=231 data-nosnippet>231</a><span class="attr">#[derive(Default)]
+<a href=#232 id=232 data-nosnippet>232</a></span><span class="kw">struct </span>RekeyClock {
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="doccomment">/// When the KEX in progress was first seen.
+<a href=#234 id=234 data-nosnippet>234</a>    </span>kex_started: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="doccomment">/// Completed key exchanges seen so far, and when the last one completed.
+<a href=#236 id=236 data-nosnippet>236</a>    </span>newkeys: u32,
+<a href=#237 id=237 data-nosnippet>237</a>    newkeys_at: u64,
+<a href=#238 id=238 data-nosnippet>238</a>}
+<a href=#239 id=239 data-nosnippet>239</a>
+<a href=#240 id=240 data-nosnippet>240</a><span class="doccomment">/// Service only the transport for `ms` (a fault-injection hold): runner output goes
+<a href=#241 id=241 data-nosnippet>241</a>/// out and input is queued, but no packet is processed. A closed or failed transport
+<a href=#242 id=242 data-nosnippet>242</a>/// ends the hold with its error.
+<a href=#243 id=243 data-nosnippet>243</a></span><span class="kw">fn </span>hold&lt;T: Transport&gt;(runner: <span class="kw-2">&amp;mut </span>Runner&lt;<span class="lifetime">'static</span>, Client&gt;, t: <span class="kw-2">&amp;mut </span>T, pending: <span class="kw-2">&amp;mut </span>Vec&lt;u8&gt;, ms: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), ClientError&gt; {
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">if </span>ms == <span class="number">0 </span>{
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#246 id=246 data-nosnippet>246</a>    }
+<a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">let </span>end = t.now_ms().saturating_add(ms);
+<a href=#248 id=248 data-nosnippet>248</a>    <span class="kw">while </span>t.now_ms() &lt; end {
+<a href=#249 id=249 data-nosnippet>249</a>        pump(runner, t, pending)<span class="question-mark">?</span>;
+<a href=#250 id=250 data-nosnippet>250</a>        t.idle()<span class="question-mark">?</span>;
+<a href=#251 id=251 data-nosnippet>251</a>    }
+<a href=#252 id=252 data-nosnippet>252</a>    <span class="prelude-val">Ok</span>(())
+<a href=#253 id=253 data-nosnippet>253</a>}
+<a href=#254 id=254 data-nosnippet>254</a>
+<a href=#255 id=255 data-nosnippet>255</a><span class="doccomment">/// Rekey policy and KEX deadline, once per turn. Returns how long to hold at a rekey's
+<a href=#256 id=256 data-nosnippet>256</a>/// start ([`Point::RekeyStart`]).
+<a href=#257 id=257 data-nosnippet>257</a></span><span class="kw">fn </span>rekey_turn&lt;T: Transport, L: Local&gt;(
+<a href=#258 id=258 data-nosnippet>258</a>    runner: <span class="kw-2">&amp;mut </span>Runner&lt;<span class="lifetime">'static</span>, Client&gt;,
+<a href=#259 id=259 data-nosnippet>259</a>    t: <span class="kw-2">&amp;mut </span>T,
+<a href=#260 id=260 data-nosnippet>260</a>    local: <span class="kw-2">&amp;mut </span>L,
+<a href=#261 id=261 data-nosnippet>261</a>    policy: <span class="kw-2">&amp;</span>RekeyPolicy,
+<a href=#262 id=262 data-nosnippet>262</a>    st: <span class="kw-2">&amp;mut </span>RekeyClock,
+<a href=#263 id=263 data-nosnippet>263</a>) -&gt; <span class="prelude-ty">Result</span>&lt;u64, ClientError&gt; {
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">let </span><span class="kw-2">mut </span>hold_ms = <span class="number">0</span>;
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">let </span>now = t.now_ms();
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">let </span>newkeys = runner.newkeys_count();
+<a href=#267 id=267 data-nosnippet>267</a>    <span class="kw">if </span>newkeys != st.newkeys {
+<a href=#268 id=268 data-nosnippet>268</a>        st.newkeys = newkeys;
+<a href=#269 id=269 data-nosnippet>269</a>        st.newkeys_at = now;
+<a href=#270 id=270 data-nosnippet>270</a>    }
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">if </span>runner.kex_active() {
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">let </span>started = <span class="kw-2">*</span>st.kex_started.get_or_insert_with(|| {
+<a href=#273 id=273 data-nosnippet>273</a>            <span class="kw">if </span>newkeys &gt; <span class="number">0 </span>{
+<a href=#274 id=274 data-nosnippet>274</a>                hold_ms = local.checkpoint(Point::RekeyStart);
+<a href=#275 id=275 data-nosnippet>275</a>            }
+<a href=#276 id=276 data-nosnippet>276</a>            now
+<a href=#277 id=277 data-nosnippet>277</a>        });
+<a href=#278 id=278 data-nosnippet>278</a>        <span class="kw">if </span>now.saturating_sub(started) &gt;= policy.kex_ms {
+<a href=#279 id=279 data-nosnippet>279</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ClientError::Transport(TransportError::TimedOut));
+<a href=#280 id=280 data-nosnippet>280</a>        }
+<a href=#281 id=281 data-nosnippet>281</a>    } <span class="kw">else </span>{
+<a href=#282 id=282 data-nosnippet>282</a>        st.kex_started = <span class="prelude-val">None</span>;
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">if </span>newkeys &gt; <span class="number">0 </span>&amp;&amp; now.saturating_sub(st.newkeys_at) &gt;= policy.max_age_ms {
+<a href=#284 id=284 data-nosnippet>284</a>            runner.request_rekey();
+<a href=#285 id=285 data-nosnippet>285</a>        }
+<a href=#286 id=286 data-nosnippet>286</a>    }
+<a href=#287 id=287 data-nosnippet>287</a>    <span class="prelude-val">Ok</span>(hold_ms)
+<a href=#288 id=288 data-nosnippet>288</a>}
+<a href=#289 id=289 data-nosnippet>289</a>
+<a href=#290 id=290 data-nosnippet>290</a><span class="attr">#[allow(clippy::too_many_arguments)]
+<a href=#291 id=291 data-nosnippet>291</a></span><span class="kw">fn </span>drive&lt;T: Transport, L: Local&gt;(
+<a href=#292 id=292 data-nosnippet>292</a>    runner: <span class="kw-2">&amp;mut </span>Runner&lt;<span class="lifetime">'static</span>, Client&gt;,
+<a href=#293 id=293 data-nosnippet>293</a>    t: <span class="kw-2">&amp;mut </span>T,
+<a href=#294 id=294 data-nosnippet>294</a>    local: <span class="kw-2">&amp;mut </span>L,
+<a href=#295 id=295 data-nosnippet>295</a>    user: <span class="kw-2">&amp;</span>str,
+<a href=#296 id=296 data-nosnippet>296</a>    mode: <span class="kw-2">&amp;</span>Mode,
+<a href=#297 id=297 data-nosnippet>297</a>    policy: <span class="kw-2">&amp;</span>RekeyPolicy,
+<a href=#298 id=298 data-nosnippet>298</a>    st: <span class="kw-2">&amp;mut </span>State,
+<a href=#299 id=299 data-nosnippet>299</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Ending, ClientError&gt; {
+<a href=#300 id=300 data-nosnippet>300</a>    <span class="kw">let </span><span class="kw-2">mut </span>pending = Vec::with_capacity(RECV_CHUNK);
+<a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = <span class="macro">alloc::vec!</span>[<span class="number">0u8</span>; CHUNK];
+<a href=#302 id=302 data-nosnippet>302</a>    <span class="comment">// Local input not yet taken by the channel: one chunk, wiped as it is sent and on drop.
+<a href=#303 id=303 data-nosnippet>303</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>out = zeroize::Zeroizing::new(<span class="macro">alloc::vec!</span>[<span class="number">0u8</span>; CHUNK]);
+<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">let </span><span class="kw-2">mut </span>unsent = (<span class="number">0usize</span>, <span class="number">0usize</span>);
+<a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">let </span><span class="kw-2">mut </span>open_session = <span class="bool-val">false</span>;
+<a href=#306 id=306 data-nosnippet>306</a>    <span class="kw">loop </span>{
+<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">let </span>hold_ms = rekey_turn(runner, t, local, policy, <span class="kw-2">&amp;mut </span>st.clock)<span class="question-mark">?</span>;
+<a href=#308 id=308 data-nosnippet>308</a>        hold(runner, t, <span class="kw-2">&amp;mut </span>pending, hold_ms)<span class="question-mark">?</span>;
+<a href=#309 id=309 data-nosnippet>309</a>        <span class="kw">let </span><span class="kw-2">mut </span>progressed = <span class="bool-val">false</span>;
+<a href=#310 id=310 data-nosnippet>310</a>        <span class="kw">let </span><span class="kw-2">mut </span>stop = <span class="prelude-val">None</span>;
+<a href=#311 id=311 data-nosnippet>311</a>        <span class="kw">let </span><span class="kw-2">mut </span>point = <span class="prelude-val">None</span>;
+<a href=#312 id=312 data-nosnippet>312</a>        <span class="kw">match </span>runner.progress() {
+<a href=#313 id=313 data-nosnippet>313</a>            <span class="comment">// Every offered method was refused (or the password was not given).
+<a href=#314 id=314 data-nosnippet>314</a>            </span><span class="prelude-val">Err</span>(sunset::Error::NoAuthMethods) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(Ending::Auth),
+<a href=#315 id=315 data-nosnippet>315</a>            <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(e.into()),
+<a href=#316 id=316 data-nosnippet>316</a>            <span class="prelude-val">Ok</span>(Event::Cli(CliEvent::Hostkey(h))) =&gt; {
+<a href=#317 id=317 data-nosnippet>317</a>                <span class="kw">let </span>key = <span class="kw">match </span>h.hostkey()<span class="question-mark">? </span>{
+<a href=#318 id=318 data-nosnippet>318</a>                    PubKey::Ed25519(k) =&gt; HostKey { algorithm: <span class="string">"ssh-ed25519"</span>, key: k.key.<span class="number">0 </span>},
+<a href=#319 id=319 data-nosnippet>319</a>                    <span class="attr">#[allow(unreachable_patterns)]
+<a href=#320 id=320 data-nosnippet>320</a>                    </span><span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(Ending::Error(String::from(<span class="string">"unsupported host key type"</span>))),
+<a href=#321 id=321 data-nosnippet>321</a>                };
+<a href=#322 id=322 data-nosnippet>322</a>                <span class="kw">let </span>decision = <span class="kw">match </span><span class="kw-2">&amp;</span>st.host {
+<a href=#323 id=323 data-nosnippet>323</a>                    <span class="comment">// A rekey: exactly the accepted key, never a new trust decision.
+<a href=#324 id=324 data-nosnippet>324</a>                    </span><span class="prelude-val">Some</span>(accepted) <span class="kw">if </span><span class="kw-2">*</span>accepted == key =&gt; Trust::KnownExact,
+<a href=#325 id=325 data-nosnippet>325</a>                    <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; Trust::Mismatch,
+<a href=#326 id=326 data-nosnippet>326</a>                    <span class="prelude-val">None </span>=&gt; {
+<a href=#327 id=327 data-nosnippet>327</a>                        local.progress(Phase::Trust, st.dispatch);
+<a href=#328 id=328 data-nosnippet>328</a>                        <span class="kw">match </span>local.trust(<span class="kw-2">&amp;</span>key) {
+<a href=#329 id=329 data-nosnippet>329</a>                            Trust::Unknown =&gt; local.confirm_unknown(<span class="kw-2">&amp;</span>key),
+<a href=#330 id=330 data-nosnippet>330</a>                            other =&gt; other,
+<a href=#331 id=331 data-nosnippet>331</a>                        }
+<a href=#332 id=332 data-nosnippet>332</a>                    }
+<a href=#333 id=333 data-nosnippet>333</a>                };
+<a href=#334 id=334 data-nosnippet>334</a>                <span class="kw">match </span>decision {
+<a href=#335 id=335 data-nosnippet>335</a>                    Trust::KnownExact =&gt; {
+<a href=#336 id=336 data-nosnippet>336</a>                        h.accept()<span class="question-mark">?</span>;
+<a href=#337 id=337 data-nosnippet>337</a>                        <span class="kw">if </span>st.host.is_none() {
+<a href=#338 id=338 data-nosnippet>338</a>                            st.host = <span class="prelude-val">Some</span>(key);
+<a href=#339 id=339 data-nosnippet>339</a>                            local.progress(Phase::Auth, st.dispatch);
+<a href=#340 id=340 data-nosnippet>340</a>                        }
+<a href=#341 id=341 data-nosnippet>341</a>                    }
+<a href=#342 id=342 data-nosnippet>342</a>                    other =&gt; {
+<a href=#343 id=343 data-nosnippet>343</a>                        <span class="comment">// Upstream reports the refusal as `BadUsage`; it is intended here.
+<a href=#344 id=344 data-nosnippet>344</a>                        </span><span class="kw">let _ </span>= h.reject();
+<a href=#345 id=345 data-nosnippet>345</a>                        stop = <span class="prelude-val">Some</span>(Ending::HostKey(other, key));
+<a href=#346 id=346 data-nosnippet>346</a>                    }
+<a href=#347 id=347 data-nosnippet>347</a>                }
+<a href=#348 id=348 data-nosnippet>348</a>            }
+<a href=#349 id=349 data-nosnippet>349</a>            <span class="prelude-val">Ok</span>(Event::Cli(CliEvent::Username(u))) =&gt; u.username(user)<span class="question-mark">?</span>,
+<a href=#350 id=350 data-nosnippet>350</a>            <span class="prelude-val">Ok</span>(Event::Cli(CliEvent::Password(p))) =&gt; {
+<a href=#351 id=351 data-nosnippet>351</a>                <span class="kw">if </span>st.password_asked {
+<a href=#352 id=352 data-nosnippet>352</a>                    <span class="comment">// Exclusive auth, no retry: a second request means the first failed.
+<a href=#353 id=353 data-nosnippet>353</a>                    </span>p.skip()<span class="question-mark">?</span>;
+<a href=#354 id=354 data-nosnippet>354</a>                    stop = <span class="prelude-val">Some</span>(Ending::Auth);
+<a href=#355 id=355 data-nosnippet>355</a>                } <span class="kw">else </span>{
+<a href=#356 id=356 data-nosnippet>356</a>                    st.password_asked = <span class="bool-val">true</span>;
+<a href=#357 id=357 data-nosnippet>357</a>                    <span class="kw">let </span><span class="kw-2">mut </span>secret = String::new();
+<a href=#358 id=358 data-nosnippet>358</a>                    <span class="kw">let </span>given = local.password(<span class="kw-2">&amp;mut </span>secret);
+<a href=#359 id=359 data-nosnippet>359</a>                    <span class="kw">let </span>r = <span class="kw">if </span>given { p.password(<span class="kw-2">&amp;</span>secret) } <span class="kw">else </span>{ p.skip() };
+<a href=#360 id=360 data-nosnippet>360</a>                    secret.zeroize();
+<a href=#361 id=361 data-nosnippet>361</a>                    r<span class="question-mark">?</span>;
+<a href=#362 id=362 data-nosnippet>362</a>                    <span class="kw">if </span>!given {
+<a href=#363 id=363 data-nosnippet>363</a>                        stop = <span class="prelude-val">Some</span>(Ending::Auth);
+<a href=#364 id=364 data-nosnippet>364</a>                    }
+<a href=#365 id=365 data-nosnippet>365</a>                }
+<a href=#366 id=366 data-nosnippet>366</a>            }
+<a href=#367 id=367 data-nosnippet>367</a>            <span class="prelude-val">Ok</span>(Event::Cli(CliEvent::Pubkey(p))) =&gt; p.skip()<span class="question-mark">?</span>,
+<a href=#368 id=368 data-nosnippet>368</a>            <span class="prelude-val">Ok</span>(Event::Cli(CliEvent::AgentSign(s))) =&gt; s.skip()<span class="question-mark">?</span>,
+<a href=#369 id=369 data-nosnippet>369</a>            <span class="prelude-val">Ok</span>(Event::Cli(CliEvent::Authenticated)) =&gt; {
+<a href=#370 id=370 data-nosnippet>370</a>                local.progress(Phase::Request, st.dispatch);
+<a href=#371 id=371 data-nosnippet>371</a>                point = <span class="prelude-val">Some</span>(Point::BeforeRequest);
+<a href=#372 id=372 data-nosnippet>372</a>                open_session = <span class="bool-val">true</span>;
+<a href=#373 id=373 data-nosnippet>373</a>            }
+<a href=#374 id=374 data-nosnippet>374</a>            <span class="prelude-val">Ok</span>(Event::Cli(CliEvent::SessionOpened(<span class="kw-2">mut </span>o))) =&gt; {
+<a href=#375 id=375 data-nosnippet>375</a>                <span class="comment">// Write-ahead: the request may run remotely once its frame exists.
+<a href=#376 id=376 data-nosnippet>376</a>                </span>st.dispatch = Dispatch::MayHaveRun;
+<a href=#377 id=377 data-nosnippet>377</a>                local.progress(Phase::Request, st.dispatch);
+<a href=#378 id=378 data-nosnippet>378</a>                <span class="kw">match </span>mode {
+<a href=#379 id=379 data-nosnippet>379</a>                    Mode::Pty { term, rows, cols } =&gt; {
+<a href=#380 id=380 data-nosnippet>380</a>                        <span class="kw">let </span><span class="kw-2">mut </span>pty = Pty {
+<a href=#381 id=381 data-nosnippet>381</a>                            term: heapless::String::new(),
+<a href=#382 id=382 data-nosnippet>382</a>                            cols: u32::from(<span class="kw-2">*</span>cols),
+<a href=#383 id=383 data-nosnippet>383</a>                            rows: u32::from(<span class="kw-2">*</span>rows),
+<a href=#384 id=384 data-nosnippet>384</a>                            width: <span class="number">0</span>,
+<a href=#385 id=385 data-nosnippet>385</a>                            height: <span class="number">0</span>,
+<a href=#386 id=386 data-nosnippet>386</a>                            modes: heapless::Vec::new(),
+<a href=#387 id=387 data-nosnippet>387</a>                        };
+<a href=#388 id=388 data-nosnippet>388</a>                        pty.term.push_str(term).map_err(|<span class="kw">_</span>| ClientError::Protocol(sunset::Error::msg(<span class="string">"TERM"</span>)))<span class="question-mark">?</span>;
+<a href=#389 id=389 data-nosnippet>389</a>                        o.pty(pty)<span class="question-mark">?</span>;
+<a href=#390 id=390 data-nosnippet>390</a>                        o.shell()<span class="question-mark">?</span>;
+<a href=#391 id=391 data-nosnippet>391</a>                    }
+<a href=#392 id=392 data-nosnippet>392</a>                    Mode::Exec(cmd) =&gt; o.exec(cmd)<span class="question-mark">?</span>,
+<a href=#393 id=393 data-nosnippet>393</a>                }
+<a href=#394 id=394 data-nosnippet>394</a>                point = <span class="prelude-val">Some</span>(Point::RequestSent);
+<a href=#395 id=395 data-nosnippet>395</a>            }
+<a href=#396 id=396 data-nosnippet>396</a>            <span class="prelude-val">Ok</span>(Event::Cli(CliEvent::SessionExit(x))) =&gt; {
+<a href=#397 id=397 data-nosnippet>397</a>                <span class="kw">if </span>st.exit.is_some() {
+<a href=#398 id=398 data-nosnippet>398</a>                    <span class="comment">// Duplicate or conflicting outcomes: uncertainty, not last-wins.
+<a href=#399 id=399 data-nosnippet>399</a>                    </span>st.exit = <span class="prelude-val">None</span>;
+<a href=#400 id=400 data-nosnippet>400</a>                    stop = <span class="prelude-val">Some</span>(Ending::Error(String::from(<span class="string">"duplicate remote exit outcome"</span>)));
+<a href=#401 id=401 data-nosnippet>401</a>                } <span class="kw">else </span>{
+<a href=#402 id=402 data-nosnippet>402</a>                    st.exit = <span class="prelude-val">Some</span>(<span class="kw">match </span>x {
+<a href=#403 id=403 data-nosnippet>403</a>                        CliSessionExit::Status(n) =&gt; Ending::RemoteExit(n),
+<a href=#404 id=404 data-nosnippet>404</a>                        CliSessionExit::Signal(s) =&gt; Ending::RemoteSignal(String::from(s.signal)),
+<a href=#405 id=405 data-nosnippet>405</a>                    });
+<a href=#406 id=406 data-nosnippet>406</a>                    point = <span class="prelude-val">Some</span>(Point::ExitStatus);
+<a href=#407 id=407 data-nosnippet>407</a>                }
+<a href=#408 id=408 data-nosnippet>408</a>            }
+<a href=#409 id=409 data-nosnippet>409</a>            <span class="prelude-val">Ok</span>(Event::Cli(CliEvent::Banner(<span class="kw">_</span>))) =&gt; {}
+<a href=#410 id=410 data-nosnippet>410</a>            <span class="prelude-val">Ok</span>(Event::Cli(CliEvent::Defunct)) =&gt; {
+<a href=#411 id=411 data-nosnippet>411</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(st.exit.take().unwrap_or(<span class="kw">match </span>st.dispatch {
+<a href=#412 id=412 data-nosnippet>412</a>                    Dispatch::NotSent <span class="kw">if </span>!st.password_asked =&gt; Ending::Error(String::from(<span class="string">"server closed the connection"</span>)),
+<a href=#413 id=413 data-nosnippet>413</a>                    Dispatch::NotSent =&gt; Ending::Auth,
+<a href=#414 id=414 data-nosnippet>414</a>                    <span class="kw">_ </span>=&gt; Ending::Unknown,
+<a href=#415 id=415 data-nosnippet>415</a>                }));
+<a href=#416 id=416 data-nosnippet>416</a>            }
+<a href=#417 id=417 data-nosnippet>417</a>            <span class="prelude-val">Ok</span>(Event::None) =&gt; {}
+<a href=#418 id=418 data-nosnippet>418</a>            <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; progressed = <span class="bool-val">true</span>,
+<a href=#419 id=419 data-nosnippet>419</a>        }
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(ending) = stop {
+<a href=#421 id=421 data-nosnippet>421</a>            <span class="kw">let _ </span>= pump(runner, t, <span class="kw-2">&amp;mut </span>pending);
+<a href=#422 id=422 data-nosnippet>422</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(ending);
+<a href=#423 id=423 data-nosnippet>423</a>        }
+<a href=#424 id=424 data-nosnippet>424</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(point) = point {
+<a href=#425 id=425 data-nosnippet>425</a>            <span class="kw">if </span>point == Point::RequestSent {
+<a href=#426 id=426 data-nosnippet>426</a>                <span class="comment">// The request frame is queued, not yet written: a hold here writes nothing.
+<a href=#427 id=427 data-nosnippet>427</a>                </span><span class="kw">let </span>ms = local.checkpoint(point);
+<a href=#428 id=428 data-nosnippet>428</a>                <span class="kw">let </span>end = t.now_ms().saturating_add(ms);
+<a href=#429 id=429 data-nosnippet>429</a>                <span class="kw">while </span>t.now_ms() &lt; end {
+<a href=#430 id=430 data-nosnippet>430</a>                    t.idle()<span class="question-mark">?</span>;
+<a href=#431 id=431 data-nosnippet>431</a>                }
+<a href=#432 id=432 data-nosnippet>432</a>                pump(runner, t, <span class="kw-2">&amp;mut </span>pending)<span class="question-mark">?</span>;
+<a href=#433 id=433 data-nosnippet>433</a>            } <span class="kw">else </span>{
+<a href=#434 id=434 data-nosnippet>434</a>                <span class="comment">// Anything queued (the channel open, a reply) reaches the transport first.
+<a href=#435 id=435 data-nosnippet>435</a>                </span>pump(runner, t, <span class="kw-2">&amp;mut </span>pending)<span class="question-mark">?</span>;
+<a href=#436 id=436 data-nosnippet>436</a>                <span class="kw">let </span>ms = local.checkpoint(point);
+<a href=#437 id=437 data-nosnippet>437</a>                hold(runner, t, <span class="kw-2">&amp;mut </span>pending, ms)<span class="question-mark">?</span>;
+<a href=#438 id=438 data-nosnippet>438</a>            }
+<a href=#439 id=439 data-nosnippet>439</a>            progressed = <span class="bool-val">true</span>;
+<a href=#440 id=440 data-nosnippet>440</a>        }
+<a href=#441 id=441 data-nosnippet>441</a>        st.peaks.pending = st.peaks.pending.max(pending.capacity());
+<a href=#442 id=442 data-nosnippet>442</a>        <span class="kw">if </span>open_session &amp;&amp; st.chan.is_none() {
+<a href=#443 id=443 data-nosnippet>443</a>            st.chan = <span class="prelude-val">Some</span>(runner.open_client_session()<span class="question-mark">?</span>);
+<a href=#444 id=444 data-nosnippet>444</a>            progressed = <span class="bool-val">true</span>;
+<a href=#445 id=445 data-nosnippet>445</a>        }
+<a href=#446 id=446 data-nosnippet>446</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(chan) = st.chan.as_ref() {
+<a href=#447 id=447 data-nosnippet>447</a>            <span class="kw">if </span>st.dispatch == Dispatch::MayHaveRun {
+<a href=#448 id=448 data-nosnippet>448</a>                <span class="kw">match </span>runner.channel_request_reply(chan) {
+<a href=#449 id=449 data-nosnippet>449</a>                    <span class="prelude-val">Some</span>(<span class="bool-val">true</span>) =&gt; {
+<a href=#450 id=450 data-nosnippet>450</a>                        st.dispatch = Dispatch::Accepted;
+<a href=#451 id=451 data-nosnippet>451</a>                        local.progress(Phase::Running, st.dispatch);
+<a href=#452 id=452 data-nosnippet>452</a>                        pump(runner, t, <span class="kw-2">&amp;mut </span>pending)<span class="question-mark">?</span>;
+<a href=#453 id=453 data-nosnippet>453</a>                        <span class="kw">let </span>ms = local.checkpoint(Point::Accepted);
+<a href=#454 id=454 data-nosnippet>454</a>                        hold(runner, t, <span class="kw-2">&amp;mut </span>pending, ms)<span class="question-mark">?</span>;
+<a href=#455 id=455 data-nosnippet>455</a>                    }
+<a href=#456 id=456 data-nosnippet>456</a>                    <span class="prelude-val">Some</span>(<span class="bool-val">false</span>) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(Ending::RequestRefused),
+<a href=#457 id=457 data-nosnippet>457</a>                    <span class="prelude-val">None </span>=&gt; {}
+<a href=#458 id=458 data-nosnippet>458</a>                }
+<a href=#459 id=459 data-nosnippet>459</a>            }
+<a href=#460 id=460 data-nosnippet>460</a>            <span class="comment">// Remote output first, so local input cannot starve it. In PTY mode extended
+<a href=#461 id=461 data-nosnippet>461</a>            // data is part of the one terminal output stream.
+<a href=#462 id=462 data-nosnippet>462</a>            </span><span class="kw">for </span>dt <span class="kw">in </span>[ChanData::Normal, ChanData::Stderr] {
+<a href=#463 id=463 data-nosnippet>463</a>                <span class="kw">match </span>runner.read_channel(chan, dt, <span class="kw-2">&amp;mut </span>buf) {
+<a href=#464 id=464 data-nosnippet>464</a>                    <span class="prelude-val">Ok</span>(<span class="number">0</span>) | <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {}
+<a href=#465 id=465 data-nosnippet>465</a>                    <span class="prelude-val">Ok</span>(n) =&gt; {
+<a href=#466 id=466 data-nosnippet>466</a>                        progressed = <span class="bool-val">true</span>;
+<a href=#467 id=467 data-nosnippet>467</a>                        st.peaks.chunk = st.peaks.chunk.max(n);
+<a href=#468 id=468 data-nosnippet>468</a>                        <span class="kw">match </span>(mode, dt) {
+<a href=#469 id=469 data-nosnippet>469</a>                            (Mode::Exec(<span class="kw">_</span>), ChanData::Stderr) =&gt; local.stderr(<span class="kw-2">&amp;</span>buf[..n]),
+<a href=#470 id=470 data-nosnippet>470</a>                            <span class="kw">_ </span>=&gt; local.stdout(<span class="kw-2">&amp;</span>buf[..n]),
+<a href=#471 id=471 data-nosnippet>471</a>                        }
+<a href=#472 id=472 data-nosnippet>472</a>                    }
+<a href=#473 id=473 data-nosnippet>473</a>                }
+<a href=#474 id=474 data-nosnippet>474</a>            }
+<a href=#475 id=475 data-nosnippet>475</a>            <span class="kw">if </span>runner.is_channel_closed(chan) {
+<a href=#476 id=476 data-nosnippet>476</a>                <span class="kw">let _ </span>= pump(runner, t, <span class="kw-2">&amp;mut </span>pending);
+<a href=#477 id=477 data-nosnippet>477</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(st.exit.take().unwrap_or(Ending::Unknown));
+<a href=#478 id=478 data-nosnippet>478</a>            }
+<a href=#479 id=479 data-nosnippet>479</a>            <span class="kw">if </span>st.eof_sent {
+<a href=#480 id=480 data-nosnippet>480</a>                <span class="comment">// Local input has ended; only a local disconnect can still come.
+<a href=#481 id=481 data-nosnippet>481</a>                </span><span class="kw">if </span>local.input(<span class="kw-2">&amp;mut </span>[]) == Input::Disconnect {
+<a href=#482 id=482 data-nosnippet>482</a>                    <span class="kw">let _ </span>= pump(runner, t, <span class="kw-2">&amp;mut </span>pending);
+<a href=#483 id=483 data-nosnippet>483</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(Ending::Disconnected);
+<a href=#484 id=484 data-nosnippet>484</a>                }
+<a href=#485 id=485 data-nosnippet>485</a>            } <span class="kw">else if </span>st.dispatch != Dispatch::NotSent {
+<a href=#486 id=486 data-nosnippet>486</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>((rows, cols)) = local.resized() {
+<a href=#487 id=487 data-nosnippet>487</a>                    <span class="kw">if </span><span class="macro">matches!</span>(mode, Mode::Pty { .. }) {
+<a href=#488 id=488 data-nosnippet>488</a>                        <span class="kw">let </span>w = WinChange { cols: u32::from(cols), rows: u32::from(rows), width: <span class="number">0</span>, height: <span class="number">0 </span>};
+<a href=#489 id=489 data-nosnippet>489</a>                        runner.term_window_change(chan, <span class="kw-2">&amp;</span>w)<span class="question-mark">?</span>;
+<a href=#490 id=490 data-nosnippet>490</a>                        progressed = <span class="bool-val">true</span>;
+<a href=#491 id=491 data-nosnippet>491</a>                    }
+<a href=#492 id=492 data-nosnippet>492</a>                }
+<a href=#493 id=493 data-nosnippet>493</a>                <span class="comment">// At most one unsent chunk waits (KEX pause, window or buffer full); the
+<a href=#494 id=494 data-nosnippet>494</a>                // next turn retries it after `progress()` had its chance to move the KEX.
+<a href=#495 id=495 data-nosnippet>495</a>                </span><span class="kw">if </span>unsent.<span class="number">1 </span>&gt; unsent.<span class="number">0 </span>{
+<a href=#496 id=496 data-nosnippet>496</a>                    <span class="kw">let </span>w = runner.write_channel(chan, ChanData::Normal, <span class="kw-2">&amp;</span>out[unsent.<span class="number">0</span>..unsent.<span class="number">1</span>])<span class="question-mark">?</span>;
+<a href=#497 id=497 data-nosnippet>497</a>                    out[unsent.<span class="number">0</span>..unsent.<span class="number">0 </span>+ w].zeroize();
+<a href=#498 id=498 data-nosnippet>498</a>                    unsent.<span class="number">0 </span>+= w;
+<a href=#499 id=499 data-nosnippet>499</a>                    progressed |= w &gt; <span class="number">0</span>;
+<a href=#500 id=500 data-nosnippet>500</a>                } <span class="kw">else </span>{
+<a href=#501 id=501 data-nosnippet>501</a>                    <span class="kw">let </span>room = runner.write_channel_ready(chan, ChanData::Normal)<span class="question-mark">?</span>.unwrap_or(<span class="number">0</span>).min(CHUNK);
+<a href=#502 id=502 data-nosnippet>502</a>                    <span class="kw">if </span>room &gt; <span class="number">0 </span>{
+<a href=#503 id=503 data-nosnippet>503</a>                        <span class="kw">match </span>local.input(<span class="kw-2">&amp;mut </span>out[..room]) {
+<a href=#504 id=504 data-nosnippet>504</a>                            Input::Data(n) =&gt; {
+<a href=#505 id=505 data-nosnippet>505</a>                                <span class="kw">let </span>w = runner.write_channel(chan, ChanData::Normal, <span class="kw-2">&amp;</span>out[..n])<span class="question-mark">?</span>;
+<a href=#506 id=506 data-nosnippet>506</a>                                out[..w].zeroize();
+<a href=#507 id=507 data-nosnippet>507</a>                                unsent = (w, n);
+<a href=#508 id=508 data-nosnippet>508</a>                                progressed = <span class="bool-val">true</span>;
+<a href=#509 id=509 data-nosnippet>509</a>                            }
+<a href=#510 id=510 data-nosnippet>510</a>                            Input::Eof =&gt; {
+<a href=#511 id=511 data-nosnippet>511</a>                                runner.send_channel_eof(chan)<span class="question-mark">?</span>;
+<a href=#512 id=512 data-nosnippet>512</a>                                st.eof_sent = <span class="bool-val">true</span>;
+<a href=#513 id=513 data-nosnippet>513</a>                                progressed = <span class="bool-val">true</span>;
+<a href=#514 id=514 data-nosnippet>514</a>                            }
+<a href=#515 id=515 data-nosnippet>515</a>                            Input::Disconnect =&gt; {
+<a href=#516 id=516 data-nosnippet>516</a>                                <span class="kw">let _ </span>= pump(runner, t, <span class="kw-2">&amp;mut </span>pending);
+<a href=#517 id=517 data-nosnippet>517</a>                                <span class="kw">return </span><span class="prelude-val">Ok</span>(Ending::Disconnected);
+<a href=#518 id=518 data-nosnippet>518</a>                            }
+<a href=#519 id=519 data-nosnippet>519</a>                            Input::Idle =&gt; {}
+<a href=#520 id=520 data-nosnippet>520</a>                        }
+<a href=#521 id=521 data-nosnippet>521</a>                    }
+<a href=#522 id=522 data-nosnippet>522</a>                }
+<a href=#523 id=523 data-nosnippet>523</a>            }
+<a href=#524 id=524 data-nosnippet>524</a>        }
+<a href=#525 id=525 data-nosnippet>525</a>        <span class="kw">if </span>!pump(runner, t, <span class="kw-2">&amp;mut </span>pending)<span class="question-mark">? </span>&amp;&amp; !progressed {
+<a href=#526 id=526 data-nosnippet>526</a>            t.idle()<span class="question-mark">?</span>;
+<a href=#527 id=527 data-nosnippet>527</a>        }
+<a href=#528 id=528 data-nosnippet>528</a>    }
+<a href=#529 id=529 data-nosnippet>529</a>}
+</code></pre></div></section></main></body></html>

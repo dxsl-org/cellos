@@ -1,0 +1,557 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `libs/terminal/src/pipe_child.rs`."><title>pipe_child.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="terminal_sdk" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">terminal_sdk/</div>pipe_child.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="comment">// SPDX-License-Identifier: Apache-2.0 OR MIT
+<a href=#2 id=2 data-nosnippet>2</a></span><span class="doccomment">//! Shell-owned byte pipelines: children whose fd 0/1/2 are delegated stream
+<a href=#3 id=3 data-nosnippet>3</a>//! endpoints, never the keyboard owner.
+<a href=#4 id=4 data-nosnippet>4</a>//!
+<a href=#5 id=5 data-nosnippet>5</a>//! A [`Pipeline`] is a tree of kernel Operations below one root (a child of the
+<a href=#6 id=6 data-nosnippet>6</a>//! session Operation). The kernel cancels the Operation that holds a producer's
+<a href=#7 id=7 data-nosnippet>7</a>//! endpoint, and everything below it, when the last reader of a stream closes, and
+<a href=#8 id=8 data-nosnippet>8</a>//! an endpoint can only be delegated to a child prepared at or below the Operation
+<a href=#9 id=9 data-nosnippet>9</a>//! it lives in. The tree is laid out so that exactly the right things stop:
+<a href=#10 id=10 data-nosnippet>10</a>//!
+<a href=#11 id=11 data-nosnippet>11</a>//! - the root holds what the shell reads (output and diagnostics) and is never
+<a href=#12 id=12 data-nosnippet>12</a>//!   cancelled by a stage;
+<a href=#13 id=13 data-nosnippet>13</a>//! - stage `i` runs in its own stage Operation, so a stage that was stopped never
+<a href=#14 id=14 data-nosnippet>14</a>//!   takes a neighbour with it;
+<a href=#15 id=15 data-nosnippet>15</a>//! - the stream between stage `i` and `i + 1` lives in ring Operation `i`, and the
+<a href=#16 id=16 data-nosnippet>16</a>//!   ring Operations nest outward toward the last stage (`ring n-2` is a child of the
+<a href=#17 id=17 data-nosnippet>17</a>//!   root, `ring i` a child of `ring i + 1`); stage `i + 1` and every ring and stage
+<a href=#18 id=18 data-nosnippet>18</a>//!   upstream of it sit below `ring i`. Losing the consumer of a stream therefore
+<a href=#19 id=19 data-nosnippet>19</a>//!   cancels everything upstream of it (nothing is producing for nobody), never a
+<a href=#20 id=20 data-nosnippet>20</a>//!   stage downstream, which still reads what was written and ends normally;
+<a href=#21 id=21 data-nosnippet>21</a>//! - the stream the shell feeds stage 0 through lives in stage 0's own Operation.
+<a href=#22 id=22 data-nosnippet>22</a>//!
+<a href=#23 id=23 data-nosnippet>23</a>//! [`Pipeline::spawn`] prepares and commits one child inside its stage Operation
+<a href=#24 id=24 data-nosnippet>24</a>//! through the same `prepare_child -&gt; delegate -&gt; write_context -&gt; commit`
+<a href=#25 id=25 data-nosnippet>25</a>//! sequence a foreground child uses, but without `authorize_input`, input-service
+<a href=#26 id=26 data-nosnippet>26</a>//! receipts or a foreground lease: the child can never own the terminal. Only the
+<a href=#27 id=27 data-nosnippet>27</a>//! VFS prepared-cwd reservation is bound, exactly as `spawn_foreground` does.
+<a href=#28 id=28 data-nosnippet>28</a>//!
+<a href=#29 id=29 data-nosnippet>29</a>//! Ownership: the caller keeps every endpoint copy it passes to `spawn` and
+<a href=#30 id=30 data-nosnippet>30</a>//! must close it afterwards (the child holds its own delegated copies). EOF at a
+<a href=#31 id=31 data-nosnippet>31</a>//! reader is the close of the last writer copy, so callers must close their
+<a href=#32 id=32 data-nosnippet>32</a>//! writer copies once the stages that need them are spawned. A reader passed as
+<a href=#33 id=33 data-nosnippet>33</a>//! stdin is moved to the child at commit (the kernel consumes the caller's copy).
+<a href=#34 id=34 data-nosnippet>34</a></span><span class="kw">use </span>api::cell_session::{ChildRefV1,KernelOp,ObjectRefV1,Reader,Writer,Status,VfsOp,HEADER_LEN};
+<a href=#35 id=35 data-nosnippet>35</a><span class="kw">use </span>api::service_binding::ServiceBinding;
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>ostd::child_context::{ChildContext,Grant,GrantSlot};
+<a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span><span class="kw">crate</span>::stream::{Endpoint,EndpointRights,Operation,OperationRef,ReceiptRef,ok};
+<a href=#38 id=38 data-nosnippet>38</a>
+<a href=#39 id=39 data-nosnippet>39</a><span class="doccomment">/// Maximum immutable-context argv / cwd / environment sizes (ABI limits).
+<a href=#40 id=40 data-nosnippet>40</a></span><span class="kw">const </span>ARGV_MAX:usize=<span class="number">512</span>;
+<a href=#41 id=41 data-nosnippet>41</a><span class="kw">const </span>CWD_MAX:usize=<span class="number">4096</span>;
+<a href=#42 id=42 data-nosnippet>42</a><span class="kw">const </span>ENV_MAX:usize=<span class="number">4096</span>;
+<a href=#43 id=43 data-nosnippet>43</a><span class="kw">const </span>ENV_ENTRIES_MAX:usize=<span class="number">64</span>;
+<a href=#44 id=44 data-nosnippet>44</a><span class="kw">const </span>PATH_MAX:usize=<span class="number">4096</span>;
+<a href=#45 id=45 data-nosnippet>45</a><span class="doccomment">/// Ring capacity of the empty stdin stream (the kernel minimum).
+<a href=#46 id=46 data-nosnippet>46</a></span><span class="kw">const </span>PLACEHOLDER_CAPACITY:u32=<span class="number">64</span>;
+<a href=#47 id=47 data-nosnippet>47</a><span class="doccomment">/// Ring capacity of every pipeline stream (one transfer unit is 512 bytes).
+<a href=#48 id=48 data-nosnippet>48</a></span><span class="kw">const </span>STREAM_CAPACITY:u32=<span class="number">4096</span>;
+<a href=#49 id=49 data-nosnippet>49</a><span class="doccomment">/// Most stages one pipeline may have (the shell's own pipeline limit).
+<a href=#50 id=50 data-nosnippet>50</a></span><span class="kw">pub const </span>MAX_STAGES:usize=<span class="number">16</span>;
+<a href=#51 id=51 data-nosnippet>51</a>
+<a href=#52 id=52 data-nosnippet>52</a><span class="doccomment">/// Everything needed to launch one pipeline stage.
+<a href=#53 id=53 data-nosnippet>53</a></span><span class="attr">#[derive(Debug,Clone,Copy)]
+<a href=#54 id=54 data-nosnippet>54</a></span><span class="kw">pub struct </span>PipeSpec&lt;<span class="lifetime">'a</span>&gt;{
+<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">pub </span>path:<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+<a href=#56 id=56 data-nosnippet>56</a>    <span class="kw">pub </span>argv:<span class="kw-2">&amp;</span><span class="lifetime">'a</span>[<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str],
+<a href=#57 id=57 data-nosnippet>57</a>    <span class="doccomment">/// Raw cwd bytes; empty means no cwd grant. Non-empty requires either
+<a href=#58 id=58 data-nosnippet>58</a>    /// `cwd_source` or a UTF-8 path the VFS can open.
+<a href=#59 id=59 data-nosnippet>59</a>    </span><span class="kw">pub </span>cwd:<span class="kw-2">&amp;</span><span class="lifetime">'a</span>[u8],
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">pub </span>environment:<span class="kw-2">&amp;</span><span class="lifetime">'a</span>[(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)],
+<a href=#61 id=61 data-nosnippet>61</a>    <span class="doccomment">/// Existing VFS directory grant to derive the child's cwd from (never an
+<a href=#62 id=62 data-nosnippet>62</a>    /// ambient path lookup when present).
+<a href=#63 id=63 data-nosnippet>63</a>    </span><span class="kw">pub </span>cwd_source:<span class="prelude-ty">Option</span>&lt;ObjectRefV1&gt;,
+<a href=#64 id=64 data-nosnippet>64</a>}
+<a href=#65 id=65 data-nosnippet>65</a>
+<a href=#66 id=66 data-nosnippet>66</a><span class="doccomment">/// Pure pre-effect validation. Returns the exact immutable context length.
+<a href=#67 id=67 data-nosnippet>67</a>/// Size violations are `QuotaExceeded`, malformed bytes `Malformed`, a path-only
+<a href=#68 id=68 data-nosnippet>68</a>/// cwd that is not UTF-8 `UnsupportedInput` (same classes as `spawn_foreground`).
+<a href=#69 id=69 data-nosnippet>69</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>validate(spec:<span class="kw-2">&amp;</span>PipeSpec&lt;<span class="lifetime">'_</span>&gt;)-&gt;<span class="prelude-ty">Result</span>&lt;usize,Status&gt;{
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">if </span>spec.path.is_empty()||spec.path.len()&gt;PATH_MAX||spec.path.as_bytes().contains(<span class="kw-2">&amp;</span><span class="number">0</span>){<span class="kw">return </span><span class="prelude-val">Err</span>(Status::Malformed)}
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">let </span>argv_len=spec.argv.iter().try_fold(<span class="number">7usize</span>,|n,a|n.checked_add(a.len()+<span class="number">1</span>)).ok_or(Status::Malformed)<span class="question-mark">?</span>;
+<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">let </span>env_len=spec.environment.iter().try_fold(<span class="number">0usize</span>,|n,(k,v)|n.checked_add(<span class="number">4</span>+k.len()+v.len())).ok_or(Status::Malformed)<span class="question-mark">?</span>;
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">if </span>argv_len&gt;ARGV_MAX||spec.cwd.len()&gt;CWD_MAX||env_len&gt;ENV_MAX||spec.environment.len()&gt;ENV_ENTRIES_MAX{<span class="kw">return </span><span class="prelude-val">Err</span>(Status::QuotaExceeded)}
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">if </span>spec.argv.iter().any(|a|a.as_bytes().contains(<span class="kw-2">&amp;</span><span class="number">0</span>))||spec.cwd.contains(<span class="kw-2">&amp;</span><span class="number">0</span>){<span class="kw">return </span><span class="prelude-val">Err</span>(Status::Malformed)}
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">if </span>!spec.cwd.is_empty()&amp;&amp;spec.cwd_source.is_none()&amp;&amp;core::str::from_utf8(spec.cwd).is_err(){<span class="kw">return </span><span class="prelude-val">Err</span>(Status::UnsupportedInput)}
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">let </span>grant_count=<span class="number">3</span>+usize::from(!spec.cwd.is_empty());
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="prelude-val">Ok</span>(<span class="number">48</span>+argv_len+spec.cwd.len()+env_len+grant_count<span class="kw-2">*</span><span class="number">40</span>)
+<a href=#78 id=78 data-nosnippet>78</a>}
+<a href=#79 id=79 data-nosnippet>79</a>
+<a href=#80 id=80 data-nosnippet>80</a><span class="doccomment">/// Kernel child state: terminal record complete (`QueryChild` `state`).
+<a href=#81 id=81 data-nosnippet>81</a></span><span class="kw">const </span>CHILD_TERMINAL:u32=<span class="number">3</span>;
+<a href=#82 id=82 data-nosnippet>82</a><span class="doccomment">/// `QueryChild` result body after the result header: state, reason, exit code,
+<a href=#83 id=83 data-nosnippet>83</a>/// reserved, terminal sequence.
+<a href=#84 id=84 data-nosnippet>84</a></span><span class="kw">const </span>CHILD_STATUS_LEN:usize=<span class="number">24</span>;
+<a href=#85 id=85 data-nosnippet>85</a><span class="doccomment">/// Upper bound on one [`PipeChild::wait`]. A child that never reaches its terminal
+<a href=#86 id=86 data-nosnippet>86</a>/// record inside it yields `Status::TimedOut`; it is never reported as exited.
+<a href=#87 id=87 data-nosnippet>87</a></span><span class="kw">const </span>WAIT_BUDGET_NS:u64=<span class="number">30_000_000_000</span>;
+<a href=#88 id=88 data-nosnippet>88</a><span class="doccomment">/// Polls that only yield before the wait starts sleeping one tick per poll.
+<a href=#89 id=89 data-nosnippet>89</a></span><span class="kw">const </span>WAIT_YIELDS:u32=<span class="number">8</span>;
+<a href=#90 id=90 data-nosnippet>90</a>
+<a href=#91 id=91 data-nosnippet>91</a><span class="doccomment">/// The kernel's terminal record of a committed child, as its preparer sees it.
+<a href=#92 id=92 data-nosnippet>92</a></span><span class="attr">#[derive(Debug,Clone,Copy,PartialEq,Eq)]
+<a href=#93 id=93 data-nosnippet>93</a></span><span class="kw">pub struct </span>ChildStatus{
+<a href=#94 id=94 data-nosnippet>94</a>    <span class="doccomment">/// 1 live, 2 retiring, 3 terminal (the only state with a final `exit_code`).
+<a href=#95 id=95 data-nosnippet>95</a>    </span><span class="kw">pub </span>state:u32,
+<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">pub </span>reason:u32,
+<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">pub </span>exit_code:i32,
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">pub </span>terminal_sequence:u64,
+<a href=#99 id=99 data-nosnippet>99</a>}
+<a href=#100 id=100 data-nosnippet>100</a><span class="kw">impl </span>ChildStatus{
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">pub fn </span>is_terminal(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt;bool{<span class="self">self</span>.state==CHILD_TERMINAL}
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="doccomment">/// Decode the 24-byte `QueryChild` body (after the 24-byte result header).
+<a href=#103 id=103 data-nosnippet>103</a>    /// Any other length, a nonzero reserved word or an unknown state is `Malformed`.
+<a href=#104 id=104 data-nosnippet>104</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>decode(body:<span class="kw-2">&amp;</span>[u8])-&gt;<span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>,Status&gt;{
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">if </span>body.len()!=CHILD_STATUS_LEN{<span class="kw">return </span><span class="prelude-val">Err</span>(Status::Malformed)}
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">let </span><span class="kw-2">mut </span>r=Reader::new(body);
+<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">let </span>state=r.u32()<span class="question-mark">?</span>;<span class="kw">let </span>reason=r.u32()<span class="question-mark">?</span>;<span class="kw">let </span>exit_code=r.i32()<span class="question-mark">?</span>;<span class="kw">let </span>reserved=r.u32()<span class="question-mark">?</span>;<span class="kw">let </span>terminal_sequence=r.u64()<span class="question-mark">?</span>;
+<a href=#108 id=108 data-nosnippet>108</a>        r.finish()<span class="question-mark">?</span>;
+<a href=#109 id=109 data-nosnippet>109</a>        <span class="kw">if </span>reserved!=<span class="number">0</span>||state&gt;CHILD_TERMINAL{<span class="kw">return </span><span class="prelude-val">Err</span>(Status::Malformed)}
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>{state,reason,exit_code,terminal_sequence})
+<a href=#111 id=111 data-nosnippet>111</a>    }
+<a href=#112 id=112 data-nosnippet>112</a>}
+<a href=#113 id=113 data-nosnippet>113</a>
+<a href=#114 id=114 data-nosnippet>114</a><span class="doccomment">/// How [`PipeChild::wait`] spends the gap before poll number `attempt` (0-based).
+<a href=#115 id=115 data-nosnippet>115</a></span><span class="attr">#[derive(Debug,Clone,Copy,PartialEq,Eq)]
+<a href=#116 id=116 data-nosnippet>116</a></span><span class="kw">enum </span>Pause{Yield,Tick}
+<a href=#117 id=117 data-nosnippet>117</a><span class="kw">fn </span>pause_for(attempt:u32)-&gt;Pause{<span class="kw">if </span>attempt&lt;WAIT_YIELDS{Pause::Yield}<span class="kw">else</span>{Pause::Tick}}
+<a href=#118 id=118 data-nosnippet>118</a><span class="doccomment">/// Absolute deadline for a wait that starts at `now_ns`; `Malformed` on overflow.
+<a href=#119 id=119 data-nosnippet>119</a></span><span class="kw">fn </span>wait_deadline(now_ns:u64)-&gt;<span class="prelude-ty">Result</span>&lt;u64,Status&gt;{now_ns.checked_add(WAIT_BUDGET_NS).ok_or(Status::Malformed)}
+<a href=#120 id=120 data-nosnippet>120</a>
+<a href=#121 id=121 data-nosnippet>121</a><span class="doccomment">/// A committed pipeline stage. Keep it alive until the stage is reaped and drop it
+<a href=#122 id=122 data-nosnippet>122</a>/// before closing its stage Operation: it keeps a dynamically admitted cwd
+<a href=#123 id=123 data-nosnippet>123</a>/// directory open, and dropping it lets VFS settle the child's cwd receipt.
+<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">pub struct </span>PipeChild{child:ChildRefV1,operation:OperationRef,_cwd:<span class="prelude-ty">Option</span>&lt;CwdLease&gt;}
+<a href=#125 id=125 data-nosnippet>125</a><span class="kw">impl </span>PipeChild{
+<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">pub fn </span>child(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt;ChildRefV1{<span class="self">self</span>.child}
+<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">pub fn </span>root_tid(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt;usize{<span class="self">self</span>.child.root_tid <span class="kw">as </span>usize}
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="doccomment">/// One `QueryChild` (non-mutating, idempotent): the kernel's current record of
+<a href=#129 id=129 data-nosnippet>129</a>    /// this child. Only the preparer may ask, and only until the pipeline Operation
+<a href=#130 id=130 data-nosnippet>130</a>    /// is closed. Kernel refusals surface as their own status (`WrongOwner`,
+<a href=#131 id=131 data-nosnippet>131</a>    /// `Stale`); a reply that is not exactly header plus 24 bytes is `Malformed`.
+<a href=#132 id=132 data-nosnippet>132</a>    </span><span class="kw">pub fn </span>query(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt;<span class="prelude-ty">Result</span>&lt;ChildStatus,Status&gt;{query_child(<span class="self">self</span>.operation,<span class="self">self</span>.child)}
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="doccomment">/// Wait until the kernel's terminal record of the child exists and return its
+<a href=#134 id=134 data-nosnippet>134</a>    /// exit code. Polls [`PipeChild::query`] (a few yields, then one-tick sleeps)
+<a href=#135 id=135 data-nosnippet>135</a>    /// while the child is live or retiring, for at most 30 seconds. Never guesses:
+<a href=#136 id=136 data-nosnippet>136</a>    /// `Status::TimedOut` when the budget ends first (the child may still run, so
+<a href=#137 id=137 data-nosnippet>137</a>    /// cancel the pipeline operation if it must stop), `Status::Unsupported` when
+<a href=#138 id=138 data-nosnippet>138</a>    /// the clock is unavailable, `Stale`/`WrongOwner`/other kernel statuses as
+<a href=#139 id=139 data-nosnippet>139</a>    /// reported. Transient `WouldBlock`/`TimedOut` answers are polled again.
+<a href=#140 id=140 data-nosnippet>140</a>    /// Idempotent: the record stays readable until the operation is closed.
+<a href=#141 id=141 data-nosnippet>141</a>    </span><span class="kw">pub fn </span>wait(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt;<span class="prelude-ty">Result</span>&lt;i32,Status&gt;{<span class="self">self</span>.wait_status().map(|status|status.exit_code)}
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="doccomment">/// [`PipeChild::wait`] returning the whole terminal record: `reason` is nonzero
+<a href=#143 id=143 data-nosnippet>143</a>    /// when the kernel stopped the child (a cancelled Operation) instead of the
+<a href=#144 id=144 data-nosnippet>144</a>    /// child exiting by itself, and `exit_code` is then meaningless.
+<a href=#145 id=145 data-nosnippet>145</a>    </span><span class="kw">pub fn </span>wait_status(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt;<span class="prelude-ty">Result</span>&lt;ChildStatus,Status&gt;{wait_child_status(<span class="self">self</span>.operation,<span class="self">self</span>.child)}
+<a href=#146 id=146 data-nosnippet>146</a>}
+<a href=#147 id=147 data-nosnippet>147</a>
+<a href=#148 id=148 data-nosnippet>148</a><span class="doccomment">/// One `QueryChild` of `child` under its preparing `operation`.
+<a href=#149 id=149 data-nosnippet>149</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>query_child(operation:OperationRef,child:ChildRefV1)-&gt;<span class="prelude-ty">Result</span>&lt;ChildStatus,Status&gt;{
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">let </span><span class="kw-2">mut </span>reply=[<span class="number">0u8</span>;HEADER_LEN+CHILD_STATUS_LEN];
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">let </span>total=<span class="kw">crate</span>::stream::call(operation,KernelOp::QueryChild,<span class="bool-val">false</span>,<span class="kw-2">&amp;</span>child.to_bytes(),<span class="kw-2">&amp;mut </span>reply)<span class="question-mark">?</span>;
+<a href=#152 id=152 data-nosnippet>152</a>    ChildStatus::decode(reply.get(HEADER_LEN..total).ok_or(Status::Malformed)<span class="question-mark">?</span>)
+<a href=#153 id=153 data-nosnippet>153</a>}
+<a href=#154 id=154 data-nosnippet>154</a>
+<a href=#155 id=155 data-nosnippet>155</a><span class="doccomment">/// Bounded poll of [`query_child`] until the terminal record exists (see [`PipeChild::wait`]).
+<a href=#156 id=156 data-nosnippet>156</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>wait_child_status(operation:OperationRef,child:ChildRefV1)-&gt;<span class="prelude-ty">Result</span>&lt;ChildStatus,Status&gt;{
+<a href=#157 id=157 data-nosnippet>157</a>    <span class="kw">let </span>deadline=wait_deadline(ostd::session::monotonic_ns()<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">let </span><span class="kw-2">mut </span>attempt=<span class="number">0u32</span>;
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">loop</span>{
+<a href=#160 id=160 data-nosnippet>160</a>        <span class="kw">match </span>query_child(operation,child){
+<a href=#161 id=161 data-nosnippet>161</a>            <span class="prelude-val">Ok</span>(status) <span class="kw">if </span>status.is_terminal()=&gt;<span class="kw">return </span><span class="prelude-val">Ok</span>(status),
+<a href=#162 id=162 data-nosnippet>162</a>            <span class="prelude-val">Ok</span>(<span class="kw">_</span>)|<span class="prelude-val">Err</span>(Status::WouldBlock|Status::TimedOut)=&gt;{}
+<a href=#163 id=163 data-nosnippet>163</a>            <span class="prelude-val">Err</span>(e)=&gt;<span class="kw">return </span><span class="prelude-val">Err</span>(e),
+<a href=#164 id=164 data-nosnippet>164</a>        }
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">if </span>ostd::session::monotonic_ns()<span class="question-mark">?</span>&gt;=deadline{<span class="kw">return </span><span class="prelude-val">Err</span>(Status::TimedOut)}
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">match </span>pause_for(attempt){
+<a href=#167 id=167 data-nosnippet>167</a>            Pause::Yield=&gt;ostd::syscall::sys_yield(),
+<a href=#168 id=168 data-nosnippet>168</a>            Pause::Tick=&gt;{<span class="kw">let _</span>=ostd::syscall::sys_set_timer(<span class="number">1</span>);}
+<a href=#169 id=169 data-nosnippet>169</a>        }
+<a href=#170 id=170 data-nosnippet>170</a>        attempt=attempt.saturating_add(<span class="number">1</span>);
+<a href=#171 id=171 data-nosnippet>171</a>    }
+<a href=#172 id=172 data-nosnippet>172</a>}
+<a href=#173 id=173 data-nosnippet>173</a>
+<a href=#174 id=174 data-nosnippet>174</a><span class="doccomment">/// Where an Operation of a pipeline hangs.
+<a href=#175 id=175 data-nosnippet>175</a></span><span class="attr">#[derive(Debug,Clone,Copy,PartialEq,Eq)]
+<a href=#176 id=176 data-nosnippet>176</a></span><span class="kw">enum </span>Parent{Root,Ring(usize)}
+<a href=#177 id=177 data-nosnippet>177</a><span class="doccomment">/// The parent of every ring Operation (index = ring) and stage Operation (index =
+<a href=#178 id=178 data-nosnippet>178</a>/// stage) of a `stages`-stage pipeline. Ring `i` carries the stream from stage `i`
+<a href=#179 id=179 data-nosnippet>179</a>/// to stage `i + 1`; see the module documentation for why they nest outward.
+<a href=#180 id=180 data-nosnippet>180</a></span><span class="attr">#[derive(Debug,PartialEq,Eq)]
+<a href=#181 id=181 data-nosnippet>181</a></span><span class="kw">struct </span>Plan{rings:alloc::vec::Vec&lt;Parent&gt;,stages:alloc::vec::Vec&lt;Parent&gt;}
+<a href=#182 id=182 data-nosnippet>182</a><span class="kw">fn </span>layout_plan(stages:usize)-&gt;Plan{
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">let </span>rings=(<span class="number">0</span>..stages.saturating_sub(<span class="number">1</span>)).map(|ring|<span class="kw">if </span>ring+<span class="number">2</span>==stages{Parent::Root}<span class="kw">else</span>{Parent::Ring(ring+<span class="number">1</span>)}).collect();
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span>stage_parents=(<span class="number">0</span>..stages).map(|stage|<span class="kw">if </span>stages==<span class="number">1</span>{Parent::Root}<span class="kw">else</span>{Parent::Ring(stage.saturating_sub(<span class="number">1</span>))}).collect();
+<a href=#185 id=185 data-nosnippet>185</a>    Plan{rings,stages:stage_parents}
+<a href=#186 id=186 data-nosnippet>186</a>}
+<a href=#187 id=187 data-nosnippet>187</a>
+<a href=#188 id=188 data-nosnippet>188</a><span class="doccomment">/// The root Operation of a pipeline and the ring and stage Operations below it.
+<a href=#189 id=189 data-nosnippet>189</a></span><span class="kw">pub struct </span>Pipeline{operation:Operation,rings:alloc::vec::Vec&lt;Operation&gt;,stages:alloc::vec::Vec&lt;Operation&gt;,created:alloc::vec::Vec&lt;Operation&gt;}
+<a href=#190 id=190 data-nosnippet>190</a><span class="kw">impl </span>Pipeline{
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="doccomment">/// One root Operation per pipeline, a child of the session operation.
+<a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">pub fn </span>create(parent:OperationRef)-&gt;<span class="prelude-ty">Result</span>&lt;Pipeline,Status&gt;{
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="prelude-val">Ok</span>(Pipeline{operation:Operation::create(<span class="prelude-val">Some</span>(parent))<span class="question-mark">?</span>,rings:alloc::vec::Vec::new(),stages:alloc::vec::Vec::new(),created:alloc::vec::Vec::new()})
+<a href=#194 id=194 data-nosnippet>194</a>    }
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">pub fn </span>operation(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt;OperationRef{<span class="self">self</span>.operation.reference()}
+<a href=#196 id=196 data-nosnippet>196</a>    <span class="doccomment">/// `(reader, writer)` in the root Operation, the same order as
+<a href=#197 id=197 data-nosnippet>197</a>    /// `Operation::create_stream`: for the ends the shell reads (output and
+<a href=#198 id=198 data-nosnippet>198</a>    /// diagnostics). The root is never cancelled by a stage.
+<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="kw">pub fn </span>stream(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt;<span class="prelude-ty">Result</span>&lt;(Endpoint,Endpoint),Status&gt;{<span class="self">self</span>.operation.create_stream(STREAM_CAPACITY)}
+<a href=#200 id=200 data-nosnippet>200</a>    <span class="doccomment">/// Open the ring and stage Operations for `stages` stages (at least one, at most
+<a href=#201 id=201 data-nosnippet>201</a>    /// sixteen). Call once, before any stream or spawn.
+<a href=#202 id=202 data-nosnippet>202</a>    </span><span class="kw">pub fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>,stages:usize)-&gt;<span class="prelude-ty">Result</span>&lt;(),Status&gt;{
+<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw">if </span>stages==<span class="number">0</span>||stages&gt;MAX_STAGES||!<span class="self">self</span>.stages.is_empty(){<span class="kw">return </span><span class="prelude-val">Err</span>(Status::Malformed)}
+<a href=#204 id=204 data-nosnippet>204</a>        <span class="kw">let </span>plan=layout_plan(stages);
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let </span><span class="kw-2">mut </span>rings:alloc::vec::Vec&lt;<span class="prelude-ty">Option</span>&lt;Operation&gt;&gt;=<span class="macro">alloc::vec!</span>[<span class="prelude-val">None</span>;plan.rings.len()];
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="comment">// Outermost ring first: ring `stages - 2` below the root, ring `i` below ring `i + 1`.
+<a href=#207 id=207 data-nosnippet>207</a>        </span><span class="kw">for </span>ring <span class="kw">in </span>(<span class="number">0</span>..plan.rings.len()).rev(){
+<a href=#208 id=208 data-nosnippet>208</a>            <span class="kw">let </span>parent=<span class="kw">match </span>plan.rings[ring]{Parent::Root=&gt;<span class="self">self</span>.operation,Parent::Ring(outer)=&gt;rings[outer].ok_or(Status::Malformed)<span class="question-mark">?</span>};
+<a href=#209 id=209 data-nosnippet>209</a>            <span class="kw">let </span>operation=Operation::create(<span class="prelude-val">Some</span>(parent.reference()))<span class="question-mark">?</span>;
+<a href=#210 id=210 data-nosnippet>210</a>            <span class="self">self</span>.created.push(operation);rings[ring]=<span class="prelude-val">Some</span>(operation);
+<a href=#211 id=211 data-nosnippet>211</a>        }
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="self">self</span>.rings=rings.into_iter().flatten().collect();
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">for </span>parent <span class="kw">in </span>plan.stages{
+<a href=#214 id=214 data-nosnippet>214</a>            <span class="kw">let </span>parent=<span class="kw">match </span>parent{Parent::Root=&gt;<span class="self">self</span>.operation,Parent::Ring(ring)=&gt;<span class="self">self</span>.rings[ring]};
+<a href=#215 id=215 data-nosnippet>215</a>            <span class="kw">let </span>operation=Operation::create(<span class="prelude-val">Some</span>(parent.reference()))<span class="question-mark">?</span>;
+<a href=#216 id=216 data-nosnippet>216</a>            <span class="self">self</span>.created.push(operation);<span class="self">self</span>.stages.push(operation);
+<a href=#217 id=217 data-nosnippet>217</a>        }
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="prelude-val">Ok</span>(())
+<a href=#219 id=219 data-nosnippet>219</a>    }
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="doccomment">/// `(reader, writer)` of the stream between stage `ring` and stage `ring + 1`,
+<a href=#221 id=221 data-nosnippet>221</a>    /// created in that ring's Operation.
+<a href=#222 id=222 data-nosnippet>222</a>    </span><span class="kw">pub fn </span>link(<span class="kw-2">&amp;</span><span class="self">self</span>,ring:usize)-&gt;<span class="prelude-ty">Result</span>&lt;(Endpoint,Endpoint),Status&gt;{
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="self">self</span>.rings.get(ring).ok_or(Status::Malformed)<span class="question-mark">?</span>.create_stream(STREAM_CAPACITY)
+<a href=#224 id=224 data-nosnippet>224</a>    }
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="doccomment">/// `(reader, writer)` created inside stage `stage`'s own Operation: the stream
+<a href=#226 id=226 data-nosnippet>226</a>    /// the shell feeds that stage through. When the stage stops reading the kernel
+<a href=#227 id=227 data-nosnippet>227</a>    /// cancels only that stage's Operation.
+<a href=#228 id=228 data-nosnippet>228</a>    </span><span class="kw">pub fn </span>stage_stream(<span class="kw-2">&amp;</span><span class="self">self</span>,stage:usize)-&gt;<span class="prelude-ty">Result</span>&lt;(Endpoint,Endpoint),Status&gt;{
+<a href=#229 id=229 data-nosnippet>229</a>        <span class="self">self</span>.stages.get(stage).ok_or(Status::Malformed)<span class="question-mark">?</span>.create_stream(STREAM_CAPACITY)
+<a href=#230 id=230 data-nosnippet>230</a>    }
+<a href=#231 id=231 data-nosnippet>231</a>    <span class="doccomment">/// Cancel the whole pipeline (root and everything below it).
+<a href=#232 id=232 data-nosnippet>232</a>    </span><span class="kw">pub fn </span>cancel(<span class="kw-2">&amp;</span><span class="self">self</span>,reason:u32)-&gt;<span class="prelude-ty">Result</span>&lt;(),Status&gt;{<span class="self">self</span>.operation.cancel(reason)}
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="doccomment">/// Release every Operation, children before parents, then the root (bounded retry
+<a href=#234 id=234 data-nosnippet>234</a>    /// on `WouldBlock`; correlation lanes are retired on success and on giving up).
+<a href=#235 id=235 data-nosnippet>235</a>    /// Drop every reaped [`PipeChild`] first: VFS settles a stage's cwd receipt, which
+<a href=#236 id=236 data-nosnippet>236</a>    /// its Operation's release waits for, only when the owner contacts it.
+<a href=#237 id=237 data-nosnippet>237</a>    /// The first failure is returned after every release was attempted.
+<a href=#238 id=238 data-nosnippet>238</a>    </span><span class="kw">pub fn </span>close(<span class="self">self</span>)-&gt;<span class="prelude-ty">Result</span>&lt;(),Status&gt;{
+<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">let </span><span class="kw-2">mut </span>first=<span class="prelude-val">Ok</span>(());
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw">for </span>operation <span class="kw">in </span><span class="self">self</span>.created.iter().rev(){
+<a href=#241 id=241 data-nosnippet>241</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e)=close_bounded(operation.reference()){<span class="kw">if </span>first.is_ok(){first=<span class="prelude-val">Err</span>(e)}}
+<a href=#242 id=242 data-nosnippet>242</a>        }
+<a href=#243 id=243 data-nosnippet>243</a>        <span class="kw">let </span>root=close_bounded(<span class="self">self</span>.operation.reference());
+<a href=#244 id=244 data-nosnippet>244</a>        first.and(root)
+<a href=#245 id=245 data-nosnippet>245</a>    }
+<a href=#246 id=246 data-nosnippet>246</a>
+<a href=#247 id=247 data-nosnippet>247</a>    <span class="doccomment">/// Prepare and commit one child in stage Operation `stage` whose fd0/fd1/fd2 are
+<a href=#248 id=248 data-nosnippet>248</a>    /// delegated copies of the given endpoints (stdin with reader rights,
+<a href=#249 id=249 data-nosnippet>249</a>    /// stdout/stderr with writer rights). `None` for `stdin` gives the child an
+<a href=#250 id=250 data-nosnippet>250</a>    /// empty stream: its first read sees end of file.
+<a href=#251 id=251 data-nosnippet>251</a>    ///
+<a href=#252 id=252 data-nosnippet>252</a>    /// The caller keeps its own endpoint copies and must close them; this never
+<a href=#253 id=253 data-nosnippet>253</a>    /// closes a caller endpoint. Failure before commit publishes nothing (the
+<a href=#254 id=254 data-nosnippet>254</a>    /// prepared child is aborted and every endpoint made here is closed). A
+<a href=#255 id=255 data-nosnippet>255</a>    /// failure at or after commit may have published a child, so it cancels the
+<a href=#256 id=256 data-nosnippet>256</a>    /// stage Operation (reason 5, the `spawn_foreground` reason) and returns the
+<a href=#257 id=257 data-nosnippet>257</a>    /// error; the Operation itself is released by [`Pipeline::close`].
+<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">pub fn </span>spawn(<span class="kw-2">&amp;</span><span class="self">self</span>,stage:usize,spec:<span class="kw-2">&amp;</span>PipeSpec&lt;<span class="lifetime">'_</span>&gt;,stdin:<span class="prelude-ty">Option</span>&lt;Endpoint&gt;,stdout:Endpoint,stderr:Endpoint)-&gt;<span class="prelude-ty">Result</span>&lt;PipeChild,Status&gt;{
+<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">let </span>operation=<span class="kw-2">*</span><span class="self">self</span>.stages.get(stage).ok_or(Status::Malformed)<span class="question-mark">?</span>;
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">let </span>context_len=validate(spec)<span class="question-mark">?</span>;
+<a href=#261 id=261 data-nosnippet>261</a>        <span class="kw">let </span><span class="kw-2">mut </span>committing=<span class="bool-val">false</span>;
+<a href=#262 id=262 data-nosnippet>262</a>        <span class="kw">let </span>result=<span class="self">Self</span>::prepare(operation,spec,context_len,stdin,stdout,stderr,<span class="kw-2">&amp;mut </span>committing);
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">match </span>result{
+<a href=#264 id=264 data-nosnippet>264</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) <span class="kw">if </span>committing=&gt;{<span class="kw">let _</span>=operation.cancel(<span class="number">5</span>);}
+<a href=#265 id=265 data-nosnippet>265</a>            <span class="comment">// Before commit, a stage whose Operation the kernel cancelled lost its
+<a href=#266 id=266 data-nosnippet>266</a>            // consumer while it was being prepared (the cancellation aborts the
+<a href=#267 id=267 data-nosnippet>267</a>            // prepared child, so any step after it fails): report that as `Cancelled`.
+<a href=#268 id=268 data-nosnippet>268</a>            </span><span class="prelude-val">Err</span>(status) <span class="kw">if </span>status!=Status::Cancelled&amp;&amp;operation.query().is_ok_and(|state|state.state!=<span class="number">0</span>)=&gt;<span class="kw">return </span><span class="prelude-val">Err</span>(Status::Cancelled),
+<a href=#269 id=269 data-nosnippet>269</a>            <span class="kw">_</span>=&gt;{}
+<a href=#270 id=270 data-nosnippet>270</a>        }
+<a href=#271 id=271 data-nosnippet>271</a>        result
+<a href=#272 id=272 data-nosnippet>272</a>    }
+<a href=#273 id=273 data-nosnippet>273</a>
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="kw">fn </span>prepare(operation:Operation,spec:<span class="kw-2">&amp;</span>PipeSpec&lt;<span class="lifetime">'_</span>&gt;,context_len:usize,stdin:<span class="prelude-ty">Option</span>&lt;Endpoint&gt;,stdout:Endpoint,stderr:Endpoint,committing:<span class="kw-2">&amp;mut </span>bool)-&gt;<span class="prelude-ty">Result</span>&lt;PipeChild,Status&gt;{
+<a href=#275 id=275 data-nosnippet>275</a>        <span class="comment">// Endpoint copies owned by this call, declared before `prepared` so an
+<a href=#276 id=276 data-nosnippet>276</a>        // unpublished child is aborted first. `empty_reader` (the reader of the empty
+<a href=#277 id=277 data-nosnippet>277</a>        // stdin stream) outlives the commit; `delegated` is closed only while the
+<a href=#278 id=278 data-nosnippet>278</a>        // child is unpublished.
+<a href=#279 id=279 data-nosnippet>279</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>empty_reader=Closer::new();<span class="kw">let </span><span class="kw-2">mut </span>delegated=Closer::new();
+<a href=#280 id=280 data-nosnippet>280</a>        <span class="kw">let </span><span class="kw-2">mut </span>prepared=operation.prepare_child(spec.path,context_len)<span class="question-mark">?</span>;
+<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">let </span>stdin_source=<span class="kw">match </span>stdin{
+<a href=#282 id=282 data-nosnippet>282</a>            <span class="prelude-val">Some</span>(e)=&gt;e,
+<a href=#283 id=283 data-nosnippet>283</a>            <span class="prelude-val">None</span>=&gt;{
+<a href=#284 id=284 data-nosnippet>284</a>                <span class="comment">// Closing the last reader of a stream stops its producers, so the
+<a href=#285 id=285 data-nosnippet>285</a>                // reader stays open until the child holds its own copy. The writer is
+<a href=#286 id=286 data-nosnippet>286</a>                // closed now: the child reads end of file at once.
+<a href=#287 id=287 data-nosnippet>287</a>                </span><span class="kw">let</span>(reader,writer)=operation.create_stream(PLACEHOLDER_CAPACITY)<span class="question-mark">?</span>;
+<a href=#288 id=288 data-nosnippet>288</a>                empty_reader.push(reader);
+<a href=#289 id=289 data-nosnippet>289</a>                writer.close()<span class="question-mark">?</span>;
+<a href=#290 id=290 data-nosnippet>290</a>                reader
+<a href=#291 id=291 data-nosnippet>291</a>            }
+<a href=#292 id=292 data-nosnippet>292</a>        };
+<a href=#293 id=293 data-nosnippet>293</a>        <span class="kw">let </span>stdin_copy=stdin_source.delegate(<span class="kw-2">&amp;</span>prepared,EndpointRights::READ_ONLY)<span class="question-mark">?</span>;delegated.push(stdin_copy);
+<a href=#294 id=294 data-nosnippet>294</a>        <span class="kw">let </span>stdout_copy=stdout.delegate(<span class="kw-2">&amp;</span>prepared,EndpointRights::WRITE_DELEGATE)<span class="question-mark">?</span>;delegated.push(stdout_copy);
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">let </span>stderr_copy=stderr.delegate(<span class="kw-2">&amp;</span>prepared,EndpointRights::WRITE_DELEGATE)<span class="question-mark">?</span>;delegated.push(stderr_copy);
+<a href=#296 id=296 data-nosnippet>296</a>
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="kw">let </span><span class="kw-2">mut </span>cwd_lease=<span class="prelude-val">None</span>;<span class="kw">let </span><span class="kw-2">mut </span>reservation=<span class="prelude-val">None</span>;<span class="kw">let </span><span class="kw-2">mut </span>child_cwd=<span class="prelude-val">None</span>;
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="kw">let </span>vfs_owner=<span class="kw">if </span>spec.cwd.is_empty(){<span class="prelude-val">None</span>}<span class="kw">else</span>{<span class="prelude-val">Some</span>(ostd::session::service_binding(api::syscall::service::VFS)<span class="question-mark">?</span>)};
+<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(owner)=vfs_owner{
+<a href=#300 id=300 data-nosnippet>300</a>            <span class="kw">let </span>lease=cwd_lease.insert(CwdLease::new(owner,operation.reference()));
+<a href=#301 id=301 data-nosnippet>301</a>            <span class="kw">let </span>source=<span class="kw">match </span>spec.cwd_source{
+<a href=#302 id=302 data-nosnippet>302</a>                <span class="prelude-val">Some</span>(source)=&gt;source,
+<a href=#303 id=303 data-nosnippet>303</a>                <span class="prelude-val">None</span>=&gt;{
+<a href=#304 id=304 data-nosnippet>304</a>                    <span class="kw">let </span>path=core::str::from_utf8(spec.cwd).map_err(|<span class="kw">_</span>|Status::UnsupportedInput)<span class="question-mark">?</span>;
+<a href=#305 id=305 data-nosnippet>305</a>                    <span class="comment">// The dynamically opened directory is granted under the caller's
+<a href=#306 id=306 data-nosnippet>306</a>                    // own principal generation (held by every endpoint it owns).
+<a href=#307 id=307 data-nosnippet>307</a>                    </span><span class="kw">let </span>generation=stderr.inspect()<span class="question-mark">?</span>.holder.generation;
+<a href=#308 id=308 data-nosnippet>308</a>                    <span class="kw">let </span><span class="kw-2">mut </span>send=[<span class="number">0u8</span>;<span class="number">4096</span>];<span class="kw">let </span><span class="kw-2">mut </span>recv=[<span class="number">0u8</span>;<span class="number">4096</span>];
+<a href=#309 id=309 data-nosnippet>309</a>                    <span class="kw">let </span>request=api::ipc::VfsRequest::OpenRootDir{path};
+<a href=#310 id=310 data-nosnippet>310</a>                    <span class="kw">let </span>response=ostd::ipc::service_call_typed_bounded::&lt;<span class="kw">_</span>,api::ipc::VfsResponse&lt;<span class="lifetime">'_</span>&gt;&gt;(owner.tid <span class="kw">as </span>usize,<span class="kw-2">&amp;</span>request,<span class="kw-2">&amp;mut </span>send,<span class="kw-2">&amp;mut </span>recv,<span class="number">100</span>).map_err(|<span class="kw">_</span>|Status::Indeterminate)<span class="question-mark">?</span>;
+<a href=#311 id=311 data-nosnippet>311</a>                    <span class="kw">let </span>id=<span class="kw">match </span>response{api::ipc::VfsResponse::DirHandle(handle)=&gt;handle.<span class="number">0</span>,<span class="kw">_</span>=&gt;<span class="kw">return </span><span class="prelude-val">Err</span>(Status::Denied)};
+<a href=#312 id=312 data-nosnippet>312</a>                    <span class="comment">// From here the lease closes the handle on every exit.
+<a href=#313 id=313 data-nosnippet>313</a>                    </span>lease.dir=<span class="prelude-val">Some</span>(api::dir_handles::ViDirHandle(id));
+<a href=#314 id=314 data-nosnippet>314</a>                    <span class="kw">if </span>ostd::session::service_binding(api::syscall::service::VFS)<span class="question-mark">?</span>!=owner{<span class="kw">return </span><span class="prelude-val">Err</span>(Status::Stale)}
+<a href=#315 id=315 data-nosnippet>315</a>                    ObjectRefV1{id,generation}
+<a href=#316 id=316 data-nosnippet>316</a>                }
+<a href=#317 id=317 data-nosnippet>317</a>            };
+<a href=#318 id=318 data-nosnippet>318</a>            <span class="kw">let </span><span class="kw-2">mut </span>body=[<span class="number">0u8</span>;<span class="number">32</span>];<span class="kw">let </span><span class="kw-2">mut </span>w=Writer::new(<span class="kw-2">&amp;mut </span>body);w.reference(prepared.reference().raw())<span class="question-mark">?</span>;w.reference(source)<span class="question-mark">?</span>;
+<a href=#319 id=319 data-nosnippet>319</a>            <span class="kw">let </span><span class="kw-2">mut </span>reply=[<span class="number">0u8</span>;<span class="number">56</span>];<span class="kw">let </span>n=vfs(owner,operation.reference(),VfsOp::ReserveCwd,<span class="kw-2">&amp;</span>body,<span class="kw-2">&amp;mut </span>reply)<span class="question-mark">?</span>;
+<a href=#320 id=320 data-nosnippet>320</a>            <span class="kw">let </span><span class="kw-2">mut </span>r=Reader::new(<span class="kw-2">&amp;</span>reply[<span class="number">24</span>..n]);reservation=<span class="prelude-val">Some</span>(r.reference()<span class="question-mark">?</span>);child_cwd=<span class="prelude-val">Some</span>(r.reference()<span class="question-mark">?</span>);r.finish()<span class="question-mark">?</span>;
+<a href=#321 id=321 data-nosnippet>321</a>        }
+<a href=#322 id=322 data-nosnippet>322</a>
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="kw">let </span>endpoint_grant=|slot:GrantSlot,copy:Endpoint,rights:EndpointRights|Grant::endpoint(slot,copy.reference().raw(),rights.bits() <span class="kw">as </span>u16);
+<a href=#324 id=324 data-nosnippet>324</a>        <span class="kw">let </span><span class="kw-2">mut </span>grants=[endpoint_grant(GrantSlot::Stdin,stdin_copy,EndpointRights::READ_ONLY)<span class="question-mark">?</span>,endpoint_grant(GrantSlot::Stdout,stdout_copy,EndpointRights::WRITE_DELEGATE)<span class="question-mark">?</span>,endpoint_grant(GrantSlot::Stderr,stderr_copy,EndpointRights::WRITE_DELEGATE)<span class="question-mark">?</span>,Grant{kind:<span class="number">1</span>,rights:<span class="number">0</span>,slot:GrantSlot::Stdin,owner_service:<span class="number">0</span>,object:ObjectRefV1::ZERO}];
+<a href=#325 id=325 data-nosnippet>325</a>        <span class="kw">let </span><span class="kw-2">mut </span>count=<span class="number">3</span>;
+<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(grant)=child_cwd{grants[<span class="number">3</span>]=Grant::cwd(grant)<span class="question-mark">?</span>;count=<span class="number">4</span>;}
+<a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">let </span>context=ChildContext::new(operation.reference().raw(),spec.argv,spec.cwd,spec.environment,<span class="kw-2">&amp;</span>grants[..count])<span class="question-mark">?</span>;
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">if </span>context.as_bytes().len()!=context_len{<span class="kw">return </span><span class="prelude-val">Err</span>(Status::Malformed)}
+<a href=#329 id=329 data-nosnippet>329</a>        prepared.write_context(<span class="kw-2">&amp;</span>context)<span class="question-mark">?</span>;
+<a href=#330 id=330 data-nosnippet>330</a>        <span class="kw">if let</span>(<span class="prelude-val">Some</span>(owner),<span class="prelude-val">Some</span>(reservation))=(vfs_owner,reservation){
+<a href=#331 id=331 data-nosnippet>331</a>            <span class="kw">let </span><span class="kw-2">mut </span>body=[<span class="number">0u8</span>;<span class="number">32</span>];<span class="kw">let </span><span class="kw-2">mut </span>w=Writer::new(<span class="kw-2">&amp;mut </span>body);w.reference(reservation)<span class="question-mark">?</span>;w.reference(prepared.reference().raw())<span class="question-mark">?</span>;
+<a href=#332 id=332 data-nosnippet>332</a>            <span class="kw">let </span><span class="kw-2">mut </span>reply=[<span class="number">0u8</span>;<span class="number">40</span>];<span class="kw">let </span>n=vfs(owner,operation.reference(),VfsOp::FinalizeCwd,<span class="kw-2">&amp;</span>body,<span class="kw-2">&amp;mut </span>reply)<span class="question-mark">?</span>;
+<a href=#333 id=333 data-nosnippet>333</a>            <span class="kw">let </span>receipt=ReceiptRef::from_raw(ObjectRefV1::from_bytes(<span class="kw-2">&amp;</span>reply[<span class="number">24</span>..n])<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#334 id=334 data-nosnippet>334</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(lease)=cwd_lease.as_mut(){lease.receipt=<span class="prelude-val">Some</span>(receipt);}
+<a href=#335 id=335 data-nosnippet>335</a>            prepared.bind_receipt(<span class="number">2</span>,<span class="number">4</span>,owner,receipt)<span class="question-mark">?</span>;
+<a href=#336 id=336 data-nosnippet>336</a>        }
+<a href=#337 id=337 data-nosnippet>337</a>        <span class="comment">// From the commit call on, a child may be published (even when the call
+<a href=#338 id=338 data-nosnippet>338</a>        // reports an error); the delegated copies then belong to it.
+<a href=#339 id=339 data-nosnippet>339</a>        </span><span class="kw-2">*</span>committing=<span class="bool-val">true</span>;delegated.disarm();
+<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span>child=prepared.commit()<span class="question-mark">?</span>;
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="comment">// The child holds its own reader of the empty stream now.
+<a href=#342 id=342 data-nosnippet>342</a>        </span>empty_reader.close_all();
+<a href=#343 id=343 data-nosnippet>343</a>        <span class="prelude-val">Ok</span>(PipeChild{child,operation:operation.reference(),_cwd:cwd_lease})
+<a href=#344 id=344 data-nosnippet>344</a>    }
+<a href=#345 id=345 data-nosnippet>345</a>}
+<a href=#346 id=346 data-nosnippet>346</a>
+<a href=#347 id=347 data-nosnippet>347</a><span class="doccomment">/// Closes every pushed endpoint on drop or on demand; `disarm` forgets them.
+<a href=#348 id=348 data-nosnippet>348</a></span><span class="kw">struct </span>Closer{list:[<span class="prelude-ty">Option</span>&lt;Endpoint&gt;;<span class="number">4</span>],len:usize}
+<a href=#349 id=349 data-nosnippet>349</a><span class="kw">impl </span>Closer{
+<a href=#350 id=350 data-nosnippet>350</a>    <span class="kw">fn </span>new()-&gt;<span class="self">Self</span>{<span class="self">Self</span>{list:[<span class="prelude-val">None</span>;<span class="number">4</span>],len:<span class="number">0</span>}}
+<a href=#351 id=351 data-nosnippet>351</a>    <span class="kw">fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>,endpoint:Endpoint){<span class="kw">if </span><span class="self">self</span>.len&lt;<span class="self">self</span>.list.len(){<span class="self">self</span>.list[<span class="self">self</span>.len]=<span class="prelude-val">Some</span>(endpoint);<span class="self">self</span>.len+=<span class="number">1</span>;}}
+<a href=#352 id=352 data-nosnippet>352</a>    <span class="kw">fn </span>close_all(<span class="kw-2">&amp;mut </span><span class="self">self</span>){<span class="kw">for </span>slot <span class="kw">in </span><span class="self">self</span>.list.iter_mut().take(<span class="self">self</span>.len){<span class="kw">if let </span><span class="prelude-val">Some</span>(endpoint)=slot.take(){<span class="kw">let _</span>=endpoint.close();}}<span class="self">self</span>.len=<span class="number">0</span>;}
+<a href=#353 id=353 data-nosnippet>353</a>    <span class="kw">fn </span>disarm(<span class="kw-2">&amp;mut </span><span class="self">self</span>){<span class="self">self</span>.list=[<span class="prelude-val">None</span>;<span class="number">4</span>];<span class="self">self</span>.len=<span class="number">0</span>;}
+<a href=#354 id=354 data-nosnippet>354</a>}
+<a href=#355 id=355 data-nosnippet>355</a><span class="kw">impl </span>Drop <span class="kw">for </span>Closer{<span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>){<span class="self">self</span>.close_all()}}
+<a href=#356 id=356 data-nosnippet>356</a>
+<a href=#357 id=357 data-nosnippet>357</a><span class="kw">fn </span>vfs(owner:ServiceBinding,operation:OperationRef,op:VfsOp,body:<span class="kw-2">&amp;</span>[u8],reply:<span class="kw-2">&amp;mut</span>[u8])-&gt;<span class="prelude-ty">Result</span>&lt;usize,Status&gt;{
+<a href=#358 id=358 data-nosnippet>358</a>    <span class="kw">let </span>header=ostd::session::service_call(owner,api::syscall::service::VFS,operation.raw(),op <span class="kw">as </span>u16,<span class="bool-val">true</span>,body,reply)<span class="question-mark">?</span>;ok(header.status)<span class="question-mark">?</span>;<span class="prelude-val">Ok</span>(header.total_len <span class="kw">as </span>usize)
+<a href=#359 id=359 data-nosnippet>359</a>}
+<a href=#360 id=360 data-nosnippet>360</a>
+<a href=#361 id=361 data-nosnippet>361</a><span class="doccomment">/// CloseOperation retried while `WouldBlock` (receipt owners settle receipts
+<a href=#362 id=362 data-nosnippet>362</a>/// asynchronously): eight yields, then one-tick sleeps, 64 attempts at most.
+<a href=#363 id=363 data-nosnippet>363</a>/// Correlation lanes are retired on success and on giving up.
+<a href=#364 id=364 data-nosnippet>364</a></span><span class="kw">fn </span>close_bounded(operation:OperationRef)-&gt;<span class="prelude-ty">Result</span>&lt;(),Status&gt;{
+<a href=#365 id=365 data-nosnippet>365</a>    <span class="kw">let </span><span class="kw-2">mut </span>last=Status::WouldBlock;
+<a href=#366 id=366 data-nosnippet>366</a>    <span class="kw">for </span>attempt <span class="kw">in </span><span class="number">0</span>..<span class="number">64u32</span>{
+<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">match </span>Operation::from_ref(operation).close(){
+<a href=#368 id=368 data-nosnippet>368</a>            <span class="prelude-val">Ok</span>(())=&gt;<span class="kw">return </span><span class="prelude-val">Ok</span>(()),
+<a href=#369 id=369 data-nosnippet>369</a>            <span class="prelude-val">Err</span>(Status::WouldBlock)=&gt;{ostd::syscall::sys_yield();<span class="kw">if </span>attempt&gt;=<span class="number">8</span>{<span class="kw">let _</span>=ostd::syscall::sys_set_timer(<span class="number">1</span>);}}
+<a href=#370 id=370 data-nosnippet>370</a>            <span class="prelude-val">Err</span>(e)=&gt;{last=e;<span class="kw">break</span>}
+<a href=#371 id=371 data-nosnippet>371</a>        }
+<a href=#372 id=372 data-nosnippet>372</a>    }
+<a href=#373 id=373 data-nosnippet>373</a>    ostd::session::retire_operation(operation.raw());
+<a href=#374 id=374 data-nosnippet>374</a>    <span class="prelude-val">Err</span>(last)
+<a href=#375 id=375 data-nosnippet>375</a>}
+<a href=#376 id=376 data-nosnippet>376</a>
+<a href=#377 id=377 data-nosnippet>377</a><span class="doccomment">/// The owner's side of a child's VFS cwd reservation, dropped once the child is
+<a href=#378 id=378 data-nosnippet>378</a>/// reaped. VFS does not poll a running child that never contacts it: it settles an
+<a href=#379 id=379 data-nosnippet>379</a>/// owner's reservations when that owner sends a request, and closing the child's
+<a href=#380 id=380 data-nosnippet>380</a>/// Operation waits for the settled receipt. Dropping the lease is that request: it
+<a href=#381 id=381 data-nosnippet>381</a>/// closes the dynamically admitted source directory, or else queries the receipt
+<a href=#382 id=382 data-nosnippet>382</a>/// (`ResolveCwd`, action 0). Cleanup only; VFS still validates every handle operation.
+<a href=#383 id=383 data-nosnippet>383</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>CwdLease{owner:ServiceBinding,operation:OperationRef,<span class="kw">pub</span>(<span class="kw">crate</span>) dir:<span class="prelude-ty">Option</span>&lt;api::dir_handles::ViDirHandle&gt;,<span class="kw">pub</span>(<span class="kw">crate</span>) receipt:<span class="prelude-ty">Option</span>&lt;ReceiptRef&gt;}
+<a href=#384 id=384 data-nosnippet>384</a><span class="kw">impl </span>CwdLease{<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new(owner:ServiceBinding,operation:OperationRef)-&gt;<span class="self">Self</span>{<span class="self">Self</span>{owner,operation,dir:<span class="prelude-val">None</span>,receipt:<span class="prelude-val">None</span>}}}
+<a href=#385 id=385 data-nosnippet>385</a><span class="kw">impl </span>Drop <span class="kw">for </span>CwdLease{<span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>){
+<a href=#386 id=386 data-nosnippet>386</a>    <span class="kw">if </span>ostd::session::service_binding(api::syscall::service::VFS).ok()!=<span class="prelude-val">Some</span>(<span class="self">self</span>.owner){<span class="kw">return</span>}
+<a href=#387 id=387 data-nosnippet>387</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(dir)=<span class="self">self</span>.dir{
+<a href=#388 id=388 data-nosnippet>388</a>        <span class="kw">let </span><span class="kw-2">mut </span>send=[<span class="number">0u8</span>;<span class="number">4096</span>];<span class="kw">let </span><span class="kw-2">mut </span>recv=[<span class="number">0u8</span>;<span class="number">4096</span>];
+<a href=#389 id=389 data-nosnippet>389</a>        <span class="kw">let _</span>=ostd::ipc::service_call_typed_bounded::&lt;<span class="kw">_</span>,api::ipc::VfsResponse&lt;<span class="lifetime">'_</span>&gt;&gt;(<span class="self">self</span>.owner.tid <span class="kw">as </span>usize,<span class="kw-2">&amp;</span>api::ipc::VfsRequest::CloseDir{dir},<span class="kw-2">&amp;mut </span>send,<span class="kw-2">&amp;mut </span>recv,<span class="number">100</span>);
+<a href=#390 id=390 data-nosnippet>390</a>    }<span class="kw">else if let </span><span class="prelude-val">Some</span>(receipt)=<span class="self">self</span>.receipt{
+<a href=#391 id=391 data-nosnippet>391</a>        <span class="kw">let </span><span class="kw-2">mut </span>body=[<span class="number">0u8</span>;<span class="number">24</span>];<span class="kw">let </span><span class="kw-2">mut </span>w=Writer::new(<span class="kw-2">&amp;mut </span>body);
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">if </span>w.reference(receipt.raw()).and_then(|()|w.u32(<span class="number">0</span>)).and_then(|()|w.u32(<span class="number">0</span>)).is_ok(){
+<a href=#393 id=393 data-nosnippet>393</a>            <span class="kw">let _</span>=ostd::session::service_call(<span class="self">self</span>.owner,api::syscall::service::VFS,<span class="self">self</span>.operation.raw(),VfsOp::ResolveCwd <span class="kw">as </span>u16,<span class="bool-val">false</span>,<span class="kw-2">&amp;</span>body,<span class="kw-2">&amp;mut</span>[<span class="number">0u8</span>;HEADER_LEN+<span class="number">24</span>]);
+<a href=#394 id=394 data-nosnippet>394</a>        }
+<a href=#395 id=395 data-nosnippet>395</a>    }
+<a href=#396 id=396 data-nosnippet>396</a>}}
+<a href=#397 id=397 data-nosnippet>397</a>
+<a href=#398 id=398 data-nosnippet>398</a><span class="attr">#[cfg(test)]
+<a href=#399 id=399 data-nosnippet>399</a></span><span class="kw">mod </span>tests{
+<a href=#400 id=400 data-nosnippet>400</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">fn </span>spec&lt;<span class="lifetime">'a</span>&gt;(argv:<span class="kw-2">&amp;</span><span class="lifetime">'a</span>[<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str],cwd:<span class="kw-2">&amp;</span><span class="lifetime">'a</span>[u8],environment:<span class="kw-2">&amp;</span><span class="lifetime">'a</span>[(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)])-&gt;PipeSpec&lt;<span class="lifetime">'a</span>&gt;{
+<a href=#402 id=402 data-nosnippet>402</a>        PipeSpec{path:<span class="string">"/bin/cat"</span>,argv,cwd,environment,cwd_source:<span class="prelude-val">None</span>}
+<a href=#403 id=403 data-nosnippet>403</a>    }
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="attr">#[test]
+<a href=#405 id=405 data-nosnippet>405</a>    </span><span class="kw">fn </span>context_length_matches_the_session_formula(){
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="comment">// 48 + (7 + 8 + 4) + 0 + 0 + 3 grants.
+<a href=#407 id=407 data-nosnippet>407</a>        </span><span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[<span class="string">"cat"</span>,<span class="string">"-n"</span>],<span class="string">b""</span>,<span class="kw-2">&amp;</span>[])),<span class="prelude-val">Ok</span>(<span class="number">48</span>+<span class="number">7</span>+<span class="number">4</span>+<span class="number">3</span>+<span class="number">3</span><span class="kw-2">*</span><span class="number">40</span>));
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="comment">// cwd adds its bytes and one grant; env counts 4 + key + value.
+<a href=#409 id=409 data-nosnippet>409</a>        </span><span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[<span class="string">"a"</span>],<span class="string">b"/tmp"</span>,<span class="kw-2">&amp;</span>[(<span class="string">"K"</span>,<span class="string">"vv"</span>)])),<span class="prelude-val">Ok</span>(<span class="number">48</span>+<span class="number">7</span>+<span class="number">2</span>+<span class="number">4</span>+(<span class="number">4</span>+<span class="number">1</span>+<span class="number">2</span>)+<span class="number">4</span><span class="kw-2">*</span><span class="number">40</span>));
+<a href=#410 id=410 data-nosnippet>410</a>    }
+<a href=#411 id=411 data-nosnippet>411</a>    <span class="attr">#[test]
+<a href=#412 id=412 data-nosnippet>412</a>    </span><span class="kw">fn </span>argv_over_512_bytes_is_refused(){
+<a href=#413 id=413 data-nosnippet>413</a>        <span class="kw">let </span>largest=<span class="string">"x"</span>.repeat(<span class="number">512</span>-<span class="number">7</span>-<span class="number">1</span>);
+<a href=#414 id=414 data-nosnippet>414</a>        <span class="macro">assert!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[largest.as_str()],<span class="string">b""</span>,<span class="kw-2">&amp;</span>[])).is_ok());
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">let </span>over=<span class="string">"x"</span>.repeat(<span class="number">512</span>-<span class="number">7</span>);
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[over.as_str()],<span class="string">b""</span>,<span class="kw-2">&amp;</span>[])),<span class="prelude-val">Err</span>(Status::QuotaExceeded));
+<a href=#417 id=417 data-nosnippet>417</a>        <span class="kw">let </span>many=[<span class="string">"0123456789abcdef"</span>;<span class="number">32</span>];
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>many,<span class="string">b""</span>,<span class="kw-2">&amp;</span>[])),<span class="prelude-val">Err</span>(Status::QuotaExceeded));
+<a href=#419 id=419 data-nosnippet>419</a>    }
+<a href=#420 id=420 data-nosnippet>420</a>    <span class="attr">#[test]
+<a href=#421 id=421 data-nosnippet>421</a>    </span><span class="kw">fn </span>environment_over_4096_bytes_or_64_entries_is_refused(){
+<a href=#422 id=422 data-nosnippet>422</a>        <span class="kw">let </span>value=<span class="string">"v"</span>.repeat(<span class="number">4096</span>-<span class="number">4</span>-<span class="number">1</span>);
+<a href=#423 id=423 data-nosnippet>423</a>        <span class="macro">assert!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[<span class="string">"a"</span>],<span class="string">b""</span>,<span class="kw-2">&amp;</span>[(<span class="string">"k"</span>,value.as_str())])).is_ok());
+<a href=#424 id=424 data-nosnippet>424</a>        <span class="kw">let </span>over=<span class="string">"v"</span>.repeat(<span class="number">4096</span>-<span class="number">4</span>);
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[<span class="string">"a"</span>],<span class="string">b""</span>,<span class="kw-2">&amp;</span>[(<span class="string">"k"</span>,over.as_str())])),<span class="prelude-val">Err</span>(Status::QuotaExceeded));
+<a href=#426 id=426 data-nosnippet>426</a>        <span class="kw">let </span>entries=[(<span class="string">"k"</span>,<span class="string">""</span>);<span class="number">64</span>];
+<a href=#427 id=427 data-nosnippet>427</a>        <span class="macro">assert!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[<span class="string">"a"</span>],<span class="string">b""</span>,<span class="kw-2">&amp;</span>entries)).is_ok());
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">let </span>too_many=[(<span class="string">"k"</span>,<span class="string">""</span>);<span class="number">65</span>];
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[<span class="string">"a"</span>],<span class="string">b""</span>,<span class="kw-2">&amp;</span>too_many)),<span class="prelude-val">Err</span>(Status::QuotaExceeded));
+<a href=#430 id=430 data-nosnippet>430</a>    }
+<a href=#431 id=431 data-nosnippet>431</a>    <span class="attr">#[test]
+<a href=#432 id=432 data-nosnippet>432</a>    </span><span class="kw">fn </span>cwd_over_4096_bytes_is_refused(){
+<a href=#433 id=433 data-nosnippet>433</a>        <span class="kw">let </span>cwd=<span class="macro">std::vec!</span>[<span class="string">b'/'</span>;<span class="number">4096</span>];
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="macro">assert!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[<span class="string">"a"</span>],<span class="kw-2">&amp;</span>cwd,<span class="kw-2">&amp;</span>[])).is_ok());
+<a href=#435 id=435 data-nosnippet>435</a>        <span class="kw">let </span>over=<span class="macro">std::vec!</span>[<span class="string">b'/'</span>;<span class="number">4097</span>];
+<a href=#436 id=436 data-nosnippet>436</a>        <span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[<span class="string">"a"</span>],<span class="kw-2">&amp;</span>over,<span class="kw-2">&amp;</span>[])),<span class="prelude-val">Err</span>(Status::QuotaExceeded));
+<a href=#437 id=437 data-nosnippet>437</a>    }
+<a href=#438 id=438 data-nosnippet>438</a>    <span class="attr">#[test]
+<a href=#439 id=439 data-nosnippet>439</a>    </span><span class="kw">fn </span>maximum_context_fits_the_prepare_child_window(){
+<a href=#440 id=440 data-nosnippet>440</a>        <span class="kw">let </span>argv=<span class="string">"x"</span>.repeat(<span class="number">512</span>-<span class="number">7</span>-<span class="number">1</span>);
+<a href=#441 id=441 data-nosnippet>441</a>        <span class="kw">let </span>value=<span class="string">"v"</span>.repeat(<span class="number">4096</span>-<span class="number">4</span>-<span class="number">1</span>);
+<a href=#442 id=442 data-nosnippet>442</a>        <span class="kw">let </span>cwd=<span class="macro">std::vec!</span>[<span class="string">b'/'</span>;<span class="number">4096</span>];
+<a href=#443 id=443 data-nosnippet>443</a>        <span class="kw">let </span>len=validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[argv.as_str()],<span class="kw-2">&amp;</span>cwd,<span class="kw-2">&amp;</span>[(<span class="string">"k"</span>,value.as_str())])).unwrap();
+<a href=#444 id=444 data-nosnippet>444</a>        <span class="macro">assert!</span>((<span class="number">48</span>..=<span class="number">9072</span>).contains(<span class="kw-2">&amp;</span>len));
+<a href=#445 id=445 data-nosnippet>445</a>    }
+<a href=#446 id=446 data-nosnippet>446</a>    <span class="attr">#[test]
+<a href=#447 id=447 data-nosnippet>447</a>    </span><span class="kw">fn </span>nul_bytes_and_empty_or_oversize_paths_are_malformed(){
+<a href=#448 id=448 data-nosnippet>448</a>        <span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[<span class="string">"a\0b"</span>],<span class="string">b""</span>,<span class="kw-2">&amp;</span>[])),<span class="prelude-val">Err</span>(Status::Malformed));
+<a href=#449 id=449 data-nosnippet>449</a>        <span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[<span class="string">"a"</span>],<span class="string">b"/a\0b"</span>,<span class="kw-2">&amp;</span>[])),<span class="prelude-val">Err</span>(Status::Malformed));
+<a href=#450 id=450 data-nosnippet>450</a>        <span class="kw">let </span><span class="kw-2">mut </span>bad=spec(<span class="kw-2">&amp;</span>[<span class="string">"a"</span>],<span class="string">b""</span>,<span class="kw-2">&amp;</span>[]);
+<a href=#451 id=451 data-nosnippet>451</a>        bad.path=<span class="string">""</span>;<span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>bad),<span class="prelude-val">Err</span>(Status::Malformed));
+<a href=#452 id=452 data-nosnippet>452</a>        bad.path=<span class="string">"/bin/a\0"</span>;<span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>bad),<span class="prelude-val">Err</span>(Status::Malformed));
+<a href=#453 id=453 data-nosnippet>453</a>        <span class="kw">let </span>long=<span class="string">"/"</span>.repeat(<span class="number">4097</span>);bad.path=long.as_str();<span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>bad),<span class="prelude-val">Err</span>(Status::Malformed));
+<a href=#454 id=454 data-nosnippet>454</a>    }
+<a href=#455 id=455 data-nosnippet>455</a>    <span class="attr">#[test]
+<a href=#456 id=456 data-nosnippet>456</a>    </span><span class="kw">fn </span>non_utf8_cwd_needs_an_explicit_source(){
+<a href=#457 id=457 data-nosnippet>457</a>        <span class="macro">assert_eq!</span>(validate(<span class="kw-2">&amp;</span>spec(<span class="kw-2">&amp;</span>[<span class="string">"a"</span>],<span class="string">b"/\xff"</span>,<span class="kw-2">&amp;</span>[])),<span class="prelude-val">Err</span>(Status::UnsupportedInput));
+<a href=#458 id=458 data-nosnippet>458</a>        <span class="kw">let </span><span class="kw-2">mut </span>with_source=spec(<span class="kw-2">&amp;</span>[<span class="string">"a"</span>],<span class="string">b"/\xff"</span>,<span class="kw-2">&amp;</span>[]);
+<a href=#459 id=459 data-nosnippet>459</a>        with_source.cwd_source=<span class="prelude-val">Some</span>(ObjectRefV1{id:<span class="number">1</span>,generation:<span class="number">1</span>});
+<a href=#460 id=460 data-nosnippet>460</a>        <span class="macro">assert!</span>(validate(<span class="kw-2">&amp;</span>with_source).is_ok());
+<a href=#461 id=461 data-nosnippet>461</a>    }
+<a href=#462 id=462 data-nosnippet>462</a>    <span class="doccomment">/// Whether `node` hangs (at any depth) below ring `ring`.
+<a href=#463 id=463 data-nosnippet>463</a>    </span><span class="kw">fn </span>below_ring(plan:<span class="kw-2">&amp;</span>Plan,<span class="kw-2">mut </span>parent:Parent,ring:usize)-&gt;bool{
+<a href=#464 id=464 data-nosnippet>464</a>        <span class="kw">loop</span>{
+<a href=#465 id=465 data-nosnippet>465</a>            <span class="kw">match </span>parent{
+<a href=#466 id=466 data-nosnippet>466</a>                Parent::Root=&gt;<span class="kw">return </span><span class="bool-val">false</span>,
+<a href=#467 id=467 data-nosnippet>467</a>                Parent::Ring(at) <span class="kw">if </span>at==ring=&gt;<span class="kw">return </span><span class="bool-val">true</span>,
+<a href=#468 id=468 data-nosnippet>468</a>                Parent::Ring(at)=&gt;parent=plan.rings[at],
+<a href=#469 id=469 data-nosnippet>469</a>            }
+<a href=#470 id=470 data-nosnippet>470</a>        }
+<a href=#471 id=471 data-nosnippet>471</a>    }
+<a href=#472 id=472 data-nosnippet>472</a>    <span class="attr">#[test]
+<a href=#473 id=473 data-nosnippet>473</a>    </span><span class="kw">fn </span>a_lone_stage_hangs_from_the_root(){
+<a href=#474 id=474 data-nosnippet>474</a>        <span class="macro">assert_eq!</span>(layout_plan(<span class="number">1</span>),Plan{rings:<span class="macro">std::vec!</span>[],stages:<span class="macro">std::vec!</span>[Parent::Root]});
+<a href=#475 id=475 data-nosnippet>475</a>    }
+<a href=#476 id=476 data-nosnippet>476</a>    <span class="attr">#[test]
+<a href=#477 id=477 data-nosnippet>477</a>    </span><span class="kw">fn </span>rings_nest_outward_toward_the_last_stage(){
+<a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">let </span>plan=layout_plan(<span class="number">4</span>);
+<a href=#479 id=479 data-nosnippet>479</a>        <span class="comment">// Ring 2 (stream into the last stage) hangs from the root, ring 1 from ring 2, ring 0 from ring 1.
+<a href=#480 id=480 data-nosnippet>480</a>        </span><span class="macro">assert_eq!</span>(plan.rings,<span class="macro">std::vec!</span>[Parent::Ring(<span class="number">1</span>),Parent::Ring(<span class="number">2</span>),Parent::Root]);
+<a href=#481 id=481 data-nosnippet>481</a>        <span class="macro">assert_eq!</span>(plan.stages,<span class="macro">std::vec!</span>[Parent::Ring(<span class="number">0</span>),Parent::Ring(<span class="number">0</span>),Parent::Ring(<span class="number">1</span>),Parent::Ring(<span class="number">2</span>)]);
+<a href=#482 id=482 data-nosnippet>482</a>    }
+<a href=#483 id=483 data-nosnippet>483</a>    <span class="attr">#[test]
+<a href=#484 id=484 data-nosnippet>484</a>    </span><span class="kw">fn </span>losing_a_consumer_cancels_only_what_is_upstream_of_it(){
+<a href=#485 id=485 data-nosnippet>485</a>        <span class="kw">for </span>stages <span class="kw">in </span><span class="number">2</span>..=MAX_STAGES{
+<a href=#486 id=486 data-nosnippet>486</a>            <span class="kw">let </span>plan=layout_plan(stages);
+<a href=#487 id=487 data-nosnippet>487</a>            <span class="kw">for </span>ring <span class="kw">in </span><span class="number">0</span>..stages-<span class="number">1</span>{
+<a href=#488 id=488 data-nosnippet>488</a>                <span class="kw">for </span>stage <span class="kw">in </span><span class="number">0</span>..stages{
+<a href=#489 id=489 data-nosnippet>489</a>                    <span class="comment">// Cancelling ring `ring` (consumer stage `ring + 1` lost its reader) stops the
+<a href=#490 id=490 data-nosnippet>490</a>                    // consumer and every stage before it, never a stage after it.
+<a href=#491 id=491 data-nosnippet>491</a>                    </span><span class="macro">assert_eq!</span>(below_ring(<span class="kw-2">&amp;</span>plan,plan.stages[stage],ring),stage&lt;=ring+<span class="number">1</span>,<span class="string">"{stages} stages, ring {ring}, stage {stage}"</span>);
+<a href=#492 id=492 data-nosnippet>492</a>                }
+<a href=#493 id=493 data-nosnippet>493</a>                <span class="comment">// No ring below it is a later one: nothing downstream hangs from this ring.
+<a href=#494 id=494 data-nosnippet>494</a>                </span><span class="kw">for </span>outer <span class="kw">in </span>ring+<span class="number">1</span>..stages-<span class="number">1</span>{<span class="macro">assert!</span>(!below_ring(<span class="kw-2">&amp;</span>plan,plan.rings[outer],ring))}
+<a href=#495 id=495 data-nosnippet>495</a>            }
+<a href=#496 id=496 data-nosnippet>496</a>        }
+<a href=#497 id=497 data-nosnippet>497</a>    }
+<a href=#498 id=498 data-nosnippet>498</a>    <span class="attr">#[test]
+<a href=#499 id=499 data-nosnippet>499</a>    </span><span class="kw">fn </span>every_stage_is_below_every_ring_it_touches_and_the_root_is_never_cancelled_by_one(){
+<a href=#500 id=500 data-nosnippet>500</a>        <span class="kw">for </span>stages <span class="kw">in </span><span class="number">2</span>..=MAX_STAGES{
+<a href=#501 id=501 data-nosnippet>501</a>            <span class="kw">let </span>plan=layout_plan(stages);
+<a href=#502 id=502 data-nosnippet>502</a>            <span class="kw">for </span>stage <span class="kw">in </span><span class="number">0</span>..stages{
+<a href=#503 id=503 data-nosnippet>503</a>                <span class="comment">// A stage reads ring `stage - 1` and writes ring `stage`: delegation needs it below both.
+<a href=#504 id=504 data-nosnippet>504</a>                </span><span class="kw">if </span>stage&gt;<span class="number">0</span>{<span class="macro">assert!</span>(below_ring(<span class="kw-2">&amp;</span>plan,plan.stages[stage],stage-<span class="number">1</span>))}
+<a href=#505 id=505 data-nosnippet>505</a>                <span class="kw">if </span>stage+<span class="number">1</span>&lt;stages{<span class="macro">assert!</span>(below_ring(<span class="kw-2">&amp;</span>plan,plan.stages[stage],stage))}
+<a href=#506 id=506 data-nosnippet>506</a>            }
+<a href=#507 id=507 data-nosnippet>507</a>            <span class="comment">// Every ring chain ends at the root, so no cancelled ring can reach it.
+<a href=#508 id=508 data-nosnippet>508</a>            </span><span class="macro">assert_eq!</span>(plan.rings.iter().filter(|p|<span class="kw-2">**</span>p==Parent::Root).count(),<span class="number">1</span>);
+<a href=#509 id=509 data-nosnippet>509</a>        }
+<a href=#510 id=510 data-nosnippet>510</a>    }
+<a href=#511 id=511 data-nosnippet>511</a>    <span class="attr">#[test]
+<a href=#512 id=512 data-nosnippet>512</a>    </span><span class="kw">fn </span>the_largest_pipeline_needs_thirty_one_operations_below_its_root(){
+<a href=#513 id=513 data-nosnippet>513</a>        <span class="kw">let </span>plan=layout_plan(MAX_STAGES);
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="macro">assert_eq!</span>(plan.stages.len(),MAX_STAGES);
+<a href=#515 id=515 data-nosnippet>515</a>        <span class="macro">assert_eq!</span>(plan.rings.len(),MAX_STAGES-<span class="number">1</span>);
+<a href=#516 id=516 data-nosnippet>516</a>    }
+<a href=#517 id=517 data-nosnippet>517</a>    <span class="kw">fn </span>status_body(state:u32,reason:u32,exit_code:i32,reserved:u32,sequence:u64)-&gt;[u8;<span class="number">24</span>]{
+<a href=#518 id=518 data-nosnippet>518</a>        <span class="kw">let </span><span class="kw-2">mut </span>body=[<span class="number">0u8</span>;<span class="number">24</span>];<span class="kw">let </span><span class="kw-2">mut </span>w=Writer::new(<span class="kw-2">&amp;mut </span>body);
+<a href=#519 id=519 data-nosnippet>519</a>        w.u32(state).unwrap();w.u32(reason).unwrap();w.i32(exit_code).unwrap();w.u32(reserved).unwrap();w.u64(sequence).unwrap();
+<a href=#520 id=520 data-nosnippet>520</a>        body
+<a href=#521 id=521 data-nosnippet>521</a>    }
+<a href=#522 id=522 data-nosnippet>522</a>    <span class="attr">#[test]
+<a href=#523 id=523 data-nosnippet>523</a>    </span><span class="kw">fn </span>child_status_decodes_the_24_byte_record(){
+<a href=#524 id=524 data-nosnippet>524</a>        <span class="kw">let </span>body=status_body(<span class="number">3</span>,<span class="number">5</span>,-<span class="number">7</span>,<span class="number">0</span>,<span class="number">0x0102_0304_0506_0708</span>);
+<a href=#525 id=525 data-nosnippet>525</a>        <span class="comment">// Fixed little-endian layout: state, reason, exit code, reserved, sequence.
+<a href=#526 id=526 data-nosnippet>526</a>        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>body[..<span class="number">12</span>],<span class="kw-2">&amp;</span>[<span class="number">3</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">5</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0xf9</span>,<span class="number">0xff</span>,<span class="number">0xff</span>,<span class="number">0xff</span>]);
+<a href=#527 id=527 data-nosnippet>527</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>body[<span class="number">16</span>..],<span class="kw-2">&amp;</span>[<span class="number">8</span>,<span class="number">7</span>,<span class="number">6</span>,<span class="number">5</span>,<span class="number">4</span>,<span class="number">3</span>,<span class="number">2</span>,<span class="number">1</span>]);
+<a href=#528 id=528 data-nosnippet>528</a>        <span class="kw">let </span>status=ChildStatus::decode(<span class="kw-2">&amp;</span>body).unwrap();
+<a href=#529 id=529 data-nosnippet>529</a>        <span class="macro">assert_eq!</span>(status,ChildStatus{state:<span class="number">3</span>,reason:<span class="number">5</span>,exit_code:-<span class="number">7</span>,terminal_sequence:<span class="number">0x0102_0304_0506_0708</span>});
+<a href=#530 id=530 data-nosnippet>530</a>        <span class="macro">assert!</span>(status.is_terminal());
+<a href=#531 id=531 data-nosnippet>531</a>        <span class="macro">assert!</span>(!ChildStatus::decode(<span class="kw-2">&amp;</span>status_body(<span class="number">1</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>)).unwrap().is_terminal());
+<a href=#532 id=532 data-nosnippet>532</a>        <span class="macro">assert!</span>(!ChildStatus::decode(<span class="kw-2">&amp;</span>status_body(<span class="number">2</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>)).unwrap().is_terminal());
+<a href=#533 id=533 data-nosnippet>533</a>    }
+<a href=#534 id=534 data-nosnippet>534</a>    <span class="attr">#[test]
+<a href=#535 id=535 data-nosnippet>535</a>    </span><span class="kw">fn </span>child_status_refuses_malformed_records(){
+<a href=#536 id=536 data-nosnippet>536</a>        <span class="macro">assert_eq!</span>(ChildStatus::decode(<span class="kw-2">&amp;</span>status_body(<span class="number">3</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">1</span>,<span class="number">0</span>)),<span class="prelude-val">Err</span>(Status::Malformed));
+<a href=#537 id=537 data-nosnippet>537</a>        <span class="macro">assert_eq!</span>(ChildStatus::decode(<span class="kw-2">&amp;</span>status_body(<span class="number">4</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>)),<span class="prelude-val">Err</span>(Status::Malformed));
+<a href=#538 id=538 data-nosnippet>538</a>        <span class="kw">let </span>body=status_body(<span class="number">3</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>);
+<a href=#539 id=539 data-nosnippet>539</a>        <span class="macro">assert_eq!</span>(ChildStatus::decode(<span class="kw-2">&amp;</span>body[..<span class="number">23</span>]),<span class="prelude-val">Err</span>(Status::Malformed));
+<a href=#540 id=540 data-nosnippet>540</a>        <span class="macro">assert_eq!</span>(ChildStatus::decode(<span class="kw-2">&amp;</span>[]),<span class="prelude-val">Err</span>(Status::Malformed));
+<a href=#541 id=541 data-nosnippet>541</a>        <span class="kw">let </span><span class="kw-2">mut </span>long=std::vec::Vec::from(body);long.push(<span class="number">0</span>);
+<a href=#542 id=542 data-nosnippet>542</a>        <span class="macro">assert_eq!</span>(ChildStatus::decode(<span class="kw-2">&amp;</span>long),<span class="prelude-val">Err</span>(Status::Malformed));
+<a href=#543 id=543 data-nosnippet>543</a>    }
+<a href=#544 id=544 data-nosnippet>544</a>    <span class="attr">#[test]
+<a href=#545 id=545 data-nosnippet>545</a>    </span><span class="kw">fn </span>wait_pacing_yields_first_then_sleeps(){
+<a href=#546 id=546 data-nosnippet>546</a>        <span class="kw">for </span>attempt <span class="kw">in </span><span class="number">0</span>..WAIT_YIELDS{<span class="macro">assert_eq!</span>(pause_for(attempt),Pause::Yield)}
+<a href=#547 id=547 data-nosnippet>547</a>        <span class="macro">assert_eq!</span>(pause_for(WAIT_YIELDS),Pause::Tick);
+<a href=#548 id=548 data-nosnippet>548</a>        <span class="macro">assert_eq!</span>(pause_for(u32::MAX),Pause::Tick);
+<a href=#549 id=549 data-nosnippet>549</a>    }
+<a href=#550 id=550 data-nosnippet>550</a>    <span class="attr">#[test]
+<a href=#551 id=551 data-nosnippet>551</a>    </span><span class="kw">fn </span>wait_deadline_is_bounded_and_overflow_checked(){
+<a href=#552 id=552 data-nosnippet>552</a>        <span class="macro">assert_eq!</span>(wait_deadline(<span class="number">0</span>),<span class="prelude-val">Ok</span>(WAIT_BUDGET_NS));
+<a href=#553 id=553 data-nosnippet>553</a>        <span class="macro">assert_eq!</span>(wait_deadline(<span class="number">10</span>),<span class="prelude-val">Ok</span>(<span class="number">10</span>+WAIT_BUDGET_NS));
+<a href=#554 id=554 data-nosnippet>554</a>        <span class="macro">assert_eq!</span>(wait_deadline(u64::MAX),<span class="prelude-val">Err</span>(Status::Malformed));
+<a href=#555 id=555 data-nosnippet>555</a>    }
+<a href=#556 id=556 data-nosnippet>556</a>}
+</code></pre></div></section></main></body></html>

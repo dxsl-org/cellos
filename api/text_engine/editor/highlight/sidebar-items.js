@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Carry","Kind","Lang"],"fn":["highlight"],"struct":["Span"]};

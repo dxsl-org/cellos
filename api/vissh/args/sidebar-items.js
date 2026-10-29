@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_CONNECT_TIMEOUT","DEFAULT_PORT","MAX_COMMAND"],"enum":["ArgError","Auth","Host"],"fn":["parse","parse_host","parse_owned"],"struct":["Args"]};

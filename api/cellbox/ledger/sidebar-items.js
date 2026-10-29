@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DENIAL_CHECKS","LEDGER","REFUSAL_CHECKS"],"enum":["Disposition","Surface"],"fn":["disposition","e"],"struct":["Entry"]};

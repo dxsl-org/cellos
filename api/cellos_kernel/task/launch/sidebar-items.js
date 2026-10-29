@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["authority_is_current","publish_prepared"],"struct":["CallerLaunchAuthority","LaunchRoutes","StagedMeasurement","TaskLaunchState"]};
+window.SIDEBAR_ITEMS = {"fn":["authority_is_current","publish_prepared"],"struct":["CallerLaunchAuthority","LaunchRoutes","PublicationClaim","SessionPublication","StagedMeasurement","TaskLaunchState"]};

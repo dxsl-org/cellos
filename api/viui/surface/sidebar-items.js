@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["draw_badge","draw_button","draw_label","draw_label_aligned","draw_text","draw_themed_button","draw_themed_panel","fill_rect","stroke_rect"],"mod":["components"]};

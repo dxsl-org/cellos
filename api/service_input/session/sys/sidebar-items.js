@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["kernel_call","kernel_request","monotonic_ns","sys_get_time_ms","sys_ipc_current","sys_ipc_reply","sys_lookup_service","sys_lookup_service_bound","sys_try_send"]};

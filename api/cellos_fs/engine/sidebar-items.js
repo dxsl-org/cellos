@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CellosFs"]};
+window.SIDEBAR_ITEMS = {"enum":["Expect"],"struct":["CellosFs","DurabilityUnavailable"]};

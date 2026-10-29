@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BUFFER_ALIGN","CELL_LEN","HEADER_LEN","NAME_LEN","SCOPE_SYSTEM","TASK_LEN","TELEMETRY_VERSION"],"enum":["TelemetryDecodeError"],"fn":["encode_name","name_bytes"],"mod":["cell_flags","cell_state","header_flags","request","task_flags","task_state"],"struct":["TelemetryCellV1","TelemetryHeaderV1","TelemetrySnapshot","TelemetryTaskV1"]};

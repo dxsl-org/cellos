@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BENCH_MAX","LINE_MAX","MAX_WORKERS"],"enum":["Command"],"fn":["decimal","parse","parse_workers","per_call_ns"],"struct":["InputLine","OutputLine","Tids"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["HostInput","IdleAction"],"fn":["idle_action","map_key","named_code"]};

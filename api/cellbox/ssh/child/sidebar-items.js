@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["AUTH_MS","BACKSPACE","CONFIRM_MS","CONFIRM_POLL_TICKS","CTRL","ENTER","ESCAPE","FOREVER","MAX_PASSWORD","REQUEST_MS"],"fn":["granted","kernel_entropy","now_ms","read_secret","rekey_policy","run","write_all"],"struct":["Deadline","NetTransport","Term"]};

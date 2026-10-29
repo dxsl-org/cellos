@@ -1,9 +1,9 @@
 (function() {
-    const implementors = Object.fromEntries([["cellos_kernel",[["impl AsRef&lt;[u8]&gt; for <a class=\"enum\" href=\"cellos_kernel/loader/aligned_elf/enum.AlignedElf.html\" title=\"enum cellos_kernel::loader::aligned_elf::AlignedElf\">AlignedElf</a>&lt;'_&gt;",0]]],["gguf_rs",[["impl AsRef&lt;[u64]&gt; for <a class=\"struct\" href=\"gguf_rs/struct.Dims.html\" title=\"struct gguf_rs::Dims\">Dims</a>",0]]]]);
+    const implementors = Object.fromEntries([["cellos_kernel",[["impl AsRef&lt;[u8]&gt; for <a class=\"enum\" href=\"cellos_kernel/loader/aligned_elf/enum.AlignedElf.html\" title=\"enum cellos_kernel::loader::aligned_elf::AlignedElf\">AlignedElf</a>&lt;'_&gt;",0]]],["gguf_rs",[["impl AsRef&lt;[u64]&gt; for <a class=\"struct\" href=\"gguf_rs/struct.Dims.html\" title=\"struct gguf_rs::Dims\">Dims</a>",0]]],["service_vfs",[["impl AsRef&lt;[u8]&gt; for <a class=\"struct\" href=\"service_vfs/backend_bootfs/struct.BootName.html\" title=\"struct service_vfs::backend_bootfs::BootName\">BootName</a>",0]]],["sunset",[["impl AsRef&lt;[u8]&gt; for <a class=\"struct\" href=\"sunset/sshwire/struct.BinString.html\" title=\"struct sunset::sshwire::BinString\">BinString</a>&lt;'_&gt;",0],["impl&lt;'a&gt; AsRef&lt;[u8]&gt; for <a class=\"struct\" href=\"sunset/sshwire/struct.Mpint.html\" title=\"struct sunset::sshwire::Mpint\">Mpint</a>&lt;'a&gt;",0],["impl&lt;'a&gt; AsRef&lt;[u8]&gt; for <a class=\"struct\" href=\"sunset/sshwire/struct.TextString.html\" title=\"struct sunset::sshwire::TextString\">TextString</a>&lt;'a&gt;",0],["impl&lt;B&gt; AsRef&lt;B&gt; for <a class=\"struct\" href=\"sunset/sshwire/struct.Blob.html\" title=\"struct sunset::sshwire::Blob\">Blob</a>&lt;B&gt;",0]]],["vigrep",[["impl AsRef&lt;<a class=\"struct\" href=\"vigrep/glob/struct.Glob.html\" title=\"struct vigrep::glob::Glob\">Glob</a>&gt; for <a class=\"struct\" href=\"vigrep/glob/struct.Glob.html\" title=\"struct vigrep::glob::Glob\">Glob</a>",0]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
         window.pending_implementors = implementors;
     }
 })()
-//{"start":59,"fragment_lengths":[220,142]}
+//{"start":59,"fragment_lengths":[220,142,196,682,247]}

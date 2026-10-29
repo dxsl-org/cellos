@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["VfsClient"]};
+window.SIDEBAR_ITEMS = {"constant":["VFS_DIR_PAGE_MAX","VFS_READ_CHUNK_MAX"],"struct":["VfsClient","VfsDirPage","VfsFileState"]};

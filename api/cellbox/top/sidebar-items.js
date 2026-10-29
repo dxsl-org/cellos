@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["INITIAL_ROWS"],"enum":["Waited"],"fn":["capture_error","capture_tasks","cmd_top","park_one_tick","run_batch","snapshot_bytes","wait_core","wait_until","words"],"mod":["render","tui","view"],"struct":["TelemetryReader"]};

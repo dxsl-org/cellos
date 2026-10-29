@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CLOSE","FRAME_COLOR","MAXIMIZE","MINIMIZE","SYMBOL","TITLE_ACTIVE","TITLE_INACTIVE"],"fn":["intersect","paint","paint_rect","paint_symbol"]};
+window.SIDEBAR_ITEMS = {"constant":["BTN_ACTIVE_BG","BTN_BORDER","BTN_INACTIVE_BG","FRAME_COLOR","GLYPH","TAB_ACTIVE","TAB_ACTIVE_HL","TAB_INACTIVE","TAB_INACTIVE_HL"],"fn":["intersect","paint","paint_rect","paint_symbol"]};

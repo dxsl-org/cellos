@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_LOCAL_NAMES"],"enum":["NameList"],"struct":["LocalNames","StringNames"]};

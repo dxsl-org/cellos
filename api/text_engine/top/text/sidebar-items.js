@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GAP","MAX_WIDTH"],"enum":["Column","HeaderMark","TopError"],"fn":["cell_text","columns","format_bytes","format_cpu","header_parts","header_text","render_frame","task_text","widths"],"struct":["HeaderPart"]};

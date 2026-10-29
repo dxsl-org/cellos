@@ -66,17 +66,18 @@
 <a href=#66 id=66 data-nosnippet>66</a>#[path = <span class="string">"idle-ipc-wake-oracle.rs"</span>]
 <a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">mod </span>idle_ipc_wake_oracle;
 <a href=#68 id=68 data-nosnippet>68</a><span class="kw">mod </span>interface;
-<a href=#69 id=69 data-nosnippet>69</a><span class="attr">#[path = <span class="string">"service-runtime.rs"</span>]
-<a href=#70 id=70 data-nosnippet>70</a></span><span class="kw">mod </span>service_runtime;
-<a href=#71 id=71 data-nosnippet>71</a><span class="kw">mod </span>socket_state;
-<a href=#72 id=72 data-nosnippet>72</a><span class="kw">mod </span>socket_table;
-<a href=#73 id=73 data-nosnippet>73</a><span class="kw">mod </span>tls;
-<a href=#74 id=74 data-nosnippet>74</a><span class="kw">mod </span>tls_handler;
-<a href=#75 id=75 data-nosnippet>75</a><span class="kw">mod </span>tls_wire;
-<a href=#76 id=76 data-nosnippet>76</a><span class="attr">#[cfg(target_os = <span class="string">"none"</span>)]
-<a href=#77 id=77 data-nosnippet>77</a>#[no_mangle]
-<a href=#78 id=78 data-nosnippet>78</a></span><span class="kw">pub fn </span>main() {
-<a href=#79 id=79 data-nosnippet>79</a>    init_custom_heap();
-<a href=#80 id=80 data-nosnippet>80</a>    service_runtime::run();
-<a href=#81 id=81 data-nosnippet>81</a>}
+<a href=#69 id=69 data-nosnippet>69</a><span class="kw">mod </span>rights;
+<a href=#70 id=70 data-nosnippet>70</a><span class="attr">#[path = <span class="string">"service-runtime.rs"</span>]
+<a href=#71 id=71 data-nosnippet>71</a></span><span class="kw">mod </span>service_runtime;
+<a href=#72 id=72 data-nosnippet>72</a><span class="kw">mod </span>socket_state;
+<a href=#73 id=73 data-nosnippet>73</a><span class="kw">mod </span>socket_table;
+<a href=#74 id=74 data-nosnippet>74</a><span class="kw">mod </span>tls;
+<a href=#75 id=75 data-nosnippet>75</a><span class="kw">mod </span>tls_handler;
+<a href=#76 id=76 data-nosnippet>76</a><span class="kw">mod </span>tls_wire;
+<a href=#77 id=77 data-nosnippet>77</a><span class="attr">#[cfg(target_os = <span class="string">"none"</span>)]
+<a href=#78 id=78 data-nosnippet>78</a>#[no_mangle]
+<a href=#79 id=79 data-nosnippet>79</a></span><span class="kw">pub fn </span>main() {
+<a href=#80 id=80 data-nosnippet>80</a>    init_custom_heap();
+<a href=#81 id=81 data-nosnippet>81</a>    service_runtime::run();
+<a href=#82 id=82 data-nosnippet>82</a>}
 </code></pre></div></section></main></body></html>

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_ARGV_BYTES","MAX_CONTEXT","MAX_GLOBS","MAX_GLOB_BYTES","MAX_PATHS","MAX_PATTERNS","MAX_PATTERN_BYTES","SPELLINGS","USAGE"],"enum":["Opt"],"fn":["context_lines","lookup","parse","parse_within","shown","usage","value"],"struct":["RgArgs","Usage"]};

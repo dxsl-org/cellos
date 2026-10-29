@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CANCELLED","NO_FRONTEND","REMOTE_FAILURE","SESSION_LOST","SSH_ENTRY","SSH_PATH","TIMED_OUT","USAGE","USAGE_STATUS"],"fn":["admission","cmd_ssh","commit_trust","completion","progress_record","record_dispatch","record_phase","report","settle","trust_added"],"mod":["child"],"struct":["Escape"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cell_main","draw_button","fill_rect","init_custom_heap","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["ChromeApp","ChromeTab","__CustomHeapArena"]};

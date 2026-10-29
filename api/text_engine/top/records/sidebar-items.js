@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["META_FIELDS"],"fn":["cell_record","frame_items","meta_record","task_record","task_rows"],"struct":["FrameItems","TaskRows"]};

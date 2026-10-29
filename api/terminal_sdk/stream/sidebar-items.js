@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["EndpointDirection"],"struct":["ChildRef","Endpoint","EndpointInfo","EndpointRef","EndpointRights","Operation","OperationRef","OperationState","PreparedChild","PreparedRef","PrincipalRef","ReceiptRef"]};

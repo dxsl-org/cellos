@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_ROW_JSON_BYTES"],"enum":["Input","Phase"],"fn":["diagnostic","field","search_row","status","summary_line"],"struct":["Empty","Limits","RowSink","Rows","StdinSource","Summary","TreeSource"],"type":["Report"]};

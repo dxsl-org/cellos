@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["init","relay_ascii_to_input"],"static":["CONSOLE","PENDING_ASCII"],"struct":["viConsole"]};
+window.SIDEBAR_ITEMS = {"enum":["Route"],"fn":["init","relay_ascii_to_input","route_for"],"static":["CONSOLE","PENDING_ASCII"],"struct":["viConsole"]};

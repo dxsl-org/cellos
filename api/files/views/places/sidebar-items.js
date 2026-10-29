@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PLACES_WIDTH"],"fn":["handle_click","render"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["SCHEMA_VERSION"],"fn":["cell_main","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["ConfigService","ConfigStore"]};
+window.SIDEBAR_ITEMS = {"constant":["ERR_MALFORMED","SCHEMA_VERSION"],"fn":["cell_main","encode","handle","main"],"mod":["rights"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["ConfigStore"]};

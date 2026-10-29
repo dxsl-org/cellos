@@ -13,7 +13,7 @@
 <a href=#13 id=13 data-nosnippet>13</a>//!
 <a href=#14 id=14 data-nosnippet>14</a>//! # Why this crate exists
 <a href=#15 id=15 data-nosnippet>15</a>//!
-<a href=#16 id=16 data-nosnippet>16</a>//! `app-shell` links `ostd`, which owns `#[global_allocator]` and
+<a href=#16 id=16 data-nosnippet>16</a>//! `app-cellbox` links `ostd`, which owns `#[global_allocator]` and
 <a href=#17 id=17 data-nosnippet>17</a>//! `#[panic_handler]`; linking it alongside the std test harness fails with
 <a href=#18 id=18 data-nosnippet>18</a>//! duplicate lang items (E0152).  Every byte-in/byte-out utility stage —
 <a href=#19 id=19 data-nosnippet>19</a>//! argv cursors, ERE-lite compilation, record reading, and the grep/sed/awk/top
@@ -42,5 +42,7 @@
 <a href=#42 id=42 data-nosnippet>42</a><span class="kw">pub mod </span>awk;
 <a href=#43 id=43 data-nosnippet>43</a><span class="kw">pub mod </span>grep;
 <a href=#44 id=44 data-nosnippet>44</a><span class="kw">pub mod </span>sed;
-<a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub mod </span>top;
+<a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub mod </span>editor;
+<a href=#46 id=46 data-nosnippet>46</a><span class="kw">pub mod </span>pipeline;
+<a href=#47 id=47 data-nosnippet>47</a><span class="kw">pub mod </span>top;
 </code></pre></div></section></main></body></html>

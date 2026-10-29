@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["args","awk","grep","matcher","records","sed","top"]};
+window.SIDEBAR_ITEMS = {"mod":["args","awk","editor","grep","matcher","pipeline","records","sed","top"]};

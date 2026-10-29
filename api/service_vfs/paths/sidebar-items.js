@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ERR_DENIED","ERR_HANDLE","ERR_IO","ERR_QUOTA"],"fn":["unlink_file","write_file"]};
+window.SIDEBAR_ITEMS = {"constant":["ERR_DENIED","ERR_HANDLE","ERR_IO","ERR_QUOTA","ERR_UNSUPPORTED"],"fn":["may_alias","may_alias_within","parent_of","unlink_file","write_file"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["collect_trust_decision","kernel_call","kernel_request","monotonic_ns","register_trust_challenge","retire_operation","service_binding","service_call","sha256","trust_descriptor_sha256","zeroize","zeroize_deque","zeroize_deque_front","zeroize_string","zeroize_vec"],"struct":["Scrub"]};

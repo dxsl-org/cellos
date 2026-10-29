@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["close_file","file_err","open_file","read_file"]};
+window.SIDEBAR_ITEMS = {"fn":["close_file","file_err","file_state","open_file","read_file"]};

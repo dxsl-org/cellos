@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_GRANTS","MAX_LEN","SLOT_COMPLETION","STDIO_PROJECTION_LEN"],"fn":["validate"],"struct":["Context","Grant"]};

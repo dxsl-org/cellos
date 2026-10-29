@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_CWD","STREAMS_KEY","STREAMS_MERGED","WAIT_YIELDS"],"enum":["Launch","Pause"],"fn":["classify_read_failure","ensure_default_cwd","needs_default_cwd","open","pause_for","streams_merged"],"struct":["Backoff","FrontendLaunch"]};

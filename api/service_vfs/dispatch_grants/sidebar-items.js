@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["list_at","read_handle_grant","stat_path","sync_handle","write_handle_grant"]};
+window.SIDEBAR_ITEMS = {"fn":["list_at","list_at_page","read_handle_grant","stat_path","sync_handle","write_handle_grant"]};

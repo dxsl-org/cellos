@@ -1,0 +1,528 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A matcher defines an interface for regular expression implementations."><title>Matcher in vigrep::matcher - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="vigrep" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc trait"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Matcher</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../vigrep/index.html">vigrep</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Matcher</a></h2><h3><a href="#required-associated-types">Required Associated Types</a></h3><ul class="block"><li><a href="#associatedtype.Captures" title="Captures">Captures</a></li><li><a href="#associatedtype.Error" title="Error">Error</a></li></ul><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.find_at" title="find_at">find_at</a></li><li><a href="#tymethod.new_captures" title="new_captures">new_captures</a></li></ul><h3><a href="#provided-methods">Provided Methods</a></h3><ul class="block"><li><a href="#method.capture_count" title="capture_count">capture_count</a></li><li><a href="#method.capture_index" title="capture_index">capture_index</a></li><li><a href="#method.captures" title="captures">captures</a></li><li><a href="#method.captures_at" title="captures_at">captures_at</a></li><li><a href="#method.captures_iter" title="captures_iter">captures_iter</a></li><li><a href="#method.captures_iter_at" title="captures_iter_at">captures_iter_at</a></li><li><a href="#method.find" title="find">find</a></li><li><a href="#method.find_candidate_line" title="find_candidate_line">find_candidate_line</a></li><li><a href="#method.find_iter" title="find_iter">find_iter</a></li><li><a href="#method.find_iter_at" title="find_iter_at">find_iter_at</a></li><li><a href="#method.is_match" title="is_match">is_match</a></li><li><a href="#method.is_match_at" title="is_match_at">is_match_at</a></li><li><a href="#method.line_terminator" title="line_terminator">line_terminator</a></li><li><a href="#method.non_matching_bytes" title="non_matching_bytes">non_matching_bytes</a></li><li><a href="#method.replace" title="replace">replace</a></li><li><a href="#method.replace_with_captures" title="replace_with_captures">replace_with_captures</a></li><li><a href="#method.replace_with_captures_at" title="replace_with_captures_at">replace_with_captures_at</a></li><li><a href="#method.shortest_match" title="shortest_match">shortest_match</a></li><li><a href="#method.shortest_match_at" title="shortest_match_at">shortest_match_at</a></li><li><a href="#method.try_captures_iter" title="try_captures_iter">try_captures_iter</a></li><li><a href="#method.try_captures_iter_at" title="try_captures_iter_at">try_captures_iter_at</a></li><li><a href="#method.try_find_iter" title="try_find_iter">try_find_iter</a></li><li><a href="#method.try_find_iter_at" title="try_find_iter_at">try_find_iter_at</a></li></ul><h3><a href="#foreign-impls">Implementations on Foreign Types</a></h3><ul class="block"><li><a href="#impl-Matcher-for-%26M" title="&#38;&#39;a M">&#38;&#39;a M</a></li></ul><h3><a href="#dyn-compatibility">Dyn Compatibility</a></h3><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In vigrep::<wbr>matcher</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">vigrep</a>::<wbr><a href="index.html">matcher</a></div><h1>Trait <span class="trait">Matcher</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/vigrep/matcher/mod.rs.html#554-1139">Source</a> </span></div><pre class="rust item-decl"><code>pub trait Matcher {
+    type <a href="#associatedtype.Captures" class="associatedtype">Captures</a>: <a class="trait" href="trait.Captures.html" title="trait vigrep::matcher::Captures">Captures</a>;
+    type <a href="#associatedtype.Error" class="associatedtype">Error</a>: Display;
+
+<details class="toggle type-contents-toggle"><summary class="hideme"><span>Show 25 methods</span></summary>    // Required methods
+    fn <a href="#tymethod.find_at" class="fn">find_at</a>(
+        &amp;self,
+        haystack: &amp;[u8],
+        at: usize,
+    ) -&gt; Result&lt;Option&lt;<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.new_captures" class="fn">new_captures</a>(&amp;self) -&gt; Result&lt;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;;
+
+    // Provided methods
+    fn <a href="#method.capture_count" class="fn">capture_count</a>(&amp;self) -&gt; usize { ... }
+<span class="item-spacer"></span>    fn <a href="#method.capture_index" class="fn">capture_index</a>(&amp;self, _name: &amp;str) -&gt; Option&lt;usize&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.find" class="fn">find</a>(&amp;self, haystack: &amp;[u8]) -&gt; Result&lt;Option&lt;<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.find_iter" class="fn">find_iter</a>&lt;F&gt;(
+        &amp;self,
+        haystack: &amp;[u8],
+        matched: F,
+    ) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;
+       <span class="where">where F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; bool</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.find_iter_at" class="fn">find_iter_at</a>&lt;F&gt;(
+        &amp;self,
+        haystack: &amp;[u8],
+        at: usize,
+        matched: F,
+    ) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;
+       <span class="where">where F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; bool</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.try_find_iter" class="fn">try_find_iter</a>&lt;F, E&gt;(
+        &amp;self,
+        haystack: &amp;[u8],
+        matched: F,
+    ) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;
+       <span class="where">where F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; Result&lt;bool, E&gt;</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.try_find_iter_at" class="fn">try_find_iter_at</a>&lt;F, E&gt;(
+        &amp;self,
+        haystack: &amp;[u8],
+        at: usize,
+        matched: F,
+    ) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;
+       <span class="where">where F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; Result&lt;bool, E&gt;</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.captures" class="fn">captures</a>(
+        &amp;self,
+        haystack: &amp;[u8],
+        caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    ) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.captures_iter" class="fn">captures_iter</a>&lt;F&gt;(
+        &amp;self,
+        haystack: &amp;[u8],
+        caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+        matched: F,
+    ) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;
+       <span class="where">where F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; bool</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.captures_iter_at" class="fn">captures_iter_at</a>&lt;F&gt;(
+        &amp;self,
+        haystack: &amp;[u8],
+        at: usize,
+        caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+        matched: F,
+    ) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;
+       <span class="where">where F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; bool</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.try_captures_iter" class="fn">try_captures_iter</a>&lt;F, E&gt;(
+        &amp;self,
+        haystack: &amp;[u8],
+        caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+        matched: F,
+    ) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;
+       <span class="where">where F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; Result&lt;bool, E&gt;</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.try_captures_iter_at" class="fn">try_captures_iter_at</a>&lt;F, E&gt;(
+        &amp;self,
+        haystack: &amp;[u8],
+        at: usize,
+        caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+        matched: F,
+    ) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;
+       <span class="where">where F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; Result&lt;bool, E&gt;</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.captures_at" class="fn">captures_at</a>(
+        &amp;self,
+        _haystack: &amp;[u8],
+        _at: usize,
+        _caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    ) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.replace" class="fn">replace</a>&lt;F&gt;(
+        &amp;self,
+        haystack: &amp;[u8],
+        dst: &amp;mut Vec&lt;u8&gt;,
+        append: F,
+    ) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;
+       <span class="where">where F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>, &amp;mut Vec&lt;u8&gt;) -&gt; bool</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.replace_with_captures" class="fn">replace_with_captures</a>&lt;F&gt;(
+        &amp;self,
+        haystack: &amp;[u8],
+        caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+        dst: &amp;mut Vec&lt;u8&gt;,
+        append: F,
+    ) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;
+       <span class="where">where F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>, &amp;mut Vec&lt;u8&gt;) -&gt; bool</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.replace_with_captures_at" class="fn">replace_with_captures_at</a>&lt;F&gt;(
+        &amp;self,
+        haystack: &amp;[u8],
+        at: usize,
+        caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+        dst: &amp;mut Vec&lt;u8&gt;,
+        append: F,
+    ) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;
+       <span class="where">where F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>, &amp;mut Vec&lt;u8&gt;) -&gt; bool</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.is_match" class="fn">is_match</a>(&amp;self, haystack: &amp;[u8]) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.is_match_at" class="fn">is_match_at</a>(
+        &amp;self,
+        haystack: &amp;[u8],
+        at: usize,
+    ) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.shortest_match" class="fn">shortest_match</a>(
+        &amp;self,
+        haystack: &amp;[u8],
+    ) -&gt; Result&lt;Option&lt;usize&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.shortest_match_at" class="fn">shortest_match_at</a>(
+        &amp;self,
+        haystack: &amp;[u8],
+        at: usize,
+    ) -&gt; Result&lt;Option&lt;usize&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.non_matching_bytes" class="fn">non_matching_bytes</a>(&amp;self) -&gt; Option&lt;&amp;<a class="struct" href="struct.ByteSet.html" title="struct vigrep::matcher::ByteSet">ByteSet</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.line_terminator" class="fn">line_terminator</a>(&amp;self) -&gt; Option&lt;<a class="struct" href="struct.LineTerminator.html" title="struct vigrep::matcher::LineTerminator">LineTerminator</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.find_candidate_line" class="fn">find_candidate_line</a>(
+        &amp;self,
+        haystack: &amp;[u8],
+    ) -&gt; Result&lt;Option&lt;<a class="enum" href="enum.LineMatchKind.html" title="enum vigrep::matcher::LineMatchKind">LineMatchKind</a>&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt; { ... }
+</details>}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A matcher defines an interface for regular expression implementations.</p>
+<p>While this trait is large, there are only two required methods that
+implementors must provide: <code>find_at</code> and <code>new_captures</code>. If captures aren’t
+supported by your implementation, then <code>new_captures</code> can be implemented
+with <a href="struct.NoCaptures.html" title="struct vigrep::matcher::NoCaptures"><code>NoCaptures</code></a>. If your implementation does support capture groups,
+then you should also implement the other capture related methods, as
+dictated by the documentation. Crucially, this includes <code>captures_at</code>.</p>
+<p>The rest of the methods on this trait provide default implementations on
+top of <code>find_at</code> and <code>new_captures</code>. It is not uncommon for implementations
+to be able to provide faster variants of some methods; in those cases,
+simply override the default implementation.</p>
+</div></details><h2 id="required-associated-types" class="section-header">Required Associated Types<a href="#required-associated-types" class="anchor">§</a></h2><div class="methods"><details class="toggle" open><summary><section id="associatedtype.Captures" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#559">Source</a><h4 class="code-header">type <a href="#associatedtype.Captures" class="associatedtype">Captures</a>: <a class="trait" href="trait.Captures.html" title="trait vigrep::matcher::Captures">Captures</a></h4></section></summary><div class="docblock"><p>The concrete type of capturing groups used for this matcher.</p>
+<p>If this implementation does not support capturing groups, then set
+this to <code>NoCaptures</code>.</p>
+</div></details><details class="toggle" open><summary><section id="associatedtype.Error" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#567">Source</a><h4 class="code-header">type <a href="#associatedtype.Error" class="associatedtype">Error</a>: Display</h4></section></summary><div class="docblock"><p>The error type used by this matcher.</p>
+<p>For matchers in which an error is not possible, they are encouraged to
+use the <code>NoError</code> type in this crate. In the future, when the “never”
+(spelled <code>!</code>) type is stabilized, then it should probably be used
+instead.</p>
+</div></details></div><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.find_at" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#579-583">Source</a><h4 class="code-header">fn <a href="#tymethod.find_at" class="fn">find_at</a>(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+) -&gt; Result&lt;Option&lt;<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>Returns the start and end byte range of the first match in <code>haystack</code>
+after <code>at</code>, where the byte offsets are relative to that start of
+<code>haystack</code> (and not <code>at</code>). If no match exists, then <code>None</code> is returned.</p>
+<p>The text encoding of <code>haystack</code> is not strictly specified. Matchers are
+advised to assume UTF-8, or at worst, some ASCII compatible encoding.</p>
+<p>The significance of the starting point is that it takes the surrounding
+context into consideration. For example, the <code>\A</code> anchor can only
+match when <code>at == 0</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.new_captures" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#591">Source</a><h4 class="code-header">fn <a href="#tymethod.new_captures" class="fn">new_captures</a>(&amp;self) -&gt; Result&lt;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>Creates an empty group of captures suitable for use with the capturing
+APIs of this trait.</p>
+<p>Implementations that don’t support capturing groups should use
+the <code>NoCaptures</code> type and implement this method by calling
+<code>NoCaptures::new()</code>.</p>
+</div></details></div><h2 id="provided-methods" class="section-header">Provided Methods<a href="#provided-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="method.capture_count" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#605-607">Source</a><h4 class="code-header">fn <a href="#method.capture_count" class="fn">capture_count</a>(&amp;self) -&gt; usize</h4></section></summary><div class="docblock"><p>Returns the total number of capturing groups in this matcher.</p>
+<p>If a matcher supports capturing groups, then this value must always be
+at least 1, where the first capturing group always corresponds to the
+overall match.</p>
+<p>If a matcher does not support capturing groups, then this should
+always return 0.</p>
+<p>By default, capturing groups are not supported, so this always
+returns 0.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.capture_index" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#619-621">Source</a><h4 class="code-header">fn <a href="#method.capture_index" class="fn">capture_index</a>(&amp;self, _name: &amp;str) -&gt; Option&lt;usize&gt;</h4></section></summary><div class="docblock"><p>Maps the given capture group name to its corresponding capture group
+index, if one exists. If one does not exist, then <code>None</code> is returned.</p>
+<p>If the given capture group name maps to multiple indices, then it is
+not specified which one is returned. However, it is guaranteed that
+one of them is returned.</p>
+<p>By default, capturing groups are not supported, so this always returns
+<code>None</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.find" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#629-631">Source</a><h4 class="code-header">fn <a href="#method.find" class="fn">find</a>(&amp;self, haystack: &amp;[u8]) -&gt; Result&lt;Option&lt;<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>Returns the start and end byte range of the first match in <code>haystack</code>.
+If no match exists, then <code>None</code> is returned.</p>
+<p>The text encoding of <code>haystack</code> is not strictly specified. Matchers are
+advised to assume UTF-8, or at worst, some ASCII compatible encoding.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.find_iter" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#637-646">Source</a><h4 class="code-header">fn <a href="#method.find_iter" class="fn">find_iter</a>&lt;F&gt;(&amp;self, haystack: &amp;[u8], matched: F) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; bool,</div></h4></section></summary><div class="docblock"><p>Executes the given function over successive non-overlapping matches
+in <code>haystack</code>. If no match exists, then the given function is never
+called. If the function returns <code>false</code>, then iteration stops.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.find_iter_at" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#656-667">Source</a><h4 class="code-header">fn <a href="#method.find_iter_at" class="fn">find_iter_at</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+    matched: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; bool,</div></h4></section></summary><div class="docblock"><p>Executes the given function over successive non-overlapping matches
+in <code>haystack</code>. If no match exists, then the given function is never
+called. If the function returns <code>false</code>, then iteration stops.</p>
+<p>The significance of the starting point is that it takes the surrounding
+context into consideration. For example, the <code>\A</code> anchor can only
+match when <code>at == 0</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.try_find_iter" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#677-686">Source</a><h4 class="code-header">fn <a href="#method.try_find_iter" class="fn">try_find_iter</a>&lt;F, E&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    matched: F,
+) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; Result&lt;bool, E&gt;,</div></h4></section></summary><div class="docblock"><p>Executes the given function over successive non-overlapping matches
+in <code>haystack</code>. If no match exists, then the given function is never
+called. If the function returns <code>false</code>, then iteration stops.
+Similarly, if the function returns an error then iteration stops and
+the error is yielded. If an error occurs while executing the search,
+then it is converted to
+<code>E</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.try_find_iter_at" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#700-740">Source</a><h4 class="code-header">fn <a href="#method.try_find_iter_at" class="fn">try_find_iter_at</a>&lt;F, E&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+    matched: F,
+) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; Result&lt;bool, E&gt;,</div></h4></section></summary><div class="docblock"><p>Executes the given function over successive non-overlapping matches
+in <code>haystack</code>. If no match exists, then the given function is never
+called. If the function returns <code>false</code>, then iteration stops.
+Similarly, if the function returns an error then iteration stops and
+the error is yielded. If an error occurs while executing the search,
+then it is converted to
+<code>E</code>.</p>
+<p>The significance of the starting point is that it takes the surrounding
+context into consideration. For example, the <code>\A</code> anchor can only
+match when <code>at == 0</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.captures" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#748-754">Source</a><h4 class="code-header">fn <a href="#method.captures" class="fn">captures</a>(
+    &amp;self,
+    haystack: &amp;[u8],
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>Populates the first set of capture group matches from <code>haystack</code> into
+<code>caps</code>. If no match exists, then <code>false</code> is returned.</p>
+<p>The text encoding of <code>haystack</code> is not strictly specified. Matchers are
+advised to assume UTF-8, or at worst, some ASCII compatible encoding.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.captures_iter" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#761-771">Source</a><h4 class="code-header">fn <a href="#method.captures_iter" class="fn">captures_iter</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    matched: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; bool,</div></h4></section></summary><div class="docblock"><p>Executes the given function over successive non-overlapping matches
+in <code>haystack</code> with capture groups extracted from each match. If no
+match exists, then the given function is never called. If the function
+returns <code>false</code>, then iteration stops.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.captures_iter_at" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#782-794">Source</a><h4 class="code-header">fn <a href="#method.captures_iter_at" class="fn">captures_iter_at</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    matched: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; bool,</div></h4></section></summary><div class="docblock"><p>Executes the given function over successive non-overlapping matches
+in <code>haystack</code> with capture groups extracted from each match. If no
+match exists, then the given function is never called. If the function
+returns <code>false</code>, then iteration stops.</p>
+<p>The significance of the starting point is that it takes the surrounding
+context into consideration. For example, the <code>\A</code> anchor can only
+match when <code>at == 0</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.try_captures_iter" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#804-814">Source</a><h4 class="code-header">fn <a href="#method.try_captures_iter" class="fn">try_captures_iter</a>&lt;F, E&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    matched: F,
+) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; Result&lt;bool, E&gt;,</div></h4></section></summary><div class="docblock"><p>Executes the given function over successive non-overlapping matches
+in <code>haystack</code> with capture groups extracted from each match. If no
+match exists, then the given function is never called. If the function
+returns <code>false</code>, then iteration stops. Similarly, if the function
+returns an error then iteration stops and the error is yielded. If
+an error occurs while executing the search, then it is converted to
+<code>E</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.try_captures_iter_at" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#828-869">Source</a><h4 class="code-header">fn <a href="#method.try_captures_iter_at" class="fn">try_captures_iter_at</a>&lt;F, E&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    matched: F,
+) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; Result&lt;bool, E&gt;,</div></h4></section></summary><div class="docblock"><p>Executes the given function over successive non-overlapping matches
+in <code>haystack</code> with capture groups extracted from each match. If no
+match exists, then the given function is never called. If the function
+returns <code>false</code>, then iteration stops. Similarly, if the function
+returns an error then iteration stops and the error is yielded. If
+an error occurs while executing the search, then it is converted to
+<code>E</code>.</p>
+<p>The significance of the starting point is that it takes the surrounding
+context into consideration. For example, the <code>\A</code> anchor can only
+match when <code>at == 0</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.captures_at" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#895-902">Source</a><h4 class="code-header">fn <a href="#method.captures_at" class="fn">captures_at</a>(
+    &amp;self,
+    _haystack: &amp;[u8],
+    _at: usize,
+    _caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>Populates the first set of capture group matches from <code>haystack</code>
+into <code>matches</code> after <code>at</code>, where the byte offsets in each capturing
+group are relative to the start of <code>haystack</code> (and not <code>at</code>). If no
+match exists, then <code>false</code> is returned and the contents of the given
+capturing groups are unspecified.</p>
+<p>The text encoding of <code>haystack</code> is not strictly specified. Matchers are
+advised to assume UTF-8, or at worst, some ASCII compatible encoding.</p>
+<p>The significance of the starting point is that it takes the surrounding
+context into consideration. For example, the <code>\A</code> anchor can only
+match when <code>at == 0</code>.</p>
+<p>By default, capturing groups aren’t supported, and this implementation
+will always behave as if a match were impossible.</p>
+<p>Implementors that provide support for capturing groups must guarantee
+that when a match occurs, the first capture match (at index <code>0</code>) is
+always set to the overall match offsets.</p>
+<p>Note that if implementors seek to support capturing groups, then they
+should implement this method. Other methods that match based on
+captures will then work automatically.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.replace" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#910-927">Source</a><h4 class="code-header">fn <a href="#method.replace" class="fn">replace</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    dst: &amp;mut Vec&lt;u8&gt;,
+    append: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>, &amp;mut Vec&lt;u8&gt;) -&gt; bool,</div></h4></section></summary><div class="docblock"><p>Replaces every match in the given haystack with the result of calling
+<code>append</code>. <code>append</code> is given the start and end of a match, along with
+a handle to the <code>dst</code> buffer provided.</p>
+<p>If the given <code>append</code> function returns <code>false</code>, then replacement stops.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.replace_with_captures" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#934-945">Source</a><h4 class="code-header">fn <a href="#method.replace_with_captures" class="fn">replace_with_captures</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    dst: &amp;mut Vec&lt;u8&gt;,
+    append: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>, &amp;mut Vec&lt;u8&gt;) -&gt; bool,</div></h4></section></summary><div class="docblock"><p>Replaces every match in the given haystack with the result of calling
+<code>append</code> with the matching capture groups.</p>
+<p>If the given <code>append</code> function returns <code>false</code>, then replacement stops.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.replace_with_captures_at" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#956-976">Source</a><h4 class="code-header">fn <a href="#method.replace_with_captures_at" class="fn">replace_with_captures_at</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    dst: &amp;mut Vec&lt;u8&gt;,
+    append: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>, &amp;mut Vec&lt;u8&gt;) -&gt; bool,</div></h4></section></summary><div class="docblock"><p>Replaces every match in the given haystack with the result of calling
+<code>append</code> with the matching capture groups.</p>
+<p>If the given <code>append</code> function returns <code>false</code>, then replacement stops.</p>
+<p>The significance of the starting point is that it takes the surrounding
+context into consideration. For example, the <code>\A</code> anchor can only
+match when <code>at == 0</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.is_match" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#982-984">Source</a><h4 class="code-header">fn <a href="#method.is_match" class="fn">is_match</a>(&amp;self, haystack: &amp;[u8]) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>Returns true if and only if the matcher matches the given haystack.</p>
+<p>By default, this method is implemented by calling <code>shortest_match</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.is_match_at" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#995-1001">Source</a><h4 class="code-header">fn <a href="#method.is_match_at" class="fn">is_match_at</a>(&amp;self, haystack: &amp;[u8], at: usize) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>Returns true if and only if the matcher matches the given haystack
+starting at the given position.</p>
+<p>By default, this method is implemented by calling <code>shortest_match_at</code>.</p>
+<p>The significance of the starting point is that it takes the surrounding
+context into consideration. For example, the <code>\A</code> anchor can only
+match when <code>at == 0</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.shortest_match" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1018-1023">Source</a><h4 class="code-header">fn <a href="#method.shortest_match" class="fn">shortest_match</a>(&amp;self, haystack: &amp;[u8]) -&gt; Result&lt;Option&lt;usize&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>Returns an end location of the first match in <code>haystack</code>. If no match
+exists, then <code>None</code> is returned.</p>
+<p>Note that the end location reported by this method may be less than the
+same end location reported by <code>find</code>. For example, running <code>find</code> with
+the pattern <code>a+</code> on the haystack <code>aaa</code> should report a range of <code>[0, 3)</code>, but <code>shortest_match</code> may report <code>1</code> as the ending location since
+that is the place at which a match is guaranteed to occur.</p>
+<p>This method should never report false positives or false negatives. The
+point of this method is that some implementors may be able to provide
+a faster implementation of this than what <code>find</code> does.</p>
+<p>By default, this method is implemented by calling <code>find</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.shortest_match_at" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1044-1050">Source</a><h4 class="code-header">fn <a href="#method.shortest_match_at" class="fn">shortest_match_at</a>(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+) -&gt; Result&lt;Option&lt;usize&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>Returns an end location of the first match in <code>haystack</code> starting at
+the given position. If no match exists, then <code>None</code> is returned.</p>
+<p>Note that the end location reported by this method may be less than the
+same end location reported by <code>find</code>. For example, running <code>find</code> with
+the pattern <code>a+</code> on the haystack <code>aaa</code> should report a range of <code>[0, 3)</code>, but <code>shortest_match</code> may report <code>1</code> as the ending location since
+that is the place at which a match is guaranteed to occur.</p>
+<p>This method should never report false positives or false negatives. The
+point of this method is that some implementors may be able to provide
+a faster implementation of this than what <code>find</code> does.</p>
+<p>By default, this method is implemented by calling <code>find_at</code>.</p>
+<p>The significance of the starting point is that it takes the surrounding
+context into consideration. For example, the <code>\A</code> anchor can only
+match when <code>at == 0</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.non_matching_bytes" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1073-1075">Source</a><h4 class="code-header">fn <a href="#method.non_matching_bytes" class="fn">non_matching_bytes</a>(&amp;self) -&gt; Option&lt;&amp;<a class="struct" href="struct.ByteSet.html" title="struct vigrep::matcher::ByteSet">ByteSet</a>&gt;</h4></section></summary><div class="docblock"><p>If available, return a set of bytes that will never appear in a match
+produced by an implementation.</p>
+<p>Specifically, if such a set can be determined, then it’s possible for
+callers to perform additional operations on the basis that certain
+bytes may never match.</p>
+<p>For example, if a search is configured to possibly produce results
+that span multiple lines but a caller provided pattern can never
+match across multiple lines, then it may make sense to divert to
+more optimized line oriented routines that don’t need to handle the
+multi-line match case.</p>
+<p>Implementations that produce this set must never report false
+positives, but may produce false negatives. That is, is a byte is in
+this set then it must be guaranteed that it is never in a match. But,
+if a byte is not in this set, then callers cannot assume that a match
+exists with that byte.</p>
+<p>By default, this returns <code>None</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.line_terminator" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1090-1092">Source</a><h4 class="code-header">fn <a href="#method.line_terminator" class="fn">line_terminator</a>(&amp;self) -&gt; Option&lt;<a class="struct" href="struct.LineTerminator.html" title="struct vigrep::matcher::LineTerminator">LineTerminator</a>&gt;</h4></section></summary><div class="docblock"><p>If this matcher was compiled as a line oriented matcher, then this
+method returns the line terminator if and only if the line terminator
+never appears in any match produced by this matcher. If this wasn’t
+compiled as a line oriented matcher, or if the aforementioned guarantee
+cannot be made, then this must return <code>None</code>, which is the default.
+It is <strong>never wrong</strong> to return <code>None</code>, but returning a line terminator
+when it can appear in a match results in unspecified behavior.</p>
+<p>The line terminator is typically <code>b'\n'</code>, but can be any single byte or
+<code>CRLF</code>.</p>
+<p>By default, this returns <code>None</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.find_candidate_line" class="method"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1133-1138">Source</a><h4 class="code-header">fn <a href="#method.find_candidate_line" class="fn">find_candidate_line</a>(
+    &amp;self,
+    haystack: &amp;[u8],
+) -&gt; Result&lt;Option&lt;<a class="enum" href="enum.LineMatchKind.html" title="enum vigrep::matcher::LineMatchKind">LineMatchKind</a>&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section></summary><div class="docblock"><p>Return one of the following: a confirmed line match, a candidate line
+match (which may be a false positive) or no match at all (which <strong>must
+not</strong> be a false negative). When reporting a confirmed or candidate
+match, the position returned can be any position in the line.</p>
+<p>By default, this never returns a candidate match, and always either
+returns a confirmed match or no match at all.</p>
+<p>When a matcher can match spans over multiple lines, then the behavior
+of this method is unspecified. Namely, use of this method only
+makes sense in a context where the caller is looking for the next
+matching line. That is, callers should only use this method when
+<code>line_terminator</code> does not return <code>None</code>.</p>
+<h5 id="design-rationale"><a class="doc-anchor" href="#design-rationale">§</a>Design rationale</h5>
+<p>A line matcher is, fundamentally, a normal matcher with the addition
+of one optional method: finding a line. By default, this routine
+is implemented via the matcher’s <code>shortest_match</code> method, which
+always yields either no match or a <code>LineMatchKind::Confirmed</code>. However,
+implementors may provide a routine for this that can return candidate
+lines that need subsequent verification to be confirmed as a match.
+This can be useful in cases where it may be quicker to find candidate
+lines via some other means instead of relying on the more general
+implementations for <code>find</code> and <code>shortest_match</code>.</p>
+<p>For example, consider the regex <code>\w+foo\s+</code>. Both <code>find</code> and
+<code>shortest_match</code> must consider the entire regex, including the <code>\w+</code>
+and <code>\s+</code>, while searching. However, this method could look for lines
+containing <code>foo</code> and return them as candidates. Finding <code>foo</code> might
+be implemented as a highly optimized substring search routine (like
+<code>memmem</code>), which is likely to be faster than whatever more generalized
+routine is required for resolving <code>\w+foo\s+</code>. The caller is then
+responsible for confirming whether a match exists or not.</p>
+<p>Note that while this method may report false positives, it must never
+report false negatives. That is, it can never skip over lines that
+contain a match.</p>
+</div></details></div><h2 id="dyn-compatibility" class="section-header">Dyn Compatibility<a href="#dyn-compatibility" class="anchor">§</a></h2><div class="dyn-compatibility-info"><p>This trait is <b>not</b> <a href="https://doc.rust-lang.org/nightly/reference/items/traits.html#dyn-compatibility">dyn compatible</a>.</p><p><i>In older versions of Rust, dyn compatibility was called "object safety", so this trait is not object safe.</i></p></div><h2 id="foreign-impls" class="section-header">Implementations on Foreign Types<a href="#foreign-impls" class="anchor">§</a></h2><details class="toggle implementors-toggle"><summary><section id="impl-Matcher-for-%26M" class="impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1141-1387">Source</a><a href="#impl-Matcher-for-%26M" class="anchor">§</a><h3 class="code-header">impl&lt;'a, M: <a class="trait" href="trait.Matcher.html" title="trait vigrep::matcher::Matcher">Matcher</a>&gt; <a class="trait" href="trait.Matcher.html" title="trait vigrep::matcher::Matcher">Matcher</a> for &amp;'a M</h3></section></summary><div class="impl-items"><section id="associatedtype.Captures-1" class="associatedtype trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1142">Source</a><a href="#associatedtype.Captures-1" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.Captures" class="associatedtype">Captures</a> = &lt;M as <a class="trait" href="trait.Matcher.html" title="trait vigrep::matcher::Matcher">Matcher</a>&gt;::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a></h4></section><section id="associatedtype.Error-1" class="associatedtype trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1143">Source</a><a href="#associatedtype.Error-1" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.Error" class="associatedtype">Error</a> = &lt;M as <a class="trait" href="trait.Matcher.html" title="trait vigrep::matcher::Matcher">Matcher</a>&gt;::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a></h4></section><section id="method.find_at" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1146-1152">Source</a><a href="#method.find_at" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.find_at" class="fn">find_at</a>(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+) -&gt; Result&lt;Option&lt;<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section><section id="method.new_captures" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1155-1157">Source</a><a href="#method.new_captures" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.new_captures" class="fn">new_captures</a>(&amp;self) -&gt; Result&lt;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section><section id="method.captures_at-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1160-1167">Source</a><a href="#method.captures_at-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.captures_at" class="fn">captures_at</a>(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section><section id="method.capture_index-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1170-1172">Source</a><a href="#method.capture_index-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.capture_index" class="fn">capture_index</a>(&amp;self, name: &amp;str) -&gt; Option&lt;usize&gt;</h4></section><section id="method.capture_count-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1175-1177">Source</a><a href="#method.capture_count-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.capture_count" class="fn">capture_count</a>(&amp;self) -&gt; usize</h4></section><section id="method.find-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1180-1182">Source</a><a href="#method.find-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.find" class="fn">find</a>(&amp;self, haystack: &amp;[u8]) -&gt; Result&lt;Option&lt;<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section><section id="method.find_iter-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1185-1194">Source</a><a href="#method.find_iter-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.find_iter" class="fn">find_iter</a>&lt;F&gt;(&amp;self, haystack: &amp;[u8], matched: F) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; bool,</div></h4></section><section id="method.find_iter_at-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1197-1207">Source</a><a href="#method.find_iter_at-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.find_iter_at" class="fn">find_iter_at</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+    matched: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; bool,</div></h4></section><section id="method.try_find_iter-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1210-1219">Source</a><a href="#method.try_find_iter-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.try_find_iter" class="fn">try_find_iter</a>&lt;F, E&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    matched: F,
+) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; Result&lt;bool, E&gt;,</div></h4></section><section id="method.try_find_iter_at-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1222-1232">Source</a><a href="#method.try_find_iter_at-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.try_find_iter_at" class="fn">try_find_iter_at</a>&lt;F, E&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+    matched: F,
+) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>) -&gt; Result&lt;bool, E&gt;,</div></h4></section><section id="method.captures-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1235-1241">Source</a><a href="#method.captures-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.captures" class="fn">captures</a>(
+    &amp;self,
+    haystack: &amp;[u8],
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section><section id="method.captures_iter-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1244-1254">Source</a><a href="#method.captures_iter-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.captures_iter" class="fn">captures_iter</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    matched: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; bool,</div></h4></section><section id="method.captures_iter_at-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1257-1268">Source</a><a href="#method.captures_iter_at-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.captures_iter_at" class="fn">captures_iter_at</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    matched: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; bool,</div></h4></section><section id="method.try_captures_iter-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1271-1281">Source</a><a href="#method.try_captures_iter-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.try_captures_iter" class="fn">try_captures_iter</a>&lt;F, E&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    matched: F,
+) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; Result&lt;bool, E&gt;,</div></h4></section><section id="method.try_captures_iter_at-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1284-1295">Source</a><a href="#method.try_captures_iter_at-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.try_captures_iter_at" class="fn">try_captures_iter_at</a>&lt;F, E&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    matched: F,
+) -&gt; Result&lt;Result&lt;(), E&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>) -&gt; Result&lt;bool, E&gt;,</div></h4></section><section id="method.replace-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1298-1308">Source</a><a href="#method.replace-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.replace" class="fn">replace</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    dst: &amp;mut Vec&lt;u8&gt;,
+    append: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(<a class="struct" href="struct.Match.html" title="struct vigrep::matcher::Match">Match</a>, &amp;mut Vec&lt;u8&gt;) -&gt; bool,</div></h4></section><section id="method.replace_with_captures-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1311-1322">Source</a><a href="#method.replace_with_captures-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.replace_with_captures" class="fn">replace_with_captures</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    dst: &amp;mut Vec&lt;u8&gt;,
+    append: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>, &amp;mut Vec&lt;u8&gt;) -&gt; bool,</div></h4></section><section id="method.replace_with_captures_at-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1325-1337">Source</a><a href="#method.replace_with_captures_at-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.replace_with_captures_at" class="fn">replace_with_captures_at</a>&lt;F&gt;(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+    caps: &amp;mut Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>,
+    dst: &amp;mut Vec&lt;u8&gt;,
+    append: F,
+) -&gt; Result&lt;(), Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;<div class="where">where
+    F: FnMut(&amp;Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Captures" title="type vigrep::matcher::Matcher::Captures">Captures</a>, &amp;mut Vec&lt;u8&gt;) -&gt; bool,</div></h4></section><section id="method.is_match-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1340-1342">Source</a><a href="#method.is_match-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.is_match" class="fn">is_match</a>(&amp;self, haystack: &amp;[u8]) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section><section id="method.is_match_at-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1345-1351">Source</a><a href="#method.is_match_at-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.is_match_at" class="fn">is_match_at</a>(&amp;self, haystack: &amp;[u8], at: usize) -&gt; Result&lt;bool, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section><section id="method.shortest_match-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1354-1359">Source</a><a href="#method.shortest_match-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.shortest_match" class="fn">shortest_match</a>(&amp;self, haystack: &amp;[u8]) -&gt; Result&lt;Option&lt;usize&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section><section id="method.shortest_match_at-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1362-1368">Source</a><a href="#method.shortest_match_at-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.shortest_match_at" class="fn">shortest_match_at</a>(
+    &amp;self,
+    haystack: &amp;[u8],
+    at: usize,
+) -&gt; Result&lt;Option&lt;usize&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section><section id="method.non_matching_bytes-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1371-1373">Source</a><a href="#method.non_matching_bytes-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.non_matching_bytes" class="fn">non_matching_bytes</a>(&amp;self) -&gt; Option&lt;&amp;<a class="struct" href="struct.ByteSet.html" title="struct vigrep::matcher::ByteSet">ByteSet</a>&gt;</h4></section><section id="method.line_terminator-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1376-1378">Source</a><a href="#method.line_terminator-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.line_terminator" class="fn">line_terminator</a>(&amp;self) -&gt; Option&lt;<a class="struct" href="struct.LineTerminator.html" title="struct vigrep::matcher::LineTerminator">LineTerminator</a>&gt;</h4></section><section id="method.find_candidate_line-1" class="method trait-impl"><a class="src rightside" href="../../src/vigrep/matcher/mod.rs.html#1381-1386">Source</a><a href="#method.find_candidate_line-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.find_candidate_line" class="fn">find_candidate_line</a>(
+    &amp;self,
+    haystack: &amp;[u8],
+) -&gt; Result&lt;Option&lt;<a class="enum" href="enum.LineMatchKind.html" title="enum vigrep::matcher::LineMatchKind">LineMatchKind</a>&gt;, Self::<a class="associatedtype" href="trait.Matcher.html#associatedtype.Error" title="type vigrep::matcher::Matcher::Error">Error</a>&gt;</h4></section></div></details><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><div class="negative-marker"></div><details class="toggle implementors-toggle"><summary><section id="impl-Matcher-for-RegexMatcher" class="impl"><a class="src rightside" href="../../src/vigrep/regex/matcher.rs.html#417-515">Source</a><a href="#impl-Matcher-for-RegexMatcher" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.Matcher.html" title="trait vigrep::matcher::Matcher">Matcher</a> for <a class="struct" href="../regex/struct.RegexMatcher.html" title="struct vigrep::regex::RegexMatcher">RegexMatcher</a></h3></section></summary><div class="impl-items"><section id="associatedtype.Captures-2" class="associatedtype trait-impl"><a class="src rightside" href="../../src/vigrep/regex/matcher.rs.html#418">Source</a><a href="#associatedtype.Captures-2" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.Captures" class="associatedtype">Captures</a> = <a class="struct" href="../regex/struct.RegexCaptures.html" title="struct vigrep::regex::RegexCaptures">RegexCaptures</a></h4></section><section id="associatedtype.Error-2" class="associatedtype trait-impl"><a class="src rightside" href="../../src/vigrep/regex/matcher.rs.html#419">Source</a><a href="#associatedtype.Error-2" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.Error" class="associatedtype">Error</a> = <a class="struct" href="struct.NoError.html" title="struct vigrep::matcher::NoError">NoError</a></h4></section></div></details></div><script src="../../trait.impl/vigrep/matcher/trait.Matcher.js" async></script></section></div></main></body></html>

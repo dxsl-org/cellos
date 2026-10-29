@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_PLACES"],"enum":["ConflictResolution","ViewMode"],"fn":["resolve_conflict_name"],"struct":["FileItem","PlacesItem"]};

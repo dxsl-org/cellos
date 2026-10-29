@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["completion_writer"],"struct":["AttachmentRef","Capabilities","ForegroundChild","ForegroundRef","FrontendOutput","SessionRef","TerminalSession"]};

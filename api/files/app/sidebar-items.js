@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_INPUT_LEN","PARENT_ENTRY"],"enum":["PromptKind"],"struct":["Clip","FilesApp","Prompt"]};

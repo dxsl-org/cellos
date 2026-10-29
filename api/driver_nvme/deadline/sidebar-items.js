@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ADMIN_BUDGET_MS","FALLBACK_POLLS","IO_BUDGET_MS","POLL_YIELD_EVERY","RDY_FLOOR_MS","SLOW_COMPLETION_MS"],"enum":["Spent"],"fn":["rdy_budget_ms"],"struct":["Deadline"]};

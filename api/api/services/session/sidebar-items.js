@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONTROL_MAX","ESC_TIMEOUT_NS","EVENT_HEADER_LEN","EVENT_MAX","PASTE_MAX"],"fn":["encode_key","validate_dimensions","validate_event","validate_paste","validate_text"],"mod":["event_kind","key_code","mode","modifiers"],"struct":["EventHeaderV1","SerialDecoder"]};

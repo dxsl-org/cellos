@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["granted_stdin","load_stdin","run","run_command","stderr","stdout"],"static":["STDIN"]};

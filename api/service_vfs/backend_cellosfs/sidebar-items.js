@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["NativeState","Operation"],"fn":["path_tag"],"struct":["CellosFsBackend","Failure"]};
+window.SIDEBAR_ITEMS = {"constant":["STAGING_DIR"],"enum":["NativeState","Operation"],"fn":["clear_staging","path_tag"],"struct":["CellosFsBackend","Failure"]};

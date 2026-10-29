@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_CELLS","MAX_COLS","MAX_ROWS","MAX_SCROLLBACK_BYTES","MAX_SCROLLBACK_LINES","TAB_WIDTH"],"enum":["Color","ResizeError","Width"],"fn":["blank_screen","checked_dims","extended_color","keep_line","relayout"],"struct":["Pen","Saved","TerminalCell","TerminalGrid"]};

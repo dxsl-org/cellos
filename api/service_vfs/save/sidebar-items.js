@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_SAVES","MAX_SAVES_PER_CALLER"],"fn":["abort","begin","chunk","commit","handle","observe","publish_owned","seal","sealed_identity","stage_and_publish"],"struct":["SaveTable","Slot"]};

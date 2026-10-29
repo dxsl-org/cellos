@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BOLD","BOTTOM_LEFT","BOTTOM_RIGHT","CSI_MAX","DIM","HIGHLIGHT","HORIZONTAL","INVERSE","ITALIC","TOP_LEFT","TOP_RIGHT","UNDERLINE","VERTICAL"],"enum":["Color","Parse"],"fn":["is_cell_identity"],"struct":["Cell","Frame","Pen","Screen"]};

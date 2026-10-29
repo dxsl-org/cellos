@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["split","utf8","vfs_error"],"struct":["VfsDir","VfsFile","VfsTree"]};

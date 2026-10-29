@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DELAY_MS","INTERVAL_MS"],"struct":["KeyRepeat"]};

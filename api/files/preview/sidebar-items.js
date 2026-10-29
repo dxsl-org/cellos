@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PREVIEW_COLS","PREVIEW_LINES","QUICK_LOOK_H","QUICK_LOOK_W"],"enum":["PreviewKind"],"fn":["handle_click","hud_rect","render"],"struct":["QuickLookState"]};

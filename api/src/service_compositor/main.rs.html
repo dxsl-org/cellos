@@ -68,72 +68,72 @@
 <a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">let </span>(w, h) = framebuffer::default_screen_size();
 <a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">let </span><span class="kw-2">mut </span>fb = ScreenFb::new(w, h);
 <a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">let </span><span class="kw-2">mut </span>table = SurfaceTable::new();
-<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">let </span><span class="kw-2">mut </span>z_order = ZOrder::new();
-<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">let </span><span class="kw-2">mut </span>input = InputState::new();
-<a href=#73 id=73 data-nosnippet>73</a>    <span class="comment">// Compositor-initiated repaint region: set by cursor moves, surface destroy/raise.
-<a href=#74 id=74 data-nosnippet>74</a>    // Consumed (taken) on each render_frame call.
-<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>pending_dirty: <span class="prelude-ty">Option</span>&lt;Rect&gt; = <span class="prelude-val">None</span>;
-<a href=#76 id=76 data-nosnippet>76</a>
-<a href=#77 id=77 data-nosnippet>77</a>    <span class="comment">// Register as input focus so keyboard + mouse events flow to us.
-<a href=#78 id=78 data-nosnippet>78</a>    </span>connect_to_input(<span class="kw-2">&amp;mut </span>input);
-<a href=#79 id=79 data-nosnippet>79</a>
-<a href=#80 id=80 data-nosnippet>80</a>    <span class="comment">// Attempt to upload the hardware cursor sprite (64×64 BGRA8888).
-<a href=#81 id=81 data-nosnippet>81</a>    // The 16×16 software sprite is placed in the top-left; the rest is transparent.
-<a href=#82 id=82 data-nosnippet>82</a>    // If the GPU cursor is unavailable (setup_cursor returns error), we fall back to
-<a href=#83 id=83 data-nosnippet>83</a>    // the Phase 01 software cursor path for the session.
-<a href=#84 id=84 data-nosnippet>84</a>    </span>{
-<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">let </span>(hot_x, hot_y) = cursor_sprite::hotspot();
-<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">let </span>sprite = build_hw_cursor_sprite();
-<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">let </span>ok = sys_gpu_cursor(<span class="number">0</span>, sprite.as_ptr(), <span class="number">0</span>, <span class="number">0</span>, hot_x <span class="kw">as </span>u32, hot_y <span class="kw">as </span>u32).is_ok();
-<a href=#88 id=88 data-nosnippet>88</a>        input.hw_cursor = ok;
-<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">if </span>ok {
-<a href=#90 id=90 data-nosnippet>90</a>            println(<span class="string">"[compositor] hardware cursor active"</span>);
-<a href=#91 id=91 data-nosnippet>91</a>        } <span class="kw">else </span>{
-<a href=#92 id=92 data-nosnippet>92</a>            println(<span class="string">"[compositor] hardware cursor unavailable — using software cursor"</span>);
-<a href=#93 id=93 data-nosnippet>93</a>        }
-<a href=#94 id=94 data-nosnippet>94</a>    }
-<a href=#95 id=95 data-nosnippet>95</a>
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">512</span>];
-<a href=#97 id=97 data-nosnippet>97</a>    <span class="comment">// Resolution hotplug: check every 5 s; reconstruct ScreenFb on change.
-<a href=#98 id=98 data-nosnippet>98</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>last_res_check_ms: u64 = <span class="number">0</span>;
-<a href=#99 id=99 data-nosnippet>99</a>
-<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">loop </span>{
-<a href=#101 id=101 data-nosnippet>101</a>        <span class="comment">// The receive syscall only writes the payload; clear its reusable tail so
-<a href=#102 id=102 data-nosnippet>102</a>        // fixed-frame decoders never inspect bytes from an earlier sender.
-<a href=#103 id=103 data-nosnippet>103</a>        </span>buf.fill(<span class="number">0</span>);
-<a href=#104 id=104 data-nosnippet>104</a>
-<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">match </span>sys_recv(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>buf) {
-<a href=#106 id=106 data-nosnippet>106</a>            SyscallResult::Ok(sender) <span class="kw">if </span>sender &gt; <span class="number">0 </span>=&gt; {
-<a href=#107 id=107 data-nosnippet>107</a>                <span class="kw">if </span>input.input_tid != <span class="number">0 </span>&amp;&amp; sender == input.input_tid &amp;&amp; buf[<span class="number">0</span>] == INPUT_EVENT_OPCODE
-<a href=#108 id=108 data-nosnippet>108</a>                {
-<a href=#109 id=109 data-nosnippet>109</a>                    <span class="comment">// On MouseMove, update_cursor sets pending_dirty = union(old, new)
-<a href=#110 id=110 data-nosnippet>110</a>                    // so the frame is repainted at the interval tick.
-<a href=#111 id=111 data-nosnippet>111</a>                    </span>handle_input_event(
-<a href=#112 id=112 data-nosnippet>112</a>                        <span class="kw-2">&amp;</span>buf,
-<a href=#113 id=113 data-nosnippet>113</a>                        <span class="kw-2">&amp;mut </span>input,
-<a href=#114 id=114 data-nosnippet>114</a>                        Rect {
-<a href=#115 id=115 data-nosnippet>115</a>                            x: window_decoration::FRAME,
-<a href=#116 id=116 data-nosnippet>116</a>                            y: window_decoration::FRAME + window_decoration::TITLE,
-<a href=#117 id=117 data-nosnippet>117</a>                            w: fb
-<a href=#118 id=118 data-nosnippet>118</a>                                .width
-<a href=#119 id=119 data-nosnippet>119</a>                                .saturating_sub((window_decoration::FRAME * <span class="number">2</span>) <span class="kw">as </span>u32),
-<a href=#120 id=120 data-nosnippet>120</a>                            h: fb.height.saturating_sub(
-<a href=#121 id=121 data-nosnippet>121</a>                                (window_decoration::FRAME * <span class="number">2 </span>+ window_decoration::TITLE) <span class="kw">as </span>u32,
-<a href=#122 id=122 data-nosnippet>122</a>                            ),
-<a href=#123 id=123 data-nosnippet>123</a>                        },
-<a href=#124 id=124 data-nosnippet>124</a>                        <span class="kw-2">&amp;mut </span>table,
-<a href=#125 id=125 data-nosnippet>125</a>                        <span class="kw-2">&amp;mut </span>z_order,
-<a href=#126 id=126 data-nosnippet>126</a>                        <span class="kw-2">&amp;mut </span>pending_dirty,
-<a href=#127 id=127 data-nosnippet>127</a>                    );
-<a href=#128 id=128 data-nosnippet>128</a>                } <span class="kw">else </span>{
-<a href=#129 id=129 data-nosnippet>129</a>                    message_handler::handle_message(
-<a href=#130 id=130 data-nosnippet>130</a>                        <span class="kw-2">&amp;</span>buf,
-<a href=#131 id=131 data-nosnippet>131</a>                        sender,
-<a href=#132 id=132 data-nosnippet>132</a>                        message_handler::MessageContext::new(
-<a href=#133 id=133 data-nosnippet>133</a>                            fb.width,
-<a href=#134 id=134 data-nosnippet>134</a>                            fb.height,
-<a href=#135 id=135 data-nosnippet>135</a>                            <span class="kw-2">&amp;mut </span>input,
-<a href=#136 id=136 data-nosnippet>136</a>                            <span class="kw-2">&amp;mut </span>table,
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">let </span><span class="kw-2">mut </span>frames = <span class="kw">crate</span>::surface_table::FrameRegistry::new();
+<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">let </span><span class="kw-2">mut </span>z_order = ZOrder::new();
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">let </span><span class="kw-2">mut </span>input = InputState::new();
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="comment">// Compositor-initiated repaint region: set by cursor moves, surface destroy/raise.
+<a href=#75 id=75 data-nosnippet>75</a>    // Consumed (taken) on each render_frame call.
+<a href=#76 id=76 data-nosnippet>76</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>pending_dirty: <span class="prelude-ty">Option</span>&lt;Rect&gt; = <span class="prelude-val">None</span>;
+<a href=#77 id=77 data-nosnippet>77</a>
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="comment">// Register as input focus so keyboard + mouse events flow to us.
+<a href=#79 id=79 data-nosnippet>79</a>    </span>connect_to_input(<span class="kw-2">&amp;mut </span>input);
+<a href=#80 id=80 data-nosnippet>80</a>
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="comment">// Attempt to upload the hardware cursor sprite (64×64 BGRA8888).
+<a href=#82 id=82 data-nosnippet>82</a>    // The 16×16 software sprite is placed in the top-left; the rest is transparent.
+<a href=#83 id=83 data-nosnippet>83</a>    // If the GPU cursor is unavailable (setup_cursor returns error), we fall back to
+<a href=#84 id=84 data-nosnippet>84</a>    // the Phase 01 software cursor path for the session.
+<a href=#85 id=85 data-nosnippet>85</a>    </span>{
+<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">let </span>(hot_x, hot_y) = cursor_sprite::hotspot();
+<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">let </span>sprite = build_hw_cursor_sprite();
+<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">let </span>ok = sys_gpu_cursor(<span class="number">0</span>, sprite.as_ptr(), <span class="number">0</span>, <span class="number">0</span>, hot_x <span class="kw">as </span>u32, hot_y <span class="kw">as </span>u32).is_ok();
+<a href=#89 id=89 data-nosnippet>89</a>        input.hw_cursor = ok;
+<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">if </span>ok {
+<a href=#91 id=91 data-nosnippet>91</a>            println(<span class="string">"[compositor] hardware cursor active"</span>);
+<a href=#92 id=92 data-nosnippet>92</a>        } <span class="kw">else </span>{
+<a href=#93 id=93 data-nosnippet>93</a>            println(<span class="string">"[compositor] hardware cursor unavailable — using software cursor"</span>);
+<a href=#94 id=94 data-nosnippet>94</a>        }
+<a href=#95 id=95 data-nosnippet>95</a>    }
+<a href=#96 id=96 data-nosnippet>96</a>
+<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">512</span>];
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="comment">// Resolution hotplug: check every 5 s; reconstruct ScreenFb on change.
+<a href=#99 id=99 data-nosnippet>99</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>last_res_check_ms: u64 = <span class="number">0</span>;
+<a href=#100 id=100 data-nosnippet>100</a>
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">loop </span>{
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="comment">// The receive syscall only writes the payload; clear its reusable tail so
+<a href=#103 id=103 data-nosnippet>103</a>        // fixed-frame decoders never inspect bytes from an earlier sender.
+<a href=#104 id=104 data-nosnippet>104</a>        </span>buf.fill(<span class="number">0</span>);
+<a href=#105 id=105 data-nosnippet>105</a>
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">match </span>sys_recv(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>buf) {
+<a href=#107 id=107 data-nosnippet>107</a>            SyscallResult::Ok(sender) <span class="kw">if </span>sender &gt; <span class="number">0 </span>=&gt; {
+<a href=#108 id=108 data-nosnippet>108</a>                <span class="kw">if </span>input.input_tid != <span class="number">0 </span>&amp;&amp; sender == input.input_tid &amp;&amp; buf[<span class="number">0</span>] == INPUT_EVENT_OPCODE
+<a href=#109 id=109 data-nosnippet>109</a>                {
+<a href=#110 id=110 data-nosnippet>110</a>                    <span class="comment">// On MouseMove, update_cursor sets pending_dirty = union(old, new)
+<a href=#111 id=111 data-nosnippet>111</a>                    // so the frame is repainted at the interval tick.
+<a href=#112 id=112 data-nosnippet>112</a>                    </span>handle_input_event(
+<a href=#113 id=113 data-nosnippet>113</a>                        <span class="kw-2">&amp;</span>buf,
+<a href=#114 id=114 data-nosnippet>114</a>                        <span class="kw-2">&amp;mut </span>input,
+<a href=#115 id=115 data-nosnippet>115</a>                        fb.width,
+<a href=#116 id=116 data-nosnippet>116</a>                        fb.height,
+<a href=#117 id=117 data-nosnippet>117</a>                        Rect {
+<a href=#118 id=118 data-nosnippet>118</a>                            x: <span class="number">0</span>,
+<a href=#119 id=119 data-nosnippet>119</a>                            y: <span class="number">0</span>,
+<a href=#120 id=120 data-nosnippet>120</a>                            w: fb.width,
+<a href=#121 id=121 data-nosnippet>121</a>                            h: fb.height.saturating_sub(<span class="number">36</span>),
+<a href=#122 id=122 data-nosnippet>122</a>                        },
+<a href=#123 id=123 data-nosnippet>123</a>                        <span class="kw-2">&amp;mut </span>table,
+<a href=#124 id=124 data-nosnippet>124</a>                        <span class="kw-2">&amp;mut </span>z_order,
+<a href=#125 id=125 data-nosnippet>125</a>                        <span class="kw-2">&amp;mut </span>pending_dirty,
+<a href=#126 id=126 data-nosnippet>126</a>                    );
+<a href=#127 id=127 data-nosnippet>127</a>                } <span class="kw">else </span>{
+<a href=#128 id=128 data-nosnippet>128</a>                    message_handler::handle_message(
+<a href=#129 id=129 data-nosnippet>129</a>                        <span class="kw-2">&amp;</span>buf,
+<a href=#130 id=130 data-nosnippet>130</a>                        sender,
+<a href=#131 id=131 data-nosnippet>131</a>                        message_handler::MessageContext::new(
+<a href=#132 id=132 data-nosnippet>132</a>                            fb.width,
+<a href=#133 id=133 data-nosnippet>133</a>                            fb.height,
+<a href=#134 id=134 data-nosnippet>134</a>                            <span class="kw-2">&amp;mut </span>input,
+<a href=#135 id=135 data-nosnippet>135</a>                            <span class="kw-2">&amp;mut </span>table,
+<a href=#136 id=136 data-nosnippet>136</a>                            <span class="kw-2">&amp;mut </span>frames,
 <a href=#137 id=137 data-nosnippet>137</a>                            <span class="kw-2">&amp;mut </span>z_order,
 <a href=#138 id=138 data-nosnippet>138</a>                            <span class="kw-2">&amp;mut </span>pending_dirty,
 <a href=#139 id=139 data-nosnippet>139</a>                        ),

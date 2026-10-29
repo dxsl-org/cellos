@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CHILD_PATH"],"fn":["argv_of","blocked_reader","blocked_writer","cell_main","ctx","descend","forged","granted","hang","main","mark","now","orphan","parse_ref","raw_panic","sleep_ms","spawn_writer","timeout","writer"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

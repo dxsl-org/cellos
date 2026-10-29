@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ANSI","DEFAULT_BG","DEFAULT_FG","FONT_PX","PAD_X","PAD_Y"],"fn":["cell_colors","cell_main","grid_dims","init_custom_heap","main","open_window","resolve"],"mod":["grid","keymap","session","sink"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["TerminalApp","__CustomHeapArena"]};

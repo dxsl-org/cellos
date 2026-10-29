@@ -53,8 +53,8 @@
 <a href=#53 id=53 data-nosnippet>53</a><span class="kw">const </span>STATIC_CTOR_SENTINEL: u32 = <span class="number">0xC0FFEE11</span>;
 <a href=#54 id=54 data-nosnippet>54</a><span class="kw">const </span>VFS_PATH: <span class="kw-2">&amp;</span>str = <span class="string">"/tmp/cpp-smoke.txt"</span>;
 <a href=#55 id=55 data-nosnippet>55</a><span class="doccomment">/// Candidates for the C-ABI file read: an embedded ELF file in the kernel file table.
-<a href=#56 id=56 data-nosnippet>56</a>/// RV64 embeds `/BIN/INIT`; x86_64 embeds `/bin/shell`. Both start with `\x7fELF`.
-<a href=#57 id=57 data-nosnippet>57</a></span><span class="kw">const </span>CANDIDATES: [<span class="kw-2">&amp;</span>[u8]; <span class="number">2</span>] = [<span class="string">b"/BIN/INIT\0"</span>, <span class="string">b"/bin/shell\0"</span>];
+<a href=#56 id=56 data-nosnippet>56</a>/// RV64 embeds `/BIN/INIT`; x86_64 embeds `/bin/cellbox`. Both start with `\x7fELF`.
+<a href=#57 id=57 data-nosnippet>57</a></span><span class="kw">const </span>CANDIDATES: [<span class="kw-2">&amp;</span>[u8]; <span class="number">2</span>] = [<span class="string">b"/BIN/INIT\0"</span>, <span class="string">b"/bin/cellbox\0"</span>];
 <a href=#58 id=58 data-nosnippet>58</a><span class="kw">const </span>ELF_MAGIC: [u8; <span class="number">4</span>] = [<span class="number">0x7F</span>, <span class="string">b'E'</span>, <span class="string">b'L'</span>, <span class="string">b'F'</span>];
 <a href=#59 id=59 data-nosnippet>59</a><span class="kw">const </span>PAYLOAD: <span class="kw-2">&amp;</span>[u8] = <span class="string">b"cpp-freestanding payload read through the VFS service"</span>;
 <a href=#60 id=60 data-nosnippet>60</a><span class="kw">const </span>HEAP_ITERATIONS: i32 = <span class="number">64</span>;

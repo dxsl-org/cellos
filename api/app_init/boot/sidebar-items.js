@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["VIRTIO_BLOCK_DRIVER"],"fn":["spawn_test_fixtures","start_block_drivers"]};
+window.SIDEBAR_ITEMS = {"constant":["BLOCK_DRIVER_WAIT_MS","BLOCK_DRIVER_WAIT_YIELDS","PLATFORM_PROCESS_ROWS","PLATFORM_WAIT_MS","VIRTIO_BLOCK_DRIVER"],"enum":["BlockWait","PlatformWait","PlatformWaitError"],"fn":["block_wait_step","platform_boot_flow","platform_wait_step","spawn_test_fixtures","start_after_platform","start_block_drivers","task_terminated"]};

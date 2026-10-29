@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cell_main","extract_app_name","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["AppConfig"]};

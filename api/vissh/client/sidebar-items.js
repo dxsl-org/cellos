@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["RECV_CHUNK"],"enum":["ClientError","TransportError"],"fn":["pump"],"struct":["HostKey"],"trait":["Transport"]};

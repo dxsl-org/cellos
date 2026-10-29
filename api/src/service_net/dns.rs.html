@@ -81,71 +81,72 @@
 <a href=#81 id=81 data-nosnippet>81</a>    <span class="doccomment">/// Install the DNS socket in the interface's socket set.
 <a href=#82 id=82 data-nosnippet>82</a>    </span><span class="kw">pub fn </span>install(sockets: <span class="kw-2">&amp;mut </span>SocketSet&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="self">Self </span>{
 <a href=#83 id=83 data-nosnippet>83</a>        <span class="kw">let </span>server = SLIRP_DNS_SERVER;
-<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">let </span>handle = sockets.add(dns::Socket::new(<span class="kw-2">&amp;</span>[ip_address(server)], <span class="macro">vec!</span>[]));
-<a href=#85 id=85 data-nosnippet>85</a>        <span class="self">Self </span>{ handle, server }
-<a href=#86 id=86 data-nosnippet>86</a>    }
-<a href=#87 id=87 data-nosnippet>87</a>
-<a href=#88 id=88 data-nosnippet>88</a>    <span class="doccomment">/// The DNS server in force (lease option 6, else SLIRP's).
-<a href=#89 id=89 data-nosnippet>89</a>    </span><span class="kw">pub fn </span>server(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; [u8; <span class="number">4</span>] {
-<a href=#90 id=90 data-nosnippet>90</a>        <span class="self">self</span>.server
-<a href=#91 id=91 data-nosnippet>91</a>    }
-<a href=#92 id=92 data-nosnippet>92</a>
-<a href=#93 id=93 data-nosnippet>93</a>    <span class="doccomment">/// Adopt the DNS server handed out by DHCP.
-<a href=#94 id=94 data-nosnippet>94</a>    </span><span class="kw">pub fn </span>set_server(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sockets: <span class="kw-2">&amp;mut </span>SocketSet&lt;<span class="lifetime">'_</span>&gt;, server: [u8; <span class="number">4</span>]) {
-<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">if </span>server == <span class="self">self</span>.server {
-<a href=#96 id=96 data-nosnippet>96</a>            <span class="kw">return</span>;
-<a href=#97 id=97 data-nosnippet>97</a>        }
-<a href=#98 id=98 data-nosnippet>98</a>        <span class="self">self</span>.server = server;
-<a href=#99 id=99 data-nosnippet>99</a>        sockets
-<a href=#100 id=100 data-nosnippet>100</a>            .get_mut::&lt;dns::Socket&gt;(<span class="self">self</span>.handle)
-<a href=#101 id=101 data-nosnippet>101</a>            .update_servers(<span class="kw-2">&amp;</span>[ip_address(server)]);
-<a href=#102 id=102 data-nosnippet>102</a>    }
-<a href=#103 id=103 data-nosnippet>103</a>
-<a href=#104 id=104 data-nosnippet>104</a>    <span class="doccomment">/// Begin a wire query without parking the net service loop. The returned
-<a href=#105 id=105 data-nosnippet>105</a>    /// handle owns one smoltcp DNS slot until poll_result or cancel.
-<a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">pub fn </span>start(
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#108 id=108 data-nosnippet>108</a>        hostname: <span class="kw-2">&amp;</span>str,
-<a href=#109 id=109 data-nosnippet>109</a>        iface: <span class="kw-2">&amp;mut </span>Interface,
-<a href=#110 id=110 data-nosnippet>110</a>        sockets: <span class="kw-2">&amp;mut </span>SocketSet&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#111 id=111 data-nosnippet>111</a>    ) -&gt; <span class="prelude-ty">Option</span>&lt;dns::QueryHandle&gt; {
-<a href=#112 id=112 data-nosnippet>112</a>        sockets
-<a href=#113 id=113 data-nosnippet>113</a>            .get_mut::&lt;dns::Socket&gt;(<span class="self">self</span>.handle)
-<a href=#114 id=114 data-nosnippet>114</a>            .start_query(iface.context(), hostname, DnsQueryType::A)
-<a href=#115 id=115 data-nosnippet>115</a>            .ok()
-<a href=#116 id=116 data-nosnippet>116</a>    }
-<a href=#117 id=117 data-nosnippet>117</a>
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">pub fn </span>poll_result(
-<a href=#119 id=119 data-nosnippet>119</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#120 id=120 data-nosnippet>120</a>        query: dns::QueryHandle,
-<a href=#121 id=121 data-nosnippet>121</a>        sockets: <span class="kw-2">&amp;mut </span>SocketSet&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#122 id=122 data-nosnippet>122</a>    ) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="prelude-ty">Option</span>&lt;[u8; <span class="number">4</span>]&gt;&gt; {
-<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">match </span>sockets.get_mut::&lt;dns::Socket&gt;(<span class="self">self</span>.handle).get_query_result(query) {
-<a href=#124 id=124 data-nosnippet>124</a>            <span class="prelude-val">Ok</span>(addresses) =&gt; <span class="prelude-val">Some</span>(first_ipv4(<span class="kw-2">&amp;</span>addresses)),
-<a href=#125 id=125 data-nosnippet>125</a>            <span class="prelude-val">Err</span>(dns::GetQueryResultError::Failed) =&gt; <span class="prelude-val">Some</span>(<span class="prelude-val">None</span>),
-<a href=#126 id=126 data-nosnippet>126</a>            <span class="prelude-val">Err</span>(dns::GetQueryResultError::Pending) =&gt; <span class="prelude-val">None</span>,
-<a href=#127 id=127 data-nosnippet>127</a>        }
-<a href=#128 id=128 data-nosnippet>128</a>    }
-<a href=#129 id=129 data-nosnippet>129</a>
-<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">pub fn </span>cancel(<span class="kw-2">&amp;</span><span class="self">self</span>, query: dns::QueryHandle, sockets: <span class="kw-2">&amp;mut </span>SocketSet&lt;<span class="lifetime">'_</span>&gt;) {
-<a href=#131 id=131 data-nosnippet>131</a>        sockets.get_mut::&lt;dns::Socket&gt;(<span class="self">self</span>.handle).cancel_query(query);
-<a href=#132 id=132 data-nosnippet>132</a>    }
-<a href=#133 id=133 data-nosnippet>133</a>
-<a href=#134 id=134 data-nosnippet>134</a>}
-<a href=#135 id=135 data-nosnippet>135</a>
-<a href=#136 id=136 data-nosnippet>136</a><span class="kw">fn </span>first_ipv4(addresses: <span class="kw-2">&amp;</span>[IpAddress]) -&gt; <span class="prelude-ty">Option</span>&lt;[u8; <span class="number">4</span>]&gt; {
-<a href=#137 id=137 data-nosnippet>137</a>    addresses.iter().find_map(|address| <span class="kw">match </span>address {
-<a href=#138 id=138 data-nosnippet>138</a>        IpAddress::Ipv4(v4) =&gt; <span class="prelude-val">Some</span>(v4.<span class="number">0</span>),
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="attr">#[allow(unreachable_patterns)] </span><span class="comment">// reason: proto-ipv6 is not enabled here
-<a href=#140 id=140 data-nosnippet>140</a>        </span><span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#141 id=141 data-nosnippet>141</a>    })
-<a href=#142 id=142 data-nosnippet>142</a>}
-<a href=#143 id=143 data-nosnippet>143</a>
-<a href=#144 id=144 data-nosnippet>144</a><span class="kw">fn </span>ip_address(ip: [u8; <span class="number">4</span>]) -&gt; IpAddress {
-<a href=#145 id=145 data-nosnippet>145</a>    IpAddress::v4(ip[<span class="number">0</span>], ip[<span class="number">1</span>], ip[<span class="number">2</span>], ip[<span class="number">3</span>])
-<a href=#146 id=146 data-nosnippet>146</a>}
-<a href=#147 id=147 data-nosnippet>147</a>
+<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">let </span>queries: alloc::vec::Vec&lt;<span class="kw">_</span>&gt; = (<span class="number">0</span>..<span class="number">32</span>).map(|<span class="kw">_</span>| <span class="prelude-val">None</span>).collect();
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">let </span>handle = sockets.add(dns::Socket::new(<span class="kw-2">&amp;</span>[ip_address(server)], queries));
+<a href=#86 id=86 data-nosnippet>86</a>        <span class="self">Self </span>{ handle, server }
+<a href=#87 id=87 data-nosnippet>87</a>    }
+<a href=#88 id=88 data-nosnippet>88</a>
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="doccomment">/// The DNS server in force (lease option 6, else SLIRP's).
+<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="kw">pub fn </span>server(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; [u8; <span class="number">4</span>] {
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="self">self</span>.server
+<a href=#92 id=92 data-nosnippet>92</a>    }
+<a href=#93 id=93 data-nosnippet>93</a>
+<a href=#94 id=94 data-nosnippet>94</a>    <span class="doccomment">/// Adopt the DNS server handed out by DHCP.
+<a href=#95 id=95 data-nosnippet>95</a>    </span><span class="kw">pub fn </span>set_server(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sockets: <span class="kw-2">&amp;mut </span>SocketSet&lt;<span class="lifetime">'_</span>&gt;, server: [u8; <span class="number">4</span>]) {
+<a href=#96 id=96 data-nosnippet>96</a>        <span class="kw">if </span>server == <span class="self">self</span>.server {
+<a href=#97 id=97 data-nosnippet>97</a>            <span class="kw">return</span>;
+<a href=#98 id=98 data-nosnippet>98</a>        }
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="self">self</span>.server = server;
+<a href=#100 id=100 data-nosnippet>100</a>        sockets
+<a href=#101 id=101 data-nosnippet>101</a>            .get_mut::&lt;dns::Socket&gt;(<span class="self">self</span>.handle)
+<a href=#102 id=102 data-nosnippet>102</a>            .update_servers(<span class="kw-2">&amp;</span>[ip_address(server)]);
+<a href=#103 id=103 data-nosnippet>103</a>    }
+<a href=#104 id=104 data-nosnippet>104</a>
+<a href=#105 id=105 data-nosnippet>105</a>    <span class="doccomment">/// Begin a wire query without parking the net service loop. The returned
+<a href=#106 id=106 data-nosnippet>106</a>    /// handle owns one smoltcp DNS slot until poll_result or cancel.
+<a href=#107 id=107 data-nosnippet>107</a>    </span><span class="kw">pub fn </span>start(
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#109 id=109 data-nosnippet>109</a>        hostname: <span class="kw-2">&amp;</span>str,
+<a href=#110 id=110 data-nosnippet>110</a>        iface: <span class="kw-2">&amp;mut </span>Interface,
+<a href=#111 id=111 data-nosnippet>111</a>        sockets: <span class="kw-2">&amp;mut </span>SocketSet&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#112 id=112 data-nosnippet>112</a>    ) -&gt; <span class="prelude-ty">Option</span>&lt;dns::QueryHandle&gt; {
+<a href=#113 id=113 data-nosnippet>113</a>        sockets
+<a href=#114 id=114 data-nosnippet>114</a>            .get_mut::&lt;dns::Socket&gt;(<span class="self">self</span>.handle)
+<a href=#115 id=115 data-nosnippet>115</a>            .start_query(iface.context(), hostname, DnsQueryType::A)
+<a href=#116 id=116 data-nosnippet>116</a>            .ok()
+<a href=#117 id=117 data-nosnippet>117</a>    }
+<a href=#118 id=118 data-nosnippet>118</a>
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">pub fn </span>poll_result(
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#121 id=121 data-nosnippet>121</a>        query: dns::QueryHandle,
+<a href=#122 id=122 data-nosnippet>122</a>        sockets: <span class="kw-2">&amp;mut </span>SocketSet&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#123 id=123 data-nosnippet>123</a>    ) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="prelude-ty">Option</span>&lt;[u8; <span class="number">4</span>]&gt;&gt; {
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">match </span>sockets.get_mut::&lt;dns::Socket&gt;(<span class="self">self</span>.handle).get_query_result(query) {
+<a href=#125 id=125 data-nosnippet>125</a>            <span class="prelude-val">Ok</span>(addresses) =&gt; <span class="prelude-val">Some</span>(first_ipv4(<span class="kw-2">&amp;</span>addresses)),
+<a href=#126 id=126 data-nosnippet>126</a>            <span class="prelude-val">Err</span>(dns::GetQueryResultError::Failed) =&gt; <span class="prelude-val">Some</span>(<span class="prelude-val">None</span>),
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="prelude-val">Err</span>(dns::GetQueryResultError::Pending) =&gt; <span class="prelude-val">None</span>,
+<a href=#128 id=128 data-nosnippet>128</a>        }
+<a href=#129 id=129 data-nosnippet>129</a>    }
+<a href=#130 id=130 data-nosnippet>130</a>
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">pub fn </span>cancel(<span class="kw-2">&amp;</span><span class="self">self</span>, query: dns::QueryHandle, sockets: <span class="kw-2">&amp;mut </span>SocketSet&lt;<span class="lifetime">'_</span>&gt;) {
+<a href=#132 id=132 data-nosnippet>132</a>        sockets.get_mut::&lt;dns::Socket&gt;(<span class="self">self</span>.handle).cancel_query(query);
+<a href=#133 id=133 data-nosnippet>133</a>    }
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a>}
+<a href=#136 id=136 data-nosnippet>136</a>
+<a href=#137 id=137 data-nosnippet>137</a><span class="kw">fn </span>first_ipv4(addresses: <span class="kw-2">&amp;</span>[IpAddress]) -&gt; <span class="prelude-ty">Option</span>&lt;[u8; <span class="number">4</span>]&gt; {
+<a href=#138 id=138 data-nosnippet>138</a>    addresses.iter().find_map(|address| <span class="kw">match </span>address {
+<a href=#139 id=139 data-nosnippet>139</a>        IpAddress::Ipv4(v4) =&gt; <span class="prelude-val">Some</span>(v4.<span class="number">0</span>),
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="attr">#[allow(unreachable_patterns)] </span><span class="comment">// reason: proto-ipv6 is not enabled here
+<a href=#141 id=141 data-nosnippet>141</a>        </span><span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#142 id=142 data-nosnippet>142</a>    })
+<a href=#143 id=143 data-nosnippet>143</a>}
+<a href=#144 id=144 data-nosnippet>144</a>
+<a href=#145 id=145 data-nosnippet>145</a><span class="kw">fn </span>ip_address(ip: [u8; <span class="number">4</span>]) -&gt; IpAddress {
+<a href=#146 id=146 data-nosnippet>146</a>    IpAddress::v4(ip[<span class="number">0</span>], ip[<span class="number">1</span>], ip[<span class="number">2</span>], ip[<span class="number">3</span>])
+<a href=#147 id=147 data-nosnippet>147</a>}
 <a href=#148 id=148 data-nosnippet>148</a>
-<a href=#149 id=149 data-nosnippet>149</a><span class="attr">#[cfg(test)]
-<a href=#150 id=150 data-nosnippet>150</a></span><span class="kw">mod </span>tests;
+<a href=#149 id=149 data-nosnippet>149</a>
+<a href=#150 id=150 data-nosnippet>150</a><span class="attr">#[cfg(test)]
+<a href=#151 id=151 data-nosnippet>151</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

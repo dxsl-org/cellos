@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_ENTRIES"],"fn":["aggregate","commit_staged","entry_count","force_unlock_locks"],"static":["LOG"],"struct":["Log","MeasureEntry"]};
+window.SIDEBAR_ITEMS = {"constant":["CREATOR_SHARE","MAX_ENTRIES","NO_CREATOR"],"fn":["advance_aggregate","aggregate","commit_staged","emit_audit","entry_count","force_unlock_locks"],"static":["LOG"],"struct":["Log","MeasureEntry","PublicationReservation","Share"],"type":["Creator"]};

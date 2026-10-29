@@ -1,0 +1,805 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `third_party/sunset/src/traffic.rs`."><title>traffic.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="sunset" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">sunset/</div>traffic.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>core::fmt;
+<a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>core::ops::{Deref, DerefMut};
+<a href=#3 id=3 data-nosnippet>3</a>
+<a href=#4 id=4 data-nosnippet>4</a><span class="attr">#[allow(unused_imports)]
+<a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">use </span>{
+<a href=#6 id=6 data-nosnippet>6</a>    <span class="kw">crate</span>::error::{Error, <span class="prelude-ty">Result</span>},
+<a href=#7 id=7 data-nosnippet>7</a>    log::{debug, error, info, log, trace, warn},
+<a href=#8 id=8 data-nosnippet>8</a>};
+<a href=#9 id=9 data-nosnippet>9</a>
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>zeroize::Zeroize;
+<a href=#11 id=11 data-nosnippet>11</a>
+<a href=#12 id=12 data-nosnippet>12</a><span class="attr">#[cfg(feature = <span class="string">"alloc"</span>)]
+<a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">use </span>alloc::boxed::Box;
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>heapless::Deque;
+<a href=#15 id=15 data-nosnippet>15</a>
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::encrypt::{KeyState, KeysRecv, KeysSend, SSH_PAYLOAD_START};
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">crate</span>::ident::RemoteVersion;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>crate::<span class="kw-2">*</span>;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>crate::{
+<a href=#20 id=20 data-nosnippet>20</a>    channel::{ChanData, ChanNum},
+<a href=#21 id=21 data-nosnippet>21</a>    packets::Packet,
+<a href=#22 id=22 data-nosnippet>22</a>};
+<a href=#23 id=23 data-nosnippet>23</a>
+<a href=#24 id=24 data-nosnippet>24</a><span class="doccomment">/// Number of `DeferredPacket`s to queue.
+<a href=#25 id=25 data-nosnippet>25</a>///
+<a href=#26 id=26 data-nosnippet>26</a>/// Each entry takes around 40 bytes.
+<a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">const </span>DEFER_COUNT: usize = <span class="number">10</span>;
+<a href=#28 id=28 data-nosnippet>28</a>
+<a href=#29 id=29 data-nosnippet>29</a><span class="comment">// Either a slice or boxed array.
+<a href=#30 id=30 data-nosnippet>30</a>// Similar to managed::ManagedSlice.
+<a href=#31 id=31 data-nosnippet>31</a>//
+<a href=#32 id=32 data-nosnippet>32</a>// Zeroize is slow for fuzzing, so skip it.
+<a href=#33 id=33 data-nosnippet>33</a>// In normal operation one zeroize per connection is fine.
+<a href=#34 id=34 data-nosnippet>34</a></span><span class="attr">#[cfg_attr(not(fuzzing), derive(zeroize::ZeroizeOnDrop))]
+<a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">enum </span>SliceOrVec&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#36 id=36 data-nosnippet>36</a>    Borrowed(<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]),
+<a href=#37 id=37 data-nosnippet>37</a>
+<a href=#38 id=38 data-nosnippet>38</a>    <span class="doccomment">/// `'static` variant
+<a href=#39 id=39 data-nosnippet>39</a>    </span><span class="attr">#[cfg(feature = <span class="string">"alloc"</span>)]
+<a href=#40 id=40 data-nosnippet>40</a>    </span>Owned(Box&lt;[u8; config::SSH_MAX_PACKET]&gt;),
+<a href=#41 id=41 data-nosnippet>41</a>}
+<a href=#42 id=42 data-nosnippet>42</a>
+<a href=#43 id=43 data-nosnippet>43</a><span class="kw">impl </span>Deref <span class="kw">for </span>SliceOrVec&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#44 id=44 data-nosnippet>44</a>    <span class="kw">type </span>Target = [u8];
+<a href=#45 id=45 data-nosnippet>45</a>
+<a href=#46 id=46 data-nosnippet>46</a>    <span class="kw">fn </span>deref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Target {
+<a href=#47 id=47 data-nosnippet>47</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#48 id=48 data-nosnippet>48</a>            <span class="self">Self</span>::Borrowed(r) =&gt; r,
+<a href=#49 id=49 data-nosnippet>49</a>            <span class="attr">#[cfg(feature = <span class="string">"alloc"</span>)]
+<a href=#50 id=50 data-nosnippet>50</a>            </span><span class="self">Self</span>::Owned(r) =&gt; r.as_ref(),
+<a href=#51 id=51 data-nosnippet>51</a>        }
+<a href=#52 id=52 data-nosnippet>52</a>    }
+<a href=#53 id=53 data-nosnippet>53</a>}
+<a href=#54 id=54 data-nosnippet>54</a>
+<a href=#55 id=55 data-nosnippet>55</a><span class="kw">impl </span>DerefMut <span class="kw">for </span>SliceOrVec&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#56 id=56 data-nosnippet>56</a>    <span class="kw">fn </span>deref_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self</span>::Target {
+<a href=#57 id=57 data-nosnippet>57</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#58 id=58 data-nosnippet>58</a>            <span class="self">Self</span>::Borrowed(r) =&gt; r,
+<a href=#59 id=59 data-nosnippet>59</a>            <span class="attr">#[cfg(feature = <span class="string">"alloc"</span>)]
+<a href=#60 id=60 data-nosnippet>60</a>            </span><span class="self">Self</span>::Owned(r) =&gt; r.as_mut(),
+<a href=#61 id=61 data-nosnippet>61</a>        }
+<a href=#62 id=62 data-nosnippet>62</a>    }
+<a href=#63 id=63 data-nosnippet>63</a>}
+<a href=#64 id=64 data-nosnippet>64</a>
+<a href=#65 id=65 data-nosnippet>65</a><span class="kw">impl </span>Zeroize <span class="kw">for </span>SliceOrVec&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">fn </span>zeroize(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#67 id=67 data-nosnippet>67</a>        <span class="self">self</span>.deref_mut().zeroize();
+<a href=#68 id=68 data-nosnippet>68</a>    }
+<a href=#69 id=69 data-nosnippet>69</a>}
+<a href=#70 id=70 data-nosnippet>70</a>
+<a href=#71 id=71 data-nosnippet>71</a><span class="comment">// TODO: if smoltcp exposed both ends of a CircularBuffer to recv()
+<a href=#72 id=72 data-nosnippet>72</a>// we could perhaps just work directly in smoltcp's provided buffer?
+<a href=#73 id=73 data-nosnippet>73</a>// Would need changes to ciphers with block boundaries
+<a href=#74 id=74 data-nosnippet>74</a>
+<a href=#75 id=75 data-nosnippet>75</a>// TODO only pub for testing
+<a href=#76 id=76 data-nosnippet>76</a>// pub(crate) struct TrafIn&lt;'a&gt; {
+<a href=#77 id=77 data-nosnippet>77</a></span><span class="kw">pub struct </span>TrafIn&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="comment">// TODO: decompression will need another buffer
+<a href=#79 id=79 data-nosnippet>79</a>    </span><span class="doccomment">/// Accumulated input buffer.
+<a href=#80 id=80 data-nosnippet>80</a>    ///
+<a href=#81 id=81 data-nosnippet>81</a>    /// Should be sized to fit the largest packet allowed for input.
+<a href=#82 id=82 data-nosnippet>82</a>    /// Contains ciphertext or cleartext, decrypted in-place.
+<a href=#83 id=83 data-nosnippet>83</a>    /// Only contains a single SSH packet at a time.
+<a href=#84 id=84 data-nosnippet>84</a>    </span>buf: SliceOrVec&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#85 id=85 data-nosnippet>85</a>    state: RxState,
+<a href=#86 id=86 data-nosnippet>86</a>}
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a><span class="attr">#[derive(Debug)]
+<a href=#89 id=89 data-nosnippet>89</a></span><span class="kw">enum </span>RxState {
+<a href=#90 id=90 data-nosnippet>90</a>    <span class="doccomment">/// Awaiting read, buffer is unused
+<a href=#91 id=91 data-nosnippet>91</a>    </span>Idle,
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="doccomment">/// Reading initial encrypted block for packet length. idx &gt; 0.
+<a href=#93 id=93 data-nosnippet>93</a>    </span>ReadInitial { idx: usize },
+<a href=#94 id=94 data-nosnippet>94</a>    <span class="doccomment">/// Reading remainder of encrypted packet
+<a href=#95 id=95 data-nosnippet>95</a>    </span>Read { idx: usize, expect: usize },
+<a href=#96 id=96 data-nosnippet>96</a>    <span class="doccomment">/// Whole encrypted packet has been read
+<a href=#97 id=97 data-nosnippet>97</a>    </span>ReadComplete { len: usize },
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="doccomment">/// Decrypted complete input payload
+<a href=#99 id=99 data-nosnippet>99</a>    </span>InPayload { len: usize, seq: u32 },
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="doccomment">/// Decrypted incoming channel data
+<a href=#101 id=101 data-nosnippet>101</a>    </span>InChannelData {
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="doccomment">/// channel number
+<a href=#103 id=103 data-nosnippet>103</a>        </span>chan: ChanNum,
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="doccomment">/// Normal or Stderr
+<a href=#105 id=105 data-nosnippet>105</a>        </span>dt: ChanData,
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="doccomment">/// read index of channel data. should transition to Idle once `idx==len`
+<a href=#107 id=107 data-nosnippet>107</a>        </span>idx: usize,
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="doccomment">/// length of channel data
+<a href=#109 id=109 data-nosnippet>109</a>        </span>len: usize,
+<a href=#110 id=110 data-nosnippet>110</a>    },
+<a href=#111 id=111 data-nosnippet>111</a>}
+<a href=#112 id=112 data-nosnippet>112</a>
+<a href=#113 id=113 data-nosnippet>113</a><span class="kw">impl </span>core::fmt::Debug <span class="kw">for </span>TrafIn&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#115 id=115 data-nosnippet>115</a>        f.debug_struct(<span class="string">"TrafIn"</span>).field(<span class="string">"state"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.state).finish_non_exhaustive()
+<a href=#116 id=116 data-nosnippet>116</a>    }
+<a href=#117 id=117 data-nosnippet>117</a>}
+<a href=#118 id=118 data-nosnippet>118</a>
+<a href=#119 id=119 data-nosnippet>119</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; TrafIn&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">pub fn </span>new(buf: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]) -&gt; <span class="self">Self </span>{
+<a href=#121 id=121 data-nosnippet>121</a>        <span class="self">Self </span>{ buf: SliceOrVec::Borrowed(buf), state: RxState::Idle }
+<a href=#122 id=122 data-nosnippet>122</a>    }
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">pub fn </span>is_input_ready(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="kw">match </span><span class="self">self</span>.state {
+<a href=#126 id=126 data-nosnippet>126</a>            RxState::Idle | RxState::ReadInitial { .. } | RxState::Read { .. } =&gt; {
+<a href=#127 id=127 data-nosnippet>127</a>                <span class="bool-val">true
+<a href=#128 id=128 data-nosnippet>128</a>            </span>}
+<a href=#129 id=129 data-nosnippet>129</a>            RxState::ReadComplete { .. }
+<a href=#130 id=130 data-nosnippet>130</a>            | RxState::InPayload { .. }
+<a href=#131 id=131 data-nosnippet>131</a>            | RxState::InChannelData { .. } =&gt; <span class="bool-val">false</span>,
+<a href=#132 id=132 data-nosnippet>132</a>        }
+<a href=#133 id=133 data-nosnippet>133</a>    }
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="doccomment">/// Returns the number of bytes consumed.
+<a href=#136 id=136 data-nosnippet>136</a>    </span><span class="kw">pub fn </span>input(
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#138 id=138 data-nosnippet>138</a>        keys: <span class="kw-2">&amp;mut </span>KeyState,
+<a href=#139 id=139 data-nosnippet>139</a>        remote_version: <span class="kw-2">&amp;mut </span>RemoteVersion,
+<a href=#140 id=140 data-nosnippet>140</a>        buf: <span class="kw-2">&amp;</span>[u8],
+<a href=#141 id=141 data-nosnippet>141</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;usize, Error&gt; {
+<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">let </span><span class="kw-2">mut </span>inlen = <span class="number">0</span>;
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="macro">debug_assert!</span>(<span class="self">self</span>.is_input_ready());
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">if </span>remote_version.version().is_none() &amp;&amp; <span class="macro">matches!</span>(<span class="self">self</span>.state, RxState::Idle)
+<a href=#145 id=145 data-nosnippet>145</a>        {
+<a href=#146 id=146 data-nosnippet>146</a>            <span class="comment">// Handle initial version string
+<a href=#147 id=147 data-nosnippet>147</a>            </span>inlen += remote_version.consume(buf)<span class="question-mark">?</span>;
+<a href=#148 id=148 data-nosnippet>148</a>        }
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">let </span>buf = <span class="kw-2">&amp;</span>buf[inlen..];
+<a href=#150 id=150 data-nosnippet>150</a>
+<a href=#151 id=151 data-nosnippet>151</a>        inlen += <span class="self">self</span>.fill_input(keys, buf)<span class="question-mark">?</span>;
+<a href=#152 id=152 data-nosnippet>152</a>        <span class="prelude-val">Ok</span>(inlen)
+<a href=#153 id=153 data-nosnippet>153</a>    }
+<a href=#154 id=154 data-nosnippet>154</a>
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="doccomment">/// Called when `payload()` is complete.
+<a href=#156 id=156 data-nosnippet>156</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>done_payload(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">if let </span>RxState::InPayload { .. } = <span class="self">self</span>.state {
+<a href=#158 id=158 data-nosnippet>158</a>            <span class="self">self</span>.state = RxState::Idle
+<a href=#159 id=159 data-nosnippet>159</a>        }
+<a href=#160 id=160 data-nosnippet>160</a>    }
+<a href=#161 id=161 data-nosnippet>161</a>
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="doccomment">/// Called when `payload()` is complete, zeroizes the payload
+<a href=#163 id=163 data-nosnippet>163</a>    /// Also calls `done_payload()`.
+<a href=#164 id=164 data-nosnippet>164</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>zeroize_payload(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">if let </span>RxState::InPayload { len, .. } = <span class="self">self</span>.state {
+<a href=#166 id=166 data-nosnippet>166</a>            <span class="self">self</span>.buf[SSH_PAYLOAD_START..SSH_PAYLOAD_START + len].zeroize();
+<a href=#167 id=167 data-nosnippet>167</a>            <span class="self">self</span>.done_payload()
+<a href=#168 id=168 data-nosnippet>168</a>        }
+<a href=#169 id=169 data-nosnippet>169</a>    }
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="doccomment">/// Returns a reference to the decrypted payload buffer if ready,
+<a href=#172 id=172 data-nosnippet>172</a>    /// and the `seq` of that packet.
+<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>payload(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;(<span class="kw-2">&amp;</span>[u8], u32)&gt; {
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="kw">match </span><span class="self">self</span>.state {
+<a href=#175 id=175 data-nosnippet>175</a>            RxState::InPayload { len, seq } =&gt; {
+<a href=#176 id=176 data-nosnippet>176</a>                <span class="kw">let </span>payload = <span class="kw-2">&amp;</span><span class="self">self</span>.buf[SSH_PAYLOAD_START..SSH_PAYLOAD_START + len];
+<a href=#177 id=177 data-nosnippet>177</a>                <span class="prelude-val">Some</span>((payload, seq))
+<a href=#178 id=178 data-nosnippet>178</a>            }
+<a href=#179 id=179 data-nosnippet>179</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#180 id=180 data-nosnippet>180</a>        }
+<a href=#181 id=181 data-nosnippet>181</a>    }
+<a href=#182 id=182 data-nosnippet>182</a>
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">fn </span>fill_input(
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#185 id=185 data-nosnippet>185</a>        keys: <span class="kw-2">&amp;mut </span>KeyState,
+<a href=#186 id=186 data-nosnippet>186</a>        buf: <span class="kw-2">&amp;</span>[u8],
+<a href=#187 id=187 data-nosnippet>187</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;usize, Error&gt; {
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>size_block = keys.size_block_dec();
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="comment">// 'r' is the remaining input, a slice that moves along.
+<a href=#190 id=190 data-nosnippet>190</a>        // Used to calculate the size to return
+<a href=#191 id=191 data-nosnippet>191</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>r = buf;
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="macro">trace!</span>(<span class="string">"fill_input {:?}"</span>, <span class="self">self</span>.state);
+<a href=#194 id=194 data-nosnippet>194</a>
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="comment">// Fill the initial block from either Idle with input,
+<a href=#196 id=196 data-nosnippet>196</a>        // partial initial block
+<a href=#197 id=197 data-nosnippet>197</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(idx) = <span class="kw">match </span><span class="self">self</span>.state {
+<a href=#198 id=198 data-nosnippet>198</a>            RxState::Idle <span class="kw">if </span>!r.is_empty() =&gt; <span class="prelude-val">Some</span>(<span class="number">0</span>),
+<a href=#199 id=199 data-nosnippet>199</a>            RxState::ReadInitial { idx } =&gt; <span class="prelude-val">Some</span>(idx),
+<a href=#200 id=200 data-nosnippet>200</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#201 id=201 data-nosnippet>201</a>        } {
+<a href=#202 id=202 data-nosnippet>202</a>            <span class="macro">trace!</span>(<span class="string">"fill_input idle idx {idx}"</span>);
+<a href=#203 id=203 data-nosnippet>203</a>            <span class="kw">let </span>need = (size_block - idx).clamp(<span class="number">0</span>, r.len());
+<a href=#204 id=204 data-nosnippet>204</a>            <span class="kw">let </span>x;
+<a href=#205 id=205 data-nosnippet>205</a>            (x, r) = r.split_at(need);
+<a href=#206 id=206 data-nosnippet>206</a>            <span class="kw">let </span>w = <span class="kw-2">&amp;mut </span><span class="self">self</span>.buf[idx..idx + need];
+<a href=#207 id=207 data-nosnippet>207</a>            w.copy_from_slice(x);
+<a href=#208 id=208 data-nosnippet>208</a>            <span class="self">self</span>.state = RxState::ReadInitial { idx: idx + need }
+<a href=#209 id=209 data-nosnippet>209</a>        }
+<a href=#210 id=210 data-nosnippet>210</a>
+<a href=#211 id=211 data-nosnippet>211</a>        <span class="comment">// Have enough input now to decrypt the packet length
+<a href=#212 id=212 data-nosnippet>212</a>        </span><span class="kw">if let </span>RxState::ReadInitial { idx } = <span class="self">self</span>.state {
+<a href=#213 id=213 data-nosnippet>213</a>            <span class="macro">trace!</span>(<span class="string">"fill_input readinit {idx}"</span>);
+<a href=#214 id=214 data-nosnippet>214</a>            <span class="kw">if </span>idx &gt;= size_block {
+<a href=#215 id=215 data-nosnippet>215</a>                <span class="kw">let </span>w = <span class="kw-2">&amp;mut </span><span class="self">self</span>.buf[..size_block];
+<a href=#216 id=216 data-nosnippet>216</a>                <span class="kw">let </span>total_len = keys.decrypt_first_block(w)<span class="question-mark">?</span>;
+<a href=#217 id=217 data-nosnippet>217</a>                <span class="kw">if </span>total_len &gt; <span class="self">self</span>.buf.len() {
+<a href=#218 id=218 data-nosnippet>218</a>                    <span class="comment">// TODO: Or just BadDecrypt could make more sense if
+<a href=#219 id=219 data-nosnippet>219</a>                    // it were packet corruption/decryption failure
+<a href=#220 id=220 data-nosnippet>220</a>                    </span><span class="kw">return </span><span class="prelude-val">Err</span>(Error::BigPacket { size: total_len });
+<a href=#221 id=221 data-nosnippet>221</a>                }
+<a href=#222 id=222 data-nosnippet>222</a>                <span class="kw">if </span>total_len &lt; size_block {
+<a href=#223 id=223 data-nosnippet>223</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(Error::BadDecrypt);
+<a href=#224 id=224 data-nosnippet>224</a>                }
+<a href=#225 id=225 data-nosnippet>225</a>                <span class="macro">trace!</span>(<span class="string">"fill_input set read  {idx} ex {total_len}"</span>);
+<a href=#226 id=226 data-nosnippet>226</a>                <span class="self">self</span>.state = RxState::Read { idx, expect: total_len }
+<a href=#227 id=227 data-nosnippet>227</a>            }
+<a href=#228 id=228 data-nosnippet>228</a>        }
+<a href=#229 id=229 data-nosnippet>229</a>
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="comment">// Know expected length, read until the end of the packet.
+<a href=#231 id=231 data-nosnippet>231</a>        // We have already validated that expect_len &lt;= buf_size
+<a href=#232 id=232 data-nosnippet>232</a>        </span><span class="kw">if let </span>RxState::Read { <span class="kw-2">ref mut </span>idx, expect } = <span class="self">self</span>.state {
+<a href=#233 id=233 data-nosnippet>233</a>            <span class="macro">trace!</span>(<span class="string">"expect {expect} idx {idx}"</span>);
+<a href=#234 id=234 data-nosnippet>234</a>            <span class="kw">let </span>need = (expect - <span class="kw-2">*</span>idx).min(r.len());
+<a href=#235 id=235 data-nosnippet>235</a>            <span class="kw">let </span>x;
+<a href=#236 id=236 data-nosnippet>236</a>            (x, r) = r.split_at(need);
+<a href=#237 id=237 data-nosnippet>237</a>            <span class="kw">let </span>w = <span class="kw-2">&amp;mut </span><span class="self">self</span>.buf[<span class="kw-2">*</span>idx..<span class="kw-2">*</span>idx + need];
+<a href=#238 id=238 data-nosnippet>238</a>            w.copy_from_slice(x);
+<a href=#239 id=239 data-nosnippet>239</a>            <span class="kw-2">*</span>idx += need;
+<a href=#240 id=240 data-nosnippet>240</a>            <span class="kw">if </span><span class="kw-2">*</span>idx == expect {
+<a href=#241 id=241 data-nosnippet>241</a>                <span class="self">self</span>.state = RxState::ReadComplete { len: expect }
+<a href=#242 id=242 data-nosnippet>242</a>            }
+<a href=#243 id=243 data-nosnippet>243</a>        }
+<a href=#244 id=244 data-nosnippet>244</a>
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">if let </span>RxState::ReadComplete { len } = <span class="self">self</span>.state {
+<a href=#246 id=246 data-nosnippet>246</a>            <span class="kw">let </span>w = <span class="kw-2">&amp;mut </span><span class="self">self</span>.buf[..len];
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="kw">let </span>seq = keys.recv_seq();
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">let </span>payload_len = keys.decrypt(w)<span class="question-mark">?</span>;
+<a href=#249 id=249 data-nosnippet>249</a>            <span class="self">self</span>.state = RxState::InPayload { len: payload_len, seq }
+<a href=#250 id=250 data-nosnippet>250</a>        }
+<a href=#251 id=251 data-nosnippet>251</a>        <span class="macro">trace!</span>(<span class="string">"out"</span>);
+<a href=#252 id=252 data-nosnippet>252</a>
+<a href=#253 id=253 data-nosnippet>253</a>        <span class="prelude-val">Ok</span>(buf.len() - r.len())
+<a href=#254 id=254 data-nosnippet>254</a>    }
+<a href=#255 id=255 data-nosnippet>255</a>
+<a href=#256 id=256 data-nosnippet>256</a>    <span class="doccomment">/// Returns `(channel, dt, length)`
+<a href=#257 id=257 data-nosnippet>257</a>    </span><span class="kw">pub fn </span>read_channel_ready(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;(ChanNum, ChanData, usize)&gt; {
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="kw">match </span><span class="self">self</span>.state {
+<a href=#259 id=259 data-nosnippet>259</a>            RxState::InChannelData { chan, dt, idx, len } =&gt; {
+<a href=#260 id=260 data-nosnippet>260</a>                <span class="macro">debug_assert!</span>(len &gt; idx);
+<a href=#261 id=261 data-nosnippet>261</a>                <span class="kw">let </span>rem = len - idx;
+<a href=#262 id=262 data-nosnippet>262</a>                <span class="prelude-val">Some</span>((chan, dt, rem))
+<a href=#263 id=263 data-nosnippet>263</a>            }
+<a href=#264 id=264 data-nosnippet>264</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#265 id=265 data-nosnippet>265</a>        }
+<a href=#266 id=266 data-nosnippet>266</a>    }
+<a href=#267 id=267 data-nosnippet>267</a>
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="doccomment">/// Set channel data ready to be read.
+<a href=#269 id=269 data-nosnippet>269</a>    </span><span class="kw">pub fn </span>set_read_channel_data(
+<a href=#270 id=270 data-nosnippet>270</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#271 id=271 data-nosnippet>271</a>        di: channel::DataIn,
+<a href=#272 id=272 data-nosnippet>272</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(ChanNum, ChanData)&gt; {
+<a href=#273 id=273 data-nosnippet>273</a>        <span class="kw">match </span><span class="self">self</span>.state {
+<a href=#274 id=274 data-nosnippet>274</a>            RxState::InPayload { .. } =&gt; {
+<a href=#275 id=275 data-nosnippet>275</a>                <span class="kw">let </span>idx = SSH_PAYLOAD_START + di.dt.packet_offset();
+<a href=#276 id=276 data-nosnippet>276</a>                <span class="self">self</span>.state = RxState::InChannelData {
+<a href=#277 id=277 data-nosnippet>277</a>                    chan: di.num,
+<a href=#278 id=278 data-nosnippet>278</a>                    dt: di.dt,
+<a href=#279 id=279 data-nosnippet>279</a>                    idx,
+<a href=#280 id=280 data-nosnippet>280</a>                    len: idx + di.len.get(),
+<a href=#281 id=281 data-nosnippet>281</a>                };
+<a href=#282 id=282 data-nosnippet>282</a>                <span class="prelude-val">Ok</span>((di.num, di.dt))
+<a href=#283 id=283 data-nosnippet>283</a>            }
+<a href=#284 id=284 data-nosnippet>284</a>            <span class="kw">_ </span>=&gt; Error::bug(),
+<a href=#285 id=285 data-nosnippet>285</a>        }
+<a href=#286 id=286 data-nosnippet>286</a>    }
+<a href=#287 id=287 data-nosnippet>287</a>
+<a href=#288 id=288 data-nosnippet>288</a>    <span class="comment">// Returns the length returned, and an Option&lt;len&gt; indicating whether the whole
+<a href=#289 id=289 data-nosnippet>289</a>    // data packet has been completed, or None if some is still pending.
+<a href=#290 id=290 data-nosnippet>290</a>    </span><span class="kw">pub fn </span>read_channel(
+<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#292 id=292 data-nosnippet>292</a>        chan: ChanNum,
+<a href=#293 id=293 data-nosnippet>293</a>        dt: ChanData,
+<a href=#294 id=294 data-nosnippet>294</a>        buf: <span class="kw-2">&amp;mut </span>[u8],
+<a href=#295 id=295 data-nosnippet>295</a>    ) -&gt; (usize, <span class="prelude-ty">Option</span>&lt;usize&gt;) {
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">match </span><span class="self">self</span>.state {
+<a href=#297 id=297 data-nosnippet>297</a>            RxState::InChannelData { chan: c, dt: e, <span class="kw-2">ref mut </span>idx, len }
+<a href=#298 id=298 data-nosnippet>298</a>                <span class="kw">if </span>(c, e) == (chan, dt) =&gt;
+<a href=#299 id=299 data-nosnippet>299</a>            {
+<a href=#300 id=300 data-nosnippet>300</a>                <span class="macro">debug_assert!</span>(len &gt; <span class="kw-2">*</span>idx);
+<a href=#301 id=301 data-nosnippet>301</a>                <span class="kw">let </span>wlen = (len - <span class="kw-2">*</span>idx).min(buf.len());
+<a href=#302 id=302 data-nosnippet>302</a>                buf[..wlen].copy_from_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.buf[<span class="kw-2">*</span>idx..<span class="kw-2">*</span>idx + wlen]);
+<a href=#303 id=303 data-nosnippet>303</a>                <span class="kw-2">*</span>idx += wlen;
+<a href=#304 id=304 data-nosnippet>304</a>
+<a href=#305 id=305 data-nosnippet>305</a>                <span class="kw">if </span><span class="kw-2">*</span>idx == len {
+<a href=#306 id=306 data-nosnippet>306</a>                    <span class="comment">// all done.
+<a href=#307 id=307 data-nosnippet>307</a>                    </span><span class="self">self</span>.state = RxState::Idle;
+<a href=#308 id=308 data-nosnippet>308</a>                    (wlen, <span class="prelude-val">Some</span>(len))
+<a href=#309 id=309 data-nosnippet>309</a>                } <span class="kw">else </span>{
+<a href=#310 id=310 data-nosnippet>310</a>                    (wlen, <span class="prelude-val">None</span>)
+<a href=#311 id=311 data-nosnippet>311</a>                }
+<a href=#312 id=312 data-nosnippet>312</a>            }
+<a href=#313 id=313 data-nosnippet>313</a>            <span class="kw">_ </span>=&gt; (<span class="number">0</span>, <span class="prelude-val">None</span>),
+<a href=#314 id=314 data-nosnippet>314</a>        }
+<a href=#315 id=315 data-nosnippet>315</a>    }
+<a href=#316 id=316 data-nosnippet>316</a>
+<a href=#317 id=317 data-nosnippet>317</a>    <span class="comment">// Returns (length, complete: Option&lt;len: usize&gt;&gt;, Option(dt))
+<a href=#318 id=318 data-nosnippet>318</a>    </span><span class="kw">pub fn </span>read_channel_either(
+<a href=#319 id=319 data-nosnippet>319</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#320 id=320 data-nosnippet>320</a>        chan: ChanNum,
+<a href=#321 id=321 data-nosnippet>321</a>        buf: <span class="kw-2">&amp;mut </span>[u8],
+<a href=#322 id=322 data-nosnippet>322</a>    ) -&gt; (usize, <span class="prelude-ty">Option</span>&lt;usize&gt;, ChanData) {
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="kw">match </span><span class="self">self</span>.state {
+<a href=#324 id=324 data-nosnippet>324</a>            RxState::InChannelData { chan: c, dt, <span class="kw-2">ref mut </span>idx, len }
+<a href=#325 id=325 data-nosnippet>325</a>                <span class="kw">if </span>c == chan =&gt;
+<a href=#326 id=326 data-nosnippet>326</a>            {
+<a href=#327 id=327 data-nosnippet>327</a>                <span class="macro">debug_assert!</span>(len &gt; <span class="kw-2">*</span>idx);
+<a href=#328 id=328 data-nosnippet>328</a>                <span class="kw">let </span>wlen = (len - <span class="kw-2">*</span>idx).min(buf.len());
+<a href=#329 id=329 data-nosnippet>329</a>                buf[..wlen].copy_from_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.buf[<span class="kw-2">*</span>idx..<span class="kw-2">*</span>idx + wlen]);
+<a href=#330 id=330 data-nosnippet>330</a>                <span class="comment">// info!("idx {} += wlen {} = {}", *idx, wlen, *idx+wlen);
+<a href=#331 id=331 data-nosnippet>331</a>                </span><span class="kw-2">*</span>idx += wlen;
+<a href=#332 id=332 data-nosnippet>332</a>
+<a href=#333 id=333 data-nosnippet>333</a>                <span class="kw">if </span><span class="kw-2">*</span>idx == len {
+<a href=#334 id=334 data-nosnippet>334</a>                    <span class="comment">// all done.
+<a href=#335 id=335 data-nosnippet>335</a>                    </span><span class="self">self</span>.state = RxState::Idle;
+<a href=#336 id=336 data-nosnippet>336</a>                    (wlen, <span class="prelude-val">Some</span>(len), dt)
+<a href=#337 id=337 data-nosnippet>337</a>                } <span class="kw">else </span>{
+<a href=#338 id=338 data-nosnippet>338</a>                    (wlen, <span class="prelude-val">None</span>, dt)
+<a href=#339 id=339 data-nosnippet>339</a>                }
+<a href=#340 id=340 data-nosnippet>340</a>            }
+<a href=#341 id=341 data-nosnippet>341</a>            <span class="kw">_ </span>=&gt; (<span class="number">0</span>, <span class="prelude-val">None</span>, ChanData::Normal),
+<a href=#342 id=342 data-nosnippet>342</a>        }
+<a href=#343 id=343 data-nosnippet>343</a>    }
+<a href=#344 id=344 data-nosnippet>344</a>
+<a href=#345 id=345 data-nosnippet>345</a>    <span class="doccomment">/// Returns the length of data discarded
+<a href=#346 id=346 data-nosnippet>346</a>    </span><span class="kw">pub fn </span>discard_read_channel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chan: ChanNum) -&gt; usize {
+<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">match </span><span class="self">self</span>.state {
+<a href=#348 id=348 data-nosnippet>348</a>            RxState::InChannelData { chan: c, len, .. } <span class="kw">if </span>c == chan =&gt; {
+<a href=#349 id=349 data-nosnippet>349</a>                <span class="self">self</span>.state = RxState::Idle;
+<a href=#350 id=350 data-nosnippet>350</a>                len
+<a href=#351 id=351 data-nosnippet>351</a>            }
+<a href=#352 id=352 data-nosnippet>352</a>            <span class="kw">_ </span>=&gt; <span class="number">0</span>,
+<a href=#353 id=353 data-nosnippet>353</a>        }
+<a href=#354 id=354 data-nosnippet>354</a>    }
+<a href=#355 id=355 data-nosnippet>355</a>}
+<a href=#356 id=356 data-nosnippet>356</a>
+<a href=#357 id=357 data-nosnippet>357</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>TrafOut&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#358 id=358 data-nosnippet>358</a>    <span class="comment">// TODO: decompression will need another buffer
+<a href=#359 id=359 data-nosnippet>359</a>    </span><span class="doccomment">/// Accumulated output buffer.
+<a href=#360 id=360 data-nosnippet>360</a>    ///
+<a href=#361 id=361 data-nosnippet>361</a>    /// Should be sized to fit the largest
+<a href=#362 id=362 data-nosnippet>362</a>    /// sequence of packets to be sent at once.
+<a href=#363 id=363 data-nosnippet>363</a>    /// Contains ciphertext or cleartext, encrypted in-place.
+<a href=#364 id=364 data-nosnippet>364</a>    /// Writing may contain multiple SSH packets to write out, encrypted
+<a href=#365 id=365 data-nosnippet>365</a>    /// in-place as they are written to `buf`.
+<a href=#366 id=366 data-nosnippet>366</a>    </span>buf: SliceOrVec&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#367 id=367 data-nosnippet>367</a>    state: TxState,
+<a href=#368 id=368 data-nosnippet>368</a>
+<a href=#369 id=369 data-nosnippet>369</a>    drain: bool,
+<a href=#370 id=370 data-nosnippet>370</a>
+<a href=#371 id=371 data-nosnippet>371</a>    <span class="comment">// Set between sending KexInit and sending NewKeys.
+<a href=#372 id=372 data-nosnippet>372</a>    </span>sending_kex: bool,
+<a href=#373 id=373 data-nosnippet>373</a>
+<a href=#374 id=374 data-nosnippet>374</a>    deferred_packets: Deque&lt;DeferredPacket, DEFER_COUNT&gt;,
+<a href=#375 id=375 data-nosnippet>375</a>}
+<a href=#376 id=376 data-nosnippet>376</a>
+<a href=#377 id=377 data-nosnippet>377</a><span class="doccomment">/// State machine for writes
+<a href=#378 id=378 data-nosnippet>378</a></span><span class="attr">#[derive(Debug)]
+<a href=#379 id=379 data-nosnippet>379</a></span><span class="kw">enum </span>TxState {
+<a href=#380 id=380 data-nosnippet>380</a>    <span class="doccomment">/// Awaiting write, buffer is unused
+<a href=#381 id=381 data-nosnippet>381</a>    </span>Idle,
+<a href=#382 id=382 data-nosnippet>382</a>
+<a href=#383 id=383 data-nosnippet>383</a>    <span class="doccomment">/// Writing to the socket. Buffer is encrypted in-place.
+<a href=#384 id=384 data-nosnippet>384</a>    /// Should never be left in `idx==len` state,
+<a href=#385 id=385 data-nosnippet>385</a>    /// instead should transition to Idle
+<a href=#386 id=386 data-nosnippet>386</a>    </span>Write {
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="doccomment">/// Cursor position in the buffer
+<a href=#388 id=388 data-nosnippet>388</a>        </span>idx: usize,
+<a href=#389 id=389 data-nosnippet>389</a>        <span class="doccomment">/// Buffer available to write
+<a href=#390 id=390 data-nosnippet>390</a>        </span>len: usize,
+<a href=#391 id=391 data-nosnippet>391</a>    },
+<a href=#392 id=392 data-nosnippet>392</a>
+<a href=#393 id=393 data-nosnippet>393</a>    <span class="doccomment">/// No more output will be produced
+<a href=#394 id=394 data-nosnippet>394</a>    </span>Closed,
+<a href=#395 id=395 data-nosnippet>395</a>}
+<a href=#396 id=396 data-nosnippet>396</a>
+<a href=#397 id=397 data-nosnippet>397</a><span class="kw">impl </span>core::fmt::Debug <span class="kw">for </span>TrafOut&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#398 id=398 data-nosnippet>398</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#399 id=399 data-nosnippet>399</a>        f.debug_struct(<span class="string">"TrafOut"</span>).field(<span class="string">"state"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.state).finish_non_exhaustive()
+<a href=#400 id=400 data-nosnippet>400</a>    }
+<a href=#401 id=401 data-nosnippet>401</a>}
+<a href=#402 id=402 data-nosnippet>402</a>
+<a href=#403 id=403 data-nosnippet>403</a><span class="attr">#[cfg(feature = <span class="string">"alloc"</span>)]
+<a href=#404 id=404 data-nosnippet>404</a></span><span class="kw">impl </span>TrafIn&lt;<span class="lifetime">'static</span>&gt; {
+<a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">pub fn </span>new_owned() -&gt; <span class="self">Self </span>{
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = <span class="self">Self</span>::new(<span class="kw-2">&amp;mut </span>[]);
+<a href=#407 id=407 data-nosnippet>407</a>        s.buf = SliceOrVec::Owned(Box::new([<span class="number">0</span>; <span class="kw">_</span>]));
+<a href=#408 id=408 data-nosnippet>408</a>        s
+<a href=#409 id=409 data-nosnippet>409</a>    }
+<a href=#410 id=410 data-nosnippet>410</a>}
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; TrafOut&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#413 id=413 data-nosnippet>413</a>    <span class="kw">pub fn </span>new(buf: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]) -&gt; <span class="self">Self </span>{
+<a href=#414 id=414 data-nosnippet>414</a>        <span class="self">Self </span>{
+<a href=#415 id=415 data-nosnippet>415</a>            buf: SliceOrVec::Borrowed(buf),
+<a href=#416 id=416 data-nosnippet>416</a>            state: TxState::Idle,
+<a href=#417 id=417 data-nosnippet>417</a>            drain: <span class="bool-val">false</span>,
+<a href=#418 id=418 data-nosnippet>418</a>            sending_kex: <span class="bool-val">false</span>,
+<a href=#419 id=419 data-nosnippet>419</a>            deferred_packets: Deque::new(),
+<a href=#420 id=420 data-nosnippet>420</a>        }
+<a href=#421 id=421 data-nosnippet>421</a>    }
+<a href=#422 id=422 data-nosnippet>422</a>
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="doccomment">/// Serializes and and encrypts a packet to send
+<a href=#424 id=424 data-nosnippet>424</a>    ///
+<a href=#425 id=425 data-nosnippet>425</a>    /// If the output buffer is full or a rekey is in progress, the
+<a href=#426 id=426 data-nosnippet>426</a>    /// packet will be enqueued to be sent later. If the deferred packet queue
+<a href=#427 id=427 data-nosnippet>427</a>    /// is full, `NoRoom` will be returned.
+<a href=#428 id=428 data-nosnippet>428</a>    ///
+<a href=#429 id=429 data-nosnippet>429</a>    /// `BusySend` error is recoverable, others should be treated as fatal.
+<a href=#430 id=430 data-nosnippet>430</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>send_packet(
+<a href=#431 id=431 data-nosnippet>431</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#432 id=432 data-nosnippet>432</a>        p: packets::Packet,
+<a href=#433 id=433 data-nosnippet>433</a>        keys: <span class="kw-2">&amp;mut </span>KeyState,
+<a href=#434 id=434 data-nosnippet>434</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#435 id=435 data-nosnippet>435</a>        <span class="kw">let </span>is_kex = <span class="macro">matches!</span>(p.category(), packets::Category::Kex);
+<a href=#436 id=436 data-nosnippet>436</a>
+<a href=#437 id=437 data-nosnippet>437</a>        <span class="kw">if </span>is_kex || (<span class="self">self</span>.deferred_packets.is_empty() &amp;&amp; !<span class="self">self</span>.sending_kex) {
+<a href=#438 id=438 data-nosnippet>438</a>            <span class="comment">// Send the packet normally if it fits.
+<a href=#439 id=439 data-nosnippet>439</a>            // KEX packets can be sent even if other packets are deferred
+<a href=#440 id=440 data-nosnippet>440</a>            // (KEX packets don't get deferred themselves).
+<a href=#441 id=441 data-nosnippet>441</a>            // A KexInit is only sent when there are no deferred packets,
+<a href=#442 id=442 data-nosnippet>442</a>            // so we don't need to worry about incorrect reordering.
+<a href=#443 id=443 data-nosnippet>443</a>            </span><span class="kw">match </span><span class="self">self</span>.send_packet_inner(<span class="kw-2">&amp;</span>p, keys) {
+<a href=#444 id=444 data-nosnippet>444</a>                <span class="prelude-val">Err</span>(Error::NoRoom { .. }) =&gt; {
+<a href=#445 id=445 data-nosnippet>445</a>                    <span class="macro">debug_assert!</span>(!is_kex, <span class="string">"KEX packets should have room"</span>);
+<a href=#446 id=446 data-nosnippet>446</a>                    <span class="comment">// non-kex packets get deferred
+<a href=#447 id=447 data-nosnippet>447</a>                </span>}
+<a href=#448 id=448 data-nosnippet>448</a>                res =&gt; <span class="kw">return </span>res,
+<a href=#449 id=449 data-nosnippet>449</a>            }
+<a href=#450 id=450 data-nosnippet>450</a>        }
+<a href=#451 id=451 data-nosnippet>451</a>
+<a href=#452 id=452 data-nosnippet>452</a>        <span class="comment">// Either it didn't fit (NoRoom), or the deferred queue
+<a href=#453 id=453 data-nosnippet>453</a>        // is already in use so we need to enqueue after that.
+<a href=#454 id=454 data-nosnippet>454</a>        // Attempt to defer the packet.
+<a href=#455 id=455 data-nosnippet>455</a>
+<a href=#456 id=456 data-nosnippet>456</a>        </span><span class="kw">let </span>pnum = p.message_num();
+<a href=#457 id=457 data-nosnippet>457</a>        <span class="macro">trace!</span>(<span class="string">"Delay packet type {pnum:?}"</span>);
+<a href=#458 id=458 data-nosnippet>458</a>
+<a href=#459 id=459 data-nosnippet>459</a>        <span class="comment">// Convert to a DeferredPacket if possible
+<a href=#460 id=460 data-nosnippet>460</a>        </span><span class="kw">let </span><span class="prelude-val">Ok</span>(dp) = DeferredPacket::try_from(p) <span class="kw">else </span>{
+<a href=#461 id=461 data-nosnippet>461</a>            <span class="comment">// Packet type isn't expected to be deferred.
+<a href=#462 id=462 data-nosnippet>462</a>            </span><span class="macro">trace!</span>(<span class="string">"NoRoom packet type {pnum:?}"</span>);
+<a href=#463 id=463 data-nosnippet>463</a>            <span class="kw">return </span>error::BusySend { packet: pnum, unsupported: <span class="bool-val">true </span>}.fail();
+<a href=#464 id=464 data-nosnippet>464</a>        };
+<a href=#465 id=465 data-nosnippet>465</a>
+<a href=#466 id=466 data-nosnippet>466</a>        <span class="self">self</span>.deferred_packets.push_front(dp).map_err(|<span class="kw">_</span>| {
+<a href=#467 id=467 data-nosnippet>467</a>            <span class="macro">error!</span>(<span class="string">"No space to queue packet"</span>);
+<a href=#468 id=468 data-nosnippet>468</a>            <span class="macro">trace!</span>(<span class="string">"NoRoom packet type {pnum:?}"</span>);
+<a href=#469 id=469 data-nosnippet>469</a>            error::BusySend { packet: pnum, unsupported: <span class="bool-val">false </span>}.build()
+<a href=#470 id=470 data-nosnippet>470</a>        })
+<a href=#471 id=471 data-nosnippet>471</a>    }
+<a href=#472 id=472 data-nosnippet>472</a>
+<a href=#473 id=473 data-nosnippet>473</a>    <span class="comment">// Check some invariants, and track whether we're sending KEX.
+<a href=#474 id=474 data-nosnippet>474</a>    </span><span class="kw">fn </span>track_send_packet(
+<a href=#475 id=475 data-nosnippet>475</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#476 id=476 data-nosnippet>476</a>        p: <span class="kw-2">&amp;</span>packets::Packet,
+<a href=#477 id=477 data-nosnippet>477</a>        keys: <span class="kw-2">&amp;mut </span>KeyState,
+<a href=#478 id=478 data-nosnippet>478</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#479 id=479 data-nosnippet>479</a>        <span class="comment">// Check that packets are being encrypted
+<a href=#480 id=480 data-nosnippet>480</a>        // This is checked in release and debug.
+<a href=#481 id=481 data-nosnippet>481</a>        </span><span class="kw">match </span>p.category() {
+<a href=#482 id=482 data-nosnippet>482</a>            packets::Category::All | packets::Category::Kex =&gt; (),
+<a href=#483 id=483 data-nosnippet>483</a>            <span class="kw">_ </span>=&gt; {
+<a href=#484 id=484 data-nosnippet>484</a>                <span class="kw">if </span>keys.is_send_cleartext() {
+<a href=#485 id=485 data-nosnippet>485</a>                    <span class="kw">return </span>Error::bug_msg(<span class="string">"send cleartext"</span>);
+<a href=#486 id=486 data-nosnippet>486</a>                }
+<a href=#487 id=487 data-nosnippet>487</a>            }
+<a href=#488 id=488 data-nosnippet>488</a>        }
+<a href=#489 id=489 data-nosnippet>489</a>
+<a href=#490 id=490 data-nosnippet>490</a>        <span class="comment">// KEX send packet catetory checked in debug builds for fuzzing.
+<a href=#491 id=491 data-nosnippet>491</a>        </span><span class="kw">if </span><span class="self">self</span>.sending_kex {
+<a href=#492 id=492 data-nosnippet>492</a>            <span class="comment">// strict kex is ignored since we don't have access to
+<a href=#493 id=493 data-nosnippet>493</a>            // conn.kex.
+<a href=#494 id=494 data-nosnippet>494</a>            </span><span class="macro">debug_assert!</span>(<span class="macro">matches!</span>(
+<a href=#495 id=495 data-nosnippet>495</a>                p.category(),
+<a href=#496 id=496 data-nosnippet>496</a>                packets::Category::All | packets::Category::Kex
+<a href=#497 id=497 data-nosnippet>497</a>            ));
+<a href=#498 id=498 data-nosnippet>498</a>        }
+<a href=#499 id=499 data-nosnippet>499</a>
+<a href=#500 id=500 data-nosnippet>500</a>        <span class="comment">// Track KEX sending state
+<a href=#501 id=501 data-nosnippet>501</a>        </span><span class="kw">match </span>p {
+<a href=#502 id=502 data-nosnippet>502</a>            Packet::KexInit(<span class="kw">_</span>) =&gt; {
+<a href=#503 id=503 data-nosnippet>503</a>                <span class="macro">debug_assert!</span>(!<span class="self">self</span>.sending_kex);
+<a href=#504 id=504 data-nosnippet>504</a>                <span class="self">self</span>.sending_kex = <span class="bool-val">true</span>;
+<a href=#505 id=505 data-nosnippet>505</a>            }
+<a href=#506 id=506 data-nosnippet>506</a>            Packet::NewKeys(<span class="kw">_</span>) =&gt; {
+<a href=#507 id=507 data-nosnippet>507</a>                <span class="macro">debug_assert!</span>(<span class="self">self</span>.sending_kex);
+<a href=#508 id=508 data-nosnippet>508</a>                <span class="self">self</span>.sending_kex = <span class="bool-val">false</span>;
+<a href=#509 id=509 data-nosnippet>509</a>            }
+<a href=#510 id=510 data-nosnippet>510</a>            <span class="kw">_ </span>=&gt; (),
+<a href=#511 id=511 data-nosnippet>511</a>        }
+<a href=#512 id=512 data-nosnippet>512</a>
+<a href=#513 id=513 data-nosnippet>513</a>        <span class="prelude-val">Ok</span>(())
+<a href=#514 id=514 data-nosnippet>514</a>    }
+<a href=#515 id=515 data-nosnippet>515</a>
+<a href=#516 id=516 data-nosnippet>516</a>    <span class="doccomment">/// Serializes and and encrypts a packet to send
+<a href=#517 id=517 data-nosnippet>517</a>    ///
+<a href=#518 id=518 data-nosnippet>518</a>    /// The packet will not be enqueued to the deferred queue.
+<a href=#519 id=519 data-nosnippet>519</a>    /// This function should not usually be called directly.
+<a href=#520 id=520 data-nosnippet>520</a>    ///
+<a href=#521 id=521 data-nosnippet>521</a>    /// `NoRoom` error is recoverable, others should be treated as fatal.
+<a href=#522 id=522 data-nosnippet>522</a>    </span><span class="kw">pub fn </span>send_packet_inner(
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#524 id=524 data-nosnippet>524</a>        p: <span class="kw-2">&amp;</span>packets::Packet,
+<a href=#525 id=525 data-nosnippet>525</a>        keys: <span class="kw-2">&amp;mut </span>KeyState,
+<a href=#526 id=526 data-nosnippet>526</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#527 id=527 data-nosnippet>527</a>        <span class="self">self</span>.track_send_packet(p, keys)<span class="question-mark">?</span>;
+<a href=#528 id=528 data-nosnippet>528</a>
+<a href=#529 id=529 data-nosnippet>529</a>        <span class="comment">// Either a fresh buffer or appending to write
+<a href=#530 id=530 data-nosnippet>530</a>        </span><span class="kw">let </span>(idx, len) = <span class="kw">match </span><span class="self">self</span>.state {
+<a href=#531 id=531 data-nosnippet>531</a>            TxState::Idle =&gt; (<span class="number">0</span>, <span class="number">0</span>),
+<a href=#532 id=532 data-nosnippet>532</a>            TxState::Write { idx, len } =&gt; (idx, len),
+<a href=#533 id=533 data-nosnippet>533</a>            TxState::Closed =&gt; {
+<a href=#534 id=534 data-nosnippet>534</a>                <span class="macro">trace!</span>(<span class="string">"Dropped output after close {p:?}"</span>);
+<a href=#535 id=535 data-nosnippet>535</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#536 id=536 data-nosnippet>536</a>            }
+<a href=#537 id=537 data-nosnippet>537</a>        };
+<a href=#538 id=538 data-nosnippet>538</a>
+<a href=#539 id=539 data-nosnippet>539</a>        <span class="comment">// Use the remainder of our buffer to write the packet. Payload starts
+<a href=#540 id=540 data-nosnippet>540</a>        // after the length and padding bytes which get filled by encrypt()
+<a href=#541 id=541 data-nosnippet>541</a>        </span><span class="kw">let </span>wbuf = <span class="kw-2">&amp;mut </span><span class="self">self</span>.buf[len..];
+<a href=#542 id=542 data-nosnippet>542</a>        <span class="kw">if </span>wbuf.len() &lt; SSH_PAYLOAD_START {
+<a href=#543 id=543 data-nosnippet>543</a>            <span class="kw">return </span>error::NoRoom.fail();
+<a href=#544 id=544 data-nosnippet>544</a>        }
+<a href=#545 id=545 data-nosnippet>545</a>        <span class="kw">let </span>plen = sshwire::write_ssh(<span class="kw-2">&amp;mut </span>wbuf[SSH_PAYLOAD_START..], <span class="kw-2">&amp;</span>p)<span class="question-mark">?</span>;
+<a href=#546 id=546 data-nosnippet>546</a>        <span class="macro">trace!</span>(<span class="string">"Sending {p:?}"</span>);
+<a href=#547 id=547 data-nosnippet>547</a>
+<a href=#548 id=548 data-nosnippet>548</a>        <span class="comment">// Encrypt in place
+<a href=#549 id=549 data-nosnippet>549</a>        </span><span class="kw">let </span>elen = keys.encrypt(plen, wbuf)<span class="question-mark">?</span>;
+<a href=#550 id=550 data-nosnippet>550</a>        <span class="self">self</span>.state = TxState::Write { idx, len: len + elen };
+<a href=#551 id=551 data-nosnippet>551</a>        <span class="prelude-val">Ok</span>(())
+<a href=#552 id=552 data-nosnippet>552</a>    }
+<a href=#553 id=553 data-nosnippet>553</a>
+<a href=#554 id=554 data-nosnippet>554</a>    <span class="kw">pub fn </span>send_deferred_packets(<span class="kw-2">&amp;mut </span><span class="self">self</span>, keys: <span class="kw-2">&amp;mut </span>KeyState) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#555 id=555 data-nosnippet>555</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(d) = <span class="self">self</span>.deferred_packets.back() {
+<a href=#556 id=556 data-nosnippet>556</a>            <span class="kw">let </span>p = Packet::from(d);
+<a href=#557 id=557 data-nosnippet>557</a>            <span class="kw">match </span><span class="self">self</span>.send_packet_inner(<span class="kw-2">&amp;</span>p, keys) {
+<a href=#558 id=558 data-nosnippet>558</a>                <span class="prelude-val">Ok</span>(()) =&gt; {
+<a href=#559 id=559 data-nosnippet>559</a>                    <span class="self">self</span>.deferred_packets.pop_back();
+<a href=#560 id=560 data-nosnippet>560</a>                }
+<a href=#561 id=561 data-nosnippet>561</a>                <span class="prelude-val">Err</span>(Error::NoRoom { .. }) =&gt; {
+<a href=#562 id=562 data-nosnippet>562</a>                    <span class="comment">// Can't progress, let the caller retry later
+<a href=#563 id=563 data-nosnippet>563</a>                    </span><span class="kw">break</span>;
+<a href=#564 id=564 data-nosnippet>564</a>                }
+<a href=#565 id=565 data-nosnippet>565</a>                <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(e),
+<a href=#566 id=566 data-nosnippet>566</a>            }
+<a href=#567 id=567 data-nosnippet>567</a>        }
+<a href=#568 id=568 data-nosnippet>568</a>
+<a href=#569 id=569 data-nosnippet>569</a>        <span class="prelude-val">Ok</span>(())
+<a href=#570 id=570 data-nosnippet>570</a>    }
+<a href=#571 id=571 data-nosnippet>571</a>
+<a href=#572 id=572 data-nosnippet>572</a>    <span class="kw">pub fn </span>have_deferred_packets(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#573 id=573 data-nosnippet>573</a>        !<span class="self">self</span>.deferred_packets.is_empty()
+<a href=#574 id=574 data-nosnippet>574</a>    }
+<a href=#575 id=575 data-nosnippet>575</a>
+<a href=#576 id=576 data-nosnippet>576</a>    <span class="kw">pub fn </span>is_output_pending(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#577 id=577 data-nosnippet>577</a>        <span class="macro">trace!</span>(<span class="string">"is_output_pending st {:?}"</span>, <span class="self">self</span>.state);
+<a href=#578 id=578 data-nosnippet>578</a>        <span class="macro">matches!</span>(<span class="self">self</span>.state, TxState::Write { .. })
+<a href=#579 id=579 data-nosnippet>579</a>    }
+<a href=#580 id=580 data-nosnippet>580</a>
+<a href=#581 id=581 data-nosnippet>581</a>    <span class="doccomment">/// Returns payload space available to send a packet. Returns 0 if not ready or full
+<a href=#582 id=582 data-nosnippet>582</a>    </span><span class="kw">pub fn </span>send_allowed(<span class="kw-2">&amp;</span><span class="self">self</span>, keys: <span class="kw-2">&amp;</span>KeyState) -&gt; usize {
+<a href=#583 id=583 data-nosnippet>583</a>        <span class="kw">if </span>!<span class="self">self</span>.deferred_packets.is_empty() {
+<a href=#584 id=584 data-nosnippet>584</a>            <span class="comment">// Don't allow sending packets when deferred ones are waiting.
+<a href=#585 id=585 data-nosnippet>585</a>            // Otherwise the deferred queue will run out of room.
+<a href=#586 id=586 data-nosnippet>586</a>            </span><span class="kw">return </span><span class="number">0</span>;
+<a href=#587 id=587 data-nosnippet>587</a>        }
+<a href=#588 id=588 data-nosnippet>588</a>
+<a href=#589 id=589 data-nosnippet>589</a>        <span class="comment">// TODO: test for full output buffer
+<a href=#590 id=590 data-nosnippet>590</a>        </span><span class="kw">match </span><span class="self">self</span>.state {
+<a href=#591 id=591 data-nosnippet>591</a>            TxState::Write { len, .. } =&gt; keys.max_enc_payload(<span class="self">self</span>.buf.len() - len),
+<a href=#592 id=592 data-nosnippet>592</a>            TxState::Idle =&gt; keys.max_enc_payload(<span class="self">self</span>.buf.len()),
+<a href=#593 id=593 data-nosnippet>593</a>            <span class="comment">// output will just be dropped in closed state.
+<a href=#594 id=594 data-nosnippet>594</a>            </span>TxState::Closed =&gt; <span class="self">self</span>.buf.len(),
+<a href=#595 id=595 data-nosnippet>595</a>        }
+<a href=#596 id=596 data-nosnippet>596</a>    }
+<a href=#597 id=597 data-nosnippet>597</a>
+<a href=#598 id=598 data-nosnippet>598</a>    <span class="doccomment">/// Move to Closed state. Current output is lost, future output
+<a href=#599 id=599 data-nosnippet>599</a>    /// is discarded. This is called when the output tcp pipe
+<a href=#600 id=600 data-nosnippet>600</a>    /// has closed so there's nowhere to send output anyway.
+<a href=#601 id=601 data-nosnippet>601</a>    </span><span class="kw">pub fn </span>close(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#602 id=602 data-nosnippet>602</a>        <span class="self">self</span>.state = TxState::Closed
+<a href=#603 id=603 data-nosnippet>603</a>    }
+<a href=#604 id=604 data-nosnippet>604</a>
+<a href=#605 id=605 data-nosnippet>605</a>    <span class="kw">pub fn </span>closed(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#606 id=606 data-nosnippet>606</a>        <span class="macro">matches!</span>(<span class="self">self</span>.state, TxState::Closed)
+<a href=#607 id=607 data-nosnippet>607</a>    }
+<a href=#608 id=608 data-nosnippet>608</a>
+<a href=#609 id=609 data-nosnippet>609</a>    <span class="kw">pub fn </span>send_version(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), Error&gt; {
+<a href=#610 id=610 data-nosnippet>610</a>        <span class="kw">if </span>!<span class="macro">matches!</span>(<span class="self">self</span>.state, TxState::Idle) {
+<a href=#611 id=611 data-nosnippet>611</a>            <span class="kw">return </span>Error::bug();
+<a href=#612 id=612 data-nosnippet>612</a>        }
+<a href=#613 id=613 data-nosnippet>613</a>
+<a href=#614 id=614 data-nosnippet>614</a>        <span class="kw">let </span>len = ident::write_version(<span class="kw-2">&amp;mut </span><span class="self">self</span>.buf)<span class="question-mark">?</span>;
+<a href=#615 id=615 data-nosnippet>615</a>        <span class="self">self</span>.state = TxState::Write { idx: <span class="number">0</span>, len };
+<a href=#616 id=616 data-nosnippet>616</a>        <span class="prelude-val">Ok</span>(())
+<a href=#617 id=617 data-nosnippet>617</a>    }
+<a href=#618 id=618 data-nosnippet>618</a>
+<a href=#619 id=619 data-nosnippet>619</a>    <span class="kw">pub fn </span>output_buf(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u8] {
+<a href=#620 id=620 data-nosnippet>620</a>        <span class="kw">match </span><span class="self">self</span>.state {
+<a href=#621 id=621 data-nosnippet>621</a>            TxState::Write { <span class="kw-2">ref mut </span>idx, len } =&gt; {
+<a href=#622 id=622 data-nosnippet>622</a>                <span class="kw">let </span>wlen = len - <span class="kw-2">*</span>idx;
+<a href=#623 id=623 data-nosnippet>623</a>                <span class="kw-2">&amp;</span><span class="self">self</span>.buf[<span class="kw-2">*</span>idx..<span class="kw-2">*</span>idx + wlen]
+<a href=#624 id=624 data-nosnippet>624</a>            }
+<a href=#625 id=625 data-nosnippet>625</a>            <span class="kw">_ </span>=&gt; <span class="kw-2">&amp;</span>[],
+<a href=#626 id=626 data-nosnippet>626</a>        }
+<a href=#627 id=627 data-nosnippet>627</a>    }
+<a href=#628 id=628 data-nosnippet>628</a>
+<a href=#629 id=629 data-nosnippet>629</a>    <span class="kw">pub fn </span>consume_output(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: usize) {
+<a href=#630 id=630 data-nosnippet>630</a>        <span class="kw">if let </span>TxState::Write { <span class="kw-2">ref mut </span>idx, len } = <span class="self">self</span>.state {
+<a href=#631 id=631 data-nosnippet>631</a>            <span class="kw">let </span>wlen = (len - <span class="kw-2">*</span>idx).min(l);
+<a href=#632 id=632 data-nosnippet>632</a>            <span class="kw-2">*</span>idx += wlen;
+<a href=#633 id=633 data-nosnippet>633</a>
+<a href=#634 id=634 data-nosnippet>634</a>            <span class="kw">if </span><span class="kw-2">*</span>idx == len {
+<a href=#635 id=635 data-nosnippet>635</a>                <span class="comment">// all done, read the next packet
+<a href=#636 id=636 data-nosnippet>636</a>                </span><span class="self">self</span>.state = TxState::Idle
+<a href=#637 id=637 data-nosnippet>637</a>            }
+<a href=#638 id=638 data-nosnippet>638</a>        }
+<a href=#639 id=639 data-nosnippet>639</a>    }
+<a href=#640 id=640 data-nosnippet>640</a>
+<a href=#641 id=641 data-nosnippet>641</a>    <span class="kw">pub fn </span>sender&lt;<span class="lifetime">'s</span>&gt;(<span class="kw-2">&amp;</span><span class="lifetime">'s </span><span class="kw-2">mut </span><span class="self">self</span>, keys: <span class="kw-2">&amp;</span><span class="lifetime">'s </span><span class="kw-2">mut </span>KeyState) -&gt; TrafSend&lt;<span class="lifetime">'s</span>, <span class="lifetime">'a</span>&gt; {
+<a href=#642 id=642 data-nosnippet>642</a>        TrafSend::new(<span class="self">self</span>, keys)
+<a href=#643 id=643 data-nosnippet>643</a>    }
+<a href=#644 id=644 data-nosnippet>644</a>
+<a href=#645 id=645 data-nosnippet>645</a>    <span class="doccomment">/// Return whether output is draining.
+<a href=#646 id=646 data-nosnippet>646</a>    ///
+<a href=#647 id=647 data-nosnippet>647</a>    /// Used to determine whether to initiate outbound traffic, such as channel writes.
+<a href=#648 id=648 data-nosnippet>648</a>    /// Generally immediate responses to incoming messages should still be sent
+<a href=#649 id=649 data-nosnippet>649</a>    /// even when draining. Otherwise they would need to be put in deferred_packets
+<a href=#650 id=650 data-nosnippet>650</a>    /// which may run out.
+<a href=#651 id=651 data-nosnippet>651</a>    </span><span class="kw">pub fn </span>is_draining(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#652 id=652 data-nosnippet>652</a>        <span class="self">self</span>.drain
+<a href=#653 id=653 data-nosnippet>653</a>    }
+<a href=#654 id=654 data-nosnippet>654</a>}
+<a href=#655 id=655 data-nosnippet>655</a>
+<a href=#656 id=656 data-nosnippet>656</a><span class="attr">#[cfg(feature = <span class="string">"alloc"</span>)]
+<a href=#657 id=657 data-nosnippet>657</a></span><span class="kw">impl </span>TrafOut&lt;<span class="lifetime">'static</span>&gt; {
+<a href=#658 id=658 data-nosnippet>658</a>    <span class="kw">pub fn </span>new_owned() -&gt; <span class="self">Self </span>{
+<a href=#659 id=659 data-nosnippet>659</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = <span class="self">Self</span>::new(<span class="kw-2">&amp;mut </span>[]);
+<a href=#660 id=660 data-nosnippet>660</a>        s.buf = SliceOrVec::Owned(Box::new([<span class="number">0</span>; <span class="kw">_</span>]));
+<a href=#661 id=661 data-nosnippet>661</a>        s
+<a href=#662 id=662 data-nosnippet>662</a>    }
+<a href=#663 id=663 data-nosnippet>663</a>}
+<a href=#664 id=664 data-nosnippet>664</a>
+<a href=#665 id=665 data-nosnippet>665</a><span class="doccomment">/// Convenience to pass TrafOut with keys
+<a href=#666 id=666 data-nosnippet>666</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>TrafSend&lt;<span class="lifetime">'s</span>, <span class="lifetime">'a</span>&gt; {
+<a href=#667 id=667 data-nosnippet>667</a>    out: <span class="kw-2">&amp;</span><span class="lifetime">'s </span><span class="kw-2">mut </span>TrafOut&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#668 id=668 data-nosnippet>668</a>    keys: <span class="kw-2">&amp;</span><span class="lifetime">'s </span><span class="kw-2">mut </span>KeyState,
+<a href=#669 id=669 data-nosnippet>669</a>}
+<a href=#670 id=670 data-nosnippet>670</a>
+<a href=#671 id=671 data-nosnippet>671</a><span class="kw">impl</span>&lt;<span class="lifetime">'s</span>, <span class="lifetime">'a</span>&gt; TrafSend&lt;<span class="lifetime">'s</span>, <span class="lifetime">'a</span>&gt; {
+<a href=#672 id=672 data-nosnippet>672</a>    <span class="kw">fn </span>new(out: <span class="kw-2">&amp;</span><span class="lifetime">'s </span><span class="kw-2">mut </span>TrafOut&lt;<span class="lifetime">'a</span>&gt;, keys: <span class="kw-2">&amp;</span><span class="lifetime">'s </span><span class="kw-2">mut </span>KeyState) -&gt; <span class="self">Self </span>{
+<a href=#673 id=673 data-nosnippet>673</a>        <span class="self">Self </span>{ out, keys }
+<a href=#674 id=674 data-nosnippet>674</a>    }
+<a href=#675 id=675 data-nosnippet>675</a>
+<a href=#676 id=676 data-nosnippet>676</a>    <span class="kw">pub fn </span>send&lt;<span class="lifetime">'p</span>, P: Into&lt;packets::Packet&lt;<span class="lifetime">'p</span>&gt;&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, p: P) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#677 id=677 data-nosnippet>677</a>        <span class="self">self</span>.out.send_packet(p.into(), <span class="self">self</span>.keys)
+<a href=#678 id=678 data-nosnippet>678</a>    }
+<a href=#679 id=679 data-nosnippet>679</a>
+<a href=#680 id=680 data-nosnippet>680</a>    <span class="kw">pub fn </span>rekey_send(<span class="kw-2">&amp;mut </span><span class="self">self</span>, keys: KeysSend) {
+<a href=#681 id=681 data-nosnippet>681</a>        <span class="self">self</span>.keys.rekey_send(keys);
+<a href=#682 id=682 data-nosnippet>682</a>    }
+<a href=#683 id=683 data-nosnippet>683</a>
+<a href=#684 id=684 data-nosnippet>684</a>    <span class="kw">pub fn </span>rekey_recv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, keys: KeysRecv) {
+<a href=#685 id=685 data-nosnippet>685</a>        <span class="self">self</span>.keys.rekey_recv(keys)
+<a href=#686 id=686 data-nosnippet>686</a>    }
+<a href=#687 id=687 data-nosnippet>687</a>
+<a href=#688 id=688 data-nosnippet>688</a>    <span class="kw">pub fn </span>send_version(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), Error&gt; {
+<a href=#689 id=689 data-nosnippet>689</a>        <span class="self">self</span>.out.send_version()
+<a href=#690 id=690 data-nosnippet>690</a>    }
+<a href=#691 id=691 data-nosnippet>691</a>
+<a href=#692 id=692 data-nosnippet>692</a>    <span class="doccomment">/// Returns the current receive sequence number
+<a href=#693 id=693 data-nosnippet>693</a>    </span><span class="kw">pub fn </span>recv_seq(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
+<a href=#694 id=694 data-nosnippet>694</a>        <span class="self">self</span>.keys.seq_decrypt.<span class="number">0
+<a href=#695 id=695 data-nosnippet>695</a>    </span>}
+<a href=#696 id=696 data-nosnippet>696</a>
+<a href=#697 id=697 data-nosnippet>697</a>    <span class="kw">pub fn </span>enable_strict_kex(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#698 id=698 data-nosnippet>698</a>        <span class="self">self</span>.keys.enable_strict_kex();
+<a href=#699 id=699 data-nosnippet>699</a>    }
+<a href=#700 id=700 data-nosnippet>700</a>
+<a href=#701 id=701 data-nosnippet>701</a>    <span class="kw">pub fn </span>is_rekey_needed(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#702 id=702 data-nosnippet>702</a>        <span class="self">self</span>.keys.is_rekey_needed()
+<a href=#703 id=703 data-nosnippet>703</a>    }
+<a href=#704 id=704 data-nosnippet>704</a>
+<a href=#705 id=705 data-nosnippet>705</a>    <span class="doccomment">/// Set TrafOut to start draining output.
+<a href=#706 id=706 data-nosnippet>706</a>    ///
+<a href=#707 id=707 data-nosnippet>707</a>    /// Only one caller/area should be using set_drain_output() at a time.
+<a href=#708 id=708 data-nosnippet>708</a>    /// For `TrafOut` itself there isn't a problem with multiple
+<a href=#709 id=709 data-nosnippet>709</a>    /// callers enabling/disabling drain, but it could result in races
+<a href=#710 id=710 data-nosnippet>710</a>    /// between callers. Only kex should be using it currently, so
+<a href=#711 id=711 data-nosnippet>711</a>    /// there is a debug_assert! to that effect.
+<a href=#712 id=712 data-nosnippet>712</a>    </span><span class="kw">pub fn </span>set_drain_output(<span class="kw-2">&amp;mut </span><span class="self">self</span>, drain: bool) {
+<a href=#713 id=713 data-nosnippet>713</a>        <span class="macro">debug_assert!</span>(drain != <span class="self">self</span>.out.drain, <span class="string">"set_drain_output() dupe"</span>);
+<a href=#714 id=714 data-nosnippet>714</a>        <span class="self">self</span>.out.drain = drain;
+<a href=#715 id=715 data-nosnippet>715</a>    }
+<a href=#716 id=716 data-nosnippet>716</a>
+<a href=#717 id=717 data-nosnippet>717</a>    <span class="doccomment">/// Test if output buffer is empty.
+<a href=#718 id=718 data-nosnippet>718</a>    ///
+<a href=#719 id=719 data-nosnippet>719</a>    /// Fails if `set_drain_output(true)` wasn't set (debug panic)
+<a href=#720 id=720 data-nosnippet>720</a>    /// This isn't inherent, but helps catch misuse (see comment
+<a href=#721 id=721 data-nosnippet>721</a>    /// for set_drain_output()).
+<a href=#722 id=722 data-nosnippet>722</a>    </span><span class="kw">pub fn </span>is_drained(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#723 id=723 data-nosnippet>723</a>        <span class="macro">debug_assert!</span>(<span class="self">self</span>.out.drain);
+<a href=#724 id=724 data-nosnippet>724</a>        <span class="macro">matches!</span>(<span class="self">self</span>.out.state, TxState::Idle)
+<a href=#725 id=725 data-nosnippet>725</a>            &amp;&amp; <span class="self">self</span>.out.deferred_packets.is_empty()
+<a href=#726 id=726 data-nosnippet>726</a>    }
+<a href=#727 id=727 data-nosnippet>727</a>}
+<a href=#728 id=728 data-nosnippet>728</a>
+<a href=#729 id=729 data-nosnippet>729</a><span class="doccomment">/// Packet types that may be sent once a currently-NoRoom TrafOut clears.
+<a href=#730 id=730 data-nosnippet>730</a>///
+<a href=#731 id=731 data-nosnippet>731</a>/// Rather than storing an entire `Packet&lt;'static&gt;`, keep a queue of smaller
+<a href=#732 id=732 data-nosnippet>732</a>/// `DeferredPacket`s.
+<a href=#733 id=733 data-nosnippet>733</a>///
+<a href=#734 id=734 data-nosnippet>734</a>/// These packet types account for most packets that may be sent as responses
+<a href=#735 id=735 data-nosnippet>735</a>/// or from other asynchronous events (rekey packet count reached, as an example).
+<a href=#736 id=736 data-nosnippet>736</a>///
+<a href=#737 id=737 data-nosnippet>737</a>/// These also queue packets to be sent while a KEX is in progress
+<a href=#738 id=738 data-nosnippet>738</a>/// (other packet types aren't allowed)
+<a href=#739 id=739 data-nosnippet>739</a>///
+<a href=#740 id=740 data-nosnippet>740</a>/// Some packet types aren't included here since they're deferred via other
+<a href=#741 id=741 data-nosnippet>741</a>/// mechanisms:
+<a href=#742 id=742 data-nosnippet>742</a>///
+<a href=#743 id=743 data-nosnippet>743</a>/// - ChannelWindowAdjust. Can be retried later.
+<a href=#744 id=744 data-nosnippet>744</a>/// - KEX packets. The output buffer is drained at the start of a KEX.
+<a href=#745 id=745 data-nosnippet>745</a>/// - Userauth - we hope it only occurs early when traffic is
+<a href=#746 id=746 data-nosnippet>746</a>///   well defined (no channels) and no KEXes are happening.
+<a href=#747 id=747 data-nosnippet>747</a></span><span class="attr">#[derive(Debug)]
+<a href=#748 id=748 data-nosnippet>748</a></span><span class="kw">pub enum </span>DeferredPacket {
+<a href=#749 id=749 data-nosnippet>749</a>    ChannelSuccess(packets::ChannelSuccess),
+<a href=#750 id=750 data-nosnippet>750</a>    ChannelFailure(packets::ChannelFailure),
+<a href=#751 id=751 data-nosnippet>751</a>    ChannelOpenFailure(packets::ChannelOpenFailure&lt;<span class="lifetime">'static</span>&gt;),
+<a href=#752 id=752 data-nosnippet>752</a>    ChannelOpenConfirmation(packets::ChannelOpenConfirmation),
+<a href=#753 id=753 data-nosnippet>753</a>    ChannelEof(packets::ChannelEof),
+<a href=#754 id=754 data-nosnippet>754</a>    ChannelClose(packets::ChannelClose),
+<a href=#755 id=755 data-nosnippet>755</a>    Unimplemented(packets::Unimplemented),
+<a href=#756 id=756 data-nosnippet>756</a>    RequestFailure(packets::RequestFailure),
+<a href=#757 id=757 data-nosnippet>757</a>    RequestSuccess(packets::RequestSuccess),
+<a href=#758 id=758 data-nosnippet>758</a>}
+<a href=#759 id=759 data-nosnippet>759</a>
+<a href=#760 id=760 data-nosnippet>760</a><span class="kw">impl </span>DeferredPacket {}
+<a href=#761 id=761 data-nosnippet>761</a>
+<a href=#762 id=762 data-nosnippet>762</a><span class="kw">impl </span>From&lt;<span class="kw-2">&amp;</span>DeferredPacket&gt; <span class="kw">for </span>Packet&lt;<span class="lifetime">'static</span>&gt; {
+<a href=#763 id=763 data-nosnippet>763</a>    <span class="kw">fn </span>from(d: <span class="kw-2">&amp;</span>DeferredPacket) -&gt; <span class="self">Self </span>{
+<a href=#764 id=764 data-nosnippet>764</a>        <span class="kw">match </span>d {
+<a href=#765 id=765 data-nosnippet>765</a>            DeferredPacket::ChannelSuccess(p) =&gt; (p.clone()).into(),
+<a href=#766 id=766 data-nosnippet>766</a>            DeferredPacket::ChannelFailure(p) =&gt; (p.clone()).into(),
+<a href=#767 id=767 data-nosnippet>767</a>            DeferredPacket::ChannelOpenFailure(p) =&gt; (p.clone()).into(),
+<a href=#768 id=768 data-nosnippet>768</a>            DeferredPacket::ChannelOpenConfirmation(p) =&gt; (p.clone()).into(),
+<a href=#769 id=769 data-nosnippet>769</a>            DeferredPacket::ChannelEof(p) =&gt; (p.clone()).into(),
+<a href=#770 id=770 data-nosnippet>770</a>            DeferredPacket::ChannelClose(p) =&gt; (p.clone()).into(),
+<a href=#771 id=771 data-nosnippet>771</a>            DeferredPacket::Unimplemented(p) =&gt; (p.clone()).into(),
+<a href=#772 id=772 data-nosnippet>772</a>            DeferredPacket::RequestFailure(p) =&gt; (p.clone()).into(),
+<a href=#773 id=773 data-nosnippet>773</a>            DeferredPacket::RequestSuccess(p) =&gt; (p.clone()).into(),
+<a href=#774 id=774 data-nosnippet>774</a>        }
+<a href=#775 id=775 data-nosnippet>775</a>    }
+<a href=#776 id=776 data-nosnippet>776</a>}
+<a href=#777 id=777 data-nosnippet>777</a>
+<a href=#778 id=778 data-nosnippet>778</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; TryFrom&lt;Packet&lt;<span class="lifetime">'a</span>&gt;&gt; <span class="kw">for </span>DeferredPacket {
+<a href=#779 id=779 data-nosnippet>779</a>    <span class="kw">type </span>Error = Error;
+<a href=#780 id=780 data-nosnippet>780</a>    <span class="kw">fn </span>try_from(packet: Packet&lt;<span class="lifetime">'a</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#781 id=781 data-nosnippet>781</a>        <span class="prelude-val">Ok</span>(<span class="kw">match </span>packet {
+<a href=#782 id=782 data-nosnippet>782</a>            Packet::ChannelSuccess(p) =&gt; <span class="self">Self</span>::ChannelSuccess(p),
+<a href=#783 id=783 data-nosnippet>783</a>            Packet::ChannelFailure(p) =&gt; <span class="self">Self</span>::ChannelFailure(p),
+<a href=#784 id=784 data-nosnippet>784</a>            Packet::ChannelOpenConfirmation(p) =&gt; <span class="self">Self</span>::ChannelOpenConfirmation(p),
+<a href=#785 id=785 data-nosnippet>785</a>            Packet::ChannelEof(p) =&gt; <span class="self">Self</span>::ChannelEof(p),
+<a href=#786 id=786 data-nosnippet>786</a>            Packet::ChannelClose(p) =&gt; <span class="self">Self</span>::ChannelClose(p),
+<a href=#787 id=787 data-nosnippet>787</a>            Packet::Unimplemented(p) =&gt; <span class="self">Self</span>::Unimplemented(p),
+<a href=#788 id=788 data-nosnippet>788</a>            Packet::RequestFailure(p) =&gt; <span class="self">Self</span>::RequestFailure(p),
+<a href=#789 id=789 data-nosnippet>789</a>            Packet::RequestSuccess(p) =&gt; <span class="self">Self</span>::RequestSuccess(p),
+<a href=#790 id=790 data-nosnippet>790</a>
+<a href=#791 id=791 data-nosnippet>791</a>            Packet::ChannelOpenFailure(p) =&gt; {
+<a href=#792 id=792 data-nosnippet>792</a>                <span class="self">Self</span>::ChannelOpenFailure(packets::ChannelOpenFailure {
+<a href=#793 id=793 data-nosnippet>793</a>                    <span class="comment">// empty desc for 'static
+<a href=#794 id=794 data-nosnippet>794</a>                    </span>desc: TextString::new(),
+<a href=#795 id=795 data-nosnippet>795</a>                    lang: <span class="string">""</span>,
+<a href=#796 id=796 data-nosnippet>796</a>                    ..p
+<a href=#797 id=797 data-nosnippet>797</a>                })
+<a href=#798 id=798 data-nosnippet>798</a>            }
+<a href=#799 id=799 data-nosnippet>799</a>
+<a href=#800 id=800 data-nosnippet>800</a>            <span class="comment">// Unhandled types
+<a href=#801 id=801 data-nosnippet>801</a>            </span><span class="kw">_ </span>=&gt; <span class="kw">return </span>error::SSHProtoUnsupported.fail(),
+<a href=#802 id=802 data-nosnippet>802</a>        })
+<a href=#803 id=803 data-nosnippet>803</a>    }
+<a href=#804 id=804 data-nosnippet>804</a>}
+</code></pre></div></section></main></body></html>

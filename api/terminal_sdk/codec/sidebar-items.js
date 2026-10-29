@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["KeyAction","KeyState","KeySymbol"],"fn":["encode_key_action","encode_key_action_with_paste","validate_paste","validate_text"],"struct":["Decoder","Modifiers"]};

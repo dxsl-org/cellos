@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CARD_GAP","CARD_H","CARD_W"],"fn":["handle_click","render"]};
