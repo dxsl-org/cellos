@@ -398,9 +398,10 @@ impl PageTableTrait for PageTable {
         let i2 = (virt >> 30) & 0x1FF;
         let i1 = (virt >> 21) & 0x1FF;
         let i0 = (virt >> 12) & 0x1FF;
-        let pdpt = self.get_or_alloc(i3, alloc_fn)?;
-        let pd = pdpt.get_or_alloc(i2, alloc_fn)?;
-        let pt = pd.get_or_alloc(i1, alloc_fn)?;
+        let user = flags.bits() & PageFlags::USER != 0;
+        let pdpt = self.get_or_alloc(i3, user, alloc_fn)?;
+        let pd = pdpt.get_or_alloc(i2, user, alloc_fn)?;
+        let pt = pd.get_or_alloc(i1, user, alloc_fn)?;
         let mut e = phys as u64 | PTE_P;
         if flags.bits() & PageFlags::WRITE != 0 {
             e |= PTE_RW;
@@ -713,9 +714,13 @@ impl PageTable {
     fn get_or_alloc(
         &mut self,
         idx: usize,
+        user: bool,
         alloc_fn: &mut dyn FnMut() -> Option<PhysAddr>,
     ) -> ViResult<&mut PageTable> {
-        let us_bit = if idx < 256 { PTE_US } else { 0 };
+        // U/S is ANDed across all four levels. A lower-level index says
+        // nothing about privilege (QuickJS's low-half VA has PD index 384).
+        // Supervisor leaves remain protected when an ancestor is upgraded.
+        let us_bit = if user { PTE_US } else { 0 };
         if self.entries[idx] & PTE_P == 0 {
             let f = alloc_fn().ok_or(ViError::OutOfMemory)?;
             // SAFETY: f is a freshly allocated 4KB physical frame. Accessed via
@@ -728,5 +733,53 @@ impl PageTable {
         let next_phys = (self.entries[idx] & !0xFFF) as PhysAddr;
         // SAFETY: next_phys is a valid page table frame; HHDM offset makes it accessible.
         Ok(unsafe { &mut *(phys_to_virt_ptr(next_phys) as *mut PageTable) })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+    use super::*;
+    use std::{boxed::Box, vec::Vec};
+
+    #[test]
+    fn user_execution_crosses_high_table_indices_without_exposing_supervisor_leaves() {
+        let mut root = Box::new(PageTable::zero());
+        let mut frames: Vec<Box<PageTable>> = Vec::new();
+        let mut allocate = || {
+            let mut table = Box::new(PageTable::zero());
+            let address = table.as_mut() as *mut PageTable as usize;
+            frames.push(table);
+            Some(address)
+        };
+        let entry = 0x1b0000000;
+        let supervisor = entry + PAGE_SIZE;
+        root.map(supervisor, 0x200000, PageFlags::from_bits(PageFlags::READ | PageFlags::WRITE), &mut allocate).unwrap();
+        root.map(entry, 0x100000, PageFlags::from_bits(PageFlags::READ | PageFlags::EXECUTE | PageFlags::USER), &mut allocate).unwrap();
+        // Exercise high PDPT and PT indices as well as the failing PD index.
+        let high = (255usize << 39) | (511usize << 30) | (511usize << 21) | (511usize << 12);
+        root.map(high, 0x300000, PageFlags::from_bits(PageFlags::READ | PageFlags::USER), &mut allocate).unwrap();
+
+        fn chain(root: &PageTable, va: usize) -> [u64; 4] {
+            let mut entries = [0; 4];
+            let mut table = root;
+            for (level, shift) in [39, 30, 21, 12].into_iter().enumerate() {
+                let entry = table.entries[(va >> shift) & 511];
+                entries[level] = entry;
+                assert_ne!(entry & PTE_PRESENT, 0);
+                if level < 3 {
+                    // SAFETY: the test owns all aligned intermediate frames.
+                    table = unsafe { &*(phys_to_virt_ptr((entry & PTE_ADDR_MASK) as usize) as *const PageTable) };
+                }
+            }
+            entries
+        }
+        let code = chain(&root, entry);
+        assert!(code.iter().all(|pte| pte & PTE_USER != 0));
+        assert_eq!(code[3] & (PTE_WRITABLE | PTE_NX), 0);
+        let data = chain(&root, supervisor);
+        assert_eq!(data[3] & PTE_USER, 0);
+        assert_ne!(data[3] & PTE_NX, 0);
+        assert!(chain(&root, high).iter().all(|pte| pte & PTE_USER != 0));
     }
 }
