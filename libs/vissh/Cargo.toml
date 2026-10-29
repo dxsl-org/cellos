@@ -1,0 +1,15 @@
+[package]
+name = "vissh"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Cellos SSH client core: the vendored Sunset client narrowed to the cellbox ssh profile, with a fail-closed entropy source"
+
+# HOST TESTS: `cargo test -p vissh --target x86_64-unknown-linux-gnu`.
+
+[dependencies]
+sunset = { path = "../../third_party/sunset", version = "0.6.0", default-features = false, features = ["alloc", "openssh-key"] }
+sha2 = { version = "0.11", default-features = false }
+heapless = { version = "0.9", default-features = false }
+zeroize = { version = "1", default-features = false }

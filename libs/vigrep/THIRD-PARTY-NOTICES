@@ -1,0 +1,22 @@
+vigrep third-party notices
+==========================
+
+vigrep contains code adapted from, and depends on, the following works. For
+each dual-licensed work the MIT licence was chosen (D71-4).
+
+ripgrep 15.2.0 (commit e89fff89ac9af12e8d4ce9d5fd07beb408ca730f)
+  Components adapted: grep-matcher 0.1.9, grep-regex 0.1.14,
+  grep-searcher 0.1.17, globset 0.4.19, ignore 0.4.29.
+  Declared licence: Unlicense OR MIT. Chosen: MIT.
+  Copyright (c) 2015 Andrew Gallant. Licence text: LICENSE-MIT (verbatim).
+  Per-file provenance: PROVENANCE.
+
+Dependencies (crates.io, exact pins, default features off)
+  bstr 1.13.1          MIT OR Apache-2.0 -> MIT  Copyright (c) 2018-2019 Andrew Gallant
+  memchr 2.8.3         Unlicense OR MIT  -> MIT  Copyright (c) 2015 Andrew Gallant
+  aho-corasick 1.1.4   Unlicense OR MIT  -> MIT  Copyright (c) 2015 Andrew Gallant
+  regex-automata 0.4.16 MIT OR Apache-2.0 -> MIT Copyright (c) 2014 The Rust Project Developers
+  regex-syntax 0.8.11  MIT OR Apache-2.0 -> MIT  Copyright (c) 2014 The Rust Project Developers
+  log 0.4.33           MIT OR Apache-2.0 -> MIT  Copyright (c) 2014 The Rust Project Developers
+
+The MIT licence text of each dependency is distributed in its crate archive.

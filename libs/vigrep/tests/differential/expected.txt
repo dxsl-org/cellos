@@ -1,0 +1,219 @@
+# vigrep differential reference records (generated, do not edit)
+# reference: ripgrep 15.2.0 (rev e89fff89ac) at /tmp/p07-s0/target-rg/release/rg
+# reference binary sha256 f1ae3ea62707860ddfd1a50c1b28a4525baf84df3d68561684a73723c1f9a918
+# command per case: rg --json --no-config --sort path --no-ignore-parent --no-ignore-global --no-ignore-exclude --no-require-git --encoding none [case flags] -e PATTERN... -- ROOTS (cwd = parent of corpus/)
+# generator: libs/vigrep/tests/differential/main.rs with VIGREP_DIFF_REGENERATE=1
+# record: kind path line_number absolute_offset hex(lines) submatches
+# corpus-digest 998026b82ce87802862cfabe2dd713dfe51fb409f3465ac5a27fd6415e0336b0
+case plain
+match corpus/B.md 1 0 626574610a 0-4
+match corpus/a.txt 2 6 626574610a 0-4
+match corpus/a.txt 3 11 416c70686120626574612067616d6d610a 6-10
+match corpus/blank.txt 3 2 626574610a 0-4
+match corpus/bom.txt 1 0 efbbbf626574612066697273740a 3-7
+match corpus/bom.txt 2 14 6c6173742062657461 5-9
+match corpus/crlf.txt 2 5 74776f20626574610d0a 4-8
+match corpus/ctx.txt 3 6 626574610a 0-4
+match corpus/ctx.txt 7 20 626574610a 0-4
+match corpus/invalid.txt 1 0 6f6b20626574610a 3-7
+match corpus/invalid.txt 2 8 fffe20626574610a 3-7
+match corpus/keep.log 1 0 62657461206b6565700a 0-4
+match corpus/nolf.txt 1 0 62657461 0-4
+match corpus/sub/deep/x.log 1 0 626574612064656570206c6f670a 0-4
+match corpus/sub/deep/y.rs 1 0 666e20626574612829207b7d0a 3-7
+match corpus/sub/open.txt 1 0 62657461206f70656e0a 0-4
+match corpus/sub/open.txt 2 10 62657461626574610a 0-4,4-8
+match corpus/sub/secret2.txt 1 0 626574612073320a 0-4
+match corpus/utf8.txt 1 0 636166c3a920626574610a 6-10
+match corpus/z/ż.txt 1 0 62657461207a7a0a 0-4
+end
+case ignore_case
+match corpus/a.txt 1 0 616c7068610a 0-5
+match corpus/a.txt 3 11 416c70686120626574612067616d6d610a 0-5
+end
+case word
+match corpus/B.md 1 0 626574610a 0-4
+match corpus/a.txt 2 6 626574610a 0-4
+match corpus/a.txt 3 11 416c70686120626574612067616d6d610a 6-10
+match corpus/blank.txt 3 2 626574610a 0-4
+match corpus/bom.txt 1 0 efbbbf626574612066697273740a 3-7
+match corpus/bom.txt 2 14 6c6173742062657461 5-9
+match corpus/crlf.txt 2 5 74776f20626574610d0a 4-8
+match corpus/ctx.txt 3 6 626574610a 0-4
+match corpus/ctx.txt 7 20 626574610a 0-4
+match corpus/invalid.txt 1 0 6f6b20626574610a 3-7
+match corpus/invalid.txt 2 8 fffe20626574610a 3-7
+match corpus/keep.log 1 0 62657461206b6565700a 0-4
+match corpus/nolf.txt 1 0 62657461 0-4
+match corpus/sub/deep/x.log 1 0 626574612064656570206c6f670a 0-4
+match corpus/sub/deep/y.rs 1 0 666e20626574612829207b7d0a 3-7
+match corpus/sub/open.txt 1 0 62657461206f70656e0a 0-4
+match corpus/sub/secret2.txt 1 0 626574612073320a 0-4
+match corpus/utf8.txt 1 0 636166c3a920626574610a 6-10
+match corpus/z/ż.txt 1 0 62657461207a7a0a 0-4
+end
+case line
+match corpus/B.md 1 0 626574610a 0-4
+match corpus/a.txt 2 6 626574610a 0-4
+match corpus/blank.txt 3 2 626574610a 0-4
+match corpus/ctx.txt 3 6 626574610a 0-4
+match corpus/ctx.txt 7 20 626574610a 0-4
+match corpus/nolf.txt 1 0 62657461 0-4
+end
+case fixed
+match corpus/sub/deep/y.rs 1 0 666e20626574612829207b7d0a 3-9
+end
+case multi
+match corpus/a.txt 1 0 616c7068610a 0-5
+match corpus/a.txt 3 11 416c70686120626574612067616d6d610a 11-16
+match corpus/ctx.txt 8 25 6c380a 0-2
+match corpus/z/ż.txt 1 0 62657461207a7a0a 5-7
+end
+case context
+context corpus/ctx.txt 2 3 6c320a -
+match corpus/ctx.txt 3 6 626574610a 0-4
+context corpus/ctx.txt 4 11 6c340a -
+context corpus/ctx.txt 6 17 6c360a -
+match corpus/ctx.txt 7 20 626574610a 0-4
+context corpus/ctx.txt 8 25 6c380a -
+context corpus/a.txt 1 0 616c7068610a -
+match corpus/a.txt 2 6 626574610a 0-4
+match corpus/a.txt 3 11 416c70686120626574612067616d6d610a 6-10
+end
+case before_after
+context corpus/ctx.txt 3 6 626574610a -
+match corpus/ctx.txt 4 11 6c340a 0-2
+context corpus/ctx.txt 5 14 6c350a -
+context corpus/ctx.txt 6 17 6c360a -
+context corpus/ctx.txt 7 20 626574610a -
+match corpus/ctx.txt 8 25 6c380a 0-2
+end
+case hidden
+match corpus/.hidden.txt 1 0 626574612068696464656e0a 0-4
+match corpus/B.md 1 0 626574610a 0-4
+match corpus/a.txt 2 6 626574610a 0-4
+match corpus/a.txt 3 11 416c70686120626574612067616d6d610a 6-10
+match corpus/blank.txt 3 2 626574610a 0-4
+match corpus/bom.txt 1 0 efbbbf626574612066697273740a 3-7
+match corpus/bom.txt 2 14 6c6173742062657461 5-9
+match corpus/crlf.txt 2 5 74776f20626574610d0a 4-8
+match corpus/ctx.txt 3 6 626574610a 0-4
+match corpus/ctx.txt 7 20 626574610a 0-4
+match corpus/invalid.txt 1 0 6f6b20626574610a 3-7
+match corpus/invalid.txt 2 8 fffe20626574610a 3-7
+match corpus/keep.log 1 0 62657461206b6565700a 0-4
+match corpus/nolf.txt 1 0 62657461 0-4
+match corpus/sub/deep/x.log 1 0 626574612064656570206c6f670a 0-4
+match corpus/sub/deep/y.rs 1 0 666e20626574612829207b7d0a 3-7
+match corpus/sub/open.txt 1 0 62657461206f70656e0a 0-4
+match corpus/sub/open.txt 2 10 62657461626574610a 0-4,4-8
+match corpus/sub/secret2.txt 1 0 626574612073320a 0-4
+match corpus/utf8.txt 1 0 636166c3a920626574610a 6-10
+match corpus/z/ż.txt 1 0 62657461207a7a0a 0-4
+end
+case no_ignore
+match corpus/B.md 1 0 626574610a 0-4
+match corpus/a.txt 2 6 626574610a 0-4
+match corpus/a.txt 3 11 416c70686120626574612067616d6d610a 6-10
+match corpus/blank.txt 3 2 626574610a 0-4
+match corpus/bom.txt 1 0 efbbbf626574612066697273740a 3-7
+match corpus/bom.txt 2 14 6c6173742062657461 5-9
+match corpus/build/out.txt 1 0 62657461206275696c740a 0-4
+match corpus/crlf.txt 2 5 74776f20626574610d0a 4-8
+match corpus/ctx.txt 3 6 626574610a 0-4
+match corpus/ctx.txt 7 20 626574610a 0-4
+match corpus/invalid.txt 1 0 6f6b20626574610a 3-7
+match corpus/invalid.txt 2 8 fffe20626574610a 3-7
+match corpus/keep.log 1 0 62657461206b6565700a 0-4
+match corpus/nolf.txt 1 0 62657461 0-4
+match corpus/sub/deep/x.log 1 0 626574612064656570206c6f670a 0-4
+match corpus/sub/deep/y.rs 1 0 666e20626574612829207b7d0a 3-7
+match corpus/sub/open.txt 1 0 62657461206f70656e0a 0-4
+match corpus/sub/open.txt 2 10 62657461626574610a 0-4,4-8
+match corpus/sub/other.log 1 0 62657461206f74686572206c6f670a 0-4
+match corpus/sub/secret.txt 1 0 62657461207365637265740a 0-4
+match corpus/sub/secret2.txt 1 0 626574612073320a 0-4
+match corpus/utf8.txt 1 0 636166c3a920626574610a 6-10
+match corpus/x.log 1 0 62657461206c6f670a 0-4
+match corpus/z/ż.txt 1 0 62657461207a7a0a 0-4
+end
+case globs
+match corpus/.hidden.txt 1 0 626574612068696464656e0a 0-4
+match corpus/a.txt 2 6 626574610a 0-4
+match corpus/a.txt 3 11 416c70686120626574612067616d6d610a 6-10
+match corpus/blank.txt 3 2 626574610a 0-4
+match corpus/bom.txt 1 0 efbbbf626574612066697273740a 3-7
+match corpus/bom.txt 2 14 6c6173742062657461 5-9
+match corpus/crlf.txt 2 5 74776f20626574610d0a 4-8
+match corpus/ctx.txt 3 6 626574610a 0-4
+match corpus/ctx.txt 7 20 626574610a 0-4
+match corpus/invalid.txt 1 0 6f6b20626574610a 3-7
+match corpus/invalid.txt 2 8 fffe20626574610a 3-7
+match corpus/nolf.txt 1 0 62657461 0-4
+match corpus/sub/secret.txt 1 0 62657461207365637265740a 0-4
+match corpus/sub/secret2.txt 1 0 626574612073320a 0-4
+match corpus/utf8.txt 1 0 636166c3a920626574610a 6-10
+match corpus/z/ż.txt 1 0 62657461207a7a0a 0-4
+end
+case glob_overrides_ignore
+match corpus/keep.log 1 0 62657461206b6565700a 0-4
+match corpus/sub/deep/x.log 1 0 626574612064656570206c6f670a 0-4
+match corpus/sub/other.log 1 0 62657461206f74686572206c6f670a 0-4
+match corpus/x.log 1 0 62657461206c6f670a 0-4
+end
+case unicode_class
+match corpus/utf8.txt 2 11 cea3ceafcf83cf85cf86cebfcf820a 0-14
+end
+case empty_pattern
+match corpus/blank.txt 1 0 0a 0-0
+match corpus/blank.txt 2 1 0a 0-0
+match corpus/blank.txt 3 2 626574610a 0-0,1-1,2-2,3-3,4-4
+match corpus/blank.txt 4 7 0a 0-0
+match corpus/crlf.txt 1 0 6f6e650d0a 0-0,1-1,2-2,3-3,4-4
+match corpus/crlf.txt 2 5 74776f20626574610d0a 0-0,1-1,2-2,3-3,4-4,5-5,6-6,7-7,8-8,9-9
+match corpus/nolf.txt 1 0 62657461 0-0,1-1,2-2,3-3
+match corpus/bom.txt 1 0 efbbbf626574612066697273740a 0-0,1-1,2-2,3-3,4-4,5-5,6-6,7-7,8-8,9-9,10-10,11-11,12-12,13-13
+match corpus/bom.txt 2 14 6c6173742062657461 0-0,1-1,2-2,3-3,4-4,5-5,6-6,7-7,8-8
+end
+case zero_width
+match corpus/a.txt 1 0 616c7068610a 0-0,5-5
+match corpus/a.txt 2 6 626574610a 0-0,4-4
+match corpus/a.txt 3 11 416c70686120626574612067616d6d610a 0-0,5-5,6-6,10-10,11-11,16-16
+match corpus/utf8.txt 1 0 636166c3a920626574610a 0-0,5-5,6-6,10-10
+match corpus/utf8.txt 2 11 cea3ceafcf83cf85cf86cebfcf820a 0-0,14-14
+match corpus/utf8.txt 3 26 6e61c3af76650a 0-0,6-6
+end
+case byte_regex
+match corpus/invalid.txt 2 8 fffe20626574610a 0-1
+end
+case text_mode
+match corpus/nul.bin 1 0 626574610062696e0a 5-8
+end
+case dot
+match corpus/B.md 1 0 626574610a 0-4
+match corpus/a.txt 2 6 626574610a 0-4
+match corpus/blank.txt 3 2 626574610a 0-4
+match corpus/bom.txt 2 14 6c6173742062657461 5-9
+match corpus/ctx.txt 3 6 626574610a 0-4
+match corpus/ctx.txt 7 20 626574610a 0-4
+match corpus/invalid.txt 1 0 6f6b20626574610a 3-7
+match corpus/invalid.txt 2 8 fffe20626574610a 3-7
+match corpus/nolf.txt 1 0 62657461 0-4
+match corpus/sub/open.txt 2 10 62657461626574610a 4-8
+match corpus/utf8.txt 1 0 636166c3a920626574610a 6-10
+end
+case big
+match corpus/big.txt 8 266 6c696e6520303030303037206861732061206e6565646c6520696e2069740a 18-24
+match corpus/big.txt 2007 76221 6c696e6520303032303036206861732061206e6565646c6520696e2069740a 18-24
+match corpus/big.txt 4006 152176 6c696e6520303034303035206861732061206e6565646c6520696e2069740a 18-24
+match corpus/big.txt 6005 228131 6c696e6520303036303034206861732061206e6565646c6520696e2069740a 18-24
+match corpus/big.txt 8004 304086 6c696e6520303038303033206861732061206e6565646c6520696e2069740a 18-24
+match corpus/big.txt 10003 380041 6c696e6520303130303032206861732061206e6565646c6520696e2069740a 18-24
+end
+case roots_in_order
+match corpus/sub/deep/x.log 1 0 626574612064656570206c6f670a 0-4
+match corpus/sub/deep/y.rs 1 0 666e20626574612829207b7d0a 3-7
+match corpus/a.txt 2 6 626574610a 0-4
+match corpus/a.txt 3 11 416c70686120626574612067616d6d610a 6-10
+match corpus/z/ż.txt 1 0 62657461207a7a0a 0-4
+end

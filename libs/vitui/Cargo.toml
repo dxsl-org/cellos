@@ -1,0 +1,17 @@
+[package]
+name = "vitui"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+
+# HOST TESTS: run with an explicit host triple, e.g.
+# `cargo test -p vitui --target x86_64-unknown-linux-gnu`.
+# In production builds, this crate is `#![no_std]` + `alloc`.
+
+[dependencies]
+terminal-sdk = { path = "../terminal", version = "0.1.0" }
+# Ratatui's modular crates, defaults off: no std, crossterm/termion, serde,
+# macros, layout-cache or calendar. Never the `ratatui` facade crate (its
+# dependency on ratatui-widgets re-enables `all-widgets`/`calendar`).
+ratatui-core = { version = "=0.1.0", default-features = false }
+ratatui-widgets = { version = "=0.3.0", default-features = false }

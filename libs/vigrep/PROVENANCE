@@ -1,0 +1,155 @@
+vigrep provenance
+=================
+
+Upstream: ripgrep 15.2.0, tag object 6ec72defacfb042f203ca0b4bf2513a0a5505a7e,
+commit e89fff89ac9af12e8d4ce9d5fd07beb408ca730f (good tag signature,
+BurntSushi key 2D8111E141151C072EE9AB9DB2E3A4923F8B0D44), tag tarball SHA-256
+7605249d3eb0d5f170e3414498e3344e26b1e7a147aec518b57090b80036a562.
+Components: grep-matcher 0.1.9, grep-regex 0.1.14, grep-searcher 0.1.17,
+globset 0.4.19, ignore 0.4.29. Licence: Unlicense OR MIT; MIT chosen
+(Copyright (c) 2015 Andrew Gallant). Admission record and per-file manifest:
+.agents/261020-1750-cellbox-cli/phase-07-s0-admission.md,
+.agents/261020-1750-cellbox-cli/reports/s7-0-evidence/manifest.json.
+
+Each adapted file starts with its upstream path, the commit, "adapted" and
+SPDX-License-Identifier: MIT. Upstream SHA-256 values below are of the tag
+tree files the port started from.
+
+Licence and tooling files
+-------------------------
+0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f  LICENSE-MIT (crates/*/LICENSE-MIT, verbatim) -> libs/vigrep/LICENSE-MIT
+4b4f1d825a2b14c15a074dc716625bbb5dcd54dc1475b9751bf2b835e66591b5  rustfmt.toml (repository root, verbatim) -> libs/vigrep/rustfmt.toml
+
+Ported files
+------------
+bf67b20b542db2a159f91da8b980fca27d93253a8fafaee7173d6493de985bd8  crates/globset/src/fnv.rs
+    -> DROPPED (fnv HashMap replaced by BTreeMap)
+d230e938384da768864b4aff78836271c1e923ee9f1ffae2d9319fed8bb2ccb4  crates/globset/src/glob.rs
+    -> libs/vigrep/src/glob/glob.rs  [adapted]
+7e34c24673ee164d779de7d0efdaf97f19176f9e0bfc71e0842345ef76f0a38a  crates/globset/src/lib.rs
+    -> libs/vigrep/src/glob/mod.rs  [adapted]
+5780ad5ec2bc89a42201a1532295e06a90f493929583c453f135759b39a70fa5  crates/globset/src/pathutil.rs
+    -> libs/vigrep/src/glob/pathutil.rs  [adapted]
+eba78b3b22cfeeb8847a1daa6055ac6bd137262c827626f431ff4a13a8c260ba  crates/ignore/src/dir.rs
+    -> libs/vigrep/src/ignore/dir.rs  [adapted (precedence logic only, re-expressed for the serial walker)]
+928d8bb106bc408e4b9b6208b3ae8e31e669cf70e9a3d8c7eb5113e968c85161  crates/ignore/src/gitignore.rs
+    -> libs/vigrep/src/ignore/gitignore.rs  [adapted]
+ffd28ee1f7da906b3e6fb0a3b07af754844851f20ccb7766eee9b6231f5bfdf9  crates/ignore/src/lib.rs
+    -> libs/vigrep/src/ignore/mod.rs  [adapted (error types + Match only)]
+4283fd4dc169476a580ea1e393b1b125a357cda4c1862293800097bd91acb69e  crates/ignore/src/overrides.rs
+    -> libs/vigrep/src/ignore/overrides.rs  [adapted]
+d0fb48f0ff1d2e0ff0462bf7b8ee80f7133f2fffaac299bef966b821ee42f442  crates/ignore/src/pathutil.rs
+    -> libs/vigrep/src/ignore/pathutil.rs  [adapted]
+00b130d37cf2ca685e25f10201f37aa332f5d4cdfe04fe59b00df24a3be1e3a4  crates/matcher/src/interpolate.rs
+    -> libs/vigrep/src/matcher/interpolate.rs  [adapted]
+98f194a9cd6a5db50fdd08fe20913f6865bd78b8760236d50395155121ea806e  crates/matcher/src/lib.rs
+    -> libs/vigrep/src/matcher/mod.rs  [adapted]
+9e45d49f5a06afc87a492b86845a32055e4a7e448474f98990c8d27fb034a9b8  crates/regex/src/ast.rs
+    -> libs/vigrep/src/regex/ast.rs  [adapted]
+9ea2fd822d4e4445df3c54a3081fce35bc2d7b839cc19985aa984e6062d06459  crates/regex/src/ban.rs
+    -> libs/vigrep/src/regex/ban.rs  [adapted]
+8af11cac22616a5227542beead8d7ee9fb62c208a5cfc9923c07186eae1fd9cb  crates/regex/src/config.rs
+    -> libs/vigrep/src/regex/config.rs  [adapted]
+af7b8bfe1575546a9a31780c009bbf315a81a02f823099da34f106e416743ffd  crates/regex/src/error.rs
+    -> libs/vigrep/src/regex/error.rs  [adapted]
+f1746f2df93ba9defed55f36ad0f7cd5dada16a7fa881f80193f8d98948c981f  crates/regex/src/literal.rs
+    -> libs/vigrep/src/regex/literal.rs  [adapted]
+a98966ab3326c1ff8121987222f602dc8d861b627fbb4f9fa804667ca643065f  crates/regex/src/matcher.rs
+    -> libs/vigrep/src/regex/matcher.rs  [adapted]
+1aaa3edac9982c2aea9522c0381a17a6204f826419d58876531fb9de4b13e22a  crates/regex/src/lib.rs
+    -> libs/vigrep/src/regex/mod.rs  [adapted]
+197c6a6e372644a8942f503848d7d1c7749dbbe9694fb6e65073c62cf92a9769  crates/regex/src/non_matching.rs
+    -> libs/vigrep/src/regex/non_matching.rs  [adapted]
+f799bbc604e6a306070f8acdf612f396c7ae230d755e2fb98efdad61367ee7ac  crates/regex/src/strip.rs
+    -> libs/vigrep/src/regex/strip.rs  [adapted]
+b5f96b093387ca9aacaf3660b2b0be8741cbb01a50076162ebeb413395a7fb10  crates/searcher/src/line_buffer.rs
+    -> libs/vigrep/src/searcher/line_buffer.rs  [adapted]
+37ec6404ed642b0692a726e21313acadae8ca4202da859d6421d5dfd44594bc1  crates/searcher/src/lines.rs
+    -> libs/vigrep/src/searcher/lines.rs  [adapted]
+8514cf191aef22ad187ffe84d48f2edf1e9e7df04e963d8ad8026f5137ed17c2  crates/searcher/src/macros.rs
+    -> libs/vigrep/src/searcher/macros.rs  [adapted]
+7b6c771a3d3e5c40dabe776ea0d8b5af9dbacd84508b9e367bd93ede032f968d  crates/searcher/src/lib.rs
+    -> libs/vigrep/src/searcher/mod.rs  [adapted]
+7f3fd0976fc91e8aca2eaa07b423ab2a6ad919984b261604d35d715fa02ab3ef  crates/searcher/src/searcher/core.rs
+    -> libs/vigrep/src/searcher/searcher/core.rs  [adapted]
+c2a6d3055a7a2e69a7208113e837eec247d30a43e0c96029aad307f83632fb02  crates/searcher/src/searcher/glue.rs
+    -> libs/vigrep/src/searcher/searcher/glue.rs  [adapted]
+6ae846df42f0868385bc54ef728db822c86f20f6d6457777d8f8058fc4c67bf0  crates/searcher/src/searcher/mod.rs
+    -> libs/vigrep/src/searcher/searcher/mod.rs  [adapted]
+703f25a0f08dac9a39742cabc029a332c7e027d9356980d6ffeec34f68953657  crates/searcher/src/sink.rs
+    -> libs/vigrep/src/searcher/sink.rs  [adapted]
+34055e71ee830bdc897686554a3be65499150e1d67a7d4cde45d7bf9aa9e9e2b  crates/searcher/src/testutil.rs
+    -> libs/vigrep/src/searcher/testutil.rs  [adapted (test-only module)]
+3895c935f76a57928cc12284dfff406693b7666c0ffce9b8676c6c1976debe2d  crates/ignore/tests/gitignore_matched_path_or_any_parents_tests.gitignore
+    -> libs/vigrep/tests/gitignore_matched_path_or_any_parents_tests.gitignore  [fixture copied verbatim]
+1a38fdb4ba4b555debca6587fd14f69468ef93c37d14992dd90374b2e160232c  crates/ignore/tests/gitignore_matched_path_or_any_parents_tests.rs
+    -> libs/vigrep/tests/gitignore_matched_path_or_any_parents_tests.rs  [test ported]
+efe6f6479615a9f83b6c080e3fe9c55e4702e9d3c9ad2c49354c4b78fa79e64b  crates/ignore/tests/gitignore_skip_bom.gitignore
+    -> libs/vigrep/tests/gitignore_skip_bom.gitignore  [fixture copied verbatim]
+93b70f641a87f2c1efb78f93f50b81d69a1c50bdc1b302e8c502f8071a12cb93  crates/ignore/tests/gitignore_skip_bom.rs
+    -> libs/vigrep/tests/gitignore_skip_bom.rs  [test ported]
+a6a20ad15557f2c485f45bf0f1b4afdb1a5b6c3839a4db44c93ee1470db92670  crates/matcher/tests/tests.rs
+    -> libs/vigrep/tests/matcher/main.rs  [test ported]
+daaff26c1359e5b18b5df6262c3404ae50cfa50c03ba35a3bb61e498d08b2643  crates/matcher/tests/test_matcher.rs
+    -> libs/vigrep/tests/matcher/test_matcher.rs  [test ported]
+a7dcad0b540de203b1bae0332d2ec46b7bb6df5f69487b74892ef0e470d56fc0  crates/matcher/tests/util.rs
+    -> libs/vigrep/tests/matcher/util.rs  [test ported]
+
+Dropped upstream files
+----------------------
+403f00eca491e20ef654d0bd6572acccb07c546489054bc514adf528afee8a2c  crates/searcher/src/searcher/mmap.rs
+    -> DROPPED (memory maps (only unsafe upstream))
+1651e1603c3cfb1f02ed6234f231a9a1ed368dbede94d0e0914cd8a0c804d33c  crates/searcher/examples/search-stdin.rs
+    -> DROPPED (stdin example)
+4fdc2b4a456fd9ffbe4555d27c760861adaec2ed2524a5f4149ebe827d4779f1  crates/globset/src/serde_impl.rs
+    -> DROPPED (serde feature)
+05a00ec1b35dbd7a202e280e862a784b3a972574b19201ef66ac7980521ce4ac  crates/globset/benches/bench.rs
+    -> DROPPED (benchmarks)
+cfa0b97e6332212b19dc973ec532a4564cb302398bbc1862680ad82e4d0afcf3  crates/ignore/src/walk.rs
+    -> DROPPED (walkdir/threads walker; replaced by vigrep::walk)
+a8d515917dbcf21f6d92f42d9dacb75013a71c91394dfd68677c5d1c15cda706  crates/ignore/src/types.rs
+    -> DROPPED (file types)
+7ed94507d800e77a98795fe0c50e1a05a16612d71bacfbb287fc3930bcc10ba9  crates/ignore/src/default_types.rs
+    -> DROPPED (file types)
+801b849ef589050878e02cd2367fb856bbe55197cab28e1978acbe8b74539379  crates/ignore/examples/walk.rs
+    -> DROPPED (walk example)
+
+vigrep-authored files (no upstream source)
+------------------------------------------
+src/lib.rs, src/prelude.rs, src/io.rs, src/walk.rs, src/walk/tests.rs,
+tests/differential/main.rs, tests/differential/expected.txt (generated by the
+reference rg 15.2.0, binary SHA-256
+f1ae3ea62707860ddfd1a50c1b28a4525baf84df3d68561684a73723c1f9a918).
+
+Cellos adaptations after S7-1 (S7-3, D76-2)
+-------------------------------------------
+src/regex/config.rs: the one-pass DFA size limit follows the configured
+size_limit (upstream: fixed 10 MiB), so a small size_limit bounds every
+compiled engine.
+src/walk.rs (vigrep-authored): resumable segmented search (Step, Begun,
+Walker::begin_file, FileSearch, ResumeInput, ResumableSearch, ResumeError;
+Walker::search_file is begin_file + step), line_submatches (rg printer
+submatch rule moved from tests/differential/main.rs, capped, and measured
+from the start of the input instead of the searcher buffer), packed pending
+children with max_pending_bytes / max_pending_entries.
+tests/differential/main.rs: uses line_submatches; adds a forced-pause run
+(pause after every row and every third row) against expected.txt
+(unchanged). Upstream-derived searcher files are untouched.
+
+Upstream tests (#[test] attributes in kept files: 186)
+------------------------------------------------------
+Ported 171: matcher 13, regex 26 (one upstream #[ignore] kept), searcher 77,
+globset 22, ignore 33 (dir.rs 14, gitignore.rs 4, overrides.rs 9,
+integration 6). Expectations adapted: searcher glue binary3/binary4 (reader
+byte count 262142, upstream 262146 came from encoding_rs_io's 3-byte BOM-peek
+read), searcher mod uft8_bom_sniffing (BOM kept), dir gitignore_no_git and
+stops_at_git_dir (no repository detection). globset/pathutil non-Unix macro
+variants dropped (Cellos uses `/` only).
+Dropped 15: gitignore parse_excludes_file1-5 (global git config not ported);
+dir explicit_ignore (no --ignore-file), git_exclude, exclude_lowest,
+git_info_exclude_in_linked_worktree (.git/info/exclude not ported),
+gitignore_with_jj (no .jj detection), absolute_parent,
+absolute_parent_anchored, absolute_parent_matchers_are_cached_across_roots,
+multi_root_gitignore_order_independent, multi_root_custom_ignore_order_independent
+(ancestor-above-root discovery not ported; re-expressed as walker test
+roots_use_only_their_own_subtree_rules).
