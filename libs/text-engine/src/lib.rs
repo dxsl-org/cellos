@@ -13,7 +13,7 @@
 //!
 //! # Why this crate exists
 //!
-//! `app-shell` links `ostd`, which owns `#[global_allocator]` and
+//! `app-cellbox` links `ostd`, which owns `#[global_allocator]` and
 //! `#[panic_handler]`; linking it alongside the std test harness fails with
 //! duplicate lang items (E0152).  Every byte-in/byte-out utility stage —
 //! argv cursors, ERE-lite compilation, record reading, and the grep/sed/awk/top
@@ -42,4 +42,6 @@ pub mod records;
 pub mod awk;
 pub mod grep;
 pub mod sed;
+pub mod editor;
+pub mod pipeline;
 pub mod top;

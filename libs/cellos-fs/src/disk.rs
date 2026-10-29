@@ -16,6 +16,8 @@ pub enum FsError {
     DirectoryNotEmpty,
     InvalidOffset,
     PartitionOverflow,
+    /// A conditional operation found state other than the expected observation.
+    Conflict,
 }
 
 /// Abstract block device representing a raw storage medium or partition slice.

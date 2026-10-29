@@ -21,7 +21,7 @@
 //! ```no_run
 //! # fn main() -> ostd::ViResult<()> {
 //! let mut vfs = ostd::clients::VfsClient::new();
-//! let bytes = vfs.read_file("/bin/shell")?;
+//! let bytes = vfs.read_file("/bin/cellbox")?;
 //! # let _ = bytes;
 //! # Ok(())
 //! # }

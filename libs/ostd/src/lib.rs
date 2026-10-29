@@ -55,6 +55,10 @@ pub mod ring_channel;
 pub mod startup;
 pub mod sync;
 pub mod syscall;
+/// Authenticated generation-bound streams and prepared child publication.
+pub mod session;
+/// Canonical immutable child invocation context.
+pub mod child_context;
 
 /// Allocator hooks (to be implemented).
 pub mod heap;

@@ -3,7 +3,7 @@
 extern crate alloc;
 
 mod path;
-mod session;
+pub(super) mod session;
 pub(super) mod wire;
 
 use crate::service::VfsRef;

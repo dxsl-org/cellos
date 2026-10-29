@@ -14,6 +14,7 @@
 pub mod caller_identity;
 pub mod cap;
 pub mod cell_owner;
+pub mod cell_session;
 pub mod completion;
 pub mod dir_attestation;
 pub mod dir_handles;
@@ -33,4 +34,5 @@ pub mod service_binding;
 pub mod syscall;
 pub mod syscall_tests;
 pub mod task;
+pub mod telemetry;
 pub mod vm;

@@ -15,6 +15,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::cell_session::ObjectRefV1;
+
 /// IPC payload buffer size.  Must be large enough for the largest serialized
 /// message in the system — currently a VFS Write with ~900-byte content
 /// (~916 bytes encoded).  4 KiB gives comfortable headroom.
@@ -198,6 +200,162 @@ pub enum VfsRequest<'a> {
     },
     /// Atomic rename of a file or directory from `old` to `new`.
     Rename { old: &'a str, new: &'a str },
+    /// Owner-authenticated prepared-cwd protocol; no filesystem mutation rights.
+    PreparedChildV1(&'a [u8]),
+    /// One page of the entries of `dir` itself, starting at `cursor`.
+    ///
+    /// `cursor` 0 starts a listing; every later page passes the `next` value of
+    /// the previous [`VfsResponse::DirPage`] unchanged (it is opaque). Answered
+    /// with `DirPage`, whose `entries` are packed per [`vfs_dir_page`]. Unlike
+    /// `ListAt`, a listing that does not fit one reply is never cut short
+    /// silently: only the page with [`vfs_dir_page::COMPLETE`] ends it.
+    ListAtPage {
+        dir: crate::dir_handles::ViDirHandle,
+        cursor: u32,
+    },
+    /// Current size of `file`, and whether a content or binding mutation reached
+    /// its path after it was opened. Answered with `FileState`.
+    FileHandleState {
+        file: crate::vfs_file_handles::ViVfsFileHandle,
+    },
+
+    // ── D03 conditional save (Phase 08). Appended; never reorder. ─────────────
+    /// Observe `path` for a later conditional publication. Answered with
+    /// `Observed`, or `Err(6)` on a backend without conditional save.
+    Observe { path: &'a str },
+    /// Open a staging transaction that can only publish at `dst`. Answered with
+    /// `SaveId`. Nothing visible at `dst` changes until `SaveCommit`.
+    SaveBegin { dst: &'a str },
+    /// Append staged bytes; `offset` must equal the bytes staged so far and
+    /// `bytes` is at most [`VFS_SAVE_CHUNK`].
+    SaveChunk { id: u32, offset: u64, bytes: &'a [u8] },
+    /// Seal the staged bytes: the service reads them back and requires exactly
+    /// `len` bytes with this SHA-256. No further chunks are accepted.
+    SaveSeal { id: u32, len: u64, sha256: [u8; 32] },
+    /// Publish the sealed bytes at `dst` only if it still matches `expect`.
+    /// Answered with `SaveOutcome`; a repeated commit or query answers the
+    /// recorded outcome and never runs the publication again.
+    SaveCommit { id: u32, expect: SaveExpect },
+    /// Outcome of this transaction's commit, if one was attempted.
+    SaveQuery { id: u32 },
+    /// Forget the transaction, removing any unpublished staged bytes.
+    SaveAbort { id: u32 },
+    /// Phase 09 (abi-vfs-telemetry §4, read-only part): look up the configured SSH
+    /// host identifier and port in the protected host-trust store and compare the
+    /// complete public key. Answered with [`VfsResponse::Trust`]. Needs the caller's
+    /// attested outbound-connect right; never reveals store contents.
+    TrustLookup { host: &'a str, port: u16, algorithm: &'a str, key: &'a [u8] },
+    /// Phase 09 S9-4c first trust: for a host and port that [`Self::TrustLookup`] reports
+    /// Unknown, the service registers a 60-second challenge with the input owner bound to
+    /// the caller, the exact key and the store's current state, and answers
+    /// [`VfsResponse::TrustChallenged`] (or [`VfsResponse::Trust`] with the refusal). The
+    /// caller then runs `BeginTrustConfirmation` with `confirmation` on `session` at
+    /// `epoch`, its own terminal session. Needs the attested outbound-connect right.
+    TrustChallenge { host: &'a str, port: u16, algorithm: &'a str, key: &'a [u8], session: ObjectRefV1, epoch: u64 },
+    /// Phase 09 S9-4c: complete the caller's own `challenge`. Answered with
+    /// [`VfsResponse::Trust`]: `PENDING` while undecided; after an accepted confirmation
+    /// the store is updated and the answer is `KNOWN_EXACT` (or `MISMATCH` when another
+    /// writer stored a different key first); `REFUSED`, `EXPIRED`, `DENIED` or
+    /// `UNAVAILABLE` otherwise. Any final answer ends the challenge.
+    TrustCommit { challenge: ObjectRefV1 },
+}
+
+/// Largest `SaveChunk` payload.
+pub const VFS_SAVE_CHUNK: usize = 512;
+/// Largest sealed save.
+pub const VFS_SAVE_MAX: u64 = 4 * 1024 * 1024;
+
+/// The destination state a conditional save was confirmed against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SaveExpect {
+    Absent,
+    /// Exact file identity: `inode` is never reused on the volume and
+    /// `generation` advances on every mutation, even a byte-identical one.
+    Present { inode: u64, generation: u64 },
+}
+
+/// `Observe` reply.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Observation {
+    Absent,
+    Present { inode: u64, generation: u64, size: u64, regular: bool },
+}
+
+impl Observation {
+    /// The expectation that binds a save to exactly this observation; `None`
+    /// for a non-regular object, which a save never replaces.
+    pub fn expect(self) -> Option<SaveExpect> {
+        match self {
+            Self::Absent => Some(SaveExpect::Absent),
+            Self::Present { inode, generation, regular: true, .. } =>
+                Some(SaveExpect::Present { inode, generation }),
+            Self::Present { .. } => None,
+        }
+    }
+}
+
+/// `VfsResponse::Trust` values (abi-vfs-telemetry §4 lookup outcomes).
+pub mod ssh_trust {
+    /// The store holds this host and port with exactly this algorithm and key.
+    pub const KNOWN_EXACT: u8 = 0;
+    /// The store holds nothing for this host and port.
+    pub const UNKNOWN: u8 = 1;
+    /// The store holds this host and port with a different key.
+    pub const MISMATCH: u8 = 2;
+    /// The caller may not consult the store.
+    pub const DENIED: u8 = 3;
+    /// The store cannot be read or is malformed.
+    pub const UNAVAILABLE: u8 = 4;
+    /// `TrustCommit`: the user refused (or the confirmation was cancelled, or its
+    /// owner-attested bindings did not match the challenge). Nothing was stored.
+    pub const REFUSED: u8 = 5;
+    /// `TrustCommit`: the challenge's 60 seconds passed. Nothing was stored.
+    pub const EXPIRED: u8 = 6;
+    /// `TrustCommit`: not decided yet; ask again.
+    pub const PENDING: u8 = 7;
+}
+
+/// Why a commit proved nothing was published.
+pub mod save_refusal {
+    /// The staged object changed after sealing.
+    pub const STAGE_CHANGED: u8 = 1;
+    /// The transaction was not sealed.
+    pub const NOT_SEALED: u8 = 2;
+    /// Quota does not cover the new size.
+    pub const QUOTA: u8 = 3;
+    /// The backend refused before any mutation (bad destination, no space).
+    pub const REFUSED: u8 = 4;
+}
+
+/// Result of `SaveCommit` / `SaveQuery`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SaveOutcome {
+    /// Published and synced through the backend's barriers. This is not a
+    /// power-loss guarantee.
+    Committed { inode: u64, generation: u64 },
+    /// `dst` no longer matched the expectation; nothing changed.
+    Conflict,
+    /// Proven not published; `dst` is unchanged. Reason per [`save_refusal`].
+    NotPublished(u8),
+    /// The publication may or may not have reached storage.
+    Indeterminate,
+    /// Published, and the backend's durability protocol proved the new bytes survive
+    /// power loss (before this reply: old or new whole, never torn). No backend
+    /// returns it yet: CellosFS reports durability unavailable until the separate
+    /// crash-safety plan (`.agents/261025-cellosfs-crash-safety/plan.md`) lands.
+    CommittedDurable { inode: u64, generation: u64 },
+}
+
+impl SaveOutcome {
+    /// The published object for either successful outcome.
+    pub fn published(self) -> Option<(u64, u64)> {
+        match self {
+            Self::Committed { inode, generation } | Self::CommittedDurable { inode, generation } => {
+                Some((inode, generation))
+            }
+            Self::Conflict | Self::NotPublished(_) | Self::Indeterminate => None,
+        }
+    }
 }
 
 impl VfsRequest<'_> {
@@ -242,7 +400,22 @@ impl VfsRequest<'_> {
             | Self::CloseFile { .. }
             | Self::ReadHandleGrant { .. }
             | Self::WriteHandleGrant { .. }
-            | Self::SyncHandle { .. } => false,
+            | Self::SyncHandle { .. }
+            | Self::PreparedChildV1(_)
+            | Self::ListAtPage { .. }
+            | Self::FileHandleState { .. } => false,
+            // A save names its destination once, at `SaveBegin`; the rest carry
+            // the service-issued transaction id.
+            Self::Observe { .. } | Self::SaveBegin { .. } => true,
+            Self::SaveChunk { .. }
+            | Self::SaveSeal { .. }
+            | Self::SaveCommit { .. }
+            | Self::SaveQuery { .. }
+            | Self::SaveAbort { .. }
+            // Names a host, never a path; the store location is the service's own.
+            | Self::TrustLookup { .. }
+            | Self::TrustChallenge { .. }
+            | Self::TrustCommit { .. } => false,
         }
     }
 
@@ -262,7 +435,12 @@ impl VfsRequest<'_> {
             | Self::UnlinkAt { .. }
             | Self::WriteHandleGrant { .. }
             | Self::SyncHandle { .. }
-            | Self::Rename { .. } => true,
+            | Self::Rename { .. }
+            | Self::SaveBegin { .. }
+            | Self::SaveChunk { .. }
+            | Self::SaveSeal { .. }
+            | Self::SaveCommit { .. }
+            | Self::SaveAbort { .. } => true,
 
             Self::GetFile(_)
             | Self::ListDir(_)
@@ -281,7 +459,17 @@ impl VfsRequest<'_> {
             | Self::OpenFileAt { .. }
             | Self::ReadFileHandle { .. }
             | Self::CloseFile { .. }
-            | Self::ReadHandleGrant { .. } => false,
+            | Self::ReadHandleGrant { .. }
+            | Self::PreparedChildV1(_)
+            | Self::ListAtPage { .. }
+            | Self::FileHandleState { .. }
+            | Self::Observe { .. }
+            | Self::SaveQuery { .. }
+            | Self::TrustLookup { .. }
+            // The store is written on the service's own authority after an
+            // owner-attested confirmation, never with the caller's.
+            | Self::TrustChallenge { .. }
+            | Self::TrustCommit { .. } => false,
         }
     }
 }
@@ -314,6 +502,150 @@ pub enum VfsResponse<'a> {
     DirHandle(crate::dir_handles::ViDirHandle),
     /// A file handle the service has issued to the caller.
     FileHandle(crate::vfs_file_handles::ViVfsFileHandle),
+    /// Complete borrowed V1 prepared-cwd result record.
+    PreparedChildV1(&'a [u8]),
+    /// One `ListAtPage` reply: whole entries packed per [`vfs_dir_page`],
+    /// the cursor for the following page, and [`vfs_dir_page`] flag bits.
+    /// On the page that carries `COMPLETE`, `next` is 0 and means nothing.
+    DirPage {
+        next: u32,
+        flags: u8,
+        entries: &'a [u8],
+    },
+    /// `FileHandleState` reply.
+    FileState { size: u64, modified: bool },
+    /// `Observe` reply.
+    Observed(Observation),
+    /// `SaveBegin` reply: the transaction id.
+    SaveId(u32),
+    /// `SaveCommit` / `SaveQuery` reply.
+    SaveOutcome(SaveOutcome),
+    /// `TrustLookup` reply: one of [`ssh_trust`].
+    Trust(u8),
+    /// `TrustChallenge` reply: the input-issued confirmation to begin, and the
+    /// service-issued challenge to commit.
+    TrustChallenged { confirmation: ObjectRefV1, challenge: ObjectRefV1 },
+}
+
+/// Packed entry format and flag bits of [`VfsResponse::DirPage`].
+///
+/// Each entry is `kind:u8, len:u8, name[len]`. `name` is one directory
+/// component that passes [`crate::dir_name::validate_dir_component`], so it is
+/// valid UTF-8, 1–255 bytes, and can be passed back to `OpenDir`/`OpenFileAt`
+/// unchanged. A page holds only whole entries.
+pub mod vfs_dir_page {
+    use crate::dir_name::{validate_dir_component, DirNameError};
+
+    /// Set on the final page of a listing.
+    pub const COMPLETE: u8 = 1 << 0;
+    /// A child of the listed directory was created, removed or renamed after the
+    /// directory handle was opened, so pages may not form one consistent view.
+    /// Sticky for the life of the handle.
+    pub const CHANGED: u8 = 1 << 1;
+    /// Bytes before the name in one packed entry.
+    pub const ENTRY_HEADER_LEN: usize = 2;
+
+    /// What a directory entry is.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum EntryKind {
+        File,
+        Dir,
+        /// The root of another mount: listing or reading it leaves this mount.
+        Mount,
+        /// Neither a regular file nor a directory.
+        Other,
+    }
+
+    impl EntryKind {
+        pub const fn wire(self) -> u8 {
+            match self {
+                Self::File => 0,
+                Self::Dir => 1,
+                Self::Mount => 2,
+                Self::Other => 3,
+            }
+        }
+
+        pub const fn from_wire(byte: u8) -> Option<Self> {
+            match byte {
+                0 => Some(Self::File),
+                1 => Some(Self::Dir),
+                2 => Some(Self::Mount),
+                3 => Some(Self::Other),
+                _ => None,
+            }
+        }
+    }
+
+    /// Append one entry to `out` at `pos`.
+    ///
+    /// Returns the position after the entry, or `Ok(None)` when it does not fit
+    /// (nothing is written then).
+    ///
+    /// # Errors
+    /// The name is not a valid directory component.
+    pub fn push_entry(
+        out: &mut [u8],
+        pos: usize,
+        kind: EntryKind,
+        name: &[u8],
+    ) -> Result<Option<usize>, DirNameError> {
+        let name = validate_dir_component(name)?.as_bytes();
+        let end = pos + ENTRY_HEADER_LEN + name.len();
+        if end > out.len() {
+            return Ok(None);
+        }
+        out[pos] = kind.wire();
+        // validate_dir_component bounds the name to MAX_DIR_NAME_LEN (255).
+        out[pos + 1] = name.len() as u8;
+        out[pos + ENTRY_HEADER_LEN..end].copy_from_slice(name);
+        Ok(Some(end))
+    }
+
+    /// One decoded entry, borrowing the page bytes.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Entry<'a> {
+        pub kind: EntryKind,
+        pub name: &'a str,
+    }
+
+    /// The page bytes do not follow the packed format.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct MalformedPage;
+
+    /// Decode the entries of one page in order.
+    pub fn entries(page: &[u8]) -> Entries<'_> {
+        Entries { rest: page }
+    }
+
+    /// Iterator over packed entries; yields one error and then stops.
+    pub struct Entries<'a> {
+        rest: &'a [u8],
+    }
+
+    impl<'a> Iterator for Entries<'a> {
+        type Item = Result<Entry<'a>, MalformedPage>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            let rest = self.rest;
+            if rest.is_empty() {
+                return None;
+            }
+            self.rest = &[];
+            let [kind, len, tail @ ..] = rest else {
+                return Some(Err(MalformedPage));
+            };
+            let len = usize::from(*len);
+            let (Some(kind), Some(name)) = (EntryKind::from_wire(*kind), tail.get(..len)) else {
+                return Some(Err(MalformedPage));
+            };
+            let Ok(name) = validate_dir_component(name) else {
+                return Some(Err(MalformedPage));
+            };
+            self.rest = &tail[len..];
+            Some(Ok(Entry { kind, name }))
+        }
+    }
 }
 
 // ── Network service ───────────────────────────────────────────────────────────
@@ -479,6 +811,11 @@ pub enum NetRequest<'a> {
 }
 
 /// Responses from the network service.
+///
+/// `Err(code)` codes: `0xFF` generic failure, `0xFE` accept not ready, `0xFD`
+/// busy/capacity, [`NET_ERR_DENIED`] (`0xFC`) the caller's Cell lacks the
+/// network right the request needs. A deferred `L2Send` reply may forward the
+/// NIC driver's own status byte.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NetResponse<'a> {
     CapId(u32),
@@ -496,11 +833,19 @@ pub enum NetResponse<'a> {
     WriteProgress(u32),
 }
 
+/// `NetResponse::Err` code: permission denied.
+///
+/// service-net returns it before any effect (no socket, DNS query, owner watch
+/// or frame) when the kernel-attested caller flags lack the right the request
+/// needs (`CALLER_FLAG_NET_*` in `abi::caller_identity`). Clients report it as
+/// "permission denied", never as a network failure.
+pub const NET_ERR_DENIED: u8 = 0xFC;
+
 // ── Input service ─────────────────────────────────────────────────────────────
 
 /// Requests sent to the input service (`/bin/input`).
 #[derive(Debug, Serialize, Deserialize)]
-pub enum InputRequest {
+pub enum InputRequest<'a> {
     /// Register the caller as the currently focused cell that receives key/mouse events.
     SetFocus { cell_tid: u32 },
     /// Query which cell currently has focus.  Returns `InputResponse::Focus`.
@@ -520,6 +865,8 @@ pub enum InputRequest {
     /// `kind` identifies the producer class ([`input_source`]); Input validates
     /// the caller against the kernel service identity for that class.
     RegisterEventSource { kind: u8 },
+    /// Complete borrowed owner-authenticated V1 session request record.
+    SessionV1(&'a [u8]),
 }
 
 /// `RegisterEventSource` producer classes.
@@ -561,29 +908,43 @@ pub mod led_bits {
 
 /// Responses from the input service.
 #[derive(Debug, Serialize, Deserialize)]
-pub enum InputResponse {
+pub enum InputResponse<'a> {
     /// Currently focused cell tid (0 = none).
     Focus(u32),
     Ok,
     Err(u8),
+    /// Complete borrowed V1 session result record.
+    SessionV1(&'a [u8]),
 }
 
 // ── Config service ────────────────────────────────────────────────────────────
 
 /// Requests sent to the config service (`/bin/config`).
+///
+/// `Get` and `List` are open to every caller (Config is not a secret store).
+/// `Set` and `Delete` are admitted only when the kernel-attested caller holds
+/// [`crate::caller_identity::CALLER_FLAG_CONFIG_WRITE`] **and** the key is in
+/// the shell namespace: 1..=64 bytes of `[A-Za-z_][A-Za-z0-9_]*`, excluding the
+/// system keys `PATH` and `OS`. Anything else is answered with
+/// `ConfigResponse::Err(CONFIG_ERR_DENIED)` before any mutation.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ConfigRequest<'a> {
     /// Read the value for `key`.  Returns `ConfigResponse::Value` or `NotFound`.
     Get(&'a str),
-    /// Write `value` for `key` (insert or overwrite).  Returns `Ok`.
+    /// Write `value` for `key` (insert or overwrite).  Returns `Ok`, or
+    /// `Err(CONFIG_ERR_DENIED)` when the write is not admitted.
     Set { key: &'a str, value: &'a str },
-    /// Remove `key`.  Returns `Ok` even if absent (idempotent).
+    /// Remove `key`.  Returns `Ok` even if absent (idempotent), or
+    /// `Err(CONFIG_ERR_DENIED)` when the delete is not admitted.
     Delete(&'a str),
     /// List all registered keys as a newline-separated string.
     List,
 }
 
 /// Responses from the config service.
+///
+/// `Err(code)` codes: `0xFF` malformed request / reply too large,
+/// [`CONFIG_ERR_DENIED`] (`0xFC`) write not admitted.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ConfigResponse<'a> {
     /// Value associated with a key.
@@ -594,6 +955,14 @@ pub enum ConfigResponse<'a> {
     NotFound,
     Err(u8),
 }
+
+/// `ConfigResponse::Err` code: permission denied.
+///
+/// service-config returns it for a `Set`/`Delete` whose caller is unattested,
+/// lacks `CALLER_FLAG_CONFIG_WRITE`, or names a key outside the shell
+/// namespace. The store is untouched. Clients report it as "permission denied",
+/// never as "config unavailable". Same value as [`NET_ERR_DENIED`].
+pub const CONFIG_ERR_DENIED: u8 = 0xFC;
 
 // ── Serialization helpers ─────────────────────────────────────────────────────
 
@@ -619,4 +988,173 @@ pub fn encode<'a, T: Serialize>(msg: &T, buf: &'a mut [u8]) -> postcard::Result<
 pub fn decode<'de, T: Deserialize<'de>>(buf: &'de [u8]) -> postcard::Result<T> {
     let (msg, _remaining) = postcard::take_from_bytes(buf)?;
     Ok(msg)
+}
+
+#[cfg(test)]
+mod session_wire_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_input_records_keep_their_complete_postcard_bytes() {
+        let mut out = [0; 32];
+        for (request, expected) in [
+            (InputRequest::SetFocus { cell_tid: 7 }, &b"\x00\x07"[..]),
+            (InputRequest::GetFocus, &b"\x01"[..]),
+            (InputRequest::ClearFocus { cell_tid: 7 }, &b"\x02\x07"[..]),
+            (InputRequest::RegisterEventSource { kind: 2 }, &b"\x03\x02"[..]),
+        ] {
+            assert_eq!(encode(&request, &mut out).unwrap(), expected);
+        }
+        for (response, expected) in [
+            (InputResponse::Focus(7), &b"\x00\x07"[..]),
+            (InputResponse::Ok, &b"\x01"[..]),
+            (InputResponse::Err(9), &b"\x02\x09"[..]),
+        ] {
+            assert_eq!(encode(&response, &mut out).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn new_envelopes_append_and_borrow_without_consuming_receive_padding() {
+        let mut record = [0; crate::cell_session::MAX_SERVICE_RECORD_LEN];
+        crate::cell_session::RequestHeaderV1 {
+            selector: 1, total_len: record.len() as u32, request_id: 1,
+        }.encode(&mut record).unwrap();
+        let mut out = [0; IPC_BUF_SIZE - crate::caller_identity::CALLER_IDENTITY_LEN];
+        let encoded = encode(&InputRequest::SessionV1(&record), &mut out).unwrap();
+        assert_eq!(encoded[0], 4);
+        let encoded_len = encoded.len();
+        let decoded: InputRequest<'_> = decode(&out).unwrap();
+        let InputRequest::SessionV1(inner) = decoded else { panic!("wrong variant"); };
+        assert_eq!(inner, record);
+        assert_eq!(inner.as_ptr(), out[encoded_len - record.len()..].as_ptr());
+        crate::cell_session::RequestHeaderV1::decode(inner).unwrap();
+        assert_eq!(encode(&InputResponse::SessionV1(&record), &mut out).unwrap()[0], 3);
+        assert_eq!(encode(&VfsRequest::PreparedChildV1(&record), &mut out).unwrap()[0], 30);
+        assert_eq!(encode(&VfsResponse::PreparedChildV1(&record), &mut out).unwrap()[0], 10);
+        assert!(!VfsRequest::PreparedChildV1(&record).is_path_addressed());
+        assert!(!VfsRequest::PreparedChildV1(&record).requires_mutation_authority());
+    }
+
+    #[test]
+    fn existing_vfs_tail_and_path_semantics_are_unchanged() {
+        let mut out = [0; 32];
+        assert_eq!(encode(&VfsRequest::GetFile("a"), &mut out).unwrap(), b"\x00\x01a");
+        assert_eq!(encode(&VfsRequest::Rename { old: "a", new: "b" }, &mut out).unwrap(), b"\x1d\x01a\x01b");
+        assert_eq!(encode(&VfsResponse::Err(7), &mut out).unwrap(), b"\x04\x07");
+        assert!(VfsRequest::Rename { old: "a", new: "b" }.is_path_addressed());
+        assert!(VfsRequest::Rename { old: "a", new: "b" }.requires_mutation_authority());
+    }
+
+    #[test]
+    fn read_path_variants_append_at_31_32_and_11_12() {
+        use crate::dir_handles::ViDirHandle;
+        use crate::vfs_file_handles::ViVfsFileHandle;
+        let mut out = [0; 32];
+        let page = VfsRequest::ListAtPage { dir: ViDirHandle(5), cursor: 300 };
+        assert_eq!(encode(&page, &mut out).unwrap(), b"\x1f\x05\xac\x02");
+        let state = VfsRequest::FileHandleState { file: ViVfsFileHandle(7) };
+        assert_eq!(encode(&state, &mut out).unwrap(), b"\x20\x07");
+        for request in [page, state] {
+            assert!(!request.is_path_addressed());
+            assert!(!request.requires_mutation_authority());
+        }
+        let reply = VfsResponse::DirPage { next: 3, flags: vfs_dir_page::COMPLETE, entries: b"\x00\x01a" };
+        assert_eq!(encode(&reply, &mut out).unwrap(), b"\x0b\x03\x01\x03\x00\x01a");
+        let reply = VfsResponse::FileState { size: 4001, modified: true };
+        assert_eq!(encode(&reply, &mut out).unwrap(), b"\x0c\xa1\x1f\x01");
+        // Earlier indices keep their bytes.
+        assert_eq!(encode(&VfsResponse::PreparedChildV1(b""), &mut out).unwrap(), b"\x0a\x00");
+    }
+
+    #[test]
+    fn trust_lookup_appends_after_save_abort() {
+        let mut out = [0; 64];
+        let req = VfsRequest::TrustLookup { host: "h", port: 22, algorithm: "a", key: b"k" };
+        assert_eq!(encode(&req, &mut out).unwrap(), b"\x28\x01h\x16\x01a\x01k");
+        assert_eq!(encode(&VfsResponse::Trust(ssh_trust::MISMATCH), &mut out).unwrap(), b"\x10\x02");
+        // Read-only and host-addressed: neither mutation authority nor a path.
+        assert!(!req.requires_mutation_authority() && !req.is_path_addressed());
+    }
+
+    #[test]
+    fn first_trust_variants_append_after_trust_lookup() {
+        let mut out = [0; 64];
+        let r = |id, generation| ObjectRefV1 { id, generation };
+        let challenge = VfsRequest::TrustChallenge { host: "h", port: 22, algorithm: "a", key: b"k", session: r(5, 300), epoch: 2 };
+        assert_eq!(encode(&challenge, &mut out).unwrap(), b"\x29\x01h\x16\x01a\x01k\x05\xac\x02\x02");
+        let commit = VfsRequest::TrustCommit { challenge: r(1, 2) };
+        assert_eq!(encode(&commit, &mut out).unwrap(), b"\x2a\x01\x02");
+        let reply = VfsResponse::TrustChallenged { confirmation: r(3, 1), challenge: r(1, 2) };
+        assert_eq!(encode(&reply, &mut out).unwrap(), b"\x11\x03\x01\x01\x02");
+        // Earlier indices keep their bytes; the commit answers are new `Trust` codes.
+        assert_eq!(encode(&VfsResponse::Trust(ssh_trust::PENDING), &mut out).unwrap(), b"\x10\x07");
+        assert_eq!((ssh_trust::REFUSED, ssh_trust::EXPIRED, ssh_trust::PENDING), (5, 6, 7));
+        // Host-addressed, and the caller's mutation authority is never what writes the store.
+        for req in [challenge, commit] {
+            assert!(!req.requires_mutation_authority() && !req.is_path_addressed());
+        }
+    }
+
+    #[test]
+    fn conditional_save_variants_append_after_file_handle_state() {
+        let mut out = [0; 64];
+        let expect = SaveExpect::Present { inode: 9, generation: 300 };
+        assert_eq!(encode(&VfsRequest::Observe { path: "a" }, &mut out).unwrap(), b"\x21\x01a");
+        assert_eq!(encode(&VfsRequest::SaveBegin { dst: "a" }, &mut out).unwrap(), b"\x22\x01a");
+        assert_eq!(encode(&VfsRequest::SaveAbort { id: 1 }, &mut out).unwrap(), b"\x27\x01");
+        assert_eq!(encode(&VfsRequest::SaveCommit { id: 1, expect }, &mut out).unwrap(),
+            b"\x25\x01\x01\x09\xac\x02");
+        assert_eq!(encode(&VfsResponse::SaveOutcome(SaveOutcome::Conflict), &mut out).unwrap(), b"\x0f\x01");
+        assert_eq!(encode(&VfsResponse::Observed(Observation::Absent), &mut out).unwrap(), b"\x0d\x00");
+        // Every step that changes storage needs mutation authority; only the
+        // destination-naming steps are path-addressed.
+        let seal = VfsRequest::SaveSeal { id: 1, len: 0, sha256: [0; 32] };
+        assert!(seal.requires_mutation_authority() && !seal.is_path_addressed());
+        let begin = VfsRequest::SaveBegin { dst: "a" };
+        assert!(begin.requires_mutation_authority() && begin.is_path_addressed());
+        let observe = VfsRequest::Observe { path: "a" };
+        assert!(!observe.requires_mutation_authority() && observe.is_path_addressed());
+        assert!(!VfsRequest::SaveQuery { id: 1 }.requires_mutation_authority());
+        // A directory observation never yields a replaceable expectation.
+        let dir = Observation::Present { inode: 2, generation: 1, size: 0, regular: false };
+        assert_eq!(dir.expect(), None);
+    }
+
+    #[test]
+    fn dir_page_entries_round_trip_and_reject_what_a_handle_cannot_name() {
+        use vfs_dir_page::{entries, push_entry, Entry, EntryKind, MalformedPage};
+        let mut page = [0u8; 16];
+        let pos = push_entry(&mut page, 0, EntryKind::Dir, b"src").unwrap().unwrap();
+        let pos = push_entry(&mut page, pos, EntryKind::Mount, b"tmp").unwrap().unwrap();
+        assert_eq!(pos, 10);
+        // Does not fit: nothing written, position unchanged by the caller.
+        assert_eq!(push_entry(&mut page, pos, EntryKind::File, b"too-long"), Ok(None));
+        assert_eq!(page[pos..], [0; 6]);
+        for bad in [&b""[..], b".", b"..", b"a/b", b"a\\b", b"a\nb", b"\xff"] {
+            assert!(push_entry(&mut page, 0, EntryKind::File, bad).is_err(), "{bad:?}");
+        }
+        let decoded: Vec<_> = entries(&page[..pos]).collect();
+        assert_eq!(decoded, [
+            Ok(Entry { kind: EntryKind::Dir, name: "src" }),
+            Ok(Entry { kind: EntryKind::Mount, name: "tmp" }),
+        ]);
+        assert_eq!(entries(&[]).count(), 0);
+        // Unknown kind, truncated name, a bad name: one error, then the end.
+        for malformed in [&b"\x04\x01a"[..], b"\x00\x05ab", b"\x00", b"\x00\x02.."] {
+            let decoded: Vec<_> = entries(malformed).collect();
+            assert_eq!(decoded, [Err(MalformedPage)], "{malformed:?}");
+        }
+        for kind in [EntryKind::File, EntryKind::Dir, EntryKind::Mount, EntryKind::Other] {
+            assert_eq!(EntryKind::from_wire(kind.wire()), Some(kind));
+        }
+    }
+
+    #[test]
+    fn a_full_inline_page_fits_one_reply_frame() {
+        let entries = [b'x'; IPC_BUF_SIZE - 96];
+        let mut out = [0; IPC_BUF_SIZE];
+        let reply = VfsResponse::DirPage { next: u32::MAX, flags: 0xff, entries: &entries };
+        assert!(encode(&reply, &mut out).is_ok());
+    }
 }

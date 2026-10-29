@@ -16,6 +16,8 @@ pub(super) enum MockReply {
     Data(Vec<u8>),
     Ok,
     Err(u8),
+    Page { next: u32, flags: u8, entries: Vec<u8> },
+    State { size: u64, modified: bool },
 }
 
 pub(super) struct MockOps {
@@ -57,6 +59,11 @@ impl VfsReadOps for MockOps {
             }
             MockReply::Ok => VfsResponse::Ok,
             MockReply::Err(code) => VfsResponse::Err(code),
+            MockReply::Page { next, flags, entries } => {
+                resp_buf[..entries.len()].copy_from_slice(&entries);
+                VfsResponse::DirPage { next, flags, entries: &resp_buf[..entries.len()] }
+            }
+            MockReply::State { size, modified } => VfsResponse::FileState { size, modified },
         })
     }
 }

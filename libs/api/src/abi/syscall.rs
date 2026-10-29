@@ -596,6 +596,22 @@ pub enum ViSyscall {
     /// an open syscall, so any client that may resolve a service endpoint today may
     /// resolve its binding tomorrow.
     LookupServiceBound = 429,
+    /// 430: Capture one Cell-aware telemetry snapshot into a caller buffer
+    /// (Phase 06 S6-1, [`crate::telemetry`]).
+    ///
+    /// ABI: a0 = out_ptr (8-byte aligned), a1 = out_len (bytes, at least
+    /// [`crate::telemetry::HEADER_LEN`]), a2 = [`crate::telemetry::request`] flags,
+    /// a3 = 0 → bytes written: a header, then whole Cell rows, then whole task
+    /// rows; whatever does not fit is counted, never silently dropped.
+    ///
+    /// Needs the caller's `observe_tasks` right; a system-memory request without
+    /// `observe_memory` is not an error — the header says `SYSMEM_DENIED`. A
+    /// transient kernel allocation failure returns the typed out-of-memory code.
+    ///
+    /// Allowlist: shares bit 55 with [`Self::GetProcs2`] — the same task-observation
+    /// authority, and the `u64` allowlist is full (bits 0–62 syscalls, 63 the
+    /// VFS-mutate declaration). `GetProcs2`, `GetProcs` and `MemInfo` are unchanged.
+    TelemetrySnapshot = 430,
     ///
     /// Allowlist: all four share the DriverRegistration bit (50) with
     /// `RegisterBlockDriver`/`FindPcieDevice`/`FindPcieDeviceByVendor`, exactly
@@ -736,6 +752,10 @@ pub enum ViSyscall {
     /// 261: Complete a deferred request received by this exact service
     /// generation. a0=token, a1=reply ptr, a2=reply len, a3=0 -> 0.
     IpcReply = 261,
+    /// Owner-authenticated session/stream and prepared-child V1 transport.
+    /// a0=request ptr, a1=request len, a2=result ptr, a3=result capacity.
+    /// Returns zero after a complete typed result, or usize::MAX without effects.
+    CellSessionV1 = 262,
 }
 
 /// Fixed-width little-endian status written only by a successful `IpcTake`.
@@ -1115,7 +1135,9 @@ impl ViSyscall {
             // Declare with `ReadLog` in the cell manifest to enable.
             Self::ReadLog => Some(54),
             // GetProcs2 (bit 55): richer task telemetry, opt-in like ReadLog.
-            Self::GetProcs2 => Some(55),
+            // TelemetrySnapshot shares it: the same task-observation authority with
+            // Cell identity and ns CPU, and the u64 allowlist has no free bit.
+            Self::GetProcs2 | Self::TelemetrySnapshot => Some(55),
             // MemInfo (bit 56): global allocator telemetry is a cross-cell side channel.
             Self::MemInfo => Some(56),
             // SpawnReplacement (bit 57): supervisor-only replacement spawn via a
@@ -1159,6 +1181,9 @@ impl ViSyscall {
             | Self::CancelCellOwnerWatch
             | Self::ResolveCellOwnerRecord
             | Self::WatchCellOwnerRecord
+            // This transport has no manifest bit: each selector must validate
+            // the caller's live owner/issuer generation and object rights.
+            | Self::CellSessionV1
             // SetTlsBase is self-only and carries no authority: it changes one word
             // of the caller's own register state, and the allowlist bitmap is full
             // (bits 0-62 assigned, 63 is the VFS-mutate declaration bit). Giving it
@@ -1290,6 +1315,7 @@ impl From<usize> for ViSyscall {
             259 => ViSyscall::IpcCancel,
             260 => ViSyscall::IpcCurrent,
             261 => ViSyscall::IpcReply,
+            262 => ViSyscall::CellSessionV1,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,
@@ -1315,6 +1341,7 @@ impl From<usize> for ViSyscall {
             427 => ViSyscall::SerialRead,
             428 => ViSyscall::SerialConfigure,
             429 => ViSyscall::LookupServiceBound,
+            430 => ViSyscall::TelemetrySnapshot,
             _ => ViSyscall::Unknown,
         }
     }

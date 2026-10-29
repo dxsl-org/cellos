@@ -78,15 +78,29 @@ fn decode_snapshot_result(ret: isize) -> SyscallResult {
     }
 }
 
+/// Submit an owner-authenticated V1 request. Transport success is exactly zero;
+/// operation status remains in the result record, including typed errors.
+pub fn sys_cell_session_v1(request: &[u8], result: &mut [u8]) -> SyscallResult {
+    // SAFETY: both slices remain live for the call; the exclusive result borrow
+    // prevents overlap with the request. The kernel validates both full ranges.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::CellSessionV1,
+            request.as_ptr() as usize,
+            request.len(),
+            result.as_mut_ptr() as usize,
+            result.len(),
+        )
+    };
+    if ret == 0 {
+        SyscallResult::Ok(0)
+    } else {
+        SyscallResult::Err(SyscallError::Unknown)
+    }
+}
+
 #[inline(always)]
 unsafe fn syscall(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) -> isize {
-    // Host (test) builds have no cell kernel: a raw `syscall` would execute an
-    // unrelated Linux call (e.g. IpcTake == openat), so fail closed instead.
-    #[cfg(not(target_os = "none"))]
-    {
-        let _ = (id, a0, a1, a2, a3);
-        return -1;
-    }
     let mut ret: isize;
     #[cfg(target_arch = "riscv64")]
     asm!(
@@ -197,19 +211,27 @@ pub fn sys_blk_flush() -> bool {
     ret == 1
 }
 
-/// Trigger a clean system shutdown via the kernel's SBI SRST path. Never returns.
+/// Request a clean system shutdown via the kernel's SBI SRST path. Never returns when the
+/// kernel accepts it.
 ///
 /// Raw syscall 502 — intentionally absent from `ViSyscall`/`libs/api` to avoid the
-/// ABI 2x-confirm gate (same pattern as `sys_blk_read`/`sys_blk_write` above).
+/// ABI 2x-confirm gate (same pattern as `sys_blk_read`/`sys_blk_write` above). The kernel
+/// accepts it only from the reviewed `shutdown` worker.
 pub fn sys_shutdown() -> ! {
-    // SAFETY: raw syscall 502 invokes the kernel SBI SRST shutdown; the kernel's
-    // ecall to OpenSBI terminates QEMU and never returns to us.
-    unsafe {
-        syscall_raw(502, 0, 0, 0, 0);
-    }
-    // Unreachable: the kernel never returns from shutdown. Spin to satisfy `-> !`.
+    sys_shutdown_denied();
+    // Unreachable when accepted: the kernel never returns from shutdown. Spin to satisfy `-> !`.
     loop {
         sys_yield();
+    }
+}
+
+/// Issue raw syscall 502 and return **only if the kernel refused it** (an accepted shutdown
+/// never returns). Lets a caller that is not the reviewed `shutdown` worker survive and report.
+pub fn sys_shutdown_denied() {
+    // SAFETY: raw syscall 502 takes no pointers; the kernel either powers the machine off or
+    // returns an error status.
+    unsafe {
+        syscall_raw(502, 0, 0, 0, 0);
     }
 }
 
@@ -510,7 +532,7 @@ pub fn sys_spawn_from_mem(data: &[u8], name: &str, args: &str) -> SyscallResult 
     }
 }
 
-/// Spawn a cell by loading its ELF from a VFS path (e.g. `/bin/shell`).
+/// Spawn a cell by loading its ELF from a VFS path (e.g. `/bin/cellbox`).
 ///
 /// The kernel reads the ELF from disk or the bootstrap table, parses it,
 /// and spawns a new task.  Returns the new cell's task ID on success.
@@ -1545,6 +1567,51 @@ pub fn sys_get_procs2(buffer: &mut [api::syscall::ProcessInfoV2]) -> Result<usiz
             Err(SyscallError::Unknown)
         }
     }
+}
+
+/// Capture one Cell-aware telemetry snapshot (Phase 06 S6-1).
+///
+/// `out` is 8-byte aligned by type; `flags` are [`api::telemetry::request`] bits.
+/// Returns the bytes written into `out` — decode them with
+/// [`api::telemetry::TelemetrySnapshot::parse`]. Requires a `GetProcs2` or
+/// `TelemetrySnapshot` declaration (shared bit 55) and the caller's
+/// `observe_tasks` right.
+///
+/// # Errors
+/// - `BufferTooSmall` / `InvalidCommand`: refused locally, before the call, for
+///   a buffer shorter than a header or an undefined flag bit.
+/// - `PermissionDenied`: the kernel refused a well-formed call, which is the
+///   dispatch gate (no `observe_tasks`, or no bit 55).
+/// - `OutOfMemory`: the kernel could not allocate the transient capture.
+pub fn sys_telemetry_snapshot(out: &mut [u64], flags: usize) -> Result<usize, SyscallError> {
+    let len = core::mem::size_of_val(out);
+    if len < api::telemetry::HEADER_LEN {
+        return Err(SyscallError::BufferTooSmall);
+    }
+    if flags & !api::telemetry::request::ALL != 0 {
+        return Err(SyscallError::InvalidCommand);
+    }
+    // SAFETY: `out` is a live, aligned, writable slice of `len` bytes and the
+    // kernel writes at most `len` bytes into it.
+    let ret = unsafe {
+        syscall(ViSyscall::TelemetrySnapshot, out.as_mut_ptr() as usize, len, flags, 0)
+    };
+    match ret {
+        written if written >= 0 && written as usize <= len => Ok(written as usize),
+        SYSCALL_DENIED => Err(SyscallError::PermissionDenied),
+        SYSCALL_OOM => Err(SyscallError::OutOfMemory),
+        _ => Err(SyscallError::Unknown),
+    }
+}
+
+/// The first `written` bytes of a [`sys_telemetry_snapshot`] buffer, ready for
+/// [`api::telemetry::TelemetrySnapshot::parse`]. `written` past the buffer is
+/// clamped to it.
+pub fn telemetry_bytes(out: &[u64], written: usize) -> &[u8] {
+    let len = written.min(core::mem::size_of_val(out));
+    // SAFETY: every initialised `u64` is `size_of::<u64>()` initialised bytes,
+    // `len` is within the slice, and the borrow keeps `out` alive and unaliased.
+    unsafe { core::slice::from_raw_parts(out.as_ptr().cast::<u8>(), len) }
 }
 
 /// Signal to the kernel that this cell has finished deserializing hot-swap state

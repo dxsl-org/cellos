@@ -241,6 +241,10 @@ pub struct InodeRecord {
     pub ctime: u64,
     pub extent_count: u32,
     pub inline_size: u32,
+    /// Mutation generation, bytes 492..500. A volume-unique `inode_num` never
+    /// reused plus this per-inode monotonic counter identifies one exact file
+    /// state (no ABA). Volumes written before this field read as 0.
+    pub generation: u64,
     pub payload: [u8; INODE_PAYLOAD_SIZE],
     pub checksum: u32,
 }
@@ -260,6 +264,7 @@ impl InodeRecord {
             ctime: 0,
             extent_count: 0,
             inline_size: 0,
+            generation: 0,
             payload: [0u8; INODE_PAYLOAD_SIZE],
             checksum: 0,
         };
@@ -282,6 +287,7 @@ impl InodeRecord {
         buf[56..60].copy_from_slice(&self.extent_count.to_le_bytes());
         buf[60..64].copy_from_slice(&self.inline_size.to_le_bytes());
         buf[64..64 + INODE_PAYLOAD_SIZE].copy_from_slice(&self.payload);
+        buf[492..500].copy_from_slice(&self.generation.to_le_bytes());
         buf[508..512].copy_from_slice(&self.checksum.to_le_bytes());
         buf
     }
@@ -309,6 +315,7 @@ impl InodeRecord {
             ctime: u64::from_le_bytes(buf[48..56].try_into().ok()?),
             extent_count: u32::from_le_bytes(buf[56..60].try_into().ok()?),
             inline_size: u32::from_le_bytes(buf[60..64].try_into().ok()?),
+            generation: u64::from_le_bytes(buf[492..500].try_into().ok()?),
             payload,
             checksum: stored_checksum,
         })

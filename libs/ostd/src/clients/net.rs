@@ -8,11 +8,23 @@ use super::vierr_from_code;
 use crate::service::NetRef;
 use crate::{ViError, ViResult};
 use alloc::vec::Vec;
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_TCP_INLINE_DATA_MAX};
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_DENIED, NET_TCP_INLINE_DATA_MAX};
 
 /// Yield-retry budget for [`TcpStream::write`] while the socket is in SynSent
 /// (TCP handshake not yet complete). Mirrors `tls_stream::READ_RETRY_BUDGET`.
 const WRITE_STALL_BUDGET: u32 = 100_000;
+
+/// Map a `NetResponse::Err` code to a `ViError`.
+///
+/// [`NET_ERR_DENIED`] means the caller's Cell lacks the network right the
+/// request needs, which is a permission failure, not a network one.
+fn net_error(code: u8) -> ViError {
+    if code == NET_ERR_DENIED {
+        ViError::PermissionDenied
+    } else {
+        vierr_from_code(code)
+    }
+}
 
 /// A TCP/UDP socket handle returned by [`NetClient::tcp_connect`].
 pub type SocketId = u32;
@@ -42,7 +54,7 @@ impl NetClient {
             .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
         {
             NetResponse::CapId(id) => Ok(id),
-            NetResponse::Err(code) => Err(vierr_from_code(code)),
+            NetResponse::Err(code) => Err(net_error(code)),
             _ => Err(ViError::IO),
         }
     }
@@ -74,7 +86,29 @@ impl NetClient {
                 }
             }
             NetResponse::Ok => Ok(()),
-            NetResponse::Err(code) => Err(vierr_from_code(code)),
+            NetResponse::Err(code) => Err(net_error(code)),
+            _ => Err(ViError::IO),
+        }
+    }
+
+    /// Send `data` over a TCP socket and return how many bytes the socket accepted
+    /// (`0` while the handshake is still completing or the tx buffer is full).
+    /// Unlike [`tcp_send`][Self::tcp_send], a partial acceptance is reported
+    /// exactly, so the caller can resume after the accepted prefix instead of
+    /// resending it.
+    pub fn tcp_send_some(&mut self, id: SocketId, data: &[u8]) -> ViResult<usize> {
+        let req = NetRequest::TcpSend { cap_id: id, data };
+        let mut resp_buf = [0u8; IPC_BUF_SIZE];
+        match self
+            .svc
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+        {
+            NetResponse::Data(b) if b.len() >= 4 => {
+                let n = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize;
+                if n <= data.len() { Ok(n) } else { Err(ViError::IO) }
+            }
+            NetResponse::Ok => Ok(data.len()),
+            NetResponse::Err(code) => Err(net_error(code)),
             _ => Err(ViError::IO),
         }
     }
@@ -92,12 +126,29 @@ impl NetClient {
         {
             NetResponse::Data(data) => Ok(data.to_vec()),
             NetResponse::Ok => Ok(alloc::vec![]),
-            NetResponse::Err(code) => Err(vierr_from_code(code)),
+            NetResponse::Err(code) => Err(net_error(code)),
             _ => Err(ViError::IO),
         }
     }
 
-    /// Close a TCP connection.
+    /// The socket's TCP state byte as the net service reports it (`0x00` Closed,
+    /// `0x01` SynSent, `0x02` SynReceived, `0x03` Established, `0x04`..`0x09` the
+    /// closing states). A socket this Cell does not own reads as Closed.
+    pub fn tcp_state(&mut self, id: SocketId) -> ViResult<u8> {
+        let req = NetRequest::SocketState { cap_id: id };
+        let mut resp_buf = [0u8; IPC_BUF_SIZE];
+        match self
+            .svc
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+        {
+            NetResponse::State(state) => Ok(state),
+            NetResponse::Err(code) => Err(net_error(code)),
+            _ => Err(ViError::IO),
+        }
+    }
+
+    /// Discard a TCP socket at once. The peer is not told (no FIN or RST): use
+    /// [`Self::tcp_close_graceful`] to end a live connection.
     pub fn tcp_close(&mut self, id: SocketId) -> ViResult<()> {
         let req = NetRequest::TcpClose { cap_id: id };
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
@@ -106,7 +157,23 @@ impl NetClient {
             .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
         {
             NetResponse::Ok => Ok(()),
-            NetResponse::Err(code) => Err(vierr_from_code(code)),
+            NetResponse::Err(code) => Err(net_error(code)),
+            _ => Err(ViError::IO),
+        }
+    }
+
+    /// End a TCP connection: queued output is sent, then FIN. The service releases the
+    /// socket once it is closed (or aborts it after its own deadline); the id is no
+    /// longer usable for sending.
+    pub fn tcp_close_graceful(&mut self, id: SocketId) -> ViResult<()> {
+        let req = NetRequest::TcpCloseGraceful { cap_id: id };
+        let mut resp_buf = [0u8; IPC_BUF_SIZE];
+        match self
+            .svc
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+        {
+            NetResponse::Ok => Ok(()),
+            NetResponse::Err(code) => Err(net_error(code)),
             _ => Err(ViError::IO),
         }
     }
@@ -120,7 +187,7 @@ impl NetClient {
             .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
         {
             NetResponse::Addr(addr) => Ok(addr),
-            NetResponse::Err(code) => Err(vierr_from_code(code)),
+            NetResponse::Err(code) => Err(net_error(code)),
             _ => Err(ViError::IO),
         }
     }
@@ -134,7 +201,7 @@ impl NetClient {
             .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
         {
             NetResponse::Addr(addr) => Ok(addr),
-            NetResponse::Err(code) => Err(vierr_from_code(code)),
+            NetResponse::Err(code) => Err(net_error(code)),
             _ => Err(ViError::IO),
         }
     }
@@ -241,5 +308,17 @@ impl embedded_io::Write for TcpStream {
 
     fn flush(&mut self) -> Result<(), crate::io::OstdError> {
         Ok(()) // tcp_send commits synchronously through the net service
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn denied_is_permission_denied_and_other_codes_keep_their_mapping() {
+        assert_eq!(net_error(NET_ERR_DENIED), ViError::PermissionDenied);
+        assert_eq!(net_error(0xFF), ViError::Unknown);
+        assert_eq!(net_error(0xFD), ViError::Unknown);
     }
 }

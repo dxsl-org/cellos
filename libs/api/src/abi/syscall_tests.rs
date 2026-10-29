@@ -76,6 +76,7 @@ mod tests {
         (423, ViSyscall::RegisterUsbHidProducer),
         (424, ViSyscall::FindPcieDeviceByVendor),
         (429, ViSyscall::LookupServiceBound),
+        (430, ViSyscall::TelemetrySnapshot),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -131,6 +132,7 @@ mod tests {
         assert_eq!(ViSyscall::RegisterUsbHidProducer as usize, 423);
         assert_eq!(ViSyscall::FindPcieDeviceByVendor as usize, 424);
         assert_eq!(ViSyscall::LookupServiceBound as usize, 429);
+        assert_eq!(ViSyscall::TelemetrySnapshot as usize, 430);
         assert_eq!(ViSyscall::Chdir as usize, 252);
         assert_eq!(ViSyscall::Getcwd as usize, 253);
         assert_eq!(ViSyscall::Fstat as usize, 254);
@@ -234,7 +236,7 @@ mod tests {
         assert_eq!(ViSyscall::from(255), ViSyscall::Rename);
         assert_eq!(ViSyscall::from(256), ViSyscall::IpcSubmit);
         assert_eq!(ViSyscall::from(261), ViSyscall::IpcReply);
-        assert_eq!(ViSyscall::from(262), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::from(262), ViSyscall::CellSessionV1);
         assert!(
             CASES
                 .iter()
@@ -295,6 +297,20 @@ mod tests {
         // unmapped so retired whole-sequence hot-swap callers fail closed.
         assert_eq!(ViSyscall::SerialConfigure as usize, 428);
         assert_eq!(ViSyscall::from(429), ViSyscall::LookupServiceBound);
+    }
+
+    /// S6-1: `TelemetrySnapshot` is the same task-observation authority as
+    /// `GetProcs2` (bit 55, no fresh bit), so an existing `GetProcs2` declaration
+    /// admits it at the allowlist and the X right decides at dispatch. 430 is the
+    /// next opcode after 429 and 431 stays unmapped.
+    #[test]
+    fn telemetry_snapshot_shares_the_get_procs2_authority() {
+        assert_eq!(ViSyscall::TelemetrySnapshot.allowlist_bit(), Some(55));
+        let declared = SyscallSet::EMPTY.with(ViSyscall::GetProcs2);
+        assert!(declared.permits(ViSyscall::TelemetrySnapshot));
+        assert!(!SyscallSet::EMPTY.with(ViSyscall::MemInfo).permits(ViSyscall::TelemetrySnapshot));
+        assert_eq!(ViSyscall::from(430), ViSyscall::TelemetrySnapshot);
+        assert_eq!(ViSyscall::from(431), ViSyscall::Unknown);
     }
 
     #[test]
@@ -377,12 +393,7 @@ mod tests {
 
     #[test]
     fn unknown_id_decodes_to_unknown_variant() {
-        // IDs that have no assigned meaning must produce Unknown, not panic.
-        //
-        // If a future opcode claims one of these numbers, drop it here and pick
-        // another free one — id 9 was in this list until `SetTlsBase` took it
-        // (ADR-0018's per-task TLS base), which is what broke this test.
-        let unassigned = [50, 99, 100, 108, 262, 999, usize::MAX];
+        let unassigned = [50, 99, 100, 108, 263, 999, usize::MAX];
         for id in unassigned {
             let got = ViSyscall::from(id);
             assert_eq!(
@@ -409,6 +420,14 @@ mod tests {
             assert_eq!(ViSyscall::from(id), call);
             assert_eq!(call.allowlist_bit(), Some(bit));
         }
+    }
+
+    #[test]
+    fn session_transport_is_owner_gated_without_a_new_manifest_bit() {
+        assert_eq!(ViSyscall::from(262), ViSyscall::CellSessionV1);
+        assert_eq!(ViSyscall::CellSessionV1.allowlist_bit(), None);
+        assert_eq!(SyscallSet::EMPTY.with(ViSyscall::CellSessionV1).bits(), 0);
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::CellSessionV1));
     }
 
     #[test]

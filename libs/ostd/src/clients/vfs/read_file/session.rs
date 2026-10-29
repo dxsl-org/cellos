@@ -7,7 +7,8 @@ use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 use api::vfs_file_handles::ViVfsFileHandle;
 
-pub(super) trait VfsReadOps {
+/// The one-request seam every VFS client path goes through; tests replace it.
+pub(in crate::clients::vfs) trait VfsReadOps {
     fn call<'a>(
         &mut self,
         req: &VfsRequest<'_>,

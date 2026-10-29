@@ -44,6 +44,36 @@ pub const RECV_ATTEST_CALLER: usize = 1;
 /// Caller identity flag indicating the calling Cell has declared VfsMutate authority.
 pub const CALLER_FLAG_VFS_MUTATE: u32 = 1 << 0;
 
+/// The calling Cell may resolve names through service-net (`NetRequest::Resolve`).
+///
+/// The four `CALLER_FLAG_NET_*` bits mirror kernel-only `CapSet` net rights of
+/// the sender's **Cell** (requested by install path, bounded by the reviewed
+/// launch/boot ceiling). service-net answers a request whose right is absent
+/// with `NetResponse::Err(NET_ERR_DENIED)` before any effect.
+pub const CALLER_FLAG_NET_RESOLVE: u32 = 1 << 1;
+/// The calling Cell may open egress: `TcpConnect`, `UdpCreate`, `UdpSend`.
+pub const CALLER_FLAG_NET_CONNECT: u32 = 1 << 2;
+/// The calling Cell may accept inbound traffic: `TcpListen`, `UdpBind`, `MulticastJoin`.
+pub const CALLER_FLAG_NET_LISTEN: u32 = 1 << 3;
+/// The calling Cell may send and receive raw Ethernet frames: `L2Send`, `L2Recv`.
+pub const CALLER_FLAG_NET_L2: u32 = 1 << 4;
+/// Every network-right flag. Bits outside this mask, [`CALLER_FLAG_VFS_MUTATE`]
+/// and [`CALLER_FLAG_CONFIG_WRITE`] (6..31) are reserved and must be zero.
+pub const CALLER_FLAG_NET_RIGHTS_MASK: u32 = CALLER_FLAG_NET_RESOLVE
+    | CALLER_FLAG_NET_CONNECT
+    | CALLER_FLAG_NET_LISTEN
+    | CALLER_FLAG_NET_L2;
+
+/// The calling Cell may write the shell key namespace of service-config
+/// (`ConfigRequest::Set` / `Delete`; Phase 01 Q right, CP1 2026-10-25).
+///
+/// Mirrors the kernel-only `CapSet::config_write` of the sender's **Cell**,
+/// requested by install path (`/bin/cellbox` only) and bounded by the reviewed
+/// launch/boot ceiling. service-config answers a write without it, or a write
+/// to a key outside the shell namespace, with
+/// `ConfigResponse::Err(CONFIG_ERR_DENIED)` before any mutation.
+pub const CALLER_FLAG_CONFIG_WRITE: u32 = 1 << 5;
+
 /// Size in bytes of the identity trailer reserved at the end of a recv buffer.
 pub const CALLER_IDENTITY_LEN: usize = 32;
 /// Tag distinguishing a kernel-written trailer from leftover payload bytes.
@@ -150,6 +180,35 @@ mod tests {
     fn flags_round_trip() {
         let mut sample = SAMPLE;
         sample.flags = CALLER_FLAG_VFS_MUTATE;
+        assert_eq!(
+            CallerIdentity::from_trailer(&sample.to_trailer()),
+            Some(sample)
+        );
+    }
+
+    #[test]
+    fn net_right_flags_are_distinct_and_leave_reserved_bits_clear() {
+        let net = [
+            CALLER_FLAG_NET_RESOLVE,
+            CALLER_FLAG_NET_CONNECT,
+            CALLER_FLAG_NET_LISTEN,
+            CALLER_FLAG_NET_L2,
+        ];
+        let mut seen = CALLER_FLAG_VFS_MUTATE;
+        for flag in net {
+            assert_eq!(flag.count_ones(), 1);
+            assert_eq!(seen & flag, 0, "flag {flag:#x} overlaps another flag");
+            seen |= flag;
+        }
+        assert_eq!(CALLER_FLAG_NET_RIGHTS_MASK, seen & !CALLER_FLAG_VFS_MUTATE);
+        assert_eq!(CALLER_FLAG_CONFIG_WRITE.count_ones(), 1);
+        assert_eq!(seen & CALLER_FLAG_CONFIG_WRITE, 0, "config flag overlaps another flag");
+        seen |= CALLER_FLAG_CONFIG_WRITE;
+        // Bits 6..31 are reserved: every defined flag lives in bits 0..5.
+        assert_eq!(seen, 0x3F);
+
+        let mut sample = SAMPLE;
+        sample.flags = CALLER_FLAG_NET_RIGHTS_MASK | CALLER_FLAG_VFS_MUTATE | CALLER_FLAG_CONFIG_WRITE;
         assert_eq!(
             CallerIdentity::from_trailer(&sample.to_trailer()),
             Some(sample)

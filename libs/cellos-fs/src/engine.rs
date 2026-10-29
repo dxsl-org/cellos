@@ -217,7 +217,10 @@ impl<D: BlockDevice> CellosFs<D> {
         Ok(())
     }
 
-    fn put_inode(&mut self, record: InodeRecord) {
+    /// Stage a mutated inode. Every staged mutation advances its generation, so
+    /// an observation `(inode_num, generation)` is invalidated by any change.
+    fn put_inode(&mut self, mut record: InodeRecord) {
+        record.generation = record.generation.saturating_add(1);
         self.dirty_inodes.insert(record.inode_num, record);
     }
 
@@ -702,6 +705,72 @@ impl<D: BlockDevice> CellosFs<D> {
         Ok(())
     }
 
+    /// Publish regular file `src` at `dst` only if `dst` still matches `expect`.
+    ///
+    /// Checked and applied in memory as one step; the caller's next `sync` publishes
+    /// it in one superblock flip. On `Conflict` nothing is staged. A replaced
+    /// destination's inode is retired and its blocks freed. Not crash-preservation proof.
+    pub fn rename_replace_if(&mut self, src: &str, dst: &str, expect: Expect) -> Result<(), FsError> {
+        self.ensure_mutable()?;
+        let src = src.trim_matches('/');
+        let dst = dst.trim_matches('/');
+        if src.is_empty() || dst.is_empty() {
+            return Err(FsError::InvalidName);
+        }
+        let src_inode = self.lookup(src)?;
+        if !src_inode.is_file() {
+            return Err(FsError::IsADirectory);
+        }
+        let current = match self.lookup(dst) {
+            Ok(inode) => Some(inode),
+            Err(FsError::NotFound) => None,
+            Err(error) => return Err(error),
+        };
+        let matches = match (expect, &current) {
+            (Expect::Absent, None) => true,
+            (Expect::Present { inode_num, generation }, Some(found)) =>
+                found.is_file() && found.inode_num == inode_num && found.generation == generation,
+            _ => false,
+        };
+        if !matches {
+            return Err(FsError::Conflict);
+        }
+        if src_inode.inode_num == current.map_or(0, |c| c.inode_num) {
+            return Err(FsError::Conflict);
+        }
+        let Some(old) = current else {
+            return self.rename(src, dst);
+        };
+        let (src_parent_path, src_leaf) = split_parent(src);
+        let (dst_parent_path, dst_leaf) = split_parent(dst);
+        let new_entry = DirEntryRecord::new(src_inode.inode_num, 1, dst_leaf)
+            .ok_or(FsError::InvalidName)?;
+        let old_extents = if old.is_inline() { Vec::new() } else { self.read_extents(&old)? };
+        let mut src_parent = self.lookup(src_parent_path)?;
+        let mut dst_parent = self.lookup(dst_parent_path)?;
+        let same = src_parent.inode_num == dst_parent.inode_num;
+        // Edit payload copies first; nothing is staged until every step succeeded.
+        let mut count = src_parent.extent_count as usize;
+        DirPayload::remove(&mut src_parent.payload, &mut count, src_leaf)?;
+        src_parent.extent_count = count as u32;
+        let target = if same { &mut src_parent } else { &mut dst_parent };
+        let mut count = target.extent_count as usize;
+        DirPayload::remove(&mut target.payload, &mut count, dst_leaf)?;
+        DirPayload::insert(&mut target.payload, &mut count, &new_entry)?;
+        target.extent_count = count as u32;
+        for ext in old_extents {
+            for b in 0..ext.block_count {
+                self.allocator.free_block(ext.physical_block + b as u64)?;
+            }
+        }
+        self.put_inode(src_parent);
+        if !same {
+            self.put_inode(dst_parent);
+        }
+        self.dirty_inodes.remove(&old.inode_num);
+        Ok(())
+    }
+
     /// Publish metadata through the two existing barriers. This is not crash-preservation proof.
     pub fn sync(&mut self) -> Result<(), FsError> {
         self.ensure_mutable()?;
@@ -771,6 +840,36 @@ impl<D: BlockDevice> CellosFs<D> {
         self.active_slot = target_slot;
         Ok(())
     }
+
+    /// Durable commit (D03 `CommittedDurable`): publish so that the new state survives
+    /// power loss, and before return a cut leaves the old or the new state whole.
+    ///
+    /// Skeleton only. This engine cannot give that guarantee (see the crate note and
+    /// `.agents/261025-cellosfs-crash-safety/plan.md`), so it always refuses and
+    /// writes nothing. Callers keep using [`Self::sync`] and report `Committed`.
+    pub fn sync_durable(&mut self) -> Result<(), DurabilityUnavailable> {
+        Err(DurabilityUnavailable)
+    }
+}
+
+/// A durable commit cannot be acknowledged by this filesystem (see
+/// `.agents/261025-cellosfs-crash-safety/plan.md`). Nothing was written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DurabilityUnavailable;
+
+/// Expected destination state for [`CellosFs::rename_replace_if`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Expect {
+    Absent,
+    Present { inode_num: u64, generation: u64 },
+}
+
+#[cfg(not(all(feature = "g2-cow-experiment", not(target_os = "none"))))]
+fn split_parent(path: &str) -> (&str, &str) {
+    match path.rfind('/') {
+        Some(pos) => (&path[..pos], &path[pos + 1..]),
+        None => ("", path),
+    }
 }
 
 /// The default-off host experiment preserves the existing library interface.
@@ -823,4 +922,6 @@ impl<D: BlockDevice> CellosFs<D> {
         self.inner.rename(old, new)
     }
     pub fn sync(&mut self) -> Result<(), FsError> { self.inner.sync() }
+    /// See the default engine: the experiment is not a production durability proof.
+    pub fn sync_durable(&mut self) -> Result<(), DurabilityUnavailable> { Err(DurabilityUnavailable) }
 }

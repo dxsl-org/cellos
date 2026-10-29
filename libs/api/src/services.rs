@@ -25,4 +25,6 @@ pub mod net;
 pub mod posix;
 pub mod ring_channel;
 pub mod serde_helpers;
+pub mod session;
+pub mod ssh_completion;
 pub mod vfs_file_handles;

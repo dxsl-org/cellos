@@ -6,6 +6,8 @@ use alloc::string::String;
 use api::input::{decode_event, InputEvent, KeyState, KeySym, INPUT_EVENT_OPCODE};
 use api::ipc::IPC_BUF_SIZE;
 use api::syscall::service;
+use api::cell_session::{ObjectRefV1, Status, TRANSFER_MAX};
+use crate::child_context::{ChildContext, GrantSlot};
 
 // ─── embedded-io glue ────────────────────────────────────────────────────────
 
@@ -120,6 +122,117 @@ pub fn print_usize(n: usize) {
     if let Ok(s) = core::str::from_utf8(&buf[..i]) {
         print(s);
     }
+}
+
+/// Output grants captured once from this process's immutable invocation context.
+///
+/// Only a context-free (`Denied`) launch uses the legacy synchronous logger.
+/// A committed context must supply both stdout and stderr; errors never fall
+/// back to logging. This object retains no parsed context or service identity.
+pub struct ProcessOutput {
+    stdout: OutputStream,
+    stderr: OutputStream,
+}
+
+/// One process output target, deliberately without a public raw-handle accessor.
+pub struct OutputStream {
+    target: OutputTarget,
+}
+
+enum OutputTarget {
+    Legacy,
+    Context { operation: ObjectRefV1, endpoint: ObjectRefV1 },
+}
+
+impl ProcessOutput {
+    /// Read own context once and capture its independently routed output grants.
+    pub fn read_own() -> Result<Self, Status> {
+        Self::from_context_result(ChildContext::read_own())
+    }
+
+    fn from_context_result(context: Result<ChildContext, Status>) -> Result<Self, Status> {
+        let context = match context {
+            Ok(context) => context,
+            Err(Status::Denied) => return Ok(Self {
+                stdout: OutputStream { target: OutputTarget::Legacy },
+                stderr: OutputStream { target: OutputTarget::Legacy },
+            }),
+            Err(error) => return Err(error),
+        };
+        let mut stdout = None;
+        let mut stderr = None;
+        for grant in context.grants() {
+            if grant.kind != 1 {
+                continue;
+            }
+            match grant.slot {
+                GrantSlot::Stdout => stdout = Some(grant.object),
+                GrantSlot::Stderr => stderr = Some(grant.object),
+                _ => {},
+            }
+        }
+        let operation = context.operation();
+        Ok(Self {
+            stdout: OutputStream { target: OutputTarget::Context {
+                operation, endpoint: stdout.ok_or(Status::Denied)?,
+            } },
+            stderr: OutputStream { target: OutputTarget::Context {
+                operation, endpoint: stderr.ok_or(Status::Denied)?,
+            } },
+        })
+    }
+
+    pub fn stdout(&self) -> &OutputStream {
+        &self.stdout
+    }
+
+    pub fn stderr(&self) -> &OutputStream {
+        &self.stderr
+    }
+}
+
+impl OutputStream {
+    /// Write bytes using one finite, nonzero absolute monotonic deadline.
+    ///
+    /// Context output preserves arbitrary bytes and waits inside the kernel for
+    /// backpressure. An error can follow a committed prefix: terminate rather
+    /// than replaying the original slice. Legacy output accepts only UTF-8.
+    pub fn write_all(&self, bytes: &[u8], deadline_ns: u64) -> Result<(), Status> {
+        if deadline_ns == 0 || deadline_ns == u64::MAX {
+            return Err(Status::Malformed);
+        }
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        match &self.target {
+            OutputTarget::Legacy => {
+                let text = core::str::from_utf8(bytes).map_err(|_| Status::UnsupportedInput)?;
+                let _ = syscall::sys_log(text);
+                Ok(())
+            },
+            OutputTarget::Context { operation, endpoint } => {
+                write_all_chunks(bytes, deadline_ns, |chunk, deadline| {
+                    crate::session::write_stream(*operation, *endpoint, chunk, deadline)
+                })
+            },
+        }
+    }
+}
+
+fn write_all_chunks(
+    mut bytes: &[u8],
+    deadline_ns: u64,
+    mut write: impl FnMut(&[u8], u64) -> Result<usize, Status>,
+) -> Result<(), Status> {
+    while !bytes.is_empty() {
+        let chunk = &bytes[..bytes.len().min(TRANSFER_MAX)];
+        let actual = write(chunk, deadline_ns)?;
+        if actual == 0 || actual > chunk.len() {
+            return Err(Status::Malformed);
+        }
+        bytes = &bytes[actual..];
+    }
+    Ok(())
 }
 
 pub struct Stdin;
@@ -283,5 +396,128 @@ impl embedded_io::Write for Stdout {
 
     fn flush(&mut self) -> Result<(), OstdError> {
         Ok(()) // sys_log is synchronous; no buffering to flush
+    }
+}
+
+#[cfg(test)]
+mod output_tests {
+    use super::*;
+    use crate::child_context::Grant;
+
+    const OPERATION: ObjectRefV1 = ObjectRefV1 { id: 1, generation: 7 };
+    const STDOUT: ObjectRefV1 = ObjectRefV1 { id: 2, generation: 8 };
+    const STDERR: ObjectRefV1 = ObjectRefV1 { id: 3, generation: 9 };
+
+    fn context(stdout: bool, stderr: bool) -> ChildContext {
+        let mut grants = alloc::vec::Vec::new();
+        if stdout {
+            grants.push(Grant::endpoint(GrantSlot::Stdout, STDOUT, 2).unwrap());
+        }
+        if stderr {
+            grants.push(Grant::endpoint(GrantSlot::Stderr, STDERR, 2).unwrap());
+        }
+        ChildContext::new(OPERATION, &["echo"], b"", &[], &grants).unwrap()
+    }
+
+    #[test]
+    fn only_denied_context_read_selects_legacy_output() {
+        let output = ProcessOutput::from_context_result(Err(Status::Denied)).unwrap();
+        assert!(matches!(&output.stdout().target, OutputTarget::Legacy));
+        assert!(matches!(&output.stderr().target, OutputTarget::Legacy));
+        for error in [Status::Malformed, Status::TimedOut, Status::Cancelled,
+            Status::Revoked, Status::Stale, Status::Io, Status::Indeterminate]
+        {
+            assert_eq!(ProcessOutput::from_context_result(Err(error)).err(), Some(error));
+        }
+    }
+
+    #[test]
+    fn committed_context_requires_both_output_grants() {
+        for (stdout, stderr) in [(false, false), (true, false), (false, true)] {
+            assert_eq!(
+                ProcessOutput::from_context_result(Ok(context(stdout, stderr))).err(),
+                Some(Status::Denied),
+            );
+        }
+        let output = ProcessOutput::from_context_result(Ok(context(true, true))).unwrap();
+        for (stream, expected) in [(output.stdout(), STDOUT), (output.stderr(), STDERR)] {
+            match &stream.target {
+                OutputTarget::Context { operation, endpoint } => {
+                    assert_eq!(*operation, OPERATION);
+                    assert_eq!(*endpoint, expected);
+                },
+                OutputTarget::Legacy => panic!("committed context selected logger"),
+            }
+        }
+    }
+
+    #[test]
+    fn empty_output_never_calls_owner_and_deadlines_are_bounded() {
+        let output = ProcessOutput::from_context_result(Ok(context(true, true))).unwrap();
+        let legacy = ProcessOutput::from_context_result(Err(Status::Denied)).unwrap();
+        for stream in [output.stdout(), output.stderr(), legacy.stdout(), legacy.stderr()] {
+            assert_eq!(stream.write_all(b"", 1), Ok(()));
+            for deadline in [0, u64::MAX] {
+                assert_eq!(stream.write_all(b"", deadline), Err(Status::Malformed));
+                assert_eq!(stream.write_all(b"not published", deadline), Err(Status::Malformed));
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_rejects_binary_output_without_logging() {
+        let output = ProcessOutput::from_context_result(Err(Status::Denied)).unwrap();
+        assert_eq!(output.stdout().write_all(b"prefix\xffsuffix", 1), Err(Status::UnsupportedInput));
+        assert_eq!(output.stderr().write_all(b"\xc3", 1), Err(Status::UnsupportedInput));
+    }
+
+    #[test]
+    fn partial_writes_preserve_bytes_and_one_absolute_deadline() {
+        let bytes: alloc::vec::Vec<u8> = (0..1300).map(|i| (i % 256) as u8).collect();
+        let mut received = alloc::vec::Vec::new();
+        let mut calls = 0;
+        assert_eq!(write_all_chunks(&bytes, 12345, |chunk, deadline| {
+            calls += 1;
+            assert_eq!(deadline, 12345);
+            assert!(!chunk.is_empty() && chunk.len() <= TRANSFER_MAX);
+            let actual = chunk.len().min(73);
+            received.extend_from_slice(&chunk[..actual]);
+            Ok(actual)
+        }), Ok(()));
+        assert!(calls > 3);
+        assert_eq!(received, bytes);
+    }
+
+    #[test]
+    fn invalid_progress_stops_without_replaying() {
+        for actual in [0, 4] {
+            let mut calls = 0;
+            assert_eq!(write_all_chunks(b"abc", 1, |_, _| {
+                calls += 1;
+                Ok(actual)
+            }), Err(Status::Malformed));
+            assert_eq!(calls, 1);
+        }
+    }
+
+    #[test]
+    fn errors_after_committed_prefix_are_not_retried() {
+        for error in [Status::WouldBlock, Status::TimedOut, Status::Cancelled,
+            Status::Revoked, Status::BrokenPipe, Status::WrongOwner,
+            Status::WrongDirection, Status::Stale, Status::Indeterminate]
+        {
+            let mut calls = 0;
+            assert_eq!(write_all_chunks(b"abcdef", 1, |chunk, _| {
+                calls += 1;
+                if calls == 1 {
+                    assert_eq!(chunk, b"abcdef");
+                    Ok(2)
+                } else {
+                    assert_eq!(chunk, b"cdef");
+                    Err(error)
+                }
+            }), Err(error));
+            assert_eq!(calls, 2);
+        }
     }
 }
