@@ -47,9 +47,12 @@ members = [
     "libs/dom-arena",
     "libs/ocel-pdf-proto",
     "libs/ocel-service-proto",
-    
-    "libs/polling-cellos",
-    "libs/mio-cellos",
+    "libs/terminal",
+    "libs/vitui",
+    "libs/vipolling",
+    "libs/vimio",
+    "libs/vigrep",
+    "libs/vissh",
     # HAL
     "hal/core",
     "hal/soc/bcm27xx",
@@ -128,11 +131,10 @@ members = [
 
     # Cells - Tools (system + CLI)
     "cells/tools/init",
-    "cells/tools/shell",
     "cells/tools/sys-tools",
     "cells/tools/net-tools",
+    "cells/tools/cellbox",
     "cells/tools/wasm",
-
     # Cells - Apps (user applications)
     "cells/apps/fb-console",
     "cells/apps/robot-dashboard",
@@ -205,6 +207,12 @@ members = [
     "cells/tests/futex-test",
     "cells/tests/pipe-test",
     "cells/tests/pipe-peer",
+    "cells/tests/phase02-session-parent",
+    "cells/tests/phase02-session-child",
+    "cells/tests/phase03-filter",
+    "cells/tests/phase04-terminal-driver",
+    "cells/tests/s2tw-probe",
+    "cells/tests/top-load",
     "cells/tests/c-pthread",
     "cells/tests/c-spawn",
     "cells/tests/c-spawn-child",
