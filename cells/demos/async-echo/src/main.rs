@@ -1,6 +1,6 @@
 //! async-echo - Asynchronous TCP Echo Service on CellOS using Poller.
 //!
-//! Demonstrates cooperative single-thread asynchronous I/O with polling-cellos.
+//! Demonstrates cooperative single-thread asynchronous I/O with vipolling.
 
 #![no_std]
 #![no_main]
@@ -11,7 +11,7 @@ extern crate alloc;
 use core::time::Duration;
 use ostd::io::println;
 use ostd::syscall::sys_lookup_service;
-use polling_cellos::{Event, Events, Poller};
+use vipolling::{Event, Events, Poller};
 
 api::declare_manifest!(
     block_io = false,
@@ -36,7 +36,7 @@ const SERVER_TOKEN: usize = 1;
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
-    println("[async-echo] Initializing CellOS Async Reactor via polling-cellos...");
+    println("[async-echo] Initializing CellOS Async Reactor via vipolling...");
 
     let poller = match Poller::new() {
         Ok(p) => p,

@@ -1,4 +1,4 @@
-//! tokio-smoke - Demonstrating Tokio I/O driver pattern on CellOS via mio-cellos.
+//! tokio-smoke - Demonstrating Tokio I/O driver pattern on CellOS via vimio.
 
 #![no_std]
 #![no_main]
@@ -9,7 +9,7 @@ extern crate alloc;
 use core::time::Duration;
 use ostd::io::println;
 use ostd::syscall::sys_lookup_service;
-use mio_cellos::{Events, Interest, Selector, Token, Waker};
+use vimio::{Events, Interest, Selector, Token, Waker};
 
 api::declare_manifest!(
     block_io = false,
@@ -35,7 +35,7 @@ const HTTP_PORT: u16 = 8088;
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
-    println("[tokio-smoke] Starting Tokio-style I/O Driver on CellOS (mio-cellos)...");
+    println("[tokio-smoke] Starting Tokio-style I/O Driver on CellOS (vimio)...");
 
     let selector = match Selector::new() {
         Ok(s) => s,

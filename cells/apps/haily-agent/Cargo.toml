@@ -12,7 +12,7 @@ types = { path = "../../../libs/types", version = "0.1.0" }
 agent-proto = { path = "../../../libs/agent-proto", version = "0.1.0" }
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
-mio-cellos = { path = "../../../libs/mio-cellos", version = "0.1.0" }
+vimio = { path = "../../../libs/vimio", version = "0.1.0" }
 postcard = { version = "1", default-features = false, features = ["alloc"] }
 
 [[bin]]

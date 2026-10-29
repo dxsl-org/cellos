@@ -21,7 +21,7 @@ use alloc::vec::Vec;
 use core::time::Duration;
 use ostd::io::println;
 use ostd::syscall::{sys_exit, sys_lookup_service, sys_spawn_from_path, SyscallResult};
-use mio_cellos::{Events, Selector};
+use vimio::{Events, Selector};
 
 use dto::{HailyRequest, HailyResponse};
 use tools::ToolRouter;

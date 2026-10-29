@@ -8,7 +8,7 @@ license.workspace = true
 types = { path = "../../../libs/types", version = "0.1.0" }
 api = { path = "../../../libs/api", version = "0.1.0" }
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
-mio-cellos = { path = "../../../libs/mio-cellos", version = "0.1.0" }
+vimio = { path = "../../../libs/vimio", version = "0.1.0" }
 
 [[bin]]
 name = "tokio-smoke"

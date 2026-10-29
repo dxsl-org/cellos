@@ -194,7 +194,7 @@ pub(crate) fn api_cluster() -> Response {
 
 pub(crate) fn api_gateway_stats(active: usize, peak: usize, refused: usize) -> Response {
     let text = format!(
-        r#"{{"gateway":"CellOS-Async-HTTP-Gateway","runtime_engine":"mio-cellos","max_concurrent_connections":256,"active_connections":{},"peak_connections":{},"refused_requests":{},"status":"operational"}}"#,
+        r#"{{"gateway":"CellOS-Async-HTTP-Gateway","runtime_engine":"vimio","max_concurrent_connections":256,"active_connections":{},"peak_connections":{},"refused_requests":{},"status":"operational"}}"#,
         active, peak, refused
     );
     json(200, &text)
