@@ -615,7 +615,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         //     still emulating SVM root operation under TCG, so gating SVM on
         //     the hypervisor bit would close the capability on the only lane
         //     that can exercise it (the x86 hypervisor smoke lane).
-        let under_hypervisor = cpu_features::hypervisor_present();
+        let _under_hypervisor = cpu_features::hypervisor_present();
         match cpu_features::x86_virt_kind() {
             Some(cpu_features::X86Virt::Svm) => {
                 let hsave_pa = {
@@ -639,10 +639,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                     None => log_info("x86 virt: OOM allocating HSAVE frame; cap closed"),
                 }
             }
-            Some(cpu_features::X86Virt::Vmx) if !under_hypervisor => {
-                // VMXON faults (#GP) rather than reporting failure when a
-                // precondition is unmet, so the preconditions are printed before
-                // the attempt: a fault here is otherwise unattributable.
+            Some(cpu_features::X86Virt::Vmx) => {
                 crate::early_uart::text("\n[kernel] x86 virt: VMX preconditions CPUID=");
                 crate::early_uart::flag(hal::vmx::supported());
                 crate::early_uart::text(" FEATURE_CONTROL=");
@@ -660,8 +657,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 match vmxon_pa {
                     Some(pa) => {
                         let va = memory::frame::phys_to_virt(pa) as *mut u32;
-                        // SAFETY: vmxon frame freshly allocated + exclusively
-                        // owned + alive forever; va is its HHDM mapping.
                         match unsafe { hal::vmx::enter_root(pa as u64, va) } {
                             Ok(()) => {
                                 cpu_features::latch_x86_root_active();
@@ -672,11 +667,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                     }
                     None => log_info("x86 virt: OOM allocating VMXON frame; cap closed"),
                 }
-            }
-            Some(cpu_features::X86Virt::Vmx) => {
-                log_info(
-                    "x86 virt: hypervisor present; VMX root operation not attempted (cap closed)",
-                );
             }
             None => log_info("x86 virt: not supported by CPU; cap closed"),
         }

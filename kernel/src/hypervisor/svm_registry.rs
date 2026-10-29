@@ -19,15 +19,92 @@ use crate::memory::frame::{phys_to_virt, FRAME_ALLOCATOR};
 use crate::memory::paging::PAGE_SIZE;
 use crate::sync::Spinlock;
 use hal::x86_64::svm_vcpu::SvmVcpu;
+use hal::x86_64::vmx_vcpu::VmxVcpu;
 use hal::ViVmExit as HalVmExit;
 use types::{ViError, ViResult};
 
-/// Physical frames backing one vCPU's SVM structures, freed on VM teardown.
-struct VcpuFrames {
-    vmcb: usize,
-    host: usize,
-    msrpm: usize, // 2 contiguous pages
-    iopm: usize,  // 3 contiguous pages
+/// Physical frames backing one vCPU's hardware structures, freed on VM teardown.
+enum VcpuFrames {
+    Svm {
+        vmcb: usize,
+        host: usize,
+        msrpm: usize,
+        iopm: usize,
+    },
+    Vmx {
+        vmcs: usize,
+    },
+}
+
+enum X86Vcpu {
+    Svm(SvmVcpu),
+    Vmx(VmxVcpu),
+}
+
+impl X86Vcpu {
+    fn gpr(&self) -> &[u64; 16] {
+        match self {
+            Self::Svm(v) => &v.gpr,
+            Self::Vmx(v) => &v.gpr,
+        }
+    }
+
+    fn gpr_mut(&mut self) -> &mut [u64; 16] {
+        match self {
+            Self::Svm(v) => &mut v.gpr,
+            Self::Vmx(v) => &mut v.gpr,
+        }
+    }
+
+    unsafe fn run(&mut self) -> HalVmExit {
+        match self {
+            Self::Svm(v) => v.run(),
+            Self::Vmx(v) => v.run().unwrap_or(HalVmExit::Shutdown),
+        }
+    }
+
+    fn inject_ext_irq_gated(&mut self, vector: u8) -> bool {
+        match self {
+            Self::Svm(v) => v.inject_ext_irq_gated(vector),
+            Self::Vmx(_) => unsafe {
+                let rflags = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RFLAGS).unwrap_or(0);
+                let intr_info = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_INTERRUPTIBILITY_INFO).unwrap_or(0);
+                if (rflags & (1 << 9) != 0) && (intr_info & 0x3 == 0) {
+                    let _ = hal::x86_64::vmcs::vmwrite(
+                        hal::x86_64::vmcs::VM_ENTRY_INTR_INFO_FIELD,
+                        vector as u64 | (1 << 31),
+                    );
+                    true
+                } else {
+                    false
+                }
+            },
+        }
+    }
+
+    fn shutdown_diagnostics(&self) -> (u64, u64, u64) {
+        match self {
+            Self::Svm(v) => v.shutdown_diagnostics(),
+            Self::Vmx(_) => unsafe {
+                let rip = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RIP).unwrap_or(0);
+                let rflags = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RFLAGS).unwrap_or(0);
+                let cr0 = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_CR0).unwrap_or(0);
+                (rip, rflags, cr0)
+            },
+        }
+    }
+
+    fn npf_diagnostics(&self) -> (u64, u64, u64) {
+        match self {
+            Self::Svm(v) => v.npf_diagnostics(),
+            Self::Vmx(_) => unsafe {
+                let gpa = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_PHYSICAL_ADDRESS).unwrap_or(0);
+                let rip = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RIP).unwrap_or(0);
+                let qual = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::EXIT_QUALIFICATION).unwrap_or(0);
+                (qual, gpa, rip)
+            },
+        }
+    }
 }
 
 /// GPA of the guest LAPIC MMIO window (x86 architectural default).
@@ -45,7 +122,7 @@ struct SvmVm {
     /// it on HLT. Freed here in `Drop` (it is not tracked by the NPT, which only
     /// frees its own tree + guest RAM).
     apic_frame: usize,
-    vcpus: Vec<SvmVcpu>,
+    vcpus: Vec<X86Vcpu>,
     vcpu_frames: Vec<VcpuFrames>,
 }
 
@@ -54,13 +131,20 @@ impl Drop for SvmVm {
         let mut g = FRAME_ALLOCATOR.lock();
         if let Some(a) = g.as_mut() {
             for f in &self.vcpu_frames {
-                a.deallocate_frame(f.vmcb);
-                a.deallocate_frame(f.host);
-                a.deallocate_frame(f.msrpm);
-                a.deallocate_frame(f.msrpm + PAGE_SIZE);
-                a.deallocate_frame(f.iopm);
-                a.deallocate_frame(f.iopm + PAGE_SIZE);
-                a.deallocate_frame(f.iopm + 2 * PAGE_SIZE);
+                match f {
+                    VcpuFrames::Svm { vmcb, host, msrpm, iopm } => {
+                        a.deallocate_frame(*vmcb);
+                        a.deallocate_frame(*host);
+                        a.deallocate_frame(*msrpm);
+                        a.deallocate_frame(*msrpm + PAGE_SIZE);
+                        a.deallocate_frame(*iopm);
+                        a.deallocate_frame(*iopm + PAGE_SIZE);
+                        a.deallocate_frame(*iopm + 2 * PAGE_SIZE);
+                    }
+                    VcpuFrames::Vmx { vmcs } => {
+                        a.deallocate_frame(*vmcs);
+                    }
+                }
             }
             if self.apic_frame != 0 {
                 a.deallocate_frame(self.apic_frame);
@@ -167,6 +251,36 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
 
 /// Create a vCPU entering at GPA `entry_pc`; returns the 1-based `vcpu_id`.
 pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
+    if crate::cpu_features::x86_virt_kind() == Some(crate::cpu_features::X86Virt::Vmx) {
+        let vmcs = alloc_contig(1).ok_or(ViError::OutOfMemory)?;
+        let mut guard = VM_REGISTRY.lock();
+        let map = guard.as_mut().ok_or(ViError::NotFound)?;
+        let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+        let vcpu_id = vm.vcpus.len() + 1;
+        let host_cr3 = unsafe { hal::x86_64::paging::read_cr3() & !0xFFF };
+        let mut vcpu = match unsafe {
+            VmxVcpu::new(
+                vmcs as u64,
+                phys_to_virt(vmcs) as *mut u8,
+                phys_to_virt(vm.guest_pa as usize) as *const u8,
+                vm.guest_pages * PAGE_SIZE,
+            )
+        } {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("[vmx] VmxVcpu::new failed: {:?}", e);
+                return Err(e);
+            }
+        };
+        if let Err(e) = unsafe { vcpu.init_pvh(entry_pc, 0, vm.npt.eptp(), host_cr3) } {
+            log::error!("[vmx] init_pvh failed: {:?}", e);
+            return Err(e);
+        }
+        vm.vcpus.push(X86Vcpu::Vmx(vcpu));
+        vm.vcpu_frames.push(VcpuFrames::Vmx { vmcs });
+        return Ok(vcpu_id);
+    }
+
     // Allocate the SVM backing frames (VMCB + host-save + IOPM + MSRPM).
     let vmcb = alloc_contig(1).ok_or(ViError::OutOfMemory)?;
     let host = alloc_contig(1).ok_or(ViError::OutOfMemory)?;
@@ -219,8 +333,8 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
             vm.guest_pages * PAGE_SIZE,
         )
     };
-    vm.vcpus.push(vcpu);
-    vm.vcpu_frames.push(VcpuFrames {
+    vm.vcpus.push(X86Vcpu::Svm(vcpu));
+    vm.vcpu_frames.push(VcpuFrames::Svm {
         vmcb,
         host,
         msrpm,
@@ -384,9 +498,9 @@ pub fn vcpu_regs(
     // SAFETY: buf_ptr validated by the syscall layer; SAS — same VA in kernel.
     let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u64, 16) };
     if write {
-        vcpu.gpr.copy_from_slice(&buf[..16]);
+        vcpu.gpr_mut().copy_from_slice(&buf[..16]);
     } else {
-        buf[..16].copy_from_slice(&vcpu.gpr);
+        buf[..16].copy_from_slice(vcpu.gpr());
     }
     Ok(0)
 }
@@ -462,24 +576,33 @@ pub fn x86_smoke() {
     // Drive the vCPU through the PUBLIC syscall-level path so the P04 HAL→API
     // ViVmExit conversion (VERSION 2) is exercised, not just the HAL decode.
     use api::hypervisor::ViVmExit as ApiVmExit;
-    let mut e1 = ApiVmExit::Unknown { ec: 0, iss: 0 };
-    let mut e2 = ApiVmExit::Unknown { ec: 0, iss: 0 };
-    // SAFETY: e1/e2 are valid local ViVmExit slots; OWNER owns this VM; single
-    // task, no concurrent run. run_vcpu masks interrupts internally.
-    unsafe {
-        let _ = super::registry::run_vcpu(OWNER, vm_id, 1, 0, &mut e1 as *mut ApiVmExit);
-        let _ = super::registry::run_vcpu(OWNER, vm_id, 1, 0, &mut e2 as *mut ApiVmExit);
+    let mut e = ApiVmExit::Unknown { ec: 0, iss: 0 };
+    let mut got_port = false;
+    let mut got_hlt = false;
+    for _ in 0..10 {
+        unsafe {
+            let _ = super::registry::run_vcpu(OWNER, vm_id, 1, 0, &mut e as *mut ApiVmExit);
+        }
+        match e {
+            ApiVmExit::PortOut { port: 0x3F8, val, .. } if val == 0x4B => {
+                got_port = true;
+            }
+            ApiVmExit::Hlt => {
+                got_hlt = true;
+                break;
+            }
+            ApiVmExit::Preempted => {
+                continue;
+            }
+            _ => break,
+        }
     }
 
-    let ok_port = matches!(e1, ApiVmExit::PortOut { port: 0x3F8, val, .. } if val == 0x4B);
-    let ok_hlt = matches!(e2, ApiVmExit::Hlt);
-
-    if ok_port && ok_hlt {
+    if got_port && got_hlt {
         log::info!("X86-VMM-SMOKE: PASS (api-path PortOut+Hlt)");
     } else {
-        log::error!("X86-VMM-SMOKE: FAIL e1={:?} e2={:?}", e1, e2);
+        log::error!("X86-VMM-SMOKE: FAIL got_port={} got_hlt={} last_exit={:?}", got_port, got_hlt, e);
     }
-
     reap_vms_for_task(OWNER);
 }
 

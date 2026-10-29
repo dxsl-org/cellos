@@ -42,9 +42,13 @@ pub mod uart_16550;
 #[cfg(target_arch = "x86_64")]
 pub mod vmcb;
 #[cfg(target_arch = "x86_64")]
+pub mod vmcs;
+#[cfg(target_arch = "x86_64")]
 pub mod vmexit_decode;
 #[cfg(target_arch = "x86_64")]
 pub mod vmx;
+#[cfg(target_arch = "x86_64")]
+pub mod vmx_vcpu;
 #[cfg(target_arch = "x86_64")]
 pub mod world_switch;
 

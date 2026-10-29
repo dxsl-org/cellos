@@ -18,6 +18,11 @@ const FC_VMXON_OUTSIDE_SMX: u64 = 1 << 2;
 const MSR_IA32_VMX_BASIC: u32 = 0x480;
 
 const CR4_VMXE: u64 = 1 << 13;
+const MSR_IA32_VMX_CR0_FIXED0: u32 = 0x486;
+const MSR_IA32_VMX_CR0_FIXED1: u32 = 0x487;
+const MSR_IA32_VMX_CR4_FIXED0: u32 = 0x488;
+const MSR_IA32_VMX_CR4_FIXED1: u32 = 0x489;
+
 
 /// Returns `true` if the CPU advertises VMX (`CPUID.1:ECX[5]`).
 pub fn supported() -> bool {
@@ -109,16 +114,22 @@ pub unsafe fn enter_root(vmxon_pa: u64, vmxon_va: *mut u32) -> ViResult<()> {
         let revid = (rdmsr(MSR_IA32_VMX_BASIC) & 0x7FFF_FFFF) as u32;
         core::ptr::write_volatile(vmxon_va, revid);
     }
-    // SAFETY: CR4.VMXE is a prerequisite for VMXON; setting it has no other effect.
+    // Ensure CR0 and CR4 satisfy IA32_VMX_CR0_FIXED0/1 and IA32_VMX_CR4_FIXED0/1
+    // before VMXON to prevent #GP (Intel SDM Vol 3C 24.8 / 30.1.1).
     unsafe {
-        core::arch::asm!(
-            "mov {tmp}, cr4",
-            "or  {tmp}, {vmxe}",
-            "mov cr4, {tmp}",
-            tmp = out(reg) _,
-            vmxe = const CR4_VMXE,
-            options(nomem, nostack),
-        );
+        let cr0_fixed0 = rdmsr(MSR_IA32_VMX_CR0_FIXED0);
+        let cr0_fixed1 = rdmsr(MSR_IA32_VMX_CR0_FIXED1);
+        let mut cr0: u64;
+        core::arch::asm!("mov {}, cr0", out(reg) cr0, options(nomem, nostack));
+        cr0 = (cr0 | cr0_fixed0) & cr0_fixed1;
+        core::arch::asm!("mov cr0, {}", in(reg) cr0, options(nomem, nostack));
+
+        let cr4_fixed0 = rdmsr(MSR_IA32_VMX_CR4_FIXED0);
+        let cr4_fixed1 = rdmsr(MSR_IA32_VMX_CR4_FIXED1);
+        let mut cr4: u64;
+        core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack));
+        cr4 = ((cr4 | CR4_VMXE) | cr4_fixed0) & cr4_fixed1;
+        core::arch::asm!("mov cr4, {}", in(reg) cr4, options(nomem, nostack));
     }
     // VMXON reports failure via CF (invalid region) or ZF (VMfailValid).
     let rflags: u64;

@@ -37,6 +37,11 @@ extern "C" {
     /// (IF=0) for the whole call — an interrupt in the VMRUN→VMLOAD window would
     /// read the guest's `gs:` base.
     pub fn svm_vmrun(guest_vmcb_pa: u64, gpr_ptr: *mut u64, host_vmcb_pa: u64);
+
+    /// Enter the VMX guest via `vmlaunch` (if `launched == 0`) or `vmresume` (if `launched != 0`).
+    ///
+    /// Returns 0 on successful VM-exit, 1 on VMfailInvalid, 2 on VMfailValid.
+    pub fn vmx_vmrun(gpr_ptr: *mut u64, launched: u64) -> u32;
 }
 
 global_asm!(
@@ -131,6 +136,120 @@ global_asm!(
     "stgi",
     // Pop the arg slots + callee-saved and return.
     "add rsp, 24",
+    "pop r15",
+    "pop r14",
+    "pop r13",
+    "pop r12",
+    "pop rbx",
+    "pop rbp",
+    "ret",
+
+    ".global vmx_vmrun",
+    "vmx_vmrun:",
+    ".byte 0xF3, 0x0F, 0x1E, 0xFA", // ENDBR64
+    "push rbp",
+    "push rbx",
+    "push r12",
+    "push r13",
+    "push r14",
+    "push r15",
+    "push rdi", // [rsp] = gpr_ptr
+
+    // Update HOST_RSP (0x6C14) to current rsp
+    "mov rax, 0x6C14",
+    "vmwrite rax, rsp",
+
+    // Update HOST_RIP (0x6C16) to VM-exit landing pad (label 2)
+    "lea rdx, [rip + 2f]",
+    "mov rax, 0x6C16",
+    "vmwrite rax, rdx",
+
+    // Test launched flag (rsi)
+    "test rsi, rsi",
+    "jnz 10f",
+
+    // vmlaunch path (first launch)
+    "mov rax, [rdi + 0]",
+    "mov rcx, [rdi + 8]",
+    "mov rdx, [rdi + 16]",
+    "mov rbx, [rdi + 24]",
+    "mov rbp, [rdi + 40]",
+    "mov rsi, [rdi + 48]",
+    "mov r8,  [rdi + 64]",
+    "mov r9,  [rdi + 72]",
+    "mov r10, [rdi + 80]",
+    "mov r11, [rdi + 88]",
+    "mov r12, [rdi + 96]",
+    "mov r13, [rdi + 104]",
+    "mov r14, [rdi + 112]",
+    "mov r15, [rdi + 120]",
+    "mov rdi, [rdi + 56]",
+    "vmlaunch",
+    "jmp 3f",
+
+    // vmresume path (subsequent resumes)
+    "10:",
+    "mov rax, [rdi + 0]",
+    "mov rcx, [rdi + 8]",
+    "mov rdx, [rdi + 16]",
+    "mov rbx, [rdi + 24]",
+    "mov rbp, [rdi + 40]",
+    "mov rsi, [rdi + 48]",
+    "mov r8,  [rdi + 64]",
+    "mov r9,  [rdi + 72]",
+    "mov r10, [rdi + 80]",
+    "mov r11, [rdi + 88]",
+    "mov r12, [rdi + 96]",
+    "mov r13, [rdi + 104]",
+    "mov r14, [rdi + 112]",
+    "mov r15, [rdi + 120]",
+    "mov rdi, [rdi + 56]",
+    "vmresume",
+    "jmp 3f",
+
+    // VM-entry failed: CPU sets CF (VMfailInvalid) or ZF (VMfailValid)
+    "3:",
+    "pop rdi",
+    "jc 4f",
+    "jz 5f",
+    "mov eax, 3",
+    "jmp 6f",
+    "4:",
+    "mov eax, 1",
+    "jmp 6f",
+    "5:",
+    "mov eax, 2",
+    "jmp 6f",
+    "6:",
+    "pop r15",
+    "pop r14",
+    "pop r13",
+    "pop r12",
+    "pop rbx",
+    "pop rbp",
+    "ret",
+
+    // VM-exit landing pad (CPU jumped here on exit, with RSP=HOST_RSP)
+    "2:",
+    "push rax",
+    "mov rax, [rsp + 8]", // gpr_ptr
+    "mov [rax + 8],   rcx",
+    "mov [rax + 16],  rdx",
+    "mov [rax + 24],  rbx",
+    "mov [rax + 40],  rbp",
+    "mov [rax + 48],  rsi",
+    "mov [rax + 56],  rdi",
+    "mov [rax + 64],  r8",
+    "mov [rax + 72],  r9",
+    "mov [rax + 80],  r10",
+    "mov [rax + 88],  r11",
+    "mov [rax + 96],  r12",
+    "mov [rax + 104], r13",
+    "mov [rax + 112], r14",
+    "mov [rax + 120], r15",
+    "pop qword ptr [rax + 0]", // guest RAX
+    "pop rdi",                 // pop gpr_ptr
+    "xor eax, eax",            // return 0 (successful exit)
     "pop r15",
     "pop r14",
     "pop r13",
