@@ -1,0 +1,41 @@
+    Updating crates.io index
+     Locking 3 packages to latest Rust 1.97.0-nightly compatible versions
+      Adding bcrypt-pbkdf v0.11.0
+      Adding blowfish v0.10.0
+      Adding pbkdf2 v0.13.0
+warning: unused import: `Cipher`
+  --> src/main.rs:84:15
+   |
+84 | use ssh_key::{Cipher, Kdf, PrivateKey};
+   |               ^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `k1hosttest` (bin "k1hosttest") generated 1 warning (run `cargo fix --bin "k1hosttest" -p k1hosttest` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 4.46s
+     Running `/tmp/kssh-k1/target-host/release/k1hosttest`
+ownmin: sign ok, verify against fixture pubkey = true
+ownmin: wrong passphrase rejected = true
+ownmin: chacha20-poly1305 fixture rejected pre-KDF = true
+ownmin: aes128-ctr fixture rejected pre-KDF = true
+ssh-key+encryption: same signature as ownmin = true
+ssh-key+encryption: wrong passphrase error = Some(Crypto)
+ssh-key: chacha fixture cipher()=ChaCha20Poly1305 kdf rounds readable pre-decrypt: Some((16, 16))
+fixture rounds before patch = 16
+ssh-key: hostile rounds=0x7fffffff PARSES OK (no cap); kdf = rounds Some(2147483647) (decrypt() would run the KDF unbounded)
+ownmin: hostile rounds rejected = true in 1.85µs
+api rounds=0   -> Err(InvalidRounds)
+api rounds=1   -> Ok(())
+api rounds=64  -> Ok(())
+api rounds=65  -> Ok(())
+api salt len 0 -> Err(InvalidParamLen)
+api salt len 15-> Ok(())
+api salt len 64-> Ok(())
+api salt len 65-> Ok(())
+api passphrase empty -> Err(InvalidParamLen)
+api passphrase 1024 B -> Ok(())
+api output 1025 -> Err(InvalidOutputLen)
+api memory 32 for 48 out -> Err(InvalidMemoryLen)
+host timing bcrypt_pbkdf 48B rounds=1: min 4.65 ms median 4.70 ms max 4.74 ms
+host timing bcrypt_pbkdf 48B rounds=16: min 74.15 ms median 75.25 ms max 76.55 ms
+host timing bcrypt_pbkdf 48B rounds=64: min 298.63 ms median 301.26 ms max 302.04 ms

@@ -1,0 +1,12 @@
+--- a/cells/services/kms/Cargo.toml
++++ b/cells/services/kms/Cargo.toml
+@@ -28,6 +28,9 @@
+ p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
+ sha2 = { version = "0.10", default-features = false }
+ ostd = { path = "../../../libs/ostd", version = "0.2.0" }
++ssh-key = { version = "0.7.0-rc.11", default-features = false, features = ["alloc", "encryption"] }
++zeroize = { version = "1", default-features = false }
++ed25519-dalek = { version = "3.0", default-features = false, features = ["zeroize"] }
+ 
+ [build-dependencies]
+ cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

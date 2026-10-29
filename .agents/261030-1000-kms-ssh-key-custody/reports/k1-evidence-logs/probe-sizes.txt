@@ -1,0 +1,17 @@
+# llvm-size (SysV-less Berkeley), release, opt-level=2 lto panic=abort (repo [profile.release]), RUSTFLAGS '-C relocation-model=pic' (cell profile); bss includes a 262144 B bump-allocator arena in every probe
+## x86_64-unknown-none base elf_bytes=2832 sha256=fef1e1605967790758a2eaf9d7e9a0adf73eea83e71751a8fae4ac494b6d77ed
+    459	    160	 265104	 265723	  40dfb	target-probes/base/x86_64-unknown-none/release/k1probe-base
+## x86_64-unknown-none ownmin elf_bytes=87136 sha256=f57c35fcea01eed215ac0225ca82d6c930d920c986511ca981fc2f6d3d788f13
+  77427	    272	 265792	 343491	  53dc3	target-probes/ownmin/x86_64-unknown-none/release/k1probe-ownmin
+## x86_64-unknown-none own elf_bytes=151248 sha256=a42ad904cc809bca63fd504f5c49f4633d3b9a3ac2cc919ecf11f25bf3a201cc
+ 129923	    376	 262344	 392643	  5fdc3	target-probes/own/x86_64-unknown-none/release/k1probe-own
+## x86_64-unknown-none sshkey elf_bytes=195576 sha256=0deaa87427d7aa5de679a3ec8d34f9ddde4662f0d50b0dd11382d2f5b5f25820
+ 169107	    376	 264120	 433603	  69dc3	target-probes/sshkey/x86_64-unknown-none/release/k1probe-sshkey
+## riscv64gc-unknown-none-elf own elf_bytes=155584 sha256=10165c6dc2efa51a5224bf0a80779a3d6cbbffd5ce962a95327c05c9e4da7ae8
+ 117628	     96	 262696	 380420	  5ce04	target-probes/own/riscv64gc-unknown-none-elf/release/k1probe-own
+## riscv64gc-unknown-none-elf sshkey elf_bytes=201328 sha256=52c0c08618645a8ada5d2fe6605f349edc7928326a4e6da4ad3c01ef52d02073
+ 155424	     96	 265864	 421384	  66e08	target-probes/sshkey/riscv64gc-unknown-none-elf/release/k1probe-sshkey
+## aarch64-unknown-none-softfloat own elf_bytes=144872 sha256=f037f719f026c8a0f83789898e4cd0bf8806237083dcfd4180c38e323df5f355
+ 116228	    101	 264096	 380425	  5ce09	target-probes/own/aarch64-unknown-none-softfloat/release/k1probe-own
+## aarch64-unknown-none-softfloat sshkey elf_bytes=194752 sha256=f428e91ac7c711f8c1a8476fe93b435fcfd420758bc34840a1952841c12e86fc
+ 158852	    105	 262432	 421389	  66e0d	target-probes/sshkey/aarch64-unknown-none-softfloat/release/k1probe-sshkey

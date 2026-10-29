@@ -1,0 +1,12 @@
+[package]
+name = "k1probe-sshkey"
+version = "0.0.0"
+edition = "2024"
+publish = false
+[dependencies]
+ssh-key = { version = "0.7.0-rc.11", default-features = false, features = ["alloc", "encryption"] }
+ed25519-dalek = { version = "3.0", default-features = false, features = ["zeroize"] }
+[profile.release]
+panic = "abort"
+lto = true
+opt-level = 2

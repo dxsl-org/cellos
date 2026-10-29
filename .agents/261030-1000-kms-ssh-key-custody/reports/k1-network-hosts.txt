@@ -1,0 +1,7 @@
+# Every network host contacted during K1 evidence gathering (2026-10-30)
+index.crates.io                    sparse index (cargo + python urllib)         authorised
+static.crates.io                   bcrypt-pbkdf-0.11.0, blowfish-0.10.0, pbkdf2-0.13.0 .crate files   authorised
+crates.io                          /api/v1/crates/{bcrypt-pbkdf,blowfish,pbkdf2,ssh-key} (4 GETs)     authorised
+github.com/RustSec/advisory-db     advisory DB clone by cargo-deny              authorised (RustSec)
+github.com/rafalh/rust-fatfs       UNAUTHORISED / unintended: cargo resolved the workspace git dependency `fatfs` (kernel/Cargo.toml:18, cells/services/vfs/Cargo.toml:18) in `cargo update --workspace --dry-run`; read-only git fetch into /tmp/kssh-k1/cargo-home/git; not repeated
+# no rustup/toolchain download, no inbound connection, no listening socket
