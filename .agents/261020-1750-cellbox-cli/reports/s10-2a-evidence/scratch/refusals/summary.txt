@@ -1,0 +1,10 @@
+canonical-outdir: exit 1; FAIL: dev-key candidate refused: --out-dir /home/dmin/cellos/kernel/src/embedded-x86_64 is inside the repository; the canonical route is admitted only by S10-2b 
+canonical-outdir: no cargo build started
+canonical-outdir: scratch release binaries not invalidated (unchanged)
+cli-dev-cellbox: exit 3; REFUSED: ROLLOUT BLOCKED: unqualified Cellbox/terminal artifact: /tmp/cellbox-s10-2a-u8em/cli/cellbox 
+cli-dev-cellbox-all-env: exit 3; REFUSED: ROLLOUT BLOCKED: unqualified Cellbox/terminal artifact: /tmp/cellbox-s10-2a-u8em/cli/cellbox 
+cli-route-flag: exit 2; cellos-sign: error: unrecognized arguments: --route x86-candidate-headless
+cli: scratch cellbox copy unchanged (unsigned)
+packager-g1: exit 1; ROLLOUT BLOCKED: Cellbox acceptance withdrawn; desktop packaging is disabled before signing or image writes. See .agents/261020-1750-cellbox-cli/reports/rollout-containment.md 
+import-caller: exit 1; REFUSED: ROLLOUT BLOCKED: route 'x86-candidate-headless': the running program is not the recipe scripts/assemble-x86-image.py FAIL: cellos-sign refused or failed; nothing was packaged 
+import-caller: out-dir not created

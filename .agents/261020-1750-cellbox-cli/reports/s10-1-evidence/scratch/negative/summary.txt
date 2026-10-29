@@ -1,0 +1,6 @@
+tier2-smoke sha256 used as the injected blocked hash: 7f158e2f13520d955f6c2f8dac37930052e7b8e30464e5107b09b5008c3faa96
+inject-bin-shell: exit 1; out-dir unchanged; refusal: FAIL: retired or forbidden image paths refused: ['/bin/shell'] 
+inject-bin-sshd: exit 1; out-dir unchanged; refusal: FAIL: retired or forbidden image paths refused: ['/bin/sshd'] 
+blocked-hash-input: exit 1; out-dir unchanged; refusal: FAIL: quarantined bytes refused as image input: /tmp/cellbox-s10-1-3jLV/headless/.assemble-_z18cvcz/inputs/tier2-smoke 
+dev-key-no-seed: exit 1; out-dir unchanged; refusal: REFUSED: ROLLOUT BLOCKED: unqualified Cellbox/terminal artifact: /tmp/cellbox-s10-1-3jLV/target/x86_64-unknown-none/release/cellbox FAIL: cellos-sign refused or failed; nothing was packaged 
+dev-key-no-seed: release cellbox carries __ViCell_sig section name: False

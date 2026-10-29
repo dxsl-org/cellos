@@ -1,0 +1,95 @@
+test_assembler_never_sets_the_signing_allowances (__main__.CommandLine.test_assembler_never_sets_the_signing_allowances) ... ok
+test_seed_file_must_be_a_private_32_byte_seed (__main__.CommandLine.test_seed_file_must_be_a_private_32_byte_seed) ... ok
+test_test_inject_may_not_replace_a_manifest_path (__main__.CommandLine.test_test_inject_may_not_replace_a_manifest_path) ... ok
+test_artifact_not_reported_by_cargo_is_refused (__main__.EndToEnd.test_artifact_not_reported_by_cargo_is_refused) ... === x86_64 image: profile headless, release dir /tmp/tmperm6iy39/target/x86_64-unknown-none/release ===
+ok
+test_artifact_older_than_the_build_start_is_refused (__main__.EndToEnd.test_artifact_older_than_the_build_start_is_refused) ... === x86_64 image: profile headless, release dir /tmp/tmpyvxnljd3/target/x86_64-unknown-none/release ===
+ok
+test_blocked_input_hash_is_refused_before_the_image (__main__.EndToEnd.test_blocked_input_hash_is_refused_before_the_image) ... === x86_64 image: profile headless, release dir /tmp/tmptj787nno/target/x86_64-unknown-none/release ===
+ok
+test_builder_failure_leaves_the_out_dir_byte_identical (__main__.EndToEnd.test_builder_failure_leaves_the_out_dir_byte_identical) ... === x86_64 image: profile headless, release dir /tmp/tmp63mb7zuu/target/x86_64-unknown-none/release ===
+ok
+test_copy_then_sign_keeps_the_cargo_target_unsigned (__main__.EndToEnd.test_copy_then_sign_keeps_the_cargo_target_unsigned) ... === x86_64 image: profile headless, release dir /tmp/tmpmgmdd7xf/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpmgmdd7xf/out/.assemble-l15vwd9i/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpmgmdd7xf/out/kernel_fs.img (4194304 B, sha256 c423e99e59ac5ae4dbed832fb042fabe89f9783ae83c8ec3b3625e59c86c0f68), 25 files
+=== x86_64 image: profile desktop, release dir /tmp/tmpmgmdd7xf/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpmgmdd7xf/out/.assemble-0ql9_ki2/kernel_fs.img: 32 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpmgmdd7xf/out/kernel_fs.img (4194304 B, sha256 dd62b99c9dd9078a0840238bfee452cbef94fce9a4c69c11b3005a85ba00592c), 32 files
+ok
+test_dev_key_class_without_a_seed (__main__.EndToEnd.test_dev_key_class_without_a_seed) ... === x86_64 image: profile headless, release dir /tmp/tmp5uzgk034/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmp5uzgk034/out/.assemble-1vrbi2d2/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmp5uzgk034/out/kernel_fs.img (4194304 B, sha256 c423e99e59ac5ae4dbed832fb042fabe89f9783ae83c8ec3b3625e59c86c0f68), 25 files
+ok
+test_dev_key_run_inside_the_repository_is_refused_before_invalidation (__main__.EndToEnd.test_dev_key_run_inside_the_repository_is_refused_before_invalidation) ... ok
+test_injected_retired_paths_are_refused (__main__.EndToEnd.test_injected_retired_paths_are_refused) ... === x86_64 image: profile headless, release dir /tmp/tmpnimbbfrs/target/x86_64-unknown-none/release ===
+=== x86_64 image: profile headless, release dir /tmp/tmpnimbbfrs/target/x86_64-unknown-none/release ===
+ok
+test_invalidation_removes_stale_inputs_before_the_build (__main__.EndToEnd.test_invalidation_removes_stale_inputs_before_the_build) ... === x86_64 image: profile headless, release dir /tmp/tmpouxkd94k/target/x86_64-unknown-none/release ===
+ok
+test_missing_artifact_is_refused (__main__.EndToEnd.test_missing_artifact_is_refused) ... === x86_64 image: profile headless, release dir /tmp/tmpdbq9cia3/target/x86_64-unknown-none/release ===
+=== x86_64 image: profile headless, release dir /tmp/tmpdbq9cia3/target/x86_64-unknown-none/release ===
+=== x86_64 image: profile headless, release dir /tmp/tmpdbq9cia3/target/x86_64-unknown-none/release ===
+ok
+test_missing_out_dir_is_created_only_on_success (__main__.EndToEnd.test_missing_out_dir_is_created_only_on_success) ... === x86_64 image: profile headless, release dir /tmp/tmpufg0l0md/target/x86_64-unknown-none/release ===
+=== x86_64 image: profile headless, release dir /tmp/tmpufg0l0md/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpufg0l0md/fresh/.assemble-i_ba6p0v/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpufg0l0md/fresh/kernel_fs.img (4194304 B, sha256 c423e99e59ac5ae4dbed832fb042fabe89f9783ae83c8ec3b3625e59c86c0f68), 25 files
+ok
+test_private_seed_runs_keep_the_s10_1_rule (__main__.EndToEnd.test_private_seed_runs_keep_the_s10_1_rule) ... ok
+test_real_sign_hook_routes_dev_key_and_keeps_the_seed_cli (__main__.EndToEnd.test_real_sign_hook_routes_dev_key_and_keeps_the_seed_cli) ... + cellos-sign route x86-candidate-headless (dev key) --sign 2 cell(s)
++ cellos-sign route x86-candidate-desktop (dev key) --sign 2 cell(s)
++ cellos-sign --objcopy objcopy (private key) --sign 2 cell(s)
++ cellos-sign route x86-candidate-headless (dev key) --sign 2 cell(s)
+ok
+test_route_table_matches_the_profiles (__main__.EndToEnd.test_route_table_matches_the_profiles) ... ok
+test_signer_only_sees_signed_cells_and_init (__main__.EndToEnd.test_signer_only_sees_signed_cells_and_init) ... === x86_64 image: profile headless, release dir /tmp/tmp8s734n_7/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmp8s734n_7/out/.assemble-8r7yra1v/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmp8s734n_7/out/kernel_fs.img (4194304 B, sha256 c423e99e59ac5ae4dbed832fb042fabe89f9783ae83c8ec3b3625e59c86c0f68), 25 files
+ok
+test_signer_refusal_leaves_the_out_dir_untouched (__main__.EndToEnd.test_signer_refusal_leaves_the_out_dir_untouched) ... === x86_64 image: profile headless, release dir /tmp/tmpn0w3d664/target/x86_64-unknown-none/release ===
+ok
+test_success_publishes_image_init_config_and_manifest_together (__main__.EndToEnd.test_success_publishes_image_init_config_and_manifest_together) ... === x86_64 image: profile headless, release dir /tmp/tmpx5ellz2j/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpx5ellz2j/out/.assemble-fzul5ee8/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpx5ellz2j/out/kernel_fs.img (4194304 B, sha256 c423e99e59ac5ae4dbed832fb042fabe89f9783ae83c8ec3b3625e59c86c0f68), 25 files
+=== x86_64 image: profile desktop, release dir /tmp/tmpx5ellz2j/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpx5ellz2j/out/.assemble-gauxzqom/kernel_fs.img: 32 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpx5ellz2j/out/kernel_fs.img (4194304 B, sha256 dd62b99c9dd9078a0840238bfee452cbef94fce9a4c69c11b3005a85ba00592c), 32 files
+ok
+test_alias_shares_one_source_and_retired_paths_are_absent (__main__.ManifestTables.test_alias_shares_one_source_and_retired_paths_are_absent) ... ok
+test_blocked_set_is_the_signers_own (__main__.ManifestTables.test_blocked_set_is_the_signers_own) ... ok
+test_desktop_is_headless_plus_the_desktop_apps (__main__.ManifestTables.test_desktop_is_headless_plus_the_desktop_apps) ... ok
+test_headless_packages_and_paths (__main__.ManifestTables.test_headless_packages_and_paths) ... ok
+test_only_tier2_fixtures_are_unsigned (__main__.ManifestTables.test_only_tier2_fixtures_are_unsigned) ... ok
+test_worker_set_is_d10_6 (__main__.ManifestTables.test_worker_set_is_d10_6) ... ok
+test_clean_images_pass_and_boot_cellbox_sh_from_templates (__main__.OutputChecks.test_clean_images_pass_and_boot_cellbox_sh_from_templates) ... Created FAT16 image at /tmp/tmplqe39scr/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+Created FAT16 image at /tmp/tmpj0em83hv/kernel_fs.img: 32 file(s), 3 director(ies), 8031 clusters.
+ok
+test_refuses_a_blocked_hash_in_any_file (__main__.OutputChecks.test_refuses_a_blocked_hash_in_any_file) ... Created FAT16 image at /tmp/tmpn5lmbknm/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+ok
+test_refuses_a_desktop_image_without_compositor (__main__.OutputChecks.test_refuses_a_desktop_image_without_compositor) ... Created FAT16 image at /tmp/tmpt00vs_29/kernel_fs.img: 32 file(s), 3 director(ies), 8031 clusters.
+ok
+test_refuses_a_file_that_differs_from_its_input (__main__.OutputChecks.test_refuses_a_file_that_differs_from_its_input) ... Created FAT16 image at /tmp/tmpaaiwsurz/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+ok
+test_refuses_a_missing_alias (__main__.OutputChecks.test_refuses_a_missing_alias) ... Created FAT16 image at /tmp/tmpbht5jgww/kernel_fs.img: 24 file(s), 3 director(ies), 8031 clusters.
+ok
+test_refuses_a_second_cellbox_row_or_one_without_sh (__main__.OutputChecks.test_refuses_a_second_cellbox_row_or_one_without_sh) ... Created FAT16 image at /tmp/tmpakf4bcme/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+Created FAT16 image at /tmp/tmpoaztzczt/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+ok
+test_refuses_a_services_row_for_sshd_or_config (__main__.OutputChecks.test_refuses_a_services_row_for_sshd_or_config) ... Created FAT16 image at /tmp/tmp0dv3d_e2/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+Created FAT16 image at /tmp/tmp28z05gmz/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+ok
+test_refuses_alias_bytes_that_differ (__main__.OutputChecks.test_refuses_alias_bytes_that_differ) ... Created FAT16 image at /tmp/tmpvn34r_g9/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+ok
+test_refuses_an_autoload_row_for_bin_shell (__main__.OutputChecks.test_refuses_an_autoload_row_for_bin_shell) ... Created FAT16 image at /tmp/tmp9dtntzv5/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+ok
+test_refuses_an_extra_bin_shell (__main__.OutputChecks.test_refuses_an_extra_bin_shell) ... Created FAT16 image at /tmp/tmpawyhnry8/kernel_fs.img: 26 file(s), 3 director(ies), 8031 clusters.
+ok
+test_refuses_an_extra_bin_sshd (__main__.OutputChecks.test_refuses_an_extra_bin_sshd) ... Created FAT16 image at /tmp/tmpt5imo33h/kernel_fs.img: 26 file(s), 3 director(ies), 8031 clusters.
+ok
+test_refuses_any_other_extra_file (__main__.OutputChecks.test_refuses_any_other_extra_file) ... Created FAT16 image at /tmp/tmpdth8gz2m/kernel_fs.img: 26 file(s), 3 director(ies), 8031 clusters.
+ok
+
+----------------------------------------------------------------------
+Ran 38 tests in 0.392s
+
+OK

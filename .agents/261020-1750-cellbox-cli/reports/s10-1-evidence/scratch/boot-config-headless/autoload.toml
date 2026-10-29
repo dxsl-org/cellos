@@ -1,0 +1,8 @@
+# Applications start after the configured required services are ready.
+version = 1
+
+[[cells]]
+name = "cellbox"
+path = "/bin/cellbox"
+args = ["sh"]
+restart = "on-failure"

@@ -1,0 +1,25 @@
+{
+  "headless": {
+    "markers_seconds": {
+      "[policy] loaded + verified": 1.2,
+      "Cellos >": 3.3
+    },
+    "missing": [],
+    "shell_echo_round_trip": true,
+    "suspicious_lines": [],
+    "verdict": "PASS"
+  },
+  "desktop": {
+    "markers_seconds": {
+      "[policy] loaded + verified": 0.9,
+      "[compositor] Compositor v0.2": 1.9,
+      "[compositor] first scanout flush submitted": 2.2,
+      "[desktop] Ready. Entering event loop.": 2.9,
+      "Cellos >": 5.0
+    },
+    "missing": [],
+    "shell_echo_round_trip": true,
+    "suspicious_lines": [],
+    "verdict": "PASS"
+  }
+}

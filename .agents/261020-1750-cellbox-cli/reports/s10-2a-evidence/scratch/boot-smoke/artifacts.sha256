@@ -1,0 +1,10 @@
+fed9ce5b22b2127105def6f0a365e16255ecb368652738ee868d73c29d922b99  $W/headless/kernel_fs.img
+7697a4d2d7cbde4b7351d3ec229c426e4ea27f5fd1ccb47590deebf6ba7b6073  $W/kernel-headless.elf
+d134c8a4bcac54a9457d4a2f162596b786076526a8a2079a83f37effcdc8bc33  $W/smoke-headless.iso
+$W/kernel-headless.elf 15599632
+$W/smoke-headless.iso 19472384
+5726b180c93f1c07c50745675c891e86a032970479a130dbf45cbf592cb21f69  $W/desktop/kernel_fs.img
+8481416bd9fd81027c1c5a829f0a30234b54109dd1873395867df5750f14dffb  $W/kernel-desktop.elf
+f77febb204219cced41cc0895a5c1ff53183e4c40686f27f359bd32852a99df4  $W/smoke-desktop.iso
+$W/kernel-desktop.elf 28182544
+$W/smoke-desktop.iso 32055296

@@ -1,0 +1,41 @@
+S10-1 evidence (2026-10-26). Scratch W=/tmp/cellbox-s10-1-3jLV (deleted after archiving), private
+Ed25519 cell key per run (identity sha256 afaecc091e3d453448cac5c9609b3abb8226ddd3f903e266172e18b06bccb7ef;
+seed never archived, grep-checked). CELLBOX_PRIVATE_FIXTURE_SIGNING=1 and
+CELLOS_SIGN_ALLOW_PROD_KEY_OUTSIDE_CI=1 were set on each assembler command only. Toolchain
+(caller's): CARGO_TARGET_DIR=$W/target, CC=cc, lane CFLAGS/BINDGEN (manifest source.toolchain_env).
+Assembler sha256 at the final runs: cc5273092bc89f630c6bfde28588f695a25aca84f9d5dbada3ecbf71fe4469d8. After the runs
+only an unused `import time` was removed (as-built a8ccf5f6f6b0491cebb364fd4a69030f94af0791e17c26fcebbfecac0a1dacdd;
+the 33 unit tests rerun OK on it).
+
+canonical/            sha256 before/after of kernel_fs.img, embedded init, target cellos-kernel/cellbox/
+                      terminal, build/vicell-x86.iso, build/cellos-x86_64.iso, iso-root kernel.elf, and the
+                      embedded-x86_64 file hashes + listing with mtimes: identical (diff empty).
+scratch/manifest-*.json            assembler manifests (headless, desktop, ps1 wrapper headless)
+scratch/boot-config-*/             published template-generated boot config
+scratch/fat-layout-*.txt           tools/inspect_fat.py of both images
+scratch/readback-verify.txt        independent read-back: paths/hashes == manifest, cellbox == cellbox-ssh,
+                                   no /bin/shell, no /bin/sshd, no blocked hash, autoload/services rows
+scratch/wrapper-equality.txt       pwsh build-x86_64-cells.ps1 manifest == direct assembler (files, image, init)
+scratch/negative/                  refused runs with out-dir snapshots before/after (summary.txt)
+scratch/boot-smoke/                D11-3 fixture-kernel (phase02-terminal-profile) TCG smoke, verdict.json
+scratch/census-bin-shell.txt       git grep of /bin/shell outside .agents/changelogs/build
+scratch/negative.sh, boot-smoke.sh the exact scripts used
+phase04-lane/                      P04 terminal lane /tmp/cellbox-phase04-X5gq: 494/494, 202 markers
+logs/                              assembler runs, final-code reruns, unit tests (33), cellos-sign tests (49),
+                                   cellbox host tests (205), app-sys-tools build, P04 runner log
+
+Results
+- headless: kernel_fs.img 12,582,912 B a770850db380130fad77df3366bb5953a8d3114f335d93f80dc82a90a2a94389, 25 files,
+  init 403,016 B 01ec7bf908d9b132352bf0fe25e5c156ffd158eff49519677234356cb05c1842,
+  /bin/cellbox = /bin/cellbox-ssh 3,076,760 B 7b3b47b9381ab6f4753ff7af04f73bc234eb1243ad0ab933e4ddd738147270b6.
+- desktop: kernel_fs.img 25,165,824 B 6858a7666500c30f53be580a9d644b65d7e75e2c77bb61bf784e74f9f407eb90, 32 files,
+  init a978c8d357a645f69d9cf11371f8ede8d92ad22829b467102ee4edcb52c0c791,
+  /bin/cellbox = /bin/cellbox-ssh 3,076,824 B c23a3b720c3e01334e3a69df78b8fdcd104e4f75e7537f2ac13e2db3386616f0.
+- ps1 wrapper (pwsh 7 on Linux) == direct headless; final-code reruns of both profiles == first runs.
+- negative: /bin/shell inject, /bin/sshd inject, blocked-hash input (tier2-smoke hash via
+  --test-block-sha256), dev-key run without --seed-file (G2a REFUSED before key load; release cellbox
+  left unsigned): each exit 1, out-dir unchanged.
+- boot smoke (TCG, fixture kernel, private key): headless `Cellos >` 2.7 s; desktop compositor 2.0 s,
+  first scanout 2.3 s, desktop ready 3.0 s, `Cellos >` 5.0 s. Fixture kernel ELF 15,595,648 B (headless)
+  and 28,178,560 B (desktop). Pre-existing `COMPLETION-QUEUE` self-test FAIL lines also appear in
+  earlier archived lane logs (s8-2-evidence, s3-gui-rerun-evidence); not from this slice.

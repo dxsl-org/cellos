@@ -1,0 +1,91 @@
+Checking: /tmp/cellbox-s10-1-3jLV/desktop/kernel_fs.img
+Size: 25165824 bytes (24576 KB)
+Sig: 55aa (should be 55aa)
+FS type: b'  FAT16 '
+BPS=512 SPC=1 RES=1 FAT_CNT=2 ROOT_ENT=512 FAT_SZ=224
+Root dir at 229888, Data area at 246272
+  --- root ---
+    LFN[1] 'bin'
+    SFN BIN~1         -> LFN 'bin'  attr=10 clus=2 sz=0
+    LFN[1] 'etc'
+    SFN ETC~1         -> LFN 'etc'  attr=10 clus=6 sz=0
+    SFN POLICY.BIN           attr=20 clus=36277 sz=2013
+bin dir (SFN='BIN~1') at cluster 2, offset 246272
+  --- /bin ---
+    SFN .                    attr=10 clus=2 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellbox'
+    SFN CELLBO~1      -> LFN 'cellbox'  attr=20 clus=8 sz=3076824
+    LFN[1] 'cellbox-ssh'
+    SFN CELLBO~2      -> LFN 'cellbox-ssh'  attr=20 clus=6018 sz=3076824
+    LFN[1] 'vfs'
+    SFN VFS~1         -> LFN 'vfs'  attr=20 clus=12028 sz=613456
+    LFN[1] 'config'
+    SFN CONFIG~1      -> LFN 'config'  attr=20 clus=13227 sz=47376
+    LFN[1] 'input'
+    SFN INPUT~1       -> LFN 'input'  attr=20 clus=13320 sz=167120
+    LFN[1] 'net'
+    SFN NET~1         -> LFN 'net'  attr=20 clus=13647 sz=491336
+    LFN[1] 'platform'
+    SFN PLATFO~1      -> LFN 'platform'  attr=20 clus=14607 sz=38488
+    LFN[1] 'nvme'
+    SFN NVME~1        -> LFN 'nvme'  attr=20 clus=14683 sz=36096
+    LFN[1] 'e1000'
+    SFN E1000~1       -> LFN 'e1000'  attr=20 clus=14754 sz=29672
+    LFN[1] 'igb'
+    SFN IGB~1         -> LFN 'igb'  attr=20 clus=14812 sz=39440
+    LFN[1] 'ahci'
+    SFN AHCI~1        -> LFN 'ahci'  attr=20 clus=14890 sz=44744
+    LFN[1] 'xhci'
+    SFN XHCI~1        -> LFN 'xhci'  attr=20 clus=14978 sz=53080
+    LFN[1] 'serial'
+    SFN SERIAL~1      -> LFN 'serial'  attr=20 clus=15082 sz=35752
+    LFN[1] 'ls'
+    SFN LS~1          -> LFN 'ls'  attr=20 clus=15152 sz=30288
+    LFN[1] 'cat'
+    SFN CAT~1         -> LFN 'cat'  attr=20 clus=15212 sz=30328
+    LFN[1] 'echo'
+    SFN ECHO~1        -> LFN 'echo'  attr=20 clus=15272 sz=30296
+    LFN[1] 'ps'
+    SFN PS~1          -> LFN 'ps'  attr=20 clus=15332 sz=30192
+    LFN[1] 'kill'
+    SFN KILL~1        -> LFN 'kill'  attr=20 clus=15391 sz=30360
+    LFN[1] 'shutdown'
+    SFN SHUTDO~1      -> LFN 'shutdown'  attr=20 clus=15451 sz=26000
+    LFN[1] 'tier2-smoke'
+    SFN TIER2-~1      -> LFN 'tier2-smoke'  attr=20 clus=15502 sz=34264
+    LFN[2] ''
+    LFN[1] 'tier2-exploit'
+    SFN TIER2-~2      -> LFN 'tier2-exploit'  attr=20 clus=15569 sz=28904
+    LFN[1] 'compositor'
+    SFN COMPOS~1      -> LFN 'compositor'  attr=20 clus=15626 sz=107816
+    LFN[1] 'fb-console'
+    SFN FB-CON~1      -> LFN 'fb-console'  attr=20 clus=15837 sz=584344
+    LFN[1] 'desktop'
+    SFN DESKTO~1      -> LFN 'desktop'  attr=20 clus=16979 sz=1161480
+    LFN[1] 'files'
+    SFN FILES~1       -> LFN 'files'  attr=20 clus=19248 sz=2326864
+    LFN[1] 'terminal'
+    SFN TERMIN~1      -> LFN 'terminal'  attr=20 clus=23793 sz=950600
+    LFN[1] 'chrome'
+    SFN CHROME~1      -> LFN 'chrome'  attr=20 clus=25650 sz=1142976
+    LFN[1] 'ocel'
+    SFN OCEL~1        -> LFN 'ocel'  attr=20 clus=27883 sz=4297224
+etc dir (SFN='ETC~1') at cluster 6, offset 248320
+  --- /etc ---
+    SFN .                    attr=10 clus=6 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellos'
+    SFN CELLOS~1      -> LFN 'cellos'  attr=10 clus=7 sz=0
+cellos dir (SFN='CELLOS~1') at cluster 7, offset 248832
+  --- /etc/cellos ---
+    SFN .                    attr=10 clus=7 sz=0
+    SFN ..                   attr=10 clus=6 sz=0
+    LFN[1] 'system.toml'
+    SFN SYSTEM~1.TOM  -> LFN 'system.toml'  attr=20 clus=36281 sz=128
+    LFN[2] ''
+    LFN[1] 'services.toml'
+    SFN SERVIC~1.TOM  -> LFN 'services.toml'  attr=20 clus=36282 sz=897
+    LFN[2] ''
+    LFN[1] 'autoload.toml'
+    SFN AUTOLO~1.TOM  -> LFN 'autoload.toml'  attr=20 clus=36284 sz=358

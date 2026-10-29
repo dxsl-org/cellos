@@ -1,0 +1,8 @@
+   Compiling serde_core v1.0.229
+   Compiling app-sys-tools v0.1.0 (/home/dmin/cellos/cells/tools/sys-tools)
+   Compiling serde v1.0.229
+   Compiling postcard v1.1.3
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+    Finished `release` profile [optimized] target(s) in 4.44s
+app-sys-tools exit 0

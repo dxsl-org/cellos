@@ -1,0 +1,14 @@
+4e7b41e8035662b776a4d4a72ae7fb569d763f88379ef508d2cb6c778280949b  ./boot-config/autoload.toml
+484b0bffbb9d472e3c1149e3bf38205604c92e7682d2172fea0a4ac2b1967855  ./boot-config/services.toml
+74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293  ./boot-config/system.toml
+01ec7bf908d9b132352bf0fe25e5c156ffd158eff49519677234356cb05c1842  ./init
+a770850db380130fad77df3366bb5953a8d3114f335d93f80dc82a90a2a94389  ./kernel_fs.img
+bc06a4bb5d90fd476a56033e736cac30fb8b278df39563625700ff8c09ecc1c0  ./manifest.json
+.
+./boot-config
+./boot-config/autoload.toml
+./boot-config/services.toml
+./boot-config/system.toml
+./init
+./kernel_fs.img
+./manifest.json

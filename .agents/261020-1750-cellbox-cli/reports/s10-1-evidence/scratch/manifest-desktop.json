@@ -1,0 +1,248 @@
+{
+  "schema": "cellos-x86-image-manifest/1",
+  "profile": "desktop",
+  "init_features": [
+    "input",
+    "ui"
+  ],
+  "key_class": "private",
+  "objcopy": "objcopy",
+  "files": {
+    "/POLICY.BIN": {
+      "sha256": "f0be61df403852caef4a27fecd6db470d1effedf0071a5a1144491fbf4e08008",
+      "size": 2013
+    },
+    "/bin/ahci": {
+      "sha256": "03d45274149a595afb7ef5237e87ddfd263b08d811f833ea1cdae30915c92a7b",
+      "size": 44744,
+      "package": "driver-ahci",
+      "binary": "driver-ahci",
+      "signed": true
+    },
+    "/bin/cat": {
+      "sha256": "06c689a622c489b8dc9c2c8f311c7164bb0a3d76f1f918bcebf9e5ed1aa3e9ed",
+      "size": 30328,
+      "package": "app-sys-tools",
+      "binary": "cat",
+      "signed": true
+    },
+    "/bin/cellbox": {
+      "sha256": "c23a3b720c3e01334e3a69df78b8fdcd104e4f75e7537f2ac13e2db3386616f0",
+      "size": 3076824,
+      "package": "app-cellbox",
+      "binary": "cellbox",
+      "signed": true
+    },
+    "/bin/cellbox-ssh": {
+      "sha256": "c23a3b720c3e01334e3a69df78b8fdcd104e4f75e7537f2ac13e2db3386616f0",
+      "size": 3076824,
+      "package": "app-cellbox",
+      "binary": "cellbox",
+      "signed": true
+    },
+    "/bin/chrome": {
+      "sha256": "517d8abbdf0d89fd5cc5c42da7e5c668443689aecc07b3965a16bb7142911437",
+      "size": 1142976,
+      "package": "app-chrome",
+      "binary": "chrome",
+      "signed": true
+    },
+    "/bin/compositor": {
+      "sha256": "3fafdcdfbea2b943e41be2044e70a290a9cb2b9eb22838eb2fb8cbabdd778f68",
+      "size": 107816,
+      "package": "service-compositor",
+      "binary": "service-compositor",
+      "signed": true
+    },
+    "/bin/config": {
+      "sha256": "af52388ae70ef3af1af02e07b8d499d8c335ca4fa960863e7f826004fa141a94",
+      "size": 47376,
+      "package": "service-config",
+      "binary": "service-config",
+      "signed": true
+    },
+    "/bin/desktop": {
+      "sha256": "52f205afe5c00b38d176896404c71b13e447edc2aebac15ce6807c3dadc87bf7",
+      "size": 1161480,
+      "package": "desktop",
+      "binary": "desktop",
+      "signed": true
+    },
+    "/bin/e1000": {
+      "sha256": "cd57f8eb8290284d894efdbb2cdcb47b83be18c77f454af42411d3980c606f6d",
+      "size": 29672,
+      "package": "driver-e1000",
+      "binary": "driver-e1000",
+      "signed": true
+    },
+    "/bin/echo": {
+      "sha256": "df202234dff19b937c4bda00b446bf1bd1dab8cef1e1e9683873a92f0dee27ea",
+      "size": 30296,
+      "package": "app-sys-tools",
+      "binary": "echo",
+      "signed": true
+    },
+    "/bin/fb-console": {
+      "sha256": "3181f57d67487a668bc055e14776bbbe115ee27900a86d8247eae69ba76211eb",
+      "size": 584344,
+      "package": "fb-console",
+      "binary": "fb-console",
+      "signed": true
+    },
+    "/bin/files": {
+      "sha256": "9f672987711f312b2e3edac2f0855d15ea1b2d807e2a9f8591142987b41ba525",
+      "size": 2326864,
+      "package": "files",
+      "binary": "files",
+      "signed": true
+    },
+    "/bin/igb": {
+      "sha256": "b0eeec3c14aa9fe3ab5de42e754d886bc9eebfca06ba39b9a2cece7e02203b5b",
+      "size": 39440,
+      "package": "driver-igb",
+      "binary": "driver-igb",
+      "signed": true
+    },
+    "/bin/input": {
+      "sha256": "90b4866135466acb3bac45ef742bbabebf9908699a84992554bb70af0a132404",
+      "size": 167120,
+      "package": "service-input",
+      "binary": "service-input",
+      "signed": true
+    },
+    "/bin/kill": {
+      "sha256": "1dbd96ec05941f0163809376e06427d9f139790954bcbb2a0e3a7631c36ae61b",
+      "size": 30360,
+      "package": "app-sys-tools",
+      "binary": "kill",
+      "signed": true
+    },
+    "/bin/ls": {
+      "sha256": "9b074b367024028b5ba77f03f6a68e815a2c62ad1caf382695920b502c233583",
+      "size": 30288,
+      "package": "app-sys-tools",
+      "binary": "ls",
+      "signed": true
+    },
+    "/bin/net": {
+      "sha256": "740e05742ae1f2ea75dede49729e31e12bf84077daa7a0bd5201e60b49b14ecf",
+      "size": 491336,
+      "package": "service-net",
+      "binary": "service-net",
+      "signed": true
+    },
+    "/bin/nvme": {
+      "sha256": "432642dc5204b172aa433e5dc0a5d58e86de47300e7014ee80b29a1cfc7e9a11",
+      "size": 36096,
+      "package": "driver-nvme",
+      "binary": "driver-nvme",
+      "signed": true
+    },
+    "/bin/ocel": {
+      "sha256": "8ea67fe445a9db2411871d89b0083eaac994c08a271daba4a1178503af273b76",
+      "size": 4297224,
+      "package": "ocel",
+      "binary": "ocel",
+      "signed": true
+    },
+    "/bin/platform": {
+      "sha256": "42ed36cc079559cab9c88fdbc330b5c78ea2f45a498d81919428e3e8bee9591e",
+      "size": 38488,
+      "package": "service-platform",
+      "binary": "platform",
+      "signed": true
+    },
+    "/bin/ps": {
+      "sha256": "39a4c51d79c273fde6ecb3228b2072f3c877114d46d1b3ee7ff1857ad062b08f",
+      "size": 30192,
+      "package": "app-sys-tools",
+      "binary": "ps",
+      "signed": true
+    },
+    "/bin/serial": {
+      "sha256": "c488375481ac40854d7080b136abc8b7eb69266305ff9139cda52b529ecc9d6c",
+      "size": 35752,
+      "package": "driver-serial-x86",
+      "binary": "driver-serial-x86",
+      "signed": true
+    },
+    "/bin/shutdown": {
+      "sha256": "42c5713d2ede05be4eabe5ce320d128d82ab7e411f321b80cab95c3d027f3db4",
+      "size": 26000,
+      "package": "app-sys-tools",
+      "binary": "shutdown",
+      "signed": true
+    },
+    "/bin/terminal": {
+      "sha256": "214457d6a9466d9b30c70ca8a317d392678b880d1ef86f768e4c9317c9d6873b",
+      "size": 950600,
+      "package": "terminal",
+      "binary": "terminal",
+      "signed": true
+    },
+    "/bin/tier2-exploit": {
+      "sha256": "f651193c77dc7bb328ba48995276fd3fe8d40cb249b4532535c72c1817d513ed",
+      "size": 28904,
+      "package": "tier2-exploit",
+      "binary": "tier2-exploit",
+      "signed": false
+    },
+    "/bin/tier2-smoke": {
+      "sha256": "257f9d4d047e76dbbe9b7a450ba18b196f078cff838644eb0fc3ff84002f1df1",
+      "size": 34264,
+      "package": "tier2-smoke",
+      "binary": "tier2-smoke",
+      "signed": false
+    },
+    "/bin/vfs": {
+      "sha256": "1105e2f36c192bd5373b55e18159d72e0642b11fb97aff57b8364049c6ee5850",
+      "size": 613456,
+      "package": "service-vfs",
+      "binary": "service-vfs",
+      "signed": true
+    },
+    "/bin/xhci": {
+      "sha256": "d325a1ff0f169514e581d11b2afbb3ad07a4006cf149aa5ff7b7c99252a96baf",
+      "size": 53080,
+      "package": "driver-xhci",
+      "binary": "driver-xhci",
+      "signed": true
+    },
+    "/etc/cellos/autoload.toml": {
+      "sha256": "db4350656ff38522e029ab6f0328c6404d5e2362fe4d371c396426361d04ee6a",
+      "size": 358
+    },
+    "/etc/cellos/services.toml": {
+      "sha256": "eff37d25775ecf1eea7012290db0a3f4994d69b35318ce621b0cfd6bc503f160",
+      "size": 897
+    },
+    "/etc/cellos/system.toml": {
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293",
+      "size": 128
+    }
+  },
+  "kernel_fs_img": {
+    "sha256": "6858a7666500c30f53be580a9d644b65d7e75e2c77bb61bf784e74f9f407eb90",
+    "size": 25165824
+  },
+  "init": {
+    "sha256": "a978c8d357a645f69d9cf11371f8ede8d92ad22829b467102ee4edcb52c0c791",
+    "size": 403016,
+    "package": "app-init"
+  },
+  "source": {
+    "git_head": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+    "dirty_files": 1428,
+    "dirty_digest_sha256": "e519fa0fd807e48c8c1ae07dfb92baf4c13c5e9fcd00a6bc4e6c4813b9a77428",
+    "cargo": "cargo 1.97.0-nightly (eb9b60f1f 2026-04-24)",
+    "rustc": "rustc 1.97.0-nightly (f53b654a8 2026-04-30)",
+    "rustflags": "-C relocation-model=pic",
+    "toolchain_env": {
+      "CC_x86_64_unknown_none": "cc",
+      "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+      "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu"
+    }
+  },
+  "build_started_utc": "2026-10-26T03:49:27+00:00",
+  "build_finished_utc": "2026-10-26T03:49:53+00:00"
+}

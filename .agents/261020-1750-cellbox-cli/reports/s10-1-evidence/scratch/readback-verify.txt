@@ -1,0 +1,36 @@
+== headless: kernel_fs.img sha256 a770850db380130fad77df3366bb5953a8d3114f335d93f80dc82a90a2a94389 (manifest a770850db380130fad77df3366bb5953a8d3114f335d93f80dc82a90a2a94389) size 12582912
+  init sha256 01ec7bf908d9b132352bf0fe25e5c156ffd158eff49519677234356cb05c1842 manifest 01ec7bf908d9b132352bf0fe25e5c156ffd158eff49519677234356cb05c1842
+  image paths == manifest paths: True
+  every file hash == manifest: True
+  /bin/cellbox sha256 7b3b47b9381ab6f4753ff7af04f73bc234eb1243ad0ab933e4ddd738147270b6
+  /bin/cellbox-ssh sha256 7b3b47b9381ab6f4753ff7af04f73bc234eb1243ad0ab933e4ddd738147270b6 byte-equal: True
+  /bin/shell present: False  /bin/sshd present: False
+  blocked hashes present: none
+  boot-config/ == image config: True
+  autoload: [('cellbox', '/bin/cellbox', ['sh'], None, 'on-failure')]
+  services: ['e1000', 'igb', 'serial', 'xhci', 'input', 'net']
+  key_class: private  file count: 25
+== desktop: kernel_fs.img sha256 6858a7666500c30f53be580a9d644b65d7e75e2c77bb61bf784e74f9f407eb90 (manifest 6858a7666500c30f53be580a9d644b65d7e75e2c77bb61bf784e74f9f407eb90) size 25165824
+  init sha256 a978c8d357a645f69d9cf11371f8ede8d92ad22829b467102ee4edcb52c0c791 manifest a978c8d357a645f69d9cf11371f8ede8d92ad22829b467102ee4edcb52c0c791
+  image paths == manifest paths: True
+  every file hash == manifest: True
+  /bin/cellbox sha256 c23a3b720c3e01334e3a69df78b8fdcd104e4f75e7537f2ac13e2db3386616f0
+  /bin/cellbox-ssh sha256 c23a3b720c3e01334e3a69df78b8fdcd104e4f75e7537f2ac13e2db3386616f0 byte-equal: True
+  /bin/shell present: False  /bin/sshd present: False
+  blocked hashes present: none
+  boot-config/ == image config: True
+  autoload: [('fb-console', '/bin/fb-console', None, ['compositor'], 'never'), ('desktop', '/bin/desktop', None, ['compositor'], 'never'), ('cellbox', '/bin/cellbox', ['sh'], None, 'on-failure')]
+  services: ['e1000', 'igb', 'serial', 'xhci', 'input', 'net', 'compositor']
+  key_class: private  file count: 32
+== headless-ps1: kernel_fs.img sha256 a770850db380130fad77df3366bb5953a8d3114f335d93f80dc82a90a2a94389 (manifest a770850db380130fad77df3366bb5953a8d3114f335d93f80dc82a90a2a94389) size 12582912
+  init sha256 01ec7bf908d9b132352bf0fe25e5c156ffd158eff49519677234356cb05c1842 manifest 01ec7bf908d9b132352bf0fe25e5c156ffd158eff49519677234356cb05c1842
+  image paths == manifest paths: True
+  every file hash == manifest: True
+  /bin/cellbox sha256 7b3b47b9381ab6f4753ff7af04f73bc234eb1243ad0ab933e4ddd738147270b6
+  /bin/cellbox-ssh sha256 7b3b47b9381ab6f4753ff7af04f73bc234eb1243ad0ab933e4ddd738147270b6 byte-equal: True
+  /bin/shell present: False  /bin/sshd present: False
+  blocked hashes present: none
+  boot-config/ == image config: True
+  autoload: [('cellbox', '/bin/cellbox', ['sh'], None, 'on-failure')]
+  services: ['e1000', 'igb', 'serial', 'xhci', 'input', 'net']
+  key_class: private  file count: 25

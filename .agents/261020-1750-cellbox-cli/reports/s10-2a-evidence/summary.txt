@@ -1,0 +1,33 @@
+S10-2a evidence (2026-10-26). Scratch W=/tmp/cellbox-s10-2a-u8em (deleted after archiving). Dev cell
+key (0x43*32, public constant) through the candidate routes only; no fixture/prod-override variable set
+on the candidate runs. Out-dirs and CARGO_TARGET_DIR=$W/target outside the repository.
+As-built sha256: assemble-x86-image.py 6d22da98...94a5 (= the route pin), signing.py 723ab6bf...56bc,
+cli.py ed92c59a...6efa, package-desktop-x86.py 286bef7a...cabcc.
+
+canonical/                 sha256 before/after (kernel_fs.img, embedded init, target cellos-kernel/cellbox/terminal,
+                           vicell-x86.iso, cellos-x86_64.iso, desktop-fixture ISO + wip qcow2, iso-root kernel.elf),
+                           embedded file hashes, listings with mtimes of kernel/src/embedded-x86_64, target release, build/
+scratch/manifest-*.json    dev-key candidate manifests (key_class dev, signing_route x86-candidate-<profile>)
+scratch/signature-verify.txt  sign-cell.py --verify (dev public key) of every packaged signed cell and init: PASS;
+                           tier2 fixtures stay unsigned; 28/28 cargo-target binaries unsigned (copy-then-sign)
+scratch/refusals/          real refusals (summary.txt): canonical out-dir before build, CLI dev cellbox exit 3
+                           (also with every variable set), CLI --route exit 2, assembler imported by another
+                           program refused by the route, packager G1 unchanged
+scratch/boot-smoke/        default-feature (matching) kernel per candidate, explicit X86_KERNEL ISO in /tmp, TCG:
+                           verdict.json, serial logs, artifacts.sha256
+scratch/*.sh, verify.py    exact scripts used
+logs/                      candidate runs, test_cellos_sign.py (66), test_assemble_x86_image.py (38)
+
+Candidates (recorded by hash, deleted with W):
+- headless kernel_fs.img fed9ce5b22b2127105def6f0a365e16255ecb368652738ee868d73c29d922b99 (12,582,912 B),
+  init 7b13bbde7ae7517572da82e076d142049a28d911f84ce56f84335960335a7c45,
+  /bin/cellbox = /bin/cellbox-ssh 4c8bc569bd3060ff74aa0fecfb49c83ebe10244ba4b0518823f6b2b5d3bb4da7.
+- desktop kernel_fs.img 5726b180c93f1c07c50745675c891e86a032970479a130dbf45cbf592cb21f69 (25,165,824 B),
+  init 67a35f69e0dced140c05a04a1e37ddd4780c14ccc414aca7c906dce400f352c9,
+  /bin/cellbox 082c1d0ab7e9c6e2723ae73d866aa840e462dfde6b3c6ab9ca554f7322bf937c,
+  /bin/terminal 816718a20188bb797a65622d17087010e8d41c7a933248dc303847c7d11ff3cc.
+- Boot smoke (not qualification): headless policy verified 1.2 s, `Cellos >` 3.3 s, echo round trip;
+  desktop policy 0.9 s, compositor 1.9 s, first scanout 2.2 s, desktop ready 2.9 s, `Cellos >` 5.0 s, echo
+  round trip; no panic/signature/spawn-failure lines.
+Note: refusals/summary.txt had its first import-caller line (a harness bug: module not registered in
+sys.modules) replaced by the rerun's result with sed on the scratch copy; import-caller.log is the rerun.

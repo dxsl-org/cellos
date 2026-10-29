@@ -1,0 +1,4 @@
+usage: cellos-sign [-h] [--repo REPO] [--allowlist ALLOWLIST] [--quiet]
+                   [--strict] [--check] [--sign ELF [ELF ...]]
+                   [--objcopy OBJCOPY] [--seed-hex SEED_HEX]
+cellos-sign: error: unrecognized arguments: --route x86-candidate-headless

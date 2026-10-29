@@ -1,0 +1,57 @@
+== headless: key_class=dev route=x86-candidate-headless kernel_fs.img fed9ce5b22b2127105def6f0a365e16255ecb368652738ee868d73c29d922b99 (12582912 B)
+  PASS /bin/ahci            signed=True dev-signature-valid=True sha256=e6cb9d65b1cc47c6
+  PASS /bin/cat             signed=True dev-signature-valid=True sha256=5c2ae62d45493b4f
+  PASS /bin/cellbox         signed=True dev-signature-valid=True sha256=4c8bc569bd3060ff
+  PASS /bin/cellbox-ssh     signed=True dev-signature-valid=True sha256=4c8bc569bd3060ff
+  PASS /bin/config          signed=True dev-signature-valid=True sha256=53a0a4554a9b4ef3
+  PASS /bin/e1000           signed=True dev-signature-valid=True sha256=d10281b801b23e3e
+  PASS /bin/echo            signed=True dev-signature-valid=True sha256=9f742446789bed1d
+  PASS /bin/igb             signed=True dev-signature-valid=True sha256=cbb8b1a632ae6c2f
+  PASS /bin/input           signed=True dev-signature-valid=True sha256=1543d4f3d38dc7d2
+  PASS /bin/kill            signed=True dev-signature-valid=True sha256=38c9b4297580226f
+  PASS /bin/ls              signed=True dev-signature-valid=True sha256=ca76e07f11611fa5
+  PASS /bin/net             signed=True dev-signature-valid=True sha256=14767da8e1fd739b
+  PASS /bin/nvme            signed=True dev-signature-valid=True sha256=d2d1e0968ab2cb63
+  PASS /bin/platform        signed=True dev-signature-valid=True sha256=adb6edc54d94c29d
+  PASS /bin/ps              signed=True dev-signature-valid=True sha256=f408f7184e441175
+  PASS /bin/serial          signed=True dev-signature-valid=True sha256=48fad0f332c380d7
+  PASS /bin/shutdown        signed=True dev-signature-valid=True sha256=56120dab8d3b9816
+  PASS /bin/tier2-exploit   signed=False dev-signature-valid=False sha256=2ffdb4e8c73ac528
+  PASS /bin/tier2-smoke     signed=False dev-signature-valid=False sha256=7f158e2f13520d95
+  PASS /bin/vfs             signed=True dev-signature-valid=True sha256=40b2a51bbc29a043
+  PASS /bin/xhci            signed=True dev-signature-valid=True sha256=e568eeb2ac90305a
+  PASS init                 signed=True dev-signature-valid=True sha256=7b13bbde7ae75175
+  alias byte-equal: True; blocked hashes: none; /bin/shell False; /bin/sshd False
+== desktop: key_class=dev route=x86-candidate-desktop kernel_fs.img 5726b180c93f1c07c50745675c891e86a032970479a130dbf45cbf592cb21f69 (25165824 B)
+  PASS /bin/ahci            signed=True dev-signature-valid=True sha256=db36dd7987b2babb
+  PASS /bin/cat             signed=True dev-signature-valid=True sha256=72561d164d33db71
+  PASS /bin/cellbox         signed=True dev-signature-valid=True sha256=082c1d0ab7e9c6e2
+  PASS /bin/cellbox-ssh     signed=True dev-signature-valid=True sha256=082c1d0ab7e9c6e2
+  PASS /bin/chrome          signed=True dev-signature-valid=True sha256=e5b7e8f7be97970c
+  PASS /bin/compositor      signed=True dev-signature-valid=True sha256=11aa61be89c71a76
+  PASS /bin/config          signed=True dev-signature-valid=True sha256=e8caf5a4aaea0dac
+  PASS /bin/desktop         signed=True dev-signature-valid=True sha256=50ead2aedada0ab7
+  PASS /bin/e1000           signed=True dev-signature-valid=True sha256=60456ca9fc087b9d
+  PASS /bin/echo            signed=True dev-signature-valid=True sha256=e93af5d2e7bf5321
+  PASS /bin/fb-console      signed=True dev-signature-valid=True sha256=138edc208cfc8034
+  PASS /bin/files           signed=True dev-signature-valid=True sha256=5ece74bd2200e6da
+  PASS /bin/igb             signed=True dev-signature-valid=True sha256=98eabf6cda57d0f8
+  PASS /bin/input           signed=True dev-signature-valid=True sha256=e8596a8b7e943d3b
+  PASS /bin/kill            signed=True dev-signature-valid=True sha256=2cee8c326efe5e52
+  PASS /bin/ls              signed=True dev-signature-valid=True sha256=baf3cf964c9eaa56
+  PASS /bin/net             signed=True dev-signature-valid=True sha256=d8893fa0ace50ef5
+  PASS /bin/nvme            signed=True dev-signature-valid=True sha256=d87033b065b9c8b7
+  PASS /bin/ocel            signed=True dev-signature-valid=True sha256=513aee92a37569e2
+  PASS /bin/platform        signed=True dev-signature-valid=True sha256=50636909b8c93cd0
+  PASS /bin/ps              signed=True dev-signature-valid=True sha256=f78b1cd3c700bda4
+  PASS /bin/serial          signed=True dev-signature-valid=True sha256=0de9237fb7355745
+  PASS /bin/shutdown        signed=True dev-signature-valid=True sha256=6d81b26696b698bf
+  PASS /bin/terminal        signed=True dev-signature-valid=True sha256=816718a20188bb79
+  PASS /bin/tier2-exploit   signed=False dev-signature-valid=False sha256=f651193c77dc7bb3
+  PASS /bin/tier2-smoke     signed=False dev-signature-valid=False sha256=257f9d4d047e76db
+  PASS /bin/vfs             signed=True dev-signature-valid=True sha256=3571793e2221fa00
+  PASS /bin/xhci            signed=True dev-signature-valid=True sha256=d519bdc1510da2bd
+  PASS init                 signed=True dev-signature-valid=True sha256=67a35f69e0dced14
+  alias byte-equal: True; blocked hashes: none; /bin/shell False; /bin/sshd False
+cargo target binaries without a valid signature (copy-then-sign): 28/28
+VERDICT PASS

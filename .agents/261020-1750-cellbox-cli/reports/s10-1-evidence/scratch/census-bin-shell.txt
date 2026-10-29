@@ -1,0 +1,22 @@
+cells/services/vfs/src/access/tests.rs:14:    for path in ["/bin/shell", "/data/x", "/tmp/x", "/mnt/sd/x", "/srv/x"] {
+cells/tools/cellbox/src/main.rs:22:// This list is the retired `/bin/shell` ceiling plus `GetRandom` (Phase 09 D79-9 as
+docs/baremetal/load-cellos.md:243:/bin/shell` then `=== Cellos shell ready — type 'help' for commands ===`.
+docs/baremetal/load-cellos.md:656:`SpawnFromElf: /bin/shell`, `=== Cellos shell ready — type 'help' for
+docs/evidence/aarch64-semihosting-20260902-01-raw.txt:373:[ INFO] [loader] SpawnFromElf: /bin/shell (929792 bytes from grant)
+docs/evidence/aarch64-semihosting-20260903-02-raw.txt:376:[ INFO] [loader] SpawnFromElf: /bin/shell (930120 bytes from grant)
+docs/evidence/aarch64-semihosting-20260903-02-runner.txt:332:  /bin/shell <- target/aarch64-unknown-none-softfloat/release/app-shell
+docs/evidence/aarch64-semihosting-20260903-03-raw.txt:376:[ INFO] [loader] SpawnFromElf: /bin/shell (930120 bytes from grant)
+docs/evidence/aarch64-semihosting-20260903-03-runner.txt:320:  /bin/shell <- target/aarch64-unknown-none-softfloat/release/app-shell
+docs/evidence/aarch64-semihosting-20260915-04-raw.txt:387:[ INFO] [loader] SpawnFromElf: /bin/shell (868344 bytes from grant)
+docs/evidence/actor-supervisor-harts1-qemu.txt:345:[ INFO] [loader] SpawnFromElf: /bin/shell (1046304 bytes from grant)
+docs/evidence/atomic-publication-ledger-x86-settling.log:516:[ INFO] [loader] SpawnFromElf: /bin/shell (866752 bytes from grant)
+docs/evidence/c-pthread-qemu.txt:330:[ INFO] [loader] SpawnFromElf: /bin/shell (1051112 bytes from grant)
+docs/evidence/c-spawn-harts1-qemu.txt:338:[ INFO] [loader] SpawnFromElf: /bin/shell (1051112 bytes from grant)
+docs/evidence/c2c-cross-tier-exchange-x86.log:548:[ INFO] [loader] SpawnFromElf: /bin/shell (866944 bytes from grant)
+docs/evidence/c2c-named-tier2-service-x86.log:574:[ INFO] [loader] SpawnFromElf: /bin/shell (880496 bytes from grant)
+docs/evidence/c2c-x86-cpp-freestanding-runtime.txt:11:6. File paths: `cells/tests/cpp-smoke/src/main.rs` uses `/tmp/cpp-smoke.txt` (RamFS) for typed VFS IPC and checks candidate embedded ELF files (`/BIN/INIT`, `/bin/shell`) for C-ABI `open`/`read`.
+docs/evidence/ocel-browser-qemu.log:374:[ INFO] [loader] SpawnFromElf: /bin/shell (1046680 bytes from grant)
+docs/evidence/ocel-js-fallback-qemu.log:379:[ INFO] [loader] SpawnFromElf: /bin/shell (1046680 bytes from grant)
+docs/evidence/ocel-quickjs-qemu.log:373:[ INFO] [loader] SpawnFromElf: /bin/shell (1046680 bytes from grant)
+docs/evidence/task-id-reuse-guard-aarch64-qemu.log:611:[ INFO] [loader] SpawnFromElf: /bin/shell (883344 bytes from grant)
+docs/evidence/vmware-domain-test.log:562:[ INFO] [loader] SpawnFromElf: /bin/shell (880496 bytes from grant)

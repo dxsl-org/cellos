@@ -1,0 +1,23 @@
+{
+  "headless": {
+    "markers_seconds": {
+      "Cellos >": 2.7
+    },
+    "missing": [],
+    "suspicious_strings": {},
+    "seed_in_log": false,
+    "verdict": "PASS"
+  },
+  "desktop": {
+    "markers_seconds": {
+      "[compositor] Compositor v0.2": 2.0,
+      "[compositor] first scanout flush submitted": 2.3,
+      "[desktop] Ready. Entering event loop.": 3.0,
+      "Cellos >": 5.0
+    },
+    "missing": [],
+    "suspicious_strings": {},
+    "seed_in_log": false,
+    "verdict": "PASS"
+  }
+}

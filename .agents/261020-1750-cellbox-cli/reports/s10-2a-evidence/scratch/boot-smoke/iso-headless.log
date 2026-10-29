@@ -1,0 +1,16 @@
+[make-iso] Building BIOS+UEFI ISO: /tmp/cellbox-s10-2a-u8em/smoke-headless.iso
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Drive current: -outdev 'stdio:/tmp/cellbox-s10-2a-u8em/smoke-headless.iso'
+Media current: stdio file, overwriteable
+Media status : is blank
+Media summary: 0 sessions, 0 data blocks, 0 data,  636g free
+Added to ISO image: directory '/'='/tmp/cellbox-s10-2a-u8em/iso-root-headless'
+xorriso : UPDATE :      10 files added in 1 seconds
+xorriso : UPDATE :      10 files added in 1 seconds
+ISO image produced: 9508 sectors
+Written to medium : 9508 sectors at LBA 0
+Writing to 'stdio:/tmp/cellbox-s10-2a-u8em/smoke-headless.iso' completed successfully.
+
+ISO_SIZE=19472384 bytes
+ISO_READY=/tmp/cellbox-s10-2a-u8em/smoke-headless.iso

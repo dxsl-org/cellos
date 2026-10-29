@@ -1,0 +1,2 @@
+import-caller: exit 1; REFUSED: ROLLOUT BLOCKED: route 'x86-candidate-headless': the running program is not the recipe scripts/assemble-x86-image.py FAIL: cellos-sign refused or failed; nothing was packaged 
+import-caller: out-dir not created

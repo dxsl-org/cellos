@@ -1,0 +1,701 @@
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+limine: Loading executable `boot():/boot/kernel.elf`...
+limine: Physical base:   0xe0b1000
+limine: Virtual base:    0xffffffff80000000
+limine: Slide:           0x0
+limine: ELF entry point: 0xffffffff80000000
+limine: Base revision:   3
+limine: Requests count:  7
+limine: Top of HHDM:     0x40000000
+acpi: Found RSDP at 0xf52b0
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Mode was already set, perfect!
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+paging: 1GiB pages are supported!
+acpi: Found RSDP at 0xf52b0
+acpi: Found "APIC" at 0xffe220b
+[x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64
+[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT
+[INFO] CET-IBT: unavailable
+[INFO] PKU: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[boot] kernel_phys_base=0x000000000e0b1000
+[INFO] Frame allocator initialized
+[INFO] Initializing x86_64 paging (kernel PML4)...
+[INFO] x86_64 paging initialized
+[INFO] Activating x86_64 paging (mov cr3)...
+
+[kernel] x86_64 paging: PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x59000 — domain roots use tag 0 with a full CR3 flush)
+QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
+[INFO] x86 virt: root operation active (SVM)
+[INFO] Heap initialized
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] RAM Disk: read-only, 12288 KB (24576 sectors)
+[ INFO] VMware/QEMU absolute pointer enabled (EV_ABS guest pixels)
+[ INFO] UART Input Buffer Initialized
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ WARN] [x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 2 base=0x3e8 irq=4 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 3 base=0x2e8 irq=3 absent (16550 probe failed)
+[INFO] x86_64: ramdisk + UART RX IRQ initialised
+[ INFO] [pcie] ECAM fallback scan bus 0 @ 0xb0000000 (1 MiB window)
+[ INFO] [pcie] 00:00.0 vendor=8086 device=29c0 class=06:00:00 bar0=0x0
+[ INFO] [pcie] 00:01.0 vendor=1234 device=1111 class=03:00:00 bar0=0xfd000000
+[ INFO] [pcie] 00:02.0 vendor=8086 device=100e class=02:00:00 bar0=0xfeb80000
+[ INFO] [pcie] 00:03.0 vendor=1b36 device=0010 class=01:08:02 bar0=0xfebb0000
+[ INFO] [pcie] 00:1f.0 vendor=8086 device=2918 class=06:01:00 bar0=0x0
+[ INFO] [pcie] 00:1f.2 vendor=8086 device=2922 class=01:06:01 bar0=0x0
+[ INFO] [pcie] 00:1f.3 vendor=8086 device=2930 class=0c:05:00 bar0=0x0
+[ INFO] [pcie] ECAM scan complete: 7 device(s) found
+[ WARN] [vtd] no ACPI DMAR unit; using the board-declared q35 register base 0xfed90000 (fallback)
+[ INFO] [vtd] Intel VT-d not present (GCAP=0x0)
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 128
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [system-config] applied: logging=Info, default_cell_heap_mib=16
+[ INFO] [policy] no /POLICY.BIN in VIFS1 — absent
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] Thread 'thread' (ID 1): KStack 0x2143000-0x2155000, UStackTop 0x2169000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (no teardown for hypervisor authority)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x0000ff00 from task 9002
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000070 from task 9004
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0x215a000
+[ INFO] GRANT-RECLAIM-OWNED: PASS
+[ INFO] GRANT-RECLAIM-RECEIVED: PASS
+[ INFO] GRANT-RECLAIM-PINNED: PASS
+[INFO] grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)
+[ INFO] Thread 'thread' (ID 1): KStack 0x2143000-0x2155000, UStackTop 0x2169000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ERROR] [selftest] COMPLETION-QUEUE: FAIL — an older waiter erased its replacement
+[ERROR] [selftest] COMPLETION-QUEUE: FAIL
+[INFO] completion-queue self-test FAIL
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [x86-smp] topology online=1 processor_ids=0 qualified=yes
+[INFO] Tier 2 admission: ENABLED (development profile)
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[INFO] [boot] x86_64 Limine linear framebuffer mapped and registered
+[ INFO] [early] VIFS1-first /bin/platform <- ramdisk (38576 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x1000037E7 flags=R-X
+[ INFO] ELF LOAD: 0x1000037E8-0x100004658 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x100005250 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] ELF LOAD: 0x100106038-0x10010703C flags=R--
+[ INFO] [wx] 'platform': 6/264 cell pages lowered to read-only/execute-only
+[INFO] Platform Cell spawned (x86 PCIe ECAM scanner)
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x102000000-0x102042DFA flags=R-X
+[ INFO] ELF LOAD: 0x102042E00-0x10204F248 flags=R--
+[ INFO] ELF LOAD: 0x102050000-0x102051A78 flags=RW-
+[ INFO] ELF LOAD: 0x102052000-0x102152031 flags=RW-
+[ INFO] ELF LOAD: 0x102152038-0x10215303C flags=R--
+[ INFO] [wx] 'init': 81/340 cell pages lowered to read-only/execute-only
+[ INFO] Successfully spawned init with complete root authority (tid=2)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+[ INFO] [sched] hart 0 dispatched a task
+USER: Init: Starting Cellos Orchestrator...
+[ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/block error=NotFound
+[ INFO] ELF LOAD: 0x104000000-0x104003D5A flags=R-X
+[ INFO] ELF LOAD: 0x104003D60-0x104005A00 flags=R--
+[ INFO] ELF LOAD: 0x104006000-0x1040063B8 flags=RW-
+[ INFO] ELF LOAD: 0x104007000-0x104107031 flags=RW-
+[ INFO] ELF LOAD: 0x104108000-0x10410803C flags=R--
+[ INFO] [wx] 'nvme': 7/265 cell pages lowered to read-only/execute-only
+USER: [platform] ECAM scan buses 0-255 starting
+USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
+USER: [platform] registered bus 0 device 1 function 0 class 3:0:0
+USER: [platform] registered bus 0 device 2 function 0 class 2:0:0
+[ WARN] [iommu] board qemu-q35-x86_64 declares no DMA remapper; DMA is untranslated (identity addressing)
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2583000 size=4096
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2584000 size=4096
+USER: [nvme] regs: aqa=0x3f003f asq=0x2583000 acq=0x2584000 (sq_virt=0x2583000 cq_virt=0x2584000)
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2585000 size=4096
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2586000 size=4096
+USER: [nvme] dma iovas: admin.sq=0x2583000 admin.cq=0x2584000 io.sq=0x2585000 io.cq=0x2586000
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2587000 size=4096
+USER: [nvme] dma iovas: identify=0x2587000
+[ WARN] [grant] GrantFree 0x2587000 refused: region 0x2587000+4096 overlaps a pinned region 0x2587000+1 pages owned by task 3 with 1 in-flight operation(s)
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2588000 size=4096
+[ WARN] [grant] GrantFree 0x2588000 refused: region 0x2588000+4096 overlaps a pinned region 0x2588000+1 pages owned by task 3 with 1 in-flight operation(s)
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2589000 size=4096
+USER: [nvme] io buffer iova=0x2589000
+USER: [nvme] DMA authorized for bus 0 device 3 function 0
+[ WARN] [driver_cell] block driver registered: tid=3
+[ INFO] [service-registry] 9 -> tid 3 (cell 3 gen 108)
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ahci error=NotFound
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (613528 bytes)
+[ INFO] ELF LOAD: 0x106000000-0x106077B5A flags=R-X
+[ INFO] ELF LOAD: 0x106077B60-0x10607C428 flags=R--
+[ INFO] ELF LOAD: 0x10607D000-0x10607EBF0 flags=RW-
+[ INFO] ELF LOAD: 0x10607F000-0x10717F048 flags=RW-
+[ INFO] ELF LOAD: 0x10717F048-0x10718003C flags=R--
+[ INFO] [wx] 'vfs': 126/4481 cell pages lowered to read-only/execute-only
+USER: [platform] registered bus 0 device 3 function 0 class 1:8:2
+USER: [platform] registered bus 0 device 31 function 0 class 6:1:0
+USER: [platform] registered bus 0 device 31 function 2 class 1:6:1
+USER: [platform] registered bus 0 device 31 function 3 class 12:5:0
+USER: [platform] ECAM scan complete
+[ INFO] Syscall::Exit: task 1 exited with code 0
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+[ INFO] [service-registry] 1 -> tid 4 (cell 4 gen 109)
+USER: [vfs] FAT32 /mnt/sd volume mounted
+USER: [vfs] WARNING: CellosFS open failed — volume unavailable
+USER: [vfs] WARNING: FAT32 /bin mount failed
+USER: [vfs] CellosFS Native mounted at existing volume
+[ INFO] [loader] SpawnFromElf: /bin/e1000 (29752 bytes from grant)
+[ INFO] ELF LOAD: 0x100000000-0x10000240A flags=R-X
+[ INFO] ELF LOAD: 0x100002410-0x100003508 flags=R--
+[ INFO] ELF LOAD: 0x100004000-0x100004280 flags=RW-
+[ INFO] ELF LOAD: 0x100005000-0x1001053A1 flags=RW-
+[ INFO] ELF LOAD: 0x100106000-0x10010603C flags=R--
+[ INFO] [wx] 'e1000': 5/263 cell pages lowered to read-only/execute-only
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38a1000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38a3000 size=4096
+USER: Init: e1000 launched.
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38a4000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38a5000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38a6000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38a7000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38a8000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38a9000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38aa000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38ab000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38ac000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38ad000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38ae000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38af000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38b0000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38b1000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38b2000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38b3000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38b4000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38b5000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38b6000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38b7000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38b8000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38b9000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38ba000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38bb000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38bc000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38bd000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38be000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38bf000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38c0000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38c1000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38c2000 size=4096
+[ WARN] [iommu] Cell 5 granted DMA BDF=00:02.0 phys=0x38c3000 size=4096
+[ WARN] [driver_cell] NIC driver registered: tid=5
+[ INFO] [service-registry] 10 -> tid 5 (cell 1 gen 110)
+[ INFO] [loader] SpawnFromElf: /bin/input (167328 bytes from grant)
+[ INFO] ELF LOAD: 0x108000000-0x10801C3EA flags=R-X
+[ INFO] ELF LOAD: 0x10801C3F0-0x10801FD78 flags=R--
+[ INFO] ELF LOAD: 0x108020000-0x108021348 flags=RW-
+[ INFO] ELF LOAD: 0x108022000-0x108122031 flags=RW-
+[ INFO] ELF LOAD: 0x108122038-0x10812303C flags=R--
+[ INFO] [wx] 'input': 33/292 cell pages lowered to read-only/execute-only
+[ WARN] [input] registered input service TID 6
+USER: [input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing
+USER: [input] No VirtIO input device; relying on kernel push
+[ INFO] [service-registry] 3 -> tid 6 (cell 5 gen 111)
+USER: Init: input launched.
+[ INFO] [loader] SpawnFromElf: /bin/net (491208 bytes from grant)
+[ INFO] ELF LOAD: 0x10A000000-0x10A05E9DE flags=R-X
+[ INFO] ELF LOAD: 0x10A05E9E0-0x10A065070 flags=R--
+[ INFO] ELF LOAD: 0x10A066000-0x10A067C28 flags=RW-
+[ INFO] ELF LOAD: 0x10A068000-0x10A968098 flags=RW-
+[ INFO] ELF LOAD: 0x10A968098-0x10A96903C flags=R--
+[ INFO] [wx] 'net': 103/2410 cell pages lowered to read-only/execute-only
+USER: [net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP
+USER: [net] Starting DHCP...
+[ INFO] [service-registry] 2 -> tid 7 (cell 6 gen 112)
+USER: Init: net launched.
+[ INFO] [service-registry] 19 -> tid 2 (cell 2 gen 107)
+USER: [net] DHCP: deconfigured
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ai-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/vfs-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: Init: services spawned.
+USER: Init: service registry verified (init registration is publication, not application readiness).
+USER: Init: OS ready.
+[ INFO] [loader] SpawnFromElf: /bin/phase04-terminal-driver (193808 bytes from grant)
+[ INFO] ELF LOAD: 0x10C000000-0x10C02155A flags=R-X
+[ INFO] ELF LOAD: 0x10C021560-0x10C025C60 flags=R--
+[ INFO] ELF LOAD: 0x10C026000-0x10C026D78 flags=RW-
+[ INFO] ELF LOAD: 0x10C027000-0x10C127048 flags=RW-
+[ INFO] ELF LOAD: 0x10C127048-0x10C12803C flags=R--
+[ INFO] [wx] 'phase04-terminal-driver': 39/297 cell pages lowered to read-only/execute-only
+USER: P04 START
+USER: Init: phase04-terminal-driver launched.
+[ INFO] [early] VIFS1-first /bin/cellbox <- ramdisk (3089880 bytes)
+[ INFO] ELF LOAD: 0x10E000000-0x10E1F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x10E1F0DC0-0x10E27D4D8 flags=R--
+[ INFO] ELF LOAD: 0x10E27E000-0x10E2A5870 flags=RW-
+[ INFO] ELF LOAD: 0x10E2A6000-0x10E9A6148 flags=RW-
+[ INFO] ELF LOAD: 0x10E9A6148-0x10E9A703C flags=R--
+[ INFO] [wx] 'cellbox': 639/2472 cell pages lowered to read-only/execute-only
+USER: Init: supervising services (auto-restart on crash)...
+USER: shell: starting
+USER: [net-bridge] first e1000 TX accepted=true
+USER: [net-bridge] first e1000 RX len=590
+USER: P04 PASS shell-prompt
+USER: [net] DHCP acquired — IP configured
+USER: [net] IP address: 10.0.2.15
+USER: [net] DNS server: 10.0.2.3
+USER: [net] owner death watch unavailable; socket reclaim deferred
+USER: P04 INFO ssh-network-ready lines=1
+USER: P04 PASS ssh-conf
+USER: P04 PASS ssh-refusals
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 10 exited with code 255
+USER: P04 PASS ssh-changed-host-key
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 11 exited with code 255
+USER: P04 PASS ssh-first-trust-no
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 12 exited with code 255
+USER: P04 PASS ssh-first-trust-paste-refused
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 13 exited with code 0
+USER: P04 PASS ssh-first-trust-yes
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 14 exited with code 0
+USER: P04 PASS ssh-first-trust-known-after
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 15 exited with code 255
+USER: P04 PASS ssh-wrong-password
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 16 exited with code 7
+USER: P04 PASS ssh-exec-bytes
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 17 exited with code 3
+USER: P04 PASS ssh-exec-stdin-eof
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 18 exited with code 255
+USER: P04 PASS ssh-exec-signal
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 PASS ssh-pty-shell
+USER: [net-bridge] NIC driver reply timeout; frame not acknowledged
+USER: P04 PASS ssh-pty-resize
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 19 exited with code 255
+USER: P04 PASS ssh-pty-escape-disconnect
+USER: P04 PASS ssh-shell-alive
+USER: P04 PASS shell-long-line
+USER: P04 INFO p09-case ssh-completion-auth
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 20 exited with code 255
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=auth dispatch=not_sent outcome=local_error remote_status=null remote_signal=null error_code=auth_failed stdout_complete=false stderr_complete=false
+USER: P04 PASS ssh-completion-auth
+USER: P04 INFO p09-case ssh-completion-trust
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 21 exited with code 255
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=trust dispatch=not_sent outcome=local_error remote_status=null remote_signal=null error_code=host_key_mismatch stdout_complete=false stderr_complete=false
+USER: P04 PASS ssh-completion-trust
+USER: P04 INFO p09-case ssh-completion-exec
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 22 exited with code 4
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=complete dispatch=accepted outcome=remote_exit remote_status=4 remote_signal=null error_code=null stdout_complete=true stderr_complete=true
+USER: P04 PASS ssh-completion-exec
+USER: P04 INFO p09-case ssh-completion-signal
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 23 exited with code 255
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=complete dispatch=accepted outcome=remote_signal remote_status=null remote_signal=TERM error_code=null stdout_complete=true stderr_complete=true
+USER: P04 PASS ssh-completion-signal
+USER: P04 INFO p09-case ssh-completion-pty
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 24 exited with code 6
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=pty phase=complete dispatch=accepted outcome=remote_exit remote_status=6 remote_signal=null error_code=null stdout_complete=true stderr_complete=true
+USER: P04 PASS ssh-completion-pty
+USER: P04 INFO p09-case ssh-fault-before-request
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO p09-hook before-request kill
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 25 exited with code 255
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=request dispatch=not_sent outcome=local_error remote_status=null remote_signal=null error_code=transport_lost stdout_complete=false stderr_complete=false
+USER: P04 PASS ssh-fault-before-request
+USER: P04 INFO p09-restore
+USER: P04 INFO p09-case ssh-fault-before-request-restore
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 26 exited with code 0
+USER: P04 INFO p09-restored ssh-fault-before-request attempts=1
+USER: P04 INFO p09-case ssh-fault-may-have-run
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO p09-hook may-have-run kill
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 27 exited with code 255
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=request dispatch=may_have_run outcome=unknown remote_status=null remote_signal=null error_code=transport_lost stdout_complete=false stderr_complete=false
+USER: P04 PASS ssh-fault-may-have-run
+USER: P04 INFO p09-restore
+USER: P04 INFO p09-case ssh-fault-may-have-run-restore
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 28 exited with code 0
+USER: P04 INFO p09-restored ssh-fault-may-have-run attempts=1
+USER: P04 INFO p09-case ssh-fault-accepted
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO p09-hook accepted kill
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 29 exited with code 255
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=running dispatch=accepted outcome=unknown remote_status=null remote_signal=null error_code=transport_lost stdout_complete=false stderr_complete=false
+USER: P04 PASS ssh-fault-accepted
+USER: P04 INFO p09-restore
+USER: P04 INFO p09-case ssh-fault-accepted-restore
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 30 exited with code 0
+USER: P04 INFO p09-restored ssh-fault-accepted attempts=1
+USER: P04 INFO p09-case ssh-fault-exit-before-drain
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO p09-hook exit-before-drain kill
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 31 exited with code 3
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=complete dispatch=accepted outcome=remote_exit remote_status=3 remote_signal=null error_code=null stdout_complete=false stderr_complete=false
+USER: P04 PASS ssh-fault-exit-before-drain
+USER: P04 INFO p09-restore
+USER: P04 INFO p09-case ssh-fault-exit-before-drain-restore
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 32 exited with code 0
+USER: P04 INFO p09-restored ssh-fault-exit-before-drain attempts=1
+USER: P04 INFO p09-case ssh-rekey-bytes
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 1
+USER: P04 INFO ssh-bytes stdout=4194304 sha256=bb9f8df61474d25e71fa00722318cd387396ca1736605e1248821cc0de3d3af8 peak_pending=2048 peak_chunk=16384
+[ INFO] Syscall::Exit: task 33 exited with code 0
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=complete dispatch=accepted outcome=remote_exit remote_status=0 remote_signal=null error_code=null stdout_complete=true stderr_complete=true
+USER: P04 PASS ssh-rekey-bytes
+USER: P04 INFO p09-case ssh-rekey-time
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 1
+[ INFO] Syscall::Exit: task 34 exited with code 0
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=complete dispatch=accepted outcome=remote_exit remote_status=0 remote_signal=null error_code=null stdout_complete=true stderr_complete=true
+USER: P04 PASS ssh-rekey-time
+USER: P04 INFO p09-case ssh-rekey-peer
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 64
+USER: P04 INFO ssh-bytes stdout=1048576 sha256=30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58 peak_pending=2048 peak_chunk=16384
+[ INFO] Syscall::Exit: task 35 exited with code 0
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=complete dispatch=accepted outcome=remote_exit remote_status=0 remote_signal=null error_code=null stdout_complete=true stderr_complete=true
+USER: P04 PASS ssh-rekey-peer
+USER: P04 INFO p09-case ssh-backpressure-bytes
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 3
+USER: P04 INFO ssh-bytes stdout=8388608 sha256=1a913df51811ff13a804c24edea34420b742600e9c9fb852481270e8152228d9 peak_pending=2048 peak_chunk=16384
+[ INFO] Syscall::Exit: task 36 exited with code 0
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=complete dispatch=accepted outcome=remote_exit remote_status=0 remote_signal=null error_code=null stdout_complete=true stderr_complete=true
+USER: P04 INFO ssh-remote-sha256 1a913df51811ff13a804c24edea34420b742600e9c9fb852481270e8152228d9
+USER: P04 PASS ssh-backpressure-bytes
+USER: P04 INFO p09-case ssh-timeout-overall
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 37 exited with code 124
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=running dispatch=accepted outcome=timeout remote_status=null remote_signal=null error_code=timeout stdout_complete=false stderr_complete=false
+USER: P04 PASS ssh-timeout-overall
+USER: P04 INFO p09-case ssh-timeout-request
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO p09-hook before-request pause
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 38 exited with code 124
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=request dispatch=not_sent outcome=timeout remote_status=null remote_signal=null error_code=timeout stdout_complete=false stderr_complete=false
+USER: P04 PASS ssh-timeout-request
+USER: P04 INFO p09-restore
+USER: P04 INFO p09-case ssh-timeout-request-restore
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 39 exited with code 0
+USER: P04 INFO p09-restored ssh-timeout-request attempts=1
+USER: P04 INFO p09-case ssh-timeout-kex
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO p09-hook rekey-start pause
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 40 exited with code 124
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=running dispatch=accepted outcome=timeout remote_status=null remote_signal=null error_code=timeout stdout_complete=false stderr_complete=false
+USER: P04 PASS ssh-timeout-kex
+USER: P04 INFO p09-restore
+USER: P04 INFO p09-case ssh-timeout-kex-restore
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO ssh-rekeys 0
+[ INFO] Syscall::Exit: task 41 exited with code 0
+USER: P04 INFO p09-restored ssh-timeout-kex attempts=1
+USER: P04 INFO p09-case ssh-cancel-exec
+[ INFO] ELF LOAD: 0x110000000-0x1101F0DBA flags=R-X
+[ INFO] ELF LOAD: 0x1101F0DC0-0x11027D4D8 flags=R--
+[ INFO] ELF LOAD: 0x11027E000-0x1102A5870 flags=RW-
+[ INFO] ELF LOAD: 0x1102A6000-0x1109A6148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A6148-0x1109A703C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 639/2472 cell pages lowered to read-only/execute-only
+USER: P04 INFO ssh-test-config rekey=lane
+USER: P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=running dispatch=accepted outcome=cancelled remote_status=null remote_signal=null error_code=cancelled stdout_complete=false stderr_complete=false
+USER: P04 PASS ssh-cancel-exec
+USER: P04 PASS ssh-fault-restores
+USER: P04 PASS session-a-close
+USER: P04-TERMINAL: PASS checks=36
+[ INFO] Syscall::Exit: task 8 exited with code 0
+USER: Init: service exited cleanly — policy says no restart.

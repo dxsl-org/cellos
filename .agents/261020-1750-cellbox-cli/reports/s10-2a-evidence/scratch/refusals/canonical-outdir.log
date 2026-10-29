@@ -1,0 +1,2 @@
+FAIL: dev-key candidate refused: --out-dir /home/dmin/cellos/kernel/src/embedded-x86_64 is inside the repository; the canonical route is admitted only by S10-2b
+nothing was published; the out-dir is unchanged

@@ -1,0 +1,198 @@
+{
+  "schema": "cellos-x86-image-manifest/1",
+  "profile": "headless",
+  "init_features": [
+    "input"
+  ],
+  "key_class": "private",
+  "objcopy": "objcopy",
+  "files": {
+    "/POLICY.BIN": {
+      "sha256": "f0be61df403852caef4a27fecd6db470d1effedf0071a5a1144491fbf4e08008",
+      "size": 2013
+    },
+    "/bin/ahci": {
+      "sha256": "cf353fbda668669d0ce9e44c68139fbc0421ca7c913a7cf98e479e08bc1dbf51",
+      "size": 44744,
+      "package": "driver-ahci",
+      "binary": "driver-ahci",
+      "signed": true
+    },
+    "/bin/cat": {
+      "sha256": "a07f5812c6e5c2b1de725b4ec3249648afe3c9de90c875b14d0b85a33de682fb",
+      "size": 30328,
+      "package": "app-sys-tools",
+      "binary": "cat",
+      "signed": true
+    },
+    "/bin/cellbox": {
+      "sha256": "7b3b47b9381ab6f4753ff7af04f73bc234eb1243ad0ab933e4ddd738147270b6",
+      "size": 3076760,
+      "package": "app-cellbox",
+      "binary": "cellbox",
+      "signed": true
+    },
+    "/bin/cellbox-ssh": {
+      "sha256": "7b3b47b9381ab6f4753ff7af04f73bc234eb1243ad0ab933e4ddd738147270b6",
+      "size": 3076760,
+      "package": "app-cellbox",
+      "binary": "cellbox",
+      "signed": true
+    },
+    "/bin/config": {
+      "sha256": "bf9a1e8d0cb19cf59bf5f392d431cff6059f0eb8d2c21e6b354ba2e05e44769d",
+      "size": 47384,
+      "package": "service-config",
+      "binary": "service-config",
+      "signed": true
+    },
+    "/bin/e1000": {
+      "sha256": "17eab72a43e7c32b9b399bad15ac9ab0fe92e604d41c4805335cada0091e09c7",
+      "size": 29672,
+      "package": "driver-e1000",
+      "binary": "driver-e1000",
+      "signed": true
+    },
+    "/bin/echo": {
+      "sha256": "e9a1f3a9d055a7a90acbc216ccf1c1313f3b34314d9e6cbaef55768ad44038ab",
+      "size": 30296,
+      "package": "app-sys-tools",
+      "binary": "echo",
+      "signed": true
+    },
+    "/bin/igb": {
+      "sha256": "bb108dc5b1aff541969a0d83e99d393882b24df202970ca7e6acc87e4398e10c",
+      "size": 39440,
+      "package": "driver-igb",
+      "binary": "driver-igb",
+      "signed": true
+    },
+    "/bin/input": {
+      "sha256": "a909ef364a2813cc1be96dd9b0c81b423349a4c56ee26abcc88acafee94ffc86",
+      "size": 167240,
+      "package": "service-input",
+      "binary": "service-input",
+      "signed": true
+    },
+    "/bin/kill": {
+      "sha256": "e4bf23b99f3a8dfd0440684575055bd433fc23aaaba15c387aec1002d6ad0928",
+      "size": 30360,
+      "package": "app-sys-tools",
+      "binary": "kill",
+      "signed": true
+    },
+    "/bin/ls": {
+      "sha256": "2f374be1f17276f3a45074f2c36ef267b04da247e0f926bad4acdc0b6fea21b8",
+      "size": 30288,
+      "package": "app-sys-tools",
+      "binary": "ls",
+      "signed": true
+    },
+    "/bin/net": {
+      "sha256": "bc50d0aec1426b8ad85d5e6394fef8197a1dcd69d73d0d9a7dafc5fc52bc0123",
+      "size": 491112,
+      "package": "service-net",
+      "binary": "service-net",
+      "signed": true
+    },
+    "/bin/nvme": {
+      "sha256": "6fa5cf1c590d7685fbf609e9d2d4d74564e9795a6b3e33cdb0a5b92c67c13986",
+      "size": 36096,
+      "package": "driver-nvme",
+      "binary": "driver-nvme",
+      "signed": true
+    },
+    "/bin/platform": {
+      "sha256": "681919e0d9037b9f8f6eedd5bc2424d2ceafe576820d8415aa282f1988f1315f",
+      "size": 38488,
+      "package": "service-platform",
+      "binary": "platform",
+      "signed": true
+    },
+    "/bin/ps": {
+      "sha256": "1f201d01d5c1fc81b39e24dec432703de41d6dedf1aa011cc4d821d603f8eecb",
+      "size": 30192,
+      "package": "app-sys-tools",
+      "binary": "ps",
+      "signed": true
+    },
+    "/bin/serial": {
+      "sha256": "8cc0e52a78bbb8761a1845e8e96513f77fee9c0725acbdb63a5b93fb2014c93c",
+      "size": 35744,
+      "package": "driver-serial-x86",
+      "binary": "driver-serial-x86",
+      "signed": true
+    },
+    "/bin/shutdown": {
+      "sha256": "802221737445c44c8e7b0d78f9f34ec58787174e1dcf28b30d74a7e78312c53d",
+      "size": 26000,
+      "package": "app-sys-tools",
+      "binary": "shutdown",
+      "signed": true
+    },
+    "/bin/tier2-exploit": {
+      "sha256": "2ffdb4e8c73ac528373d0ecc1e735a3991977c366fdcfc46107a7e024a5f446c",
+      "size": 28896,
+      "package": "tier2-exploit",
+      "binary": "tier2-exploit",
+      "signed": false
+    },
+    "/bin/tier2-smoke": {
+      "sha256": "7f158e2f13520d955f6c2f8dac37930052e7b8e30464e5107b09b5008c3faa96",
+      "size": 34256,
+      "package": "tier2-smoke",
+      "binary": "tier2-smoke",
+      "signed": false
+    },
+    "/bin/vfs": {
+      "sha256": "f6be7ce8cbc28e0152e58ec0dd6b688c04bd31a43519d206e91eea6bcae80b13",
+      "size": 613440,
+      "package": "service-vfs",
+      "binary": "service-vfs",
+      "signed": true
+    },
+    "/bin/xhci": {
+      "sha256": "62710a7ee3af1959aa847bba61fe612c6619975bd47ff166504ed95c7c22e8eb",
+      "size": 53080,
+      "package": "driver-xhci",
+      "binary": "driver-xhci",
+      "signed": true
+    },
+    "/etc/cellos/autoload.toml": {
+      "sha256": "4e7b41e8035662b776a4d4a72ae7fb569d763f88379ef508d2cb6c778280949b",
+      "size": 170
+    },
+    "/etc/cellos/services.toml": {
+      "sha256": "484b0bffbb9d472e3c1149e3bf38205604c92e7682d2172fea0a4ac2b1967855",
+      "size": 807
+    },
+    "/etc/cellos/system.toml": {
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293",
+      "size": 128
+    }
+  },
+  "kernel_fs_img": {
+    "sha256": "a770850db380130fad77df3366bb5953a8d3114f335d93f80dc82a90a2a94389",
+    "size": 12582912
+  },
+  "init": {
+    "sha256": "01ec7bf908d9b132352bf0fe25e5c156ffd158eff49519677234356cb05c1842",
+    "size": 403016,
+    "package": "app-init"
+  },
+  "source": {
+    "git_head": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+    "dirty_files": 1428,
+    "dirty_digest_sha256": "e519fa0fd807e48c8c1ae07dfb92baf4c13c5e9fcd00a6bc4e6c4813b9a77428",
+    "cargo": "cargo 1.97.0-nightly (eb9b60f1f 2026-04-24)",
+    "rustc": "rustc 1.97.0-nightly (f53b654a8 2026-04-30)",
+    "rustflags": "-C relocation-model=pic",
+    "toolchain_env": {
+      "CC_x86_64_unknown_none": "cc",
+      "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+      "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu"
+    }
+  },
+  "build_started_utc": "2026-10-26T03:50:28+00:00",
+  "build_finished_utc": "2026-10-26T03:50:48+00:00"
+}
