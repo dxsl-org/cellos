@@ -3303,3 +3303,5 @@ Environment fact for the probe: the host exposes `/dev/kvm` with nested VMX (`kv
 **Preservation/limits:** read-only probe; no VM, no key generation, no network exposure, no server start, no commit of images; no push without a separate request.
 
 - **Status 2026-10-30:** S10-10 is **proposed only**. CBX-23/24/25 remain partial; Phase 10 criterion 1 remains open.
+
+- **S10-10 CP1 decisions by the user 2026-10-30:** D10-1 = B (run the read-only S10-10.0 probe, then decide), D10-2 = **E (open the KMS program for SSH key custody; a separate plan with its own CP1s, no implementation authorized by this answer)**, D10-3 = A (containment recorded closed/final), D10-4 = A (Phase 10 stays `closed-partial-private-evidence` until the rows are actually met). Next: S10-10.0 probe (read-only) plus drafting the KMS program plan/CP1 as documents.
