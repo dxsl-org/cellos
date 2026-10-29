@@ -1,0 +1,8 @@
+{ "type": "suite", "event": "started", "test_count": 3 }
+{ "type": "test", "event": "started", "name": "q35_without_a_remapper_names_the_fallback_and_the_identity_contract" }
+{ "type": "test", "name": "q35_without_a_remapper_names_the_fallback_and_the_identity_contract", "event": "ok" }
+{ "type": "test", "event": "started", "name": "x86_pc_discovers_the_vtd_base_from_acpi_dmar" }
+{ "type": "test", "name": "x86_pc_discovers_the_vtd_base_from_acpi_dmar", "event": "ok" }
+{ "type": "test", "event": "started", "name": "x86_pc_without_a_remapper_refuses_untranslated_dma" }
+{ "type": "test", "name": "x86_pc_without_a_remapper_refuses_untranslated_dma", "event": "ok" }
+{ "type": "suite", "event": "ok", "passed": 3, "failed": 0, "ignored": 0, "measured": 0, "filtered_out": 0, "exec_time": 28.124453171 }

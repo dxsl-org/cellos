@@ -1,0 +1,10 @@
+{"lane": "L1-p02-session", "exit": 1, "seconds": 164.3, "work": "/tmp/cellbox-phase02-9kvhppcp", "summary_lines": []}
+{"lane": "L1-p02-kernel", "exit": 0, "seconds": 69.6, "work": "/tmp/cellbox-phase02-79yrckwe", "summary_lines": []}
+{"lane": "L2-p03-pipeline", "exit": 0, "seconds": 521.5, "work": "/tmp/cellbox-phase03-q6547pf4", "summary_lines": []}
+{"lane": "L3-p04-terminal", "exit": 0, "seconds": 1737.9, "work": "/tmp/cellbox-phase04-9poutlbm", "summary_lines": ["PASS no-FAIL-markers", "PASS driver-final-verdict", "PASS: 494 Phase04 S3-output runtime checks (202 driver markers); GUI/regression evidence remains separate"]}
+{"lane": "L5-p09-nofaults", "exit": 0, "seconds": 444.1, "work": "/tmp/cellbox-phase09-y3kgyxow", "summary_lines": ["PASS no-FAIL-markers", "PASS driver-final-verdict", "PASS: 34 Phase09 ssh lane checks (18 driver markers)"]}
+{"lane": "L5f-p09-faults", "exit": 0, "seconds": 455.1, "work": "/tmp/cellbox-phase09-o74_l6e4", "summary_lines": ["PASS no-FAIL-markers", "PASS driver-final-verdict", "PASS: 103 Phase09 ssh lane checks (36 driver markers)"]}
+{"lane": "default-p02-session", "exit": 1, "seconds": 199.1, "work": "/tmp/cellbox-phase02-bquxe30n", "summary_lines": []}
+{"lane": "default-p03-pipeline", "exit": 0, "seconds": 541.4, "work": "/tmp/cellbox-phase03-_pwzsm8s", "summary_lines": []}
+{"lane": "default-p09-nofaults", "exit": 0, "seconds": 474.2, "work": "/tmp/cellbox-phase09-4p4v42t8", "summary_lines": ["PASS no-FAIL-markers", "PASS driver-final-verdict", "PASS: 34 Phase09 ssh lane checks (18 driver markers)"]}
+stream A done

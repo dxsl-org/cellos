@@ -1,0 +1,8 @@
+....../usr/lib/python3.12/unittest/mock.py:767: ResourceWarning: unclosed file <_io.FileIO name='/tmp/tmpfurf4wzk/qemu-stderr-main.txt' mode='wb' closefd=True>
+  def __setattr__(self, name, value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.....................
+----------------------------------------------------------------------
+Ran 27 tests in 4.567s
+
+OK

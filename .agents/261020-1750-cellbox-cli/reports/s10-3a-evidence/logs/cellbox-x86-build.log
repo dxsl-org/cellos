@@ -1,0 +1,168 @@
+   Compiling compiler_builtins v0.1.160 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling thiserror v2.0.19
+   Compiling libm v0.2.16
+   Compiling version_check v0.9.5
+   Compiling serde_core v1.0.229
+   Compiling heck v0.5.0
+   Compiling semver v1.0.28
+   Compiling serde v1.0.229
+   Compiling rustversion v1.0.23
+   Compiling strsim v0.11.1
+   Compiling ident_case v1.0.1
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling heapless v0.8.0
+   Compiling heapless v0.9.3
+   Compiling indoc v2.0.8
+   Compiling virtue v0.0.17
+   Compiling sunset v0.6.0 (/home/dmin/cellos/third_party/sunset)
+   Compiling cell-build v0.2.0 (/home/dmin/cellos/libs/cell-build)
+   Compiling app-cellbox v0.1.0 (/home/dmin/cellos/cells/tools/cellbox)
+   Compiling generic-array v0.14.7
+   Compiling rustc_version v0.4.1
+   Compiling curve25519-dalek v5.0.0
+   Compiling sunset-sshwire-derive v0.3.0 (/home/dmin/cellos/third_party/sunset/sshwire-derive)
+   Compiling syn v2.0.119
+   Compiling syn v3.0.3
+   Compiling darling_core v0.24.1
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling zeroize_derive v1.5.0
+   Compiling postcard-derive v0.2.2
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling strum_macros v0.27.2
+   Compiling snafu-derive v0.9.2
+   Compiling darling_macro v0.24.1
+   Compiling darling v0.24.1
+   Compiling instability v0.3.14
+   Compiling alloc v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling typenum v1.20.1
+   Compiling zeroize v1.9.0
+   Compiling rand_core v0.10.1
+   Compiling cmov v0.5.4
+   Compiling cfg-if v1.0.4
+   Compiling cpufeatures v0.3.1
+   Compiling byteorder v1.5.0
+   Compiling foldhash v0.2.0
+   Compiling equivalent v1.0.3
+   Compiling allocator-api2 v0.2.21
+   Compiling stable_deref_trait v1.2.1
+   Compiling scopeguard v1.2.0
+   Compiling base64ct v1.8.3
+   Compiling memchr v2.8.3
+   Compiling spin v0.9.9
+   Compiling either v1.19.0
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling subtle v2.6.1
+   Compiling unicode-width v0.2.2
+   Compiling castaway v0.2.4
+   Compiling static_assertions v1.1.0
+   Compiling bitflags v2.13.1
+   Compiling unicode-segmentation v1.13.3
+   Compiling cobs v0.3.0
+   Compiling foldhash v0.1.5
+   Compiling tinyvec v1.13.3
+   Compiling itoa v1.0.18
+   Compiling ryu v1.0.23
+   Compiling lock_api v0.4.14
+   Compiling log v0.4.33
+   Compiling cpufeatures v0.2.17
+   Compiling signature v3.0.0
+   Compiling hashbrown v0.15.5
+   Compiling regex-syntax v0.8.11
+   Compiling strum v0.27.2
+   Compiling hash32 v0.3.1
+   Compiling embedded-io v0.7.1
+   Compiling compact_str v0.9.1
+   Compiling cpubits v0.1.1
+   Compiling line-clipping v0.3.8
+   Compiling itertools v0.14.0
+   Compiling snafu v0.9.2
+   Compiling ascii v1.1.0
+   Compiling ctutils v0.4.5
+   Compiling ed25519 v3.0.0
+   Compiling pem-rfc7468 v1.0.0
+   Compiling spinning_top v0.2.5
+   Compiling linked_list_allocator v0.10.6
+   Compiling hashbrown v0.16.1
+   Compiling hashbrown v0.17.1
+   Compiling unicode-normalization v0.1.25
+   Compiling aho-corasick v1.1.4
+   Compiling bstr v1.13.1
+   Compiling hybrid-array v0.4.15
+   Compiling core_maths v0.1.1
+   Compiling ab_glyph_rasterizer v0.1.10
+   Compiling ttf-parser v0.25.1
+   Compiling lru v0.16.4
+   Compiling kasuari v0.4.13
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling inout v0.2.5
+   Compiling inout v0.1.4
+   Compiling crypto-common v0.1.7
+   Compiling cipher v0.4.4
+   Compiling chacha20 v0.9.1
+   Compiling unicode-truncate v2.0.1
+   Compiling ratatui-core v0.1.0
+   Compiling digest v0.11.3
+   Compiling cipher v0.5.2
+   Compiling universal-hash v0.6.1
+   Compiling regex-automata v0.4.16
+   Compiling poly1305 v0.9.1
+   Compiling owned_ttf_parser v0.25.1
+   Compiling ssh-encoding v0.3.0
+   Compiling sha2 v0.11.1
+   Compiling hmac v0.13.0
+   Compiling postcard v1.1.3
+   Compiling ab_glyph v0.2.32
+   Compiling ctr v0.10.1
+   Compiling aes v0.9.3
+   Compiling ssh-cipher v0.3.0
+   Compiling x25519-dalek v3.0.0
+   Compiling ratatui-widgets v0.3.0
+   Compiling ed25519-dalek v3.0.0
+   Compiling ssh-key v0.7.0-rc.11
+   Compiling vigrep v0.1.0 (/home/dmin/cellos/libs/vigrep)
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling text-engine v0.1.0 (/home/dmin/cellos/libs/text-engine)
+   Compiling vissh v0.1.0 (/home/dmin/cellos/libs/vissh)
+   Compiling terminal-sdk v0.1.0 (/home/dmin/cellos/libs/terminal)
+   Compiling vitui v0.1.0 (/home/dmin/cellos/libs/vitui)
+warning: value assigned to `paste` is never read
+   --> cells/tools/cellbox/src/executor.rs:683:17
+    |
+683 |                 paste = false;
+    |                 ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+691 |                 paste = false;
+    |                 ------------- `paste` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:128:24
+    |
+128 |     BackgroundPipeline(Vec<Cmd>),
+    |     ------------------ ^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+128 -     BackgroundPipeline(Vec<Cmd>),
+128 +     BackgroundPipeline(()),
+    |
+
+warning: function `run_rows` is never used
+   --> cells/tools/cellbox/src/typed.rs:921:8
+    |
+921 | pub fn run_rows(
+    |        ^^^^^^^^
+
+warning: `app-cellbox` (bin "cellbox") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 27.07s

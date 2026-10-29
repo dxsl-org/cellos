@@ -1,0 +1,111 @@
+{
+  "schema": "cellos-phase10-l0-provenance/1",
+  "candidate": {
+    "candidate_json": "/tmp/cellbox-s10-3d-resume/cand/candidate.json",
+    "candidate_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+    "profile": "headless",
+    "iso": {
+      "path": "/tmp/cellbox-s10-3d-resume/cand/headless.iso",
+      "sha256": "49b32f3442f40fd52295ccf12f0009e9e46a99cd32615ffeb3a5a7ec598a753a",
+      "size": 19472384
+    },
+    "kernel": {
+      "path": "/tmp/cellbox-s10-3d-resume/cand/headless.kernel.elf",
+      "sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+      "size": 15599680,
+      "features": [
+        "default",
+        "policy-required"
+      ]
+    },
+    "kernel_fs_img": {
+      "path": "/tmp/cellbox-s10-3d-resume/cand/headless/kernel_fs.img",
+      "sha256": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+      "size": 12582912
+    },
+    "init": {
+      "path": "/tmp/cellbox-s10-3d-resume/cand/headless/init",
+      "sha256": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab",
+      "size": 406976,
+      "payload_sha256": "70eac0ad415751915c4e4a0a700637a7ef0fe71630e2577a022f887633f0f60a"
+    },
+    "manifest_sha256": "4066a0e2e9c2c680eb9c6f5084210f802559035b02f07f6ec39782311cafef5c"
+  },
+  "iso_sha256_after_run": "49b32f3442f40fd52295ccf12f0009e9e46a99cd32615ffeb3a5a7ec598a753a",
+  "iso_unchanged": true,
+  "qemu_version": "QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.17)",
+  "qemu_argv": {
+    "main": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb -m 256M -display none -chardev socket,id=ser0,path=$WORK/sock/main-serial.sock,server=on,wait=off -serial chardev:ser0 -qmp unix:$WORK/sock/main-qmp.sock,server=on,wait=off -monitor none -drive file=/tmp/cellbox-s10-3d-resume/cand/headless.iso,media=cdrom,readonly=on,format=raw -boot d -no-reboot -netdev user,id=net0,restrict=on -device e1000,netdev=net0 -drive file=$WORK/disk-main/disk.img,if=none,format=raw,id=p10fx -device nvme,drive=p10fx,serial=cellosp10",
+    "ssh": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=$WORK/sock/ssh-serial.sock,server=on,wait=off -serial chardev:ser0 -qmp unix:$WORK/sock/ssh-qmp.sock,server=on,wait=off -monitor none -drive file=/tmp/cellbox-s10-3d-resume/cand/headless.iso,media=cdrom,readonly=on,format=raw -boot d -no-reboot -netdev user,id=net0 -device e1000,netdev=net0 -drive file=$WORK/disk-ssh/disk.img,if=none,format=raw,id=p10fx -device nvme,drive=p10fx,serial=cellosp10"
+  },
+  "accel": "tcg",
+  "qualifying": true,
+  "fixture_disks_sha256_before_boot": [
+    "da21943a62c57a5e12e2a4da40c53d01de230428ce77f58e886aaabfc498d412  $WORK/disk-main/disk.img",
+    "19939600765cd489c2f3215cf64874b93630c0a89c2db3b99932c418f61925c5  $WORK/disk-ssh/disk.img",
+    ""
+  ],
+  "data_fixtures": {
+    "/mnt/sd/gui-list/alpha-entry": {
+      "length": 32,
+      "sha256": "488425f27f4902308d8c8cf866aad9900c4b2923357fde043b1062e30d25372e"
+    },
+    "/mnt/sd/gui-list/beta-entry": {
+      "length": 32,
+      "sha256": "488425f27f4902308d8c8cf866aad9900c4b2923357fde043b1062e30d25372e"
+    },
+    "/mnt/sd/gui-text/note.txt": {
+      "length": 34,
+      "sha256": "8cfe193e97ea4a4afe4020e86fb7fbb4a594912f7aad41cf5b780722062a95b1"
+    },
+    "/mnt/sd/p04-output/vt-sample.bin": {
+      "length": 650,
+      "sha256": "38af98c7a5a1b92784c9a55d78311f4809df181875ac1221c99c76cb18ac95bd"
+    },
+    "/mnt/sd/p04-output/vt-alt-enter.bin": {
+      "length": 88,
+      "sha256": "049c64bf770f48a210ac39dd67b0dcc455d014791d11db133a37c0ea50578904"
+    },
+    "/mnt/sd/p04-output/vt-alt-exit.bin": {
+      "length": 12,
+      "sha256": "f10cc1024d795f52bda5ab4c7a9ea46dca967478ee21d33807dd06dc0b15d514"
+    },
+    "/mnt/sd/p04-output/vt-hostile.bin": {
+      "length": 12628,
+      "sha256": "354e162940f3ff7e4eed24e07b361ebd8cc13f2d38f0f6f880bded30a75c7e24"
+    },
+    "/mnt/sd/p10/bytes.txt": {
+      "length": 39,
+      "sha256": "dbf53ce2c5bad6f16a2680d15c793f1b48a2fccf68c0414c2ce6734e4a55b369"
+    },
+    "/mnt/sd/p10/raw.bin": {
+      "length": 1600,
+      "sha256": "8602184f0c1f4ae8a69b981a8b3c590db60d728354b6848d9ccf14ebae45e9c6"
+    },
+    "/mnt/sd/p10/crlf.txt": {
+      "length": 14,
+      "sha256": "0e32955fc2a1b3a6cf0aaf7b5cdce02d683300f471e2a795550bb338f7e339ed"
+    },
+    "/mnt/sd/p10/state.sh": {
+      "length": 106,
+      "sha256": "2faf57afc53e4ecdb3e89605e57b5c4dc9ae18e1a43b5a49d292d29bbad8cd1a"
+    },
+    "/mnt/sd/p10/lossy.txt": {
+      "length": 29,
+      "sha256": "0f3a3f4390d31444d0250e7dd05315eed9a231719c959782f103021ce7cb9cb0"
+    }
+  },
+  "sshd_version": "OpenSSH_9.9p2, OpenSSL 3.3.7 7 Apr 2026",
+  "fixture_host_key_fingerprint": "SHA256:oHil4UycZINUehMORtoQQCJfFjdVzcrZgH/Llf43j4A",
+  "runner_sha256": {
+    "qemu-phase10-canonical-test.sh": "fd3c295fda81c7c5879e435a043c9556324aab6a8f321338e2da55b2801ab801",
+    "phase10_canonical_drive.py": "d4fcb022dc340f6d79451fa02ae3b38e0ca90f809f0c943ba48abfbeb835fad9",
+    "phase04_gui_drive.py": "bfef6d8e6426bbddcb2d5e59d9f00dced631bef995af7c62d3366486d32027bc",
+    "phase07_rg_fixture.py": "58c143486a87ec9a5df8d0eb42647eb3687af5b15abf6eacad9aac972fd8d67a",
+    "phase09_trust_disk.py": "10901b916c948efd62b632e2144e1a3ab519ce8487d324f87e42c60390e6e5e1",
+    "phase09_ssh_fixture.sh": "5a9afb76fc45a450471ec4e34b7bec4a38dfb3d0ef1f3a09d8d7b139ca4c5199",
+    "phase05_vt_hostile.py": "709bd4e3863764f9002d536c2bd29cd368ae117fde5f90bd03c805216b5c9ae2"
+  },
+  "source_head": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+  "run_seconds": 663
+}

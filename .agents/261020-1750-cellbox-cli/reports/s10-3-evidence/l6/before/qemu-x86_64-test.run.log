@@ -1,0 +1,2 @@
+[qemu-x86_64-test] Booting ISO=/home/dmin/cellos/build/vicell-x86.iso (window=90s)
+PASS: x86_64 shell prompt reached — full boot successful

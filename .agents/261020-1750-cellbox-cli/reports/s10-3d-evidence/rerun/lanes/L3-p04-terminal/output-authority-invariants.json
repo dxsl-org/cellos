@@ -1,0 +1,50 @@
+{
+  "cells/tools/sys-tools/src/bin/cat.rs": {
+    "ceiling_unchanged_except_free_GetTime": true
+  },
+  "cells/tools/sys-tools/src/bin/date.rs": {
+    "ceiling_unchanged_except_free_GetTime": true
+  },
+  "cells/tools/sys-tools/src/bin/echo.rs": {
+    "ceiling_unchanged_except_free_GetTime": true
+  },
+  "cells/tools/sys-tools/src/bin/env.rs": {
+    "ceiling_unchanged_except_free_GetTime": true
+  },
+  "cells/tools/sys-tools/src/bin/free.rs": {
+    "ceiling_unchanged_except_free_GetTime": true
+  },
+  "cells/tools/sys-tools/src/bin/hotswap.rs": {
+    "ceiling_unchanged_except_free_GetTime": true
+  },
+  "cells/tools/sys-tools/src/bin/kill.rs": {
+    "ceiling_unchanged_except_free_GetTime": true
+  },
+  "cells/tools/sys-tools/src/bin/ls.rs": {
+    "ceiling_unchanged_except_free_GetTime": true
+  },
+  "cells/tools/sys-tools/src/bin/ps.rs": {
+    "ceiling_unchanged_except_free_GetTime": true
+  },
+  "cells/tools/sys-tools/src/bin/shutdown.rs": {
+    "ceiling_unchanged_except_free_GetTime": true
+  },
+  "cells/tools/sys-tools/src/bin/uname.rs": {
+    "ceiling_unchanged_except_free_GetTime": true
+  },
+  "kernel/src/loader/launch_profile/mod.rs": {
+    "unchanged_from_preexisting_authorized_source": true
+  },
+  "kernel/src/loader/launch_profile/profiles.rs": {
+    "unchanged_from_preexisting_authorized_source": true
+  },
+  "kernel/src/loader/launch_profile/targets.rs": {
+    "unchanged_from_preexisting_authorized_source": true
+  },
+  "kernel/src/loader/launch_profile/tests.rs": {
+    "unchanged_from_preexisting_authorized_source": true
+  },
+  "libs/api/src/abi/cell_session.rs": {
+    "unchanged_from_preexisting_authorized_source": true
+  }
+}

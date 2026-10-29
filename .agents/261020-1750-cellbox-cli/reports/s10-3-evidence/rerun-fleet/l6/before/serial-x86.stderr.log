@@ -1,0 +1,3 @@
+   Compiling vicell-integration-tests v0.1.0 (/home/dmin/cellos/tests/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.40s
+     Running tests/serial-x86.rs (/tmp/cellbox-s10-3-1EGP/l6/target-before/x86_64-unknown-linux-gnu/debug/deps/serial_x86-b62a5c9795780a5c)

@@ -1,0 +1,10 @@
+{
+  "diagnostic_only": true,
+  "original_candidate_sha256": "0718a96542e7a3f4d223b02d5ad0511a2e23d83b8cbdb690450aea7662a62863",
+  "original_iso_sha256": "e6713da24de982ea6c7d30550606cd21a06efa6c317b280add088053bf73888c",
+  "probe_iso_sha256": "8a3dce31045897d67abd6c1e2e41bc3b261621ef15ac68e26822f8344cae6599",
+  "original_nvme_sha256": "5c42a0651c617b5091ac5c56bb22011bb3a5ea8b58210482c89956524d61ad0d",
+  "instrumented_nvme_sha256": "8e6a5797250ff98aedce56e75f1c0fa50623a0eb880a7bb28b5d29d7159a684f",
+  "instrumented_platform_sha256": "170dcc3d08955f923ec9dcaf71a6760e85c61365d50d4f9230fd234c0cced02c",
+  "change": "Only disposable platform-probe sources change; exact source copied beside this provenance."
+}

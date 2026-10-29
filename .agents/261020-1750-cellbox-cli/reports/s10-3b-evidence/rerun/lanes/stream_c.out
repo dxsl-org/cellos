@@ -1,0 +1,25 @@
+{"lane": "L0-headless-run1", "exit": 0, "seconds": 702.2, "work": "/tmp/cellbox-phase10-rgy10iwp", "summary_lines": ["PASS: headless L0 (16 markers) in 663.5s"]}
+L0 headless run 1: exit 0
+{"lane": "L0-headless-run2", "exit": 1, "seconds": 884.0, "work": "/tmp/cellbox-phase10-s6vleide", "summary_lines": ["FAIL: headless L0 (16 markers) in 845.1s"]}
+L0 headless run 2: exit 1
+{"lane": "L0-headless-run3", "exit": 0, "seconds": 702.6, "work": "/tmp/cellbox-phase10-6psq3bdd", "summary_lines": ["PASS: headless L0 (16 markers) in 662.4s"]}
+L0 headless run 3: exit 0
+{"lane": "L0-headless-run4", "exit": 0, "seconds": 702.0, "work": "/tmp/cellbox-phase10-a_c__sem", "summary_lines": ["PASS: headless L0 (16 markers) in 659.2s"]}
+L0 headless run 4: exit 0
+{"lane": "L0-headless-run5", "exit": 0, "seconds": 694.3, "work": "/tmp/cellbox-phase10-ghpabf7o", "summary_lines": ["PASS: headless L0 (16 markers) in 656.3s"]}
+L0 headless run 5: exit 0
+{"lane": "L0-headless-run6", "exit": 0, "seconds": 690.5, "work": "/tmp/cellbox-phase10-qjzlh2s4", "summary_lines": ["PASS: headless L0 (16 markers) in 653.4s"]}
+L0 headless run 6: exit 0
+{"lane": "L0-desktop-run1", "exit": 0, "seconds": 302.5, "work": "/tmp/cellbox-phase10-baghp6w1", "summary_lines": ["PASS: desktop L0 (9 markers) in 258.7s"]}
+L0 desktop run 1: exit 0
+{"lane": "L0-desktop-run2", "exit": 0, "seconds": 302.6, "work": "/tmp/cellbox-phase10-dse6l5fl", "summary_lines": ["PASS: desktop L0 (9 markers) in 258.6s"]}
+L0 desktop run 2: exit 0
+{"lane": "L0-desktop-run3", "exit": 1, "seconds": 147.9, "work": "/tmp/cellbox-phase10-91g1h_ta", "summary_lines": []}
+L0 desktop run 3: exit 1
+{"lane": "L0-desktop-run4", "exit": 1, "seconds": 148.1, "work": "/tmp/cellbox-phase10-wc_ox104", "summary_lines": []}
+L0 desktop run 4: exit 1
+{"lane": "L0-desktop-run5", "exit": 1, "seconds": 786.2, "work": "/tmp/cellbox-phase10-gqhryjk0", "summary_lines": ["FAIL: desktop L0 (9 markers) in 741.1s"]}
+L0 desktop run 5: exit 1
+{"lane": "L0-desktop-run6", "exit": 0, "seconds": 303.8, "work": "/tmp/cellbox-phase10-8ttw0lw9", "summary_lines": ["PASS: desktop L0 (9 markers) in 259.4s"]}
+L0 desktop run 6: exit 0
+stream C done

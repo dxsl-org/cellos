@@ -1,0 +1,194 @@
+{
+  "phase": "after",
+  "isos": {
+    "headless": {
+      "path": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso",
+      "sha256": "3cd9ee4d2da66186a4b994ddd06331a321b14d824b31c09a027afc107ed73071"
+    },
+    "desktop": {
+      "path": "/tmp/cellbox-s10-3b-tsbn/cand/desktop.iso",
+      "sha256": "a026edc2e6be86a8259ee6d66158cad216a46a9442bcf88dd26968697e40e6ac"
+    },
+    "pc": {
+      "path": "/tmp/cellbox-s10-3b-tsbn/cand/pc.iso",
+      "sha256": "4d7c09e2c35a26373cd82260de9031c769bea00801db19eeeb28112053f40962"
+    }
+  },
+  "consumers": {
+    "x86_64-boot": {
+      "env": {
+        "VICELL_X86_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "x86_boots_to_shell_prompt": "pass",
+        "x86_echo_command": "pass",
+        "x86_init_spawns": "pass",
+        "x86_kernel_banner": "pass",
+        "x86_ls_command": "pass",
+        "x86_ps_command": "pass",
+        "x86_scheduler_initializes": "pass",
+        "x86_tier2_admission_is_refused_until_switch_is_qualified": "pass",
+        "x86_tier2_fault_isolation_fixture_is_refused": "pass"
+      },
+      "seconds": 27.0
+    },
+    "nvme-x86": {
+      "env": {
+        "VICELL_X86_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "nvme_boot_reaches_shell_x86": "pass",
+        "nvme_driver_cell_registers_x86": "pass",
+        "nvme_fat32_mount_x86": "pass"
+      },
+      "seconds": 8.8
+    },
+    "virtio-x86": {
+      "env": {
+        "VICELL_X86_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "x86_virtio_blk_initialises": "ignored",
+        "x86_virtio_pci_no_device_no_hang": "pass"
+      },
+      "seconds": 2.8
+    },
+    "pcie-multibus-x86": {
+      "env": {
+        "VICELL_X86_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "bus1_nvme_dma_completes_under_vtd": "pass",
+        "bus1_nvme_is_discovered_and_initialized": "pass"
+      },
+      "seconds": 3.1
+    },
+    "handoff": {
+      "env": {
+        "VICELL_X86_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso"
+      },
+      "filter": [
+        "handoff_x86"
+      ],
+      "exit": 0,
+      "tests": {
+        "handoff_x86_32_bare_paging": "skip",
+        "handoff_x86_32_heap": "skip",
+        "handoff_x86_32_kernel_starts": "skip",
+        "handoff_x86_32_scheduler_initialized": "skip",
+        "handoff_x86_frame_allocator": "pass",
+        "handoff_x86_heap": "pass",
+        "handoff_x86_kernel_builds": "pass",
+        "handoff_x86_kernel_starts": "pass",
+        "handoff_x86_limine_paging": "pass",
+        "handoff_x86_phys_base": "pass"
+      },
+      "seconds": 4.5
+    },
+    "ahci-x86": {
+      "env": {
+        "VICELL_AHCI_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "ahci_and_nvme_both_register_x86": "pass",
+        "ahci_boot_reaches_shell_x86": "pass",
+        "ahci_driver_cell_identifies_sata_x86": "pass",
+        "ahci_driver_cell_registers_block_driver_x86": "pass",
+        "ahci_fat32_persistence_reboot_x86": "pass"
+      },
+      "seconds": 29.6
+    },
+    "xhci-x86": {
+      "env": {
+        "VICELL_XHCI_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso"
+      },
+      "filter": [],
+      "exit": 101,
+      "tests": {
+        "xhci_boot_without_keyboard_reaches_shell_x86": "pass",
+        "xhci_com1_input_still_works_x86": "pass",
+        "xhci_driver_cell_enumerates_usb_keyboard_x86": "pass",
+        "xhci_injected_key_decodes_in_cell_x86": "fail"
+      },
+      "seconds": 35.1
+    },
+    "serial-x86": {
+      "env": {
+        "VICELL_SERIAL_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "serial_x86_multiport_tx_rx_and_console_unchanged": "pass"
+      },
+      "seconds": 12.6
+    },
+    "nic-x86": {
+      "env": {
+        "VICELL_NIC_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "nic_x86_e1000_dhcp": "pass",
+        "nic_x86_vtd_e1000_dhcp": "pass"
+      },
+      "seconds": 7.0
+    },
+    "igb-x86": {
+      "env": {
+        "VICELL_IGB_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso",
+        "VICELL_IGB_VTD_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "igb_x86_dhcp": "pass",
+        "igb_x86_vtd_dhcp": "pass"
+      },
+      "seconds": 26.0
+    },
+    "iommu-dmar-x86": {
+      "env": {
+        "VICELL_IOMMU_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/headless.iso",
+        "VICELL_PC_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/pc.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "q35_without_a_remapper_names_the_fallback_and_the_identity_contract": "pass",
+        "x86_pc_discovers_the_vtd_base_from_acpi_dmar": "pass",
+        "x86_pc_without_a_remapper_refuses_untranslated_dma": "pass"
+      },
+      "seconds": 28.4
+    },
+    "desktop-x86": {
+      "env": {
+        "CELLOS_DESKTOP_ISO": "/tmp/cellbox-s10-3b-tsbn/cand/desktop.iso",
+        "CELLOS_DESKTOP_ACCEL": "tcg"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "desktop_x86_boots_to_shell_and_compositor": "pass"
+      },
+      "seconds": 15.3
+    },
+    "qemu-x86_64-test.sh": {
+      "exit": 0,
+      "tests": {
+        "boot-to-prompt": "pass"
+      }
+    }
+  }
+}

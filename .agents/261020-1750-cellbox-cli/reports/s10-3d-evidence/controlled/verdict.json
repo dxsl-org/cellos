@@ -1,0 +1,11 @@
+{
+  "diagnostic_only": true,
+  "probe_restored": true,
+  "scan_complete_before_cap": true,
+  "booted": true,
+  "no_nvme_timeout": true,
+  "platform_sha256": "2b05be9230b0e8f11668a56496d3fb330ad6081797514b53de9ac24ef7789e06",
+  "init_sha256": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab",
+  "nvme_sha256": "1d673efa1a4c6c829c02e6571c90b7c865e15b16023336e50ee4bfaeff11f334",
+  "pass": true
+}

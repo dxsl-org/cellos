@@ -1,0 +1,16 @@
+round 1 before nvme-x86::nvme_fat32_mount_x86 exit 0
+round 1 before ahci-x86::ahci_fat32_persistence_reboot_x86 exit 0
+round 1 before nic-x86::nic_x86_e1000_dhcp exit 0
+round 1 before qemu-x86_64-test.sh exit 0; [INFO] Tier 2 admission: DISABLED (fleet profile) — domain-class artifacts are denied
+round 1 after nvme-x86::nvme_fat32_mount_x86 exit 101
+round 1 after ahci-x86::ahci_fat32_persistence_reboot_x86 exit 101
+round 1 after nic-x86::nic_x86_e1000_dhcp exit 0
+round 1 after qemu-x86_64-test.sh exit 1; [INFO] Tier 2 admission: ENABLED (development profile)
+round 2 before nvme-x86::nvme_fat32_mount_x86 exit 101
+round 2 before ahci-x86::ahci_fat32_persistence_reboot_x86 exit 0
+round 2 before nic-x86::nic_x86_e1000_dhcp exit 0
+round 2 before qemu-x86_64-test.sh exit 0; [INFO] Tier 2 admission: DISABLED (fleet profile) — domain-class artifacts are denied
+round 2 after nvme-x86::nvme_fat32_mount_x86 exit 101
+round 2 after ahci-x86::ahci_fat32_persistence_reboot_x86 exit 101
+round 2 after nic-x86::nic_x86_e1000_dhcp exit 0
+round 2 after qemu-x86_64-test.sh exit 1; [INFO] Tier 2 admission: ENABLED (development profile)

@@ -1,0 +1,706 @@
+{
+  "schema": "cellos-phase10-l0-verdict/1",
+  "profile": "headless",
+  "accel": "tcg",
+  "qualifying": true,
+  "candidate_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "duration_s": 633.2,
+  "markers": {
+    "P10C-boot": {
+      "pass": true,
+      "checks": {
+        "prompt-reached": {
+          "pass": true,
+          "detail": "T=3.1s"
+        },
+        "policy-loaded-verified": {
+          "pass": true,
+          "detail": "['[ INFO] [policy] loaded + verified (58 entries, flags 0x00)']"
+        },
+        "tier2-disabled-fleet": {
+          "pass": true,
+          "detail": "['[INFO] Tier 2 admission: DISABLED (fleet profile) \u2014 domain-class artifacts are denied']"
+        },
+        "no-panic": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "no-deny-at-boot": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "signatures-admitted": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "no-spawn-failure": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "every-planned-cell-launched": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "ps-required-running": {
+          "pass": true,
+          "detail": "(['input', 'net', 'cellbox'], ['init', 'nvme', 'vfs', 'e1000', 'serial', 'input', 'net', 'cellbox'])"
+        },
+        "ps-only-planned-cells": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "ps-no-sshd-no-shell": {
+          "pass": true,
+          "detail": "['init', 'nvme', 'vfs', 'e1000', 'serial', 'input', 'net', 'cellbox']"
+        },
+        "manifest-no-sshd-no-shell": {
+          "pass": true,
+          "detail": "['/POLICY.BIN', '/bin/ahci', '/bin/cat', '/bin/cellbox', '/bin/cellbox-ssh', '/bin/config', '/bin/e1000', '/bin/echo', '/bin/igb', '/bin/input', '/bin/kill', '/bin/ls', '/bin/net', '/bin/nvme', '/bin/platform', '/bin/ps', '/bin/serial', '/bin/shutdown', '/bin/tier2-exploit', '/bin/tier2-smoke', '/bin/vfs', '/bin/xhci', '/etc/cellos/autoload.toml', '/etc/cellos/services.toml', '/etc/cellos/system.toml']"
+        },
+        "absent-hardware-drivers-exited-cleanly": {
+          "pass": true,
+          "detail": "not running: ['igb', 'xhci']; clean exits logged: 2"
+        }
+      },
+      "notes": [
+        "first `Cellos >` at T=3.1s after QEMU start (TCG)",
+        "optional absent probe paths (NotFound, not in the manifest): /bin/ai-test, /bin/block, /bin/silo-test, /bin/srv-test, /bin/std-smoke, /bin/vfs-test",
+        "fleet profile narrowed paths (expected, D3a-2 A): /bin/ahci, /bin/e1000, /bin/igb, /bin/input, /bin/nvme, /bin/xhci",
+        "known non-blocking (D3-5): [ERROR] [selftest] COMPLETION-QUEUE: FAIL \u2014 an older waiter erased its replacement; [ERROR] [selftest] COMPLETION-QUEUE: FAIL",
+        "ps --records names: ['init', 'nvme', 'vfs', 'e1000', 'serial', 'input', 'net', 'cellbox']"
+      ],
+      "error": null
+    },
+    "P10C-lf-submit": {
+      "pass": true,
+      "checks": {
+        "n-runs-once": {
+          "pass": true,
+          "detail": "{'ran': 1, 'prompts': 1}"
+        },
+        "r-runs-once": {
+          "pass": true,
+          "detail": "{'ran': 1, 'prompts': 1}"
+        },
+        "rn-runs-once": {
+          "pass": true,
+          "detail": "{'ran': 1, 'prompts': 2}"
+        }
+      },
+      "notes": [
+        "CRLF: 2 prompt(s) after one `cmd\\r\\n` line (an empty second submission is recorded, not a failure)"
+      ],
+      "error": null
+    },
+    "P10C-image-list": {
+      "pass": true,
+      "checks": {
+        "ls-bin-equals-manifest": {
+          "pass": true,
+          "detail": "{'ls': ['ahci', 'cat', 'cellbox', 'cellbox-ssh', 'config', 'e1000', 'echo', 'igb', 'input', 'kill', 'ls', 'net', 'nvme', 'platform', 'ps', 'serial', 'shutdown', 'tier2-exploit', 'tier2-smoke', 'vfs', 'xhci'], 'manifest': ['ahci', 'cat', 'cellbox', 'cellbox-ssh', 'config', 'e1000', 'echo', 'igb', 'input', 'kill', 'ls', 'net', 'nvme', 'platform', 'ps', 'serial', 'shutdown', 'tier2-exploit', 'tier2-smoke', 'vfs', 'xhci'], 'st': 0}"
+        },
+        "cellbox-and-cellbox-ssh-present": {
+          "pass": true,
+          "detail": "['ahci', 'cat', 'cellbox', 'cellbox-ssh', 'config', 'e1000', 'echo', 'igb', 'input', 'kill', 'ls', 'net', 'nvme', 'platform', 'ps', 'serial', 'shutdown', 'tier2-exploit', 'tier2-smoke', 'vfs', 'xhci']"
+        },
+        "cellbox-ssh-same-signed-file": {
+          "pass": true,
+          "detail": "('11674cd9bb9ef9421313727d5c4a323f2a8043c435468abacde6f55c2e5e86eb', '11674cd9bb9ef9421313727d5c4a323f2a8043c435468abacde6f55c2e5e86eb')"
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    "P10C-explicit-forms": {
+      "pass": true,
+      "checks": {
+        "equal-bytes-and-status": {
+          "pass": true,
+          "detail": "{'ls /': (['POLICY.BIN', 'bin', 'data', 'etc', 'mnt', 'readme.txt', 'srv', 'tmp'], 0), 'cellbox ls /': (['POLICY.BIN', 'bin', 'data', 'etc', 'mnt', 'readme.txt', 'srv', 'tmp'], 0), '/bin/cellbox ls /': (['POLICY.BIN', 'bin', 'data', 'etc', 'mnt', 'readme.txt', 'srv', 'tmp'], 0)}"
+        },
+        "cellbox-cd-refused-2": {
+          "pass": true,
+          "detail": "([\"cellbox: cd changes or reads shell state; run it inside 'cellbox sh'\"], 2)"
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    "P10C-state-script": {
+      "pass": true,
+      "checks": {
+        "variable": {
+          "pass": true,
+          "detail": ""
+        },
+        "function": {
+          "pass": true,
+          "detail": ""
+        },
+        "if-else": {
+          "pass": true,
+          "detail": ""
+        },
+        "for-loop": {
+          "pass": true,
+          "detail": ""
+        },
+        "source-disk-script": {
+          "pass": true,
+          "detail": "([\"ls: cannot access '/p10-src-missing': No such file or directory\", 'src-start', 'src-x', 'src-y', 'src-status=1'], 0)"
+        },
+        "source-sets-state": {
+          "pass": true,
+          "detail": ""
+        },
+        "status-of-failure": {
+          "pass": true,
+          "detail": "([\"ls: cannot access '/p10-no-such-dir': No such file or directory\"], 1)"
+        },
+        "status-of-success": {
+          "pass": true,
+          "detail": ""
+        },
+        "pipeline-background-refused": {
+          "pass": true,
+          "detail": "(['shell: background `&` is supported only for a single external command; the pipeline was not started'], 2)"
+        },
+        "misplaced-ampersand-refused": {
+          "pass": true,
+          "detail": "(['shell: `&` is only valid as the final token of a command'], 2)"
+        },
+        "refused-forms-no-effect": {
+          "pass": true,
+          "detail": "['big.jsonl', 'p10.jsonl', 'p10auto.toml', 'p10e.txt', 'p10raw.bin']"
+        },
+        "plain-background-runs": {
+          "pass": true,
+          "detail": "(['[25] running'], 0)"
+        },
+        "exit-code-4": {
+          "pass": true,
+          "detail": "['[ INFO] Syscall::Exit: task 12 exited with code 4']"
+        },
+        "shell-restarted": {
+          "pass": true,
+          "detail": ""
+        },
+        "fresh-shell-has-no-state": {
+          "pass": true,
+          "detail": ""
+        }
+      },
+      "notes": [
+        "`source` status after the script: 0"
+      ],
+      "error": null
+    },
+    "P10C-typed": {
+      "pass": true,
+      "checks": {
+        "where-select-sort-take": {
+          "pass": true,
+          "detail": "(['{\"tid\":12,\"name\":\"cellbox\"}'], 0)"
+        },
+        "to-jsonl-redirect": {
+          "pass": true,
+          "detail": "([], 0)"
+        },
+        "jsonl-round-trip": {
+          "pass": true,
+          "detail": "{'cat': ['{\"tid\":2,\"name\":\"init\"}', '{\"tid\":3,\"name\":\"nvme\"}', '{\"tid\":5,\"name\":\"vfs\"}', '{\"tid\":6,\"name\":\"e1000\"}', '{\"tid\":8,\"name\":\"serial\"}', '{\"tid\":10,\"name\":\"input\"}', '{\"tid\":11,\"name\":\"net\"}', '{\"tid\":12,\"name\":\"cellbox\"}'], 'back': ['{\"tid\":2,\"name\":\"init\"}', '{\"tid\":3,\"name\":\"nvme\"}', '{\"tid\":5,\"name\":\"vfs\"}', '{\"tid\":6,\"name\":\"e1000\"}', '{\"tid\":8,\"name\":\"serial\"}', '{\"tid\":10,\"name\":\"input\"}', '{\"tid\":11,\"name\":\"net\"}', '{\"tid\":12,\"name\":\"cellbox\"}']}"
+        },
+        "bad-type-refused": {
+          "pass": true,
+          "detail": "(['shell: where: literal \\'abc\\' is not a JSON scalar (JSON parse error: unexpected character at byte 0); quote strings as \\'\"text\"\\''], 2)"
+        },
+        "bad-type-before-effect": {
+          "pass": true,
+          "detail": "([\"ls: cannot access '/tmp/p10bad.jsonl': No such file or directory\"], 1)"
+        },
+        "no-ansi-in-jsonl": {
+          "pass": true,
+          "detail": ""
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    "P10C-bytes": {
+      "pass": true,
+      "checks": {
+        "disk-fixture-cat-exact": {
+          "pass": true,
+          "detail": "(['p10-bytes-line-1', 'p10-bytes-line-2 tail'], 0)"
+        },
+        "disk-fixture-uart-bytes": {
+          "pass": true,
+          "detail": "b'cat /mnt/sd/p10/bytes.txt\\nUSER: p10-bytes-line-1\\nUSER: p10-bytes-line-2 tail\\nUSER: Cellos > '"
+        },
+        "external-echo-exact": {
+          "pass": true,
+          "detail": "(['p10-echo two words'], 0)"
+        },
+        "external-stage-pipeline-exact": {
+          "pass": true,
+          "detail": "(['p10-ext-b'], 0)"
+        },
+        "builtin-after-external-refused-2": {
+          "pass": true,
+          "detail": "(['shell: `cat` cannot consume the output of an external command; only external commands may follow one'], 2)"
+        },
+        "external-cat-packaged-file-exact": {
+          "pass": true,
+          "detail": "(['# Applications start after the configured required services are ready.', 'version = 1', '', '[[cells]]', 'name = \"cellbox\"', 'path = \"/bin/cellbox\"', 'args = [\"sh\"]', 'restart = \"on-failure\"'], 0)"
+        },
+        "external-echo-file-length": {
+          "pass": true,
+          "detail": "{'p10.jsonl': 200, 'p10auto.toml': 170, 'p10e.txt': 13, 'p10raw.bin': 1600}"
+        },
+        "external-cat-file-length": {
+          "pass": true,
+          "detail": "{'p10.jsonl': 200, 'p10auto.toml': 170, 'p10e.txt': 13, 'p10raw.bin': 1600}"
+        },
+        "disk-raw-bytes-length": {
+          "pass": true,
+          "detail": "{'p10.jsonl': 200, 'p10auto.toml': 170, 'p10e.txt': 13, 'p10raw.bin': 1600}"
+        },
+        "external-file-content-exact": {
+          "pass": true,
+          "detail": "(['p10-ext-file'], 0)"
+        },
+        "external-cat-disk-path-status-1": {
+          "pass": true,
+          "detail": "(['cat: /mnt/sd/p10/bytes.txt: file not found'], 1)"
+        },
+        "disk-non-utf8-lossy-text": {
+          "pass": true,
+          "detail": "(['p10-lossy \ufffd31m \ufffd\ufffd \u20ac \ufffd end'], 0)"
+        },
+        "disk-non-utf8-uart-bytes": {
+          "pass": true,
+          "detail": "b'cat /mnt/sd/p10/lossy.txt\\nUSER: p10-lossy \\xef\\xbf\\xbd31m \\xef\\xbf\\xbd\\xef\\xbf\\xbd \\xe2\\x82\\xac \\xef\\xbf\\xbd end\\nUSER: Cellos > '"
+        },
+        "disk-big-fixture-over-1mib": {
+          "pass": true,
+          "detail": 7340032
+        },
+        "disk-oversized-file-too-large-1": {
+          "pass": true,
+          "detail": "(['cat: /mnt/sd/rg/big.log: File too large'], 1)"
+        },
+        "disk-directory-is-a-directory-1": {
+          "pass": true,
+          "detail": "(['cat: /mnt/sd/p10: Is a directory'], 1)"
+        }
+      },
+      "notes": [
+        "stock /bin/cat reads the boot image only and has no stdin mode; it cannot be a stage over disk bytes"
+      ],
+      "error": null
+    },
+    "P10C-rg": {
+      "pass": true,
+      "checks": {
+        "big-records-written": {
+          "pass": true,
+          "detail": "([], 0)"
+        },
+        "big-line-numbers": {
+          "pass": true,
+          "detail": "[{'line_number': 1}, {'line_number': 57345}, {'line_number': 114688}]"
+        },
+        "big-offsets": {
+          "pass": true,
+          "detail": "[{'absolute_offset': 0}, {'absolute_offset': 3670016}, {'absolute_offset': 7339968}]"
+        },
+        "non-utf8-lines-kept": {
+          "pass": true,
+          "detail": "(['/mnt/sd/rg/enc/bad.txt:1:ENCTOK \\\\xFF bad', '/mnt/sd/rg/enc/bom.txt:2:ENCTOK bom', '/mnt/sd/rg/enc/crlf.txt:1:ENCTOK crlf\\\\r', '/mnt/sd/rg/enc/nolf.txt:2:ENCTOK nolf'], 0)"
+        },
+        "partial-error-status-2": {
+          "pass": true,
+          "detail": "{'rows': 120, 'err': ['rg: /srv/cellos: permission denied', 'rg: summary: files_scanned=120 files_binary_skipped=0 links_skipped=0 mounts_skipped=0 lines_scanned=120 matching_lines=120 matches=120 bytes_read=2160 errors=1 complete=false reason=errors'], 'st': 2}"
+        },
+        "denied-child-status-2": {
+          "pass": true,
+          "detail": "(['rg: /srv/cellos: permission denied', '/srv/pub/a.txt:1:SRVTOK a', '/srv/zz.txt:1:SRVTOK z', 'rg: summary: files_scanned=2 files_binary_skipped=0 links_skipped=0 mounts_skipped=0 lines_scanned=2 matching_lines=2 matches=2 bytes_read=36 errors=1 complete=false reason=errors'], 2)"
+        },
+        "take-1-stops-walk": {
+          "pass": true,
+          "detail": "(['/mnt/sd/rg/wide/wide000xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit'], 0)"
+        }
+      },
+      "notes": [
+        "rg over the 7340032 B multi-chunk file: 305s (TCG)"
+      ],
+      "error": null
+    },
+    "P10C-top": {
+      "pass": true,
+      "checks": {
+        "top-batch": {
+          "pass": true,
+          "detail": "(['top: t=524s  batch  remaining 1', 'sample 5  complete  cpu% per core  mem 77.9M/224.0M', '  CELL  NAME     TASKS  CPU%  QUOTA  LIMIT  STATE', ' 8:115  input        1   3.0     0B  16.0M  Live', '10:117  cellbox      1   1.8  36.7K  16.0M  Live', ' 1:108  nvme         1   0.0   392B  16.0M  Live', ' 2:107  init         1   0.0   3.1M  16.0M  Live', ' 3:110  vfs          1   0.0     0B  16.0M  Live', ' 4:111  e1000        1   0.0   4.8K  16.0M  Live', ' 6:113  serial       1   0.0     0B  16.0M  Live', ' 9:116  net          1   0.0     0B  16.0M  Live'], 0)"
+        },
+        "records-default-one-frame": {
+          "pass": true,
+          "detail": 0
+        },
+        "records-bounded-two-frames": {
+          "pass": true,
+          "detail": "{'frames': 2, 'ends': 2, 'first': [{'frame': 'begin', 'sample_id': 9, 'monotonic_ns': 527857194440, 'meta': {'schema': 'top.cell.v1', 'provider_epoch': '18e289f8c21e9476', 'interval_ns': 1004141690, 'online_cpus': 1, 'cpu_unit': 'core_tenths', 'cpu_available': True, 'total_cells': 8, 'total_tasks': 8, 'gone_cells': 0, 'gone_tasks': None, 'mem_state': 'present', 'mem_total_bytes': 234885120, 'mem_used_bytes': 81780736, 'mem_free_bytes': 153104384, 'memory_interval': True}}]}"
+        },
+        "plain-take-on-frames-refused": {
+          "pass": true,
+          "detail": "(['shell: take: input is a frame stream; use `take --frame`'], 2)"
+        },
+        "interactive-draws": {
+          "pass": true,
+          "detail": "b'top\\nUSER: \\x1b[?1049h\\x1b[?25l\\x1b[?2004h\\x1b[1;1H\\x1b[0m\\x1b[J\\x1b[2;1H\\x1b[J\\x1b[3;1H\\x1b[J\\x1b[4;1H\\x1b[J\\x1b[5;1H\\x1b[J\\x1b[6;1H\\x1b[J\\x1b[7;1H\\x1b[J\\x1b[8;1H\\x1b[J\\x1b[9;1H\\x1b[J\\x1b[10;1H\\x1b[J\\x1b[11;1H\\x1b[J\\x1b[12;1H\\x1b[J\\x1b[13;1H\\x1b[J\\x1b[14;1H\\x1b[J\\x1b[15;1H\\x1b[J\\x1b[16;1H\\x1b[J\\x1b[17;1H\\x1b[J\\x1b[18;1H\\x1b[J\\x1b[19;1H\\x1b[J\\x1b[20;1H\\x1b[J\\x1b[21;1H\\x1b[J\\x1b[22;1H\\x1b[J\\x1b[23;1H\\x1b[J\\x1b[24;1H\\x1b[J\\x1b[1;1H\\x1b[1;30;105m top  Cells  sor'"
+        },
+        "q-restores-then-prompt": {
+          "pass": true,
+          "detail": ""
+        },
+        "q-status-0": {
+          "pass": true,
+          "detail": ""
+        }
+      },
+      "notes": [
+        "take --frame 2: 20 JSONL rows, 2 begin / 2 end envelopes"
+      ],
+      "error": null
+    },
+    "P10C-edit": {
+      "pass": true,
+      "checks": {
+        "fixture-copied": {
+          "pass": true,
+          "detail": "([], 0)"
+        },
+        "create-opens": {
+          "pass": true,
+          "detail": "edit /srv/p10ed/new.txt USER: /srv/p10ed/new.txt \u2014 Ln 1, Col 1 new file "
+        },
+        "create-saved": {
+          "pass": true,
+          "detail": "edit /srv/p10ed/new.txt USER: /srv/p10ed/new.txt \u2014 Ln 1, Col 1 new file p * \u2014 Ln 1, Col 2 ^S save ^O save as ^Q quit ^H help 1 3 0 4 5 c 6 r 7 e 8 a 9 t 10 e 1 d 2 \u2014 Ln 1, Col 12 saved 11 bytes to /srv/p10ed/new.txt (synced; not a power-loss guarantee) "
+        },
+        "create-quit": {
+          "pass": true,
+          "detail": ""
+        },
+        "create-status-0": {
+          "pass": true,
+          "detail": ""
+        },
+        "existing-opens": {
+          "pass": true,
+          "detail": "edit /srv/p10ed/m.txt USER: one two last /srv/p10ed/m.txt \u2014 Ln 1, Col 1 ^S save ^O save as ^Q quit ^H help "
+        },
+        "existing-saved": {
+          "pass": true,
+          "detail": "edit /srv/p10ed/m.txt USER: one two last /srv/p10ed/m.txt \u2014 Ln 1, Col 1 ^S save ^O save as ^Q quit ^H help 4 1 * \u2014 Ln 1, Col 5 \u2014 Ln 1, Col 5 saved 15 bytes to /srv/p10ed/m.txt (synced; not a power-loss guarantee) "
+        },
+        "existing-quit": {
+          "pass": true,
+          "detail": ""
+        },
+        "reopen": {
+          "pass": true,
+          "detail": "edit /srv/p10ed/m.txt USER: one1 two last /srv/p10ed/m.txt \u2014 Ln 1, Col 1 ^S save ^O save as ^Q quit ^H help "
+        },
+        "reopen-clean-quit-without-question": {
+          "pass": true,
+          "detail": ""
+        },
+        "stored-sizes": {
+          "pass": true,
+          "detail": "{'m.txt': 15, 'new.txt': 11}"
+        },
+        "created-bytes": {
+          "pass": true,
+          "detail": "['/srv/p10ed/new.txt:1:p10 created']"
+        },
+        "crlf-kept": {
+          "pass": true,
+          "detail": "['/srv/p10ed/m.txt:1:one1\\\\r']"
+        },
+        "lf-lines-kept": {
+          "pass": true,
+          "detail": "['/srv/p10ed/m.txt:2:two', '/srv/p10ed/m.txt:3:last']"
+        },
+        "unnamed-opens": {
+          "pass": true,
+          "detail": "edit USER: [unnamed] \u2014 Ln 1, Col 1 ^S save ^O save as ^Q quit ^H help "
+        },
+        "dirty-exit-asks": {
+          "pass": true,
+          "detail": "edit USER: [unnamed] \u2014 Ln 1, Col 1 ^S save ^O save as ^Q quit ^H help q * \u2014 Ln 1, Col 2 Unsaved changes: ( )ave, (d)iscard, (c)ancel "
+        },
+        "enter-is-no-answer": {
+          "pass": true,
+          "detail": ""
+        },
+        "discard-exits": {
+          "pass": true,
+          "detail": ""
+        },
+        "discard-status-0": {
+          "pass": true,
+          "detail": ""
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    "P10C-selective-tui": {
+      "pass": true,
+      "checks": {
+        "no-screen-controls:ls /": {
+          "pass": true,
+          "detail": "b'ls /\\nUSER: POLICY.BIN\\nUSER: bin\\nUSER: data\\nUSER: etc\\nUSER: mnt\\nUSER: readme.txt\\nUSER: srv\\nUSER: tmp\\nUSER: Cellos > '"
+        },
+        "no-screen-controls:ps": {
+          "pass": true,
+          "detail": "b'ps\\nUSER: sample 13  complete  cpu% per core  mem 77.9M/224.0M\\nUSER: TID  NAME     STATE    CPU%   STACK  SEGMENTS\\nUSER:   2  init     Waiting   new   64.0K      1.3M\\nUSER:   3  nvme     Waiting   new '"
+        },
+        "no-screen-controls:cat /mnt/sd/p10/bytes.txt": {
+          "pass": true,
+          "detail": "b'cat /mnt/sd/p10/bytes.txt\\nUSER: p10-bytes-line-1\\nUSER: p10-bytes-line-2 tail\\nUSER: Cellos > '"
+        },
+        "no-screen-controls:cellbox ls /": {
+          "pass": true,
+          "detail": "b'cellbox ls /\\nUSER: POLICY.BIN\\nUSER: bin\\nUSER: data\\nUSER: etc\\nUSER: mnt\\nUSER: readme.txt\\nUSER: srv\\nUSER: tmp\\nUSER: Cellos > '"
+        },
+        "no-screen-controls:top -b -n 1": {
+          "pass": true,
+          "detail": "b'top -b -n 1\\nUSER: top: t=548s  batch  remaining 1\\nUSER: sample 15  complete  cpu% per core  mem 77.9M/224.0M\\nUSER:   CELL  NAME     TASKS  CPU%  QUOTA  LIMIT  STATE\\nUSER:  8:115  input        1   2.7 '"
+        },
+        "no-screen-controls:ps --records | to jsonl": {
+          "pass": true,
+          "detail": "b'ps --records | to jsonl\\nUSER: {\"tid\":2,\"cell_id\":2,\"generation\":107,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Waiting\",\"cpu_ns\":767515830,\"cpu_tenths\":null,\"cpu_quality\":\"new\",\"stack_bytes\":65536,'"
+        },
+        "top-substitution-refused-2": {
+          "pass": true,
+          "detail": "(['top: no interactive terminal here; use top -b for text frames'], 2)"
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    "P10C-denials": {
+      "pass": true,
+      "checks": {
+        "bin-shell-refused": {
+          "pass": true,
+          "detail": "(['shell: foreground preparation failed: Denied'], 126)"
+        },
+        "kill-refused-1": {
+          "pass": true,
+          "detail": "(['kill: not available from the suite shell, requires a lifecycle owner'], 1)"
+        },
+        "snapshot-refused-1": {
+          "pass": true,
+          "detail": "(['snapshot: not available from the suite shell, requires a lifecycle owner'], 1)"
+        },
+        "task-set-unchanged": {
+          "pass": true,
+          "detail": "([(2, 'init'), (3, 'nvme'), (5, 'vfs'), (6, 'e1000'), (8, 'serial'), (10, 'input'), (11, 'net'), (12, 'cellbox')], [(2, 'init'), (3, 'nvme'), (5, 'vfs'), (6, 'e1000'), (8, 'serial'), (10, 'input'), (11, 'net'), (12, 'cellbox')])"
+        },
+        "export-config-unavailable-1": {
+          "pass": true,
+          "detail": "(['export: K: config unavailable'], 1)"
+        },
+        "ssh-publickey-refused": {
+          "pass": true,
+          "detail": "(['ssh: publickey authentication is not available yet'], 255)"
+        },
+        "srv-cellos-read-denied-1": {
+          "pass": true,
+          "detail": "(['cat: /srv/cellos/k.txt: Permission denied'], 1)"
+        }
+      },
+      "notes": [
+        "expected DENY line for /bin/shell: [ WARN] [loader] DENY launch edge: caller=12 name=cellbox route=Path target=/bin/shell spawn_cap=false supervisor_cap=false"
+      ],
+      "error": null
+    },
+    "P10C-ssh-serial": {
+      "pass": true,
+      "checks": {
+        "prompt": {
+          "pass": true,
+          "detail": ""
+        },
+        "network-up": {
+          "pass": true,
+          "detail": ""
+        },
+        "fails-closed-status": {
+          "pass": true,
+          "detail": "(['[net] owner death watch unavailable; socket reclaim deferred', \"tester@10.0.2.2's password: ssh: authentication failed\"], 255)"
+        },
+        "ended-without-any-key-typed": {
+          "pass": true,
+          "detail": "2.3s"
+        },
+        "no-echo-after-password-prompt": {
+          "pass": true,
+          "detail": "[\"tester@10.0.2.2's password: ssh: authentication failed\"]"
+        },
+        "server-saw-no-password": {
+          "pass": true,
+          "detail": "[\"chpasswd: password for 'tester' changed\", 'Connection closed by authenticating user tester 172.17.0.1 port 58414 [preauth]']"
+        }
+      },
+      "notes": [
+        "UART ssh with password: status 255 after 2.3s, output ['[net] owner death watch unavailable; socket reclaim deferred', \"tester@10.0.2.2's password: ssh: authentication failed\"]",
+        "sshd: chpasswd: password for 'tester' changed; Connection from 172.17.0.1 port 58414 on 172.17.0.2 port 22 rdomain \"\"; Connection closed by authenticating user tester 172.17.0.1 port 58414 [preauth]"
+      ],
+      "error": null
+    },
+    "P10C-no-inbound": {
+      "pass": true,
+      "checks": {
+        "main-no-listener-cell": {
+          "pass": true,
+          "detail": "['init', 'nvme', 'vfs', 'e1000', 'serial', 'input', 'net', 'cellbox']"
+        },
+        "main-restricted-slirp-no-forward": {
+          "pass": true,
+          "detail": "['user,id=net0,restrict=on']"
+        },
+        "ssh-boot-no-listener-cell": {
+          "pass": true,
+          "detail": "['init', 'nvme', 'vfs', 'e1000', 'serial', 'input', 'net', 'cellbox']"
+        },
+        "ssh-boot-no-forward": {
+          "pass": true,
+          "detail": "['user,id=net0']"
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    "P10C-ctrl-c": {
+      "pass": true,
+      "checks": {
+        "sleep-ctrl-c-prompt": {
+          "pass": true,
+          "detail": "prompt 0.3s after Ctrl-C; UART tail b'sleep 30\\nUSER: ^C\\nUSER: Cellos > '"
+        },
+        "sleep-ctrl-c-130": {
+          "pass": true,
+          "detail": "$?=130"
+        },
+        "rg-walk-ctrl-c-prompt": {
+          "pass": true,
+          "detail": "0.3s"
+        },
+        "rg-walk-ctrl-c-130": {
+          "pass": true,
+          "detail": ""
+        },
+        "endless-sink-flowing": {
+          "pass": true,
+          "detail": ""
+        },
+        "endless-sink-ctrl-c-prompt": {
+          "pass": true,
+          "detail": "0.3s"
+        },
+        "endless-sink-output-stops": {
+          "pass": true,
+          "detail": "['']"
+        },
+        "endless-sink-ctrl-c-130": {
+          "pass": true,
+          "detail": ""
+        },
+        "top-tui-ctrl-c-prompt": {
+          "pass": true,
+          "detail": ""
+        },
+        "top-tui-ctrl-c-130": {
+          "pass": true,
+          "detail": ""
+        },
+        "top-batch-ctrl-c-prompt": {
+          "pass": true,
+          "detail": "0.3s"
+        },
+        "top-batch-ctrl-c-130": {
+          "pass": true,
+          "detail": ""
+        },
+        "cat-sink-finite-control": {
+          "pass": true,
+          "detail": "(20, 0)"
+        },
+        "cat-sink-ctrl-c-prompt": {
+          "pass": true,
+          "detail": "0.3s"
+        },
+        "cat-sink-output-stops": {
+          "pass": true,
+          "detail": "['']"
+        },
+        "cat-sink-ctrl-c-130": {
+          "pass": true,
+          "detail": ""
+        }
+      },
+      "notes": [
+        "endless typed stream into builtin cat: output before Ctrl-C: 0 rows"
+      ],
+      "error": null
+    },
+    "P10C-not-on-uart": {
+      "pass": true,
+      "checks": {
+        "no-fixture-password-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-fixture-host-key-line-1-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-fixture-host-key-line-2-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-fixture-host-key-line-3-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-fixture-host-key-line-4-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-fixture-host-key-line-5-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-dev-signing-seed-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-private-key-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-secret-in-any-evidence-file": {
+          "pass": true,
+          "detail": "[]"
+        }
+      },
+      "notes": [],
+      "error": null
+    }
+  },
+  "pass": true
+}

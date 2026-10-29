@@ -1,0 +1,3 @@
+   Compiling vicell-integration-tests v0.1.0 (/home/dmin/cellos/tests/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.47s
+     Running tests/pcie-multibus-x86.rs (/tmp/cellbox-s10-3d-resume/l6/target-before/x86_64-unknown-linux-gnu/debug/deps/pcie_multibus_x86-ab1dcfe337132c6c)

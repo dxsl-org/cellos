@@ -1,0 +1,9 @@
+{ "type": "suite", "event": "started", "test_count": 3 }
+{ "type": "test", "event": "started", "name": "nvme_boot_reaches_shell_x86" }
+{ "type": "test", "name": "nvme_boot_reaches_shell_x86", "event": "ok" }
+{ "type": "test", "event": "started", "name": "nvme_driver_cell_registers_x86" }
+{ "type": "test", "name": "nvme_driver_cell_registers_x86", "event": "ok" }
+{ "type": "test", "event": "started", "name": "nvme_fat32_mount_x86" }
+[mkfat32] /tmp/vicell_fat32_2043907_379681335.img: base=LBA 0, 524288 sectors, 130554 data clusters (FAT32), FATsz32=1020, data start=LBA 2072
+{ "type": "test", "name": "nvme_fat32_mount_x86", "event": "ok" }
+{ "type": "suite", "event": "ok", "passed": 3, "failed": 0, "ignored": 0, "measured": 0, "filtered_out": 0, "exec_time": 6.370579381 }

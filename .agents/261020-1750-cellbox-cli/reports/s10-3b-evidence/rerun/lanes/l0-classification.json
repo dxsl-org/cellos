@@ -1,0 +1,374 @@
+{
+  "summary": {
+    "headless": {
+      "runs": 12,
+      "pass": 7,
+      "booted": 10,
+      "booted_pass": 7,
+      "longest_consecutive_pass": 4,
+      "final_streak": 1,
+      "failure_classes": {
+        "F4 prompt-not-idle": 1,
+        "F2 nvme-io-timeout": 2,
+        "F1 fixture-sshd-not-started": 2
+      }
+    },
+    "desktop": {
+      "runs": 12,
+      "pass": 6,
+      "booted": 7,
+      "booted_pass": 6,
+      "longest_consecutive_pass": 2,
+      "final_streak": 1,
+      "failure_classes": {
+        "F1 fixture-sshd-not-started": 5,
+        "F3 nvme-admin-timeout": 1
+      }
+    }
+  },
+  "runs": [
+    {
+      "lane": "L0-headless-run1",
+      "exit": 0,
+      "seconds": 702.2,
+      "work": "/tmp/cellbox-phase10-rgy10iwp",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-headless-run2",
+      "exit": 1,
+      "seconds": 884.0,
+      "work": "/tmp/cellbox-phase10-s6vleide",
+      "booted": true,
+      "failed_markers": {
+        "P10C-ssh-serial": {
+          "checks": [],
+          "error": "StepFailed: no prompt after \"ssh --user tester --auth password -p 46451 10.0.2.2 --command 'echo p10-ssh-ran'\" within 180s"
+        }
+      },
+      "classes": [
+        "F4 prompt-not-idle (serial-ssh.log)"
+      ],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-headless-run3",
+      "exit": 0,
+      "seconds": 702.6,
+      "work": "/tmp/cellbox-phase10-6psq3bdd",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-headless-run4",
+      "exit": 0,
+      "seconds": 702.0,
+      "work": "/tmp/cellbox-phase10-a_c__sem",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-headless-run5",
+      "exit": 0,
+      "seconds": 694.3,
+      "work": "/tmp/cellbox-phase10-ghpabf7o",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-headless-run6",
+      "exit": 0,
+      "seconds": 690.5,
+      "work": "/tmp/cellbox-phase10-qjzlh2s4",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-desktop-run1",
+      "exit": 0,
+      "seconds": 302.5,
+      "work": "/tmp/cellbox-phase10-baghp6w1",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-desktop-run2",
+      "exit": 0,
+      "seconds": 302.6,
+      "work": "/tmp/cellbox-phase10-dse6l5fl",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-desktop-run3",
+      "exit": 1,
+      "seconds": 147.9,
+      "work": "/tmp/cellbox-phase10-91g1h_ta",
+      "booted": false,
+      "failed_markers": {},
+      "classes": [
+        "F1 fixture-sshd-not-started"
+      ]
+    },
+    {
+      "lane": "L0-desktop-run4",
+      "exit": 1,
+      "seconds": 148.1,
+      "work": "/tmp/cellbox-phase10-wc_ox104",
+      "booted": false,
+      "failed_markers": {},
+      "classes": [
+        "F1 fixture-sshd-not-started"
+      ]
+    },
+    {
+      "lane": "L0-desktop-run5",
+      "exit": 1,
+      "seconds": 786.2,
+      "work": "/tmp/cellbox-phase10-gqhryjk0",
+      "booted": true,
+      "failed_markers": {
+        "P10G-real-output": {
+          "checks": [
+            "ls-disk-dir-output-exact"
+          ],
+          "error": "StepFailed: timeout waiting for ls-disk-dir: output"
+        },
+        "P10G-vt": {
+          "checks": [
+            "VT-1-alt-enter-output-exact"
+          ],
+          "error": "StepFailed: timeout waiting for VT-1-alt-enter: output"
+        },
+        "P10G-tui": {
+          "checks": [],
+          "error": "StepFailed: timeout waiting for editor drawn"
+        }
+      },
+      "classes": [
+        "F3 nvme-admin-timeout"
+      ],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-desktop-run6",
+      "exit": 0,
+      "seconds": 303.8,
+      "work": "/tmp/cellbox-phase10-8ttw0lw9",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-headless-run7",
+      "exit": 1,
+      "seconds": 1412.0,
+      "work": "/tmp/cellbox-phase10-vlqr0e0z",
+      "booted": true,
+      "failed_markers": {
+        "P10C-state-script": {
+          "checks": [],
+          "error": "StepFailed: no prompt after 'p10v=alpha; echo v=$p10v' within 120s"
+        },
+        "P10C-edit": {
+          "checks": [
+            "create-saved",
+            "create-quit"
+          ],
+          "error": "StepFailed: no prompt after 'echo st=$?' within 60s"
+        },
+        "P10C-selective-tui": {
+          "checks": [],
+          "error": "StepFailed: no prompt after 'ls /' within 120s"
+        },
+        "P10C-denials": {
+          "checks": [],
+          "error": "StepFailed: no prompt after '/bin/shell' within 120s"
+        },
+        "P10C-no-inbound": {
+          "checks": [],
+          "error": "StepFailed: no prompt after 'ps --records | select name | to jsonl' within 120s"
+        },
+        "P10C-ctrl-c": {
+          "checks": [
+            "sleep-ctrl-c-prompt"
+          ],
+          "error": "StepFailed: no prompt after 'echo st=$?' within 60s"
+        }
+      },
+      "classes": [
+        "F2 nvme-io-timeout"
+      ],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-headless-run8",
+      "exit": 0,
+      "seconds": 697.4,
+      "work": "/tmp/cellbox-phase10-j4wer0eh",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-headless-run9",
+      "exit": 1,
+      "seconds": 141.9,
+      "work": "/tmp/cellbox-phase10-gywu0_b0",
+      "booted": false,
+      "failed_markers": {},
+      "classes": [
+        "F1 fixture-sshd-not-started"
+      ]
+    },
+    {
+      "lane": "L0-headless-run10",
+      "exit": 1,
+      "seconds": 1485.6,
+      "work": "/tmp/cellbox-phase10-nyoktjct",
+      "booted": true,
+      "failed_markers": {
+        "P10C-state-script": {
+          "checks": [],
+          "error": "StepFailed: no prompt after 'p10v=alpha; echo v=$p10v' within 120s"
+        },
+        "P10C-edit": {
+          "checks": [
+            "existing-saved",
+            "existing-quit",
+            "reopen",
+            "stored-sizes",
+            "created-bytes",
+            "crlf-kept",
+            "lf-lines-kept"
+          ],
+          "error": ""
+        },
+        "P10C-selective-tui": {
+          "checks": [],
+          "error": "StepFailed: no prompt after 'cellbox ls /' within 120s"
+        },
+        "P10C-denials": {
+          "checks": [],
+          "error": "StepFailed: no prompt after '/bin/shell' within 120s"
+        },
+        "P10C-no-inbound": {
+          "checks": [],
+          "error": "StepFailed: no prompt after 'ps --records | select name | to jsonl' within 120s"
+        },
+        "P10C-ctrl-c": {
+          "checks": [
+            "sleep-ctrl-c-prompt"
+          ],
+          "error": "StepFailed: no prompt after 'echo st=$?' within 60s"
+        }
+      },
+      "classes": [
+        "F2 nvme-io-timeout"
+      ],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-headless-run11",
+      "exit": 1,
+      "seconds": 146.4,
+      "work": "/tmp/cellbox-phase10-wg_q8eky",
+      "booted": false,
+      "failed_markers": {},
+      "classes": [
+        "F1 fixture-sshd-not-started"
+      ]
+    },
+    {
+      "lane": "L0-headless-run12",
+      "exit": 0,
+      "seconds": 706.1,
+      "work": "/tmp/cellbox-phase10-_9e05e8g",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-desktop-run7",
+      "exit": 0,
+      "seconds": 312.7,
+      "work": "/tmp/cellbox-phase10-8nn0_ue0",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-desktop-run8",
+      "exit": 1,
+      "seconds": 146.5,
+      "work": "/tmp/cellbox-phase10-uu0cunr4",
+      "booted": false,
+      "failed_markers": {},
+      "classes": [
+        "F1 fixture-sshd-not-started"
+      ]
+    },
+    {
+      "lane": "L0-desktop-run9",
+      "exit": 1,
+      "seconds": 145.8,
+      "work": "/tmp/cellbox-phase10-8q69lb8h",
+      "booted": false,
+      "failed_markers": {},
+      "classes": [
+        "F1 fixture-sshd-not-started"
+      ]
+    },
+    {
+      "lane": "L0-desktop-run10",
+      "exit": 0,
+      "seconds": 303.9,
+      "work": "/tmp/cellbox-phase10-j2jq6u89",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    },
+    {
+      "lane": "L0-desktop-run11",
+      "exit": 1,
+      "seconds": 145.9,
+      "work": "/tmp/cellbox-phase10-dlc70c1s",
+      "booted": false,
+      "failed_markers": {},
+      "classes": [
+        "F1 fixture-sshd-not-started"
+      ]
+    },
+    {
+      "lane": "L0-desktop-run12",
+      "exit": 0,
+      "seconds": 408.0,
+      "work": "/tmp/cellbox-phase10-opjzatk3",
+      "booted": true,
+      "failed_markers": {},
+      "classes": [],
+      "qualifying": true
+    }
+  ],
+  "unclassified": []
+}

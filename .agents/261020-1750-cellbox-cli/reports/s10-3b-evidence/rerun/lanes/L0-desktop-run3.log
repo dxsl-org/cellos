@@ -1,0 +1,48 @@
+==> Verifying every input against candidate.json (desktop)
+inputs verified: iso a026edc2e6be86a8… kernel 929e5b42c0676137… (default+policy-required) image b521055ae810c35c… 32 files
+==> Building the host glyph renderer (phase04-gui-glyphs; private target dir)
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling libm v0.2.16
+   Compiling thiserror v2.0.19
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling scopeguard v1.2.0
+   Compiling byteorder v1.5.0
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling heapless v0.8.0
+   Compiling foldhash v0.1.5
+   Compiling tinyvec v1.13.3
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling stable_deref_trait v1.2.1
+   Compiling embedded-io v0.7.1
+   Compiling spin v0.9.9
+   Compiling lock_api v0.4.14
+   Compiling hashbrown v0.15.5
+   Compiling hash32 v0.3.1
+   Compiling spinning_top v0.2.5
+   Compiling linked_list_allocator v0.10.6
+   Compiling unicode-normalization v0.1.25
+   Compiling syn v3.0.3
+   Compiling syn v2.0.119
+   Compiling core_maths v0.1.1
+   Compiling ab_glyph_rasterizer v0.1.10
+   Compiling ttf-parser v0.25.1
+   Compiling postcard-derive v0.2.2
+   Compiling owned_ttf_parser v0.25.1
+   Compiling ab_glyph v0.2.32
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling cobs v0.3.0
+   Compiling postcard v1.1.3
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling phase04-gui-glyphs v0.0.0 (/tmp/cellbox-phase10-91g1h_ta/glyph-host)
+    Finished `release` profile [optimized] target(s) in 5.17s
+==> Main fixture disk: rg tree + /srv denied child (phase07_rg_fixture.py) and the FAT data tree
+[mkfat32] /tmp/cellbox-phase10-91g1h_ta/disk-main/disk.img: base=LBA 2048, 524288 sectors, 130554 data clusters (FAT32), FATsz32=1020, data start=LBA 4120
+CellosFS fresh-blank /tmp/cellbox-phase10-91g1h_ta/disk-main/disk.img verified; receipt /tmp/cellbox-phase10-91g1h_ta/disk-main/srv-receipt.json
+rg fixture: /tmp/cellbox-phase10-91g1h_ta/disk-main/disk.img (135 files), expectations /tmp/cellbox-phase10-91g1h_ta/disk-main/rg-fixture-expected.json
+data tree on P1: 12 files read back exactly
+==> Starting the disposable OpenSSH fixture (D79-1)
+FAIL: fixture sshd did not start

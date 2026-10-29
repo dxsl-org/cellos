@@ -1,0 +1,7 @@
+L4 attempt 1 (click): streak 1
+L4 attempt 2 (click): streak 2
+L4 attempt 3 (click): streak 3
+L4 attempt 4 (click): streak 4
+L4 attempt 5 (click): streak 5
+L4 attempt 6 (autoload): streak 6
+L4 final streak 6 after 6 attempts

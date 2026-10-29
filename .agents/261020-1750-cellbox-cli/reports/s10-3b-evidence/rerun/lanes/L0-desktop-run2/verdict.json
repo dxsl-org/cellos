@@ -1,0 +1,1024 @@
+{
+  "schema": "cellos-phase10-l0-verdict/1",
+  "profile": "desktop",
+  "accel": "tcg",
+  "qualifying": true,
+  "candidate_sha256": "9c4d16ebcf61b8554aaa64e38ab1e0fda637dfe29943f21c671aaefb128e77bb",
+  "duration_s": 258.6,
+  "markers": {
+    "P10G-launch": {
+      "pass": true,
+      "checks": {
+        "screen-1280x800": {
+          "pass": true,
+          "detail": "(1280, 800)"
+        },
+        "no-window-before-launch": {
+          "pass": true,
+          "detail": "a bg-coloured 720x480 rectangle exists before launch"
+        },
+        "prompt-matches-exactly": {
+          "pass": true,
+          "detail": "diff=0 at origin (140, 100)"
+        },
+        "control-pre-launch-region-differs": {
+          "pass": true,
+          "detail": "345474 differing pixels"
+        },
+        "control-wrong-prompt-differs": {
+          "pass": true,
+          "detail": "65 differing pixels"
+        },
+        "cursor-cell": {
+          "pass": true,
+          "detail": "(9, 2)"
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    "P10G-real-output": {
+      "pass": true,
+      "checks": {
+        "ls-disk-dir-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "ls-disk-dir-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "ls-disk-dir-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 2), 'diff': None}"
+        },
+        "ls-disk-dir-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "55 differing pixels"
+        },
+        "cat-disk-file-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "cat-disk-file-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "cat-disk-file-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 5), 'diff': None}"
+        },
+        "cat-disk-file-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "60 differing pixels"
+        },
+        "date-1-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "date-1-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "date-1-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 8), 'diff': None}"
+        },
+        "date-1-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "68 differing pixels"
+        },
+        "date-2-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "date-2-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "date-2-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 10), 'diff': None}"
+        },
+        "date-2-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "68 differing pixels"
+        },
+        "date-format": {
+          "pass": true,
+          "detail": "('Oct 26 12:34:05 UTC 2026', 'Oct 26 12:34:08 UTC 2026')"
+        },
+        "date-changes": {
+          "pass": true,
+          "detail": "('Oct 26 12:34:05 UTC 2026', 'Oct 26 12:34:08 UTC 2026')"
+        },
+        "ps-own-terminal-cell-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "ps-own-terminal-cell-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "ps-own-terminal-cell-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 12), 'diff': None}"
+        },
+        "ps-own-terminal-cell-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "68 differing pixels"
+        },
+        "ps-text-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "ps-text-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "ps-text-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 14), 'diff': None}"
+        },
+        "ps-text-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "74 differing pixels"
+        },
+        "ps-lists-terminal-and-shell": {
+          "pass": true,
+          "detail": "['sample 2  complete  cpu% per core  mem 124.5M/199.9M', 'TID  NAME        STATE    CPU%   STACK  SEGMENTS', '  2  init        Waiting   new   64.0K      1.3M', '  3  nvme        Waiting   new  256.0K      1.0M', '  5  vfs         Waiting   new  256.0K     17.5M', '  6  e1000       Waiting   new  256.0K      1.0M', '  8  serial      Waiting   new  256.0K      1.0M', ' 10  input       Ready     new  256.0K      1.1M', ' 11  net         Waiting   new   64.0K      9.4M', ' 12  compositor  Waiting   new  256.0K     11.0M', ' 13  fb-console  Ready     new  256.0K      5.5M', ' 14  desktop     Ready     new  256.0K      6.0M', ' 15  cellbox     Waiting   new   64.0K      9.6M', ' 16  terminal    Ready     new  256.0K      5.8M', ' 17  cellbox     Running   new   64.0K      9.6M']"
+        },
+        "mkdir-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "mkdir-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "mkdir-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 25), 'diff': 32005, 'max': 209}"
+        },
+        "mkdir-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "52 differing pixels"
+        },
+        "create-file-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "create-file-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "create-file-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 25), 'diff': 32303, 'max': 209}"
+        },
+        "create-file-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "54 differing pixels"
+        },
+        "ls-shows-created-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "ls-shows-created-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "ls-shows-created-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 25), 'diff': 32167, 'max': 209}"
+        },
+        "ls-shows-created-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "54 differing pixels"
+        },
+        "cat-created-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "cat-created-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "cat-created-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 25), 'diff': 32873, 'max': 209}"
+        },
+        "cat-created-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "60 differing pixels"
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    "P10G-two-sessions": {
+      "pass": true,
+      "checks": {
+        "second-terminal-started": {
+          "pass": true,
+          "detail": ""
+        },
+        "two-windows-on-screen": {
+          "pass": true,
+          "detail": "A at (140, 100), B at (540, 200)"
+        },
+        "B-set-state-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "B-set-state-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "B-set-state-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 2), 'diff': None}"
+        },
+        "B-set-state-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "60 differing pixels"
+        },
+        "A-unchanged-by-B-input": {
+          "pass": true,
+          "detail": "exact screen"
+        },
+        "A-state-absent-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "A-state-absent-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "A-state-absent-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 25), 'diff': 22172, 'max': 209}"
+        },
+        "A-state-absent-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "50 differing pixels"
+        },
+        "B-unchanged-by-A-input": {
+          "pass": true,
+          "detail": "exact screen"
+        },
+        "B-state-kept-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "B-state-kept-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "B-state-kept-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 4), 'diff': None}"
+        },
+        "B-state-kept-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "60 differing pixels"
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    "P10G-vt": {
+      "pass": true,
+      "checks": {
+        "VT-1-alt-enter-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "VT-1-alt-enter-output-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "VT-1-alt-enter-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 25), 'diff': None}"
+        },
+        "VT-1-alt-enter-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "60 differing pixels"
+        },
+        "VT-1-alt-enter-before-after-window-pixels-changed": {
+          "pass": true,
+          "detail": "34418 pixels changed"
+        },
+        "VT-2-alt-exit-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "VT-2-alt-exit-output-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "VT-2-alt-exit-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 4), 'diff': None}"
+        },
+        "VT-2-alt-exit-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "56 differing pixels"
+        },
+        "VT-2-alt-exit-before-after-window-pixels-changed": {
+          "pass": true,
+          "detail": "35755 pixels changed"
+        },
+        "VT-3-sample-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "VT-3-sample-output-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "VT-3-sample-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 25), 'diff': None}"
+        },
+        "VT-3-sample-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "64 differing pixels"
+        },
+        "VT-3-sample-control-bold-dropped-differs": {
+          "pass": true,
+          "detail": "492 differing pixels"
+        },
+        "VT-3-sample-control-inverse-dropped-differs": {
+          "pass": true,
+          "detail": "1134 differing pixels"
+        },
+        "VT-3-sample-before-after-window-pixels-changed": {
+          "pass": true,
+          "detail": "44452 pixels changed"
+        },
+        "VT-4-clear-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "VT-4-clear-output-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "VT-4-clear-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 15), 'diff': None}"
+        },
+        "VT-4-clear-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "42 differing pixels"
+        },
+        "VT-4-clear-before-after-window-pixels-changed": {
+          "pass": true,
+          "detail": "16419 pixels changed"
+        },
+        "vt-done-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "vt-done-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "vt-done-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 0), 'diff': None}"
+        },
+        "vt-done-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "60 differing pixels"
+        },
+        "HOSTILE-0-clear-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "HOSTILE-0-clear-output-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "HOSTILE-0-clear-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 2), 'diff': None}"
+        },
+        "HOSTILE-0-clear-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "42 differing pixels"
+        },
+        "HOSTILE-0-clear-before-after-window-pixels-changed": {
+          "pass": true,
+          "detail": "1716 pixels changed"
+        },
+        "HOSTILE-1-history-clear-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "HOSTILE-1-history-clear-output-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "HOSTILE-1-history-clear-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 0), 'diff': None}"
+        },
+        "HOSTILE-1-history-clear-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "57 differing pixels"
+        },
+        "HOSTILE-1-history-clear-before-after-window-pixels-changed": {
+          "pass": true,
+          "detail": "856 pixels changed"
+        },
+        "HOSTILE-2-cat-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "HOSTILE-2-cat-output-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "HOSTILE-2-cat-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 1), 'diff': None}"
+        },
+        "HOSTILE-2-cat-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "69 differing pixels"
+        },
+        "HOSTILE-2-cat-control-params17-bold-red-differs": {
+          "pass": true,
+          "detail": "675 differing pixels"
+        },
+        "HOSTILE-2-cat-before-after-window-pixels-changed": {
+          "pass": true,
+          "detail": "8251 pixels changed"
+        },
+        "HOSTILE-3-echo-as-typed-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "HOSTILE-3-echo-as-typed-output-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "HOSTILE-3-echo-as-typed-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 11), 'diff': None}"
+        },
+        "HOSTILE-3-echo-as-typed-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "53 differing pixels"
+        },
+        "HOSTILE-3-echo-as-typed-before-after-window-pixels-changed": {
+          "pass": true,
+          "detail": "1518 pixels changed"
+        },
+        "HOSTILE-4-history-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "HOSTILE-4-history-output-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "HOSTILE-4-history-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 13), 'diff': None}"
+        },
+        "HOSTILE-4-history-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "55 differing pixels"
+        },
+        "HOSTILE-4-history-control-history-not-cleared-differs": {
+          "pass": true,
+          "detail": "5019 differing pixels"
+        },
+        "HOSTILE-4-history-before-after-window-pixels-changed": {
+          "pass": true,
+          "detail": "3396 pixels changed"
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    "P10G-tui": {
+      "pass": true,
+      "checks": {
+        "tui-start-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "tui-start-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "tui-start-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 17), 'diff': None}"
+        },
+        "tui-start-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "54 differing pixels"
+        },
+        "TOP-0-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "TOP-1-last-column-inked-every-row": {
+          "pass": true,
+          "detail": "blank last-column rows []"
+        },
+        "TOP-1-control-prompt-last-column-blank": {
+          "pass": true,
+          "detail": "26 blank last-column cells on the prompt screen"
+        },
+        "TOP-1-title-row-accent-all-cells": {
+          "pass": true,
+          "detail": "columns without the accent []"
+        },
+        "TOP-1-status-row-surface-all-cells": {
+          "pass": true,
+          "detail": "columns without the surface colour []"
+        },
+        "TOP-2-left-border-no-gap": {
+          "pass": true,
+          "detail": "blank pixel rows []"
+        },
+        "TOP-2-right-border-no-gap": {
+          "pass": true,
+          "detail": "blank pixel rows []"
+        },
+        "TOP-2-bottom-border-no-gap": {
+          "pass": true,
+          "detail": "blank pixel columns []"
+        },
+        "TOP-2-control-scan-finds-prompt-row-gap": {
+          "pass": true,
+          "detail": "cell (0, 0): gap pixel rows [21, 22, 23, 24, 25, 26]"
+        },
+        "TOP-3-control-band-on-first-data-row": {
+          "pass": true,
+          "detail": "band rows [4]"
+        },
+        "TOP-3-down-moves-band-one-row": {
+          "pass": true,
+          "detail": "band rows [4] -> [5]"
+        },
+        "TOP-3-enter-band-first-row": {
+          "pass": true,
+          "detail": "[4]"
+        },
+        "TOP-3-enter-title-region-changes": {
+          "pass": true,
+          "detail": "2006 pixels changed"
+        },
+        "TOP-4-restored-prompt-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "TOP-4-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "65 differing pixels"
+        },
+        "TOP-5-status-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "TOP-5-status-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "TOP-5-status-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 20), 'diff': None}"
+        },
+        "TOP-5-status-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "73 differing pixels"
+        },
+        "edit-opens": {
+          "pass": true,
+          "detail": ""
+        },
+        "edit-save-then-clean-quit": {
+          "pass": true,
+          "detail": "exact restored prompt screen"
+        },
+        "edit-status-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "edit-status-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "edit-status-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 23), 'diff': None}"
+        },
+        "edit-status-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "73 differing pixels"
+        },
+        "edit-stored-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "edit-stored-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "edit-stored-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 25), 'diff': 25400, 'max': 209}"
+        },
+        "edit-stored-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "69 differing pixels"
+        },
+        "edit-reopen-shows-text": {
+          "pass": true,
+          "detail": "row 0 cells 1..9 inked"
+        },
+        "edit-reopen-clean-quit": {
+          "pass": true,
+          "detail": "exact restored prompt screen"
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    "P10G-ssh": {
+      "pass": true,
+      "checks": {
+        "screen-1280x800": {
+          "pass": true,
+          "detail": "(1280, 800)"
+        },
+        "no-window-before-launch": {
+          "pass": true,
+          "detail": "a bg-coloured 720x480 rectangle exists before launch"
+        },
+        "prompt-matches-exactly": {
+          "pass": true,
+          "detail": "diff=0 at origin (140, 100)"
+        },
+        "control-pre-launch-region-differs": {
+          "pass": true,
+          "detail": "345474 differing pixels"
+        },
+        "control-wrong-prompt-differs": {
+          "pass": true,
+          "detail": "65 differing pixels"
+        },
+        "cursor-cell": {
+          "pass": true,
+          "detail": "(9, 2)"
+        },
+        "network-up": {
+          "pass": true,
+          "detail": ""
+        },
+        "ssh-port-var-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "ssh-port-var-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "ssh-port-var-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 0), 'diff': None}"
+        },
+        "ssh-port-var-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "69 differing pixels"
+        },
+        "ssh-changed-key-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "ssh-changed-key-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "ssh-changed-key-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 1), 'diff': None}"
+        },
+        "ssh-changed-key-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "69 differing pixels"
+        },
+        "changed-key-refused-exact": {
+          "pass": true,
+          "detail": "('ssh: HOST KEY CHANGED for host:45715: server offered ssh-ed25519 SHA256:WEgoZmuOtwMgf6FcuBNLf8rAqkFmyz4eL/EQxUG2mSI; refused', 'ssh: HOST KEY CHANGED for host:45715: server offered ssh-ed25519 SHA256:WEgoZmuOtwMgf6FcuBNLf8rAqkFmyz4eL/EQxUG2mSI; refused')"
+        },
+        "ssh-changed-key-status-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "ssh-changed-key-status-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "ssh-changed-key-status-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 4), 'diff': None}"
+        },
+        "ssh-changed-key-status-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "69 differing pixels"
+        },
+        "ssh-wrong-password-password-prompt-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "ssh-wrong-password-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "ssh-wrong-password-password-never-drawn": {
+          "pass": true,
+          "detail": ""
+        },
+        "wrong-password-refused": {
+          "pass": true,
+          "detail": "['ssh: authentication failed']"
+        },
+        "ssh-wrong-status-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "ssh-wrong-status-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "ssh-wrong-status-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 9), 'diff': None}"
+        },
+        "ssh-wrong-status-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "69 differing pixels"
+        },
+        "ssh-exec-var-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "ssh-exec-var-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "ssh-exec-var-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 11), 'diff': None}"
+        },
+        "ssh-exec-var-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "51 differing pixels"
+        },
+        "ssh-exec-password-prompt-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "ssh-exec-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "ssh-exec-password-never-drawn": {
+          "pass": true,
+          "detail": ""
+        },
+        "exec-remote-bytes": {
+          "pass": true,
+          "detail": "['p10g-out', 'E']"
+        },
+        "ssh-exec-status-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "ssh-exec-status-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "ssh-exec-status-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 16), 'diff': None}"
+        },
+        "ssh-exec-status-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "63 differing pixels"
+        },
+        "ssh-pty-password-prompt-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "ssh-pty-echo-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "pty-term-and-size": {
+          "pass": true,
+          "detail": "['bbb3567d1ccd:~$ echo T=$TERM; stty size', 'T=cellos-vt1', '26 79', 'bbb3567d1ccd:~$']"
+        },
+        "pty-password-never-drawn": {
+          "pass": true,
+          "detail": ""
+        },
+        "ssh-pty-exit-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "ssh-pty-status-typed-line-exact": {
+          "pass": true,
+          "detail": "diff=0"
+        },
+        "ssh-pty-status-output-exact": {
+          "pass": true,
+          "detail": "alternative 0"
+        },
+        "ssh-pty-status-control-before-frame-differs": {
+          "pass": true,
+          "detail": "{'cursor': (9, 25), 'diff': 40431, 'max': 209}"
+        },
+        "ssh-pty-status-control-one-char-change-differs": {
+          "pass": true,
+          "detail": "73 differing pixels"
+        }
+      },
+      "notes": [
+        "PTY size 26 79 is the fixed window grid; the GUI window has no user resize control here, so a PTY resize is not exercised on this image (L5 ssh-pty-resize carries it)"
+      ],
+      "error": null
+    },
+    "P10G-apps": {
+      "pass": true,
+      "checks": {
+        "files-launched": {
+          "pass": true,
+          "detail": "{'ready_line': True, 'spawned': True, 'drawn': True, 'pixels_changed': 523540, 'deny_lines': []}"
+        },
+        "files-first-window-drawn": {
+          "pass": true,
+          "detail": "{'ready_line': True, 'spawned': True, 'drawn': True, 'pixels_changed': 523540, 'deny_lines': []}"
+        },
+        "ocel-launched": {
+          "pass": true,
+          "detail": "{'ready_line': True, 'spawned': True, 'drawn': True, 'pixels_changed': 734807, 'deny_lines': ['[ WARN] [loader] DENY launch edge: caller=14 name=desktop route=Elf target=/bin/ocel spawn_cap=false supervisor_cap=false']}"
+        },
+        "ocel-first-window-drawn": {
+          "pass": true,
+          "detail": "{'ready_line': True, 'spawned': True, 'drawn': True, 'pixels_changed': 734807, 'deny_lines': ['[ WARN] [loader] DENY launch edge: caller=14 name=desktop route=Elf target=/bin/ocel spawn_cap=false supervisor_cap=false']}"
+        },
+        "chrome-launched": {
+          "pass": true,
+          "detail": "{'ready_line': True, 'spawned': True, 'drawn': True, 'pixels_changed': 655494, 'deny_lines': []}"
+        },
+        "chrome-first-window-drawn": {
+          "pass": true,
+          "detail": "{'ready_line': True, 'spawned': True, 'drawn': True, 'pixels_changed': 655494, 'deny_lines': []}"
+        }
+      },
+      "notes": [
+        "{\"files\": {\"ready_line\": true, \"spawned\": true, \"drawn\": true, \"pixels_changed\": 523540, \"deny_lines\": []}, \"ocel\": {\"ready_line\": true, \"spawned\": true, \"drawn\": true, \"pixels_changed\": 734807, \"deny_lines\": [\"[ WARN] [loader] DENY launch edge: caller=14 name=desktop route=Elf target=/bin/ocel spawn_cap=false supervisor_cap=false\"]}, \"chrome\": {\"ready_line\": true, \"spawned\": true, \"drawn\": true, \"pixels_changed\": 655494, \"deny_lines\": []}}"
+      ],
+      "error": null
+    },
+    "P10G-delete-key": {
+      "pass": true,
+      "checks": {
+        "delete-key-delete-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "delete-key-kp_decimal-screen-read-exact": {
+          "pass": true,
+          "detail": "re-render diff=0"
+        },
+        "delete-key-recorded": {
+          "pass": true,
+          "detail": "{\"delete\": {\"line\": \"Cellos > echo p10gdel-deabc\", \"output\": \"p10gdel-deabc\", \"deleted\": false}, \"kp_decimal\": {\"line\": \"Cellos > echo p10gdel-kpabc\", \"output\": \"p10gdel-kpabc\", \"deleted\": false}}"
+        }
+      },
+      "notes": [
+        "Delete key (recorded either way, known defect): {\"delete\": {\"line\": \"Cellos > echo p10gdel-deabc\", \"output\": \"p10gdel-deabc\", \"deleted\": false}, \"kp_decimal\": {\"line\": \"Cellos > echo p10gdel-kpabc\", \"output\": \"p10gdel-kpabc\", \"deleted\": false}}"
+      ],
+      "error": null
+    },
+    "P10C-not-on-uart": {
+      "pass": true,
+      "checks": {
+        "no-fixture-password-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-fixture-host-key-line-1-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-fixture-host-key-line-2-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-fixture-host-key-line-3-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-fixture-host-key-line-4-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-fixture-host-key-line-5-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-dev-signing-seed-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:alpha-entry": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:gui-cat-line-one": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:p10g-made": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:p10gst=bee": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:b=bee": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:end-of-sample": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:hostile-begin": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:hostile-ok": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:p10gdel": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:p10g-saved": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:p10g-tui-start": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:p10g-vt-done": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:p10g-out": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:T=cellos-vt1": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:HOST KEY CHANGED": {
+          "pass": true,
+          "detail": ""
+        },
+        "gui-payload-not-on-uart:authentication failed": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-private-key-on-uart": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-secret-in-any-evidence-file": {
+          "pass": true,
+          "detail": "[]"
+        }
+      },
+      "notes": [],
+      "error": null
+    }
+  },
+  "pass": true
+}

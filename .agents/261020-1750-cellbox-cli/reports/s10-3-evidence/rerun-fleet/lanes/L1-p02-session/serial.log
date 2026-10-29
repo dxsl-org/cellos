@@ -1,0 +1,807 @@
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+limine: Loading executable `boot():/boot/kernel.elf`...
+limine: Physical base:   0xe8b1000
+limine: Virtual base:    0xffffffff80000000
+limine: Slide:           0x0
+limine: ELF entry point: 0xffffffff80000000
+limine: Base revision:   3
+limine: Requests count:  7
+limine: Top of HHDM:     0x40000000
+acpi: Found RSDP at 0xf52c0
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Mode was already set, perfect!
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+paging: 1GiB pages are supported!
+acpi: Found RSDP at 0xf52c0
+acpi: Found "APIC" at 0xffe21fa
+[x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64
+[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT
+[INFO] CET-IBT: unavailable
+[INFO] PKU: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[boot] kernel_phys_base=0x000000000e8b1000
+[INFO] Frame allocator initialized
+[INFO] Initializing x86_64 paging (kernel PML4)...
+[INFO] x86_64 paging initialized
+[INFO] Activating x86_64 paging (mov cr3)...
+
+[kernel] x86_64 paging: PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x59000 — domain roots use tag 0 with a full CR3 flush)
+QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
+[INFO] x86 virt: root operation active (SVM)
+[INFO] Heap initialized
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] RAM Disk: read-only, 8192 KB (16384 sectors)
+[ INFO] VMware/QEMU absolute pointer enabled (EV_ABS guest pixels)
+[ INFO] UART Input Buffer Initialized
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ WARN] [x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 2 base=0x3e8 irq=4 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 3 base=0x2e8 irq=3 absent (16550 probe failed)
+[INFO] x86_64: ramdisk + UART RX IRQ initialised
+[ INFO] [pcie] ECAM fallback scan bus 0 @ 0xb0000000 (1 MiB window)
+[ INFO] [pcie] 00:00.0 vendor=8086 device=29c0 class=06:00:00 bar0=0x0
+[ INFO] [pcie] 00:01.0 vendor=1234 device=1111 class=03:00:00 bar0=0xfd000000
+[ INFO] [pcie] 00:02.0 vendor=1b36 device=0010 class=01:08:02 bar0=0xfebf0000
+[ INFO] [pcie] 00:1f.0 vendor=8086 device=2918 class=06:01:00 bar0=0x0
+[ INFO] [pcie] 00:1f.2 vendor=8086 device=2922 class=01:06:01 bar0=0x0
+[ INFO] [pcie] 00:1f.3 vendor=8086 device=2930 class=0c:05:00 bar0=0x0
+[ INFO] [pcie] ECAM scan complete: 6 device(s) found
+[ WARN] [vtd] no ACPI DMAR unit; using the board-declared q35 register base 0xfed90000 (fallback)
+[ INFO] [vtd] Intel VT-d not present (GCAP=0x0)
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 96
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [system-config] applied: logging=Info, default_cell_heap_mib=16
+[ INFO] [policy] no /POLICY.BIN in VIFS1 — absent
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] Thread 'thread' (ID 1): KStack 0x2143000-0x2155000, UStackTop 0x2169000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (no teardown for hypervisor authority)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x0000ff00 from task 9002
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000070 from task 9004
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0x215a000
+[ INFO] GRANT-RECLAIM-OWNED: PASS
+[ INFO] GRANT-RECLAIM-RECEIVED: PASS
+[ INFO] GRANT-RECLAIM-PINNED: PASS
+[INFO] grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)
+[ INFO] Thread 'thread' (ID 1): KStack 0x2143000-0x2155000, UStackTop 0x2169000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ERROR] [selftest] COMPLETION-QUEUE: FAIL — an older waiter erased its replacement
+[ERROR] [selftest] COMPLETION-QUEUE: FAIL
+[INFO] completion-queue self-test FAIL
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [x86-smp] topology online=1 processor_ids=0 qualified=yes
+[INFO] Tier 2 admission: ENABLED (development profile)
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[INFO] [boot] x86_64 Limine linear framebuffer mapped and registered
+[ INFO] [early] VIFS1-first /bin/platform <- ramdisk (38488 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x1000037A7 flags=R-X
+[ INFO] ELF LOAD: 0x1000037A8-0x100004658 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x100005250 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] ELF LOAD: 0x100106038-0x10010703C flags=R--
+[ INFO] [wx] 'platform': 6/264 cell pages lowered to read-only/execute-only
+[INFO] Platform Cell spawned (x86 PCIe ECAM scanner)
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x102000000-0x102042BD6 flags=R-X
+[ INFO] ELF LOAD: 0x102042BD8-0x10204F248 flags=R--
+[ INFO] ELF LOAD: 0x102050000-0x102051A78 flags=RW-
+[ INFO] ELF LOAD: 0x102052000-0x102152031 flags=RW-
+[ INFO] ELF LOAD: 0x102152038-0x10215303C flags=R--
+[ INFO] [wx] 'init': 81/340 cell pages lowered to read-only/execute-only
+[ INFO] Successfully spawned init with complete root authority (tid=2)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+[ INFO] [sched] hart 0 dispatched a task
+USER: Init: Starting Cellos Orchestrator...
+[ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/block error=NotFound
+[ INFO] ELF LOAD: 0x104000000-0x104003D06 flags=R-X
+[ INFO] ELF LOAD: 0x104003D08-0x104004A00 flags=R--
+[ INFO] ELF LOAD: 0x104005000-0x1040053B8 flags=RW-
+[ INFO] ELF LOAD: 0x104006000-0x104106031 flags=RW-
+[ INFO] ELF LOAD: 0x104107000-0x10410703C flags=R--
+[ INFO] [wx] 'nvme': 6/264 cell pages lowered to read-only/execute-only
+USER: [platform] ECAM scan buses 0-255 starting
+[ WARN] [iommu] board qemu-q35-x86_64 declares no DMA remapper; DMA is untranslated (identity addressing)
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:02.0 phys=0x2582000 size=4096
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:02.0 phys=0x2583000 size=4096
+USER: [nvme] regs: aqa=0x3f003f asq=0x2582000 acq=0x2583000 (sq_virt=0x2582000 cq_virt=0x2583000)
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:02.0 phys=0x2584000 size=4096
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:02.0 phys=0x2585000 size=4096
+USER: [nvme] dma iovas: admin.sq=0x2582000 admin.cq=0x2583000 io.sq=0x2584000 io.cq=0x2585000
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:02.0 phys=0x2586000 size=4096
+USER: [nvme] dma iovas: identify=0x2586000
+[ WARN] [grant] GrantFree 0x2586000 refused: region 0x2586000+4096 overlaps a pinned region 0x2586000+1 pages owned by task 3 with 1 in-flight operation(s)
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:02.0 phys=0x2587000 size=4096
+[ WARN] [grant] GrantFree 0x2587000 refused: region 0x2587000+4096 overlaps a pinned region 0x2587000+1 pages owned by task 3 with 1 in-flight operation(s)
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ahci error=NotFound
+USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
+USER: [platform] registered bus 0 device 1 function 0 class 3:0:0
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:02.0 phys=0x2588000 size=4096
+USER: [nvme] io buffer iova=0x2588000
+USER: [nvme] DMA authorized for bus 0 device 2 function 0
+[ WARN] [driver_cell] block driver registered: tid=3
+[ INFO] [service-registry] 9 -> tid 3 (cell 3 gen 108)
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (613440 bytes)
+[ INFO] ELF LOAD: 0x106000000-0x106077836 flags=R-X
+[ INFO] ELF LOAD: 0x106077838-0x10607C428 flags=R--
+[ INFO] ELF LOAD: 0x10607D000-0x10607EBF0 flags=RW-
+[ INFO] ELF LOAD: 0x10607F000-0x10717F048 flags=RW-
+[ INFO] ELF LOAD: 0x10717F048-0x10718003C flags=R--
+[ INFO] [wx] 'vfs': 126/4481 cell pages lowered to read-only/execute-only
+USER: [platform] registered bus 0 device 2 function 0 class 1:8:2
+USER: [platform] registered bus 0 device 31 function 0 class 6:1:0
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+[ INFO] [service-registry] 1 -> tid 4 (cell 4 gen 109)
+USER: [platform] registered bus 0 device 31 function 2 class 1:6:1
+USER: [platform] registered bus 0 device 31 function 3 class 12:5:0
+USER: [platform] ECAM scan complete
+[ INFO] Syscall::Exit: task 1 exited with code 0
+USER: [vfs] FAT32 /mnt/sd volume mounted
+USER: [vfs] WARNING: CellosFS open failed — volume unavailable
+USER: [vfs] WARNING: FAT32 /bin mount failed
+USER: [vfs] CellosFS Native mounted at existing volume
+[ INFO] [loader] SpawnFromElf: /bin/e1000 (29672 bytes from grant)
+[ INFO] ELF LOAD: 0x100000000-0x1000023D6 flags=R-X
+[ INFO] ELF LOAD: 0x1000023D8-0x100003508 flags=R--
+[ INFO] ELF LOAD: 0x100004000-0x100004280 flags=RW-
+[ INFO] ELF LOAD: 0x100005000-0x1001053A1 flags=RW-
+[ INFO] ELF LOAD: 0x100106000-0x10010603C flags=R--
+[ INFO] [wx] 'e1000': 5/263 cell pages lowered to read-only/execute-only
+USER: Init: e1000 launched.
+[ INFO] [loader] SpawnFromElf: /bin/input (167240 bytes from grant)
+[ INFO] ELF LOAD: 0x108000000-0x10801C386 flags=R-X
+[ INFO] ELF LOAD: 0x10801C388-0x10801FD78 flags=R--
+[ INFO] ELF LOAD: 0x108020000-0x108021348 flags=RW-
+[ INFO] ELF LOAD: 0x108022000-0x108122031 flags=RW-
+[ INFO] ELF LOAD: 0x108122038-0x10812303C flags=R--
+[ INFO] [wx] 'input': 33/292 cell pages lowered to read-only/execute-only
+[ WARN] [input] registered input service TID 6
+USER: [input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing
+USER: [input] No VirtIO input device; relying on kernel push
+[ INFO] [service-registry] 3 -> tid 6 (cell 5 gen 111)
+USER: Init: input launched.
+[ INFO] [service-registry] 19 -> tid 2 (cell 2 gen 107)
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ai-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/vfs-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: Init: services spawned.
+USER: Init: service registry verified (init registration is publication, not application readiness).
+USER: Init: OS ready.
+[ INFO] [loader] SpawnFromElf: /bin/cellbox (3076824 bytes from grant)
+[ INFO] ELF LOAD: 0x10A000000-0x10A1EEB03 flags=R-X
+[ INFO] ELF LOAD: 0x10A1EEB08-0x10A27B220 flags=R--
+[ INFO] ELF LOAD: 0x10A27C000-0x10A2A36F0 flags=RW-
+[ INFO] ELF LOAD: 0x10A2A4000-0x10A9A4148 flags=RW-
+[ INFO] ELF LOAD: 0x10A9A4148-0x10A9A503C flags=R--
+[ INFO] [wx] 'cellbox': 637/2470 cell pages lowered to read-only/execute-only
+USER: shell: starting
+USER: Init: cellbox launched.
+USER: Init: supervising services (auto-restart on crash)...
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > 
+[ INFO] Syscall::Exit: task 5 exited with code 0
+USER: Init: service exited cleanly — policy says no restart.
+USER: phase02-session-parent
+[ INFO] ELF LOAD: 0x100000000-0x10001CB2A flags=R-X
+[ INFO] ELF LOAD: 0x10001CB30-0x100020218 flags=R--
+[ INFO] ELF LOAD: 0x100021000-0x1000217C8 flags=RW-
+[ INFO] ELF LOAD: 0x100022000-0x100122041 flags=RW-
+[ INFO] ELF LOAD: 0x100122048-0x10012303C flags=R--
+[ INFO] [wx] 'phase02-session-parent': 34/292 cell pages lowered to read-only/execute-only
+USER: P02 START
+USER: P02 PASS two-session-routing
+USER: P02 PASS two-session-no-leak
+USER: P02 PASS resize-owner
+USER: P02 PASS resize-control-frame
+USER: P02 PASS resize-isolated
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10C012DA0-0x10C015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016678 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02 PASS non-utf8-cwd-refused-before-launch
+USER: P02 PASS argv-limit-refused-before-launch
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10C012DA0-0x10C015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016678 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02C ctx|argc=4|argv=["ctx", "", "two words", "héllo"]|cwd=/|cwdgrant=true|env=A=1;EMPTY=;Z=last;
+USER: P02 PASS foreground-spawn
+USER: P02 PASS foreground-activation
+USER: P02 PASS context-exact-at-first-instruction
+USER: P02 PASS stderr-separate-from-stdout
+USER: P02C ctx text epoch=2 seq=3
+USER: P02 PASS typed-input-to-foreground-only
+USER: P02 PASS end-input-half-close
+USER: P02C ctx eof
+[ INFO] Syscall::Exit: task 10 exited with code 0
+USER: P02 PASS eof-reaches-child-outputs-preserved
+USER: P02 PASS foreground-restored-after-exit
+USER: P02 PASS baseline-input-after-restore
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10C012DA0-0x10C015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016678 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: PANIC: Application crashed!
+USER: Location: cells/tests/phase02-session-child/src/main.rs
+[ INFO] Syscall::Exit: task 11 exited with code 1
+USER: P02 PASS fault-restores-foreground-and-mode
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10C012DA0-0x10C015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016678 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02C raw lease acquired=true
+USER: PANIC: Application crashed!
+USER: Location: cells/tests/phase02-session-child/src/main.rs
+[ INFO] Syscall::Exit: task 12 exited with code 1
+USER: P02 PASS raw-mode-fault-restores-foreground-and-mode
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10C012DA0-0x10C015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016678 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02C timeout status=Some(TimedOut)
+[ INFO] Syscall::Exit: task 13 exited with code 0
+USER: P02 PASS timeout-restores-foreground-and-mode
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10C012DA0-0x10C015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016678 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02C hang ready
+USER: P02 PASS cancel-restores-foreground
+USER: P02 PASS cancel-other-session-unaffected
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10C012DA0-0x10C015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016678 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02C hang ready
+USER: P02 PASS ctrl-c-restores-foreground
+USER: P02 PASS ctrl-c-other-session-unaffected
+USER: P02 PASS non-utf8-nul-bytes-preserved
+USER: P02 PASS partial-write-bounded
+USER: P02 PASS full-ring-would-block
+USER: P02 PASS bytes-preserved-count
+USER: P02 PASS empty-nonblocking-is-would-block
+USER: P02 PASS timeout-distinct-from-eof
+USER: P02 PASS retained-duplicate-prevents-eof
+USER: P02 PASS last-writer-eof
+USER: P02 PASS closed-ref-stale
+USER: P02 PASS no-reader-write-refused
+USER: P02 PASS forged-endpoint-denied
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10C012DA0-0x10C015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016678 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02 PASS descendant-spawn
+USER: P02 PASS descendant-and-duplicate-hold-writer
+[ INFO] ELF LOAD: 0x10E000000-0x10E012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10E012DA0-0x10E015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10E016000-0x10E016678 flags=RW-
+[ INFO] ELF LOAD: 0x10E017000-0x10E117031 flags=RW-
+[ INFO] ELF LOAD: 0x10E117038-0x10E11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02C descend grandchild committed
+USER: P02C writer gc wrote=2
+[ INFO] Syscall::Exit: task 17 exited with code 0
+USER: P02 PASS descendant-bytes-arrive
+USER: P02 PASS eof-after-descendant-exit
+[ INFO] ELF LOAD: 0x10E000000-0x10E012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10E012DA0-0x10E015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10E016000-0x10E016678 flags=RW-
+[ INFO] ELF LOAD: 0x10E017000-0x10E117031 flags=RW-
+[ INFO] ELF LOAD: 0x10E117038-0x10E11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: PANIC: Application crashed!
+USER: Location: cells/tests/phase02-session-child/src/main.rs
+[ INFO] Syscall::Exit: task 18 exited with code 1
+USER: P02 PASS holder-death-closes-writer
+[ INFO] ELF LOAD: 0x10E000000-0x10E012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10E012DA0-0x10E015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10E016000-0x10E016678 flags=RW-
+[ INFO] ELF LOAD: 0x10E017000-0x10E117031 flags=RW-
+[ INFO] ELF LOAD: 0x10E117038-0x10E11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02C blocked-writer ready
+USER: P02 PASS consumer-close-issued
+USER: P02 PASS consumer-close-reaps-blocked-producer-subtree
+[ INFO] ELF LOAD: 0x10E000000-0x10E012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10E012DA0-0x10E015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10E016000-0x10E016678 flags=RW-
+[ INFO] ELF LOAD: 0x10E017000-0x10E117031 flags=RW-
+[ INFO] ELF LOAD: 0x10E117038-0x10E11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02C blocked-reader ready
+USER: P02 PASS root-cancel-issued
+USER: P02 PASS root-cancel-reaps-blocked-consumer-subtree
+USER: P02 PASS cancelled-subtree-endpoints-revoked
+USER: P02 PASS unrelated-session-survives-cancel
+[ INFO] ELF LOAD: 0x10E000000-0x10E012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10E012DA0-0x10E015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10E016000-0x10E016678 flags=RW-
+[ INFO] ELF LOAD: 0x10E017000-0x10E117031 flags=RW-
+[ INFO] ELF LOAD: 0x10E117038-0x10E11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02C forged read_denied=true write_denied=true dup_denied=true close_denied=true cancel_denied=true
+USER: P02C forged detail read=Err(WrongOwner) dup=Err(WrongOwner)
+[ INFO] Syscall::Exit: task 21 exited with code 0
+[ INFO] Syscall::Exit: task 16 exited with code 0
+USER: P02 PASS foreign-child-cannot-touch-private-endpoint
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10C012DA0-0x10C015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016678 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02 PASS abort-then-commit-refused
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10C012DA0-0x10C015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016678 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02 PASS expired-prepare-refuses-commit
+USER: P02 NOT-EXERCISED issuer-death commit-race-wall-clock cross-process-frontend gui-bridge
+USER: P02-SESSION: PASS checks=48
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D9A flags=R-X
+[ INFO] ELF LOAD: 0x10C012DA0-0x10C015CD0 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016678 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'phase02-session-child': 23/281 cell pages lowered to read-only/execute-only
+USER: P02C orphan ready
+USER: P02C orphan tick 0
+USER: P02C orphan tick 1
+USER: P02C orphan tick 2
+USER: P02C orphan tick 3
+[ INFO] Syscall::Exit: task 8 exited with code 0
+USER: Cellos > 
+USER: shell: input lost (reason 3); line discarded
+USER: Cellos > 
+USER: Cellos > /bin/echo stray-ok
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 25 exited with code 0
+USER: stray-ok
+USER: Cellos > /bin/echo p02n1x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 26 exited with code 0
+USER: p02n1x
+USER: Cellos > /bin/echo p02n2x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 27 exited with code 0
+USER: p02n2x
+USER: Cellos > /bin/echo p02n3x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 28 exited with code 0
+USER: p02n3x
+USER: Cellos > /bin/echo p02n4x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 29 exited with code 0
+USER: p02n4x
+USER: Cellos > /bin/echo p02n5x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 30 exited with code 0
+USER: p02n5x
+USER: Cellos > /bin/echo p02n6x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 31 exited with code 0
+USER: p02n6x
+USER: Cellos > /bin/echo p02n7x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 32 exited with code 0
+USER: p02n7x
+USER: Cellos > /bin/echo p02n8x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 33 exited with code 0
+USER: p02n8x
+USER: Cellos > /bin/echo p02n9x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 34 exited with code 0
+USER: p02n9x
+USER: Cellos > /bin/echo p02n10x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 35 exited with code 0
+USER: p02n10x
+USER: Cellos > /bin/echo p02n11x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 36 exited with code 0
+USER: p02n11x
+USER: Cellos > /bin/echo p02n12x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 37 exited with code 0
+USER: p02n12x
+USER: Cellos > /bin/echo p02n13x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 38 exited with code 0
+USER: p02n13x
+USER: Cellos > /bin/echo p02n14x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 39 exited with code 0
+USER: p02n14x
+USER: Cellos > /bin/echo p02n15x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 40 exited with code 0
+USER: p02n15x
+USER: Cellos > /bin/echo p02n16x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 41 exited with code 0
+USER: p02n16x
+USER: Cellos > /bin/echo p02n17x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 42 exited with code 0
+USER: p02n17x
+USER: Cellos > /bin/echo p02n18x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 43 exited with code 0
+USER: p02n18x
+USER: Cellos > /bin/echo p02n19x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 44 exited with code 0
+USER: p02n19x
+USER: Cellos > /bin/echo p02n20x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 45 exited with code 0
+USER: p02n20x
+USER: Cellos > /bin/echo p02n21x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 46 exited with code 0
+USER: p02n21x
+USER: Cellos > /bin/echo p02n22x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 47 exited with code 0
+USER: p02n22x
+USER: Cellos > /bin/echo p02n23x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 48 exited with code 0
+USER: p02n23x
+USER: Cellos > /bin/echo p02n24x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 49 exited with code 0
+USER: p02n24x
+USER: Cellos > /bin/echo p02n25x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 50 exited with code 0
+USER: p02n25x
+USER: Cellos > /bin/echo p02n26x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 51 exited with code 0
+USER: p02n26x
+USER: Cellos > /bin/echo p02n27x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 52 exited with code 0
+USER: p02n27x
+USER: Cellos > /bin/echo p02n28x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 53 exited with code 0
+USER: p02n28x
+USER: Cellos > /bin/echo p02n29x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 54 exited with code 0
+USER: p02n29x
+USER: Cellos > /bin/echo p02n30x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 55 exited with code 0
+USER: p02n30x
+USER: Cellos > /bin/echo p02n31x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 56 exited with code 0
+USER: p02n31x
+USER: Cellos > /bin/echo p02n32x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 57 exited with code 0
+USER: p02n32x
+USER: Cellos > /bin/echo p02n33x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 58 exited with code 0
+USER: p02n33x
+USER: Cellos > /bin/echo p02n34x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 59 exited with code 0
+USER: p02n34x
+USER: Cellos > /bin/echo p02n35x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 60 exited with code 0
+USER: p02n35x
+USER: Cellos > /bin/echo p02n36x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 61 exited with code 0
+USER: p02n36x
+USER: Cellos > /bin/echo p02n37x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 62 exited with code 0
+USER: p02n37x
+USER: Cellos > /bin/echo p02n38x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 63 exited with code 0
+USER: p02n38x
+USER: Cellos > /bin/echo p02n39x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 64 exited with code 0
+USER: p02n39x
+USER: Cellos > /bin/echo p02n40x
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 65 exited with code 0
+USER: p02n40x
+USER: Cellos > /bin/echo cjA
+[ INFO] ELF LOAD: 0x100000000-0x100003486 flags=R-X
+[ INFO] ELF LOAD: 0x100003488-0x100004318 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x1000052A8 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 66 exited with code 0
+USER: cjA
+USER: Cellos > echo rmdata > /tmp/p02rm
+USER: Cellos > cat /tmp/p02rm
+USER: rmdata
+USER: Cellos > rm -i /tmp/p02rm
+USER: rm: remove '/tmp/p02rm'? (y/n) n
+USER: Cellos > cat /tmp/p02rm
+USER: rmdata
+USER: Cellos > rm -i /tmp/p02rm
+USER: rm: remove '/tmp/p02rm'? (y/n) ^C
+USER: Cellos > cat /tmp/p02rm
+USER: rmdata
+USER: Cellos > rm -i /tmp/p02rm
+USER: rm: remove '/tmp/p02rm'? (y/n) y
+USER: Cellos > cat /tmp/p02rm
+USER: cat: /tmp/p02rm: No such file or directory
+USER: Cellos > top
+USER: [?1049h[?25l[?2004h[1;1H[0m[J[2;1H[J[3;1H[J[4;1H[J[5;1H[J[6;1H[J[7;1H[J[8;1H[J[9;1H[J[10;1H[J[11;1H[J[12;1H[J[13;1H[J[14;1H[J[15;1H[J[16;1H[J[17;1H[J[18;1H[J[19;1H[J[20;1H[J[21;1H[J[22;1H[J[23;1H[J[24;1H[J[1;1H[1;30;105m top  Cells  sort cpu_tenths desc  every 1s                                     [2;1H[0;37;100m sample 2  complete  cpu% per core  mem 65.1M/232.0M                            [3;1H[94;40m╭[1;95mCells[0;94;40m─────────────────────────────────────────────────────────────────────────╮[4;1H│[1;95m   CELL  NAME     TASKS  CPU%  QUOTA  LIMIT  STATE                            [0;94;40m│[5;1H│[1;95;100m▌ 6:112  cellbox      1  84.9   480B  16.0M  Live                             [0;94;40m│[6;1H│[37m  5:111  input        1  15.0     0B  16.0M  Live                             [94m│[7;1H│[37m  2:107  init         1   0.0   3.0M  16.0M  Live                             [94m│[8;1H│[37m  3:108  nvme         1   0.0     0B  16.0M  Live                             [94m│[9;1H│[37m  4:109  vfs          1   0.0   1.0K  16.0M  Live                             [94m│[10;1H│[37m                                                                              [94m│[11;1H│[37m                                                                              [94m│[12;1H│[37m                                                                              [94m│[13;1H│[37m                                                                              [94m│[14;1H│[37m                                                                              [94m│[15;1H│[37m                                                                              [94m│[16;1H│[37m                                                                              [94m│[17;1H│[37m                                                                              [94m│[18;1H│[37m                                                                              [94m│[19;1H│[37m                                                                              [94m│[20;1H│[37m                                                                              [94m│[21;1H│[37m                                                                              [94m│[22;1H│[37m                                                                              [94m│[23;1H╰──────────────────────────────────────────────────────────────────────────────╯[24;1H[1;95;100mq[0;90;100m quit  [1;95mUp/Dn[0;90;100m select  [1;95mEnter[0;90;100m tasks  [1;95mEsc[0;90;100m back  [1;95mo[0;90;100m sort  [1;95mr[0;90;100m reverse  [1;95mf[0;90;100m fields[37m        [0m[?1049l[?25h[?2004lCellos > top
+USER: [?1049h[?25l[?2004h[1;1H[0m[J[2;1H[J[3;1H[J[4;1H[J[5;1H[J[6;1H[J[7;1H[J[8;1H[J[9;1H[J[10;1H[J[11;1H[J[12;1H[J[13;1H[J[14;1H[J[15;1H[J[16;1H[J[17;1H[J[18;1H[J[19;1H[J[20;1H[J[21;1H[J[22;1H[J[23;1H[J[24;1H[J[1;1H[1;30;105m top  Cells  sort cpu_tenths desc  every 1s                                     [2;1H[0;37;100m sample 4  complete  cpu% per core  mem 65.1M/232.0M                            [3;1H[94;40m╭[1;95mCells[0;94;40m─────────────────────────────────────────────────────────────────────────╮[4;1H│[1;95m   CELL  NAME     TASKS  CPU%  QUOTA  LIMIT  STATE                            [0;94;40m│[5;1H│[1;95;100m▌ 6:112  cellbox      1  59.2   480B  16.0M  Live                             [0;94;40m│[6;1H│[37m  5:111  input        1  40.7     0B  16.0M  Live                             [94m│[7;1H│[37m  2:107  init         1   0.0   3.0M  16.0M  Live                             [94m│[8;1H│[37m  3:108  nvme         1   0.0     0B  16.0M  Live                             [94m│[9;1H│[37m  4:109  vfs          1   0.0   1.0K  16.0M  Live                             [94m│[10;1H│[37m                                                                              [94m│[11;1H│[37m                                                                              [94m│[12;1H│[37m                                                                              [94m│[13;1H│[37m                                                                              [94m│[14;1H│[37m                                                                              [94m│[15;1H│[37m                                                                              [94m│[16;1H│[37m                                                                              [94m│[17;1H│[37m                                                                              [94m│[18;1H│[37m                                                                              [94m│[19;1H│[37m                                                                              [94m│[20;1H│[37m                                                                              [94m│[21;1H│[37m                                                                              [94m│[22;1H│[37m                                                                              [94m│[23;1H╰──────────────────────────────────────────────────────────────────────────────╯[24;1H[1;95;100mq[0;90;100m quit  [1;95mUp/Dn[0;90;100m select  [1;95mEnter[0;90;100m tasks  [1;95mEsc[0;90;100m back  [1;95mo[0;90;100m sort  [1;95mr[0;90;100m reverse  [1;95mf[0;90;100m fields[37m        [0m[?1049l[?25h[?2004l^C
+USER: Cellos > echo tc=$?
+USER: tc=130
+USER: Cellos > history -c
+USER: Cellos > read -s SECRET
+USER: read: -s is unsupported on this console (echo cannot be suppressed)
+USER: Cellos > echo rs=$?
+USER: rs=1
+USER: Cellos > echo rl=${#SECRET}
+USER: rl=0
+USER: Cellos > history
+USER:     1  read -s SECRET
+USER:     2  echo rs=$?
+USER:     3  echo rl=${#SECRET}
+USER:     4  history
+USER: Cellos > rg -F p02-rg-literal-that-occurs-nowhere-in-this-image-0123456789abcde /mnt/sd/rg/big.log
+USER: ^C
+USER: Cellos > echo rgc=$?
+USER: rgc=130
+USER: Cellos > 

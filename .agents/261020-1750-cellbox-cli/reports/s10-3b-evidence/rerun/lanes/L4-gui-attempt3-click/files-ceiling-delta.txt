@@ -1,0 +1,4 @@
+baseline : git HEAD:cells/apps/files/src/main.rs (13 syscalls, 3 manifest keys)
+candidate: /home/dmin/cellos/cells/apps/files/src/main.rs (14 syscalls, 3 manifest keys)
+G-S1a FAIL: ceiling differs from the baseline
+ - syscall ADDED vs baseline: VfsMutate

@@ -1,0 +1,5 @@
+07849a42c41e05b98c6058e96b2715a8e53044ee6a6bb451a059e035a39e150b  kernel/src/embedded-x86_64/boot-config/autoload.toml
+5c97bad0e8fd22d17312243481a8c16774cb14bf2322086fc6d75f3bbe429cb9  kernel/src/embedded-x86_64/boot-config/services.toml
+74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293  kernel/src/embedded-x86_64/boot-config/system.toml
+0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104  kernel/src/embedded-x86_64/init
+447d0348735a25e8b396c11c0091ff3d214b0c0b392043bb0515d4104a298e2c  kernel/src/embedded-x86_64/kernel_fs.img

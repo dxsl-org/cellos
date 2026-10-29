@@ -1,0 +1,30 @@
+{
+  "mode": "import",
+  "lane": "phase02",
+  "profile": "headless",
+  "candidate_json": "/tmp/cellbox-s10-3d-resume/cand/candidate.json",
+  "candidate_json_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "kernel_fixture_features": "default+phase02-terminal-profile",
+  "cellbox_features": "default",
+  "payload_match_sha256": "c55119d1fbe5200db052bd283d6391f62cf70cc6156cb89df20d99e9c80ce5f4",
+  "payload_match_all_equal": true,
+  "shared": [
+    "/bin/cellbox",
+    "/bin/vfs",
+    "/bin/config",
+    "/bin/input",
+    "/bin/platform",
+    "/bin/nvme",
+    "/bin/e1000",
+    "/bin/ls",
+    "/bin/cat",
+    "/bin/echo",
+    "/bin/ps",
+    "init"
+  ],
+  "lane_only": [
+    "/bin/phase02-session-parent",
+    "/bin/phase02-session-child"
+  ],
+  "counts_for": "behaviour of the payload-matched cells only; never kernel-level claims (S10-3.3)"
+}

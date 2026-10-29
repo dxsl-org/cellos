@@ -1,0 +1,13 @@
+# Applications start after the configured required services are ready.
+version = 1
+
+[[cells]]
+name = "phase04-terminal-driver"
+path = "/bin/phase04-terminal-driver"
+after = ["input", "config"]
+restart = "never"
+
+[[cells]]
+name = "p04-legacy-free"
+path = "/bin/free"
+restart = "never"

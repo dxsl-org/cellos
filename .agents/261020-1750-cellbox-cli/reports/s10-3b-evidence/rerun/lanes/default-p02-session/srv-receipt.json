@@ -1,0 +1,23 @@
+{
+  "authority": "development preparation only; no genesis, ledger migration, durability, protected storage or production admission",
+  "base_lba": 931072,
+  "block_size": 4096,
+  "format": "cellos-fs-development-provisioning-v1",
+  "formatter": "/home/dmin/cellos/tools/cellos-fs-provision/target/x86_64-unknown-linux-gnu/debug/cellos-fs-provision",
+  "formatter_sha256": "5fec0a963c2de66d4e789a72a5079857dac847238b878a3359e39ad833692910",
+  "formatter_version": "0.1.0",
+  "free_blocks": 16380,
+  "image": "/tmp/cellbox-phase02-1r9y99nl/rg-fixture.img",
+  "image_before_sha256": "d44a2c87631442e8fedf4313f8a86fba0e94b894f37f2a50cc4cfb97668d42e0",
+  "image_bytes": 577372160,
+  "image_sha256": "0eb898741facc267cbe45405793671bcd2c6a626a03780975aeb13c28bb4f67b",
+  "intent": "fresh-blank",
+  "partition": "P5",
+  "partition_sha256": "8282963ee7f480eb34beff0355fd20957b7e863447145b4bb8f4ebc746a411a4",
+  "reopen": "read-only V1 geometry and root verified",
+  "sectors": 131072,
+  "seed": "/tmp/tmppg7ivq36/srv",
+  "sequence": 2,
+  "source_digest_encoding": "ordered length-prefixed names and bytes; u64 little-endian",
+  "source_sha256": "d1cd822ccfd76e7cc351796db94e2294f7501c32c585211e5e2886fc2461dd9a"
+}

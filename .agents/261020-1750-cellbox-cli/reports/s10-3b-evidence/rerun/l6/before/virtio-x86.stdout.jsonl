@@ -1,0 +1,6 @@
+{ "type": "suite", "event": "started", "test_count": 2 }
+{ "type": "test", "event": "started", "name": "x86_virtio_blk_initialises" }
+{ "type": "test", "name": "x86_virtio_blk_initialises", "event": "ignored" }
+{ "type": "test", "event": "started", "name": "x86_virtio_pci_no_device_no_hang" }
+{ "type": "test", "name": "x86_virtio_pci_no_device_no_hang", "event": "ok" }
+{ "type": "suite", "event": "ok", "passed": 1, "failed": 0, "ignored": 1, "measured": 0, "filtered_out": 0, "exec_time": 8.183969146 }

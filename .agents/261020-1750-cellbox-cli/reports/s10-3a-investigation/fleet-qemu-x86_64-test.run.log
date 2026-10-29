@@ -1,0 +1,2 @@
+[qemu-x86_64-test] Booting ISO=/tmp/cellbox-s10-3a-inv/fleet-headless.iso (window=90s)
+PASS: x86_64 shell prompt reached — full boot successful

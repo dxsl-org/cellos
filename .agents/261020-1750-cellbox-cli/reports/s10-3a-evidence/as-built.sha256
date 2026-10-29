@@ -1,0 +1,5 @@
+6ea177363aecff6b12c293403df528be28920d05f2281531fb3d2d5b5e1f5cb3  scripts/assemble-x86-image.py
+a1d25650f79383f7e09af9a95a9b4ad153bec8884f5f8913daf94fb181d1c876  scripts/cellos_sign/signing.py
+fda6b366cf07984d433935bf128cfcb7304c4d66e38580e412624c555820b28e  cells/tools/cellbox/src/executor.rs
+3f4aed9cf06e61404ebee722afbbfaec2e841f36cf0556123a91c89a8bb4cd9b  cells/tools/cellbox/src/ssh.rs
+f9c550f7a75ce4d79ac0aa6940dd21b529ba1232d0a7de081f2b105e4eba2988  .agents/261020-1750-cellbox-cli/spec.md

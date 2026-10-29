@@ -1,0 +1,3 @@
+   Compiling vicell-integration-tests v0.1.0 (/home/dmin/cellos/tests/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.31s
+     Running tests/nic-x86.rs (/tmp/cellbox-s10-3b-tsbn/l6/target-after/x86_64-unknown-linux-gnu/debug/deps/nic_x86-d8888d6dd03ce95e)

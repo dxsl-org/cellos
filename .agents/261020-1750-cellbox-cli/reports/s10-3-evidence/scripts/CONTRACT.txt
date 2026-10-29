@@ -1,0 +1,40 @@
+S10-3 shared contract (Phase 10, Cellbox). Repo /home/dmin/cellos. Proposal:
+.agents/261020-1750-cellbox-cli/phase-10-s0-proposal.md section "### S10-3" (lines ~859-1060) is the spec.
+
+CANDIDATE (read-only for everyone; never modify, never copy into the repository):
+  /tmp/cellbox-s10-3-7yWa/cand/candidate.json   (schema "cellos-x86-candidate/1")
+  {
+    "root": ".../cand",
+    "profiles": {
+      "headless" | "desktop": {
+        "dir": ".../cand/<p>",                       # kernel_fs.img, init, boot-config/, manifest.json
+        "manifest_sha256", "manifest": {...assembler manifest...},
+        "files": { "/bin/cellbox": {"file": ".../cand/<p>/files/cellbox", "sha256", "size",
+                                    "binary": "cellbox", "package", "signed": true,
+                                    "payload_sha256": <sign-cell _signed_payload sha256 or null>,
+                                    "dev_signature_valid": true}, ... every packaged path ... },
+                   # extracted names: basename for /bin/* and /POLICY.BIN; "etc-cellos-<n>.toml" for config
+        "init": {"path", "sha256", "size", "payload_sha256", "dev_signature_valid"},
+        "kernel_fs_img": {"path", "sha256", "size"},
+        "kernel": {"path": ".../cand/<p>.kernel.elf", "sha256", "size", "features": ["default"],
+                   "embeds_kernel_fs_img": true, "embeds_init": true},
+        "iso": {"path": ".../cand/<p>.iso", "sha256", "size"} },
+      "pc": {"image_profile": "headless", "kernel": {... features ["default","board-x86-pc"]}, "iso": {...}} },
+    "source": {...}, "failures": [] }
+  Every consumer verifies the sha256 of each input it uses against candidate.json and refuses on mismatch.
+  Signed-payload sha256 = sha256(sign-cell.py `_signed_payload(elf_bytes)`), load scripts/sign-cell.py
+  with importlib (register in sys.modules before exec_module).
+
+HARD RULES (all agents):
+- Never write a canonical byte: nothing under kernel/src/embedded-*, target/ (repository target dir), build/,
+  no canonical ISO. Use your own `mktemp -d /tmp/cellbox-<lane>-XXXX` work dirs and CARGO_TARGET_DIR inside them.
+- Never copy candidate (dev-key-signed) bytes into the repository.
+- Edit files only with the edit tool (no sed/perl/python rewriting of source files).
+- No product-source change (cells/, kernel/, libs/, config/). If you find a product defect, STOP and report it.
+- Do not edit scripts/assemble-x86-image.py, scripts/cellos_sign/*, package-desktop-x86.py, make-iso-ci.sh
+  (pinned / guards). Quarantined hashes stay refused.
+- Evidence summaries/verdicts must be produced by the harness code, never edited by hand.
+- Default behaviour of every existing runner without the new option must stay byte-for-byte the same in effect.
+- Toolchain env for cell builds (as the lanes already do): CC_x86_64_unknown_none=cc, freestanding CFLAGS,
+  BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none=--target=x86_64-linux-gnu.
+- Keep QEMU runs TCG; one QEMU per run; no hostfwd/inbound port.

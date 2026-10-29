@@ -1,0 +1,143 @@
+{
+  "documents": {
+    "spec.md": {
+      "expected": "f9c550f7a75ce4d79ac0aa6940dd21b529ba1232d0a7de081f2b105e4eba2988",
+      "actual": "f9c550f7a75ce4d79ac0aa6940dd21b529ba1232d0a7de081f2b105e4eba2988",
+      "equal": true
+    },
+    "abi-session-launch.md": {
+      "expected": "422df04c1f39d41aa37f4975caba359be65c48bffc2a004e7fec0f6c26822b44",
+      "actual": "422df04c1f39d41aa37f4975caba359be65c48bffc2a004e7fec0f6c26822b44",
+      "equal": true
+    },
+    "abi-vfs-telemetry.md": {
+      "expected": "0edda7171a424619ac49ec2f2d7569a91e45490e9f77adf793bd1ca25d7cec50",
+      "actual": "0edda7171a424619ac49ec2f2d7569a91e45490e9f77adf793bd1ca25d7cec50",
+      "equal": true
+    },
+    "command-catalog.md": {
+      "expected": "2a4c3e6652c90b5dad840c5a403276a3a8fa4236b8bab12ca1b319bc237cbd70",
+      "actual": "2a4c3e6652c90b5dad840c5a403276a3a8fa4236b8bab12ca1b319bc237cbd70",
+      "equal": true
+    },
+    "command-contracts.md": {
+      "expected": "4ff1c3be46a39312d400877e0655a715b024563f2d84db7aecf27947efb2090d",
+      "actual": "4ff1c3be46a39312d400877e0655a715b024563f2d84db7aecf27947efb2090d",
+      "equal": true
+    }
+  },
+  "delta_rows": [
+    {
+      "delta": "Engine v1 (spec \u00a71\u2013\u00a74)",
+      "cp1": "design consent 2026-10-20; P03 2026-10-21",
+      "cp2": "P03 2026-10-21; amendments in P05 CP2 2026-10-23 and P06 CP2",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "D01 child context / cwd (P02)",
+      "cp1": "2026-10-21",
+      "cp2": "2026-10-21 baseline ([dossier](phase-02-cp2-dossier.md)); ph",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "D02 stream/session (P02)",
+      "cp1": "2026-10-21",
+      "cp2": "2026-10-21 / 2026-10-25",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "P03 A3 external byte stages / A4 `QueryChild`",
+      "cp1": "2026-10-21",
+      "cp2": "2026-10-21",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "P04 S1 / S2-lite / S2c-min / S3 launch edge",
+      "cp1": "2026-10-21",
+      "cp2": "**2026-10-25** (user), including deviations 1\u20137",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "P04 S3-output, S3-gui, OOM, S2-K, S2-N, S2-T/W, S4a, C5",
+      "cp1": "2026-10-22",
+      "cp2": "2026-10-22",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "P05 S5-1 \u2026 S5-4, S5-3c (selectors 23\u201328)",
+      "cp1": "2026-10-22/23 (S5-3/S5-4 retroactive)",
+      "cp2": "2026-10-23",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "D04 telemetry + P06 S6-1..S6-5",
+      "cp1": "2026-10-23",
+      "cp2": "2026-10-24 (fixes U/Z/V and `$(\u2026)` ratified at CP2 without C",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "P07 S7-0..S7-4 (vigrep, VFS read path, `rg`)",
+      "cp1": "2026-10-24",
+      "cp2": "2026-10-24",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "D03-save (P08)",
+      "cp1": "2026-10-24",
+      "cp2": "S8-1..S8-4 2026-10-24; S8-5 2026-10-25",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "D03-trust, launch/entropy/completion (P09)",
+      "cp1": "2026-10-25",
+      "cp2": "S9-1..S9-4c, S9-6 2026-10-25; S9-5 deferred (D79-14)",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "Q Config per-key write right (`export`)",
+      "cp1": "**2026-10-25** (user): option Q1, a kernel `config_write` ri",
+      "cp2": "**2026-10-26** (user), including deviations 1 (`/bin/config`",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "S10-0 `/bin/cellbox <command>` one-shot + in-shell explicit form (no kernel, edg",
+      "cp1": "**2026-10-26** (user): DS0-1..DS0-6 as recommended",
+      "cp2": "**2026-10-26** (user), including deviations 1\u20137 (S10-0.11). ",
+      "has_cp1_and_cp2": true,
+      "recorded_exception": false
+    },
+    {
+      "delta": "D01 lifecycle owner (`KillTarget`/`ResetSystem`/`SnapshotTarget`/`ReplaceService",
+      "cp1": "none; effects refused (S2c-min Option B)",
+      "cp2": "\u2014",
+      "has_cp1_and_cp2": false,
+      "recorded_exception": true
+    },
+    {
+      "delta": "D04 clock units (`uptime`/`date`)",
+      "cp1": "none; open defect D60-3",
+      "cp2": "\u2014",
+      "has_cp1_and_cp2": false,
+      "recorded_exception": true
+    }
+  ],
+  "rows_missing_cp": [],
+  "cargo_deny_cellbox_scoped": {
+    "command": "cargo deny --offline --locked --exclude-dev --manifest-path cells/tools/cellbox/Cargo.toml check advisories licenses bans sources",
+    "all_ok": true
+  },
+  "cargo_deny_workspace_summary": [],
+  "verdict": "PASS"
+}

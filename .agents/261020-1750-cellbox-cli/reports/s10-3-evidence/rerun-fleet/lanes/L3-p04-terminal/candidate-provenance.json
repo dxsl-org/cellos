@@ -1,0 +1,42 @@
+{
+  "mode": "import",
+  "lane": "phase04-terminal",
+  "profile": "headless",
+  "candidate_json": "/tmp/cellbox-s10-3-1EGP/cand/candidate.json",
+  "candidate_json_sha256": "a9f384a6a3c3ff8fbec8150ad0cf780aed229f1152434d2d84a047020865c07c",
+  "kernel_fixture_features": "default+phase02-terminal-profile,phase03-filter-profile,phase04-driver-profile",
+  "cellbox_features": "default",
+  "payload_match_sha256": "45eb7747c3157bbf482f9f90837521621d9ae3e7dc70c07790b77edf65f1dee9",
+  "payload_match_all_equal": true,
+  "shared": [
+    "/bin/cellbox",
+    "/bin/vfs",
+    "/bin/config",
+    "/bin/input",
+    "/bin/platform",
+    "/bin/nvme",
+    "/bin/e1000",
+    "/bin/net",
+    "/bin/ls",
+    "/bin/cat",
+    "/bin/echo",
+    "/bin/ps",
+    "/bin/kill",
+    "/bin/shutdown",
+    "init"
+  ],
+  "lane_only": [
+    "/data/bin/s2tw-probe",
+    "/data/bin/top-load",
+    "/bin/free",
+    "/bin/date",
+    "/bin/env",
+    "/bin/uname",
+    "/bin/hotswap",
+    "/bin/curl",
+    "/bin/phase04-terminal-driver",
+    "/bin/p03-filter",
+    "/bin/s2tw-probe"
+  ],
+  "counts_for": "behaviour of the payload-matched cells only; never kernel-level claims (S10-3.3)"
+}

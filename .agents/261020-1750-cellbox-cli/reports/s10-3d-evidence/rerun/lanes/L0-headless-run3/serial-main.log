@@ -1,0 +1,1044 @@
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+limine: Loading executable `boot():/boot/kernel.elf`...
+limine: Physical base:   0xe0ae000
+limine: Virtual base:    0xffffffff80000000
+limine: Slide:           0x0
+limine: ELF entry point: 0xffffffff80000000
+limine: Base revision:   3
+limine: Requests count:  7
+limine: Top of HHDM:     0x40000000
+acpi: Found RSDP at 0xf52b0
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Mode was already set, perfect!
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+paging: 1GiB pages are supported!
+acpi: Found RSDP at 0xf52b0
+acpi: Found "APIC" at 0xffe220b
+[x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64
+[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT
+[INFO] CET-IBT: unavailable
+[INFO] PKU: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[boot] kernel_phys_base=0x000000000e0ae000
+[INFO] Frame allocator initialized
+[INFO] Initializing x86_64 paging (kernel PML4)...
+[INFO] x86_64 paging initialized
+[INFO] Activating x86_64 paging (mov cr3)...
+
+[kernel] x86_64 paging: PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x59000 — domain roots use tag 0 with a full CR3 flush)
+QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
+[INFO] x86 virt: root operation active (SVM)
+[INFO] Heap initialized
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] RAM Disk: read-only, 12288 KB (24576 sectors)
+[ INFO] VMware/QEMU absolute pointer enabled (EV_ABS guest pixels)
+[ INFO] UART Input Buffer Initialized
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ WARN] [x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 2 base=0x3e8 irq=4 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 3 base=0x2e8 irq=3 absent (16550 probe failed)
+[INFO] x86_64: ramdisk + UART RX IRQ initialised
+[ INFO] [pcie] ECAM fallback scan bus 0 @ 0xb0000000 (1 MiB window)
+[ INFO] [pcie] 00:00.0 vendor=8086 device=29c0 class=06:00:00 bar0=0x0
+[ INFO] [pcie] 00:01.0 vendor=1234 device=1111 class=03:00:00 bar0=0xfd000000
+[ INFO] [pcie] 00:02.0 vendor=8086 device=100e class=02:00:00 bar0=0xfeb80000
+[ INFO] [pcie] 00:03.0 vendor=1b36 device=0010 class=01:08:02 bar0=0xfebb0000
+[ INFO] [pcie] 00:1f.0 vendor=8086 device=2918 class=06:01:00 bar0=0x0
+[ INFO] [pcie] 00:1f.2 vendor=8086 device=2922 class=01:06:01 bar0=0x0
+[ INFO] [pcie] 00:1f.3 vendor=8086 device=2930 class=0c:05:00 bar0=0x0
+[ INFO] [pcie] ECAM scan complete: 7 device(s) found
+[ WARN] [vtd] no ACPI DMAR unit; using the board-declared q35 register base 0xfed90000 (fallback)
+[ INFO] [vtd] Intel VT-d not present (GCAP=0x0)
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 128
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [system-config] applied: logging=Info, default_cell_heap_mib=16
+[ INFO] [policy] loaded + verified (58 entries, flags 0x00)
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] Thread 'thread' (ID 1): KStack 0x2143000-0x2155000, UStackTop 0x2169000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (no teardown for hypervisor authority)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x0000ff00 from task 9002
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000070 from task 9004
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0x215a000
+[ INFO] GRANT-RECLAIM-OWNED: PASS
+[ INFO] GRANT-RECLAIM-RECEIVED: PASS
+[ INFO] GRANT-RECLAIM-PINNED: PASS
+[INFO] grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)
+[ INFO] Thread 'thread' (ID 1): KStack 0x2143000-0x2155000, UStackTop 0x2169000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ERROR] [selftest] COMPLETION-QUEUE: FAIL — an older waiter erased its replacement
+[ERROR] [selftest] COMPLETION-QUEUE: FAIL
+[INFO] completion-queue self-test FAIL
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [x86-smp] topology online=1 processor_ids=0 qualified=yes
+[INFO] Tier 2 admission: DISABLED (fleet profile) — domain-class artifacts are denied
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[INFO] [boot] x86_64 Limine linear framebuffer mapped and registered
+[ INFO] [early] VIFS1-first /bin/platform <- ramdisk (38488 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x1000037A7 flags=R-X
+[ INFO] ELF LOAD: 0x1000037A8-0x100004658 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x100005250 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] ELF LOAD: 0x100106038-0x10010703C flags=R--
+[ INFO] [wx] 'platform': 6/264 cell pages lowered to read-only/execute-only
+[INFO] Platform Cell spawned (x86 PCIe ECAM scanner)
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x102000000-0x1020434A6 flags=R-X
+[ INFO] ELF LOAD: 0x1020434A8-0x102050408 flags=R--
+[ INFO] ELF LOAD: 0x102051000-0x102052A78 flags=RW-
+[ INFO] ELF LOAD: 0x102053000-0x102153031 flags=RW-
+[ INFO] ELF LOAD: 0x102153038-0x10215403C flags=R--
+[ INFO] [wx] 'init': 82/341 cell pages lowered to read-only/execute-only
+[ INFO] Successfully spawned init with complete root authority (tid=2)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+[ INFO] [sched] hart 0 dispatched a task
+USER: Init: Starting Cellos Orchestrator...
+USER: [platform] ECAM scan buses 0-255 starting
+USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
+USER: [platform] registered bus 0 device 1 function 0 class 3:0:0
+USER: [platform] registered bus 0 device 2 function 0 class 2:0:0
+USER: [platform] registered bus 0 device 3 function 0 class 1:8:2
+USER: [platform] registered bus 0 device 31 function 0 class 6:1:0
+USER: [platform] registered bus 0 device 31 function 2 class 1:6:1
+USER: [platform] registered bus 0 device 31 function 3 class 12:5:0
+USER: [platform] ECAM scan complete
+[ INFO] Syscall::Exit: task 1 exited with code 0
+[ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/block error=NotFound
+[ WARN] [policy] narrowed "/bin/nvme" (tid 3): dropped 0b00000000010000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x100000000-0x100004986 flags=R-X
+[ INFO] ELF LOAD: 0x100004988-0x100005B00 flags=R--
+[ INFO] ELF LOAD: 0x100006000-0x1000063C0 flags=RW-
+[ INFO] ELF LOAD: 0x100007000-0x100107041 flags=RW-
+[ INFO] ELF LOAD: 0x100108000-0x10010803C flags=R--
+[ INFO] [wx] 'nvme': 7/265 cell pages lowered to read-only/execute-only
+USER: [nvme] CAP=0x004018200f0107ff ready budget 7500 ms (CAP.TO)
+[ WARN] [iommu] board qemu-q35-x86_64 declares no DMA remapper; DMA is untranslated (identity addressing)
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x24ff000 size=4096
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2501000 size=4096
+USER: [nvme] regs: aqa=0x3f003f asq=0x24ff000 acq=0x2501000 (sq_virt=0x24ff000 cq_virt=0x2501000)
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2502000 size=4096
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2503000 size=4096
+USER: [nvme] dma iovas: admin.sq=0x24ff000 admin.cq=0x2501000 io.sq=0x2502000 io.cq=0x2503000
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2504000 size=4096
+USER: [nvme] dma iovas: identify=0x2504000
+[ WARN] [grant] GrantFree 0x2504000 refused: region 0x2504000+4096 overlaps a pinned region 0x2504000+1 pages owned by task 3 with 1 in-flight operation(s)
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2505000 size=4096
+[ WARN] [grant] GrantFree 0x2505000 refused: region 0x2505000+4096 overlaps a pinned region 0x2505000+1 pages owned by task 3 with 1 in-flight operation(s)
+[ WARN] [iommu] Cell 3 granted DMA BDF=00:03.0 phys=0x2506000 size=4096
+USER: [nvme] io buffer iova=0x2506000
+USER: [nvme] DMA authorized for bus 0 device 3 function 0
+[ WARN] [driver_cell] block driver registered: tid=3
+[ INFO] [service-registry] 9 -> tid 3 (cell 1 gen 108)
+[ WARN] [policy] narrowed "/bin/ahci" (tid 4): dropped 0b00000000010000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x104000000-0x104004C06 flags=R-X
+[ INFO] ELF LOAD: 0x104004C08-0x104005D70 flags=R--
+[ INFO] ELF LOAD: 0x104006000-0x1040062D0 flags=RW-
+[ INFO] ELF LOAD: 0x104007000-0x104107031 flags=RW-
+[ INFO] ELF LOAD: 0x104107038-0x10410803C flags=R--
+[ INFO] [wx] 'ahci': 7/265 cell pages lowered to read-only/execute-only
+USER: [ahci] ABAR claim ok base=0xfebb5000 len=0x1000
+USER: [ahci] controller bound bdf=00:1f.2 cap=0xc0141f05 version=0x00010000 pi=0x0000003f
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (613440 bytes)
+[ INFO] ELF LOAD: 0x106000000-0x106077836 flags=R-X
+[ INFO] ELF LOAD: 0x106077838-0x10607C428 flags=R--
+[ INFO] ELF LOAD: 0x10607D000-0x10607EBF0 flags=RW-
+[ INFO] ELF LOAD: 0x10607F000-0x10717F048 flags=RW-
+[ INFO] ELF LOAD: 0x10717F048-0x10718003C flags=R--
+[ INFO] [wx] 'vfs': 126/4481 cell pages lowered to read-only/execute-only
+USER: [ahci] HBA reset complete (AE enabled)
+[ WARN] [iommu] Cell 4 granted DMA BDF=00:1f.2 phys=0x3821000 size=4096
+[ WARN] [iommu] Cell 4 granted DMA BDF=00:1f.2 phys=0x3822000 size=4096
+[ WARN] [iommu] Cell 4 granted DMA BDF=00:1f.2 phys=0x3823000 size=4096
+[ WARN] [iommu] Cell 4 granted DMA BDF=00:1f.2 phys=0x3824000 size=4096
+USER: [ahci] port 0 is not an ATA disk (SSTS=0x00000113 SIG=0xeb140101); skipping
+USER: [ahci] port 2 is not an ATA disk (SSTS=0x00000113 SIG=0xeb140101); skipping
+USER: [ahci] no SATA disk attached; driver cell idle
+[ INFO] Syscall::Exit: task 4 exited with code 0
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+[ INFO] [service-registry] 1 -> tid 5 (cell 4 gen 110)
+USER: [vfs] FAT32 /mnt/sd volume mounted
+USER: [vfs] WARNING: CellosFS open failed — volume unavailable
+USER: [vfs] WARNING: FAT32 /bin mount failed
+USER: [vfs] CellosFS Native mounted at existing volume
+[ INFO] [loader] SpawnFromElf: /bin/e1000 (29672 bytes from grant)
+[ WARN] [policy] narrowed "/bin/e1000" (tid 6): dropped 0b00000000010000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x104000000-0x1040023D6 flags=R-X
+[ INFO] ELF LOAD: 0x1040023D8-0x104003508 flags=R--
+[ INFO] ELF LOAD: 0x104004000-0x104004280 flags=RW-
+[ INFO] ELF LOAD: 0x104005000-0x1041053A1 flags=RW-
+[ INFO] ELF LOAD: 0x104106000-0x10410603C flags=R--
+[ INFO] [wx] 'e1000': 5/263 cell pages lowered to read-only/execute-only
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x392d000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x392e000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x392f000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3930000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3931000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3932000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3933000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3934000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3935000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3936000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3937000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3938000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3939000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x393a000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x393b000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x393c000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x393d000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x393e000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x393f000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3940000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3941000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3942000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3943000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3944000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3945000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3946000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3947000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3948000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x3949000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x394a000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x394b000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x394c000 size=4096
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x394d000 size=4096
+USER: Init: e1000 launched.
+[ WARN] [iommu] Cell 6 granted DMA BDF=00:02.0 phys=0x394e000 size=4096
+[ WARN] [driver_cell] NIC driver registered: tid=6
+[ INFO] [service-registry] 10 -> tid 6 (cell 3 gen 111)
+[ INFO] [loader] SpawnFromElf: /bin/igb (39440 bytes from grant)
+[ WARN] [policy] narrowed "/bin/igb" (tid 7): dropped 0b00000000010000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x108000000-0x1080036B6 flags=R-X
+[ INFO] ELF LOAD: 0x1080036B8-0x1080046A8 flags=R--
+[ INFO] ELF LOAD: 0x108005000-0x1080055E0 flags=RW-
+[ INFO] ELF LOAD: 0x108006000-0x108106031 flags=RW-
+[ INFO] ELF LOAD: 0x108106038-0x10810703C flags=R--
+[ INFO] [wx] 'igb': 6/264 cell pages lowered to read-only/execute-only
+USER: Init: igb launched.
+[ INFO] [loader] SpawnFromElf: /bin/serial (35744 bytes from grant)
+[ INFO] ELF LOAD: 0x10A000000-0x10A002D96 flags=R-X
+[ INFO] ELF LOAD: 0x10A002D98-0x10A0045F0 flags=R--
+[ INFO] ELF LOAD: 0x10A005000-0x10A0052C8 flags=RW-
+[ INFO] ELF LOAD: 0x10A006000-0x10A106031 flags=RW-
+[ INFO] ELF LOAD: 0x10A106038-0x10A10606C flags=R--
+[ INFO] [wx] 'serial': 5/263 cell pages lowered to read-only/execute-only
+USER: Init: serial launched.
+USER: [serial] port 0 base=0x03f8 irq=4 usable
+USER: [serial] port 1 base=0x02f8 irq=3 absent (kernel probe refused)
+USER: [serial] port 2 base=0x03e8 irq=4 absent (kernel probe refused)
+USER: [serial] port 3 base=0x02e8 irq=3 absent (kernel probe refused)
+[serial] port 0 marker base=0x03f8
+USER: [serial] port 0 tx marker bytes=36
+[ INFO] [loader] SpawnFromElf: /bin/xhci (53080 bytes from grant)
+[ WARN] [policy] narrowed "/bin/xhci" (tid 9): dropped 0b00000000010000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x10C000000-0x10C005BD6 flags=R-X
+[ INFO] ELF LOAD: 0x10C005BD8-0x10C0074A8 flags=R--
+[ INFO] ELF LOAD: 0x10C008000-0x10C008488 flags=RW-
+[ INFO] ELF LOAD: 0x10C009000-0x10C109031 flags=RW-
+[ INFO] ELF LOAD: 0x10C109038-0x10C10A03C flags=R--
+[ INFO] [wx] 'xhci': 9/267 cell pages lowered to read-only/execute-only
+USER: Init: xhci launched.
+[ INFO] [loader] SpawnFromElf: /bin/input (167240 bytes from grant)
+[ WARN] [policy] narrowed "/bin/input" (tid 10): dropped 0b00000000010000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x10E000000-0x10E01C386 flags=R-X
+[ INFO] ELF LOAD: 0x10E01C388-0x10E01FD78 flags=R--
+[ INFO] ELF LOAD: 0x10E020000-0x10E021348 flags=RW-
+[ INFO] ELF LOAD: 0x10E022000-0x10E122031 flags=RW-
+[ INFO] ELF LOAD: 0x10E122038-0x10E12303C flags=R--
+[ INFO] [wx] 'input': 33/292 cell pages lowered to read-only/execute-only
+[ WARN] [input] registered input service TID 10
+USER: [input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing
+USER: [input] No VirtIO input device; relying on kernel push
+[ INFO] [service-registry] 3 -> tid 10 (cell 8 gen 115)
+USER: Init: input launched.
+[ INFO] [loader] SpawnFromElf: /bin/net (491112 bytes from grant)
+[ INFO] ELF LOAD: 0x110000000-0x11005E5BE flags=R-X
+[ INFO] ELF LOAD: 0x11005E5C0-0x110065070 flags=R--
+[ INFO] ELF LOAD: 0x110066000-0x110067C28 flags=RW-
+[ INFO] ELF LOAD: 0x110068000-0x110968098 flags=RW-
+[ INFO] ELF LOAD: 0x110968098-0x11096903C flags=R--
+[ INFO] [wx] 'net': 103/2410 cell pages lowered to read-only/execute-only
+USER: [net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP
+USER: [net] Starting DHCP...
+[ INFO] [service-registry] 2 -> tid 11 (cell 9 gen 116)
+USER: Init: net launched.
+[ INFO] [service-registry] 19 -> tid 2 (cell 2 gen 107)
+USER: [net] DHCP: deconfigured
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ai-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/vfs-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: Init: services spawned.
+USER: Init: service registry verified (init registration is publication, not application readiness).
+USER: Init: OS ready.
+USER: [net-bridge] first e1000 TX accepted=true
+[ INFO] [loader] SpawnFromElf: /bin/cellbox (3093952 bytes from grant)
+[ INFO] ELF LOAD: 0x112000000-0x1121F2ED3 flags=R-X
+[ INFO] ELF LOAD: 0x1121F2ED8-0x11227F228 flags=R--
+[ INFO] ELF LOAD: 0x112280000-0x1122A7718 flags=RW-
+[ INFO] ELF LOAD: 0x1122A8000-0x1129A8148 flags=RW-
+[ INFO] ELF LOAD: 0x1129A8148-0x1129A903C flags=R--
+[ INFO] [wx] 'cellbox': 641/2474 cell pages lowered to read-only/execute-only
+USER: shell: starting
+USER: Init: cellbox launched.
+USER: Init: supervising services (auto-restart on crash)...
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > 
+USER: [igb] no igb controller present; driver cell idle
+[ INFO] Syscall::Exit: task 7 exited with code 0
+USER: Init: service exited cleanly — policy says no restart.
+USER: [xhci] no xHCI controller present; driver cell idle
+[ INFO] Syscall::Exit: task 9 exited with code 0
+USER: Init: service exited cleanly — policy says no restart.
+USER: [net-bridge] first e1000 RX len=590
+USER: [net] DHCP acquired — IP configured
+USER: [net] IP address: 10.0.2.15
+USER: ps --records | select tid name | to jsonl
+USER: {"tid":2,"name":"init"}
+USER: {"tid":3,"name":"nvme"}
+USER: {"tid":5,"name":"vfs"}
+USER: {"tid":6,"name":"e1000"}
+USER: {"tid":8,"name":"serial"}
+USER: {"tid":10,"name":"input"}
+USER: {"tid":11,"name":"net"}
+USER: {"tid":12,"name":"cellbox"}
+USER: Cellos > echo p10lf-n
+USER: p10lf-n
+USER: Cellos > echo p10lf-r
+USER: p10lf-r
+USER: Cellos > 
+USER: [serial] serial cell ready: usable=1 declared=4 echoed=0
+USER: echo p10lf-rn
+USER: p10lf-rn
+USER: Cellos > 
+USER: Cellos > ls /bin
+USER: ahci
+USER: cat
+USER: cellbox
+USER: cellbox-ssh
+USER: config
+USER: e1000
+USER: echo
+USER: igb
+USER: input
+USER: kill
+USER: ls
+USER: net
+USER: nvme
+USER: platform
+USER: ps
+USER: serial
+USER: shutdown
+USER: tier2-exploit
+USER: tier2-smoke
+USER: vfs
+USER: xhci
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > ls /
+USER: POLICY.BIN
+USER: bin
+USER: data
+USER: etc
+USER: mnt
+USER: readme.txt
+USER: srv
+USER: tmp
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > cellbox ls /
+USER: POLICY.BIN
+USER: bin
+USER: data
+USER: etc
+USER: mnt
+USER: readme.txt
+USER: srv
+USER: tmp
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > /bin/cellbox ls /
+USER: POLICY.BIN
+USER: bin
+USER: data
+USER: etc
+USER: mnt
+USER: readme.txt
+USER: srv
+USER: tmp
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > cellbox cd /
+USER: cellbox: cd changes or reads shell state; run it inside 'cellbox sh'
+USER: Cellos > echo st=$?
+USER: st=2
+USER: Cellos > ps --records | where name '==' '"cellbox"' | select tid name | sort-by tid | take 1 | to jsonl
+USER: {"tid":12,"name":"cellbox"}
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > ps --records | select tid name | sort-by tid | to jsonl > /tmp/p10.jsonl
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > cat /tmp/p10.jsonl
+USER: {"tid":2,"name":"init"}
+USER: {"tid":3,"name":"nvme"}
+USER: {"tid":5,"name":"vfs"}
+USER: {"tid":6,"name":"e1000"}
+USER: {"tid":8,"name":"serial"}
+USER: {"tid":10,"name":"input"}
+USER: {"tid":11,"name":"net"}
+USER: {"tid":12,"name":"cellbox"}
+USER: Cellos > cat /tmp/p10.jsonl | from jsonl | to jsonl
+USER: {"tid":2,"name":"init"}
+USER: {"tid":3,"name":"nvme"}
+USER: {"tid":5,"name":"vfs"}
+USER: {"tid":6,"name":"e1000"}
+USER: {"tid":8,"name":"serial"}
+USER: {"tid":10,"name":"input"}
+USER: {"tid":11,"name":"net"}
+USER: {"tid":12,"name":"cellbox"}
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > ps --records | where tid '==' 'abc' | to jsonl > /tmp/p10bad.jsonl
+USER: shell: where: literal 'abc' is not a JSON scalar (JSON parse error: unexpected character at byte 0); quote strings as '"text"'
+USER: Cellos > echo st=$?
+USER: st=2
+USER: Cellos > ls /tmp/p10bad.jsonl
+USER: ls: cannot access '/tmp/p10bad.jsonl': No such file or directory
+USER: Cellos > echo st=$?
+USER: st=1
+USER: Cellos > cat /mnt/sd/p10/bytes.txt
+USER: p10-bytes-line-1
+USER: p10-bytes-line-2 tail
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > /bin/echo p10-echo two  words
+[ WARN] [policy] narrowed "/bin/echo" (tid 13): dropped 0b01110000000000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x108000000-0x108003486 flags=R-X
+[ INFO] ELF LOAD: 0x108003488-0x108004318 flags=R--
+[ INFO] ELF LOAD: 0x108005000-0x1080052A8 flags=RW-
+[ INFO] ELF LOAD: 0x108006000-0x108106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 13 exited with code 0
+USER: p10-echo two words
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > /bin/echo p10-ext-a | /bin/echo p10-ext-b
+[ WARN] [policy] narrowed "/bin/echo" (tid 14): dropped 0b01110000000000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x108000000-0x108003486 flags=R-X
+[ INFO] ELF LOAD: 0x108003488-0x108004318 flags=R--
+[ INFO] ELF LOAD: 0x108005000-0x1080052A8 flags=RW-
+[ INFO] ELF LOAD: 0x108006000-0x108106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ WARN] [policy] narrowed "/bin/echo" (tid 15): dropped 0b01110000000000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x10C000000-0x10C003486 flags=R-X
+[ INFO] ELF LOAD: 0x10C003488-0x10C004318 flags=R--
+[ INFO] ELF LOAD: 0x10C005000-0x10C0052A8 flags=RW-
+[ INFO] ELF LOAD: 0x10C006000-0x10C106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 14 exited with code 0
+USER: p10-ext-b
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > /bin/echo p10-ext-stage | cat
+USER: shell: `cat` cannot consume the output of an external command; only external commands may follow one
+USER: Cellos > echo st=$?
+USER: st=2
+USER: Cellos > /bin/echo p10-ext-file > /tmp/p10e.txt
+[ WARN] [policy] narrowed "/bin/echo" (tid 16): dropped 0b01110000000000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x108000000-0x108003486 flags=R-X
+[ INFO] ELF LOAD: 0x108003488-0x108004318 flags=R--
+[ INFO] ELF LOAD: 0x108005000-0x1080052A8 flags=RW-
+[ INFO] ELF LOAD: 0x108006000-0x108106031 flags=RW-
+[ INFO] [wx] 'echo': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 16 exited with code 0
+USER: Cellos > cp /mnt/sd/p10/raw.bin /tmp/p10raw.bin
+USER: Cellos > /bin/cat /etc/cellos/autoload.toml
+[ WARN] [policy] narrowed "/bin/cat" (tid 17): dropped 0b01110000000000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x108000000-0x108003616 flags=R-X
+[ INFO] ELF LOAD: 0x108003618-0x108004360 flags=R--
+[ INFO] ELF LOAD: 0x108005000-0x1080052D0 flags=RW-
+[ INFO] ELF LOAD: 0x108006000-0x108106031 flags=RW-
+[ INFO] [wx] 'cat': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 17 exited with code 0
+USER: # Applications start after the configured required services are ready.
+USER: version = 1
+USER: 
+USER: [[cells]]
+USER: name = "cellbox"
+USER: path = "/bin/cellbox"
+USER: args = ["sh"]
+USER: restart = "on-failure"
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > /bin/cat /etc/cellos/autoload.toml > /tmp/p10auto.toml
+[ WARN] [policy] narrowed "/bin/cat" (tid 18): dropped 0b01110000000000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x108000000-0x108003616 flags=R-X
+[ INFO] ELF LOAD: 0x108003618-0x108004360 flags=R--
+[ INFO] ELF LOAD: 0x108005000-0x1080052D0 flags=RW-
+[ INFO] ELF LOAD: 0x108006000-0x108106031 flags=RW-
+[ INFO] [wx] 'cat': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 18 exited with code 0
+USER: Cellos > ls --records /tmp | to jsonl
+USER: {"name":"p10.jsonl","is_dir":false,"size":200}
+USER: {"name":"p10auto.toml","is_dir":false,"size":170}
+USER: {"name":"p10e.txt","is_dir":false,"size":13}
+USER: {"name":"p10raw.bin","is_dir":false,"size":1600}
+USER: Cellos > cat /tmp/p10e.txt
+USER: p10-ext-file
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > /bin/cat /mnt/sd/p10/bytes.txt
+[ WARN] [policy] narrowed "/bin/cat" (tid 19): dropped 0b01110000000000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x108000000-0x108003616 flags=R-X
+[ INFO] ELF LOAD: 0x108003618-0x108004360 flags=R--
+[ INFO] ELF LOAD: 0x108005000-0x1080052D0 flags=RW-
+[ INFO] ELF LOAD: 0x108006000-0x108106031 flags=RW-
+[ INFO] [wx] 'cat': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 19 exited with code 1
+USER: cat: /mnt/sd/p10/bytes.txt: file not found
+USER: Cellos > echo st=$?
+USER: st=1
+USER: Cellos > cat /mnt/sd/p10/lossy.txt
+USER: p10-lossy �31m �� € � end
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > cat /mnt/sd/rg/big.log
+USER: cat: /mnt/sd/rg/big.log: File too large
+USER: Cellos > echo st=$?
+USER: st=1
+USER: Cellos > cat /mnt/sd/p10
+USER: cat: /mnt/sd/p10: Is a directory
+USER: Cellos > echo st=$?
+USER: st=1
+USER: Cellos > rg NEEDLE /mnt/sd/rg/big.log > /tmp/big.jsonl
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > from jsonl --typed < /tmp/big.jsonl | select line_number | to jsonl
+USER: {"line_number":1}
+USER: {"line_number":57345}
+USER: {"line_number":114688}
+USER: Cellos > from jsonl --typed < /tmp/big.jsonl | select absolute_offset | to jsonl
+USER: {"absolute_offset":0}
+USER: {"absolute_offset":3670016}
+USER: {"absolute_offset":7339968}
+USER: Cellos > rg ENCTOK /mnt/sd/rg/enc
+USER: /mnt/sd/rg/enc/bad.txt:1:ENCTOK \xFF bad
+USER: /mnt/sd/rg/enc/bom.txt:2:ENCTOK bom
+USER: /mnt/sd/rg/enc/crlf.txt:1:ENCTOK crlf\r
+USER: /mnt/sd/rg/enc/nolf.txt:2:ENCTOK nolf
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > rg wide-hit /srv/cellos /mnt/sd/rg/wide
+USER: rg: /srv/cellos: permission denied
+USER: /mnt/sd/rg/wide/wide000xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide001xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide002xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide003xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide004xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide005xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide006xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide007xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide008xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide009xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide010xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide011xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide012xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide013xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide014xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide015xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide016xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide017xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide018xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide019xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide020xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide021xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide022xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide023xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide024xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide025xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide026xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide027xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide028xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide029xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide030xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide031xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide032xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide033xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide034xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide035xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide036xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide037xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide038xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide039xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide040xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide041xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide042xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide043xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide044xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide045xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide046xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide047xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide048xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide049xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide050xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide051xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide052xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide053xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide054xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide055xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide056xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide057xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide058xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide059xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide060xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide061xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide062xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide063xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide064xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide065xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide066xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide067xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide068xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide069xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide070xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide071xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide072xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide073xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide074xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide075xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide076xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide077xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide078xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide079xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide080xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide081xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide082xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide083xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide084xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide085xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide086xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide087xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide088xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide089xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide090xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide091xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide092xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide093xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide094xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide095xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide096xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide097xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide098xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide099xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide100xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide101xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide102xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide103xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide104xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide105xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide106xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide107xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide108xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide109xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide110xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide111xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide112xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide113xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide114xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide115xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide116xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide117xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide118xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: /mnt/sd/rg/wide/wide119xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: rg: summary: files_scanned=120 files_binary_skipped=0 links_skipped=0 mounts_skipped=0 lines_scanned=120 matching_lines=120 matches=120 bytes_read=2160 errors=1 complete=false reason=errors
+USER: Cellos > echo st=$?
+USER: st=2
+USER: Cellos > rg SRVTOK /srv
+USER: rg: /srv/cellos: permission denied
+USER: /srv/pub/a.txt:1:SRVTOK a
+USER: /srv/zz.txt:1:SRVTOK z
+USER: rg: summary: files_scanned=2 files_binary_skipped=0 links_skipped=0 mounts_skipped=0 lines_scanned=2 matching_lines=2 matches=2 bytes_read=36 errors=1 complete=false reason=errors
+USER: Cellos > echo st=$?
+USER: st=2
+USER: Cellos > rg wide-hit /mnt/sd/rg/wide | take 1
+USER: /mnt/sd/rg/wide/wide000xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > top -b
+USER: top: t=519s  batch  remaining 1
+USER: sample 5  complete  cpu% per core  mem 77.9M/224.0M
+USER:   CELL  NAME     TASKS  CPU%  QUOTA  LIMIT  STATE
+USER:  8:115  input        1   2.9     0B  16.0M  Live
+USER: 10:117  cellbox      1   1.8  36.7K  16.0M  Live
+USER:  1:108  nvme         1   0.0   392B  16.0M  Live
+USER:  2:107  init         1   0.0   3.1M  16.0M  Live
+USER:  3:111  e1000        1   0.0   4.8K  16.0M  Live
+USER:  4:110  vfs          1   0.0     0B  16.0M  Live
+USER:  6:113  serial       1   0.0     0B  16.0M  Live
+USER:  9:116  net          1   0.0     0B  16.0M  Live
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > top --records | to jsonl
+USER: {"frame":"begin","sample_id":7,"monotonic_ns":521119791960,"meta":{"schema":"top.cell.v1","provider_epoch":"18e28b2e793292b2","interval_ns":1015590530,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":8,"total_tasks":8,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":234885120,"mem_used_bytes":81780736,"mem_free_bytes":153104384,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":8,"generation":115,"root_tid":10,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":5659871360,"cpu_tenths":29,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":10,"generation":117,"root_tid":12,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1447724390,"cpu_tenths":17,"cpu_quality":"ok","quota_bytes":37672,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":108,"root_tid":3,"name":"nvme","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":5420912160,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":392,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":635968740,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":3325549,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":111,"root_tid":6,"name":"e1000","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":352102370,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":4944,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":110,"root_tid":5,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":474730690060,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":6,"generation":113,"root_tid":8,"name":"serial","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":9262063910,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":9,"generation":116,"root_tid":11,"name":"net","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":560717870,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > top --records -d 1 --frames 5 | take --frame 2 | to jsonl
+USER: {"frame":"begin","sample_id":9,"monotonic_ns":522627275220,"meta":{"schema":"top.cell.v1","provider_epoch":"18e28b2e793292b2","interval_ns":1004910240,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":8,"total_tasks":8,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":234885120,"mem_used_bytes":81780736,"mem_free_bytes":153104384,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":8,"generation":115,"root_tid":10,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":5704496130,"cpu_tenths":28,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":10,"generation":117,"root_tid":12,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1496519880,"cpu_tenths":17,"cpu_quality":"ok","quota_bytes":37672,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":108,"root_tid":3,"name":"nvme","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":5420912160,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":392,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":635968740,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":3325549,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":111,"root_tid":6,"name":"e1000","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":352614230,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":4944,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":110,"root_tid":5,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":474730690060,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":6,"generation":113,"root_tid":8,"name":"serial","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":9262063910,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":9,"generation":116,"root_tid":11,"name":"net","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":562021750,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: {"frame":"begin","sample_id":10,"monotonic_ns":523642452170,"meta":{"schema":"top.cell.v1","provider_epoch":"18e28b2e793292b2","interval_ns":1015176950,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":8,"total_tasks":8,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":234885120,"mem_used_bytes":81780736,"mem_free_bytes":153104384,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":8,"generation":115,"root_tid":10,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":5737107060,"cpu_tenths":32,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":10,"generation":117,"root_tid":12,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":1521103510,"cpu_tenths":24,"cpu_quality":"ok","quota_bytes":37672,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":108,"root_tid":3,"name":"nvme","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":5420912160,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":392,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":635968740,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":3325549,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":111,"root_tid":6,"name":"e1000","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":352926390,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":4944,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":110,"root_tid":5,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":474730690060,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":6,"generation":113,"root_tid":8,"name":"serial","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":9262063910,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":9,"generation":116,"root_tid":11,"name":"net","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":562848150,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > top --records | take 2
+USER: shell: take: input is a frame stream; use `take --frame`
+USER: Cellos > echo st=$?
+USER: st=2
+USER: Cellos > top
+USER: [?1049h[?25l[?2004h[1;1H[0m[J[2;1H[J[3;1H[J[4;1H[J[5;1H[J[6;1H[J[7;1H[J[8;1H[J[9;1H[J[10;1H[J[11;1H[J[12;1H[J[13;1H[J[14;1H[J[15;1H[J[16;1H[J[17;1H[J[18;1H[J[19;1H[J[20;1H[J[21;1H[J[22;1H[J[23;1H[J[24;1H[J[1;1H[1;30;105m top  Cells  sort cpu_tenths desc  every 1s                                     [2;1H[0;37;100m sample 12  complete  cpu% per core  mem 77.9M/224.0M                           [3;1H[94;40m╭[1;95mCells[0;94;40m─────────────────────────────────────────────────────────────────────────╮[4;1H│[1;95m    CELL  NAME     TASKS  CPU%  QUOTA  LIMIT  STATE                           [0;94;40m│[5;1H│[1;95;100m▌ 10:117  cellbox      1  72.8  36.7K  16.0M  Live                            [0;94;40m│[6;1H│[37m   8:115  input        1  27.1     0B  16.0M  Live                            [94m│[7;1H│[37m   1:108  nvme         1   0.0   392B  16.0M  Live                            [94m│[8;1H│[37m   2:107  init         1   0.0   3.1M  16.0M  Live                            [94m│[9;1H│[37m   3:111  e1000        1   0.0   4.8K  16.0M  Live                            [94m│[10;1H│[37m   4:110  vfs          1   0.0     0B  16.0M  Live                            [94m│[11;1H│[37m   6:113  serial       1   0.0     0B  16.0M  Live                            [94m│[12;1H│[37m   9:116  net          1   0.0     0B  16.0M  Live                            [94m│[13;1H│[37m                                                                              [94m│[14;1H│[37m                                                                              [94m│[15;1H│[37m                                                                              [94m│[16;1H│[37m                                                                              [94m│[17;1H│[37m                                                                              [94m│[18;1H│[37m                                                                              [94m│[19;1H│[37m                                                                              [94m│[20;1H│[37m                                                                              [94m│[21;1H│[37m                                                                              [94m│[22;1H│[37m                                                                              [94m│[23;1H╰──────────────────────────────────────────────────────────────────────────────╯[24;1H[1;95;100mq[0;90;100m quit  [1;95mUp/Dn[0;90;100m select  [1;95mEnter[0;90;100m tasks  [1;95mEsc[0;90;100m back  [1;95mo[0;90;100m sort  [1;95mr[0;90;100m reverse  [1;95mf[0;90;100m fields[37m        [0m[?1049l[?25h[?2004lCellos > echo st=$?
+USER: st=0
+USER: Cellos > mkdir /srv/p10ed
+USER: Cellos > cp /mnt/sd/p10/crlf.txt /srv/p10ed/m.txt
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > edit /srv/p10ed/new.txt
+USER: [?1049h[?25l[?2004h[1;1H[0m[J[2;1H[J[3;1H[J[4;1H[J[5;1H[J[6;1H[J[7;1H[J[8;1H[J[9;1H[J[10;1H[J[11;1H[J[12;1H[J[13;1H[J[14;1H[J[15;1H[J[16;1H[J[17;1H[J[18;1H[J[19;1H[J[20;1H[J[21;1H[J[22;1H[J[23;1H[J[24;1H[J[1;1H[37;40m                                                                                [2;1H                                                                                [3;1H                                                                                [4;1H                                                                                [5;1H                                                                                [6;1H                                                                                [7;1H                                                                                [8;1H                                                                                [9;1H                                                                                [10;1H                                                                                [11;1H                                                                                [12;1H                                                                                [13;1H                                                                                [14;1H                                                                                [15;1H                                                                                [16;1H                                                                                [17;1H                                                                                [18;1H                                                                                [19;1H                                                                                [20;1H                                                                                [21;1H                                                                                [22;1H                                                                                [23;1H[100m /srv/p10ed/new.txt — Ln 1, Col 1                                               [24;1H[40mnew file                                                                        [0m[?25h[1;1H[37;40mp[23;21H[100m*[23;23H— Ln 1, Col[23;35H2[24;1H[40m^S save [24;10H^O[24;13Hsave[24;18Has[24;22H^Q[24;25Hquit[24;31H^H[24;34Hhelp[0m[1;2H[37;40m1[23;35H[100m3[0m[1;3H[37;40m0[23;35H[100m4[0m[1;4H[23;35H[37;100m5[0m[1;5H[37;40mc[23;35H[100m6[0m[1;6H[37;40mr[23;35H[100m7[0m[1;7H[37;40me[23;35H[100m8[0m[1;8H[37;40ma[23;35H[100m9[0m[1;9H[37;40mt[23;35H[100m10[0m[1;10H[37;40me[23;36H[100m1[0m[1;11H[37;40md[23;36H[100m2[0m[1;12H[23;21H[37;100m—[23;23HLn 1, Col 12  [24;1H[40msaved 11[24;10Hbytes to /srv/p10ed/new.txt (synced;[24;47Hnot[24;51Ha[24;53Hpower-loss[24;64Hguarantee)[0m[1;12H[?1049l[?2004lCellos > echo st=$?
+USER: st=0
+USER: Cellos > edit /srv/p10ed/m.txt
+USER: [?1049h[?25l[?2004h[1;1H[0m[J[2;1H[J[3;1H[J[4;1H[J[5;1H[J[6;1H[J[7;1H[J[8;1H[J[9;1H[J[10;1H[J[11;1H[J[12;1H[J[13;1H[J[14;1H[J[15;1H[J[16;1H[J[17;1H[J[18;1H[J[19;1H[J[20;1H[J[21;1H[J[22;1H[J[23;1H[J[24;1H[J[1;1H[37;40mone                                                                             [2;1Htwo                                                                             [3;1Hlast                                                                            [4;1H                                                                                [5;1H                                                                                [6;1H                                                                                [7;1H                                                                                [8;1H                                                                                [9;1H                                                                                [10;1H                                                                                [11;1H                                                                                [12;1H                                                                                [13;1H                                                                                [14;1H                                                                                [15;1H                                                                                [16;1H                                                                                [17;1H                                                                                [18;1H                                                                                [19;1H                                                                                [20;1H                                                                                [21;1H                                                                                [22;1H                                                                                [23;1H[100m /srv/p10ed/m.txt — Ln 1, Col 1                                                 [24;1H[40m^S save  ^O save as  ^Q quit  ^H help                                           [0m[?25h[1;1H[23;31H[37;100m4[0m[1;4H[37;40m1[23;19H[100m*[23;21H— Ln 1, Col[23;33H5[0m[1;5H[23;19H[37;100m—[23;21HLn 1, Col 5[23;33H [24;1H[40msaved 15[24;10Hbytes to /srv/p10ed/m.txt (synced;[24;45Hnot[24;49Ha[24;51Hpower-loss[24;62Hguarantee)[0m[1;5H[?1049l[?2004lCellos > edit /srv/p10ed/m.txt
+USER: [?1049h[?25l[?2004h[1;1H[0m[J[2;1H[J[3;1H[J[4;1H[J[5;1H[J[6;1H[J[7;1H[J[8;1H[J[9;1H[J[10;1H[J[11;1H[J[12;1H[J[13;1H[J[14;1H[J[15;1H[J[16;1H[J[17;1H[J[18;1H[J[19;1H[J[20;1H[J[21;1H[J[22;1H[J[23;1H[J[24;1H[J[1;1H[37;40mone1                                                                            [2;1Htwo                                                                             [3;1Hlast                                                                            [4;1H                                                                                [5;1H                                                                                [6;1H                                                                                [7;1H                                                                                [8;1H                                                                                [9;1H                                                                                [10;1H                                                                                [11;1H                                                                                [12;1H                                                                                [13;1H                                                                                [14;1H                                                                                [15;1H                                                                                [16;1H                                                                                [17;1H                                                                                [18;1H                                                                                [19;1H                                                                                [20;1H                                                                                [21;1H                                                                                [22;1H                                                                                [23;1H[100m /srv/p10ed/m.txt — Ln 1, Col 1                                                 [24;1H[40m^S save  ^O save as  ^Q quit  ^H help                                           [0m[?25h[1;1H[?1049l[?2004lCellos > ls --records /srv/p10ed | to jsonl
+USER: {"name":"m.txt","is_dir":false,"size":15}
+USER: {"name":"new.txt","is_dir":false,"size":11}
+USER: Cellos > rg created /srv/p10ed/new.txt
+USER: /srv/p10ed/new.txt:1:p10 created
+USER: Cellos > rg e /srv/p10ed/m.txt
+USER: /srv/p10ed/m.txt:1:one1\r
+USER: Cellos > rg t /srv/p10ed/m.txt
+USER: /srv/p10ed/m.txt:2:two
+USER: /srv/p10ed/m.txt:3:last
+USER: Cellos > edit
+USER: [?1049h[?25l[?2004h[1;1H[0m[J[2;1H[J[3;1H[J[4;1H[J[5;1H[J[6;1H[J[7;1H[J[8;1H[J[9;1H[J[10;1H[J[11;1H[J[12;1H[J[13;1H[J[14;1H[J[15;1H[J[16;1H[J[17;1H[J[18;1H[J[19;1H[J[20;1H[J[21;1H[J[22;1H[J[23;1H[J[24;1H[J[1;1H[37;40m                                                                                [2;1H                                                                                [3;1H                                                                                [4;1H                                                                                [5;1H                                                                                [6;1H                                                                                [7;1H                                                                                [8;1H                                                                                [9;1H                                                                                [10;1H                                                                                [11;1H                                                                                [12;1H                                                                                [13;1H                                                                                [14;1H                                                                                [15;1H                                                                                [16;1H                                                                                [17;1H                                                                                [18;1H                                                                                [19;1H                                                                                [20;1H                                                                                [21;1H                                                                                [22;1H                                                                                [23;1H[100m [unnamed] — Ln 1, Col 1                                                        [24;1H[40m^S save  ^O save as  ^Q quit  ^H help                                           [0m[?25h[1;1H[37;40mq[23;12H[100m*[23;14H— Ln 1, Col[23;26H2[0m[1;2H[24;1H[37;40mUnsaved[24;9Hchanges:[24;18H([24;20H)ave, (d)iscard, (c)ancel[0m[?25l[?1049l[?25h[?2004lCellos > echo st=$?
+USER: st=0
+USER: Cellos > ls /
+USER: POLICY.BIN
+USER: bin
+USER: data
+USER: etc
+USER: mnt
+USER: readme.txt
+USER: srv
+USER: tmp
+USER: Cellos > ps
+USER: sample 13  complete  cpu% per core  mem 77.9M/224.0M
+USER: TID  NAME     STATE    CPU%   STACK  SEGMENTS
+USER:   2  init     Waiting   new   64.0K      1.3M
+USER:   3  nvme     Waiting   new  256.0K      1.0M
+USER:   5  vfs      Waiting   new  256.0K     17.5M
+USER:   6  e1000    Waiting   new  256.0K      1.0M
+USER:   8  serial   Waiting   new  256.0K      1.0M
+USER:  10  input    Ready     new  256.0K      1.1M
+USER:  11  net      Waiting   new   64.0K      9.4M
+USER:  12  cellbox  Running   new   64.0K      9.6M
+USER: Cellos > cat /mnt/sd/p10/bytes.txt
+USER: p10-bytes-line-1
+USER: p10-bytes-line-2 tail
+USER: Cellos > cellbox ls /
+USER: POLICY.BIN
+USER: bin
+USER: data
+USER: etc
+USER: mnt
+USER: readme.txt
+USER: srv
+USER: tmp
+USER: Cellos > top -b -n 1
+USER: top: t=542s  batch  remaining 1
+USER: sample 15  complete  cpu% per core  mem 77.9M/224.0M
+USER:   CELL  NAME     TASKS  CPU%  QUOTA  LIMIT  STATE
+USER:  8:115  input        1   3.0     0B  16.0M  Live
+USER: 10:117  cellbox      1   1.7  36.7K  16.0M  Live
+USER:  1:108  nvme         1   0.0   392B  16.0M  Live
+USER:  2:107  init         1   0.0   3.1M  16.0M  Live
+USER:  3:111  e1000        1   0.0   4.8K  16.0M  Live
+USER:  4:110  vfs          1   0.0     0B  16.0M  Live
+USER:  6:113  serial       1   0.0     0B  16.0M  Live
+USER:  9:116  net          1   0.0     0B  16.0M  Live
+USER: Cellos > ps --records | to jsonl
+USER: {"tid":2,"cell_id":2,"generation":107,"name":"init","name_truncated":false,"state":"Waiting","cpu_ns":635968740,"cpu_tenths":null,"cpu_quality":"new","stack_bytes":65536,"segment_bytes":1396736,"stack_in_quota":false}
+USER: {"tid":3,"cell_id":1,"generation":108,"name":"nvme","name_truncated":false,"state":"Waiting","cpu_ns":5864721960,"cpu_tenths":null,"cpu_quality":"new","stack_bytes":262144,"segment_bytes":1085440,"stack_in_quota":false}
+USER: {"tid":5,"cell_id":4,"generation":110,"name":"vfs","name_truncated":false,"state":"Waiting","cpu_ns":474897885820,"cpu_tenths":null,"cpu_quality":"new","stack_bytes":262144,"segment_bytes":18354176,"stack_in_quota":false}
+USER: {"tid":6,"cell_id":3,"generation":111,"name":"e1000","name_truncated":false,"state":"Waiting","cpu_ns":359890890,"cpu_tenths":null,"cpu_quality":"new","stack_bytes":262144,"segment_bytes":1077248,"stack_in_quota":false}
+USER: {"tid":8,"cell_id":6,"generation":113,"name":"serial","name_truncated":false,"state":"Waiting","cpu_ns":9262063910,"cpu_tenths":null,"cpu_quality":"new","stack_bytes":262144,"segment_bytes":1077248,"stack_in_quota":false}
+USER: {"tid":10,"cell_id":8,"generation":115,"name":"input","name_truncated":false,"state":"Ready","cpu_ns":6063637790,"cpu_tenths":null,"cpu_quality":"new","stack_bytes":262144,"segment_bytes":1196032,"stack_in_quota":false}
+USER: {"tid":11,"cell_id":9,"generation":116,"name":"net","name_truncated":false,"state":"Waiting","cpu_ns":580886720,"cpu_tenths":null,"cpu_quality":"new","stack_bytes":65536,"segment_bytes":9871360,"stack_in_quota":false}
+USER: {"tid":12,"cell_id":10,"generation":117,"name":"cellbox","name_truncated":false,"state":"Running","cpu_ns":2056434100,"cpu_tenths":null,"cpu_quality":"new","stack_bytes":65536,"segment_bytes":10133504,"stack_in_quota":false}
+USER: Cellos > x=$(top)
+USER: top: no interactive terminal here; use top -b for text frames
+USER: Cellos > echo st=$?
+USER: st=2
+USER: Cellos > /bin/shell
+[ WARN] [loader] DENY launch edge: caller=12 name=cellbox route=Path target=/bin/shell spawn_cap=false supervisor_cap=false
+USER: shell: foreground preparation failed: Denied
+USER: Cellos > echo st=$?
+USER: st=126
+USER: Cellos > ps --records | select tid name | sort-by tid | to jsonl
+USER: {"tid":2,"name":"init"}
+USER: {"tid":3,"name":"nvme"}
+USER: {"tid":5,"name":"vfs"}
+USER: {"tid":6,"name":"e1000"}
+USER: {"tid":8,"name":"serial"}
+USER: {"tid":10,"name":"input"}
+USER: {"tid":11,"name":"net"}
+USER: {"tid":12,"name":"cellbox"}
+USER: Cellos > kill 11
+USER: kill: not available from the suite shell, requires a lifecycle owner
+USER: Cellos > echo st=$?
+USER: st=1
+USER: Cellos > snapshot
+USER: snapshot: not available from the suite shell, requires a lifecycle owner
+USER: Cellos > echo st=$?
+USER: st=1
+USER: Cellos > ps --records | select tid name | sort-by tid | to jsonl
+USER: {"tid":2,"name":"init"}
+USER: {"tid":3,"name":"nvme"}
+USER: {"tid":5,"name":"vfs"}
+USER: {"tid":6,"name":"e1000"}
+USER: {"tid":8,"name":"serial"}
+USER: {"tid":10,"name":"input"}
+USER: {"tid":11,"name":"net"}
+USER: {"tid":12,"name":"cellbox"}
+USER: Cellos > export K=V
+USER: export: K: config unavailable
+USER: Cellos > echo st=$?
+USER: st=1
+USER: Cellos > ssh --user tester --auth publickey --identity k1 -p 22 10.0.2.2 --command true
+[ INFO] ELF LOAD: 0x108000000-0x1081F2ED3 flags=R-X
+[ INFO] ELF LOAD: 0x1081F2ED8-0x10827F228 flags=R--
+[ INFO] ELF LOAD: 0x108280000-0x1082A7718 flags=RW-
+[ INFO] ELF LOAD: 0x1082A8000-0x1089A8148 flags=RW-
+[ INFO] ELF LOAD: 0x1089A8148-0x1089A903C flags=R--
+[ INFO] [wx] 'cellbox-ssh': 641/2474 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 20 exited with code 255
+USER: ssh: publickey authentication is not available yet
+USER: Cellos > echo st=$?
+USER: st=255
+USER: Cellos > cat /srv/cellos/k.txt
+USER: cat: /srv/cellos/k.txt: Permission denied
+USER: Cellos > echo st=$?
+USER: st=1
+USER: Cellos > p10v=alpha; echo v=$p10v
+USER: v=alpha
+USER: Cellos > p10f() { echo in-f $1; }
+USER: Cellos > p10f beta
+USER: in-f beta
+USER: Cellos > if [ $p10v = alpha ]; then echo if-yes; else echo if-no; fi
+USER: if-yes
+USER: Cellos > for i in a b c; do echo it-$i; done
+USER: it-a
+USER: it-b
+USER: it-c
+USER: Cellos > source /mnt/sd/p10/state.sh
+USER: ls: cannot access '/p10-src-missing': No such file or directory
+USER: src-start
+USER: src-x
+USER: src-y
+USER: src-status=1
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > echo s=$p10s
+USER: s=from-script
+USER: Cellos > ls /p10-no-such-dir
+USER: ls: cannot access '/p10-no-such-dir': No such file or directory
+USER: Cellos > echo st=$?
+USER: st=1
+USER: Cellos > echo ok
+USER: ok
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > touch /tmp/p10bgp | cat &
+USER: shell: background `&` is supported only for a single external command; the pipeline was not started
+USER: Cellos > echo st=$?
+USER: st=2
+USER: Cellos > touch /tmp/p10amp & echo p10amp-ran
+USER: shell: `&` is only valid as the final token of a command
+USER: Cellos > echo st=$?
+USER: st=2
+USER: Cellos > ls /tmp
+USER: big.jsonl
+USER: p10.jsonl
+USER: p10auto.toml
+USER: p10e.txt
+USER: p10raw.bin
+USER: Cellos > sleep 1 &
+USER: [25] running
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > exit 4
+[ INFO] Syscall::Exit: task 12 exited with code 4
+USER: Init: storm state — death tid=12 count=0 window_age=55129/1000 ticks
+USER: Init: service died — restarting...
+[ INFO] [loader] SpawnFromElf: /bin/cellbox (3093952 bytes from grant)
+[ INFO] ELF LOAD: 0x108000000-0x1081F2ED3 flags=R-X
+[ INFO] ELF LOAD: 0x1081F2ED8-0x10827F228 flags=R--
+[ INFO] ELF LOAD: 0x108280000-0x1082A7718 flags=RW-
+[ INFO] ELF LOAD: 0x1082A8000-0x1089A8148 flags=RW-
+[ INFO] ELF LOAD: 0x1089A8148-0x1089A903C flags=R--
+[ INFO] [wx] 'cellbox': 641/2474 cell pages lowered to read-only/execute-only
+USER: shell: starting
+USER: Init: service restarted.
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > echo v=$p10v
+USER: v=
+USER: Cellos > ps --records | select name | to jsonl
+USER: {"name":"init"}
+USER: {"name":"nvme"}
+USER: {"name":"vfs"}
+USER: {"name":"e1000"}
+USER: {"name":"serial"}
+USER: {"name":"input"}
+USER: {"name":"net"}
+USER: {"name":"cellbox"}
+USER: Cellos > sleep 30
+USER: ^C
+USER: Cellos > echo st=$?
+USER: st=130
+USER: Cellos > rg -F p10-literal-that-occurs-nowhere-0123456789 /mnt/sd/rg/big.log
+USER: ^C
+USER: Cellos > echo st=$?
+USER: st=130
+USER: Cellos > top --records --frames 100000 | to jsonl
+USER: {"frame":"begin","sample_id":21,"monotonic_ns":570640522700,"meta":{"schema":"top.cell.v1","provider_epoch":"18e28b2e793292b2","interval_ns":1004840420,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":8,"total_tasks":8,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":234885120,"mem_used_bytes":81780736,"mem_free_bytes":153104384,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":8,"generation":115,"root_tid":10,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":6664183400,"cpu_tenths":30,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":5,"generation":126,"root_tid":21,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":218870320,"cpu_tenths":19,"cpu_quality":"ok","quota_bytes":18704,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":108,"root_tid":3,"name":"nvme","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":6112409810,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":392,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":778057850,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":3384954,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":111,"root_tid":6,"name":"e1000","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":369513830,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":4944,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":110,"root_tid":5,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":478030623360,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":6,"generation":113,"root_tid":8,"name":"serial","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":9262063910,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":9,"generation":116,"root_tid":11,"name":"net","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":604481290,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: ^C
+USER: Cellos > echo st=$?
+USER: st=130
+USER: Cellos > top
+USER: [?1049h[?25l[?2004h[1;1H[0m[J[2;1H[J[3;1H[J[4;1H[J[5;1H[J[6;1H[J[7;1H[J[8;1H[J[9;1H[J[10;1H[J[11;1H[J[12;1H[J[13;1H[J[14;1H[J[15;1H[J[16;1H[J[17;1H[J[18;1H[J[19;1H[J[20;1H[J[21;1H[J[22;1H[J[23;1H[J[24;1H[J[1;1H[1;30;105m top  Cells  sort cpu_tenths desc  every 1s                                     [2;1H[0;37;100m sample 23  complete  cpu% per core  mem 77.9M/224.0M                           [3;1H[94;40m╭[1;95mCells[0;94;40m─────────────────────────────────────────────────────────────────────────╮[4;1H│[1;95m   CELL  NAME     TASKS  CPU%  QUOTA  LIMIT  STATE                            [0;94;40m│[5;1H│[1;95;100m▌ 5:126  cellbox      1  75.8  18.2K  16.0M  Live                             [0;94;40m│[6;1H│[37m  8:115  input        1  24.1     0B  16.0M  Live                             [94m│[7;1H│[37m  1:108  nvme         1   0.0   392B  16.0M  Live                             [94m│[8;1H│[37m  2:107  init         1   0.0   3.2M  16.0M  Live                             [94m│[9;1H│[37m  3:111  e1000        1   0.0   4.8K  16.0M  Live                             [94m│[10;1H│[37m  4:110  vfs          1   0.0     0B  16.0M  Live                             [94m│[11;1H│[37m  6:113  serial       1   0.0     0B  16.0M  Live                             [94m│[12;1H│[37m  9:116  net          1   0.0     0B  16.0M  Live                             [94m│[13;1H│[37m                                                                              [94m│[14;1H│[37m                                                                              [94m│[15;1H│[37m                                                                              [94m│[16;1H│[37m                                                                              [94m│[17;1H│[37m                                                                              [94m│[18;1H│[37m                                                                              [94m│[19;1H│[37m                                                                              [94m│[20;1H│[37m                                                                              [94m│[21;1H│[37m                                                                              [94m│[22;1H│[37m                                                                              [94m│[23;1H╰──────────────────────────────────────────────────────────────────────────────╯[24;1H[1;95;100mq[0;90;100m quit  [1;95mUp/Dn[0;90;100m select  [1;95mEnter[0;90;100m tasks  [1;95mEsc[0;90;100m back  [1;95mo[0;90;100m sort  [1;95mr[0;90;100m reverse  [1;95mf[0;90;100m fields[37m        [0m[?1049l[?25h[?2004l^C
+USER: Cellos > echo st=$?
+USER: st=130
+USER: Cellos > top -b -d 5 -n 10
+USER: ^C
+USER: Cellos > echo st=$?
+USER: st=130
+USER: Cellos > top --records -d 1 --frames 2 | to jsonl | cat
+USER: {"frame":"begin","sample_id":26,"monotonic_ns":580701374910,"meta":{"schema":"top.cell.v1","provider_epoch":"18e28b2e793292b2","interval_ns":1004957300,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":8,"total_tasks":8,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":234885120,"mem_used_bytes":81780736,"mem_free_bytes":153104384,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":8,"generation":115,"root_tid":10,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":6906860200,"cpu_tenths":34,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":5,"generation":126,"root_tid":21,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":401313180,"cpu_tenths":21,"cpu_quality":"ok","quota_bytes":18704,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":108,"root_tid":3,"name":"nvme","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":6112409810,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":392,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":778057850,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":3384954,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":111,"root_tid":6,"name":"e1000","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":373472190,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":4944,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":110,"root_tid":5,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":478030623360,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":6,"generation":113,"root_tid":8,"name":"serial","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":9262063910,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":9,"generation":116,"root_tid":11,"name":"net","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":614350150,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: {"frame":"begin","sample_id":27,"monotonic_ns":581707202970,"meta":{"schema":"top.cell.v1","provider_epoch":"18e28b2e793292b2","interval_ns":1005828060,"online_cpus":1,"cpu_unit":"core_tenths","cpu_available":true,"total_cells":8,"total_tasks":8,"gone_cells":0,"gone_tasks":null,"mem_state":"present","mem_total_bytes":234885120,"mem_used_bytes":81780736,"mem_free_bytes":153104384,"memory_interval":true}}
+USER: {"frame":"row","value":{"cell_id":8,"generation":115,"root_tid":10,"name":"input","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":6940216880,"cpu_tenths":33,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":5,"generation":126,"root_tid":21,"name":"cellbox","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":423355480,"cpu_tenths":21,"cpu_quality":"ok","quota_bytes":18704,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":1,"generation":108,"root_tid":3,"name":"nvme","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":6112409810,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":392,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":2,"generation":107,"root_tid":2,"name":"init","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":778057850,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":3384954,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":3,"generation":111,"root_tid":6,"name":"e1000","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":373825390,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":4944,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":4,"generation":110,"root_tid":5,"name":"vfs","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":478030623360,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":6,"generation":113,"root_tid":8,"name":"serial","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":9262063910,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"row","value":{"cell_id":9,"generation":116,"root_tid":11,"name":"net","name_truncated":false,"state":"Live","tasks":1,"cpu_ns":615327380,"cpu_tenths":0,"cpu_quality":"ok","quota_bytes":0,"limit_bytes":16777216}}
+USER: {"frame":"end","complete":true,"unavailable_fields":[],"dropped":0}
+USER: Cellos > echo st=$?
+USER: st=0
+USER: Cellos > top --records --frames 100000 | to jsonl | cat
+USER: ^C
+USER: Cellos > echo st=$?
+USER: st=130
+USER: Cellos > 

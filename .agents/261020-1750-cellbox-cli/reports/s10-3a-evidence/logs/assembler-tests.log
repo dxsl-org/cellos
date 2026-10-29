@@ -1,0 +1,63 @@
+...=== x86_64 image: profile headless, release dir /tmp/tmp2kp10cc9/target/x86_64-unknown-none/release ===
+.=== x86_64 image: profile headless, release dir /tmp/tmpctcgd28n/target/x86_64-unknown-none/release ===
+.=== x86_64 image: profile headless, release dir /tmp/tmp9j8cl6_j/target/x86_64-unknown-none/release ===
+.=== x86_64 image: profile headless, release dir /tmp/tmplmrknj7d/target/x86_64-unknown-none/release ===
+.=== x86_64 image: profile headless, release dir /tmp/tmp40k9jr7v/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmp40k9jr7v/out/.assemble-_6so11t8/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmp40k9jr7v/out/kernel_fs.img (4194304 B, sha256 c423e99e59ac5ae4dbed832fb042fabe89f9783ae83c8ec3b3625e59c86c0f68), 25 files
+=== x86_64 image: profile desktop, release dir /tmp/tmp40k9jr7v/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmp40k9jr7v/out/.assemble-1kshx2my/kernel_fs.img: 32 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmp40k9jr7v/out/kernel_fs.img (4194304 B, sha256 dd62b99c9dd9078a0840238bfee452cbef94fce9a4c69c11b3005a85ba00592c), 32 files
+.=== x86_64 image: profile headless, release dir /tmp/tmpjdcqdia6/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpjdcqdia6/out/.assemble-o_bzo42r/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpjdcqdia6/out/kernel_fs.img (4194304 B, sha256 c423e99e59ac5ae4dbed832fb042fabe89f9783ae83c8ec3b3625e59c86c0f68), 25 files
+..=== x86_64 image: profile headless, release dir /tmp/tmp5xm1rjf7/target/x86_64-unknown-none/release ===
+=== x86_64 image: profile headless, release dir /tmp/tmp5xm1rjf7/target/x86_64-unknown-none/release ===
+.=== x86_64 image: profile headless, release dir /tmp/tmpdj8c1z61/target/x86_64-unknown-none/release ===
+.=== x86_64 image: profile headless, release dir /tmp/tmpj_hn1bri/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpj_hn1bri/out/.assemble-uruggw4h/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpj_hn1bri/out/kernel_fs.img (4194304 B, sha256 c423e99e59ac5ae4dbed832fb042fabe89f9783ae83c8ec3b3625e59c86c0f68), 25 files
+=== x86_64 image: profile desktop, release dir /tmp/tmpj_hn1bri/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpj_hn1bri/out/.assemble-ywbt972p/kernel_fs.img: 32 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpj_hn1bri/out/kernel_fs.img (4194304 B, sha256 dd62b99c9dd9078a0840238bfee452cbef94fce9a4c69c11b3005a85ba00592c), 32 files
+.=== x86_64 image: profile headless, release dir /tmp/tmpfjk16txb/target/x86_64-unknown-none/release ===
+=== x86_64 image: profile headless, release dir /tmp/tmpfjk16txb/target/x86_64-unknown-none/release ===
+=== x86_64 image: profile headless, release dir /tmp/tmpfjk16txb/target/x86_64-unknown-none/release ===
+.=== x86_64 image: profile headless, release dir /tmp/tmpcsin0h86/target/x86_64-unknown-none/release ===
+=== x86_64 image: profile headless, release dir /tmp/tmpcsin0h86/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpcsin0h86/fresh/.assemble-g6b85f0p/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpcsin0h86/fresh/kernel_fs.img (4194304 B, sha256 c423e99e59ac5ae4dbed832fb042fabe89f9783ae83c8ec3b3625e59c86c0f68), 25 files
+..+ cellos-sign route x86-candidate-headless (dev key) --sign 2 cell(s)
++ cellos-sign route x86-candidate-desktop (dev key) --sign 2 cell(s)
++ cellos-sign --objcopy objcopy (private key) --sign 2 cell(s)
++ cellos-sign route x86-candidate-headless (dev key) --sign 2 cell(s)
+..=== x86_64 image: profile headless, release dir /tmp/tmpixob1_pa/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpixob1_pa/out/.assemble-x24h5z8u/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpixob1_pa/out/kernel_fs.img (4194304 B, sha256 c423e99e59ac5ae4dbed832fb042fabe89f9783ae83c8ec3b3625e59c86c0f68), 25 files
+.=== x86_64 image: profile headless, release dir /tmp/tmp0_1t_wmf/target/x86_64-unknown-none/release ===
+.=== x86_64 image: profile headless, release dir /tmp/tmpoky6vmbg/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpoky6vmbg/out/.assemble-o8dl95ub/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpoky6vmbg/out/kernel_fs.img (4194304 B, sha256 c423e99e59ac5ae4dbed832fb042fabe89f9783ae83c8ec3b3625e59c86c0f68), 25 files
+=== x86_64 image: profile desktop, release dir /tmp/tmpoky6vmbg/target/x86_64-unknown-none/release ===
+Created FAT16 image at /tmp/tmpoky6vmbg/out/.assemble-ak8jz1kl/kernel_fs.img: 32 file(s), 3 director(ies), 8031 clusters.
+published /tmp/tmpoky6vmbg/out/kernel_fs.img (4194304 B, sha256 dd62b99c9dd9078a0840238bfee452cbef94fce9a4c69c11b3005a85ba00592c), 32 files
+.......Created FAT16 image at /tmp/tmpmjxg_r53/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+Created FAT16 image at /tmp/tmpgrhp1_8h/kernel_fs.img: 32 file(s), 3 director(ies), 8031 clusters.
+.Created FAT16 image at /tmp/tmp4tm8gwrp/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+.Created FAT16 image at /tmp/tmp9vs5u1e4/kernel_fs.img: 32 file(s), 3 director(ies), 8031 clusters.
+.Created FAT16 image at /tmp/tmpeu0jv6sv/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+.Created FAT16 image at /tmp/tmpd82apk73/kernel_fs.img: 24 file(s), 3 director(ies), 8031 clusters.
+.Created FAT16 image at /tmp/tmp8c3m3bfy/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+Created FAT16 image at /tmp/tmpl_r77ihm/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+.Created FAT16 image at /tmp/tmpp65u7bo1/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+Created FAT16 image at /tmp/tmph5mcafc4/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+.Created FAT16 image at /tmp/tmpb26v5024/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+.Created FAT16 image at /tmp/tmpu13blf6i/kernel_fs.img: 25 file(s), 3 director(ies), 8031 clusters.
+.Created FAT16 image at /tmp/tmppby6m4cm/kernel_fs.img: 26 file(s), 3 director(ies), 8031 clusters.
+.Created FAT16 image at /tmp/tmpp7vk_u69/kernel_fs.img: 26 file(s), 3 director(ies), 8031 clusters.
+.Created FAT16 image at /tmp/tmp122_qnd_/kernel_fs.img: 26 file(s), 3 director(ies), 8031 clusters.
+.
+----------------------------------------------------------------------
+Ran 39 tests in 0.481s
+
+OK

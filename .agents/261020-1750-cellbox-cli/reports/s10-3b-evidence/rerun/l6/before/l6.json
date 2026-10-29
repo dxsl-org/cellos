@@ -1,0 +1,194 @@
+{
+  "phase": "before",
+  "isos": {
+    "headless": {
+      "path": "/home/dmin/cellos/build/vicell-x86.iso",
+      "sha256": "eb1cb8130476120a2f25ab63f6d1ef45036d497722005ffef93e62433abfef09"
+    },
+    "desktop": {
+      "path": "/home/dmin/cellos/build/cellos-x86_64.iso",
+      "sha256": "b9a08fcb9050b5dd5c89cafa059c5ba20820f8bec4957fdc38d93cbf9d585b76"
+    },
+    "pc": {
+      "path": "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-pc.iso",
+      "sha256": "273a3be0dda2d6f2aea25ad83a9ddd4b37709da4bbdf2cd5acbe84be41eb3dc8"
+    }
+  },
+  "consumers": {
+    "x86_64-boot": {
+      "env": {
+        "VICELL_X86_ISO": "/home/dmin/cellos/build/vicell-x86.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "x86_boots_to_shell_prompt": "pass",
+        "x86_echo_command": "pass",
+        "x86_init_spawns": "pass",
+        "x86_kernel_banner": "pass",
+        "x86_ls_command": "pass",
+        "x86_ps_command": "pass",
+        "x86_scheduler_initializes": "pass",
+        "x86_tier2_admission_is_refused_until_switch_is_qualified": "pass",
+        "x86_tier2_fault_isolation_fixture_is_refused": "pass"
+      },
+      "seconds": 52.6
+    },
+    "nvme-x86": {
+      "env": {
+        "VICELL_X86_ISO": "/home/dmin/cellos/build/vicell-x86.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "nvme_boot_reaches_shell_x86": "pass",
+        "nvme_driver_cell_registers_x86": "pass",
+        "nvme_fat32_mount_x86": "pass"
+      },
+      "seconds": 21.4
+    },
+    "virtio-x86": {
+      "env": {
+        "VICELL_X86_ISO": "/home/dmin/cellos/build/vicell-x86.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "x86_virtio_blk_initialises": "ignored",
+        "x86_virtio_pci_no_device_no_hang": "pass"
+      },
+      "seconds": 8.6
+    },
+    "pcie-multibus-x86": {
+      "env": {
+        "VICELL_X86_ISO": "/home/dmin/cellos/build/vicell-x86.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "bus1_nvme_dma_completes_under_vtd": "pass",
+        "bus1_nvme_is_discovered_and_initialized": "pass"
+      },
+      "seconds": 3.2
+    },
+    "handoff": {
+      "env": {
+        "VICELL_X86_ISO": "/home/dmin/cellos/build/vicell-x86.iso"
+      },
+      "filter": [
+        "handoff_x86"
+      ],
+      "exit": 0,
+      "tests": {
+        "handoff_x86_32_bare_paging": "skip",
+        "handoff_x86_32_heap": "skip",
+        "handoff_x86_32_kernel_starts": "skip",
+        "handoff_x86_32_scheduler_initialized": "skip",
+        "handoff_x86_frame_allocator": "pass",
+        "handoff_x86_heap": "pass",
+        "handoff_x86_kernel_builds": "pass",
+        "handoff_x86_kernel_starts": "pass",
+        "handoff_x86_limine_paging": "pass",
+        "handoff_x86_phys_base": "pass"
+      },
+      "seconds": 4.2
+    },
+    "ahci-x86": {
+      "env": {
+        "VICELL_AHCI_ISO": "/home/dmin/cellos/build/vicell-x86.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "ahci_and_nvme_both_register_x86": "pass",
+        "ahci_boot_reaches_shell_x86": "pass",
+        "ahci_driver_cell_identifies_sata_x86": "pass",
+        "ahci_driver_cell_registers_block_driver_x86": "pass",
+        "ahci_fat32_persistence_reboot_x86": "pass"
+      },
+      "seconds": 59.6
+    },
+    "xhci-x86": {
+      "env": {
+        "VICELL_XHCI_ISO": "/home/dmin/cellos/build/vicell-x86.iso"
+      },
+      "filter": [],
+      "exit": 101,
+      "tests": {
+        "xhci_boot_without_keyboard_reaches_shell_x86": "pass",
+        "xhci_com1_input_still_works_x86": "pass",
+        "xhci_driver_cell_enumerates_usb_keyboard_x86": "pass",
+        "xhci_injected_key_decodes_in_cell_x86": "fail"
+      },
+      "seconds": 58.1
+    },
+    "serial-x86": {
+      "env": {
+        "VICELL_SERIAL_ISO": "/home/dmin/cellos/build/vicell-x86.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "serial_x86_multiport_tx_rx_and_console_unchanged": "pass"
+      },
+      "seconds": 12.4
+    },
+    "nic-x86": {
+      "env": {
+        "VICELL_NIC_ISO": "/home/dmin/cellos/build/vicell-x86.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "nic_x86_e1000_dhcp": "pass",
+        "nic_x86_vtd_e1000_dhcp": "pass"
+      },
+      "seconds": 7.1
+    },
+    "igb-x86": {
+      "env": {
+        "VICELL_IGB_ISO": "/home/dmin/cellos/build/vicell-x86.iso",
+        "VICELL_IGB_VTD_ISO": "/home/dmin/cellos/build/vicell-x86.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "igb_x86_dhcp": "pass",
+        "igb_x86_vtd_dhcp": "pass"
+      },
+      "seconds": 7.8
+    },
+    "iommu-dmar-x86": {
+      "env": {
+        "VICELL_IOMMU_ISO": "/home/dmin/cellos/build/vicell-x86.iso",
+        "VICELL_PC_ISO": "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-pc.iso"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "q35_without_a_remapper_names_the_fallback_and_the_identity_contract": "pass",
+        "x86_pc_discovers_the_vtd_base_from_acpi_dmar": "pass",
+        "x86_pc_without_a_remapper_refuses_untranslated_dma": "pass"
+      },
+      "seconds": 10.0
+    },
+    "desktop-x86": {
+      "env": {
+        "CELLOS_DESKTOP_ISO": "/home/dmin/cellos/build/cellos-x86_64.iso",
+        "CELLOS_DESKTOP_ACCEL": "tcg"
+      },
+      "filter": [],
+      "exit": 0,
+      "tests": {
+        "desktop_x86_boots_to_shell_and_compositor": "pass"
+      },
+      "seconds": 36.5
+    },
+    "qemu-x86_64-test.sh": {
+      "exit": 0,
+      "tests": {
+        "boot-to-prompt": "pass"
+      }
+    }
+  }
+}

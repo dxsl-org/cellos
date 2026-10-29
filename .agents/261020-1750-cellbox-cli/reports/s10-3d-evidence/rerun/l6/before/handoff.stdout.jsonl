@@ -1,0 +1,22 @@
+{ "type": "suite", "event": "started", "test_count": 10 }
+{ "type": "test", "event": "started", "name": "handoff_x86_32_bare_paging" }
+{ "type": "test", "name": "handoff_x86_32_bare_paging", "event": "ok", "stdout": "SKIP: x86_32 kernel not built (/home/dmin/cellos/target/x86_32-unknown-none/release/cellos-kernel)\n  build: cargo build --target kernel/x86_32-unknown-none.json -p cellos-kernel --release -Z build-std=core,alloc\n" }
+{ "type": "test", "event": "started", "name": "handoff_x86_32_heap" }
+{ "type": "test", "name": "handoff_x86_32_heap", "event": "ok", "stdout": "SKIP: x86_32 kernel not built (/home/dmin/cellos/target/x86_32-unknown-none/release/cellos-kernel)\n  build: cargo build --target kernel/x86_32-unknown-none.json -p cellos-kernel --release -Z build-std=core,alloc\n" }
+{ "type": "test", "event": "started", "name": "handoff_x86_32_kernel_starts" }
+{ "type": "test", "name": "handoff_x86_32_kernel_starts", "event": "ok", "stdout": "SKIP: x86_32 kernel not built (/home/dmin/cellos/target/x86_32-unknown-none/release/cellos-kernel)\n  build: cargo build --target kernel/x86_32-unknown-none.json -p cellos-kernel --release -Z build-std=core,alloc\n" }
+{ "type": "test", "event": "started", "name": "handoff_x86_32_scheduler_initialized" }
+{ "type": "test", "name": "handoff_x86_32_scheduler_initialized", "event": "ok", "stdout": "SKIP: x86_32 kernel not built (/home/dmin/cellos/target/x86_32-unknown-none/release/cellos-kernel)\n  build: cargo build --target kernel/x86_32-unknown-none.json -p cellos-kernel --release -Z build-std=core,alloc\n" }
+{ "type": "test", "event": "started", "name": "handoff_x86_frame_allocator" }
+{ "type": "test", "name": "handoff_x86_frame_allocator", "event": "ok" }
+{ "type": "test", "event": "started", "name": "handoff_x86_heap" }
+{ "type": "test", "name": "handoff_x86_heap", "event": "ok" }
+{ "type": "test", "event": "started", "name": "handoff_x86_kernel_builds" }
+{ "type": "test", "name": "handoff_x86_kernel_builds", "event": "ok" }
+{ "type": "test", "event": "started", "name": "handoff_x86_kernel_starts" }
+{ "type": "test", "name": "handoff_x86_kernel_starts", "event": "ok" }
+{ "type": "test", "event": "started", "name": "handoff_x86_limine_paging" }
+{ "type": "test", "name": "handoff_x86_limine_paging", "event": "ok" }
+{ "type": "test", "event": "started", "name": "handoff_x86_phys_base" }
+{ "type": "test", "name": "handoff_x86_phys_base", "event": "ok" }
+{ "type": "suite", "event": "ok", "passed": 10, "failed": 0, "ignored": 0, "measured": 0, "filtered_out": 17, "exec_time": 3.9107940340000003 }

@@ -1,0 +1,9 @@
+{
+  "diagnostic_only": true,
+  "original_candidate_sha256": "0718a96542e7a3f4d223b02d5ad0511a2e23d83b8cbdb690450aea7662a62863",
+  "original_iso_sha256": "e6713da24de982ea6c7d30550606cd21a06efa6c317b280add088053bf73888c",
+  "probe_iso_sha256": "f4be8a2288f286401281ff93be5aa017ac9a7640a5f7cc4e5e2e8d6329f06afa",
+  "unchanged_nvme_sha256": "5c42a0651c617b5091ac5c56bb22011bb3a5ea8b58210482c89956524d61ad0d",
+  "instrumented_platform_sha256": "2b05be9230b0e8f11668a56496d3fb330ad6081797514b53de9ac24ef7789e06",
+  "change": "Only platform source gets 1000 yields inside NVMe BAR0 decode-disabled probe interval."
+}

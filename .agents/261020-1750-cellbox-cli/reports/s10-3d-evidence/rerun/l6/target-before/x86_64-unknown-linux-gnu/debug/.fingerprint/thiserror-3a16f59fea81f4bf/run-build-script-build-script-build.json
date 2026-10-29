@@ -1,0 +1,1 @@
+{"rustc":9130907117175453446,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[4012234191921133045,"build_script_build",false,10187972627180106289]],"local":[{"RerunIfChanged":{"output":"x86_64-unknown-linux-gnu/debug/build/thiserror-3a16f59fea81f4bf/output","paths":["build/probe.rs"]}}],"rustflags":[],"config":0,"compile_kind":0}

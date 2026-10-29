@@ -1,0 +1,310 @@
+{
+  "candidate_sha256": "0718a96542e7a3f4d223b02d5ad0511a2e23d83b8cbdb690450aea7662a62863",
+  "host": [
+    {
+      "crate": "cellbox",
+      "passed": 213,
+      "failed": 0
+    },
+    {
+      "crate": "app_init",
+      "passed": 13,
+      "failed": 0
+    },
+    {
+      "crate": "driver_nvme",
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "crate": "service_vfs",
+      "passed": 109,
+      "failed": 0
+    }
+  ],
+  "harness_runs": [
+    {
+      "log": "harness-tests.log",
+      "tests": 25,
+      "pass": true,
+      "resource_warning": true
+    },
+    {
+      "log": "harness-tests-after-tui-framing.log",
+      "tests": 27,
+      "pass": true,
+      "resource_warning": true
+    }
+  ],
+  "lanes": [
+    {
+      "lane": "regression-p04-terminal",
+      "work": "/tmp/cellbox-phase04-jyc28jns",
+      "exit": 0,
+      "seconds": 1778.2,
+      "env": [],
+      "command": [
+        "scripts/qemu-phase04-terminal-test.sh"
+      ],
+      "final_lines": [
+        "PASS no-launch-context-refused-uart",
+        "PASS no-shell-prompt-on-uart",
+        "PASS no-key-material-in-log",
+        "PASS: 494 Phase04 S3-output runtime checks (202 driver markers); GUI/regression evidence remains separate"
+      ],
+      "summary_lines": [
+        "PASS no-FAIL-markers",
+        "PASS driver-final-verdict",
+        "PASS: 494 Phase04 S3-output runtime checks (202 driver markers); GUI/regression evidence remains separate"
+      ],
+      "verdict": "PASS",
+      "verdict.json": "/tmp/cellbox-phase04-jyc28jns/evidence/verdict.json",
+      "payload-match.json": null,
+      "candidate-provenance.json": null
+    },
+    {
+      "lane": "regression-p02-kernel",
+      "work": "/tmp/cellbox-phase02-y9quex7v",
+      "exit": 0,
+      "seconds": 99.9,
+      "env": [
+        "PHASE02_KERNEL_TESTS=1"
+      ],
+      "command": [
+        "scripts/qemu-phase02-session-test.sh"
+      ],
+      "final_lines": [
+        "atomic publication cases: 39 pass: 39",
+        "vfs self-test markers: 7 of 7",
+        "VFS SELFTEST PASS (S7-2 dir-page + S8-2 save markers; test-hooks image; not acceptance)",
+        "KERNEL REGRESSION CASES PASS (test-hooks image; not CP2, not acceptance)"
+      ],
+      "summary_lines": [],
+      "verdict": "PASS",
+      "verdict.json": null,
+      "payload-match.json": null,
+      "candidate-provenance.json": null
+    },
+    {
+      "lane": "L0-headless-run1",
+      "work": "/tmp/cellbox-phase10-s6pjo8ow",
+      "exit": 1,
+      "seconds": 949.2,
+      "env": [],
+      "command": [
+        "scripts/qemu-phase10-canonical-test.sh",
+        "--candidate",
+        "/tmp/cellbox-s10-3c-resume/cand/candidate.json",
+        "--profile",
+        "headless",
+        "--work",
+        "/tmp/cellbox-phase10-s6pjo8ow"
+      ],
+      "final_lines": [
+        "PASS P10C-not-on-uart",
+        "FAIL: headless L0 (16 markers) in 907.9s",
+        "==> Provenance, no-secret check, evidence digest",
+        "ISO unchanged: True | no-secret hits: none | run 949 s"
+      ],
+      "summary_lines": [
+        "FAIL: headless L0 (16 markers) in 907.9s"
+      ],
+      "verdict": "FAIL",
+      "verdict.json": "/tmp/cellbox-phase10-s6pjo8ow/evidence/verdict.json",
+      "payload-match.json": null,
+      "candidate-provenance.json": null
+    },
+    {
+      "lane": "L0-headless-run2",
+      "work": "/tmp/cellbox-phase10-w5t1anar",
+      "exit": 1,
+      "seconds": 735.4,
+      "env": [],
+      "command": [
+        "scripts/qemu-phase10-canonical-test.sh",
+        "--candidate",
+        "/tmp/cellbox-s10-3c-resume/cand/candidate.json",
+        "--profile",
+        "headless",
+        "--work",
+        "/tmp/cellbox-phase10-w5t1anar"
+      ],
+      "final_lines": [
+        "PASS P10C-not-on-uart",
+        "FAIL: headless L0 (16 markers) in 697.2s",
+        "==> Provenance, no-secret check, evidence digest",
+        "ISO unchanged: True | no-secret hits: none | run 735 s"
+      ],
+      "summary_lines": [
+        "FAIL: headless L0 (16 markers) in 697.2s"
+      ],
+      "verdict": "FAIL",
+      "verdict.json": "/tmp/cellbox-phase10-w5t1anar/evidence/verdict.json",
+      "payload-match.json": null,
+      "candidate-provenance.json": null
+    }
+  ],
+  "l0": {
+    "summary": {
+      "headless": {
+        "attempts": 2,
+        "runs": 2,
+        "uncounted": 0,
+        "pass": 0,
+        "booted": 2,
+        "booted_pass": 0,
+        "longest_consecutive_pass": 0,
+        "final_streak": 0,
+        "slow_completions": 0,
+        "failure_classes": {
+          "UNCLASSIFIED": 1,
+          "F3 nvme-admin-timeout": 1
+        }
+      },
+      "desktop": {
+        "attempts": 0,
+        "runs": 0,
+        "uncounted": 0,
+        "pass": 0,
+        "booted": 0,
+        "booted_pass": 0,
+        "longest_consecutive_pass": 0,
+        "final_streak": 0,
+        "slow_completions": 0,
+        "failure_classes": {}
+      }
+    },
+    "stream": {
+      "profiles": {
+        "headless": {
+          "attempts": 2,
+          "counted_runs": 2,
+          "uncounted": 0,
+          "passes": 0,
+          "streak": 0,
+          "longest_streak": 0,
+          "next_attempt": 3
+        },
+        "desktop": {
+          "attempts": 0,
+          "counted_runs": 0,
+          "uncounted": 0,
+          "passes": 0,
+          "streak": 0,
+          "longest_streak": 0,
+          "next_attempt": 1
+        }
+      },
+      "infrastructure_streak": 0,
+      "infrastructure_blocked": false,
+      "complete": false,
+      "exhausted": []
+    },
+    "runs": [
+      {
+        "lane": "L0-headless-run1",
+        "exit": 1,
+        "seconds": 949.2,
+        "work": "/tmp/cellbox-phase10-s6pjo8ow",
+        "counted": true,
+        "booted": true,
+        "failed_markers": {
+          "P10C-top": {
+            "checks": [
+              "q-restores-then-prompt"
+            ],
+            "error": ""
+          },
+          "P10C-edit": {
+            "checks": [
+              "create-quit",
+              "existing-quit",
+              "reopen-clean-quit-without-question",
+              "discard-exits"
+            ],
+            "error": ""
+          }
+        },
+        "classes": [
+          "UNCLASSIFIED"
+        ],
+        "nvme_events": [],
+        "slow_completions": [],
+        "max_slow_completion_ms": null,
+        "runner_seconds": 949,
+        "qualifying": true
+      },
+      {
+        "lane": "L0-headless-run2",
+        "exit": 1,
+        "seconds": 735.4,
+        "work": "/tmp/cellbox-phase10-w5t1anar",
+        "counted": true,
+        "booted": true,
+        "failed_markers": {
+          "P10C-ssh-serial": {
+            "checks": [
+              "no-echo-after-password-prompt"
+            ],
+            "error": ""
+          }
+        },
+        "classes": [
+          "F3 nvme-admin-timeout"
+        ],
+        "nvme_events": [
+          {
+            "boot": "serial-ssh.log",
+            "line_number": 201,
+            "line": "USER: [nvme] admin timeout opc=6 after 60000 ms",
+            "event": "admin timeout",
+            "elapsed_ms": 60000,
+            "polls": null,
+            "opc": 6
+          }
+        ],
+        "slow_completions": [],
+        "max_slow_completion_ms": null,
+        "runner_seconds": 735,
+        "qualifying": true
+      }
+    ],
+    "unclassified": [
+      "L0-headless-run1"
+    ]
+  },
+  "unrun_after_stop": [
+    "L0 headless six-consecutive qualification",
+    "L0 desktop",
+    "L1 imported P02 session and kernel",
+    "L2 imported P03",
+    "L3 imported P04 terminal",
+    "L4 imported GUI six consecutive",
+    "L5 P09 no-faults",
+    "L5f P09 faults",
+    "L6 12 consumers before and after plus CI boot",
+    "CBX-01/02 audit",
+    "default P02 session, P03, GUI, P09"
+  ],
+  "source_hashes": {
+    "cells/drivers/nvme/src/controller.rs": "f7484f30d7ad090a8f5ddf9bc6fcf001a89560464564d09524717a5949298cb2",
+    "cells/drivers/nvme/src/deadline.rs": "282cdbddd31760c6a5f3e60e6689e5c9fbcedd19c84e172808e49e9b87a876ae",
+    "cells/drivers/nvme/src/main.rs": "3d1e47820df2db02597e7791d1e88a7e348cf9d8e491f5a161050dbd207db30e",
+    "cells/tools/init/src/boot.rs": "1d39e1ba2e2eba73079997d618567ab754e048ead102826eeb3568b4028a47d7",
+    "cells/tools/init/src/main.rs": "5173c00f64bd2e9553272be8a8802680cc931f0acf1a4c6c57c978c3d1c057a2",
+    ".github/workflows/ci.yml": "33ebc835e374a6ec5bb6816e60741b0f1836f5f188de87d52cb15bc0845bd0a8",
+    "scripts/phase10_canonical_drive.py": "d4fcb022dc340f6d79451fa02ae3b38e0ca90f809f0c943ba48abfbeb835fad9",
+    "scripts/phase10_l0_stream.py": "dd6254899f6bff2088fd26bc49806a5089200fb1b6cea59b4c080feabdb8067b",
+    "scripts/test_phase10_canonical_drive.py": "e55017809009605c69f402dcccfca941a3a491d1b8f623fc5f03efbcb4aa8949",
+    "scripts/phase09_ssh_fixture.sh": "5a9afb76fc45a450471ec4e34b7bec4a38dfb3d0ef1f3a09d8d7b139ca4c5199",
+    "scripts/qemu-phase10-canonical-test.sh": "fd3c295fda81c7c5879e435a043c9556324aab6a8f321338e2da55b2801ab801"
+  },
+  "stop": {
+    "id": "SC5",
+    "lane": "L0-headless-run2",
+    "boot": "ssh",
+    "evidence": "/tmp/cellbox-phase10-w5t1anar/evidence/serial-ssh.log:201-215",
+    "finding": "Identify admin opcode 6 unanswered after 60000 ms; controller init IO; VFS unavailable",
+    "new_product_finding_not_waived": true
+  }
+}

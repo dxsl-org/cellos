@@ -1,0 +1,301 @@
+=== x86_64 image: profile desktop, release dir /tmp/cellbox-s10-3d-resume/target/x86_64-unknown-none/release ===
++ cargo build --release --locked --target x86_64-unknown-none -Z build-std=core,alloc --message-format=json-render-diagnostics -p app-cellbox -p service-vfs -p service-config -p service-input -p service-net -p service-platform -p driver-nvme -p driver-e1000 -p driver-igb -p driver-ahci -p driver-xhci -p driver-serial-x86 -p app-sys-tools -p tier2-smoke -p tier2-exploit -p service-compositor -p fb-console -p desktop -p files -p terminal -p app-chrome -p ocel
+   Compiling vi-compiler v0.1.0 (/home/dmin/cellos/tools/vi-compiler)
+   Compiling slotmap v1.1.1
+   Compiling desktop v0.1.0 (/home/dmin/cellos/cells/apps/desktop)
+   Compiling ocel v0.1.0 (/home/dmin/cellos/cells/apps/ocel)
+   Compiling fb-console v0.1.0 (/home/dmin/cellos/cells/apps/fb-console)
+   Compiling app-sys-tools v0.1.0 (/home/dmin/cellos/cells/tools/sys-tools)
+   Compiling driver-disk v0.1.0 (/home/dmin/cellos/cells/drivers/disk)
+   Compiling files v0.1.0 (/home/dmin/cellos/cells/apps/files)
+   Compiling app-chrome v0.1.0 (/home/dmin/cellos/cells/apps/chrome)
+   Compiling terminal v0.1.0 (/home/dmin/cellos/cells/apps/terminal)
+   Compiling equivalent v1.0.3
+   Compiling allocator-api2 v0.2.21
+   Compiling serde_core v1.0.229
+   Compiling no_std_io v0.6.0
+   Compiling zune-core v0.5.3
+   Compiling simd-adler32 v0.3.10
+   Compiling smallvec v1.15.2
+   Compiling ai-quick-error v2.0.1
+   Compiling arrayvec v0.7.8
+   Compiling service-compositor v0.1.0 (/home/dmin/cellos/cells/services/compositor)
+   Compiling driver-xhci v0.1.0 (/home/dmin/cellos/cells/drivers/xhci)
+   Compiling service-platform v0.1.0 (/home/dmin/cellos/cells/services/platform)
+   Compiling ocel-service-proto v0.1.0 (/home/dmin/cellos/libs/ocel-service-proto)
+   Compiling app-cellbox v0.1.0 (/home/dmin/cellos/cells/tools/cellbox)
+   Compiling driver-e1000 v0.1.0 (/home/dmin/cellos/cells/drivers/e1000)
+   Compiling driver-serial-x86 v0.1.0 (/home/dmin/cellos/cells/drivers/serial-x86)
+   Compiling driver-nvme v0.1.0 (/home/dmin/cellos/cells/drivers/nvme)
+   Compiling tier2-smoke v0.1.0 (/home/dmin/cellos/cells/tests/tier2-smoke)
+   Compiling service-vfs v0.1.0 (/home/dmin/cellos/cells/services/vfs)
+   Compiling service-input v0.2.0 (/home/dmin/cellos/cells/services/input)
+   Compiling driver-igb v0.1.0 (/home/dmin/cellos/cells/drivers/igb)
+   Compiling service-net v0.1.0 (/home/dmin/cellos/cells/services/net)
+   Compiling tier2-exploit v0.1.0 (/home/dmin/cellos/cells/tests/tier2-exploit)
+   Compiling driver-ahci v0.1.0 (/home/dmin/cellos/cells/drivers/ahci)
+   Compiling service-config v0.1.0 (/home/dmin/cellos/cells/services/config)
+   Compiling zune-inflate v0.2.54
+   Compiling ai_byteorder_lite v0.1.0
+   Compiling zune-jpeg v0.5.15
+   Compiling hashbrown v0.15.5
+   Compiling hashbrown v0.17.1
+   Compiling hashbrown v0.16.1
+   Compiling zune-png v0.5.2
+   Compiling viui-macros v0.2.0 (/home/dmin/cellos/libs/viui-macros)
+   Compiling taffy v0.14.0
+   Compiling ai-image-webp v0.2.4
+   Compiling lru v0.16.4
+   Compiling kasuari v0.4.13
+   Compiling ratatui-core v0.1.0
+   Compiling serde v1.0.229
+   Compiling ratatui-widgets v0.3.0
+   Compiling postcard v1.1.3
+   Compiling ocel-pdf-proto v0.1.0 (/home/dmin/cellos/libs/ocel-pdf-proto)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling dom-arena v0.1.0 (/home/dmin/cellos/libs/dom-arena)
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling text-engine v0.1.0 (/home/dmin/cellos/libs/text-engine)
+   Compiling driver-hid v0.1.0 (/home/dmin/cellos/cells/drivers/hid)
+   Compiling viui v0.2.0 (/home/dmin/cellos/libs/viui)
+   Compiling terminal-sdk v0.1.0 (/home/dmin/cellos/libs/terminal)
+warning: unused import: `TITLE`
+ --> cells/services/compositor/src/window_decoration/raster.rs:3:57
+  |
+3 | use super::{clip_to_screen, control_rect, end, Control, TITLE};
+  |                                                         ^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `alloc::vec`
+  --> cells/services/net/src/dns.rs:17:5
+   |
+17 | use alloc::vec;
+   |     ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling vitui v0.1.0 (/home/dmin/cellos/libs/vitui)
+warning: field `frame_id` is never read
+  --> cells/services/compositor/src/surface_table/frame.rs:16:9
+   |
+15 | pub struct Frame {
+   |            ----- field in this struct
+16 |     pub frame_id: u32,
+   |         ^^^^^^^^
+   |
+   = note: `Frame` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `view_id`, `role`, `min_w`, and `min_h` are never read
+  --> cells/services/compositor/src/surface_table/frame.rs:33:9
+   |
+32 | pub struct View {
+   |            ---- fields in this struct
+33 |     pub view_id: u32,
+   |         ^^^^^^^
+...
+38 |     pub role: SurfaceRole,
+   |         ^^^^
+39 |     pub min_w: u32,
+   |         ^^^^^
+40 |     pub min_h: u32,
+   |         ^^^^^
+   |
+   = note: `View` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: constant `INSET` is never used
+  --> cells/services/compositor/src/window_decoration.rs:12:18
+   |
+12 | pub(super) const INSET: i32 = 2;
+   |                  ^^^^^
+
+warning: constant `LOOP_TRACE_INTERVAL_TICKS` is never used
+  --> cells/services/net/src/service-runtime.rs:50:7
+   |
+50 | const LOOP_TRACE_INTERVAL_TICKS: u64 = 2_000 * MTIME_TICKS_PER_MS;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `remove_owner` is never used
+   --> cells/services/net/src/socket_table.rs:204:12
+    |
+ 48 | impl SocketTable {
+    | ---------------- method in this implementation
+...
+204 |     pub fn remove_owner(&mut self, owner: SocketOwner, sockets: &mut smoltcp::iface::SocketSet<'_>) {
+    |            ^^^^^^^^^^^^
+
+warning: function `validity_window` is never used
+  --> cells/services/net/src/tls/clock.rs:27:8
+   |
+27 | pub fn validity_window() -> Option<(u64, u64)> {
+   |        ^^^^^^^^^^^^^^^
+
+warning: method `is_empty` is never used
+   --> cells/services/net/src/tls/dispatch.rs:100:12
+    |
+ 99 | impl TlsPending {
+    | --------------- method in this implementation
+100 |     pub fn is_empty(&self) -> bool {
+    |            ^^^^^^^^
+
+warning: field `handle` is never read
+  --> cells/services/net/src/tls/socket.rs:56:9
+   |
+51 | pub struct TlsSocketEntry {
+   |            -------------- field in this struct
+...
+56 |     pub handle: SocketHandle,
+   |         ^^^^^^
+
+warning: field `expected` is never read
+  --> cells/services/input/src/session.rs:56:66
+   |
+55 | struct Foreground {
+   |        ---------- field in this struct
+56 |     lease: Ref, receipt: Ref, child: ChildRefV1, operation: Ref, expected: u64, next: u64,
+   |                                                                  ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `paste` is never read
+   --> cells/tools/cellbox/src/executor.rs:683:17
+    |
+683 |                 paste = false;
+    |                 ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+691 |                 paste = false;
+    |                 ------------- `paste` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:128:24
+    |
+128 |     BackgroundPipeline(Vec<Cmd>),
+    |     ------------------ ^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+128 -     BackgroundPipeline(Vec<Cmd>),
+128 +     BackgroundPipeline(()),
+    |
+
+warning: function `run_rows` is never used
+   --> cells/tools/cellbox/src/typed.rs:949:8
+    |
+949 | pub fn run_rows(
+    |        ^^^^^^^^
+
+warning: methods `document_url` and `is_pending` are never used
+   --> cells/apps/ocel/src/browser.rs:137:12
+    |
+135 | impl BrowserSession {
+    | ------------------- methods in this implementation
+136 |     pub fn new(document_url: &str) -> Self { Self {document_url:document_url.into(),coo...
+137 |     pub fn document_url(&self) -> &str { &self.document_url }
+    |            ^^^^^^^^^^^^
+...
+149 |     pub fn is_pending(&self) -> bool { !self.queue.is_empty() || !self.active.is_empty() }
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `render_viewport` is never used
+   --> cells/apps/ocel/src/doc.rs:558:12
+    |
+325 | impl Document {
+    | ------------- method in this implementation
+...
+558 |     pub fn render_viewport(&self,fonts:&mut TextFonts,surf:&mut ViSurface,
+    |            ^^^^^^^^^^^^^^^
+
+warning: function `set_active_system_palette` is never used
+  --> cells/apps/ocel/src/draw.rs:28:8
+   |
+28 | pub fn set_active_system_palette(palette: viui::theme::SystemPalette) {
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `is_reader_mode` is never used
+  --> cells/apps/ocel/src/loader.rs:80:12
+   |
+57 | impl DocumentLoadJob {
+   | -------------------- method in this implementation
+...
+80 |     pub fn is_reader_mode(&self) -> bool { self.reader_mode }
+   |            ^^^^^^^^^^^^^^
+
+warning: `service-compositor` (bin "service-compositor") generated 4 warnings (run `cargo fix --bin "service-compositor" -p service-compositor` to apply 1 suggestion)
+warning: `service-input` (bin "service-input") generated 1 warning
+warning: `service-net` (bin "service-net") generated 6 warnings (run `cargo fix --bin "service-net" -p service-net` to apply 1 suggestion)
+warning: `ocel` (bin "ocel") generated 4 warnings
+warning: `app-cellbox` (bin "cellbox") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 23.29s
++ cargo build --release --locked --target x86_64-unknown-none -Z build-std=core,alloc --message-format=json-render-diagnostics -p app-init --features input,ui
+   Compiling app-init v0.1.0 (/home/dmin/cellos/cells/tools/init)
+    Finished `release` profile [optimized] target(s) in 2.72s
++ cellos-sign route x86-candidate-desktop (dev key) --sign 26 cell(s)
+NOTE: allowlist entries overdue for re-review (past `review_by`, or older than `max_age_days` when they set none):
+  app-c-math-smoke (approved 2026-07-14, 106d ago)
+  app-mlibc-smoke (approved 2026-07-14, 106d ago)
+  app-posix-shim-test (approved 2026-07-14, 106d ago)
+  audio-demo (approved 2026-07-14, 106d ago)
+  cells/demos/audio-demo/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/demos/cfi-test/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/demos/doom/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/demos/tetris-c/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/demos/tetris-lua/src/ffi.rs (approved 2026-07-14, 106d ago)
+  cells/demos/tetris-lua/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/e1000/src/controller.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/nvme/src/controller.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/nvme/src/dispatch.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/nvme/src/queue.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/virtio-blk/src/device.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/virtio-gpu/src/cursor.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/virtio-gpu/src/display.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/virtio-net/src/device.rs (approved 2026-07-14, 106d ago)
+  cells/guests/silo-guest/src/mailbox.rs (approved 2026-07-14, 106d ago)
+  cells/guests/silo-guest/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/bindings_io.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/bindings_net.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/bindings_vfs.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/ffi.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/repl_session.rs (approved 2026-07-14, 106d ago)
+  cells/services/hypervisor/src/timer.rs (approved 2026-07-14, 106d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource.rs (approved 2026-07-14, 106d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource/render.rs (approved 2026-07-14, 106d ago)
+  cells/services/hypervisor/src/vmm.rs (approved 2026-07-14, 106d ago)
+  cells/services/input/src/virtio_device.rs (approved 2026-07-14, 106d ago)
+  cells/services/net/src/tls/socket.rs (approved 2026-07-14, 106d ago)
+  cells/services/net/src/tls/transport.rs (approved 2026-07-14, 106d ago)
+  cells/tests/c-math-smoke/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/tests/hypervisor-test/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/tests/mlibc-smoke/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/tests/posix-shim-test/src/main.rs (approved 2026-07-14, 106d ago)
+  cfi-test (approved 2026-07-14, 106d ago)
+  doom (approved 2026-07-14, 106d ago)
+  driver-e1000 (approved 2026-07-14, 106d ago)
+  driver-nvme (approved 2026-07-14, 106d ago)
+  driver-virtio-blk (approved 2026-07-14, 106d ago)
+  driver-virtio-gpu (approved 2026-07-14, 106d ago)
+  driver-virtio-net (approved 2026-07-14, 106d ago)
+  hypervisor-test (approved 2026-07-14, 106d ago)
+  lua (approved 2026-07-14, 106d ago)
+  service-compositor (approved 2026-07-14, 106d ago)
+  service-hypervisor (approved 2026-07-14, 106d ago)
+  service-input (approved 2026-07-14, 106d ago)
+  service-net (approved 2026-07-14, 106d ago)
+  silo-guest (approved 2026-07-14, 106d ago)
+  tetris-c (approved 2026-07-14, 106d ago)
+  tetris-lua (approved 2026-07-14, 106d ago)
+OK:   signed 26 cell(s) with the dev key on route x86-candidate-desktop after a passing F1/F5 check
+wrote 2013 bytes to /tmp/cellbox-s10-3d-resume/cand/desktop/.assemble-57ivdpgk/POLICY.BIN
+Created FAT16 image at /tmp/cellbox-s10-3d-resume/cand/desktop/.assemble-57ivdpgk/kernel_fs.img: 32 file(s), 3 director(ies), 48671 clusters.
+published /tmp/cellbox-s10-3d-resume/cand/desktop/kernel_fs.img (25165824 B, sha256 3848cefb25f0e7c4abc67feccf3d8886292e25da60a88b4633552651292479ec), 32 files

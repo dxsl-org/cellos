@@ -1,0 +1,154 @@
+//! IPC request dispatcher — translates `DrvRequest` messages into NVMe I/O.
+//!
+//! Wire format (little-endian):
+//!
+//! Read request  (10 B): `[op=0 (2B)] [sector (8B)]`
+//! Write request (522 B): `[op=1 (2B)] [sector (8B)] [data (512B)]`
+//! Flush request   (2 B): `[op=2 (2B)]`
+//!
+//! Read reply OK  (513 B): `[0x00] [sector_data (512B)]`
+//! Write reply OK   (1 B): `[0x00]`
+//! Flush reply OK   (1 B): `[0x00]`
+//! Error reply      (1 B): `[0x01]`
+
+use crate::controller::NvmeController;
+use crate::dma::AuthorizedDma;
+use ostd::dma::DmaBuf;
+
+/// Total reply buffer size: status byte + one full 512-byte sector.
+pub const REPLY_SIZE: usize = 513;
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum DrvOp {
+    Read = 0,
+    Write = 1,
+    Flush = 2,
+}
+
+fn parse_op(data: &[u8]) -> Option<(DrvOp, u64)> {
+    if data.len() < 2 {
+        return None;
+    }
+    let op = match u16::from_le_bytes([data[0], data[1]]) {
+        0 => DrvOp::Read,
+        1 => DrvOp::Write,
+        2 => return Some((DrvOp::Flush, 0)),
+        _ => return None,
+    };
+    if data.len() < 10 {
+        return None;
+    }
+    let sector = u64::from_le_bytes(data[2..10].try_into().ok()?);
+    Some((op, sector))
+}
+
+/// Encode a Read IPC request (10 bytes). Used by VFS.
+// reason: VFS does not yet call these encoders directly (it builds requests
+// inline); kept as the documented counterpart to parse_op() for that caller.
+#[allow(dead_code)]
+pub fn encode_read(sector: u64) -> [u8; 10] {
+    let mut b = [0u8; 10];
+    b[0..2].copy_from_slice(&0u16.to_le_bytes());
+    b[2..10].copy_from_slice(&sector.to_le_bytes());
+    b
+}
+
+/// Encode a Write IPC request (522 bytes). Used by VFS.
+// reason: see encode_read() above.
+#[allow(dead_code)]
+pub fn encode_write(sector: u64, data: &[u8; 512]) -> [u8; 522] {
+    let mut b = [0u8; 522];
+    b[0..2].copy_from_slice(&1u16.to_le_bytes());
+    b[2..10].copy_from_slice(&sector.to_le_bytes());
+    b[10..522].copy_from_slice(data);
+    b
+}
+
+/// Handle one incoming IPC message. Writes the reply into `out` and returns
+/// the number of bytes to send back.
+///
+/// Read OK:  writes `[0x00] ++ sector_data`, returns 513.
+/// Write OK: writes `[0x00]`, returns 1.
+/// Error:    writes `[0x01]`, returns 1.
+pub fn handle(
+    ctrl: &mut NvmeController,
+    io_buf: &AuthorizedDma<DmaBuf>,
+    data: &[u8],
+    out: &mut [u8; REPLY_SIZE],
+) -> usize {
+    let (op, sector) = match parse_op(data) {
+        Some(v) => v,
+        None => {
+            out[0] = 1;
+            return 1;
+        }
+    };
+
+    // A sector past the end of the namespace cannot be served, and the device
+    // only answers it with an opaque status - which is how the Tier-3 lane's
+    // persistence failures surface. Name the caller's sector and the namespace
+    // size instead, so a failing boot says whether the request or the size was
+    // wrong.
+    if matches!(op, DrvOp::Read | DrvOp::Write) && sector >= ctrl.n_sectors {
+        let _ = ostd::io::print_fmt(format_args!(
+            "[nvme] out-of-range request: op={:?} sector={} namespace_sectors={}\n",
+            op, sector, ctrl.n_sectors
+        ));
+    }
+
+    match op {
+        DrvOp::Read => {
+            match ctrl.read_sector(sector, io_buf.iova()) {
+                Ok(_) => {
+                    out[0] = 0;
+                    // SAFETY: read_sector completed; DMA data is now stable in
+                    // the CPU mapping retained by io_buf.
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            io_buf.inner().virt(),
+                            out[1..].as_mut_ptr(),
+                            512,
+                        );
+                    }
+                    513
+                }
+                Err(_) => {
+                    out[0] = 1;
+                    1
+                }
+            }
+        }
+
+        DrvOp::Write => {
+            if data.len() < 10 + 512 {
+                out[0] = 1;
+                return 1;
+            }
+            // SAFETY: write the caller payload into the CPU mapping before
+            // submitting the authorized device-visible IOVA.
+            unsafe {
+                core::ptr::copy_nonoverlapping(data[10..].as_ptr(), io_buf.inner().virt(), 512);
+            }
+            match ctrl.write_sector(sector, io_buf.iova()) {
+                Ok(_) => {
+                    out[0] = 0;
+                    1
+                }
+                Err(_) => {
+                    out[0] = 1;
+                    1
+                }
+            }
+        }
+        DrvOp::Flush => match ctrl.flush() {
+            Ok(_) => {
+                out[0] = 0;
+                1
+            }
+            Err(_) => {
+                out[0] = 1;
+                1
+            }
+        },
+    }
+}

@@ -1,0 +1,31 @@
+{
+  "mode": "import",
+  "lane": "phase04-gui",
+  "profile": "desktop",
+  "candidate_json": "/tmp/cellbox-s10-3-1EGP/cand/candidate.json",
+  "candidate_json_sha256": "a9f384a6a3c3ff8fbec8150ad0cf780aed229f1152434d2d84a047020865c07c",
+  "kernel_fixture_features": "default+phase02-terminal-profile,phase03-filter-profile",
+  "cellbox_features": "default",
+  "payload_match_sha256": "f41af286bf05f42baf4b54fec51607cf2350b938b177f9f1536c4b04c959098e",
+  "payload_match_all_equal": true,
+  "shared": [
+    "/bin/vfs",
+    "/bin/config",
+    "/bin/input",
+    "/bin/platform",
+    "/bin/compositor",
+    "/bin/fb-console",
+    "/bin/desktop",
+    "/bin/files",
+    "/bin/ls",
+    "/bin/cat",
+    "/bin/echo",
+    "/bin/cellbox",
+    "/bin/terminal",
+    "init"
+  ],
+  "lane_only": [
+    "/bin/p03-filter"
+  ],
+  "counts_for": "behaviour of the payload-matched cells only; never kernel-level claims (S10-3.3)"
+}

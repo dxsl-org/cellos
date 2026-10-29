@@ -1,0 +1,26 @@
+chpasswd: password for 'tester' changed
+Server listening on 0.0.0.0 port 2222.
+Server listening on 0.0.0.0 port 22.
+Server listening on :: port 2222.
+Server listening on :: port 22.
+Connection from 172.17.0.1 port 48510 on 172.17.0.2 port 22 rdomain ""
+Connection closed by 172.17.0.1 port 48510 [preauth]
+Connection from 172.17.0.1 port 56818 on 172.17.0.2 port 22 rdomain ""
+Failed password for tester from 172.17.0.1 port 56818 ssh2
+Connection closed by authenticating user tester 172.17.0.1 port 56818 [preauth]
+Connection from 172.17.0.1 port 42688 on 172.17.0.2 port 22 rdomain ""
+Accepted password for tester from 172.17.0.1 port 42688 ssh2
+User child is on pid 31
+Starting session: command for tester from 172.17.0.1 port 42688 id 0
+Close session: user tester from 172.17.0.1 port 42688 id 0
+Connection closed by 172.17.0.1 port 42688
+Transferred: sent 1524, received 628 bytes
+Closing connection to 172.17.0.1 port 42688
+Connection from 172.17.0.1 port 42346 on 172.17.0.2 port 22 rdomain ""
+Accepted password for tester from 172.17.0.1 port 42346 ssh2
+User child is on pid 35
+Starting session: shell on pts/0 for tester from 172.17.0.1 port 42346 id 0
+Close session: user tester from 172.17.0.1 port 42346 id 0
+Connection closed by 172.17.0.1 port 42346
+Transferred: sent 2456, received 1176 bytes
+Closing connection to 172.17.0.1 port 42346

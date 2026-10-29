@@ -1,0 +1,61 @@
+{
+  "status": "private fixture provenance; not acceptance",
+  "source_head": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+  "rustc": "rustc 1.97.0-nightly (f53b654a8 2026-04-30)\nbinary: rustc\ncommit-hash: f53b654a8882fd5fc036c4ca7a4ff41ce32497a6\ncommit-date: 2026-04-30\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0-nightly\nLLVM version: 22.1.4\n",
+  "cargo_lock_sha256": "02d35d446b90fe569fab50d721a634258d6bb733ea789c45ddc8534ee8ca555a",
+  "annex_sha256": "73bc7483ae6d05d6435c27f12a1c2890e3b550e63666b4339ed75f9b8371ae67",
+  "amendment_sha256": "ae6be1c39453287d19cf7027681f5e24c19b112cad387b3f0ff919c80aa676e0",
+  "kernel_features": "default+phase02-terminal-profile",
+  "service_vfs_features": "default",
+  "signed_cells_sha256": {
+    "app-init": "5e4fe164755db9ee8a735af8850d89b1c58e403fe6a7610de6f5e6554d9b842e",
+    "cellbox": "bef168fc7373aab25bbb335fb6b440a61de9c5d798c1eb024cabf2a2e633fe68",
+    "service-vfs": "7f437d0f8d3876c48129076918320c406ccec859607aa40e8d78dc7cd4d44ee3",
+    "service-config": "632878695898586a14803cb3d8972bf63a0eacf0eaa23078fe0e2fba4d7aa4b5",
+    "service-input": "8316ec75eb690d5172b41dacba85582b758283ff9b1d552e5da4b914e3913ffb",
+    "platform": "c0bdd365555508587b317e6146c83213be2757194922784b048f685cc477c7a3",
+    "ls": "ced6bf193f02290460c2fad1b5616f90ad5866cccf14a2f15b4b7b5d7ee49153",
+    "cat": "2e8bfd49a4e2b8942aaa5358792724f769c5a8c84664a8cb85d5a1c66b8573b5",
+    "echo": "b22875557ff98e9fc3e19f2751b22fe84a80fc83212528abad534adf6999faa7",
+    "ps": "93354d0d347884e536c5e61906250751c922be152cf53da6644eb7bcc2556a6d",
+    "phase02-session-parent": "99b0aaed5bee85edc68fec5f942173eb73353923789d3d77cbe34678ffac7e66",
+    "phase02-session-child": "399036fa0be0b7b807878e5e04f9254cd9b8c713fba915d2b153d4bc400fc032"
+  },
+  "init_sha256": "5e4fe164755db9ee8a735af8850d89b1c58e403fe6a7610de6f5e6554d9b842e",
+  "kernel_fs_img_sha256": "024edf75ea16ea06bade23d53c29f4e91b3424bb1177e09bb56f5a51421690ce",
+  "kernel_sha256": "53dec57f165a7dac7df6952f287d6d0c96fbbb89818ee8095e60fd95436b7ee5",
+  "iso_sha256": "72ac06c598b7a07a91c50f868b64a814c87b11f981a23fc802deab74ca235a93",
+  "trusted_key_identity_sha256": "c14be885d1edcf05ce1c45a84e5d74e625194ea338d7e39d193030c61c2f5bca",
+  "policy": "no /POLICY.BIN in the image; the kernel logs it absent and applies its development-permissive posture (dev-policy-key default)",
+  "signature_verification": "cellos-sign re-verifies each ELF after signing; kernel verifies at spawn (signing-required)",
+  "candidate_import": {
+    "mode": "import",
+    "lane": "phase02",
+    "profile": "headless",
+    "candidate_json": "/tmp/cellbox-s10-3d-resume/cand/candidate.json",
+    "candidate_json_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+    "kernel_fixture_features": "default+phase02-terminal-profile",
+    "cellbox_features": "default",
+    "payload_match_sha256": "c55119d1fbe5200db052bd283d6391f62cf70cc6156cb89df20d99e9c80ce5f4",
+    "payload_match_all_equal": true,
+    "shared": [
+      "/bin/cellbox",
+      "/bin/vfs",
+      "/bin/config",
+      "/bin/input",
+      "/bin/platform",
+      "/bin/nvme",
+      "/bin/e1000",
+      "/bin/ls",
+      "/bin/cat",
+      "/bin/echo",
+      "/bin/ps",
+      "init"
+    ],
+    "lane_only": [
+      "/bin/phase02-session-parent",
+      "/bin/phase02-session-child"
+    ],
+    "counts_for": "behaviour of the payload-matched cells only; never kernel-level claims (S10-3.3)"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "cells/apps/terminal": "cb5f30e2b9e6ae638d679ca356a656ab507ea622777156cb8de9203becab513e",
+  "cells/services/compositor": "c810cbc8ffad5508a418f8097179b3dcab79bf2b389ccd572ca394781945be18",
+  "cells/services/input": "df3125c98e5121b9a67939439ef6e090d4b99887ad2974fa68092a3b7ca3485b",
+  "cells/apps/desktop": "c7cfc56c1116a50dd633ab38ffe92c5d103683f0c247e2aabebc8726c363f309",
+  "cells/apps/files": "36b64bfda428bea99b0601e2f784dc50eeea8be47ba19974bcc8410ddadc9181",
+  "cells/tools/cellbox": "c754babaab48045c4b7268f68512907d5b60bfba0f416347c94ce87c5cf0d1b4",
+  "libs/ostd/src": "a48d1e769ab7e88a6929b2edfa82df05bc3222b75ac0fbac9dc04613e05129ed"
+}

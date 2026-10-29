@@ -1,0 +1,15 @@
+{"lane": "L4-gui-attempt1-click", "exit": 0, "seconds": 254.2, "work": "/tmp/cellbox-phase04-gui-wqoalev9", "summary_lines": ["PASS: 290 GUI checks"]}
+L4 attempt 1 (click): streak 1
+{"lane": "L4-gui-attempt2-click", "exit": 0, "seconds": 249.2, "work": "/tmp/cellbox-phase04-gui-8xq3oibm", "summary_lines": ["PASS: 290 GUI checks"]}
+L4 attempt 2 (click): streak 2
+{"lane": "L4-gui-attempt3-click", "exit": 0, "seconds": 251.9, "work": "/tmp/cellbox-phase04-gui-n31n1eur", "summary_lines": ["PASS: 290 GUI checks"]}
+L4 attempt 3 (click): streak 3
+{"lane": "L4-gui-attempt4-click", "exit": 0, "seconds": 247.6, "work": "/tmp/cellbox-phase04-gui-w5akzrny", "summary_lines": ["PASS: 290 GUI checks"]}
+L4 attempt 4 (click): streak 4
+{"lane": "L4-gui-attempt5-click", "exit": 0, "seconds": 250.8, "work": "/tmp/cellbox-phase04-gui-z5zbkq7p", "summary_lines": ["PASS: 290 GUI checks"]}
+L4 attempt 5 (click): streak 5
+{"lane": "L4-gui-attempt6-autoload", "exit": 0, "seconds": 246.5, "work": "/tmp/cellbox-phase04-gui-xlsia8pi", "summary_lines": ["PASS: 290 GUI checks"]}
+L4 attempt 6 (autoload): streak 6
+L4 final streak 6 after 6 attempts
+{"lane": "default-p04-gui", "exit": 0, "seconds": 283.8, "work": "/tmp/cellbox-phase04-gui-grnsu1yr", "summary_lines": ["PASS: 290 GUI checks"]}
+stream B done

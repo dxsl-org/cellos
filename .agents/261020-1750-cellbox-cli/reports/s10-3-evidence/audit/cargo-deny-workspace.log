@@ -1,0 +1,2722 @@
+warning[source-not-allowed]: detected 'git' source not explicitly allowed
+    ┌─ /home/dmin/cellos/Cargo.lock:173:13
+    │
+173 │ fatfs 0.4.0 git+https://github.com/rafalh/rust-fatfs
+    │             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ source
+    │
+    ├ fatfs v0.4.0
+      ├── cellos-kernel v0.2.1
+      └── service-vfs v0.1.0
+
+error[rejected]: failed to satisfy license requirements
+  ┌─ /home/dmin/cellos/cells/services/ocel-pdf/Cargo.toml:5:12
+  │
+5 │ license = "AGPL-3.0-or-later"
+  │            ━━━━━━━━━━━━━━━━━
+  │            │
+  │            rejected: license is not explicitly allowed
+  │
+  ├ AGPL-3.0-or-later - GNU Affero General Public License v3.0 or later:
+  ├   - OSI approved
+  ├   - FSF Free/Libre
+  ├   - Copyleft
+  ├ ocel-pdf v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'aes'
+  ┌─ /home/dmin/cellos/Cargo.lock:6:1
+  │  
+6 │ ╭ aes 0.8.4 registry+https://github.com/rust-lang/crates.io-index
+7 │ │ aes 0.9.3 registry+https://github.com/rust-lang/crates.io-index
+  │ ╰───────────────────────────────────────────────────────────────┘ lock entries
+  │  
+  ├ aes v0.8.4
+    └── aes-gcm v0.10.3
+        └── embedded-tls v0.19.0
+            └── service-net v0.1.0
+  ├ aes v0.9.3
+    └── sunset v0.6.0
+        └── vissh v0.1.0
+            └── app-cellbox v0.1.0
+
+error[wildcard]: found 1 wildcard dependency for crate 'app-c2c-render'
+   ┌─ /home/dmin/cellos/cells/apps/c2c-render/Cargo.toml:22:15
+   │
+22 │ render-core = { path = "../../../libs/render-core" }
+   │               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ wildcard dependency
+   │
+   ├ app-c2c-render v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'bitflags'
+   ┌─ /home/dmin/cellos/Cargo.lock:66:1
+   │  
+66 │ ╭ bitflags 1.3.2 registry+https://github.com/rust-lang/crates.io-index
+67 │ │ bitflags 2.13.1 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰─────────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ bitflags v1.3.2
+     └── smoltcp v0.11.0
+         └── service-net v0.1.0
+   ├ bitflags v2.13.1
+     ├── fatfs v0.4.0
+     │   ├── cellos-kernel v0.2.1
+     │   └── service-vfs v0.1.0
+     ├── hal-paging v0.1.0
+     │   ├── hal-arm v0.1.0
+     │   │   └── hal-core v0.2.0
+     │   │       └── cellos-kernel v0.2.1 (*)
+     │   ├── hal-core v0.2.0 (*)
+     │   ├── hal-riscv v0.2.0
+     │   │   └── hal-core v0.2.0 (*)
+     │   └── hal-x86 v0.1.0
+     │       └── hal-core v0.2.0 (*)
+     ├── hal-uart v0.1.0
+     │   ├── driver-serial v0.2.0
+     │   │   ├── periph-demo v0.1.0
+     │   │   └── periph-test v0.1.0
+     │   ├── hal-core v0.2.0 (*)
+     │   ├── hal-riscv v0.2.0 (*)
+     │   ├── periph-demo v0.1.0 (*)
+     │   └── periph-test v0.1.0 (*)
+     ├── line-clipping v0.3.8
+     │   └── ratatui-widgets v0.3.0
+     │       └── vitui v0.1.0
+     │           ├── app-cellbox v0.1.0
+     │           └── (dev) terminal v0.1.0
+     ├── ratatui-core v0.1.0
+     │   ├── ratatui-widgets v0.3.0 (*)
+     │   └── vitui v0.1.0 (*)
+     ├── ratatui-widgets v0.3.0 (*)
+     ├── virtio-drivers v0.7.5
+     │   ├── cellos-kernel v0.2.1 (*)
+     │   ├── driver-virtio-blk v0.1.0
+     │   ├── driver-virtio-gpu v0.1.0
+     │   ├── driver-virtio-net v0.1.0
+     │   └── service-input v0.2.0
+     └── wasmparser v0.239.0
+         └── wasmi v1.1.0
+             └── driver-wasm v0.2.0
+                 └── app-wasm v0.2.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
+   ┌─ /home/dmin/cellos/Cargo.lock:69:1
+   │  
+69 │ ╭ block-buffer 0.10.4 registry+https://github.com/rust-lang/crates.io-index
+70 │ │ block-buffer 0.12.1 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰─────────────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ block-buffer v0.10.4
+     └── digest v0.10.7
+         ├── blake2 v0.10.6
+         │   └── service-kms v0.1.0
+         ├── ecdsa v0.16.9
+         │   ├── embedded-tls v0.19.0
+         │   │   └── service-net v0.1.0
+         │   └── p256 v0.13.2
+         │       ├── attestation v0.1.0
+         │       ├── embedded-tls v0.19.0 (*)
+         │       └── service-kms v0.1.0 (*)
+         ├── elliptic-curve v0.13.8
+         │   ├── ecdsa v0.16.9 (*)
+         │   ├── p256 v0.13.2 (*)
+         │   └── primeorder v0.13.6
+         │       └── p256 v0.13.2 (*)
+         ├── embedded-tls v0.19.0 (*)
+         ├── hmac v0.12.1
+         │   ├── embedded-tls v0.19.0 (*)
+         │   ├── hkdf v0.12.4
+         │   │   ├── elliptic-curve v0.13.8 (*)
+         │   │   └── embedded-tls v0.19.0 (*)
+         │   └── rfc6979 v0.4.0
+         │       └── ecdsa v0.16.9 (*)
+         ├── sha2 v0.10.9
+         │   ├── authority-protocol v0.1.0
+         │   ├── clatter v2.2.0
+         │   │   └── service-net-broker v0.1.0
+         │   │       └── app-bench v0.1.0
+         │   ├── embedded-tls v0.19.0 (*)
+         │   ├── p256 v0.13.2 (*)
+         │   ├── service-kms v0.1.0 (*)
+         │   ├── service-net v0.1.0 (*)
+         │   ├── service-net-broker v0.1.0 (*)
+         │   ├── (build) service-silo v0.1.0
+         │   ├── service-sshd v0.1.0
+         │   └── service-vfs v0.1.0
+         └── signature v2.2.0
+             ├── ecdsa v0.16.9 (*)
+             └── embedded-tls v0.19.0 (*)
+   ├ block-buffer v0.12.1
+     ├── cipher v0.5.2
+     │   ├── aes v0.9.3
+     │   │   └── sunset v0.6.0
+     │   │       └── vissh v0.1.0
+     │   │           └── app-cellbox v0.1.0
+     │   ├── ctr v0.10.1
+     │   │   └── sunset v0.6.0 (*)
+     │   ├── ssh-cipher v0.3.0
+     │   │   └── ssh-key v0.7.0-rc.11
+     │   │       └── sunset v0.6.0 (*)
+     │   └── sunset v0.6.0 (*)
+     └── digest v0.11.3
+         ├── curve25519-dalek v5.0.0
+         │   ├── ed25519-dalek v3.0.0
+         │   │   └── sunset v0.6.0 (*)
+         │   └── x25519-dalek v3.0.0
+         │       └── sunset v0.6.0 (*)
+         ├── hmac v0.13.0
+         │   └── sunset v0.6.0 (*)
+         ├── sha2 v0.11.1
+         │   ├── ed25519-dalek v3.0.0 (*)
+         │   ├── ssh-key v0.7.0-rc.11 (*)
+         │   ├── sunset v0.6.0 (*)
+         │   └── vissh v0.1.0 (*)
+         ├── ssh-encoding v0.3.0
+         │   ├── ssh-cipher v0.3.0 (*)
+         │   └── ssh-key v0.7.0-rc.11 (*)
+         └── sunset v0.6.0 (*)
+
+warning[license-exception-not-encountered]: license exception was not encountered
+   ┌─ /home/dmin/cellos/deny.toml:48:9
+   │
+48 │ name = "redoxfs"
+   │         ━━━━━━━ unmatched license exception
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/dmin/cellos/deny.toml:35:4
+   │
+35 │   "ISC",
+   │    ━━━ unmatched license allowance
+
+error[wildcard]: found 1 wildcard dependency for crate 'cellos-boot-config'
+  ┌─ /home/dmin/cellos/libs/boot-config/Cargo.toml:9:7
+  │
+9 │ api = { path = "../api" }
+  │       ━━━━━━━━━━━━━━━━━━━ wildcard dependency
+  │
+  ├ cellos-boot-config v0.1.0
+    ├── app-init v0.1.0
+    └── cellos-kernel v0.2.1
+
+error[wildcard]: found 1 wildcard dependency for crate 'cellos-kernel'
+   ┌─ /home/dmin/cellos/kernel/Cargo.toml:10:22
+   │
+10 │ cellos-boot-config = { path = "../libs/boot-config" }
+   │                      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ wildcard dependency
+   │
+   ├ cellos-kernel v0.2.1
+
+warning[duplicate]: found 2 duplicate entries for crate 'cipher'
+   ┌─ /home/dmin/cellos/Cargo.lock:89:1
+   │  
+89 │ ╭ cipher 0.4.4 registry+https://github.com/rust-lang/crates.io-index
+90 │ │ cipher 0.5.2 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰──────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ cipher v0.4.4
+     ├── aes v0.8.4
+     │   └── aes-gcm v0.10.3
+     │       └── embedded-tls v0.19.0
+     │           └── service-net v0.1.0
+     ├── aes-gcm v0.10.3 (*)
+     ├── chacha20 v0.9.1
+     │   ├── chacha20poly1305 v0.10.1
+     │   │   ├── clatter v2.2.0
+     │   │   │   └── service-net-broker v0.1.0
+     │   │   │       └── app-bench v0.1.0
+     │   │   ├── service-net-broker v0.1.0 (*)
+     │   │   └── service-sshd v0.1.0
+     │   ├── service-sshd v0.1.0 (*)
+     │   └── sunset v0.6.0
+     │       └── vissh v0.1.0
+     │           └── app-cellbox v0.1.0
+     ├── chacha20poly1305 v0.10.1 (*)
+     └── ctr v0.9.2
+         └── aes-gcm v0.10.3 (*)
+   ├ cipher v0.5.2
+     ├── aes v0.9.3
+     │   └── sunset v0.6.0
+     │       └── vissh v0.1.0
+     │           └── app-cellbox v0.1.0
+     ├── ctr v0.10.1
+     │   └── sunset v0.6.0 (*)
+     ├── ssh-cipher v0.3.0
+     │   └── ssh-key v0.7.0-rc.11
+     │       └── sunset v0.6.0 (*)
+     └── sunset v0.6.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'const-oid'
+   ┌─ /home/dmin/cellos/Cargo.lock:96:1
+   │  
+96 │ ╭ const-oid 0.9.6 registry+https://github.com/rust-lang/crates.io-index
+97 │ │ const-oid 0.10.2 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ const-oid v0.9.6
+     ├── der v0.7.10
+     │   ├── ecdsa v0.16.9
+     │   │   ├── embedded-tls v0.19.0
+     │   │   │   └── service-net v0.1.0
+     │   │   └── p256 v0.13.2
+     │   │       ├── attestation v0.1.0
+     │   │       ├── embedded-tls v0.19.0 (*)
+     │   │       └── service-kms v0.1.0
+     │   └── sec1 v0.7.3
+     │       └── elliptic-curve v0.13.8
+     │           ├── ecdsa v0.16.9 (*)
+     │           ├── p256 v0.13.2 (*)
+     │           └── primeorder v0.13.6
+     │               └── p256 v0.13.2 (*)
+     └── digest v0.10.7
+         ├── blake2 v0.10.6
+         │   └── service-kms v0.1.0 (*)
+         ├── ecdsa v0.16.9 (*)
+         ├── elliptic-curve v0.13.8 (*)
+         ├── embedded-tls v0.19.0 (*)
+         ├── hmac v0.12.1
+         │   ├── embedded-tls v0.19.0 (*)
+         │   ├── hkdf v0.12.4
+         │   │   ├── elliptic-curve v0.13.8 (*)
+         │   │   └── embedded-tls v0.19.0 (*)
+         │   └── rfc6979 v0.4.0
+         │       └── ecdsa v0.16.9 (*)
+         ├── sha2 v0.10.9
+         │   ├── authority-protocol v0.1.0
+         │   ├── clatter v2.2.0
+         │   │   └── service-net-broker v0.1.0
+         │   │       └── app-bench v0.1.0
+         │   ├── embedded-tls v0.19.0 (*)
+         │   ├── p256 v0.13.2 (*)
+         │   ├── service-kms v0.1.0 (*)
+         │   ├── service-net v0.1.0 (*)
+         │   ├── service-net-broker v0.1.0 (*)
+         │   ├── (build) service-silo v0.1.0
+         │   ├── service-sshd v0.1.0
+         │   └── service-vfs v0.1.0
+         └── signature v2.2.0
+             ├── ecdsa v0.16.9 (*)
+             └── embedded-tls v0.19.0 (*)
+   ├ const-oid v0.10.2
+     ├── der v0.8.1
+     │   └── embedded-tls v0.19.0
+     │       └── service-net v0.1.0
+     └── embedded-tls v0.19.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
+    ┌─ /home/dmin/cellos/Cargo.lock:101:1
+    │  
+101 │ ╭ cpufeatures 0.2.17 registry+https://github.com/rust-lang/crates.io-index
+102 │ │ cpufeatures 0.3.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ cpufeatures v0.2.17
+      ├── aes v0.8.4
+      │   └── aes-gcm v0.10.3
+      │       └── embedded-tls v0.19.0
+      │           └── service-net v0.1.0
+      ├── chacha20 v0.9.1
+      │   ├── chacha20poly1305 v0.10.1
+      │   │   ├── clatter v2.2.0
+      │   │   │   └── service-net-broker v0.1.0
+      │   │   │       └── app-bench v0.1.0
+      │   │   ├── service-net-broker v0.1.0 (*)
+      │   │   └── service-sshd v0.1.0
+      │   ├── service-sshd v0.1.0 (*)
+      │   └── sunset v0.6.0
+      │       └── vissh v0.1.0
+      │           └── app-cellbox v0.1.0
+      ├── curve25519-dalek v4.1.3
+      │   └── x25519-dalek v2.0.1
+      │       ├── clatter v2.2.0 (*)
+      │       └── service-sshd v0.1.0 (*)
+      ├── poly1305 v0.8.0
+      │   ├── chacha20poly1305 v0.10.1 (*)
+      │   └── service-sshd v0.1.0 (*)
+      ├── polyval v0.6.2
+      │   └── ghash v0.5.1
+      │       └── aes-gcm v0.10.3 (*)
+      └── sha2 v0.10.9
+          ├── authority-protocol v0.1.0
+          ├── clatter v2.2.0 (*)
+          ├── embedded-tls v0.19.0 (*)
+          ├── p256 v0.13.2
+          │   ├── attestation v0.1.0
+          │   ├── embedded-tls v0.19.0 (*)
+          │   └── service-kms v0.1.0
+          ├── service-kms v0.1.0 (*)
+          ├── service-net v0.1.0 (*)
+          ├── service-net-broker v0.1.0 (*)
+          ├── (build) service-silo v0.1.0
+          ├── service-sshd v0.1.0 (*)
+          └── service-vfs v0.1.0
+    ├ cpufeatures v0.3.1
+      ├── aes v0.9.3
+      │   └── sunset v0.6.0
+      │       └── vissh v0.1.0
+      │           └── app-cellbox v0.1.0
+      ├── curve25519-dalek v5.0.0
+      │   ├── ed25519-dalek v3.0.0
+      │   │   └── sunset v0.6.0 (*)
+      │   └── x25519-dalek v3.0.0
+      │       └── sunset v0.6.0 (*)
+      ├── poly1305 v0.9.1
+      │   └── sunset v0.6.0 (*)
+      └── sha2 v0.11.1
+          ├── ed25519-dalek v3.0.0 (*)
+          ├── ssh-key v0.7.0-rc.11
+          │   └── sunset v0.6.0 (*)
+          ├── sunset v0.6.0 (*)
+          └── vissh v0.1.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'crypto-common'
+    ┌─ /home/dmin/cellos/Cargo.lock:106:1
+    │  
+106 │ ╭ crypto-common 0.1.7 registry+https://github.com/rust-lang/crates.io-index
+107 │ │ crypto-common 0.2.2 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰─────────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ crypto-common v0.1.7
+      ├── aead v0.5.2
+      │   ├── aes-gcm v0.10.3
+      │   │   └── embedded-tls v0.19.0
+      │   │       └── service-net v0.1.0
+      │   └── chacha20poly1305 v0.10.1
+      │       ├── clatter v2.2.0
+      │       │   └── service-net-broker v0.1.0
+      │       │       └── app-bench v0.1.0
+      │       ├── service-net-broker v0.1.0 (*)
+      │       └── service-sshd v0.1.0
+      ├── cipher v0.4.4
+      │   ├── aes v0.8.4
+      │   │   └── aes-gcm v0.10.3 (*)
+      │   ├── aes-gcm v0.10.3 (*)
+      │   ├── chacha20 v0.9.1
+      │   │   ├── chacha20poly1305 v0.10.1 (*)
+      │   │   ├── service-sshd v0.1.0 (*)
+      │   │   └── sunset v0.6.0
+      │   │       └── vissh v0.1.0
+      │   │           └── app-cellbox v0.1.0
+      │   ├── chacha20poly1305 v0.10.1 (*)
+      │   └── ctr v0.9.2
+      │       └── aes-gcm v0.10.3 (*)
+      ├── digest v0.10.7
+      │   ├── blake2 v0.10.6
+      │   │   └── service-kms v0.1.0
+      │   ├── ecdsa v0.16.9
+      │   │   ├── embedded-tls v0.19.0 (*)
+      │   │   └── p256 v0.13.2
+      │   │       ├── attestation v0.1.0
+      │   │       ├── embedded-tls v0.19.0 (*)
+      │   │       └── service-kms v0.1.0 (*)
+      │   ├── elliptic-curve v0.13.8
+      │   │   ├── ecdsa v0.16.9 (*)
+      │   │   ├── p256 v0.13.2 (*)
+      │   │   └── primeorder v0.13.6
+      │   │       └── p256 v0.13.2 (*)
+      │   ├── embedded-tls v0.19.0 (*)
+      │   ├── hmac v0.12.1
+      │   │   ├── embedded-tls v0.19.0 (*)
+      │   │   ├── hkdf v0.12.4
+      │   │   │   ├── elliptic-curve v0.13.8 (*)
+      │   │   │   └── embedded-tls v0.19.0 (*)
+      │   │   └── rfc6979 v0.4.0
+      │   │       └── ecdsa v0.16.9 (*)
+      │   ├── sha2 v0.10.9
+      │   │   ├── authority-protocol v0.1.0
+      │   │   ├── clatter v2.2.0 (*)
+      │   │   ├── embedded-tls v0.19.0 (*)
+      │   │   ├── p256 v0.13.2 (*)
+      │   │   ├── service-kms v0.1.0 (*)
+      │   │   ├── service-net v0.1.0 (*)
+      │   │   ├── service-net-broker v0.1.0 (*)
+      │   │   ├── (build) service-silo v0.1.0
+      │   │   ├── service-sshd v0.1.0 (*)
+      │   │   └── service-vfs v0.1.0
+      │   └── signature v2.2.0
+      │       ├── ecdsa v0.16.9 (*)
+      │       └── embedded-tls v0.19.0 (*)
+      └── universal-hash v0.5.1
+          ├── poly1305 v0.8.0
+          │   ├── chacha20poly1305 v0.10.1 (*)
+          │   └── service-sshd v0.1.0 (*)
+          └── polyval v0.6.2
+              └── ghash v0.5.1
+                  └── aes-gcm v0.10.3 (*)
+    ├ crypto-common v0.2.2
+      ├── cipher v0.5.2
+      │   ├── aes v0.9.3
+      │   │   └── sunset v0.6.0
+      │   │       └── vissh v0.1.0
+      │   │           └── app-cellbox v0.1.0
+      │   ├── ctr v0.10.1
+      │   │   └── sunset v0.6.0 (*)
+      │   ├── ssh-cipher v0.3.0
+      │   │   └── ssh-key v0.7.0-rc.11
+      │   │       └── sunset v0.6.0 (*)
+      │   └── sunset v0.6.0 (*)
+      ├── digest v0.11.3
+      │   ├── curve25519-dalek v5.0.0
+      │   │   ├── ed25519-dalek v3.0.0
+      │   │   │   └── sunset v0.6.0 (*)
+      │   │   └── x25519-dalek v3.0.0
+      │   │       └── sunset v0.6.0 (*)
+      │   ├── hmac v0.13.0
+      │   │   └── sunset v0.6.0 (*)
+      │   ├── sha2 v0.11.1
+      │   │   ├── ed25519-dalek v3.0.0 (*)
+      │   │   ├── ssh-key v0.7.0-rc.11 (*)
+      │   │   ├── sunset v0.6.0 (*)
+      │   │   └── vissh v0.1.0 (*)
+      │   ├── ssh-encoding v0.3.0
+      │   │   ├── ssh-cipher v0.3.0 (*)
+      │   │   └── ssh-key v0.7.0-rc.11 (*)
+      │   └── sunset v0.6.0 (*)
+      └── universal-hash v0.6.1
+          └── poly1305 v0.9.1
+              └── sunset v0.6.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'ctr'
+    ┌─ /home/dmin/cellos/Cargo.lock:108:1
+    │  
+108 │ ╭ ctr 0.9.2 registry+https://github.com/rust-lang/crates.io-index
+109 │ │ ctr 0.10.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ ctr v0.9.2
+      └── aes-gcm v0.10.3
+          └── embedded-tls v0.19.0
+              └── service-net v0.1.0
+    ├ ctr v0.10.1
+      └── sunset v0.6.0
+          └── vissh v0.1.0
+              └── app-cellbox v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'curve25519-dalek'
+    ┌─ /home/dmin/cellos/Cargo.lock:111:1
+    │  
+111 │ ╭ curve25519-dalek 4.1.3 registry+https://github.com/rust-lang/crates.io-index
+112 │ │ curve25519-dalek 5.0.0 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰────────────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ curve25519-dalek v4.1.3
+      └── x25519-dalek v2.0.1
+          ├── clatter v2.2.0
+          │   └── service-net-broker v0.1.0
+          │       └── app-bench v0.1.0
+          └── service-sshd v0.1.0
+    ├ curve25519-dalek v5.0.0
+      ├── ed25519-dalek v3.0.0
+      │   └── sunset v0.6.0
+      │       └── vissh v0.1.0
+      │           └── app-cellbox v0.1.0
+      └── x25519-dalek v3.0.0
+          └── sunset v0.6.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'darling'
+    ┌─ /home/dmin/cellos/Cargo.lock:114:1
+    │  
+114 │ ╭ darling 0.20.11 registry+https://github.com/rust-lang/crates.io-index
+115 │ │ darling 0.24.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ darling v0.20.11
+      └── derive_builder_core v0.20.2
+          └── derive_builder_macro v0.20.2
+              └── derive_builder v0.20.2
+                  ├── vergen v9.1.0
+                  │   └── vergen-gitcl v1.0.8
+                  │       └── (build) cellos-kernel v0.2.1
+                  ├── vergen-gitcl v1.0.8 (*)
+                  ├── vergen-lib v0.1.6
+                  │   └── vergen-gitcl v1.0.8 (*)
+                  └── vergen-lib v9.1.0
+                      └── vergen v9.1.0 (*)
+    ├ darling v0.24.1
+      └── instability v0.3.14
+          └── ratatui-widgets v0.3.0
+              └── vitui v0.1.0
+                  ├── app-cellbox v0.1.0
+                  └── (dev) terminal v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'darling_core'
+    ┌─ /home/dmin/cellos/Cargo.lock:116:1
+    │  
+116 │ ╭ darling_core 0.20.11 registry+https://github.com/rust-lang/crates.io-index
+117 │ │ darling_core 0.24.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰─────────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ darling_core v0.20.11
+      ├── darling v0.20.11
+      │   └── derive_builder_core v0.20.2
+      │       └── derive_builder_macro v0.20.2
+      │           └── derive_builder v0.20.2
+      │               ├── vergen v9.1.0
+      │               │   └── vergen-gitcl v1.0.8
+      │               │       └── (build) cellos-kernel v0.2.1
+      │               ├── vergen-gitcl v1.0.8 (*)
+      │               ├── vergen-lib v0.1.6
+      │               │   └── vergen-gitcl v1.0.8 (*)
+      │               └── vergen-lib v9.1.0
+      │                   └── vergen v9.1.0 (*)
+      └── darling_macro v0.20.11
+          └── darling v0.20.11 (*)
+    ├ darling_core v0.24.1
+      ├── darling v0.24.1
+      │   └── instability v0.3.14
+      │       └── ratatui-widgets v0.3.0
+      │           └── vitui v0.1.0
+      │               ├── app-cellbox v0.1.0
+      │               └── (dev) terminal v0.1.0
+      └── darling_macro v0.24.1
+          └── darling v0.24.1 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'darling_macro'
+    ┌─ /home/dmin/cellos/Cargo.lock:118:1
+    │  
+118 │ ╭ darling_macro 0.20.11 registry+https://github.com/rust-lang/crates.io-index
+119 │ │ darling_macro 0.24.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ darling_macro v0.20.11
+      └── darling v0.20.11
+          └── derive_builder_core v0.20.2
+              └── derive_builder_macro v0.20.2
+                  └── derive_builder v0.20.2
+                      ├── vergen v9.1.0
+                      │   └── vergen-gitcl v1.0.8
+                      │       └── (build) cellos-kernel v0.2.1
+                      ├── vergen-gitcl v1.0.8 (*)
+                      ├── vergen-lib v0.1.6
+                      │   └── vergen-gitcl v1.0.8 (*)
+                      └── vergen-lib v9.1.0
+                          └── vergen v9.1.0 (*)
+    ├ darling_macro v0.24.1
+      └── darling v0.24.1
+          └── instability v0.3.14
+              └── ratatui-widgets v0.3.0
+                  └── vitui v0.1.0
+                      ├── app-cellbox v0.1.0
+                      └── (dev) terminal v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'der'
+    ┌─ /home/dmin/cellos/Cargo.lock:120:1
+    │  
+120 │ ╭ der 0.7.10 registry+https://github.com/rust-lang/crates.io-index
+121 │ │ der 0.8.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ der v0.7.10
+      ├── ecdsa v0.16.9
+      │   ├── embedded-tls v0.19.0
+      │   │   └── service-net v0.1.0
+      │   └── p256 v0.13.2
+      │       ├── attestation v0.1.0
+      │       ├── embedded-tls v0.19.0 (*)
+      │       └── service-kms v0.1.0
+      └── sec1 v0.7.3
+          └── elliptic-curve v0.13.8
+              ├── ecdsa v0.16.9 (*)
+              ├── p256 v0.13.2 (*)
+              └── primeorder v0.13.6
+                  └── p256 v0.13.2 (*)
+    ├ der v0.8.1
+      └── embedded-tls v0.19.0
+          └── service-net v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'digest'
+    ┌─ /home/dmin/cellos/Cargo.lock:128:1
+    │  
+128 │ ╭ digest 0.10.7 registry+https://github.com/rust-lang/crates.io-index
+129 │ │ digest 0.11.3 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ digest v0.10.7
+      ├── blake2 v0.10.6
+      │   └── service-kms v0.1.0
+      ├── ecdsa v0.16.9
+      │   ├── embedded-tls v0.19.0
+      │   │   └── service-net v0.1.0
+      │   └── p256 v0.13.2
+      │       ├── attestation v0.1.0
+      │       ├── embedded-tls v0.19.0 (*)
+      │       └── service-kms v0.1.0 (*)
+      ├── elliptic-curve v0.13.8
+      │   ├── ecdsa v0.16.9 (*)
+      │   ├── p256 v0.13.2 (*)
+      │   └── primeorder v0.13.6
+      │       └── p256 v0.13.2 (*)
+      ├── embedded-tls v0.19.0 (*)
+      ├── hmac v0.12.1
+      │   ├── embedded-tls v0.19.0 (*)
+      │   ├── hkdf v0.12.4
+      │   │   ├── elliptic-curve v0.13.8 (*)
+      │   │   └── embedded-tls v0.19.0 (*)
+      │   └── rfc6979 v0.4.0
+      │       └── ecdsa v0.16.9 (*)
+      ├── sha2 v0.10.9
+      │   ├── authority-protocol v0.1.0
+      │   ├── clatter v2.2.0
+      │   │   └── service-net-broker v0.1.0
+      │   │       └── app-bench v0.1.0
+      │   ├── embedded-tls v0.19.0 (*)
+      │   ├── p256 v0.13.2 (*)
+      │   ├── service-kms v0.1.0 (*)
+      │   ├── service-net v0.1.0 (*)
+      │   ├── service-net-broker v0.1.0 (*)
+      │   ├── (build) service-silo v0.1.0
+      │   ├── service-sshd v0.1.0
+      │   └── service-vfs v0.1.0
+      └── signature v2.2.0
+          ├── ecdsa v0.16.9 (*)
+          └── embedded-tls v0.19.0 (*)
+    ├ digest v0.11.3
+      ├── curve25519-dalek v5.0.0
+      │   ├── ed25519-dalek v3.0.0
+      │   │   └── sunset v0.6.0
+      │   │       └── vissh v0.1.0
+      │   │           └── app-cellbox v0.1.0
+      │   └── x25519-dalek v3.0.0
+      │       └── sunset v0.6.0 (*)
+      ├── hmac v0.13.0
+      │   └── sunset v0.6.0 (*)
+      ├── sha2 v0.11.1
+      │   ├── ed25519-dalek v3.0.0 (*)
+      │   ├── ssh-key v0.7.0-rc.11
+      │   │   └── sunset v0.6.0 (*)
+      │   ├── sunset v0.6.0 (*)
+      │   └── vissh v0.1.0 (*)
+      ├── ssh-encoding v0.3.0
+      │   ├── ssh-cipher v0.3.0
+      │   │   └── ssh-key v0.7.0-rc.11 (*)
+      │   └── ssh-key v0.7.0-rc.11 (*)
+      └── sunset v0.6.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'foldhash'
+    ┌─ /home/dmin/cellos/Cargo.lock:180:1
+    │  
+180 │ ╭ foldhash 0.1.5 registry+https://github.com/rust-lang/crates.io-index
+181 │ │ foldhash 0.2.0 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ foldhash v0.1.5
+      └── hashbrown v0.15.5
+          ├── ai-image-webp v0.2.4
+          │   └── ocel v0.1.0
+          └── ostd v0.2.0
+              ├── adc-demo v0.1.0
+              ├── ai-sdk v0.1.0
+              │   ├── ai-test v0.1.0
+              │   ├── hypha-llm-gateway v0.1.0
+              │   └── service-httpd v0.1.0
+              ├── ai-test v0.1.0 (*)
+              ├── app-async-echo v0.1.0
+              ├── app-backend v0.1.0
+              ├── app-bench v0.1.0
+              ├── app-c-math-smoke v0.1.0
+              ├── app-c-spawn v0.1.0
+              ├── app-c-spawn-child v0.1.0
+              ├── app-c2c-render v0.1.0
+              ├── app-cellbox v0.1.0
+              ├── app-chrome v0.1.0
+              ├── app-cpp-smoke v0.1.0
+              ├── app-futex-test v0.1.0
+              ├── app-haily-agent v0.1.0
+              ├── app-hello v0.1.0
+              ├── app-http-smoke v0.1.0
+              ├── app-https-demo v0.1.0
+              ├── app-init v0.1.0
+              ├── app-mlibc-smoke v0.1.0
+              ├── app-net-tools v0.1.0
+              ├── app-phase02-session-child v0.1.0
+              ├── app-phase02-session-parent v0.1.0
+              ├── app-phase03-filter v0.1.0
+              ├── app-phase04-terminal-driver v0.1.0
+              ├── app-pipe-peer v0.1.0
+              ├── app-pipe-test v0.1.0
+              ├── app-posix-shim-test v0.1.0
+              ├── app-s2tw-probe v0.1.0
+              ├── app-silo-test v0.1.0
+              ├── app-srv-test v0.1.0
+              ├── app-sys-tools v0.1.0
+              ├── app-tls-test v0.1.0
+              ├── app-tokio-smoke v0.1.0
+              ├── app-top-load v0.1.0
+              ├── app-vfs-test v0.2.0
+              ├── app-wasm v0.2.0
+              ├── atomic-publication-probe v0.1.0
+              ├── audio-demo v0.1.0
+              ├── c-pthread v0.1.0
+              ├── can-demo v0.1.0
+              ├── cfi-test v0.1.0
+              ├── desktop v0.1.0
+              ├── doom v0.1.0
+              ├── driver-ahci v0.1.0
+              ├── driver-bcm-display v0.1.0
+              ├── driver-disk v0.1.0
+              │   └── service-vfs v0.1.0
+              ├── driver-display-ssd1306 v0.1.0
+              ├── driver-dwc2-usb v0.1.0
+              ├── driver-e1000 v0.1.0
+              ├── driver-gpio v0.1.0
+              │   ├── periph-demo v0.1.0
+              │   ├── periph-test v0.1.0
+              │   ├── pwm-demo v0.1.0
+              │   ├── robot-demo v0.1.0
+              │   ├── sensor-demo v0.1.0
+              │   └── spi-demo v0.1.0
+              ├── driver-gpio-bcm v0.1.0
+              │   ├── driver-display-ssd1306 v0.1.0 (*)
+              │   ├── periph-demo v0.1.0 (*)
+              │   └── sensor-demo v0.1.0 (*)
+              ├── driver-gpio-sifive v0.1.0
+              │   └── gpio-test-rv v0.1.0
+              ├── driver-gpu v0.1.0
+              ├── driver-i2c-bcm v0.1.0
+              │   ├── driver-imu-mpu6050 v0.1.0
+              │   └── sensor-demo v0.1.0 (*)
+              ├── driver-igb v0.1.0
+              ├── driver-imu-mpu6050 v0.1.0 (*)
+              ├── driver-nvme v0.1.0
+              ├── driver-serial v0.2.0
+              │   ├── periph-demo v0.1.0 (*)
+              │   └── periph-test v0.1.0 (*)
+              ├── driver-serial-x86 v0.1.0
+              ├── driver-spi-bcm v0.1.0
+              │   ├── driver-display-ssd1306 v0.1.0 (*)
+              │   └── spi-demo v0.1.0 (*)
+              ├── driver-virtio-blk v0.1.0
+              ├── driver-virtio-gpu v0.1.0
+              ├── driver-virtio-net v0.1.0
+              ├── driver-wasm v0.2.0
+              │   └── app-wasm v0.2.0 (*)
+              ├── driver-xhci v0.1.0
+              ├── fb-console v0.1.0
+              ├── files v0.1.0
+              ├── gpio-test-rv v0.1.0 (*)
+              ├── hello-cell v0.1.0
+              ├── hotswap-demo-v1 v0.1.0
+              ├── hotswap-demo-v2 v0.2.0
+              ├── hypervisor-test v0.1.0
+              ├── hypha-core v0.1.0
+              ├── hypha-llm-gateway v0.1.0 (*)
+              ├── hypha-tool-fs v0.1.0
+              ├── hypha-tool-spawn v0.1.0
+              ├── hypha-tool-sys v0.1.0
+              ├── input-test v0.1.0
+              ├── lua v0.1.0
+              ├── ocel v0.1.0 (*)
+              ├── ocel-js v0.1.0
+              ├── ocel-pdf v0.1.0
+              ├── ocel-quickjs v0.1.0
+              ├── periph-demo v0.1.0 (*)
+              ├── periph-test v0.1.0 (*)
+              ├── port-platform v0.1.0
+              │   ├── app-posix-shim-test v0.1.0 (*)
+              │   └── tetris-c v0.1.0
+              ├── pwm-demo v0.1.0 (*)
+              ├── robot-dashboard v0.1.0
+              ├── robot-demo v0.1.0 (*)
+              ├── sdk-demo v0.1.0
+              ├── sensor-demo v0.1.0 (*)
+              ├── service-ai v0.1.0
+              ├── service-budget-authority v0.1.0
+              ├── service-compositor v0.1.0
+              ├── service-config v0.1.0
+              ├── service-httpd v0.1.0 (*)
+              ├── service-hypervisor v0.1.0
+              ├── service-input v0.2.0
+              ├── service-kms v0.1.0
+              ├── service-net v0.1.0
+              ├── service-net-broker v0.1.0
+              │   └── app-bench v0.1.0 (*)
+              ├── service-placement-controller v0.1.0
+              ├── service-platform v0.1.0
+              ├── service-power v0.1.0
+              ├── service-silo v0.1.0
+              ├── service-sshd v0.1.0
+              ├── service-vfs v0.1.0 (*)
+              ├── service-workload-router v0.1.0
+              ├── spi-demo v0.1.0 (*)
+              ├── supervisor v0.1.0
+              ├── terminal v0.1.0
+              ├── terminal-sdk v0.1.0
+              │   ├── app-cellbox v0.1.0 (*)
+              │   ├── app-phase02-session-child v0.1.0 (*)
+              │   ├── app-phase02-session-parent v0.1.0 (*)
+              │   ├── app-phase03-filter v0.1.0 (*)
+              │   ├── app-phase04-terminal-driver v0.1.0 (*)
+              │   ├── app-s2tw-probe v0.1.0 (*)
+              │   ├── app-top-load v0.1.0 (*)
+              │   ├── terminal v0.1.0 (*)
+              │   └── vitui v0.1.0
+              │       ├── app-cellbox v0.1.0 (*)
+              │       └── (dev) terminal v0.1.0 (*)
+              ├── test-isolation v0.1.0
+              ├── tetris v0.1.0
+              ├── tetris-c v0.1.0 (*)
+              ├── tetris-lua v0.1.0
+              ├── tier2-exploit v0.1.0
+              ├── tier2-grant-owner v0.1.0
+              ├── tier2-grant-receiver v0.1.0
+              ├── tier2-rpc-driver v0.1.0
+              ├── tier2-rpc-provider v0.1.0
+              ├── tier2-smoke v0.1.0
+              ├── vimio v0.1.0
+              │   ├── app-haily-agent v0.1.0 (*)
+              │   └── app-tokio-smoke v0.1.0 (*)
+              ├── vipolling v0.1.0
+              │   └── app-async-echo v0.1.0 (*)
+              ├── viui v0.2.0
+              │   ├── app-chrome v0.1.0 (*)
+              │   ├── desktop v0.1.0 (*)
+              │   ├── files v0.1.0 (*)
+              │   ├── ocel v0.1.0 (*)
+              │   ├── robot-dashboard v0.1.0 (*)
+              │   ├── terminal v0.1.0 (*)
+              │   └── viui-demo v0.1.0
+              ├── viui-demo v0.1.0 (*)
+              ├── vm-runner v0.1.0
+              ├── window-policy-probe v0.1.0
+              └── wx-test v0.1.0
+    ├ foldhash v0.2.0
+      ├── hashbrown v0.16.1
+      │   ├── lru v0.16.4
+      │   │   └── ratatui-core v0.1.0
+      │   │       ├── ratatui-widgets v0.3.0
+      │   │       │   └── vitui v0.1.0
+      │   │       │       ├── app-cellbox v0.1.0
+      │   │       │       └── (dev) terminal v0.1.0
+      │   │       └── vitui v0.1.0 (*)
+      │   ├── ratatui-core v0.1.0 (*)
+      │   └── ratatui-widgets v0.3.0 (*)
+      └── hashbrown v0.17.1
+          └── kasuari v0.4.13
+              └── ratatui-core v0.1.0 (*)
+
+warning[duplicate]: found 4 duplicate entries for crate 'hashbrown'
+    ┌─ /home/dmin/cellos/Cargo.lock:211:1
+    │  
+211 │ ╭ hashbrown 0.14.5 registry+https://github.com/rust-lang/crates.io-index
+212 │ │ hashbrown 0.15.5 registry+https://github.com/rust-lang/crates.io-index
+213 │ │ hashbrown 0.16.1 registry+https://github.com/rust-lang/crates.io-index
+214 │ │ hashbrown 0.17.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ hashbrown v0.14.5
+      └── vm-fdt v0.3.0
+          └── service-hypervisor v0.1.0
+    ├ hashbrown v0.15.5
+      ├── ai-image-webp v0.2.4
+      │   └── ocel v0.1.0
+      └── ostd v0.2.0
+          ├── adc-demo v0.1.0
+          ├── ai-sdk v0.1.0
+          │   ├── ai-test v0.1.0
+          │   ├── hypha-llm-gateway v0.1.0
+          │   └── service-httpd v0.1.0
+          ├── ai-test v0.1.0 (*)
+          ├── app-async-echo v0.1.0
+          ├── app-backend v0.1.0
+          ├── app-bench v0.1.0
+          ├── app-c-math-smoke v0.1.0
+          ├── app-c-spawn v0.1.0
+          ├── app-c-spawn-child v0.1.0
+          ├── app-c2c-render v0.1.0
+          ├── app-cellbox v0.1.0
+          ├── app-chrome v0.1.0
+          ├── app-cpp-smoke v0.1.0
+          ├── app-futex-test v0.1.0
+          ├── app-haily-agent v0.1.0
+          ├── app-hello v0.1.0
+          ├── app-http-smoke v0.1.0
+          ├── app-https-demo v0.1.0
+          ├── app-init v0.1.0
+          ├── app-mlibc-smoke v0.1.0
+          ├── app-net-tools v0.1.0
+          ├── app-phase02-session-child v0.1.0
+          ├── app-phase02-session-parent v0.1.0
+          ├── app-phase03-filter v0.1.0
+          ├── app-phase04-terminal-driver v0.1.0
+          ├── app-pipe-peer v0.1.0
+          ├── app-pipe-test v0.1.0
+          ├── app-posix-shim-test v0.1.0
+          ├── app-s2tw-probe v0.1.0
+          ├── app-silo-test v0.1.0
+          ├── app-srv-test v0.1.0
+          ├── app-sys-tools v0.1.0
+          ├── app-tls-test v0.1.0
+          ├── app-tokio-smoke v0.1.0
+          ├── app-top-load v0.1.0
+          ├── app-vfs-test v0.2.0
+          ├── app-wasm v0.2.0
+          ├── atomic-publication-probe v0.1.0
+          ├── audio-demo v0.1.0
+          ├── c-pthread v0.1.0
+          ├── can-demo v0.1.0
+          ├── cfi-test v0.1.0
+          ├── desktop v0.1.0
+          ├── doom v0.1.0
+          ├── driver-ahci v0.1.0
+          ├── driver-bcm-display v0.1.0
+          ├── driver-disk v0.1.0
+          │   └── service-vfs v0.1.0
+          ├── driver-display-ssd1306 v0.1.0
+          ├── driver-dwc2-usb v0.1.0
+          ├── driver-e1000 v0.1.0
+          ├── driver-gpio v0.1.0
+          │   ├── periph-demo v0.1.0
+          │   ├── periph-test v0.1.0
+          │   ├── pwm-demo v0.1.0
+          │   ├── robot-demo v0.1.0
+          │   ├── sensor-demo v0.1.0
+          │   └── spi-demo v0.1.0
+          ├── driver-gpio-bcm v0.1.0
+          │   ├── driver-display-ssd1306 v0.1.0 (*)
+          │   ├── periph-demo v0.1.0 (*)
+          │   └── sensor-demo v0.1.0 (*)
+          ├── driver-gpio-sifive v0.1.0
+          │   └── gpio-test-rv v0.1.0
+          ├── driver-gpu v0.1.0
+          ├── driver-i2c-bcm v0.1.0
+          │   ├── driver-imu-mpu6050 v0.1.0
+          │   └── sensor-demo v0.1.0 (*)
+          ├── driver-igb v0.1.0
+          ├── driver-imu-mpu6050 v0.1.0 (*)
+          ├── driver-nvme v0.1.0
+          ├── driver-serial v0.2.0
+          │   ├── periph-demo v0.1.0 (*)
+          │   └── periph-test v0.1.0 (*)
+          ├── driver-serial-x86 v0.1.0
+          ├── driver-spi-bcm v0.1.0
+          │   ├── driver-display-ssd1306 v0.1.0 (*)
+          │   └── spi-demo v0.1.0 (*)
+          ├── driver-virtio-blk v0.1.0
+          ├── driver-virtio-gpu v0.1.0
+          ├── driver-virtio-net v0.1.0
+          ├── driver-wasm v0.2.0
+          │   └── app-wasm v0.2.0 (*)
+          ├── driver-xhci v0.1.0
+          ├── fb-console v0.1.0
+          ├── files v0.1.0
+          ├── gpio-test-rv v0.1.0 (*)
+          ├── hello-cell v0.1.0
+          ├── hotswap-demo-v1 v0.1.0
+          ├── hotswap-demo-v2 v0.2.0
+          ├── hypervisor-test v0.1.0
+          ├── hypha-core v0.1.0
+          ├── hypha-llm-gateway v0.1.0 (*)
+          ├── hypha-tool-fs v0.1.0
+          ├── hypha-tool-spawn v0.1.0
+          ├── hypha-tool-sys v0.1.0
+          ├── input-test v0.1.0
+          ├── lua v0.1.0
+          ├── ocel v0.1.0 (*)
+          ├── ocel-js v0.1.0
+          ├── ocel-pdf v0.1.0
+          ├── ocel-quickjs v0.1.0
+          ├── periph-demo v0.1.0 (*)
+          ├── periph-test v0.1.0 (*)
+          ├── port-platform v0.1.0
+          │   ├── app-posix-shim-test v0.1.0 (*)
+          │   └── tetris-c v0.1.0
+          ├── pwm-demo v0.1.0 (*)
+          ├── robot-dashboard v0.1.0
+          ├── robot-demo v0.1.0 (*)
+          ├── sdk-demo v0.1.0
+          ├── sensor-demo v0.1.0 (*)
+          ├── service-ai v0.1.0
+          ├── service-budget-authority v0.1.0
+          ├── service-compositor v0.1.0
+          ├── service-config v0.1.0
+          ├── service-httpd v0.1.0 (*)
+          ├── service-hypervisor v0.1.0
+          ├── service-input v0.2.0
+          ├── service-kms v0.1.0
+          ├── service-net v0.1.0
+          ├── service-net-broker v0.1.0
+          │   └── app-bench v0.1.0 (*)
+          ├── service-placement-controller v0.1.0
+          ├── service-platform v0.1.0
+          ├── service-power v0.1.0
+          ├── service-silo v0.1.0
+          ├── service-sshd v0.1.0
+          ├── service-vfs v0.1.0 (*)
+          ├── service-workload-router v0.1.0
+          ├── spi-demo v0.1.0 (*)
+          ├── supervisor v0.1.0
+          ├── terminal v0.1.0
+          ├── terminal-sdk v0.1.0
+          │   ├── app-cellbox v0.1.0 (*)
+          │   ├── app-phase02-session-child v0.1.0 (*)
+          │   ├── app-phase02-session-parent v0.1.0 (*)
+          │   ├── app-phase03-filter v0.1.0 (*)
+          │   ├── app-phase04-terminal-driver v0.1.0 (*)
+          │   ├── app-s2tw-probe v0.1.0 (*)
+          │   ├── app-top-load v0.1.0 (*)
+          │   ├── terminal v0.1.0 (*)
+          │   └── vitui v0.1.0
+          │       ├── app-cellbox v0.1.0 (*)
+          │       └── (dev) terminal v0.1.0 (*)
+          ├── test-isolation v0.1.0
+          ├── tetris v0.1.0
+          ├── tetris-c v0.1.0 (*)
+          ├── tetris-lua v0.1.0
+          ├── tier2-exploit v0.1.0
+          ├── tier2-grant-owner v0.1.0
+          ├── tier2-grant-receiver v0.1.0
+          ├── tier2-rpc-driver v0.1.0
+          ├── tier2-rpc-provider v0.1.0
+          ├── tier2-smoke v0.1.0
+          ├── vimio v0.1.0
+          │   ├── app-haily-agent v0.1.0 (*)
+          │   └── app-tokio-smoke v0.1.0 (*)
+          ├── vipolling v0.1.0
+          │   └── app-async-echo v0.1.0 (*)
+          ├── viui v0.2.0
+          │   ├── app-chrome v0.1.0 (*)
+          │   ├── desktop v0.1.0 (*)
+          │   ├── files v0.1.0 (*)
+          │   ├── ocel v0.1.0 (*)
+          │   ├── robot-dashboard v0.1.0 (*)
+          │   ├── terminal v0.1.0 (*)
+          │   └── viui-demo v0.1.0
+          ├── viui-demo v0.1.0 (*)
+          ├── vm-runner v0.1.0
+          ├── window-policy-probe v0.1.0
+          └── wx-test v0.1.0
+    ├ hashbrown v0.16.1
+      ├── lru v0.16.4
+      │   └── ratatui-core v0.1.0
+      │       ├── ratatui-widgets v0.3.0
+      │       │   └── vitui v0.1.0
+      │       │       ├── app-cellbox v0.1.0
+      │       │       └── (dev) terminal v0.1.0
+      │       └── vitui v0.1.0 (*)
+      ├── ratatui-core v0.1.0 (*)
+      └── ratatui-widgets v0.3.0 (*)
+    ├ hashbrown v0.17.1
+      └── kasuari v0.4.13
+          └── ratatui-core v0.1.0
+              ├── ratatui-widgets v0.3.0
+              │   └── vitui v0.1.0
+              │       ├── app-cellbox v0.1.0
+              │       └── (dev) terminal v0.1.0
+              └── vitui v0.1.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'heapless'
+    ┌─ /home/dmin/cellos/Cargo.lock:215:1
+    │  
+215 │ ╭ heapless 0.8.0 registry+https://github.com/rust-lang/crates.io-index
+216 │ │ heapless 0.9.3 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ heapless v0.8.0
+      ├── ostd v0.2.0
+      │   ├── adc-demo v0.1.0
+      │   ├── ai-sdk v0.1.0
+      │   │   ├── ai-test v0.1.0
+      │   │   ├── hypha-llm-gateway v0.1.0
+      │   │   └── service-httpd v0.1.0
+      │   ├── ai-test v0.1.0 (*)
+      │   ├── app-async-echo v0.1.0
+      │   ├── app-backend v0.1.0
+      │   ├── app-bench v0.1.0
+      │   ├── app-c-math-smoke v0.1.0
+      │   ├── app-c-spawn v0.1.0
+      │   ├── app-c-spawn-child v0.1.0
+      │   ├── app-c2c-render v0.1.0
+      │   ├── app-cellbox v0.1.0
+      │   ├── app-chrome v0.1.0
+      │   ├── app-cpp-smoke v0.1.0
+      │   ├── app-futex-test v0.1.0
+      │   ├── app-haily-agent v0.1.0
+      │   ├── app-hello v0.1.0
+      │   ├── app-http-smoke v0.1.0
+      │   ├── app-https-demo v0.1.0
+      │   ├── app-init v0.1.0
+      │   ├── app-mlibc-smoke v0.1.0
+      │   ├── app-net-tools v0.1.0
+      │   ├── app-phase02-session-child v0.1.0
+      │   ├── app-phase02-session-parent v0.1.0
+      │   ├── app-phase03-filter v0.1.0
+      │   ├── app-phase04-terminal-driver v0.1.0
+      │   ├── app-pipe-peer v0.1.0
+      │   ├── app-pipe-test v0.1.0
+      │   ├── app-posix-shim-test v0.1.0
+      │   ├── app-s2tw-probe v0.1.0
+      │   ├── app-silo-test v0.1.0
+      │   ├── app-srv-test v0.1.0
+      │   ├── app-sys-tools v0.1.0
+      │   ├── app-tls-test v0.1.0
+      │   ├── app-tokio-smoke v0.1.0
+      │   ├── app-top-load v0.1.0
+      │   ├── app-vfs-test v0.2.0
+      │   ├── app-wasm v0.2.0
+      │   ├── atomic-publication-probe v0.1.0
+      │   ├── audio-demo v0.1.0
+      │   ├── c-pthread v0.1.0
+      │   ├── can-demo v0.1.0
+      │   ├── cfi-test v0.1.0
+      │   ├── desktop v0.1.0
+      │   ├── doom v0.1.0
+      │   ├── driver-ahci v0.1.0
+      │   ├── driver-bcm-display v0.1.0
+      │   ├── driver-disk v0.1.0
+      │   │   └── service-vfs v0.1.0
+      │   ├── driver-display-ssd1306 v0.1.0
+      │   ├── driver-dwc2-usb v0.1.0
+      │   ├── driver-e1000 v0.1.0
+      │   ├── driver-gpio v0.1.0
+      │   │   ├── periph-demo v0.1.0
+      │   │   ├── periph-test v0.1.0
+      │   │   ├── pwm-demo v0.1.0
+      │   │   ├── robot-demo v0.1.0
+      │   │   ├── sensor-demo v0.1.0
+      │   │   └── spi-demo v0.1.0
+      │   ├── driver-gpio-bcm v0.1.0
+      │   │   ├── driver-display-ssd1306 v0.1.0 (*)
+      │   │   ├── periph-demo v0.1.0 (*)
+      │   │   └── sensor-demo v0.1.0 (*)
+      │   ├── driver-gpio-sifive v0.1.0
+      │   │   └── gpio-test-rv v0.1.0
+      │   ├── driver-gpu v0.1.0
+      │   ├── driver-i2c-bcm v0.1.0
+      │   │   ├── driver-imu-mpu6050 v0.1.0
+      │   │   └── sensor-demo v0.1.0 (*)
+      │   ├── driver-igb v0.1.0
+      │   ├── driver-imu-mpu6050 v0.1.0 (*)
+      │   ├── driver-nvme v0.1.0
+      │   ├── driver-serial v0.2.0
+      │   │   ├── periph-demo v0.1.0 (*)
+      │   │   └── periph-test v0.1.0 (*)
+      │   ├── driver-serial-x86 v0.1.0
+      │   ├── driver-spi-bcm v0.1.0
+      │   │   ├── driver-display-ssd1306 v0.1.0 (*)
+      │   │   └── spi-demo v0.1.0 (*)
+      │   ├── driver-virtio-blk v0.1.0
+      │   ├── driver-virtio-gpu v0.1.0
+      │   ├── driver-virtio-net v0.1.0
+      │   ├── driver-wasm v0.2.0
+      │   │   └── app-wasm v0.2.0 (*)
+      │   ├── driver-xhci v0.1.0
+      │   ├── fb-console v0.1.0
+      │   ├── files v0.1.0
+      │   ├── gpio-test-rv v0.1.0 (*)
+      │   ├── hello-cell v0.1.0
+      │   ├── hotswap-demo-v1 v0.1.0
+      │   ├── hotswap-demo-v2 v0.2.0
+      │   ├── hypervisor-test v0.1.0
+      │   ├── hypha-core v0.1.0
+      │   ├── hypha-llm-gateway v0.1.0 (*)
+      │   ├── hypha-tool-fs v0.1.0
+      │   ├── hypha-tool-spawn v0.1.0
+      │   ├── hypha-tool-sys v0.1.0
+      │   ├── input-test v0.1.0
+      │   ├── lua v0.1.0
+      │   ├── ocel v0.1.0
+      │   ├── ocel-js v0.1.0
+      │   ├── ocel-pdf v0.1.0
+      │   ├── ocel-quickjs v0.1.0
+      │   ├── periph-demo v0.1.0 (*)
+      │   ├── periph-test v0.1.0 (*)
+      │   ├── port-platform v0.1.0
+      │   │   ├── app-posix-shim-test v0.1.0 (*)
+      │   │   └── tetris-c v0.1.0
+      │   ├── pwm-demo v0.1.0 (*)
+      │   ├── robot-dashboard v0.1.0
+      │   ├── robot-demo v0.1.0 (*)
+      │   ├── sdk-demo v0.1.0
+      │   ├── sensor-demo v0.1.0 (*)
+      │   ├── service-ai v0.1.0
+      │   ├── service-budget-authority v0.1.0
+      │   ├── service-compositor v0.1.0
+      │   ├── service-config v0.1.0
+      │   ├── service-httpd v0.1.0 (*)
+      │   ├── service-hypervisor v0.1.0
+      │   ├── service-input v0.2.0
+      │   ├── service-kms v0.1.0
+      │   ├── service-net v0.1.0
+      │   ├── service-net-broker v0.1.0
+      │   │   └── app-bench v0.1.0 (*)
+      │   ├── service-placement-controller v0.1.0
+      │   ├── service-platform v0.1.0
+      │   ├── service-power v0.1.0
+      │   ├── service-silo v0.1.0
+      │   ├── service-sshd v0.1.0
+      │   ├── service-vfs v0.1.0 (*)
+      │   ├── service-workload-router v0.1.0
+      │   ├── spi-demo v0.1.0 (*)
+      │   ├── supervisor v0.1.0
+      │   ├── terminal v0.1.0
+      │   ├── terminal-sdk v0.1.0
+      │   │   ├── app-cellbox v0.1.0 (*)
+      │   │   ├── app-phase02-session-child v0.1.0 (*)
+      │   │   ├── app-phase02-session-parent v0.1.0 (*)
+      │   │   ├── app-phase03-filter v0.1.0 (*)
+      │   │   ├── app-phase04-terminal-driver v0.1.0 (*)
+      │   │   ├── app-s2tw-probe v0.1.0 (*)
+      │   │   ├── app-top-load v0.1.0 (*)
+      │   │   ├── terminal v0.1.0 (*)
+      │   │   └── vitui v0.1.0
+      │   │       ├── app-cellbox v0.1.0 (*)
+      │   │       └── (dev) terminal v0.1.0 (*)
+      │   ├── test-isolation v0.1.0
+      │   ├── tetris v0.1.0
+      │   ├── tetris-c v0.1.0 (*)
+      │   ├── tetris-lua v0.1.0
+      │   ├── tier2-exploit v0.1.0
+      │   ├── tier2-grant-owner v0.1.0
+      │   ├── tier2-grant-receiver v0.1.0
+      │   ├── tier2-rpc-driver v0.1.0
+      │   ├── tier2-rpc-provider v0.1.0
+      │   ├── tier2-smoke v0.1.0
+      │   ├── vimio v0.1.0
+      │   │   ├── app-haily-agent v0.1.0 (*)
+      │   │   └── app-tokio-smoke v0.1.0 (*)
+      │   ├── vipolling v0.1.0
+      │   │   └── app-async-echo v0.1.0 (*)
+      │   ├── viui v0.2.0
+      │   │   ├── app-chrome v0.1.0 (*)
+      │   │   ├── desktop v0.1.0 (*)
+      │   │   ├── files v0.1.0 (*)
+      │   │   ├── ocel v0.1.0 (*)
+      │   │   ├── robot-dashboard v0.1.0 (*)
+      │   │   ├── terminal v0.1.0 (*)
+      │   │   └── viui-demo v0.1.0
+      │   ├── viui-demo v0.1.0 (*)
+      │   ├── vm-runner v0.1.0
+      │   ├── window-policy-probe v0.1.0
+      │   └── wx-test v0.1.0
+      ├── service-net v0.1.0 (*)
+      └── smoltcp v0.11.0
+          └── service-net v0.1.0 (*)
+    ├ heapless v0.9.3
+      ├── der v0.8.1
+      │   └── embedded-tls v0.19.0
+      │       └── service-net v0.1.0
+      ├── embedded-tls v0.19.0 (*)
+      ├── sunset v0.6.0
+      │   └── vissh v0.1.0
+      │       └── app-cellbox v0.1.0
+      └── vissh v0.1.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'hmac'
+    ┌─ /home/dmin/cellos/Cargo.lock:220:1
+    │  
+220 │ ╭ hmac 0.12.1 registry+https://github.com/rust-lang/crates.io-index
+221 │ │ hmac 0.13.0 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰─────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ hmac v0.12.1
+      ├── embedded-tls v0.19.0
+      │   └── service-net v0.1.0
+      ├── hkdf v0.12.4
+      │   ├── elliptic-curve v0.13.8
+      │   │   ├── ecdsa v0.16.9
+      │   │   │   ├── embedded-tls v0.19.0 (*)
+      │   │   │   └── p256 v0.13.2
+      │   │   │       ├── attestation v0.1.0
+      │   │   │       ├── embedded-tls v0.19.0 (*)
+      │   │   │       └── service-kms v0.1.0
+      │   │   ├── p256 v0.13.2 (*)
+      │   │   └── primeorder v0.13.6
+      │   │       └── p256 v0.13.2 (*)
+      │   └── embedded-tls v0.19.0 (*)
+      └── rfc6979 v0.4.0
+          └── ecdsa v0.16.9 (*)
+    ├ hmac v0.13.0
+      └── sunset v0.6.0
+          └── vissh v0.1.0
+              └── app-cellbox v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'inout'
+    ┌─ /home/dmin/cellos/Cargo.lock:235:1
+    │  
+235 │ ╭ inout 0.1.4 registry+https://github.com/rust-lang/crates.io-index
+236 │ │ inout 0.2.5 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰─────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ inout v0.1.4
+      └── cipher v0.4.4
+          ├── aes v0.8.4
+          │   └── aes-gcm v0.10.3
+          │       └── embedded-tls v0.19.0
+          │           └── service-net v0.1.0
+          ├── aes-gcm v0.10.3 (*)
+          ├── chacha20 v0.9.1
+          │   ├── chacha20poly1305 v0.10.1
+          │   │   ├── clatter v2.2.0
+          │   │   │   └── service-net-broker v0.1.0
+          │   │   │       └── app-bench v0.1.0
+          │   │   ├── service-net-broker v0.1.0 (*)
+          │   │   └── service-sshd v0.1.0
+          │   ├── service-sshd v0.1.0 (*)
+          │   └── sunset v0.6.0
+          │       └── vissh v0.1.0
+          │           └── app-cellbox v0.1.0
+          ├── chacha20poly1305 v0.10.1 (*)
+          └── ctr v0.9.2
+              └── aes-gcm v0.10.3 (*)
+    ├ inout v0.2.5
+      └── cipher v0.5.2
+          ├── aes v0.9.3
+          │   └── sunset v0.6.0
+          │       └── vissh v0.1.0
+          │           └── app-cellbox v0.1.0
+          ├── ctr v0.10.1
+          │   └── sunset v0.6.0 (*)
+          ├── ssh-cipher v0.3.0
+          │   └── ssh-key v0.7.0-rc.11
+          │       └── sunset v0.6.0 (*)
+          └── sunset v0.6.0 (*)
+
+error[wildcard]: found 2 wildcard dependencies for crate 'ocel'
+   ┌─ /home/dmin/cellos/cells/apps/ocel/Cargo.toml:21:18
+   │
+21 │ ocel-pdf-proto = { path = "../../../libs/ocel-pdf-proto" }
+   │                  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ wildcard dependency
+22 │ ocel-service-proto = { path = "../../../libs/ocel-service-proto" }
+   │                      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ wildcard dependency
+   │
+   ├ ocel v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'poly1305'
+    ┌─ /home/dmin/cellos/Cargo.lock:269:1
+    │  
+269 │ ╭ poly1305 0.8.0 registry+https://github.com/rust-lang/crates.io-index
+270 │ │ poly1305 0.9.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ poly1305 v0.8.0
+      ├── chacha20poly1305 v0.10.1
+      │   ├── clatter v2.2.0
+      │   │   └── service-net-broker v0.1.0
+      │   │       └── app-bench v0.1.0
+      │   ├── service-net-broker v0.1.0 (*)
+      │   └── service-sshd v0.1.0
+      └── service-sshd v0.1.0 (*)
+    ├ poly1305 v0.9.1
+      └── sunset v0.6.0
+          └── vissh v0.1.0
+              └── app-cellbox v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'rand_core'
+    ┌─ /home/dmin/cellos/Cargo.lock:283:1
+    │  
+283 │ ╭ rand_core 0.6.4 registry+https://github.com/rust-lang/crates.io-index
+284 │ │ rand_core 0.10.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ rand_core v0.6.4
+      ├── clatter v2.2.0
+      │   └── service-net-broker v0.1.0
+      │       └── app-bench v0.1.0
+      ├── crypto-bigint v0.5.5
+      │   └── elliptic-curve v0.13.8
+      │       ├── ecdsa v0.16.9
+      │       │   ├── embedded-tls v0.19.0
+      │       │   │   └── service-net v0.1.0
+      │       │   └── p256 v0.13.2
+      │       │       ├── attestation v0.1.0
+      │       │       ├── embedded-tls v0.19.0 (*)
+      │       │       └── service-kms v0.1.0
+      │       ├── p256 v0.13.2 (*)
+      │       └── primeorder v0.13.6
+      │           └── p256 v0.13.2 (*)
+      ├── crypto-common v0.1.7
+      │   ├── aead v0.5.2
+      │   │   ├── aes-gcm v0.10.3
+      │   │   │   └── embedded-tls v0.19.0 (*)
+      │   │   └── chacha20poly1305 v0.10.1
+      │   │       ├── clatter v2.2.0 (*)
+      │   │       ├── service-net-broker v0.1.0 (*)
+      │   │       └── service-sshd v0.1.0
+      │   ├── cipher v0.4.4
+      │   │   ├── aes v0.8.4
+      │   │   │   └── aes-gcm v0.10.3 (*)
+      │   │   ├── aes-gcm v0.10.3 (*)
+      │   │   ├── chacha20 v0.9.1
+      │   │   │   ├── chacha20poly1305 v0.10.1 (*)
+      │   │   │   ├── service-sshd v0.1.0 (*)
+      │   │   │   └── sunset v0.6.0
+      │   │   │       └── vissh v0.1.0
+      │   │   │           └── app-cellbox v0.1.0
+      │   │   ├── chacha20poly1305 v0.10.1 (*)
+      │   │   └── ctr v0.9.2
+      │   │       └── aes-gcm v0.10.3 (*)
+      │   ├── digest v0.10.7
+      │   │   ├── blake2 v0.10.6
+      │   │   │   └── service-kms v0.1.0 (*)
+      │   │   ├── ecdsa v0.16.9 (*)
+      │   │   ├── elliptic-curve v0.13.8 (*)
+      │   │   ├── embedded-tls v0.19.0 (*)
+      │   │   ├── hmac v0.12.1
+      │   │   │   ├── embedded-tls v0.19.0 (*)
+      │   │   │   ├── hkdf v0.12.4
+      │   │   │   │   ├── elliptic-curve v0.13.8 (*)
+      │   │   │   │   └── embedded-tls v0.19.0 (*)
+      │   │   │   └── rfc6979 v0.4.0
+      │   │   │       └── ecdsa v0.16.9 (*)
+      │   │   ├── sha2 v0.10.9
+      │   │   │   ├── authority-protocol v0.1.0
+      │   │   │   ├── clatter v2.2.0 (*)
+      │   │   │   ├── embedded-tls v0.19.0 (*)
+      │   │   │   ├── p256 v0.13.2 (*)
+      │   │   │   ├── service-kms v0.1.0 (*)
+      │   │   │   ├── service-net v0.1.0 (*)
+      │   │   │   ├── service-net-broker v0.1.0 (*)
+      │   │   │   ├── (build) service-silo v0.1.0
+      │   │   │   ├── service-sshd v0.1.0 (*)
+      │   │   │   └── service-vfs v0.1.0
+      │   │   └── signature v2.2.0
+      │   │       ├── ecdsa v0.16.9 (*)
+      │   │       └── embedded-tls v0.19.0 (*)
+      │   └── universal-hash v0.5.1
+      │       ├── poly1305 v0.8.0
+      │       │   ├── chacha20poly1305 v0.10.1 (*)
+      │       │   └── service-sshd v0.1.0 (*)
+      │       └── polyval v0.6.2
+      │           └── ghash v0.5.1
+      │               └── aes-gcm v0.10.3 (*)
+      ├── elliptic-curve v0.13.8 (*)
+      ├── embedded-tls v0.19.0 (*)
+      ├── ff v0.13.1
+      │   ├── elliptic-curve v0.13.8 (*)
+      │   └── group v0.13.0
+      │       └── elliptic-curve v0.13.8 (*)
+      ├── group v0.13.0 (*)
+      ├── rand_chacha v0.3.1
+      │   ├── service-net v0.1.0 (*)
+      │   └── service-net-broker v0.1.0 (*)
+      ├── service-net v0.1.0 (*)
+      ├── service-net-broker v0.1.0 (*)
+      ├── signature v2.2.0 (*)
+      └── x25519-dalek v2.0.1
+          ├── clatter v2.2.0 (*)
+          └── service-sshd v0.1.0 (*)
+    ├ rand_core v0.10.1
+      ├── crypto-common v0.2.2
+      │   ├── cipher v0.5.2
+      │   │   ├── aes v0.9.3
+      │   │   │   └── sunset v0.6.0
+      │   │   │       └── vissh v0.1.0
+      │   │   │           └── app-cellbox v0.1.0
+      │   │   ├── ctr v0.10.1
+      │   │   │   └── sunset v0.6.0 (*)
+      │   │   ├── ssh-cipher v0.3.0
+      │   │   │   └── ssh-key v0.7.0-rc.11
+      │   │   │       └── sunset v0.6.0 (*)
+      │   │   └── sunset v0.6.0 (*)
+      │   ├── digest v0.11.3
+      │   │   ├── curve25519-dalek v5.0.0
+      │   │   │   ├── ed25519-dalek v3.0.0
+      │   │   │   │   └── sunset v0.6.0 (*)
+      │   │   │   └── x25519-dalek v3.0.0
+      │   │   │       └── sunset v0.6.0 (*)
+      │   │   ├── hmac v0.13.0
+      │   │   │   └── sunset v0.6.0 (*)
+      │   │   ├── sha2 v0.11.1
+      │   │   │   ├── ed25519-dalek v3.0.0 (*)
+      │   │   │   ├── ssh-key v0.7.0-rc.11 (*)
+      │   │   │   ├── sunset v0.6.0 (*)
+      │   │   │   └── vissh v0.1.0 (*)
+      │   │   ├── ssh-encoding v0.3.0
+      │   │   │   ├── ssh-cipher v0.3.0 (*)
+      │   │   │   └── ssh-key v0.7.0-rc.11 (*)
+      │   │   └── sunset v0.6.0 (*)
+      │   └── universal-hash v0.6.1
+      │       └── poly1305 v0.9.1
+      │           └── sunset v0.6.0 (*)
+      ├── curve25519-dalek v5.0.0 (*)
+      ├── ed25519-dalek v3.0.0 (*)
+      ├── signature v3.0.0
+      │   ├── ed25519 v3.0.0
+      │   │   └── ed25519-dalek v3.0.0 (*)
+      │   ├── ed25519-dalek v3.0.0 (*)
+      │   └── ssh-key v0.7.0-rc.11 (*)
+      ├── sunset v0.6.0 (*)
+      └── x25519-dalek v3.0.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'sha2'
+    ┌─ /home/dmin/cellos/Cargo.lock:328:1
+    │  
+328 │ ╭ sha2 0.10.9 registry+https://github.com/rust-lang/crates.io-index
+329 │ │ sha2 0.11.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰─────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ sha2 v0.10.9
+      ├── authority-protocol v0.1.0
+      ├── clatter v2.2.0
+      │   └── service-net-broker v0.1.0
+      │       └── app-bench v0.1.0
+      ├── embedded-tls v0.19.0
+      │   └── service-net v0.1.0
+      ├── p256 v0.13.2
+      │   ├── attestation v0.1.0
+      │   ├── embedded-tls v0.19.0 (*)
+      │   └── service-kms v0.1.0
+      ├── service-kms v0.1.0 (*)
+      ├── service-net v0.1.0 (*)
+      ├── service-net-broker v0.1.0 (*)
+      ├── (build) service-silo v0.1.0
+      ├── service-sshd v0.1.0
+      └── service-vfs v0.1.0
+    ├ sha2 v0.11.1
+      ├── ed25519-dalek v3.0.0
+      │   └── sunset v0.6.0
+      │       └── vissh v0.1.0
+      │           └── app-cellbox v0.1.0
+      ├── ssh-key v0.7.0-rc.11
+      │   └── sunset v0.6.0 (*)
+      ├── sunset v0.6.0 (*)
+      └── vissh v0.1.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'signature'
+    ┌─ /home/dmin/cellos/Cargo.lock:331:1
+    │  
+331 │ ╭ signature 2.2.0 registry+https://github.com/rust-lang/crates.io-index
+332 │ │ signature 3.0.0 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰─────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ signature v2.2.0
+      ├── ecdsa v0.16.9
+      │   ├── embedded-tls v0.19.0
+      │   │   └── service-net v0.1.0
+      │   └── p256 v0.13.2
+      │       ├── attestation v0.1.0
+      │       ├── embedded-tls v0.19.0 (*)
+      │       └── service-kms v0.1.0
+      └── embedded-tls v0.19.0 (*)
+    ├ signature v3.0.0
+      ├── ed25519 v3.0.0
+      │   └── ed25519-dalek v3.0.0
+      │       └── sunset v0.6.0
+      │           └── vissh v0.1.0
+      │               └── app-cellbox v0.1.0
+      ├── ed25519-dalek v3.0.0 (*)
+      └── ssh-key v0.7.0-rc.11
+          └── sunset v0.6.0 (*)
+
+warning[duplicate]: found 3 duplicate entries for crate 'syn'
+    ┌─ /home/dmin/cellos/Cargo.lock:354:1
+    │  
+354 │ ╭ syn 1.0.109 registry+https://github.com/rust-lang/crates.io-index
+355 │ │ syn 2.0.119 registry+https://github.com/rust-lang/crates.io-index
+356 │ │ syn 3.0.3 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ syn v1.0.109
+      └── thiserror-impl-no-std v2.0.2
+          └── thiserror-no-std v2.0.2
+              └── clatter v2.2.0
+                  └── service-net-broker v0.1.0
+                      └── app-bench v0.1.0
+    ├ syn v2.0.119
+      ├── curve25519-dalek-derive v0.1.1
+      │   ├── curve25519-dalek v4.1.3
+      │   │   └── x25519-dalek v2.0.1
+      │   │       ├── clatter v2.2.0
+      │   │       │   └── service-net-broker v0.1.0
+      │   │       │       └── app-bench v0.1.0
+      │   │       └── service-sshd v0.1.0
+      │   └── curve25519-dalek v5.0.0
+      │       ├── ed25519-dalek v3.0.0
+      │       │   └── sunset v0.6.0
+      │       │       └── vissh v0.1.0
+      │       │           └── app-cellbox v0.1.0
+      │       └── x25519-dalek v3.0.0
+      │           └── sunset v0.6.0 (*)
+      ├── darling_core v0.20.11
+      │   ├── darling v0.20.11
+      │   │   └── derive_builder_core v0.20.2
+      │   │       └── derive_builder_macro v0.20.2
+      │   │           └── derive_builder v0.20.2
+      │   │               ├── vergen v9.1.0
+      │   │               │   └── vergen-gitcl v1.0.8
+      │   │               │       └── (build) cellos-kernel v0.2.1
+      │   │               ├── vergen-gitcl v1.0.8 (*)
+      │   │               ├── vergen-lib v0.1.6
+      │   │               │   └── vergen-gitcl v1.0.8 (*)
+      │   │               └── vergen-lib v9.1.0
+      │   │                   └── vergen v9.1.0 (*)
+      │   └── darling_macro v0.20.11
+      │       └── darling v0.20.11 (*)
+      ├── darling_macro v0.20.11 (*)
+      ├── der_derive v0.8.0
+      │   └── der v0.8.1
+      │       └── embedded-tls v0.19.0
+      │           └── service-net v0.1.0
+      ├── derive_builder_core v0.20.2 (*)
+      ├── derive_builder_macro v0.20.2 (*)
+      ├── enumn v0.1.14
+      │   └── virtio-drivers v0.7.5
+      │       ├── cellos-kernel v0.2.1 (*)
+      │       ├── driver-virtio-blk v0.1.0
+      │       ├── driver-virtio-gpu v0.1.0
+      │       ├── driver-virtio-net v0.1.0
+      │       └── service-input v0.2.0
+      ├── postcard-derive v0.2.2
+      │   └── postcard v1.1.3
+      │       ├── ai-proto v0.1.0
+      │       │   ├── ai-engine v0.1.0
+      │       │   │   └── service-ai v0.1.0
+      │       │   ├── ai-sdk v0.1.0
+      │       │   │   ├── ai-test v0.1.0
+      │       │   │   ├── hypha-llm-gateway v0.1.0
+      │       │   │   └── service-httpd v0.1.0
+      │       │   ├── ai-test v0.1.0 (*)
+      │       │   ├── hypha-llm-gateway v0.1.0 (*)
+      │       │   ├── service-ai v0.1.0 (*)
+      │       │   └── service-httpd v0.1.0 (*)
+      │       ├── api v0.1.0
+      │       │   ├── adc-demo v0.1.0
+      │       │   ├── ai-sdk v0.1.0 (*)
+      │       │   ├── ai-test v0.1.0 (*)
+      │       │   ├── app-async-echo v0.1.0
+      │       │   ├── app-backend v0.1.0
+      │       │   ├── app-bench v0.1.0 (*)
+      │       │   ├── app-c-math-smoke v0.1.0
+      │       │   ├── app-c-spawn v0.1.0
+      │       │   ├── app-c-spawn-child v0.1.0
+      │       │   ├── app-c2c-render v0.1.0
+      │       │   ├── app-cellbox v0.1.0 (*)
+      │       │   ├── app-chrome v0.1.0
+      │       │   ├── app-cpp-smoke v0.1.0
+      │       │   ├── app-futex-test v0.1.0
+      │       │   ├── app-haily-agent v0.1.0
+      │       │   ├── app-hello v0.1.0
+      │       │   ├── app-http-smoke v0.1.0
+      │       │   ├── app-https-demo v0.1.0
+      │       │   ├── app-init v0.1.0
+      │       │   ├── app-mlibc-smoke v0.1.0
+      │       │   ├── app-net-tools v0.1.0
+      │       │   ├── app-phase02-session-child v0.1.0
+      │       │   ├── app-phase02-session-parent v0.1.0
+      │       │   ├── app-phase03-filter v0.1.0
+      │       │   ├── app-phase04-terminal-driver v0.1.0
+      │       │   ├── app-pipe-peer v0.1.0
+      │       │   ├── app-pipe-test v0.1.0
+      │       │   ├── app-posix-shim-test v0.1.0
+      │       │   ├── app-s2tw-probe v0.1.0
+      │       │   ├── app-silo-test v0.1.0
+      │       │   ├── app-srv-test v0.1.0
+      │       │   ├── app-sys-tools v0.1.0
+      │       │   ├── app-tls-test v0.1.0
+      │       │   ├── app-tokio-smoke v0.1.0
+      │       │   ├── app-top-load v0.1.0
+      │       │   ├── app-vfs-test v0.2.0
+      │       │   ├── app-wasm v0.2.0
+      │       │   ├── atomic-publication-probe v0.1.0
+      │       │   ├── audio-demo v0.1.0
+      │       │   ├── c-pthread v0.1.0
+      │       │   ├── can-demo v0.1.0
+      │       │   ├── cellos-boot-config v0.1.0
+      │       │   │   ├── app-init v0.1.0 (*)
+      │       │   │   └── cellos-kernel v0.2.1 (*)
+      │       │   ├── cellos-kernel v0.2.1 (*)
+      │       │   ├── cfi-test v0.1.0
+      │       │   ├── desktop v0.1.0
+      │       │   ├── doom v0.1.0
+      │       │   ├── driver-ahci v0.1.0
+      │       │   ├── driver-bcm-display v0.1.0
+      │       │   ├── driver-disk v0.1.0
+      │       │   │   └── service-vfs v0.1.0
+      │       │   ├── driver-display-ssd1306 v0.1.0
+      │       │   ├── driver-dwc2-usb v0.1.0
+      │       │   ├── driver-e1000 v0.1.0
+      │       │   ├── driver-gpio v0.1.0
+      │       │   │   ├── periph-demo v0.1.0
+      │       │   │   ├── periph-test v0.1.0
+      │       │   │   ├── pwm-demo v0.1.0
+      │       │   │   ├── robot-demo v0.1.0
+      │       │   │   ├── sensor-demo v0.1.0
+      │       │   │   └── spi-demo v0.1.0
+      │       │   ├── driver-gpio-bcm v0.1.0
+      │       │   │   ├── driver-display-ssd1306 v0.1.0 (*)
+      │       │   │   ├── periph-demo v0.1.0 (*)
+      │       │   │   └── sensor-demo v0.1.0 (*)
+      │       │   ├── driver-gpio-sifive v0.1.0
+      │       │   │   └── gpio-test-rv v0.1.0
+      │       │   ├── driver-gpu v0.1.0
+      │       │   ├── driver-hid v0.1.0
+      │       │   │   ├── driver-dwc2-usb v0.1.0 (*)
+      │       │   │   └── driver-xhci v0.1.0
+      │       │   ├── driver-igb v0.1.0
+      │       │   ├── driver-imu-mpu6050 v0.1.0
+      │       │   ├── driver-nvme v0.1.0
+      │       │   ├── driver-serial v0.2.0
+      │       │   │   ├── periph-demo v0.1.0 (*)
+      │       │   │   └── periph-test v0.1.0 (*)
+      │       │   ├── driver-serial-x86 v0.1.0
+      │       │   ├── driver-virtio-blk v0.1.0 (*)
+      │       │   ├── driver-virtio-gpu v0.1.0 (*)
+      │       │   ├── driver-virtio-net v0.1.0 (*)
+      │       │   ├── driver-wasm v0.2.0
+      │       │   │   └── app-wasm v0.2.0 (*)
+      │       │   ├── driver-xhci v0.1.0 (*)
+      │       │   ├── fb-console v0.1.0
+      │       │   ├── files v0.1.0
+      │       │   ├── gpio-test-rv v0.1.0 (*)
+      │       │   ├── hello-cell v0.1.0
+      │       │   ├── hotswap-demo-v1 v0.1.0
+      │       │   ├── hotswap-demo-v2 v0.2.0
+      │       │   ├── hypervisor-test v0.1.0
+      │       │   ├── hypha-core v0.1.0
+      │       │   ├── hypha-llm-gateway v0.1.0 (*)
+      │       │   ├── hypha-tool-fs v0.1.0
+      │       │   ├── hypha-tool-spawn v0.1.0
+      │       │   ├── hypha-tool-sys v0.1.0
+      │       │   ├── input-test v0.1.0
+      │       │   ├── lua v0.1.0
+      │       │   ├── ocel v0.1.0
+      │       │   ├── ocel-js v0.1.0
+      │       │   ├── ocel-pdf v0.1.0
+      │       │   ├── ocel-quickjs v0.1.0
+      │       │   ├── ostd v0.2.0
+      │       │   │   ├── adc-demo v0.1.0 (*)
+      │       │   │   ├── ai-sdk v0.1.0 (*)
+      │       │   │   ├── ai-test v0.1.0 (*)
+      │       │   │   ├── app-async-echo v0.1.0 (*)
+      │       │   │   ├── app-backend v0.1.0 (*)
+      │       │   │   ├── app-bench v0.1.0 (*)
+      │       │   │   ├── app-c-math-smoke v0.1.0 (*)
+      │       │   │   ├── app-c-spawn v0.1.0 (*)
+      │       │   │   ├── app-c-spawn-child v0.1.0 (*)
+      │       │   │   ├── app-c2c-render v0.1.0 (*)
+      │       │   │   ├── app-cellbox v0.1.0 (*)
+      │       │   │   ├── app-chrome v0.1.0 (*)
+      │       │   │   ├── app-cpp-smoke v0.1.0 (*)
+      │       │   │   ├── app-futex-test v0.1.0 (*)
+      │       │   │   ├── app-haily-agent v0.1.0 (*)
+      │       │   │   ├── app-hello v0.1.0 (*)
+      │       │   │   ├── app-http-smoke v0.1.0 (*)
+      │       │   │   ├── app-https-demo v0.1.0 (*)
+      │       │   │   ├── app-init v0.1.0 (*)
+      │       │   │   ├── app-mlibc-smoke v0.1.0 (*)
+      │       │   │   ├── app-net-tools v0.1.0 (*)
+      │       │   │   ├── app-phase02-session-child v0.1.0 (*)
+      │       │   │   ├── app-phase02-session-parent v0.1.0 (*)
+      │       │   │   ├── app-phase03-filter v0.1.0 (*)
+      │       │   │   ├── app-phase04-terminal-driver v0.1.0 (*)
+      │       │   │   ├── app-pipe-peer v0.1.0 (*)
+      │       │   │   ├── app-pipe-test v0.1.0 (*)
+      │       │   │   ├── app-posix-shim-test v0.1.0 (*)
+      │       │   │   ├── app-s2tw-probe v0.1.0 (*)
+      │       │   │   ├── app-silo-test v0.1.0 (*)
+      │       │   │   ├── app-srv-test v0.1.0 (*)
+      │       │   │   ├── app-sys-tools v0.1.0 (*)
+      │       │   │   ├── app-tls-test v0.1.0 (*)
+      │       │   │   ├── app-tokio-smoke v0.1.0 (*)
+      │       │   │   ├── app-top-load v0.1.0 (*)
+      │       │   │   ├── app-vfs-test v0.2.0 (*)
+      │       │   │   ├── app-wasm v0.2.0 (*)
+      │       │   │   ├── atomic-publication-probe v0.1.0 (*)
+      │       │   │   ├── audio-demo v0.1.0 (*)
+      │       │   │   ├── c-pthread v0.1.0 (*)
+      │       │   │   ├── can-demo v0.1.0 (*)
+      │       │   │   ├── cfi-test v0.1.0 (*)
+      │       │   │   ├── desktop v0.1.0 (*)
+      │       │   │   ├── doom v0.1.0 (*)
+      │       │   │   ├── driver-ahci v0.1.0 (*)
+      │       │   │   ├── driver-bcm-display v0.1.0 (*)
+      │       │   │   ├── driver-disk v0.1.0 (*)
+      │       │   │   ├── driver-display-ssd1306 v0.1.0 (*)
+      │       │   │   ├── driver-dwc2-usb v0.1.0 (*)
+      │       │   │   ├── driver-e1000 v0.1.0 (*)
+      │       │   │   ├── driver-gpio v0.1.0 (*)
+      │       │   │   ├── driver-gpio-bcm v0.1.0 (*)
+      │       │   │   ├── driver-gpio-sifive v0.1.0 (*)
+      │       │   │   ├── driver-gpu v0.1.0 (*)
+      │       │   │   ├── driver-i2c-bcm v0.1.0
+      │       │   │   │   ├── driver-imu-mpu6050 v0.1.0 (*)
+      │       │   │   │   └── sensor-demo v0.1.0 (*)
+      │       │   │   ├── driver-igb v0.1.0 (*)
+      │       │   │   ├── driver-imu-mpu6050 v0.1.0 (*)
+      │       │   │   ├── driver-nvme v0.1.0 (*)
+      │       │   │   ├── driver-serial v0.2.0 (*)
+      │       │   │   ├── driver-serial-x86 v0.1.0 (*)
+      │       │   │   ├── driver-spi-bcm v0.1.0
+      │       │   │   │   ├── driver-display-ssd1306 v0.1.0 (*)
+      │       │   │   │   └── spi-demo v0.1.0 (*)
+      │       │   │   ├── driver-virtio-blk v0.1.0 (*)
+      │       │   │   ├── driver-virtio-gpu v0.1.0 (*)
+      │       │   │   ├── driver-virtio-net v0.1.0 (*)
+      │       │   │   ├── driver-wasm v0.2.0 (*)
+      │       │   │   ├── driver-xhci v0.1.0 (*)
+      │       │   │   ├── fb-console v0.1.0 (*)
+      │       │   │   ├── files v0.1.0 (*)
+      │       │   │   ├── gpio-test-rv v0.1.0 (*)
+      │       │   │   ├── hello-cell v0.1.0 (*)
+      │       │   │   ├── hotswap-demo-v1 v0.1.0 (*)
+      │       │   │   ├── hotswap-demo-v2 v0.2.0 (*)
+      │       │   │   ├── hypervisor-test v0.1.0 (*)
+      │       │   │   ├── hypha-core v0.1.0 (*)
+      │       │   │   ├── hypha-llm-gateway v0.1.0 (*)
+      │       │   │   ├── hypha-tool-fs v0.1.0 (*)
+      │       │   │   ├── hypha-tool-spawn v0.1.0 (*)
+      │       │   │   ├── hypha-tool-sys v0.1.0 (*)
+      │       │   │   ├── input-test v0.1.0 (*)
+      │       │   │   ├── lua v0.1.0 (*)
+      │       │   │   ├── ocel v0.1.0 (*)
+      │       │   │   ├── ocel-js v0.1.0 (*)
+      │       │   │   ├── ocel-pdf v0.1.0 (*)
+      │       │   │   ├── ocel-quickjs v0.1.0 (*)
+      │       │   │   ├── periph-demo v0.1.0 (*)
+      │       │   │   ├── periph-test v0.1.0 (*)
+      │       │   │   ├── port-platform v0.1.0
+      │       │   │   │   ├── app-posix-shim-test v0.1.0 (*)
+      │       │   │   │   └── tetris-c v0.1.0
+      │       │   │   ├── pwm-demo v0.1.0 (*)
+      │       │   │   ├── robot-dashboard v0.1.0
+      │       │   │   ├── robot-demo v0.1.0 (*)
+      │       │   │   ├── sdk-demo v0.1.0
+      │       │   │   ├── sensor-demo v0.1.0 (*)
+      │       │   │   ├── service-ai v0.1.0 (*)
+      │       │   │   ├── service-budget-authority v0.1.0
+      │       │   │   ├── service-compositor v0.1.0
+      │       │   │   ├── service-config v0.1.0
+      │       │   │   ├── service-httpd v0.1.0 (*)
+      │       │   │   ├── service-hypervisor v0.1.0
+      │       │   │   ├── service-input v0.2.0 (*)
+      │       │   │   ├── service-kms v0.1.0
+      │       │   │   ├── service-net v0.1.0 (*)
+      │       │   │   ├── service-net-broker v0.1.0 (*)
+      │       │   │   ├── service-placement-controller v0.1.0
+      │       │   │   ├── service-platform v0.1.0
+      │       │   │   ├── service-power v0.1.0
+      │       │   │   ├── service-silo v0.1.0
+      │       │   │   ├── service-sshd v0.1.0 (*)
+      │       │   │   ├── service-vfs v0.1.0 (*)
+      │       │   │   ├── service-workload-router v0.1.0
+      │       │   │   ├── spi-demo v0.1.0 (*)
+      │       │   │   ├── supervisor v0.1.0
+      │       │   │   ├── terminal v0.1.0
+      │       │   │   ├── terminal-sdk v0.1.0
+      │       │   │   │   ├── app-cellbox v0.1.0 (*)
+      │       │   │   │   ├── app-phase02-session-child v0.1.0 (*)
+      │       │   │   │   ├── app-phase02-session-parent v0.1.0 (*)
+      │       │   │   │   ├── app-phase03-filter v0.1.0 (*)
+      │       │   │   │   ├── app-phase04-terminal-driver v0.1.0 (*)
+      │       │   │   │   ├── app-s2tw-probe v0.1.0 (*)
+      │       │   │   │   ├── app-top-load v0.1.0 (*)
+      │       │   │   │   ├── terminal v0.1.0 (*)
+      │       │   │   │   └── vitui v0.1.0
+      │       │   │   │       ├── app-cellbox v0.1.0 (*)
+      │       │   │   │       └── (dev) terminal v0.1.0 (*)
+      │       │   │   ├── test-isolation v0.1.0
+      │       │   │   ├── tetris v0.1.0
+      │       │   │   ├── tetris-c v0.1.0 (*)
+      │       │   │   ├── tetris-lua v0.1.0
+      │       │   │   ├── tier2-exploit v0.1.0
+      │       │   │   ├── tier2-grant-owner v0.1.0
+      │       │   │   ├── tier2-grant-receiver v0.1.0
+      │       │   │   ├── tier2-rpc-driver v0.1.0
+      │       │   │   ├── tier2-rpc-provider v0.1.0
+      │       │   │   ├── tier2-smoke v0.1.0
+      │       │   │   ├── vimio v0.1.0
+      │       │   │   │   ├── app-haily-agent v0.1.0 (*)
+      │       │   │   │   └── app-tokio-smoke v0.1.0 (*)
+      │       │   │   ├── vipolling v0.1.0
+      │       │   │   │   └── app-async-echo v0.1.0 (*)
+      │       │   │   ├── viui v0.2.0
+      │       │   │   │   ├── app-chrome v0.1.0 (*)
+      │       │   │   │   ├── desktop v0.1.0 (*)
+      │       │   │   │   ├── files v0.1.0 (*)
+      │       │   │   │   ├── ocel v0.1.0 (*)
+      │       │   │   │   ├── robot-dashboard v0.1.0 (*)
+      │       │   │   │   ├── terminal v0.1.0 (*)
+      │       │   │   │   └── viui-demo v0.1.0
+      │       │   │   ├── viui-demo v0.1.0 (*)
+      │       │   │   ├── vm-runner v0.1.0
+      │       │   │   ├── window-policy-probe v0.1.0
+      │       │   │   └── wx-test v0.1.0
+      │       │   ├── periph-demo v0.1.0 (*)
+      │       │   ├── periph-test v0.1.0 (*)
+      │       │   ├── port-platform v0.1.0 (*)
+      │       │   ├── pwm-demo v0.1.0 (*)
+      │       │   ├── robot-dashboard v0.1.0 (*)
+      │       │   ├── robot-demo v0.1.0 (*)
+      │       │   ├── sdk-demo v0.1.0 (*)
+      │       │   ├── sensor-demo v0.1.0 (*)
+      │       │   ├── service-ai v0.1.0 (*)
+      │       │   ├── service-budget-authority v0.1.0 (*)
+      │       │   ├── service-compositor v0.1.0 (*)
+      │       │   ├── service-config v0.1.0 (*)
+      │       │   ├── service-httpd v0.1.0 (*)
+      │       │   ├── service-hypervisor v0.1.0 (*)
+      │       │   ├── service-input v0.2.0 (*)
+      │       │   ├── service-kms v0.1.0 (*)
+      │       │   ├── service-net v0.1.0 (*)
+      │       │   ├── service-net-broker v0.1.0 (*)
+      │       │   ├── service-placement-controller v0.1.0 (*)
+      │       │   ├── service-platform v0.1.0 (*)
+      │       │   ├── service-power v0.1.0 (*)
+      │       │   ├── service-silo v0.1.0 (*)
+      │       │   ├── service-sshd v0.1.0 (*)
+      │       │   ├── service-vfs v0.1.0 (*)
+      │       │   ├── service-workload-router v0.1.0 (*)
+      │       │   ├── spi-demo v0.1.0 (*)
+      │       │   ├── supervisor v0.1.0 (*)
+      │       │   ├── terminal v0.1.0 (*)
+      │       │   ├── terminal-sdk v0.1.0 (*)
+      │       │   ├── test-isolation v0.1.0 (*)
+      │       │   ├── tetris v0.1.0 (*)
+      │       │   ├── tetris-c v0.1.0 (*)
+      │       │   ├── tetris-lua v0.1.0 (*)
+      │       │   ├── text-engine v0.1.0
+      │       │   │   ├── app-cellbox v0.1.0 (*)
+      │       │   │   ├── desktop v0.1.0 (*)
+      │       │   │   ├── files v0.1.0 (*)
+      │       │   │   └── terminal v0.1.0 (*)
+      │       │   ├── tier2-exploit v0.1.0 (*)
+      │       │   ├── tier2-grant-owner v0.1.0 (*)
+      │       │   ├── tier2-grant-receiver v0.1.0 (*)
+      │       │   ├── tier2-rpc-driver v0.1.0 (*)
+      │       │   ├── tier2-rpc-provider v0.1.0 (*)
+      │       │   ├── tier2-smoke v0.1.0 (*)
+      │       │   ├── vimio v0.1.0 (*)
+      │       │   ├── vipolling v0.1.0 (*)
+      │       │   ├── viui v0.2.0 (*)
+      │       │   ├── viui-demo v0.1.0 (*)
+      │       │   ├── vm-runner v0.1.0 (*)
+      │       │   ├── window-policy-probe v0.1.0 (*)
+      │       │   └── wx-test v0.1.0 (*)
+      │       ├── app-c2c-render v0.1.0 (*)
+      │       ├── app-haily-agent v0.1.0 (*)
+      │       ├── dom-arena v0.1.0
+      │       │   ├── app-init v0.1.0 (*)
+      │       │   ├── ocel v0.1.0 (*)
+      │       │   ├── ocel-js v0.1.0 (*)
+      │       │   └── ocel-quickjs v0.1.0 (*)
+      │       ├── hypha-core v0.1.0 (*)
+      │       ├── hypha-llm-gateway v0.1.0 (*)
+      │       ├── hypha-tool-fs v0.1.0 (*)
+      │       ├── hypha-tool-spawn v0.1.0 (*)
+      │       ├── hypha-tool-sys v0.1.0 (*)
+      │       ├── ocel v0.1.0 (*)
+      │       ├── ocel-js v0.1.0 (*)
+      │       ├── ocel-pdf v0.1.0 (*)
+      │       ├── ocel-quickjs v0.1.0 (*)
+      │       └── tier2-rpc-proto v0.1.0
+      │           ├── tier2-rpc-driver v0.1.0 (*)
+      │           └── tier2-rpc-provider v0.1.0 (*)
+      ├── riscv-macros v0.4.1
+      │   └── riscv v0.16.1
+      │       ├── cellos-kernel v0.2.1 (*)
+      │       └── hal-riscv v0.2.0
+      │           └── hal-core v0.2.0
+      │               └── cellos-kernel v0.2.1 (*)
+      ├── snafu-derive v0.9.2
+      │   └── snafu v0.9.2
+      │       └── sunset v0.6.0 (*)
+      ├── strum_macros v0.27.2
+      │   └── strum v0.27.2
+      │       ├── ratatui-core v0.1.0
+      │       │   ├── ratatui-widgets v0.3.0
+      │       │   │   └── vitui v0.1.0 (*)
+      │       │   └── vitui v0.1.0 (*)
+      │       └── ratatui-widgets v0.3.0 (*)
+      ├── zerocopy-derive v0.7.35
+      │   └── zerocopy v0.7.35
+      │       └── virtio-drivers v0.7.5 (*)
+      └── zeroize_derive v1.5.0
+          └── zeroize v1.9.0
+              ├── aes v0.9.3
+              │   └── sunset v0.6.0 (*)
+              ├── app-cellbox v0.1.0 (*)
+              ├── arrayvec v0.7.8
+              │   ├── clatter v2.2.0 (*)
+              │   └── taffy v0.14.0
+              │       └── ocel v0.1.0 (*)
+              ├── block-buffer v0.12.1
+              │   ├── cipher v0.5.2
+              │   │   ├── aes v0.9.3 (*)
+              │   │   ├── ctr v0.10.1
+              │   │   │   └── sunset v0.6.0 (*)
+              │   │   ├── ssh-cipher v0.3.0
+              │   │   │   └── ssh-key v0.7.0-rc.11
+              │   │   │       └── sunset v0.6.0 (*)
+              │   │   └── sunset v0.6.0 (*)
+              │   └── digest v0.11.3
+              │       ├── curve25519-dalek v5.0.0 (*)
+              │       ├── hmac v0.13.0
+              │       │   └── sunset v0.6.0 (*)
+              │       ├── sha2 v0.11.1
+              │       │   ├── ed25519-dalek v3.0.0 (*)
+              │       │   ├── ssh-key v0.7.0-rc.11 (*)
+              │       │   ├── sunset v0.6.0 (*)
+              │       │   └── vissh v0.1.0 (*)
+              │       ├── ssh-encoding v0.3.0
+              │       │   ├── ssh-cipher v0.3.0 (*)
+              │       │   └── ssh-key v0.7.0-rc.11 (*)
+              │       └── sunset v0.6.0 (*)
+              ├── chacha20poly1305 v0.10.1
+              │   ├── clatter v2.2.0 (*)
+              │   ├── service-net-broker v0.1.0 (*)
+              │   └── service-sshd v0.1.0 (*)
+              ├── cipher v0.4.4
+              │   ├── aes v0.8.4
+              │   │   └── aes-gcm v0.10.3
+              │   │       └── embedded-tls v0.19.0 (*)
+              │   ├── aes-gcm v0.10.3 (*)
+              │   ├── chacha20 v0.9.1
+              │   │   ├── chacha20poly1305 v0.10.1 (*)
+              │   │   ├── service-sshd v0.1.0 (*)
+              │   │   └── sunset v0.6.0 (*)
+              │   ├── chacha20poly1305 v0.10.1 (*)
+              │   └── ctr v0.9.2
+              │       └── aes-gcm v0.10.3 (*)
+              ├── cipher v0.5.2 (*)
+              ├── clatter v2.2.0 (*)
+              ├── crypto-bigint v0.5.5
+              │   └── elliptic-curve v0.13.8
+              │       ├── ecdsa v0.16.9
+              │       │   ├── embedded-tls v0.19.0 (*)
+              │       │   └── p256 v0.13.2
+              │       │       ├── attestation v0.1.0
+              │       │       ├── embedded-tls v0.19.0 (*)
+              │       │       └── service-kms v0.1.0 (*)
+              │       ├── p256 v0.13.2 (*)
+              │       └── primeorder v0.13.6
+              │           └── p256 v0.13.2 (*)
+              ├── curve25519-dalek v4.1.3 (*)
+              ├── curve25519-dalek v5.0.0 (*)
+              ├── der v0.7.10
+              │   ├── ecdsa v0.16.9 (*)
+              │   └── sec1 v0.7.3
+              │       └── elliptic-curve v0.13.8 (*)
+              ├── ed25519-dalek v3.0.0 (*)
+              ├── elliptic-curve v0.13.8 (*)
+              ├── generic-array v0.14.7
+              │   ├── aead v0.5.2
+              │   │   ├── aes-gcm v0.10.3 (*)
+              │   │   └── chacha20poly1305 v0.10.1 (*)
+              │   ├── block-buffer v0.10.4
+              │   │   └── digest v0.10.7
+              │   │       ├── blake2 v0.10.6
+              │   │       │   └── service-kms v0.1.0 (*)
+              │   │       ├── ecdsa v0.16.9 (*)
+              │   │       ├── elliptic-curve v0.13.8 (*)
+              │   │       ├── embedded-tls v0.19.0 (*)
+              │   │       ├── hmac v0.12.1
+              │   │       │   ├── embedded-tls v0.19.0 (*)
+              │   │       │   ├── hkdf v0.12.4
+              │   │       │   │   ├── elliptic-curve v0.13.8 (*)
+              │   │       │   │   └── embedded-tls v0.19.0 (*)
+              │   │       │   └── rfc6979 v0.4.0
+              │   │       │       └── ecdsa v0.16.9 (*)
+              │   │       ├── sha2 v0.10.9
+              │   │       │   ├── authority-protocol v0.1.0
+              │   │       │   ├── clatter v2.2.0 (*)
+              │   │       │   ├── embedded-tls v0.19.0 (*)
+              │   │       │   ├── p256 v0.13.2 (*)
+              │   │       │   ├── service-kms v0.1.0 (*)
+              │   │       │   ├── service-net v0.1.0 (*)
+              │   │       │   ├── service-net-broker v0.1.0 (*)
+              │   │       │   ├── (build) service-silo v0.1.0 (*)
+              │   │       │   ├── service-sshd v0.1.0 (*)
+              │   │       │   └── service-vfs v0.1.0 (*)
+              │   │       └── signature v2.2.0
+              │   │           ├── ecdsa v0.16.9 (*)
+              │   │           └── embedded-tls v0.19.0 (*)
+              │   ├── crypto-bigint v0.5.5 (*)
+              │   ├── crypto-common v0.1.7
+              │   │   ├── aead v0.5.2 (*)
+              │   │   ├── cipher v0.4.4 (*)
+              │   │   ├── digest v0.10.7 (*)
+              │   │   └── universal-hash v0.5.1
+              │   │       ├── poly1305 v0.8.0
+              │   │       │   ├── chacha20poly1305 v0.10.1 (*)
+              │   │       │   └── service-sshd v0.1.0 (*)
+              │   │       └── polyval v0.6.2
+              │   │           └── ghash v0.5.1
+              │   │               └── aes-gcm v0.10.3 (*)
+              │   ├── elliptic-curve v0.13.8 (*)
+              │   ├── embedded-tls v0.19.0 (*)
+              │   ├── inout v0.1.4
+              │   │   └── cipher v0.4.4 (*)
+              │   └── sec1 v0.7.3 (*)
+              ├── hybrid-array v0.4.15
+              │   ├── block-buffer v0.12.1 (*)
+              │   ├── crypto-common v0.2.2
+              │   │   ├── cipher v0.5.2 (*)
+              │   │   ├── digest v0.11.3 (*)
+              │   │   └── universal-hash v0.6.1
+              │   │       └── poly1305 v0.9.1
+              │   │           └── sunset v0.6.0 (*)
+              │   └── inout v0.2.5
+              │       └── cipher v0.5.2 (*)
+              ├── sec1 v0.7.3 (*)
+              ├── ssh-cipher v0.3.0 (*)
+              ├── ssh-encoding v0.3.0 (*)
+              ├── ssh-key v0.7.0-rc.11 (*)
+              ├── sunset v0.6.0 (*)
+              ├── vissh v0.1.0 (*)
+              ├── x25519-dalek v2.0.1 (*)
+              └── x25519-dalek v3.0.0 (*)
+    ├ syn v3.0.3
+      ├── async-trait v0.1.91
+      │   └── cellos-kernel v0.2.1
+      ├── darling_core v0.24.1
+      │   ├── darling v0.24.1
+      │   │   └── instability v0.3.14
+      │   │       └── ratatui-widgets v0.3.0
+      │   │           └── vitui v0.1.0
+      │   │               ├── app-cellbox v0.1.0
+      │   │               └── (dev) terminal v0.1.0
+      │   └── darling_macro v0.24.1
+      │       └── darling v0.24.1 (*)
+      ├── darling_macro v0.24.1 (*)
+      ├── displaydoc v0.2.7
+      │   └── clatter v2.2.0
+      │       └── service-net-broker v0.1.0
+      │           └── app-bench v0.1.0
+      ├── instability v0.3.14 (*)
+      ├── serde_derive v1.0.229
+      │   └── serde v1.0.229
+      │       ├── agent-proto v0.1.0
+      │       │   ├── app-haily-agent v0.1.0
+      │       │   ├── hypha-core v0.1.0
+      │       │   ├── hypha-llm-gateway v0.1.0
+      │       │   ├── hypha-tool-fs v0.1.0
+      │       │   ├── hypha-tool-spawn v0.1.0
+      │       │   └── hypha-tool-sys v0.1.0
+      │       ├── ai-proto v0.1.0
+      │       │   ├── ai-engine v0.1.0
+      │       │   │   └── service-ai v0.1.0
+      │       │   ├── ai-sdk v0.1.0
+      │       │   │   ├── ai-test v0.1.0
+      │       │   │   ├── hypha-llm-gateway v0.1.0 (*)
+      │       │   │   └── service-httpd v0.1.0
+      │       │   ├── ai-test v0.1.0 (*)
+      │       │   ├── hypha-llm-gateway v0.1.0 (*)
+      │       │   ├── service-ai v0.1.0 (*)
+      │       │   └── service-httpd v0.1.0 (*)
+      │       ├── api v0.1.0
+      │       │   ├── adc-demo v0.1.0
+      │       │   ├── ai-sdk v0.1.0 (*)
+      │       │   ├── ai-test v0.1.0 (*)
+      │       │   ├── app-async-echo v0.1.0
+      │       │   ├── app-backend v0.1.0
+      │       │   ├── app-bench v0.1.0 (*)
+      │       │   ├── app-c-math-smoke v0.1.0
+      │       │   ├── app-c-spawn v0.1.0
+      │       │   ├── app-c-spawn-child v0.1.0
+      │       │   ├── app-c2c-render v0.1.0
+      │       │   ├── app-cellbox v0.1.0 (*)
+      │       │   ├── app-chrome v0.1.0
+      │       │   ├── app-cpp-smoke v0.1.0
+      │       │   ├── app-futex-test v0.1.0
+      │       │   ├── app-haily-agent v0.1.0 (*)
+      │       │   ├── app-hello v0.1.0
+      │       │   ├── app-http-smoke v0.1.0
+      │       │   ├── app-https-demo v0.1.0
+      │       │   ├── app-init v0.1.0
+      │       │   ├── app-mlibc-smoke v0.1.0
+      │       │   ├── app-net-tools v0.1.0
+      │       │   ├── app-phase02-session-child v0.1.0
+      │       │   ├── app-phase02-session-parent v0.1.0
+      │       │   ├── app-phase03-filter v0.1.0
+      │       │   ├── app-phase04-terminal-driver v0.1.0
+      │       │   ├── app-pipe-peer v0.1.0
+      │       │   ├── app-pipe-test v0.1.0
+      │       │   ├── app-posix-shim-test v0.1.0
+      │       │   ├── app-s2tw-probe v0.1.0
+      │       │   ├── app-silo-test v0.1.0
+      │       │   ├── app-srv-test v0.1.0
+      │       │   ├── app-sys-tools v0.1.0
+      │       │   ├── app-tls-test v0.1.0
+      │       │   ├── app-tokio-smoke v0.1.0
+      │       │   ├── app-top-load v0.1.0
+      │       │   ├── app-vfs-test v0.2.0
+      │       │   ├── app-wasm v0.2.0
+      │       │   ├── atomic-publication-probe v0.1.0
+      │       │   ├── audio-demo v0.1.0
+      │       │   ├── c-pthread v0.1.0
+      │       │   ├── can-demo v0.1.0
+      │       │   ├── cellos-boot-config v0.1.0
+      │       │   │   ├── app-init v0.1.0 (*)
+      │       │   │   └── cellos-kernel v0.2.1 (*)
+      │       │   ├── cellos-kernel v0.2.1 (*)
+      │       │   ├── cfi-test v0.1.0
+      │       │   ├── desktop v0.1.0
+      │       │   ├── doom v0.1.0
+      │       │   ├── driver-ahci v0.1.0
+      │       │   ├── driver-bcm-display v0.1.0
+      │       │   ├── driver-disk v0.1.0
+      │       │   │   └── service-vfs v0.1.0
+      │       │   ├── driver-display-ssd1306 v0.1.0
+      │       │   ├── driver-dwc2-usb v0.1.0
+      │       │   ├── driver-e1000 v0.1.0
+      │       │   ├── driver-gpio v0.1.0
+      │       │   │   ├── periph-demo v0.1.0
+      │       │   │   ├── periph-test v0.1.0
+      │       │   │   ├── pwm-demo v0.1.0
+      │       │   │   ├── robot-demo v0.1.0
+      │       │   │   ├── sensor-demo v0.1.0
+      │       │   │   └── spi-demo v0.1.0
+      │       │   ├── driver-gpio-bcm v0.1.0
+      │       │   │   ├── driver-display-ssd1306 v0.1.0 (*)
+      │       │   │   ├── periph-demo v0.1.0 (*)
+      │       │   │   └── sensor-demo v0.1.0 (*)
+      │       │   ├── driver-gpio-sifive v0.1.0
+      │       │   │   └── gpio-test-rv v0.1.0
+      │       │   ├── driver-gpu v0.1.0
+      │       │   ├── driver-hid v0.1.0
+      │       │   │   ├── driver-dwc2-usb v0.1.0 (*)
+      │       │   │   └── driver-xhci v0.1.0
+      │       │   ├── driver-igb v0.1.0
+      │       │   ├── driver-imu-mpu6050 v0.1.0
+      │       │   ├── driver-nvme v0.1.0
+      │       │   ├── driver-serial v0.2.0
+      │       │   │   ├── periph-demo v0.1.0 (*)
+      │       │   │   └── periph-test v0.1.0 (*)
+      │       │   ├── driver-serial-x86 v0.1.0
+      │       │   ├── driver-virtio-blk v0.1.0
+      │       │   ├── driver-virtio-gpu v0.1.0
+      │       │   ├── driver-virtio-net v0.1.0
+      │       │   ├── driver-wasm v0.2.0
+      │       │   │   └── app-wasm v0.2.0 (*)
+      │       │   ├── driver-xhci v0.1.0 (*)
+      │       │   ├── fb-console v0.1.0
+      │       │   ├── files v0.1.0
+      │       │   ├── gpio-test-rv v0.1.0 (*)
+      │       │   ├── hello-cell v0.1.0
+      │       │   ├── hotswap-demo-v1 v0.1.0
+      │       │   ├── hotswap-demo-v2 v0.2.0
+      │       │   ├── hypervisor-test v0.1.0
+      │       │   ├── hypha-core v0.1.0 (*)
+      │       │   ├── hypha-llm-gateway v0.1.0 (*)
+      │       │   ├── hypha-tool-fs v0.1.0 (*)
+      │       │   ├── hypha-tool-spawn v0.1.0 (*)
+      │       │   ├── hypha-tool-sys v0.1.0 (*)
+      │       │   ├── input-test v0.1.0
+      │       │   ├── lua v0.1.0
+      │       │   ├── ocel v0.1.0
+      │       │   ├── ocel-js v0.1.0
+      │       │   ├── ocel-pdf v0.1.0
+      │       │   ├── ocel-quickjs v0.1.0
+      │       │   ├── ostd v0.2.0
+      │       │   │   ├── adc-demo v0.1.0 (*)
+      │       │   │   ├── ai-sdk v0.1.0 (*)
+      │       │   │   ├── ai-test v0.1.0 (*)
+      │       │   │   ├── app-async-echo v0.1.0 (*)
+      │       │   │   ├── app-backend v0.1.0 (*)
+      │       │   │   ├── app-bench v0.1.0 (*)
+      │       │   │   ├── app-c-math-smoke v0.1.0 (*)
+      │       │   │   ├── app-c-spawn v0.1.0 (*)
+      │       │   │   ├── app-c-spawn-child v0.1.0 (*)
+      │       │   │   ├── app-c2c-render v0.1.0 (*)
+      │       │   │   ├── app-cellbox v0.1.0 (*)
+      │       │   │   ├── app-chrome v0.1.0 (*)
+      │       │   │   ├── app-cpp-smoke v0.1.0 (*)
+      │       │   │   ├── app-futex-test v0.1.0 (*)
+      │       │   │   ├── app-haily-agent v0.1.0 (*)
+      │       │   │   ├── app-hello v0.1.0 (*)
+      │       │   │   ├── app-http-smoke v0.1.0 (*)
+      │       │   │   ├── app-https-demo v0.1.0 (*)
+      │       │   │   ├── app-init v0.1.0 (*)
+      │       │   │   ├── app-mlibc-smoke v0.1.0 (*)
+      │       │   │   ├── app-net-tools v0.1.0 (*)
+      │       │   │   ├── app-phase02-session-child v0.1.0 (*)
+      │       │   │   ├── app-phase02-session-parent v0.1.0 (*)
+      │       │   │   ├── app-phase03-filter v0.1.0 (*)
+      │       │   │   ├── app-phase04-terminal-driver v0.1.0 (*)
+      │       │   │   ├── app-pipe-peer v0.1.0 (*)
+      │       │   │   ├── app-pipe-test v0.1.0 (*)
+      │       │   │   ├── app-posix-shim-test v0.1.0 (*)
+      │       │   │   ├── app-s2tw-probe v0.1.0 (*)
+      │       │   │   ├── app-silo-test v0.1.0 (*)
+      │       │   │   ├── app-srv-test v0.1.0 (*)
+      │       │   │   ├── app-sys-tools v0.1.0 (*)
+      │       │   │   ├── app-tls-test v0.1.0 (*)
+      │       │   │   ├── app-tokio-smoke v0.1.0 (*)
+      │       │   │   ├── app-top-load v0.1.0 (*)
+      │       │   │   ├── app-vfs-test v0.2.0 (*)
+      │       │   │   ├── app-wasm v0.2.0 (*)
+      │       │   │   ├── atomic-publication-probe v0.1.0 (*)
+      │       │   │   ├── audio-demo v0.1.0 (*)
+      │       │   │   ├── c-pthread v0.1.0 (*)
+      │       │   │   ├── can-demo v0.1.0 (*)
+      │       │   │   ├── cfi-test v0.1.0 (*)
+      │       │   │   ├── desktop v0.1.0 (*)
+      │       │   │   ├── doom v0.1.0 (*)
+      │       │   │   ├── driver-ahci v0.1.0 (*)
+      │       │   │   ├── driver-bcm-display v0.1.0 (*)
+      │       │   │   ├── driver-disk v0.1.0 (*)
+      │       │   │   ├── driver-display-ssd1306 v0.1.0 (*)
+      │       │   │   ├── driver-dwc2-usb v0.1.0 (*)
+      │       │   │   ├── driver-e1000 v0.1.0 (*)
+      │       │   │   ├── driver-gpio v0.1.0 (*)
+      │       │   │   ├── driver-gpio-bcm v0.1.0 (*)
+      │       │   │   ├── driver-gpio-sifive v0.1.0 (*)
+      │       │   │   ├── driver-gpu v0.1.0 (*)
+      │       │   │   ├── driver-i2c-bcm v0.1.0
+      │       │   │   │   ├── driver-imu-mpu6050 v0.1.0 (*)
+      │       │   │   │   └── sensor-demo v0.1.0 (*)
+      │       │   │   ├── driver-igb v0.1.0 (*)
+      │       │   │   ├── driver-imu-mpu6050 v0.1.0 (*)
+      │       │   │   ├── driver-nvme v0.1.0 (*)
+      │       │   │   ├── driver-serial v0.2.0 (*)
+      │       │   │   ├── driver-serial-x86 v0.1.0 (*)
+      │       │   │   ├── driver-spi-bcm v0.1.0
+      │       │   │   │   ├── driver-display-ssd1306 v0.1.0 (*)
+      │       │   │   │   └── spi-demo v0.1.0 (*)
+      │       │   │   ├── driver-virtio-blk v0.1.0 (*)
+      │       │   │   ├── driver-virtio-gpu v0.1.0 (*)
+      │       │   │   ├── driver-virtio-net v0.1.0 (*)
+      │       │   │   ├── driver-wasm v0.2.0 (*)
+      │       │   │   ├── driver-xhci v0.1.0 (*)
+      │       │   │   ├── fb-console v0.1.0 (*)
+      │       │   │   ├── files v0.1.0 (*)
+      │       │   │   ├── gpio-test-rv v0.1.0 (*)
+      │       │   │   ├── hello-cell v0.1.0 (*)
+      │       │   │   ├── hotswap-demo-v1 v0.1.0 (*)
+      │       │   │   ├── hotswap-demo-v2 v0.2.0 (*)
+      │       │   │   ├── hypervisor-test v0.1.0 (*)
+      │       │   │   ├── hypha-core v0.1.0 (*)
+      │       │   │   ├── hypha-llm-gateway v0.1.0 (*)
+      │       │   │   ├── hypha-tool-fs v0.1.0 (*)
+      │       │   │   ├── hypha-tool-spawn v0.1.0 (*)
+      │       │   │   ├── hypha-tool-sys v0.1.0 (*)
+      │       │   │   ├── input-test v0.1.0 (*)
+      │       │   │   ├── lua v0.1.0 (*)
+      │       │   │   ├── ocel v0.1.0 (*)
+      │       │   │   ├── ocel-js v0.1.0 (*)
+      │       │   │   ├── ocel-pdf v0.1.0 (*)
+      │       │   │   ├── ocel-quickjs v0.1.0 (*)
+      │       │   │   ├── periph-demo v0.1.0 (*)
+      │       │   │   ├── periph-test v0.1.0 (*)
+      │       │   │   ├── port-platform v0.1.0
+      │       │   │   │   ├── app-posix-shim-test v0.1.0 (*)
+      │       │   │   │   └── tetris-c v0.1.0
+      │       │   │   ├── pwm-demo v0.1.0 (*)
+      │       │   │   ├── robot-dashboard v0.1.0
+      │       │   │   ├── robot-demo v0.1.0 (*)
+      │       │   │   ├── sdk-demo v0.1.0
+      │       │   │   ├── sensor-demo v0.1.0 (*)
+      │       │   │   ├── service-ai v0.1.0 (*)
+      │       │   │   ├── service-budget-authority v0.1.0
+      │       │   │   ├── service-compositor v0.1.0
+      │       │   │   ├── service-config v0.1.0
+      │       │   │   ├── service-httpd v0.1.0 (*)
+      │       │   │   ├── service-hypervisor v0.1.0
+      │       │   │   ├── service-input v0.2.0
+      │       │   │   ├── service-kms v0.1.0
+      │       │   │   ├── service-net v0.1.0
+      │       │   │   ├── service-net-broker v0.1.0 (*)
+      │       │   │   ├── service-placement-controller v0.1.0
+      │       │   │   ├── service-platform v0.1.0
+      │       │   │   ├── service-power v0.1.0
+      │       │   │   ├── service-silo v0.1.0
+      │       │   │   ├── service-sshd v0.1.0
+      │       │   │   ├── service-vfs v0.1.0 (*)
+      │       │   │   ├── service-workload-router v0.1.0
+      │       │   │   ├── spi-demo v0.1.0 (*)
+      │       │   │   ├── supervisor v0.1.0
+      │       │   │   ├── terminal v0.1.0 (*)
+      │       │   │   ├── terminal-sdk v0.1.0
+      │       │   │   │   ├── app-cellbox v0.1.0 (*)
+      │       │   │   │   ├── app-phase02-session-child v0.1.0 (*)
+      │       │   │   │   ├── app-phase02-session-parent v0.1.0 (*)
+      │       │   │   │   ├── app-phase03-filter v0.1.0 (*)
+      │       │   │   │   ├── app-phase04-terminal-driver v0.1.0 (*)
+      │       │   │   │   ├── app-s2tw-probe v0.1.0 (*)
+      │       │   │   │   ├── app-top-load v0.1.0 (*)
+      │       │   │   │   ├── terminal v0.1.0 (*)
+      │       │   │   │   └── vitui v0.1.0 (*)
+      │       │   │   ├── test-isolation v0.1.0
+      │       │   │   ├── tetris v0.1.0
+      │       │   │   ├── tetris-c v0.1.0 (*)
+      │       │   │   ├── tetris-lua v0.1.0
+      │       │   │   ├── tier2-exploit v0.1.0
+      │       │   │   ├── tier2-grant-owner v0.1.0
+      │       │   │   ├── tier2-grant-receiver v0.1.0
+      │       │   │   ├── tier2-rpc-driver v0.1.0
+      │       │   │   ├── tier2-rpc-provider v0.1.0
+      │       │   │   ├── tier2-smoke v0.1.0
+      │       │   │   ├── vimio v0.1.0
+      │       │   │   │   ├── app-haily-agent v0.1.0 (*)
+      │       │   │   │   └── app-tokio-smoke v0.1.0 (*)
+      │       │   │   ├── vipolling v0.1.0
+      │       │   │   │   └── app-async-echo v0.1.0 (*)
+      │       │   │   ├── viui v0.2.0
+      │       │   │   │   ├── app-chrome v0.1.0 (*)
+      │       │   │   │   ├── desktop v0.1.0 (*)
+      │       │   │   │   ├── files v0.1.0 (*)
+      │       │   │   │   ├── ocel v0.1.0 (*)
+      │       │   │   │   ├── robot-dashboard v0.1.0 (*)
+      │       │   │   │   ├── terminal v0.1.0 (*)
+      │       │   │   │   └── viui-demo v0.1.0
+      │       │   │   ├── viui-demo v0.1.0 (*)
+      │       │   │   ├── vm-runner v0.1.0
+      │       │   │   ├── window-policy-probe v0.1.0
+      │       │   │   └── wx-test v0.1.0
+      │       │   ├── periph-demo v0.1.0 (*)
+      │       │   ├── periph-test v0.1.0 (*)
+      │       │   ├── port-platform v0.1.0 (*)
+      │       │   ├── pwm-demo v0.1.0 (*)
+      │       │   ├── robot-dashboard v0.1.0 (*)
+      │       │   ├── robot-demo v0.1.0 (*)
+      │       │   ├── sdk-demo v0.1.0 (*)
+      │       │   ├── sensor-demo v0.1.0 (*)
+      │       │   ├── service-ai v0.1.0 (*)
+      │       │   ├── service-budget-authority v0.1.0 (*)
+      │       │   ├── service-compositor v0.1.0 (*)
+      │       │   ├── service-config v0.1.0 (*)
+      │       │   ├── service-httpd v0.1.0 (*)
+      │       │   ├── service-hypervisor v0.1.0 (*)
+      │       │   ├── service-input v0.2.0 (*)
+      │       │   ├── service-kms v0.1.0 (*)
+      │       │   ├── service-net v0.1.0 (*)
+      │       │   ├── service-net-broker v0.1.0 (*)
+      │       │   ├── service-placement-controller v0.1.0 (*)
+      │       │   ├── service-platform v0.1.0 (*)
+      │       │   ├── service-power v0.1.0 (*)
+      │       │   ├── service-silo v0.1.0 (*)
+      │       │   ├── service-sshd v0.1.0 (*)
+      │       │   ├── service-vfs v0.1.0 (*)
+      │       │   ├── service-workload-router v0.1.0 (*)
+      │       │   ├── spi-demo v0.1.0 (*)
+      │       │   ├── supervisor v0.1.0 (*)
+      │       │   ├── terminal v0.1.0 (*)
+      │       │   ├── terminal-sdk v0.1.0 (*)
+      │       │   ├── test-isolation v0.1.0 (*)
+      │       │   ├── tetris v0.1.0 (*)
+      │       │   ├── tetris-c v0.1.0 (*)
+      │       │   ├── tetris-lua v0.1.0 (*)
+      │       │   ├── text-engine v0.1.0
+      │       │   │   ├── app-cellbox v0.1.0 (*)
+      │       │   │   ├── desktop v0.1.0 (*)
+      │       │   │   ├── files v0.1.0 (*)
+      │       │   │   └── terminal v0.1.0 (*)
+      │       │   ├── tier2-exploit v0.1.0 (*)
+      │       │   ├── tier2-grant-owner v0.1.0 (*)
+      │       │   ├── tier2-grant-receiver v0.1.0 (*)
+      │       │   ├── tier2-rpc-driver v0.1.0 (*)
+      │       │   ├── tier2-rpc-provider v0.1.0 (*)
+      │       │   ├── tier2-smoke v0.1.0 (*)
+      │       │   ├── vimio v0.1.0 (*)
+      │       │   ├── vipolling v0.1.0 (*)
+      │       │   ├── viui v0.2.0 (*)
+      │       │   ├── viui-demo v0.1.0 (*)
+      │       │   ├── vm-runner v0.1.0 (*)
+      │       │   ├── window-policy-probe v0.1.0 (*)
+      │       │   └── wx-test v0.1.0 (*)
+      │       ├── app-backend v0.1.0 (*)
+      │       ├── app-haily-agent v0.1.0 (*)
+      │       ├── cargo_metadata v0.23.1
+      │       │   └── vergen v9.1.0
+      │       │       └── vergen-gitcl v1.0.8
+      │       │           └── (build) cellos-kernel v0.2.1 (*)
+      │       ├── cellos-boot-config v0.1.0 (*)
+      │       ├── dom-arena v0.1.0
+      │       │   ├── app-init v0.1.0 (*)
+      │       │   ├── ocel v0.1.0 (*)
+      │       │   ├── ocel-js v0.1.0 (*)
+      │       │   └── ocel-quickjs v0.1.0 (*)
+      │       ├── http-core v0.1.0
+      │       │   └── ostd v0.2.0 (*)
+      │       ├── ocel-js v0.1.0 (*)
+      │       ├── ocel-pdf-proto v0.1.0
+      │       │   ├── app-init v0.1.0 (*)
+      │       │   ├── ocel v0.1.0 (*)
+      │       │   └── ocel-pdf v0.1.0 (*)
+      │       ├── ostd v0.2.0 (*)
+      │       ├── postcard v1.1.3
+      │       │   ├── ai-proto v0.1.0 (*)
+      │       │   ├── api v0.1.0 (*)
+      │       │   ├── app-c2c-render v0.1.0 (*)
+      │       │   ├── app-haily-agent v0.1.0 (*)
+      │       │   ├── dom-arena v0.1.0 (*)
+      │       │   ├── hypha-core v0.1.0 (*)
+      │       │   ├── hypha-llm-gateway v0.1.0 (*)
+      │       │   ├── hypha-tool-fs v0.1.0 (*)
+      │       │   ├── hypha-tool-spawn v0.1.0 (*)
+      │       │   ├── hypha-tool-sys v0.1.0 (*)
+      │       │   ├── ocel v0.1.0 (*)
+      │       │   ├── ocel-js v0.1.0 (*)
+      │       │   ├── ocel-pdf v0.1.0 (*)
+      │       │   ├── ocel-quickjs v0.1.0 (*)
+      │       │   └── tier2-rpc-proto v0.1.0
+      │       │       ├── tier2-rpc-driver v0.1.0 (*)
+      │       │       └── tier2-rpc-provider v0.1.0 (*)
+      │       ├── render-core v0.1.0
+      │       │   └── app-c2c-render v0.1.0 (*)
+      │       ├── service-httpd v0.1.0 (*)
+      │       ├── service-sshd v0.1.0 (*)
+      │       └── tier2-rpc-proto v0.1.0 (*)
+      └── thiserror-impl v2.0.19
+          └── thiserror v2.0.19
+              ├── cargo_metadata v0.23.1 (*)
+              ├── cobs v0.3.0
+              │   └── postcard v1.1.3 (*)
+              ├── kasuari v0.4.13
+              │   └── ratatui-core v0.1.0
+              │       ├── ratatui-widgets v0.3.0 (*)
+              │       └── vitui v0.1.0 (*)
+              └── ratatui-core v0.1.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'universal-hash'
+    ┌─ /home/dmin/cellos/Cargo.lock:392:1
+    │  
+392 │ ╭ universal-hash 0.5.1 registry+https://github.com/rust-lang/crates.io-index
+393 │ │ universal-hash 0.6.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ universal-hash v0.5.1
+      ├── poly1305 v0.8.0
+      │   ├── chacha20poly1305 v0.10.1
+      │   │   ├── clatter v2.2.0
+      │   │   │   └── service-net-broker v0.1.0
+      │   │   │       └── app-bench v0.1.0
+      │   │   ├── service-net-broker v0.1.0 (*)
+      │   │   └── service-sshd v0.1.0
+      │   └── service-sshd v0.1.0 (*)
+      └── polyval v0.6.2
+          └── ghash v0.5.1
+              └── aes-gcm v0.10.3
+                  └── embedded-tls v0.19.0
+                      └── service-net v0.1.0
+    ├ universal-hash v0.6.1
+      └── poly1305 v0.9.1
+          └── sunset v0.6.0
+              └── vissh v0.1.0
+                  └── app-cellbox v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'vergen-lib'
+    ┌─ /home/dmin/cellos/Cargo.lock:396:1
+    │  
+396 │ ╭ vergen-lib 0.1.6 registry+https://github.com/rust-lang/crates.io-index
+397 │ │ vergen-lib 9.1.0 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ vergen-lib v0.1.6
+      └── vergen-gitcl v1.0.8
+          └── (build) cellos-kernel v0.2.1
+    ├ vergen-lib v9.1.0
+      └── vergen v9.1.0
+          └── vergen-gitcl v1.0.8
+              └── (build) cellos-kernel v0.2.1
+
+warning[duplicate]: found 2 duplicate entries for crate 'winnow'
+    ┌─ /home/dmin/cellos/Cargo.lock:420:1
+    │  
+420 │ ╭ winnow 0.7.15 registry+https://github.com/rust-lang/crates.io-index
+421 │ │ winnow 1.0.4 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ winnow v0.7.15
+      └── toml v0.9.12+spec-1.1.0
+          └── cellos-boot-config v0.1.0
+              ├── app-init v0.1.0
+              └── cellos-kernel v0.2.1
+    ├ winnow v1.0.4
+      └── toml_parser v1.1.5+spec-1.1.0
+          └── toml v0.9.12+spec-1.1.0
+              └── cellos-boot-config v0.1.0
+                  ├── app-init v0.1.0
+                  └── cellos-kernel v0.2.1
+
+warning[duplicate]: found 2 duplicate entries for crate 'x25519-dalek'
+    ┌─ /home/dmin/cellos/Cargo.lock:423:1
+    │  
+423 │ ╭ x25519-dalek 2.0.1 registry+https://github.com/rust-lang/crates.io-index
+424 │ │ x25519-dalek 3.0.0 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰────────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ x25519-dalek v2.0.1
+      ├── clatter v2.2.0
+      │   └── service-net-broker v0.1.0
+      │       └── app-bench v0.1.0
+      └── service-sshd v0.1.0
+    ├ x25519-dalek v3.0.0
+      └── sunset v0.6.0
+          └── vissh v0.1.0
+              └── app-cellbox v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'zerocopy'
+    ┌─ /home/dmin/cellos/Cargo.lock:427:1
+    │  
+427 │ ╭ zerocopy 0.7.35 registry+https://github.com/rust-lang/crates.io-index
+428 │ │ zerocopy 0.8.55 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰─────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ zerocopy v0.7.35
+      └── virtio-drivers v0.7.5
+          ├── cellos-kernel v0.2.1
+          ├── driver-virtio-blk v0.1.0
+          ├── driver-virtio-gpu v0.1.0
+          ├── driver-virtio-net v0.1.0
+          └── service-input v0.2.0
+    ├ zerocopy v0.8.55
+      ├── ahash v0.8.12
+      │   └── hashbrown v0.14.5
+      │       └── vm-fdt v0.3.0
+      │           └── service-hypervisor v0.1.0
+      ├── ai-engine v0.1.0
+      │   └── service-ai v0.1.0
+      └── ppv-lite86 v0.2.21
+          └── rand_chacha v0.3.1
+              ├── service-net v0.1.0
+              └── service-net-broker v0.1.0
+                  └── app-bench v0.1.0
+
+error[vulnerability]: Multiple timing variability issues in operations intended to be constant-time
+    ┌─ /home/dmin/cellos/Cargo.lock:105:1
+    │
+105 │ crypto-bigint 0.5.5 registry+https://github.com/rust-lang/crates.io-index
+    │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ security vulnerability detected
+    │
+    ├ ID: RUSTSEC-2026-0387
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0387
+    ├ ## Summary
+      
+      Several operations intended to be constant-time could execute secret-dependent
+      branches, depending on the compiler and target CPU. These include subtraction,
+      zero counting, division, and Montgomery multiplication.
+      
+      Additionally, `UintRef` equality could terminate at the first unequal limb,
+      and `BoxedMontyForm::invert` branched on whether an inverse exists.
+      
+      ## Impact
+      
+      Applications using affected operations on secret integers may leak information
+      through timing or microarchitectural side channels. This includes information
+      about intermediate arithmetic values, matching limbs, and invertibility.
+      
+      Such leakage could potentially enable recovery of cryptographic secrets.
+      Practical exploitability depends on the downstream algorithm, compiler, target
+      CPU, and an attacker's ability to observe the side channel.
+      
+      ## Resolution
+      
+      Upgrade to v0.7.6, which removes the identified branches, updates `ctutils` to
+      include its constant-time fixes, and adds BINSEC-based regression checks using
+      `cargo checkct` for arithmetic on multiple targets.
+    ├ Announcement: https://github.com/RustCrypto/crypto-bigint/pull/1365
+    ├ Solution: Upgrade to >=0.7.6 (try `cargo update -p crypto-bigint`)
+    ├ crypto-bigint v0.5.5
+      └── elliptic-curve v0.13.8
+          ├── ecdsa v0.16.9
+          │   ├── embedded-tls v0.19.0
+          │   │   └── service-net v0.1.0
+          │   └── p256 v0.13.2
+          │       ├── attestation v0.1.0
+          │       ├── embedded-tls v0.19.0 (*)
+          │       └── service-kms v0.1.0
+          ├── p256 v0.13.2 (*)
+          └── primeorder v0.13.6
+              └── p256 v0.13.2 (*)
+
+warning[advisory-not-detected]: advisory was not encountered
+   ┌─ /home/dmin/cellos/deny.toml:23:11
+   │
+23 │   { id = "RUSTSEC-2023-0071", reason = "rsa used only for TLS cert signature verification (public-key op); no private-key decryption oracle exists in Cellos; no fixed release available" },
+   │           ━━━━━━━━━━━━━━━━━             ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ignore reason
+   │           │                              
+   │           no crate matched advisory criteria
+
+ advisories FAILED: 1 errors, 1 warnings, 2 notes
+       bans FAILED: 4 errors, 29 warnings, 0 notes
+   licenses FAILED: 1 errors, 2 warnings, 435 notes
+        sources ok: 0 errors, 1 warnings, 0 notes
+exit 7

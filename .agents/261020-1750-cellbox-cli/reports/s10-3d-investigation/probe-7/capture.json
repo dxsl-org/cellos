@@ -1,0 +1,28 @@
+{
+  "reason": "booted-to-shell",
+  "seconds": 2.214,
+  "dumps": {
+    "nvme-pci-config": {
+      "return": {}
+    },
+    "admin-sq": {
+      "return": {}
+    },
+    "admin-cq": {
+      "return": {}
+    },
+    "io-sq": {
+      "return": {}
+    },
+    "io-cq": {
+      "return": {}
+    },
+    "identify": {
+      "return": {}
+    }
+  },
+  "iso_before": "e6713da24de982ea6c7d30550606cd21a06efa6c317b280add088053bf73888c",
+  "source_disk_before": "fb0ab83eab4de6d8dccf9da24c4a6d8cd8b8a23615bafd0266df02d48a59e0cb",
+  "iso_after": "e6713da24de982ea6c7d30550606cd21a06efa6c317b280add088053bf73888c",
+  "source_disk_after": "fb0ab83eab4de6d8dccf9da24c4a6d8cd8b8a23615bafd0266df02d48a59e0cb"
+}

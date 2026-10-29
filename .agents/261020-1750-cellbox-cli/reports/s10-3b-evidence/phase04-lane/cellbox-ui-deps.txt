@@ -1,0 +1,1 @@
+C5a PASS: app-cellbox dependency tree has no viUI/compositor crate

@@ -1,0 +1,5 @@
+note: GetRandom added vs baseline by an approved delta
+note: Write added vs baseline by an approved delta
+baseline : git HEAD:cells/tools/shell/src/main.rs (32 syscalls, 6 manifest keys)
+candidate: /home/dmin/cellos/cells/tools/cellbox/src/main.rs (34 syscalls, 6 manifest keys)
+G-S1a PASS: declare_manifest and declare_syscalls sets are identical

@@ -1,0 +1,175 @@
+=== x86_64 image: profile headless, release dir /tmp/cellbox-s10-3b-tsbn/target/x86_64-unknown-none/release ===
++ cargo build --release --locked --target x86_64-unknown-none -Z build-std=core,alloc --message-format=json-render-diagnostics -p app-cellbox -p service-vfs -p service-config -p service-input -p service-net -p service-platform -p driver-nvme -p driver-e1000 -p driver-igb -p driver-ahci -p driver-xhci -p driver-serial-x86 -p app-sys-tools -p tier2-smoke -p tier2-exploit
+   Compiling app-sys-tools v0.1.0 (/home/dmin/cellos/cells/tools/sys-tools)
+   Compiling driver-disk v0.1.0 (/home/dmin/cellos/cells/drivers/disk)
+   Compiling service-platform v0.1.0 (/home/dmin/cellos/cells/services/platform)
+   Compiling driver-nvme v0.1.0 (/home/dmin/cellos/cells/drivers/nvme)
+   Compiling driver-serial-x86 v0.1.0 (/home/dmin/cellos/cells/drivers/serial-x86)
+   Compiling service-input v0.2.0 (/home/dmin/cellos/cells/services/input)
+   Compiling service-config v0.1.0 (/home/dmin/cellos/cells/services/config)
+   Compiling driver-igb v0.1.0 (/home/dmin/cellos/cells/drivers/igb)
+   Compiling service-vfs v0.1.0 (/home/dmin/cellos/cells/services/vfs)
+   Compiling driver-e1000 v0.1.0 (/home/dmin/cellos/cells/drivers/e1000)
+   Compiling tier2-exploit v0.1.0 (/home/dmin/cellos/cells/tests/tier2-exploit)
+   Compiling driver-xhci v0.1.0 (/home/dmin/cellos/cells/drivers/xhci)
+   Compiling service-net v0.1.0 (/home/dmin/cellos/cells/services/net)
+   Compiling app-cellbox v0.1.0 (/home/dmin/cellos/cells/tools/cellbox)
+   Compiling driver-ahci v0.1.0 (/home/dmin/cellos/cells/drivers/ahci)
+   Compiling tier2-smoke v0.1.0 (/home/dmin/cellos/cells/tests/tier2-smoke)
+warning: field `expected` is never read
+  --> cells/services/input/src/session.rs:56:66
+   |
+55 | struct Foreground {
+   |        ---------- field in this struct
+56 |     lease: Ref, receipt: Ref, child: ChildRefV1, operation: Ref, expected: u64, next: u64,
+   |                                                                  ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `service-input` (bin "service-input") generated 1 warning
+warning: unused import: `alloc::vec`
+  --> cells/services/net/src/dns.rs:17:5
+   |
+17 | use alloc::vec;
+   |     ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `LOOP_TRACE_INTERVAL_TICKS` is never used
+  --> cells/services/net/src/service-runtime.rs:50:7
+   |
+50 | const LOOP_TRACE_INTERVAL_TICKS: u64 = 2_000 * MTIME_TICKS_PER_MS;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `remove_owner` is never used
+   --> cells/services/net/src/socket_table.rs:204:12
+    |
+ 48 | impl SocketTable {
+    | ---------------- method in this implementation
+...
+204 |     pub fn remove_owner(&mut self, owner: SocketOwner, sockets: &mut smoltcp::iface::SocketSet<'_>) {
+    |            ^^^^^^^^^^^^
+
+warning: function `validity_window` is never used
+  --> cells/services/net/src/tls/clock.rs:27:8
+   |
+27 | pub fn validity_window() -> Option<(u64, u64)> {
+   |        ^^^^^^^^^^^^^^^
+
+warning: method `is_empty` is never used
+   --> cells/services/net/src/tls/dispatch.rs:100:12
+    |
+ 99 | impl TlsPending {
+    | --------------- method in this implementation
+100 |     pub fn is_empty(&self) -> bool {
+    |            ^^^^^^^^
+
+warning: field `handle` is never read
+  --> cells/services/net/src/tls/socket.rs:56:9
+   |
+51 | pub struct TlsSocketEntry {
+   |            -------------- field in this struct
+...
+56 |     pub handle: SocketHandle,
+   |         ^^^^^^
+
+warning: value assigned to `paste` is never read
+   --> cells/tools/cellbox/src/executor.rs:683:17
+    |
+683 |                 paste = false;
+    |                 ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+691 |                 paste = false;
+    |                 ------------- `paste` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:128:24
+    |
+128 |     BackgroundPipeline(Vec<Cmd>),
+    |     ------------------ ^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+128 -     BackgroundPipeline(Vec<Cmd>),
+128 +     BackgroundPipeline(()),
+    |
+
+warning: function `run_rows` is never used
+   --> cells/tools/cellbox/src/typed.rs:949:8
+    |
+949 | pub fn run_rows(
+    |        ^^^^^^^^
+
+warning: `service-net` (bin "service-net") generated 6 warnings (run `cargo fix --bin "service-net" -p service-net` to apply 1 suggestion)
+warning: `app-cellbox` (bin "cellbox") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 25.92s
++ cargo build --release --locked --target x86_64-unknown-none -Z build-std=core,alloc --message-format=json-render-diagnostics -p app-init --features input
+   Compiling app-init v0.1.0 (/home/dmin/cellos/cells/tools/init)
+    Finished `release` profile [optimized] target(s) in 5.00s
++ cellos-sign route x86-candidate-headless (dev key) --sign 19 cell(s)
+NOTE: allowlist entries overdue for re-review (past `review_by`, or older than `max_age_days` when they set none):
+  app-c-math-smoke (approved 2026-07-14, 104d ago)
+  app-mlibc-smoke (approved 2026-07-14, 104d ago)
+  app-posix-shim-test (approved 2026-07-14, 104d ago)
+  audio-demo (approved 2026-07-14, 104d ago)
+  cells/demos/audio-demo/src/main.rs (approved 2026-07-14, 104d ago)
+  cells/demos/cfi-test/src/main.rs (approved 2026-07-14, 104d ago)
+  cells/demos/doom/src/main.rs (approved 2026-07-14, 104d ago)
+  cells/demos/tetris-c/src/main.rs (approved 2026-07-14, 104d ago)
+  cells/demos/tetris-lua/src/ffi.rs (approved 2026-07-14, 104d ago)
+  cells/demos/tetris-lua/src/main.rs (approved 2026-07-14, 104d ago)
+  cells/drivers/e1000/src/controller.rs (approved 2026-07-14, 104d ago)
+  cells/drivers/nvme/src/controller.rs (approved 2026-07-14, 104d ago)
+  cells/drivers/nvme/src/dispatch.rs (approved 2026-07-14, 104d ago)
+  cells/drivers/nvme/src/queue.rs (approved 2026-07-14, 104d ago)
+  cells/drivers/virtio-blk/src/device.rs (approved 2026-07-14, 104d ago)
+  cells/drivers/virtio-gpu/src/cursor.rs (approved 2026-07-14, 104d ago)
+  cells/drivers/virtio-gpu/src/display.rs (approved 2026-07-14, 104d ago)
+  cells/drivers/virtio-net/src/device.rs (approved 2026-07-14, 104d ago)
+  cells/guests/silo-guest/src/mailbox.rs (approved 2026-07-14, 104d ago)
+  cells/guests/silo-guest/src/main.rs (approved 2026-07-14, 104d ago)
+  cells/runtimes/lua/src/bindings_io.rs (approved 2026-07-14, 104d ago)
+  cells/runtimes/lua/src/bindings_net.rs (approved 2026-07-14, 104d ago)
+  cells/runtimes/lua/src/bindings_vfs.rs (approved 2026-07-14, 104d ago)
+  cells/runtimes/lua/src/ffi.rs (approved 2026-07-14, 104d ago)
+  cells/runtimes/lua/src/main.rs (approved 2026-07-14, 104d ago)
+  cells/runtimes/lua/src/repl_session.rs (approved 2026-07-14, 104d ago)
+  cells/services/hypervisor/src/timer.rs (approved 2026-07-14, 104d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource.rs (approved 2026-07-14, 104d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource/render.rs (approved 2026-07-14, 104d ago)
+  cells/services/hypervisor/src/vmm.rs (approved 2026-07-14, 104d ago)
+  cells/services/input/src/virtio_device.rs (approved 2026-07-14, 104d ago)
+  cells/services/net/src/tls/socket.rs (approved 2026-07-14, 104d ago)
+  cells/services/net/src/tls/transport.rs (approved 2026-07-14, 104d ago)
+  cells/tests/c-math-smoke/src/main.rs (approved 2026-07-14, 104d ago)
+  cells/tests/hypervisor-test/src/main.rs (approved 2026-07-14, 104d ago)
+  cells/tests/mlibc-smoke/src/main.rs (approved 2026-07-14, 104d ago)
+  cells/tests/posix-shim-test/src/main.rs (approved 2026-07-14, 104d ago)
+  cfi-test (approved 2026-07-14, 104d ago)
+  doom (approved 2026-07-14, 104d ago)
+  driver-e1000 (approved 2026-07-14, 104d ago)
+  driver-nvme (approved 2026-07-14, 104d ago)
+  driver-virtio-blk (approved 2026-07-14, 104d ago)
+  driver-virtio-gpu (approved 2026-07-14, 104d ago)
+  driver-virtio-net (approved 2026-07-14, 104d ago)
+  hypervisor-test (approved 2026-07-14, 104d ago)
+  lua (approved 2026-07-14, 104d ago)
+  service-compositor (approved 2026-07-14, 104d ago)
+  service-hypervisor (approved 2026-07-14, 104d ago)
+  service-input (approved 2026-07-14, 104d ago)
+  service-net (approved 2026-07-14, 104d ago)
+  silo-guest (approved 2026-07-14, 104d ago)
+  tetris-c (approved 2026-07-14, 104d ago)
+  tetris-lua (approved 2026-07-14, 104d ago)
+OK:   signed 19 cell(s) with the dev key on route x86-candidate-headless after a passing F1/F5 check
+wrote 2013 bytes to /tmp/cellbox-s10-3b-tsbn/cand/headless/.assemble-0ueq6wuc/POLICY.BIN
+Created FAT16 image at /tmp/cellbox-s10-3b-tsbn/cand/headless/.assemble-0ueq6wuc/kernel_fs.img: 25 file(s), 3 director(ies), 24287 clusters.
+published /tmp/cellbox-s10-3b-tsbn/cand/headless/kernel_fs.img (12582912 B, sha256 29e3a0d4893c1e6fcd6dca944073563cb78e1ba3127badea67262e7556e57c0b), 25 files

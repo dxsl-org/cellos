@@ -1,0 +1,8 @@
+FAIL: candidate import: /bin/ls: candidate file sha256 ecd1c89a7f582c29b30c7b893e8bc54939f3e6d006d71f6cc89da5c689cbbb3a != candidate.json 46df5374ff238322dea91680c401d6406c6fc785642cb1f6d5f8c7a8c197ac5b
+..............FAIL: payload match: /bin/vfs: signed payload 01352646c37e505aeda163dc7a39f3656c37eeab6c4b411920ff2327a93e665b != candidate 225d27c16c4f06829404634e969242ed2e16b1b1798579a9a276bb9d9442c4de
+FAIL: payload match failed; refusing to boot
+....
+----------------------------------------------------------------------
+Ran 18 tests in 0.045s
+
+OK

@@ -1,0 +1,4 @@
+   Compiling vicell-integration-tests v0.1.0 (/home/dmin/cellos/tests/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+     Running tests/xhci-x86.rs (/tmp/cellbox-s10-3d-resume/l6/target-after/x86_64-unknown-linux-gnu/debug/deps/xhci_x86-d95aa84a333e67ae)
+error: test failed, to rerun pass `--test xhci-x86`

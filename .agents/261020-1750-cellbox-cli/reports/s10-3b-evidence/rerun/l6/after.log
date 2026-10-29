@@ -1,0 +1,13 @@
+x86_64-boot: exit 0, 9 pass, 0 fail, 0 skip
+nvme-x86: exit 0, 3 pass, 0 fail, 0 skip
+virtio-x86: exit 0, 1 pass, 0 fail, 0 skip
+pcie-multibus-x86: exit 0, 2 pass, 0 fail, 0 skip
+handoff: exit 0, 6 pass, 0 fail, 4 skip
+ahci-x86: exit 0, 5 pass, 0 fail, 0 skip
+xhci-x86: exit 101, 3 pass, 1 fail, 0 skip
+serial-x86: exit 0, 1 pass, 0 fail, 0 skip
+nic-x86: exit 0, 2 pass, 0 fail, 0 skip
+igb-x86: exit 0, 2 pass, 0 fail, 0 skip
+iommu-dmar-x86: exit 0, 3 pass, 0 fail, 0 skip
+desktop-x86: exit 0, 1 pass, 0 fail, 0 skip
+qemu-x86_64-test.sh: exit 0

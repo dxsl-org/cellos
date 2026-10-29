@@ -1,0 +1,20 @@
+{ "type": "suite", "event": "started", "test_count": 9 }
+{ "type": "test", "event": "started", "name": "x86_boots_to_shell_prompt" }
+{ "type": "test", "name": "x86_boots_to_shell_prompt", "event": "ok" }
+{ "type": "test", "event": "started", "name": "x86_echo_command" }
+{ "type": "test", "name": "x86_echo_command", "event": "ok" }
+{ "type": "test", "event": "started", "name": "x86_init_spawns" }
+{ "type": "test", "name": "x86_init_spawns", "event": "ok" }
+{ "type": "test", "event": "started", "name": "x86_kernel_banner" }
+{ "type": "test", "name": "x86_kernel_banner", "event": "ok" }
+{ "type": "test", "event": "started", "name": "x86_ls_command" }
+{ "type": "test", "name": "x86_ls_command", "event": "ok" }
+{ "type": "test", "event": "started", "name": "x86_ps_command" }
+{ "type": "test", "name": "x86_ps_command", "event": "ok" }
+{ "type": "test", "event": "started", "name": "x86_scheduler_initializes" }
+{ "type": "test", "name": "x86_scheduler_initializes", "event": "ok" }
+{ "type": "test", "event": "started", "name": "x86_tier2_admission_is_refused_until_switch_is_qualified" }
+{ "type": "test", "name": "x86_tier2_admission_is_refused_until_switch_is_qualified", "event": "ok" }
+{ "type": "test", "event": "started", "name": "x86_tier2_fault_isolation_fixture_is_refused" }
+{ "type": "test", "name": "x86_tier2_fault_isolation_fixture_is_refused", "event": "ok" }
+{ "type": "suite", "event": "ok", "passed": 9, "failed": 0, "ignored": 0, "measured": 0, "filtered_out": 0, "exec_time": 45.829291419 }

@@ -1,0 +1,50 @@
+{
+ "/mnt/sd/gui-list/alpha-entry": {
+  "length": 32,
+  "sha256": "488425f27f4902308d8c8cf866aad9900c4b2923357fde043b1062e30d25372e"
+ },
+ "/mnt/sd/gui-list/beta-entry": {
+  "length": 32,
+  "sha256": "488425f27f4902308d8c8cf866aad9900c4b2923357fde043b1062e30d25372e"
+ },
+ "/mnt/sd/gui-text/note.txt": {
+  "length": 34,
+  "sha256": "8cfe193e97ea4a4afe4020e86fb7fbb4a594912f7aad41cf5b780722062a95b1"
+ },
+ "/mnt/sd/p04-output/vt-sample.bin": {
+  "length": 650,
+  "sha256": "38af98c7a5a1b92784c9a55d78311f4809df181875ac1221c99c76cb18ac95bd"
+ },
+ "/mnt/sd/p04-output/vt-alt-enter.bin": {
+  "length": 88,
+  "sha256": "049c64bf770f48a210ac39dd67b0dcc455d014791d11db133a37c0ea50578904"
+ },
+ "/mnt/sd/p04-output/vt-alt-exit.bin": {
+  "length": 12,
+  "sha256": "f10cc1024d795f52bda5ab4c7a9ea46dca967478ee21d33807dd06dc0b15d514"
+ },
+ "/mnt/sd/p04-output/vt-hostile.bin": {
+  "length": 12628,
+  "sha256": "354e162940f3ff7e4eed24e07b361ebd8cc13f2d38f0f6f880bded30a75c7e24"
+ },
+ "/mnt/sd/p10/bytes.txt": {
+  "length": 39,
+  "sha256": "dbf53ce2c5bad6f16a2680d15c793f1b48a2fccf68c0414c2ce6734e4a55b369"
+ },
+ "/mnt/sd/p10/raw.bin": {
+  "length": 1600,
+  "sha256": "8602184f0c1f4ae8a69b981a8b3c590db60d728354b6848d9ccf14ebae45e9c6"
+ },
+ "/mnt/sd/p10/crlf.txt": {
+  "length": 14,
+  "sha256": "0e32955fc2a1b3a6cf0aaf7b5cdce02d683300f471e2a795550bb338f7e339ed"
+ },
+ "/mnt/sd/p10/state.sh": {
+  "length": 106,
+  "sha256": "2faf57afc53e4ecdb3e89605e57b5c4dc9ae18e1a43b5a49d292d29bbad8cd1a"
+ },
+ "/mnt/sd/p10/lossy.txt": {
+  "length": 29,
+  "sha256": "0f3a3f4390d31444d0250e7dd05315eed9a231719c959782f103021ce7cb9cb0"
+ }
+}

@@ -1,0 +1,28 @@
+{
+  "mode": "import",
+  "lane": "phase09-no-faults",
+  "profile": "headless",
+  "candidate_json": "/tmp/cellbox-s10-3-1EGP/cand/candidate.json",
+  "candidate_json_sha256": "a9f384a6a3c3ff8fbec8150ad0cf780aed229f1152434d2d84a047020865c07c",
+  "kernel_fixture_features": "default+phase02-terminal-profile,phase04-driver-profile",
+  "cellbox_features": "default (no p09-faults)",
+  "payload_match_sha256": "dfe66224eb9f0d40485e038a7c88c924006b8f78a229cdc61155ba598b2293ee",
+  "payload_match_all_equal": true,
+  "shared": [
+    "/bin/cellbox-ssh",
+    "/bin/cellbox",
+    "/bin/vfs",
+    "/bin/config",
+    "/bin/input",
+    "/bin/platform",
+    "/bin/nvme",
+    "/bin/e1000",
+    "/bin/net",
+    "/bin/echo",
+    "init"
+  ],
+  "lane_only": [
+    "/bin/phase04-terminal-driver"
+  ],
+  "counts_for": "behaviour of the payload-matched cells only; never kernel-level claims (S10-3.3)"
+}

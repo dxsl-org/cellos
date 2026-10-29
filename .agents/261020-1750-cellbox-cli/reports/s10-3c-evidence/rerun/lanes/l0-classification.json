@@ -1,0 +1,129 @@
+{
+  "summary": {
+    "headless": {
+      "attempts": 2,
+      "runs": 2,
+      "uncounted": 0,
+      "pass": 0,
+      "booted": 2,
+      "booted_pass": 0,
+      "longest_consecutive_pass": 0,
+      "final_streak": 0,
+      "slow_completions": 0,
+      "failure_classes": {
+        "UNCLASSIFIED": 1,
+        "F3 nvme-admin-timeout": 1
+      }
+    },
+    "desktop": {
+      "attempts": 0,
+      "runs": 0,
+      "uncounted": 0,
+      "pass": 0,
+      "booted": 0,
+      "booted_pass": 0,
+      "longest_consecutive_pass": 0,
+      "final_streak": 0,
+      "slow_completions": 0,
+      "failure_classes": {}
+    }
+  },
+  "stream": {
+    "profiles": {
+      "headless": {
+        "attempts": 2,
+        "counted_runs": 2,
+        "uncounted": 0,
+        "passes": 0,
+        "streak": 0,
+        "longest_streak": 0,
+        "next_attempt": 3
+      },
+      "desktop": {
+        "attempts": 0,
+        "counted_runs": 0,
+        "uncounted": 0,
+        "passes": 0,
+        "streak": 0,
+        "longest_streak": 0,
+        "next_attempt": 1
+      }
+    },
+    "infrastructure_streak": 0,
+    "infrastructure_blocked": false,
+    "complete": false,
+    "exhausted": []
+  },
+  "runs": [
+    {
+      "lane": "L0-headless-run1",
+      "exit": 1,
+      "seconds": 949.2,
+      "work": "/tmp/cellbox-phase10-s6pjo8ow",
+      "counted": true,
+      "booted": true,
+      "failed_markers": {
+        "P10C-top": {
+          "checks": [
+            "q-restores-then-prompt"
+          ],
+          "error": ""
+        },
+        "P10C-edit": {
+          "checks": [
+            "create-quit",
+            "existing-quit",
+            "reopen-clean-quit-without-question",
+            "discard-exits"
+          ],
+          "error": ""
+        }
+      },
+      "classes": [
+        "UNCLASSIFIED"
+      ],
+      "nvme_events": [],
+      "slow_completions": [],
+      "max_slow_completion_ms": null,
+      "runner_seconds": 949,
+      "qualifying": true
+    },
+    {
+      "lane": "L0-headless-run2",
+      "exit": 1,
+      "seconds": 735.4,
+      "work": "/tmp/cellbox-phase10-w5t1anar",
+      "counted": true,
+      "booted": true,
+      "failed_markers": {
+        "P10C-ssh-serial": {
+          "checks": [
+            "no-echo-after-password-prompt"
+          ],
+          "error": ""
+        }
+      },
+      "classes": [
+        "F3 nvme-admin-timeout"
+      ],
+      "nvme_events": [
+        {
+          "boot": "serial-ssh.log",
+          "line_number": 201,
+          "line": "USER: [nvme] admin timeout opc=6 after 60000 ms",
+          "event": "admin timeout",
+          "elapsed_ms": 60000,
+          "polls": null,
+          "opc": 6
+        }
+      ],
+      "slow_completions": [],
+      "max_slow_completion_ms": null,
+      "runner_seconds": 735,
+      "qualifying": true
+    }
+  ],
+  "unclassified": [
+    "L0-headless-run1"
+  ]
+}

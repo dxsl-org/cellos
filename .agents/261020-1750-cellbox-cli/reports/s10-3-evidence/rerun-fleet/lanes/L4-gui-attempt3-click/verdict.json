@@ -1,0 +1,1733 @@
+{
+  "checks": {
+    "screen-1280x800": {
+      "pass": true,
+      "detail": [
+        1280,
+        800
+      ],
+      "informational": false
+    },
+    "no-window-before-launch": {
+      "pass": true,
+      "detail": "a bg-coloured 720x480 rectangle exists before launch",
+      "informational": false
+    },
+    "window-located": {
+      "pass": true,
+      "detail": "origin=(140, 100)",
+      "informational": false
+    },
+    "GUI-2-prompt-matches-exactly": {
+      "pass": true,
+      "detail": "diff=0 (expect_screen)",
+      "informational": false
+    },
+    "GUI-2-control-pre-launch-region-differs": {
+      "pass": true,
+      "detail": "345474 differing pixels",
+      "informational": false
+    },
+    "GUI-2-control-wrong-prompt-differs": {
+      "pass": true,
+      "detail": "65 differing pixels",
+      "informational": false
+    },
+    "GUI-2-cursor-cell": {
+      "pass": true,
+      "detail": [
+        9,
+        2
+      ],
+      "informational": false
+    },
+    "GUI-3-echo-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-3-echo-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['gui-proof-1']",
+      "informational": false
+    },
+    "GUI-3-echo-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          2
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-3-echo-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "59 differing pixels",
+      "informational": false
+    },
+    "GUI-3-echo-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "1532 pixels changed",
+      "informational": false
+    },
+    "GUI-3-stock-echo-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-3-stock-echo-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['gui-proof-ext']",
+      "informational": false
+    },
+    "GUI-3-stock-echo-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          4
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-3-stock-echo-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "54 differing pixels",
+      "informational": false
+    },
+    "GUI-3-stock-echo-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "1944 pixels changed",
+      "informational": false
+    },
+    "GUI-3-stock-ls-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-3-stock-ls-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['.', '..', 'alpha-entry', 'beta-entry']",
+      "informational": false
+    },
+    "GUI-3-stock-ls-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          6
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-3-stock-ls-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "46 differing pixels",
+      "informational": false
+    },
+    "GUI-3-stock-ls-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "2081 pixels changed",
+      "informational": false
+    },
+    "GUI-3-stock-cat-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-3-stock-cat-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['gui-cat-line-one', 'gui-cat-line-two']",
+      "informational": false
+    },
+    "GUI-3-stock-cat-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          11
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-3-stock-cat-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "60 differing pixels",
+      "informational": false
+    },
+    "GUI-3-stock-cat-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "2849 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-01-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-01-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['ls: /gui-missing: no such directory']",
+      "informational": false
+    },
+    "GUI-4-stderr-01-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          14
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-4-stderr-01-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "GUI-4-stderr-01-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "2659 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-02-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-02-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['ls: /gui-missing: no such directory']",
+      "informational": false
+    },
+    "GUI-4-stderr-02-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          16
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-4-stderr-02-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "GUI-4-stderr-02-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "2659 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-03-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-03-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['ls: /gui-missing: no such directory']",
+      "informational": false
+    },
+    "GUI-4-stderr-03-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          18
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-4-stderr-03-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "GUI-4-stderr-03-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "2659 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-04-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-04-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['ls: /gui-missing: no such directory']",
+      "informational": false
+    },
+    "GUI-4-stderr-04-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          20
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-4-stderr-04-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "GUI-4-stderr-04-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "2659 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-05-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-05-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['ls: /gui-missing: no such directory']",
+      "informational": false
+    },
+    "GUI-4-stderr-05-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          22
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-4-stderr-05-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "GUI-4-stderr-05-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "2659 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-06-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-06-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['ls: /gui-missing: no such directory']",
+      "informational": false
+    },
+    "GUI-4-stderr-06-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          24
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "GUI-4-stderr-06-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "GUI-4-stderr-06-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "35748 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-07-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-07-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['ls: /gui-missing: no such directory']",
+      "informational": false
+    },
+    "GUI-4-stderr-07-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": 13593,
+        "max": 209
+      },
+      "informational": false
+    },
+    "GUI-4-stderr-07-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "GUI-4-stderr-07-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "13593 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-08-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-08-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['ls: /gui-missing: no such directory']",
+      "informational": false
+    },
+    "GUI-4-stderr-08-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": 10377,
+        "max": 209
+      },
+      "informational": false
+    },
+    "GUI-4-stderr-08-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "GUI-4-stderr-08-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "10377 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-09-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-09-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['ls: /gui-missing: no such directory']",
+      "informational": false
+    },
+    "GUI-4-stderr-09-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": 9306,
+        "max": 209
+      },
+      "informational": false
+    },
+    "GUI-4-stderr-09-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "GUI-4-stderr-09-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "9306 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-10-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-stderr-10-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['ls: /gui-missing: no such directory']",
+      "informational": false
+    },
+    "GUI-4-stderr-10-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": 7823,
+        "max": 209
+      },
+      "informational": false
+    },
+    "GUI-4-stderr-10-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "GUI-4-stderr-10-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "7823 pixels changed",
+      "informational": false
+    },
+    "GUI-4-stderr-all-iterations-before-prompt": {
+      "pass": true,
+      "detail": "10/10 exact stderr-before-prompt screens",
+      "informational": false
+    },
+    "GUI-4-status-of-failure-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "GUI-4-status-of-failure-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['st=1']",
+      "informational": false
+    },
+    "GUI-4-status-of-failure-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": 9394,
+        "max": 209
+      },
+      "informational": false
+    },
+    "GUI-4-status-of-failure-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "59 differing pixels",
+      "informational": false
+    },
+    "GUI-4-status-of-failure-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "9394 pixels changed",
+      "informational": false
+    },
+    "C5-1-mkdir-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "C5-1-mkdir-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: []",
+      "informational": false
+    },
+    "C5-1-mkdir-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": 40747,
+        "max": 209
+      },
+      "informational": false
+    },
+    "C5-1-mkdir-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "52 differing pixels",
+      "informational": false
+    },
+    "C5-1-mkdir-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "40747 pixels changed",
+      "informational": false
+    },
+    "C5-1-write-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "C5-1-write-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: []",
+      "informational": false
+    },
+    "C5-1-write-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": 40428,
+        "max": 209
+      },
+      "informational": false
+    },
+    "C5-1-write-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "54 differing pixels",
+      "informational": false
+    },
+    "C5-1-write-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "40428 pixels changed",
+      "informational": false
+    },
+    "C5-2-files-lists-a-txt-exact": {
+      "pass": true,
+      "detail": "diff=0 in title, list, status",
+      "informational": false
+    },
+    "C5-2-files-lists-a-txt-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "47 differing pixels",
+      "informational": false
+    },
+    "C5-2-files-lists-a-txt-control-before-frame-differs": {
+      "pass": true,
+      "detail": "23604 differing pixels",
+      "informational": false
+    },
+    "C5-3-files-mkdir-exact": {
+      "pass": true,
+      "detail": "diff=0 in title, list, status",
+      "informational": false
+    },
+    "C5-3-files-mkdir-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "57 differing pixels",
+      "informational": false
+    },
+    "C5-3-files-mkdir-control-before-frame-differs": {
+      "pass": true,
+      "detail": "41712 differing pixels",
+      "informational": false
+    },
+    "C5-3-files-copy-exact": {
+      "pass": true,
+      "detail": "diff=0 in title, list, status",
+      "informational": false
+    },
+    "C5-3-files-copy-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "43 differing pixels",
+      "informational": false
+    },
+    "C5-3-files-copy-control-before-frame-differs": {
+      "pass": true,
+      "detail": "40340 differing pixels",
+      "informational": false
+    },
+    "C5-3-files-open-c5new-exact": {
+      "pass": true,
+      "detail": "diff=0 in title, list, status",
+      "informational": false
+    },
+    "C5-3-files-open-c5new-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "47 differing pixels",
+      "informational": false
+    },
+    "C5-3-files-open-c5new-control-before-frame-differs": {
+      "pass": true,
+      "detail": "42903 differing pixels",
+      "informational": false
+    },
+    "C5-3-files-paste-exact": {
+      "pass": true,
+      "detail": "diff=0 in title, list, status",
+      "informational": false
+    },
+    "C5-3-files-paste-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "43 differing pixels",
+      "informational": false
+    },
+    "C5-3-files-paste-control-before-frame-differs": {
+      "pass": true,
+      "detail": "41338 differing pixels",
+      "informational": false
+    },
+    "C5-3-cli-ls-copy-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "C5-3-cli-ls-copy-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['a.txt']",
+      "informational": false
+    },
+    "C5-3-cli-ls-copy-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": 8777,
+        "max": 209
+      },
+      "informational": false
+    },
+    "C5-3-cli-ls-copy-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "54 differing pixels",
+      "informational": false
+    },
+    "C5-3-cli-ls-copy-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "8777 pixels changed",
+      "informational": false
+    },
+    "C5-3-cli-cat-copy-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "C5-3-cli-cat-copy-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['c5']",
+      "informational": false
+    },
+    "C5-3-cli-cat-copy-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": 8917,
+        "max": 209
+      },
+      "informational": false
+    },
+    "C5-3-cli-cat-copy-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "69 differing pixels",
+      "informational": false
+    },
+    "C5-3-cli-cat-copy-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "8917 pixels changed",
+      "informational": false
+    },
+    "C5-4-files-delete-file-exact": {
+      "pass": true,
+      "detail": "diff=0 in title, list, status",
+      "informational": false
+    },
+    "C5-4-files-delete-file-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "47 differing pixels",
+      "informational": false
+    },
+    "C5-4-files-delete-file-control-before-frame-differs": {
+      "pass": true,
+      "detail": "41617 differing pixels",
+      "informational": false
+    },
+    "C5-4-cli-ls-file-gone-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "C5-4-cli-ls-file-gone-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: []",
+      "informational": false
+    },
+    "C5-4-cli-ls-file-gone-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": 40122,
+        "max": 209
+      },
+      "informational": false
+    },
+    "C5-4-cli-ls-file-gone-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "59 differing pixels",
+      "informational": false
+    },
+    "C5-4-cli-ls-file-gone-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "40122 pixels changed",
+      "informational": false
+    },
+    "C5-4-files-up-exact": {
+      "pass": true,
+      "detail": "diff=0 in title, list, status",
+      "informational": false
+    },
+    "C5-4-files-up-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "47 differing pixels",
+      "informational": false
+    },
+    "C5-4-files-up-control-before-frame-differs": {
+      "pass": true,
+      "detail": "4179 differing pixels",
+      "informational": false
+    },
+    "C5-4-files-delete-folder-exact": {
+      "pass": true,
+      "detail": "diff=0 in title, list, status",
+      "informational": false
+    },
+    "C5-4-files-delete-folder-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "47 differing pixels",
+      "informational": false
+    },
+    "C5-4-files-delete-folder-control-before-frame-differs": {
+      "pass": true,
+      "detail": "42293 differing pixels",
+      "informational": false
+    },
+    "C5-4-cli-ls-folder-gone-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "C5-4-cli-ls-folder-gone-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['a.txt']",
+      "informational": false
+    },
+    "C5-4-cli-ls-folder-gone-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": 12411,
+        "max": 209
+      },
+      "informational": false
+    },
+    "C5-4-cli-ls-folder-gone-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "54 differing pixels",
+      "informational": false
+    },
+    "C5-4-cli-ls-folder-gone-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "12411 pixels changed",
+      "informational": false
+    },
+    "C5-5-files-srv-cellos-denied-exact": {
+      "pass": true,
+      "detail": "diff=0 in title, list, status",
+      "informational": false
+    },
+    "C5-5-files-srv-cellos-denied-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "47 differing pixels",
+      "informational": false
+    },
+    "C5-5-files-srv-cellos-denied-control-before-frame-differs": {
+      "pass": true,
+      "detail": "2277 differing pixels",
+      "informational": false
+    },
+    "C5-6-spotlight-shutdown-no-match-exact": {
+      "pass": true,
+      "detail": "diff=0 in results",
+      "informational": false
+    },
+    "C5-6-spotlight-shutdown-no-match-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "728 differing pixels",
+      "informational": false
+    },
+    "C5-6-spotlight-shutdown-no-match-control-before-frame-differs": {
+      "pass": true,
+      "detail": "75935 differing pixels",
+      "informational": false
+    },
+    "C5-6-spotlight-reboot-no-match-exact": {
+      "pass": true,
+      "detail": "diff=0 in results",
+      "informational": false
+    },
+    "C5-6-spotlight-reboot-no-match-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "728 differing pixels",
+      "informational": false
+    },
+    "C5-6-spotlight-reboot-no-match-control-before-frame-differs": {
+      "pass": true,
+      "detail": "75935 differing pixels",
+      "informational": false
+    },
+    "C5-6-spotlight-system-no-power-exact": {
+      "pass": true,
+      "detail": "diff=0 in results",
+      "informational": false
+    },
+    "C5-6-spotlight-system-no-power-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "77 differing pixels",
+      "informational": false
+    },
+    "C5-6-spotlight-system-no-power-control-before-frame-differs": {
+      "pass": true,
+      "detail": "25312 differing pixels",
+      "informational": false
+    },
+    "C5-6-control-removed-power-rows-would-differ": {
+      "pass": true,
+      "detail": "50624 differing pixels",
+      "informational": false
+    },
+    "VT-1-alt-enter-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "VT-1-alt-enter-output-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "VT-1-alt-enter-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "VT-1-alt-enter-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "60 differing pixels",
+      "informational": false
+    },
+    "VT-1-alt-enter-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "28392 pixels changed",
+      "informational": false
+    },
+    "VT-2-alt-exit-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "VT-2-alt-exit-output-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "VT-2-alt-exit-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          4
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "VT-2-alt-exit-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "56 differing pixels",
+      "informational": false
+    },
+    "VT-2-alt-exit-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "29220 pixels changed",
+      "informational": false
+    },
+    "VT-3-sample-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "VT-3-sample-output-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "VT-3-sample-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          25
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "VT-3-sample-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "64 differing pixels",
+      "informational": false
+    },
+    "VT-3-sample-control-bold-dropped-differs": {
+      "pass": true,
+      "detail": "492 differing pixels",
+      "informational": false
+    },
+    "VT-3-sample-control-inverse-dropped-differs": {
+      "pass": true,
+      "detail": "1134 differing pixels",
+      "informational": false
+    },
+    "VT-3-sample-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "37072 pixels changed",
+      "informational": false
+    },
+    "VT-4-clear-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "VT-4-clear-output-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "VT-4-clear-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          15
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "VT-4-clear-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "42 differing pixels",
+      "informational": false
+    },
+    "VT-4-clear-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "16419 pixels changed",
+      "informational": false
+    },
+    "S53C-cd-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "S53C-cd-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: []",
+      "informational": false
+    },
+    "S53C-cd-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          0
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "S53C-cd-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "65 differing pixels",
+      "informational": false
+    },
+    "S53C-cd-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "798 pixels changed",
+      "informational": false
+    },
+    "S53C-pwd-before-close-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "S53C-pwd-before-close-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['/tmp']",
+      "informational": false
+    },
+    "S53C-pwd-before-close-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          1
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "S53C-pwd-before-close-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "65 differing pixels",
+      "informational": false
+    },
+    "S53C-pwd-before-close-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "853 pixels changed",
+      "informational": false
+    },
+    "S53C-serial:frontend-released-on-window-close": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "S53C-serial:window-re-created-and-frontend-re-attached": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "S53C-serial:shell-observed-Lost(4)-and-waits": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "S53C-serial:shell-observed-the-re-attach": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "S53C-release-before-reattach": {
+      "pass": true,
+      "detail": [
+        19064,
+        19130,
+        19251
+      ],
+      "informational": false
+    },
+    "S53C-reopened-screen-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "S53C-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "65 differing pixels",
+      "informational": false
+    },
+    "S53C-window-same-origin": {
+      "pass": true,
+      "detail": [
+        140,
+        100
+      ],
+      "informational": false
+    },
+    "S53C-pwd-after-reattach-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "S53C-pwd-after-reattach-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['/tmp']",
+      "informational": false
+    },
+    "S53C-pwd-after-reattach-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          3
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "S53C-pwd-after-reattach-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "65 differing pixels",
+      "informational": false
+    },
+    "S53C-pwd-after-reattach-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "853 pixels changed",
+      "informational": false
+    },
+    "S53C-history-recalled-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "S53C-history-rerun-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "S53C-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          5
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "S53C-no-second-banner": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "HOSTILE-0-clear-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "HOSTILE-0-clear-output-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "HOSTILE-0-clear-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          7
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "HOSTILE-0-clear-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "42 differing pixels",
+      "informational": false
+    },
+    "HOSTILE-0-clear-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "2757 pixels changed",
+      "informational": false
+    },
+    "HOSTILE-1-history-clear-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "HOSTILE-1-history-clear-output-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "HOSTILE-1-history-clear-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          0
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "HOSTILE-1-history-clear-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "57 differing pixels",
+      "informational": false
+    },
+    "HOSTILE-1-history-clear-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "856 pixels changed",
+      "informational": false
+    },
+    "HOSTILE-2-cat-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "HOSTILE-2-cat-output-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "HOSTILE-2-cat-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          1
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "HOSTILE-2-cat-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "69 differing pixels",
+      "informational": false
+    },
+    "HOSTILE-2-cat-control-params17-bold-red-differs": {
+      "pass": true,
+      "detail": "675 differing pixels",
+      "informational": false
+    },
+    "HOSTILE-2-cat-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "7924 pixels changed",
+      "informational": false
+    },
+    "HOSTILE-3-echo-as-typed-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "HOSTILE-3-echo-as-typed-output-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "HOSTILE-3-echo-as-typed-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          11
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "HOSTILE-3-echo-as-typed-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "53 differing pixels",
+      "informational": false
+    },
+    "HOSTILE-3-echo-as-typed-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "1518 pixels changed",
+      "informational": false
+    },
+    "HOSTILE-4-history-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "HOSTILE-4-history-output-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "HOSTILE-4-history-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          13
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "HOSTILE-4-history-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "55 differing pixels",
+      "informational": false
+    },
+    "HOSTILE-4-history-control-history-not-cleared-differs": {
+      "pass": true,
+      "detail": "4332 differing pixels",
+      "informational": false
+    },
+    "HOSTILE-4-history-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "3069 pixels changed",
+      "informational": false
+    },
+    "TOP-0-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "TOP-1-last-column-inked-every-row": {
+      "pass": true,
+      "detail": "blank last-column rows []",
+      "informational": false
+    },
+    "TOP-1-control-prompt-last-column-blank": {
+      "pass": true,
+      "detail": "26 blank last-column cells on the prompt screen",
+      "informational": false
+    },
+    "TOP-1-title-row-accent-all-cells": {
+      "pass": true,
+      "detail": "columns without the accent []",
+      "informational": false
+    },
+    "TOP-1-status-row-surface-all-cells": {
+      "pass": true,
+      "detail": "columns without the surface colour []",
+      "informational": false
+    },
+    "TOP-2-left-border-no-gap": {
+      "pass": true,
+      "detail": "blank pixel rows []",
+      "informational": false
+    },
+    "TOP-2-right-border-no-gap": {
+      "pass": true,
+      "detail": "blank pixel rows []",
+      "informational": false
+    },
+    "TOP-2-bottom-border-no-gap": {
+      "pass": true,
+      "detail": "blank pixel columns []",
+      "informational": false
+    },
+    "TOP-2-control-scan-finds-prompt-row-gap": {
+      "pass": true,
+      "detail": "cell (0, 0): gap pixel rows [21, 22, 23, 24, 25, 26]",
+      "informational": false
+    },
+    "TOP-3-control-band-on-first-data-row": {
+      "pass": true,
+      "detail": "band rows [4]",
+      "informational": false
+    },
+    "TOP-3-down-moves-band-one-row": {
+      "pass": true,
+      "detail": "band rows [4] -> [5]",
+      "informational": false
+    },
+    "TOP-3-enter-band-first-row": {
+      "pass": true,
+      "detail": [
+        4
+      ],
+      "informational": false
+    },
+    "TOP-3-enter-title-region-changes": {
+      "pass": true,
+      "detail": "2006 pixels changed",
+      "informational": false
+    },
+    "TOP-4-restored-prompt-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "TOP-4-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "65 differing pixels",
+      "informational": false
+    },
+    "TOP-5-status-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "TOP-5-status-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['st=0']",
+      "informational": false
+    },
+    "TOP-5-status-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          18
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "TOP-5-status-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "73 differing pixels",
+      "informational": false
+    },
+    "TOP-5-status-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "1102 pixels changed",
+      "informational": false
+    },
+    "EDIT-0-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "EDIT-1-status-row-surface-all-cells": {
+      "pass": true,
+      "detail": "row 24",
+      "informational": false
+    },
+    "EDIT-1-first-row-empty": {
+      "pass": true,
+      "detail": "glyph ink in row 0",
+      "informational": false
+    },
+    "EDIT-2-typed-text-drawn": {
+      "pass": true,
+      "detail": "cells 0..4 glyph-inked, 6..11 blank",
+      "informational": false
+    },
+    "EDIT-3-dirty-quit-asks": {
+      "pass": true,
+      "detail": "bottom row changed, editor still drawn",
+      "informational": false
+    },
+    "EDIT-4-restored-prompt-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "EDIT-5-status-typed-line-exact": {
+      "pass": true,
+      "detail": "diff=0",
+      "informational": false
+    },
+    "EDIT-5-status-output-exact": {
+      "pass": true,
+      "detail": "alternative 0: ['st=0']",
+      "informational": false
+    },
+    "EDIT-5-status-control-before-frame-differs": {
+      "pass": true,
+      "detail": {
+        "cursor": [
+          9,
+          21
+        ],
+        "diff": null
+      },
+      "informational": false
+    },
+    "EDIT-5-status-control-one-char-change-differs": {
+      "pass": true,
+      "detail": "73 differing pixels",
+      "informational": false
+    },
+    "EDIT-5-status-before-after-window-pixels-changed": {
+      "pass": true,
+      "detail": "1102 pixels changed",
+      "informational": false
+    },
+    "GUI-4-control-producer-still-running-before-ctrl-c": {
+      "pass": true,
+      "detail": "107867 pixels changed in 3 s",
+      "informational": false
+    },
+    "GUI-4-ctrl-c-output-stops-prompt-recovered": {
+      "pass": true,
+      "detail": "0 pixels changed 4 s after the prompt returned",
+      "informational": false
+    },
+    "GUI-4-ctrl-c-status-130-exact": {
+      "pass": true,
+      "detail": "rows 23..25 diff=0",
+      "informational": false
+    },
+    "GUI-4-control-status-0-differs": {
+      "pass": true,
+      "detail": "185 differing pixels",
+      "informational": false
+    },
+    "window-close-control": {
+      "pass": true,
+      "detail": "no Terminal-coloured window rectangle remains",
+      "informational": true
+    },
+    "no-command-uart:echo": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:stock-echo": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:ls-alpha": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:ls-beta": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:cat-one": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:cat-two": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:stderr": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:ctrl-c-status": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:typed-command": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:shell-banner": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:shell-prompt": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:c5-typed-command": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:vt-typed-command": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:vt-sample-output": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:vt-hostile-output": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:hostile-echo": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:hostile-clipboard": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:hostile-link": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "no-command-uart:hostile-title": {
+      "pass": true,
+      "detail": "payload appeared on the physical UART",
+      "informational": false
+    },
+    "uart-terminal-ready-once": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "uart-s53c-one-release": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "uart-s53c-one-reattach": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "uart-s53c-shell-reattach-once": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "uart-files-ready-once": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "no-spotlight-power-claim": {
+      "pass": true,
+      "detail": "a fake power action reported success",
+      "informational": false
+    },
+    "no-key-material-in-log": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "no-launch-deny": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    },
+    "no-panic-or-fault": {
+      "pass": true,
+      "detail": "",
+      "informational": false
+    }
+  },
+  "notes": [],
+  "window_origin": [
+    140,
+    100
+  ],
+  "scope": "private GUI Terminal proof on a private desktop image; not release acceptance",
+  "candidate_import": {
+    "mode": "import",
+    "lane": "phase04-gui",
+    "profile": "desktop",
+    "candidate_json": "/tmp/cellbox-s10-3-1EGP/cand/candidate.json",
+    "candidate_json_sha256": "a9f384a6a3c3ff8fbec8150ad0cf780aed229f1152434d2d84a047020865c07c",
+    "kernel_fixture_features": "default+phase02-terminal-profile,phase03-filter-profile",
+    "cellbox_features": "default",
+    "payload_match_sha256": "0f7d544941207db9f5ee7dc676869bd9f5ed8e6f57ddda91d2d58686611a82ff",
+    "payload_match_all_equal": true,
+    "shared": [
+      "/bin/vfs",
+      "/bin/config",
+      "/bin/input",
+      "/bin/platform",
+      "/bin/compositor",
+      "/bin/fb-console",
+      "/bin/desktop",
+      "/bin/files",
+      "/bin/ls",
+      "/bin/cat",
+      "/bin/echo",
+      "/bin/cellbox",
+      "/bin/terminal",
+      "init"
+    ],
+    "lane_only": [
+      "/bin/p03-filter"
+    ],
+    "counts_for": "behaviour of the payload-matched cells only; never kernel-level claims (S10-3.3)"
+  }
+}

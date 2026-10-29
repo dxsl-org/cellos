@@ -1,0 +1,27 @@
+{"lane": "L0-headless-run7", "exit": 1, "seconds": 1412.0, "work": "/tmp/cellbox-phase10-vlqr0e0z", "summary_lines": ["FAIL: headless L0 (16 markers) in 1373.9s"]}
+L0 headless run 7: exit 1
+{"lane": "L0-headless-run8", "exit": 0, "seconds": 697.4, "work": "/tmp/cellbox-phase10-j4wer0eh", "summary_lines": ["PASS: headless L0 (16 markers) in 658.1s"]}
+L0 headless run 8: exit 0
+{"lane": "L0-headless-run9", "exit": 1, "seconds": 141.9, "work": "/tmp/cellbox-phase10-gywu0_b0", "summary_lines": []}
+L0 headless run 9: exit 1
+{"lane": "L0-headless-run10", "exit": 1, "seconds": 1485.6, "work": "/tmp/cellbox-phase10-nyoktjct", "summary_lines": ["FAIL: headless L0 (16 markers) in 1448.2s"]}
+L0 headless run 10: exit 1
+{"lane": "L0-headless-run11", "exit": 1, "seconds": 146.4, "work": "/tmp/cellbox-phase10-wg_q8eky", "summary_lines": []}
+L0 headless run 11: exit 1
+{"lane": "L0-headless-run12", "exit": 0, "seconds": 706.1, "work": "/tmp/cellbox-phase10-_9e05e8g", "summary_lines": ["PASS: headless L0 (16 markers) in 669.3s"]}
+L0 headless run 12: exit 0
+L0 headless final streak 1 after 12 runs
+{"lane": "L0-desktop-run7", "exit": 0, "seconds": 312.7, "work": "/tmp/cellbox-phase10-8nn0_ue0", "summary_lines": ["PASS: desktop L0 (9 markers) in 259.8s"]}
+L0 desktop run 7: exit 0
+{"lane": "L0-desktop-run8", "exit": 1, "seconds": 146.5, "work": "/tmp/cellbox-phase10-uu0cunr4", "summary_lines": []}
+L0 desktop run 8: exit 1
+{"lane": "L0-desktop-run9", "exit": 1, "seconds": 145.8, "work": "/tmp/cellbox-phase10-8q69lb8h", "summary_lines": []}
+L0 desktop run 9: exit 1
+{"lane": "L0-desktop-run10", "exit": 0, "seconds": 303.9, "work": "/tmp/cellbox-phase10-j2jq6u89", "summary_lines": ["PASS: desktop L0 (9 markers) in 261.2s"]}
+L0 desktop run 10: exit 0
+{"lane": "L0-desktop-run11", "exit": 1, "seconds": 145.9, "work": "/tmp/cellbox-phase10-dlc70c1s", "summary_lines": []}
+L0 desktop run 11: exit 1
+{"lane": "L0-desktop-run12", "exit": 0, "seconds": 408.0, "work": "/tmp/cellbox-phase10-opjzatk3", "summary_lines": ["PASS: desktop L0 (9 markers) in 260.5s"]}
+L0 desktop run 12: exit 0
+L0 desktop final streak 1 after 12 runs
+stream D done

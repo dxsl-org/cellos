@@ -1,0 +1,3 @@
+   Compiling vicell-integration-tests v0.1.0 (/home/dmin/cellos/tests/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running tests/ahci-x86.rs (/tmp/cellbox-s10-3-1EGP/l6/target-after/x86_64-unknown-linux-gnu/debug/deps/ahci_x86-a4f3533cca529f6a)

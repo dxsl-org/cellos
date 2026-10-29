@@ -1,0 +1,9 @@
+==> Verifying every input against candidate.json (headless)
+inputs verified: iso 3cd9ee4d2da66186… kernel 93f57333ec662081… (default+policy-required) image 29e3a0d4893c1e6f… 25 files
+==> Main fixture disk: rg tree + /srv denied child (phase07_rg_fixture.py) and the FAT data tree
+[mkfat32] /tmp/cellbox-phase10-gywu0_b0/disk-main/disk.img: base=LBA 2048, 524288 sectors, 130554 data clusters (FAT32), FATsz32=1020, data start=LBA 4120
+CellosFS fresh-blank /tmp/cellbox-phase10-gywu0_b0/disk-main/disk.img verified; receipt /tmp/cellbox-phase10-gywu0_b0/disk-main/srv-receipt.json
+rg fixture: /tmp/cellbox-phase10-gywu0_b0/disk-main/disk.img (135 files), expectations /tmp/cellbox-phase10-gywu0_b0/disk-main/rg-fixture-expected.json
+data tree on P1: 12 files read back exactly
+==> Starting the disposable OpenSSH fixture (D79-1)
+FAIL: fixture sshd did not start

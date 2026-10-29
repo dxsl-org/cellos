@@ -1,0 +1,1 @@
+cellbox: candidate /bin/cellbox (headless profile, default features, no p09-faults), re-signed with the lane key; see payload-match.json

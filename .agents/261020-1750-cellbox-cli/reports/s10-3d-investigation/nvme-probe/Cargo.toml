@@ -1,0 +1,24 @@
+[package]
+name    = "driver-nvme"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+
+[[bin]]
+name = "driver-nvme"
+path = "src/main.rs"
+
+[dependencies]
+types = { path = "/home/dmin/cellos/libs/types", version = "0.1.0" }
+api   = { path = "/home/dmin/cellos/libs/api", version = "0.1.0" }
+ostd  = { path = "/home/dmin/cellos/libs/ostd", version = "0.2.0" }
+
+[build-dependencies]
+cell-build = { path = "/home/dmin/cellos/libs/cell-build", version = "0.2.0" }
+
+[workspace]
+
+[profile.release]
+panic = "abort"
+lto = true
+opt-level = 2

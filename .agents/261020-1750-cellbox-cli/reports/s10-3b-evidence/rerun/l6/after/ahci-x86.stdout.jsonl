@@ -1,0 +1,13 @@
+{ "type": "suite", "event": "started", "test_count": 5 }
+{ "type": "test", "event": "started", "name": "ahci_and_nvme_both_register_x86" }
+{ "type": "test", "name": "ahci_and_nvme_both_register_x86", "event": "ok", "stdout": "observed block-driver registrations on the NVMe+SATA lane (in order): [\"[ WARN] [driver_cell] block driver registered: tid=3\", \"[ WARN] [driver_cell] block driver registered: tid=4\"]\n" }
+{ "type": "test", "event": "started", "name": "ahci_boot_reaches_shell_x86" }
+{ "type": "test", "name": "ahci_boot_reaches_shell_x86", "event": "ok" }
+{ "type": "test", "event": "started", "name": "ahci_driver_cell_identifies_sata_x86" }
+{ "type": "test", "name": "ahci_driver_cell_identifies_sata_x86", "event": "ok" }
+{ "type": "test", "event": "started", "name": "ahci_driver_cell_registers_block_driver_x86" }
+{ "type": "test", "name": "ahci_driver_cell_registers_block_driver_x86", "event": "ok" }
+{ "type": "test", "event": "started", "name": "ahci_fat32_persistence_reboot_x86" }
+[mkfat32] /tmp/vicell_sata_fat32_1505268_294303933.img: base=LBA 0, 524288 sectors, 130554 data clusters (FAT32), FATsz32=1020, data start=LBA 2072
+{ "type": "test", "name": "ahci_fat32_persistence_reboot_x86", "event": "ok" }
+{ "type": "suite", "event": "ok", "passed": 5, "failed": 0, "ignored": 0, "measured": 0, "filtered_out": 0, "exec_time": 29.110936011 }

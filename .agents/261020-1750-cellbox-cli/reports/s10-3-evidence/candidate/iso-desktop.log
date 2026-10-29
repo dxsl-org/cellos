@@ -1,0 +1,16 @@
+[make-iso] Building BIOS+UEFI ISO: /tmp/cellbox-s10-3-7yWa/cand/desktop.iso
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Drive current: -outdev 'stdio:/tmp/cellbox-s10-3-7yWa/cand/desktop.iso'
+Media current: stdio file, overwriteable
+Media status : is blank
+Media summary: 0 sessions, 0 data blocks, 0 data,  636g free
+Added to ISO image: directory '/'='/tmp/cellbox-s10-3-7yWa/iso-root-desktop'
+xorriso : UPDATE :      10 files added in 1 seconds
+xorriso : UPDATE :      10 files added in 1 seconds
+ISO image produced: 15652 sectors
+Written to medium : 15652 sectors at LBA 0
+Writing to 'stdio:/tmp/cellbox-s10-3-7yWa/cand/desktop.iso' completed successfully.
+
+ISO_SIZE=32055296 bytes
+ISO_READY=/tmp/cellbox-s10-3-7yWa/cand/desktop.iso

@@ -1,0 +1,118 @@
+{
+  "schema": "cellos-phase10-candidate-import/1",
+  "mode": "import",
+  "lane": "phase04-gui",
+  "profile": "desktop",
+  "candidate_json": {
+    "path": "/tmp/cellbox-s10-3d-resume/cand/candidate.json",
+    "sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821"
+  },
+  "candidate_root": "/tmp/cellbox-s10-3d-resume/cand",
+  "shared": [
+    {
+      "path": "/bin/vfs",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/service-vfs",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/vfs",
+      "candidate_sha256": "3571793e2221fa002acbdddb9ba628af3efb3e803d510f3bd9222151e5aa6b73",
+      "candidate_payload_sha256": "28243dc59aec328e3be2bdad597406ce7f8c28b68136786df82c386f318b0613"
+    },
+    {
+      "path": "/bin/config",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/service-config",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/config",
+      "candidate_sha256": "e8caf5a4aaea0dac15c2c62a1bf48360ab2c2f77eaaa5d7ddcc65e08ec67124e",
+      "candidate_payload_sha256": "1c85044a8d8c5442a6d0f15c829a7a04ebaf8915aec28d11012029f1a77ec8b6"
+    },
+    {
+      "path": "/bin/input",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/service-input",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/input",
+      "candidate_sha256": "e8596a8b7e943d3bb057d177806f9ebb9ca538c311bd8e813dfa99f83bf5d289",
+      "candidate_payload_sha256": "f86f762b62434b77e5a7ea9a1d58643033485d4ae8d12168c022f3fa3ac17cd9"
+    },
+    {
+      "path": "/bin/platform",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/platform",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/platform",
+      "candidate_sha256": "50636909b8c93cd0295329095b6e619f3df77263e35c796bb3967dbe5bde33d4",
+      "candidate_payload_sha256": "fe052ab8bccd0b13f4039130097d51f6ead86254a4d95ac0cd544f9018722027"
+    },
+    {
+      "path": "/bin/compositor",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/service-compositor",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/compositor",
+      "candidate_sha256": "11aa61be89c71a7603133958be420e290da54949855a429eacb9796c284acc68",
+      "candidate_payload_sha256": "68fe7b959fbf3b016854aa2e2a11cd939e88d8a520143074f8840a506494d17a"
+    },
+    {
+      "path": "/bin/fb-console",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/fb-console",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/fb-console",
+      "candidate_sha256": "138edc208cfc803426ee5dfa2a57f63db9b425f08a18eafc032830131a2a1e81",
+      "candidate_payload_sha256": "bb7a3b6c5ecadd7758ce2bb7ac88a2b3f9d44fb4d27cd9ff69ff233195a7e0b2"
+    },
+    {
+      "path": "/bin/desktop",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/desktop",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/desktop",
+      "candidate_sha256": "50ead2aedada0ab7b28aac45c50828a434a237da4bd27fd32b250a6b44eb8ce8",
+      "candidate_payload_sha256": "b5866accc12af3e59a283a5e53c38976d866e4177fa2df4cfb05cf286538654b"
+    },
+    {
+      "path": "/bin/files",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/files",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/files",
+      "candidate_sha256": "5ece74bd2200e6da98d5602d3e23cd3066e62abadc7be2316709d1536e472d4e",
+      "candidate_payload_sha256": "2253652127b0708a34db8b85465553047dc1b79114b48700d606bb2178a427c9"
+    },
+    {
+      "path": "/bin/ls",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/ls",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/ls",
+      "candidate_sha256": "baf3cf964c9eaa561934cc65c51516a32789fad0aafea3d252e80a448cf3193b",
+      "candidate_payload_sha256": "8f7ab1d6a3d2df57cdbaeadd111c504d609e0385a1e7d06f2869bfc82d3b3676"
+    },
+    {
+      "path": "/bin/cat",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/cat",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cat",
+      "candidate_sha256": "72561d164d33db7194fe492069e948cd2fe67ed16d6071cad7f7dc8558359f24",
+      "candidate_payload_sha256": "f79982e1e084d8d44303e8cd0ea970d3028635857ae4bc4b734813c83ea24c55"
+    },
+    {
+      "path": "/bin/echo",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/echo",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/echo",
+      "candidate_sha256": "e93af5d2e7bf5321ec6adf9337bd4d7bf04b09dd18099760dd76f2bd2118ce68",
+      "candidate_payload_sha256": "88fc809da0d021b181971a4af9111b1971bf87a848c3e402ae929cbb3ffb0eff"
+    },
+    {
+      "path": "/bin/cellbox",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/cellbox",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cellbox",
+      "candidate_sha256": "8ea134442bb27719cf4c2ce5a8f3613f5667f88f1762a1d731cba9fd83ab54a2",
+      "candidate_payload_sha256": "67ff3b3d36b2990be5e957a77afeb2c57d023c9454b2ccb303ea49ccdd0467af"
+    },
+    {
+      "path": "/bin/terminal",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/terminal",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal",
+      "candidate_sha256": "816718a20188bb797a65622d17087010e8d41c7a933248dc303847c7d11ff3cc",
+      "candidate_payload_sha256": "09837ed91e29a1cf1159b375b15cb581996897369c536ba64acf574649fd68c3"
+    },
+    {
+      "path": "init",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/app-init",
+      "candidate_file": "/tmp/cellbox-s10-3d-resume/cand/desktop/init",
+      "candidate_sha256": "c0bd14580fda0d697a2edd66b19168107fa6877a190bc06c1a8a482b467b23f3",
+      "candidate_payload_sha256": "36884b30eeed50ed70e59f851a85cc44bff69e5aa9c0014ce5592baf3a0d0b9f"
+    }
+  ],
+  "lane_only": [
+    {
+      "path": "/bin/p03-filter",
+      "lane_file": "/tmp/cellbox-phase04-gui-i8q3krw4/cells-target/x86_64-unknown-none/release/phase03-filter",
+      "reason": "not packaged in the candidate profile"
+    }
+  ]
+}

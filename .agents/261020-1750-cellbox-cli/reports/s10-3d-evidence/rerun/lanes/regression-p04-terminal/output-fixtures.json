@@ -1,0 +1,18 @@
+{
+  "raw.bin": {
+    "length": 1600,
+    "sha256": "a6cdaa90b8b902935589ad25507a0640efe4c6e021fb8a50f651c9ca144128be"
+  },
+  "large.bin": {
+    "length": 98368,
+    "sha256": "b7bdb440172ac681fd2764c5dcc418e0ebf9bdd05ed735be1c42428deb27b5a6"
+  },
+  "pressure-ls": {
+    "length": 15621,
+    "sha256": "c6c2121bad7a55c5655550bda9d6649e318a733ff56e0bd64f791c5cca8dfaba"
+  },
+  "vt-hostile": {
+    "length": 12628,
+    "sha256": "354e162940f3ff7e4eed24e07b361ebd8cc13f2d38f0f6f880bded30a75c7e24"
+  }
+}

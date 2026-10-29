@@ -1,0 +1,175 @@
+//! NVMe Driver Cell — Tier-1 Privileged Driver Cell.
+//!
+//! This cell owns the NVMe PCIe endpoint exclusively.  It:
+//!   1. Calls `sys_find_pcie_device(NVMe class/sub/progif)` to locate BAR0.
+//!   2. Claims exclusive MMIO via `sys_request_mmio`.
+//!   3. Initialises the NVMe controller (init sequence identical to blk_nvme.rs).
+//!   4. Calls `sys_register_block_driver()` to announce itself to the kernel.
+//!   5. Serves `DrvRequest` IPC from VFS (sector read/write).
+//!
+//! Law 4 exception: this cell uses `unsafe` for MMIO register access.  Every
+//! `unsafe` block carries a `// SAFETY:` comment.
+//!
+//! This cell is granted `PcieDriverCap` by `init` via direct TCB write at spawn
+//! time — NOT via a manifest flag (all 8 flag bits in v1 are occupied).
+
+// Test builds only: a hosted `cargo test` gets std and libtest's entry, so the wait
+// budgets (`deadline`) run as host unit tests (S10-3c, D3c-3 A). Every Cell target
+// (`*-unknown-none`, `*-unknown-cellos`) keeps `no_std`/`no_main`.
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
+extern crate alloc;
+
+mod controller;
+mod deadline;
+mod dispatch;
+mod dma;
+mod queue;
+
+use controller::NvmeController;
+use dma::AuthorizedDma;
+use ostd::app::{AppContext, AppEvent};
+use ostd::dma::DmaBuf;
+use ostd::io::print_fmt;
+use ostd::mmio;
+use ostd::sync::Mutex;
+use ostd::syscall::{sys_find_pcie_device, sys_register_block_driver, sys_send, PcieDeviceInfo};
+
+/// NVMe PCIe class triple.
+const NVME_CLASS: u8 = 0x01;
+const NVME_SUB: u8 = 0x08;
+const NVME_PROGIF: u8 = 0x02;
+
+/// BAR0 MMIO window size (NVMe spec: at least 16 KiB for BAR0).
+const NVME_BAR0_LEN: usize = 0x4000; // 16 KiB
+
+struct NvmeState {
+    ctrl: NvmeController,
+    io_buf: AuthorizedDma<DmaBuf>,
+}
+
+static STATE: Mutex<Option<NvmeState>> = Mutex::new(None);
+
+fn handler(_ctx: &mut AppContext, event: AppEvent) {
+    match event {
+        AppEvent::Init => {
+            // Disposable interleaving probe: let Platform enter its BAR probe first.
+            for _ in 0..50 {
+                ostd::task::yield_now();
+            }
+            // 1. Discover NVMe device via kernel ECAM table. This cell spawns
+            // pre-VFS, concurrently with the Platform Cell's ECAM scan — the
+            // device entry may not be registered yet (the scan is slower when
+            // each RegisterPciDevice also runs the deferred VT-d init), so
+            // retry with yields for a bounded window before concluding absent.
+            let mut info = PcieDeviceInfo::zeroed();
+            let mut found = false;
+            for _ in 0..200 {
+                if let Ok(true) = sys_find_pcie_device(NVME_CLASS, NVME_SUB, NVME_PROGIF, &mut info)
+                {
+                    found = true;
+                    break;
+                }
+                ostd::task::yield_now();
+            }
+            if !found {
+                // No NVMe on this machine (or no PcieDriverCap) — exit cleanly.
+                ostd::syscall::sys_exit(0);
+            }
+
+            let bar0_base = info.bar0_base as usize;
+            let bdf = info.bdf;
+
+            // 2. Claim exclusive MMIO access to BAR0.
+            let mmio_region = match mmio::request_region(bar0_base, NVME_BAR0_LEN) {
+                Ok(r) => r,
+                Err(error) => {
+                    let _ = print_fmt(format_args!("[nvme] BAR0 request failed: {:?}\n", error));
+                    ostd::syscall::sys_exit(1)
+                }
+            };
+
+            // 3. Initialise controller.
+            let ctrl = match NvmeController::new(mmio_region, bdf) {
+                Ok(c) => c,
+                Err(error) => {
+                    let _ = print_fmt(format_args!("[nvme] controller init failed: {:?}\n", error));
+                    ostd::syscall::sys_exit(1)
+                }
+            };
+
+            // Allocate a reusable 512-byte I/O DMA buffer and retain the
+            // device-visible address returned by authorization.
+            let io_buf = match DmaBuf::alloc(1) {
+                Some(b) => b,
+                None => {
+                    let _ = print_fmt(format_args!("[nvme] io buffer allocation failed\n"));
+                    ostd::syscall::sys_exit(1)
+                }
+            };
+            let io_buf = match AuthorizedDma::authorize(io_buf, |buf| buf.authorize(bdf)) {
+                Ok(buf) => buf,
+                Err(error) => {
+                    let _ = print_fmt(format_args!(
+                        "[nvme] io buffer authorization failed: {:?}\n",
+                        error
+                    ));
+                    ostd::syscall::sys_exit(1)
+                }
+            };
+            let _ = print_fmt(format_args!("[nvme] io buffer iova=0x{:x}\n", io_buf.iova()));
+            let _ = print_fmt(format_args!(
+                "[nvme] DMA authorized for bus {} device {} function {}\n",
+                (bdf >> 8) & 0xFF,
+                (bdf >> 3) & 0x1F,
+                bdf & 0x07
+            ));
+
+            // Publish state before registration: VFS may route requests as soon
+            // as the syscall succeeds.
+            *STATE.lock() = Some(NvmeState { ctrl, io_buf });
+            if let Err(error) = sys_register_block_driver() {
+                *STATE.lock() = None;
+                let _ = print_fmt(format_args!(
+                    "[nvme] block driver registration failed: {:?}\n",
+                    error
+                ));
+                ostd::syscall::sys_exit(1);
+            }
+        }
+
+        // VFS speaks the raw DrvRequest protocol (no 0xAC App-SDK envelope), so
+        // requests arrive as RawMessage; accept Message too — layout is identical.
+        // Without the RawMessage arm the request falls into `_ => {}` and VFS
+        // blocks forever in its reply recv (x86 FAT-on-NVMe boot hang).
+        AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
+            let mut reply = [0u8; dispatch::REPLY_SIZE];
+            let len = if let Some(state) = STATE.lock().as_mut() {
+                dispatch::handle(&mut state.ctrl, &state.io_buf, data.as_ref(), &mut reply)
+            } else {
+                reply[0] = 1;
+                1 // not initialised
+            };
+            let _ = sys_send(sender_tid, &reply[..len]);
+        }
+
+        AppEvent::Shutdown | AppEvent::ShutdownWith { .. } => {
+            ostd::syscall::sys_exit(0);
+        }
+        _ => {}
+    }
+}
+
+ostd::run_app!(handler);
+
+// ── Capability manifest ───────────────────────────────────────────────────────
+// PcieDriverCap is granted by init via direct TCB write (not a manifest flag).
+// This manifest declares NO privileged flags — init elevates the cell at spawn.
+api::declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = false,
+    uart = false,
+    hypervisor = false
+);

@@ -1,0 +1,52 @@
+{
+  "source": "/tmp/cellbox-phase10-s6pjo8ow/evidence/serial-main.log",
+  "events": [
+    {
+      "offset": 50994,
+      "restore_and_prompt": "b'\\x1b[?1049l\\x1b[?25h\\x1b[?2004lCellos > '",
+      "original_last_line_tail": "          \u2502\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256fq quit  Up/Dn select  Enter tasks  Esc back  o sort  r reverse  f fields        Cellos > ",
+      "original_idle": false,
+      "corrected_idle": true,
+      "original_prompt_count": 71,
+      "corrected_prompt_count": 72
+    },
+    {
+      "offset": 54261,
+      "restore_and_prompt": "b'\\x1b[?1049l\\x1b[?2004lCellos > '",
+      "original_last_line_tail": "                          p*\u2014 Ln 1, Col2^S save ^Osaveas^Qquit^Hhelp13045c6r7e8a9t10e1d2\u2014Ln 1, Col 12  saved 11bytes to /srv/p10ed/new.txt (synced;notapower-lossguarantee)Cellos > ",
+      "original_idle": false,
+      "corrected_idle": true,
+      "original_prompt_count": 75,
+      "corrected_prompt_count": 77
+    },
+    {
+      "offset": 56992,
+      "restore_and_prompt": "b'\\x1b[?1049l\\x1b[?2004lCellos > '",
+      "original_last_line_tail": "save  ^O save as  ^Q quit  ^H help                                           41*\u2014 Ln 1, Col5\u2014Ln 1, Col 5 saved 15bytes to /srv/p10ed/m.txt (synced;notapower-lossguarantee)Cellos > ",
+      "original_idle": false,
+      "corrected_idle": true,
+      "original_prompt_count": 76,
+      "corrected_prompt_count": 79
+    },
+    {
+      "offset": 59418,
+      "restore_and_prompt": "b'\\x1b[?1049l\\x1b[?2004lCellos > '",
+      "original_last_line_tail": "            /srv/p10ed/m.txt \u2014 Ln 1, Col 1                                                 ^S save  ^O save as  ^Q quit  ^H help                                           Cellos > ",
+      "original_idle": false,
+      "corrected_idle": true,
+      "original_prompt_count": 76,
+      "corrected_prompt_count": 80
+    },
+    {
+      "offset": 62377,
+      "restore_and_prompt": "b'\\x1b[?1049l\\x1b[?25h\\x1b[?2004lCellos > '",
+      "original_last_line_tail": "                                    ^S save  ^O save as  ^Q quit  ^H help                                           q*\u2014 Ln 1, Col2Unsavedchanges:()ave, (d)iscard, (c)ancelCellos > ",
+      "original_idle": false,
+      "corrected_idle": true,
+      "original_prompt_count": 80,
+      "corrected_prompt_count": 85
+    }
+  ],
+  "all_rejected_originally": true,
+  "all_detected_after_explicit_boundary_framing": true
+}

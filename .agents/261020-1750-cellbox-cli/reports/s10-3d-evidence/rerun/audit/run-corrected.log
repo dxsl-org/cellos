@@ -1,0 +1,36 @@
+{
+ "documents": {
+  "spec.md": {
+   "expected": "f9c550f7a75ce4d79ac0aa6940dd21b529ba1232d0a7de081f2b105e4eba2988",
+   "actual": "f9c550f7a75ce4d79ac0aa6940dd21b529ba1232d0a7de081f2b105e4eba2988",
+   "equal": true
+  },
+  "abi-session-launch.md": {
+   "expected": "422df04c1f39d41aa37f4975caba359be65c48bffc2a004e7fec0f6c26822b44",
+   "actual": "422df04c1f39d41aa37f4975caba359be65c48bffc2a004e7fec0f6c26822b44",
+   "equal": true
+  },
+  "abi-vfs-telemetry.md": {
+   "expected": "0edda7171a424619ac49ec2f2d7569a91e45490e9f77adf793bd1ca25d7cec50",
+   "actual": "0edda7171a424619ac49ec2f2d7569a91e45490e9f77adf793bd1ca25d7cec50",
+   "equal": true
+  },
+  "command-catalog.md": {
+   "expected": "2a4c3e6652c90b5dad840c5a403276a3a8fa4236b8bab12ca1b319bc237cbd70",
+   "actual": "2a4c3e6652c90b5dad840c5a403276a3a8fa4236b8bab12ca1b319bc237cbd70",
+   "equal": true
+  },
+  "command-contracts.md": {
+   "expected": "4ff1c3be46a39312d400877e0655a715b024563f2d84db7aecf27947efb2090d",
+   "actual": "4ff1c3be46a39312d400877e0655a715b024563f2d84db7aecf27947efb2090d",
+   "equal": true
+  }
+ },
+ "rows_missing_cp": [],
+ "cargo_deny_cellbox_scoped": {
+  "command": "cargo deny --offline --locked --exclude-dev --manifest-path cells/tools/cellbox/Cargo.toml check advisories licenses bans sources",
+  "all_ok": true
+ },
+ "cargo_deny_workspace_summary": [],
+ "verdict": "PASS"
+}

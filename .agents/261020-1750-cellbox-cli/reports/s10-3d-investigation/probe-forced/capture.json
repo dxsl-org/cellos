@@ -1,0 +1,28 @@
+{
+  "reason": "admin-timeout",
+  "seconds": 61.66,
+  "dumps": {
+    "nvme-pci-config": {
+      "return": {}
+    },
+    "admin-sq": {
+      "return": {}
+    },
+    "admin-cq": {
+      "return": {}
+    },
+    "io-sq": {
+      "return": {}
+    },
+    "io-cq": {
+      "return": {}
+    },
+    "identify": {
+      "return": {}
+    }
+  },
+  "iso_before": "8a3dce31045897d67abd6c1e2e41bc3b261621ef15ac68e26822f8344cae6599",
+  "source_disk_before": "fb0ab83eab4de6d8dccf9da24c4a6d8cd8b8a23615bafd0266df02d48a59e0cb",
+  "iso_after": "8a3dce31045897d67abd6c1e2e41bc3b261621ef15ac68e26822f8344cae6599",
+  "source_disk_after": "fb0ab83eab4de6d8dccf9da24c4a6d8cd8b8a23615bafd0266df02d48a59e0cb"
+}

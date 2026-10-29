@@ -1,0 +1,649 @@
+Checking: /tmp/cellbox-phase04-Sn1u/embedded/kernel_fs.img
+Size: 8388608 bytes (8192 KB)
+Sig: 55aa (should be 55aa)
+FS type: b'  FAT16 '
+BPS=512 SPC=1 RES=1 FAT_CNT=2 ROOT_ENT=512 FAT_SZ=96
+Root dir at 98816, Data area at 115200
+  --- root ---
+    LFN[1] 'bin'
+    SFN BIN~1         -> LFN 'bin'  attr=10 clus=2 sz=0
+    LFN[1] 'data'
+    SFN DATA~1        -> LFN 'data'  attr=10 clus=6 sz=0
+    LFN[1] 'etc'
+    SFN ETC~1         -> LFN 'etc'  attr=10 clus=8 sz=0
+    LFN[1] 'p04-list'
+    SFN P04-LI~1      -> LFN 'p04-list'  attr=10 clus=10 sz=0
+    LFN[1] 'p04-output'
+    SFN P04-OU~1      -> LFN 'p04-output'  attr=10 clus=11 sz=0
+    LFN[1] 'p04-pressure'
+    SFN P04-PR~1      -> LFN 'p04-pressure'  attr=10 clus=12 sz=0
+    LFN[1] 'srv'
+    SFN SRV~1         -> LFN 'srv'  attr=10 clus=109 sz=0
+bin dir (SFN='BIN~1') at cluster 2, offset 115200
+  --- /bin ---
+    SFN .                    attr=10 clus=2 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellbox'
+    SFN CELLBO~1      -> LFN 'cellbox'  attr=20 clus=111 sz=3098128
+    LFN[1] 'vfs'
+    SFN VFS~1         -> LFN 'vfs'  attr=20 clus=6163 sz=613528
+    LFN[1] 'config'
+    SFN CONFIG~1      -> LFN 'config'  attr=20 clus=7362 sz=47464
+    LFN[1] 'input'
+    SFN INPUT~1       -> LFN 'input'  attr=20 clus=7455 sz=167328
+    LFN[1] 'platform'
+    SFN PLATFO~1      -> LFN 'platform'  attr=20 clus=7782 sz=38576
+    LFN[1] 'nvme'
+    SFN NVME~1        -> LFN 'nvme'  attr=20 clus=7858 sz=40280
+    LFN[1] 'e1000'
+    SFN E1000~1       -> LFN 'e1000'  attr=20 clus=7937 sz=29752
+    LFN[1] 'net'
+    SFN NET~1         -> LFN 'net'  attr=20 clus=7996 sz=491200
+    LFN[1] 'ls'
+    SFN LS~1          -> LFN 'ls'  attr=20 clus=8956 sz=30376
+    LFN[1] 'cat'
+    SFN CAT~1         -> LFN 'cat'  attr=20 clus=9016 sz=30416
+    LFN[1] 'echo'
+    SFN ECHO~1        -> LFN 'echo'  attr=20 clus=9076 sz=30376
+    LFN[1] 'ps'
+    SFN PS~1          -> LFN 'ps'  attr=20 clus=9136 sz=30280
+    LFN[1] 'free'
+    SFN FREE~1        -> LFN 'free'  attr=20 clus=9196 sz=33920
+    LFN[1] 'date'
+    SFN DATE~1        -> LFN 'date'  attr=20 clus=9263 sz=30248
+    LFN[1] 'env'
+    SFN ENV~1         -> LFN 'env'  attr=20 clus=9323 sz=26080
+    LFN[1] 'uname'
+    SFN UNAME~1       -> LFN 'uname'  attr=20 clus=9374 sz=26168
+    LFN[1] 'kill'
+    SFN KILL~1        -> LFN 'kill'  attr=20 clus=9426 sz=30440
+    LFN[1] 'shutdown'
+    SFN SHUTDO~1      -> LFN 'shutdown'  attr=20 clus=9486 sz=26080
+    LFN[1] 'hotswap'
+    SFN HOTSWA~1      -> LFN 'hotswap'  attr=20 clus=9537 sz=34840
+    LFN[1] 'curl'
+    SFN CURL~1        -> LFN 'curl'  attr=20 clus=9606 sz=34976
+    LFN[2] 'nal-driver'
+    LFN[1] 'phase04-termi'
+    SFN PHASE0~1      -> LFN 'phase04-terminal-driver'  attr=20 clus=9675 sz=618816
+    LFN[1] 'p03-filter'
+    SFN P03-FI~1      -> LFN 'p03-filter'  attr=20 clus=10884 sz=87456
+    LFN[1] 's2tw-probe'
+    SFN S2TW-P~1      -> LFN 's2tw-probe'  attr=20 clus=11055 sz=70576
+data dir (SFN='DATA~1') at cluster 6, offset 117248
+  --- /data ---
+    SFN .                    attr=10 clus=6 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'bin'
+    SFN BIN~1         -> LFN 'bin'  attr=10 clus=7 sz=0
+bin dir (SFN='BIN~1') at cluster 7, offset 117760
+  --- /data/bin ---
+    SFN .                    attr=10 clus=7 sz=0
+    SFN ..                   attr=10 clus=6 sz=0
+    LFN[1] 's2tw-probe'
+    SFN S2TW-P~1      -> LFN 's2tw-probe'  attr=20 clus=11193 sz=70576
+    LFN[1] 'top-load'
+    SFN TOP-LO~1      -> LFN 'top-load'  attr=20 clus=11331 sz=87448
+etc dir (SFN='ETC~1') at cluster 8, offset 118272
+  --- /etc ---
+    SFN .                    attr=10 clus=8 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellos'
+    SFN CELLOS~1      -> LFN 'cellos'  attr=10 clus=9 sz=0
+cellos dir (SFN='CELLOS~1') at cluster 9, offset 118784
+  --- /etc/cellos ---
+    SFN .                    attr=10 clus=9 sz=0
+    SFN ..                   attr=10 clus=8 sz=0
+    LFN[1] 'system.toml'
+    SFN SYSTEM~1.TOM  -> LFN 'system.toml'  attr=20 clus=11983 sz=128
+    LFN[2] ''
+    LFN[1] 'services.toml'
+    SFN SERVIC~1.TOM  -> LFN 'services.toml'  attr=20 clus=11984 sz=701
+    LFN[2] ''
+    LFN[1] 'autoload.toml'
+    SFN AUTOLO~1.TOM  -> LFN 'autoload.toml'  attr=20 clus=11986 sz=284
+p04-list dir (SFN='P04-LI~1') at cluster 10, offset 119296
+  --- /p04-list ---
+    SFN .                    attr=10 clus=10 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'alpha-entry'
+    SFN ALPHA-~1      -> LFN 'alpha-entry'  attr=20 clus=11699 sz=32
+    LFN[1] 'beta-entry'
+    SFN BETA-E~1      -> LFN 'beta-entry'  attr=20 clus=11700 sz=32
+p04-output dir (SFN='P04-OU~1') at cluster 11, offset 119808
+  --- /p04-output ---
+    SFN .                    attr=10 clus=11 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'raw.bin'
+    SFN RAW~1.BIN     -> LFN 'raw.bin'  attr=20 clus=11502 sz=1600
+    LFN[1] 'large.bin'
+    SFN LARGE~1.BIN   -> LFN 'large.bin'  attr=20 clus=11506 sz=98368
+    LFN[2] 'n'
+    LFN[1] 'vt-hostile.bi'
+    SFN VT-HOS~1.BIN  -> LFN 'vt-hostile.bin'  attr=20 clus=11702 sz=12628
+p04-pressure dir (SFN='P04-PR~1') at cluster 12, offset 120320
+  --- /p04-pressure ---
+    SFN .                    attr=10 clus=12 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '000-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-PR~1      -> LFN 'p04-pressure-000-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11727 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '001-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-PR~2      -> LFN 'p04-pressure-001-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11728 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '002-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-PR~3      -> LFN 'p04-pressure-002-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11729 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '003-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-PR~4      -> LFN 'p04-pressure-003-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11730 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '004-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-PR~5      -> LFN 'p04-pressure-004-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11731 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '005-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-PR~6      -> LFN 'p04-pressure-005-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11732 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '006-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-PR~7      -> LFN 'p04-pressure-006-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11733 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '007-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-PR~8      -> LFN 'p04-pressure-007-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11734 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '008-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-PR~9      -> LFN 'p04-pressure-008-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11735 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '009-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~10      -> LFN 'p04-pressure-009-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11736 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '010-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~11      -> LFN 'p04-pressure-010-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11737 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '011-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~12      -> LFN 'p04-pressure-011-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11738 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '012-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~13      -> LFN 'p04-pressure-012-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11739 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '013-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~14      -> LFN 'p04-pressure-013-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11740 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '014-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~15      -> LFN 'p04-pressure-014-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11741 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '015-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~16      -> LFN 'p04-pressure-015-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11742 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '016-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~17      -> LFN 'p04-pressure-016-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11743 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '017-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~18      -> LFN 'p04-pressure-017-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11744 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '018-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~19      -> LFN 'p04-pressure-018-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11745 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '019-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~20      -> LFN 'p04-pressure-019-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11746 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '020-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~21      -> LFN 'p04-pressure-020-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11747 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '021-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~22      -> LFN 'p04-pressure-021-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11748 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '022-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~23      -> LFN 'p04-pressure-022-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11749 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '023-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~24      -> LFN 'p04-pressure-023-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11750 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '024-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~25      -> LFN 'p04-pressure-024-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11751 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '025-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~26      -> LFN 'p04-pressure-025-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11752 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '026-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~27      -> LFN 'p04-pressure-026-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11753 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '027-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~28      -> LFN 'p04-pressure-027-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11754 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '028-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~29      -> LFN 'p04-pressure-028-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11755 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '029-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~30      -> LFN 'p04-pressure-029-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11756 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '030-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~31      -> LFN 'p04-pressure-030-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11757 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '031-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~32      -> LFN 'p04-pressure-031-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11758 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '032-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~33      -> LFN 'p04-pressure-032-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11759 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '033-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~34      -> LFN 'p04-pressure-033-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11760 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '034-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~35      -> LFN 'p04-pressure-034-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11761 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '035-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~36      -> LFN 'p04-pressure-035-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11762 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '036-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~37      -> LFN 'p04-pressure-036-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11763 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '037-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~38      -> LFN 'p04-pressure-037-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11764 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '038-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~39      -> LFN 'p04-pressure-038-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11765 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '039-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~40      -> LFN 'p04-pressure-039-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11766 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '040-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~41      -> LFN 'p04-pressure-040-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11767 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '041-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~42      -> LFN 'p04-pressure-041-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11768 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '042-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~43      -> LFN 'p04-pressure-042-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11769 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '043-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~44      -> LFN 'p04-pressure-043-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11770 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '044-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~45      -> LFN 'p04-pressure-044-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11771 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '045-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~46      -> LFN 'p04-pressure-045-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11772 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '046-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~47      -> LFN 'p04-pressure-046-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11773 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '047-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~48      -> LFN 'p04-pressure-047-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11774 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '048-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~49      -> LFN 'p04-pressure-048-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11775 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '049-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~50      -> LFN 'p04-pressure-049-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11776 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '050-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~51      -> LFN 'p04-pressure-050-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11777 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '051-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~52      -> LFN 'p04-pressure-051-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11778 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '052-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~53      -> LFN 'p04-pressure-052-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11779 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '053-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~54      -> LFN 'p04-pressure-053-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11780 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '054-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~55      -> LFN 'p04-pressure-054-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11781 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '055-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~56      -> LFN 'p04-pressure-055-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11782 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '056-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~57      -> LFN 'p04-pressure-056-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11783 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '057-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~58      -> LFN 'p04-pressure-057-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11784 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '058-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~59      -> LFN 'p04-pressure-058-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11785 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '059-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~60      -> LFN 'p04-pressure-059-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11786 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '060-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~61      -> LFN 'p04-pressure-060-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11787 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '061-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~62      -> LFN 'p04-pressure-061-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11788 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '062-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~63      -> LFN 'p04-pressure-062-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11789 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '063-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~64      -> LFN 'p04-pressure-063-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11790 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '064-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~65      -> LFN 'p04-pressure-064-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11791 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '065-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~66      -> LFN 'p04-pressure-065-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11792 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '066-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~67      -> LFN 'p04-pressure-066-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11793 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '067-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~68      -> LFN 'p04-pressure-067-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11794 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '068-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~69      -> LFN 'p04-pressure-068-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11795 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '069-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~70      -> LFN 'p04-pressure-069-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11796 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '070-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~71      -> LFN 'p04-pressure-070-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11797 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '071-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~72      -> LFN 'p04-pressure-071-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11798 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '072-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~73      -> LFN 'p04-pressure-072-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11799 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '073-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~74      -> LFN 'p04-pressure-073-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11800 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '074-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~75      -> LFN 'p04-pressure-074-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11801 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '075-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~76      -> LFN 'p04-pressure-075-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11802 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '076-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~77      -> LFN 'p04-pressure-076-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11803 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '077-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~78      -> LFN 'p04-pressure-077-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11804 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '078-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~79      -> LFN 'p04-pressure-078-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11805 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '079-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~80      -> LFN 'p04-pressure-079-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11806 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '080-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~81      -> LFN 'p04-pressure-080-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11807 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '081-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~82      -> LFN 'p04-pressure-081-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11808 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '082-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~83      -> LFN 'p04-pressure-082-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11809 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '083-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~84      -> LFN 'p04-pressure-083-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11810 sz=25
+    LFN[5] 'xxxxxxxx'
+    LFN[4] 'xxxxxxxxxxxxx'
+    LFN[3] 'xxxxxxxxxxxxx'
+    LFN[2] '084-xxxxxxxxx'
+    LFN[1] 'p04-pressure-'
+    SFN P04-P~85      -> LFN 'p04-pressure-084-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'  attr=20 clus=11811 sz=25
+srv dir (SFN='SRV~1') at cluster 109, offset 169984
+  --- /srv ---
+    SFN .                    attr=10 clus=109 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellos'
+    SFN CELLOS~1      -> LFN 'cellos'  attr=10 clus=110 sz=0
+cellos dir (SFN='CELLOS~1') at cluster 110, offset 170496
+  --- /srv/cellos ---
+    SFN .                    attr=10 clus=110 sz=0
+    SFN ..                   attr=10 clus=109 sz=0
+    LFN[1] 'p04-secret'
+    SFN P04-SE~1      -> LFN 'p04-secret'  attr=20 clus=11701 sz=32

@@ -1,0 +1,31 @@
+{
+  "status": "private fixture provenance; not acceptance",
+  "source_head": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+  "rustc": "rustc 1.97.0-nightly (f53b654a8 2026-04-30)\nbinary: rustc\ncommit-hash: f53b654a8882fd5fc036c4ca7a4ff41ce32497a6\ncommit-date: 2026-04-30\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0-nightly\nLLVM version: 22.1.4\n",
+  "cargo_lock_sha256": "02d35d446b90fe569fab50d721a634258d6bb733ea789c45ddc8534ee8ca555a",
+  "annex_sha256": "73bc7483ae6d05d6435c27f12a1c2890e3b550e63666b4339ed75f9b8371ae67",
+  "amendment_sha256": "ae6be1c39453287d19cf7027681f5e24c19b112cad387b3f0ff919c80aa676e0",
+  "kernel_features": "default+phase02-terminal-profile",
+  "service_vfs_features": "default",
+  "signed_cells_sha256": {
+    "app-init": "0db6c02c7ca98a20a29bf979d2c8b8270bd4e39ae726cfa146a67db76b74fb09",
+    "cellbox": "09fd8e3c5811d57d9aa9dd2cf973f67a36f048811f59696d15370ade31c1ab7d",
+    "service-vfs": "4311664f1d209c257f89c4beba1037dbbf6163983745bc4463c1cfdeaddb7f70",
+    "service-config": "680731f364ff85ba51b73b040aa516bb8430acf6dcb2256ccd31562f10feeead",
+    "service-input": "5dc8dfcb9d61cc27d662f19b893b58f2b9825d8dcb4a11d94b1a20dfe1f77553",
+    "platform": "54ef90d689d9f74ddeddcb8f10325cfd2aa707261bba671274f75f263469a213",
+    "ls": "78dc11fa7af23e222ae1ce5d2ed9cbc2132d56cd4f73e6f341a58582e6275ee6",
+    "cat": "30c657897cf9ab4bb0903f6f7f5c86ab411a18ae728b7137a3437b809ab8438d",
+    "echo": "170406e6de8256b8b9d208e907655e9027e9cd14c17d59e8828312cfa3da40db",
+    "ps": "03b810b9b401fccd27c843c504e7f484973e93a971517b6a24b61665bde91be1",
+    "phase02-session-parent": "1c3b0edd58e09c77a9985d04e8e71b1946f109ed59cc747663c08bac7d0e7043",
+    "phase02-session-child": "7231d5121edcbf062df2f92ecf14add8501f0f75c1fa48216020d94229f62b70"
+  },
+  "init_sha256": "0db6c02c7ca98a20a29bf979d2c8b8270bd4e39ae726cfa146a67db76b74fb09",
+  "kernel_fs_img_sha256": "c745ea42660fba507fc695349682ab3b3c64c176e78b0e49da15e1c275045241",
+  "kernel_sha256": "200177d469ebea18d019afc39cb60a4a584dcc81d36d61347fa16d4af032b4fc",
+  "iso_sha256": "f94e97ed3fb2fd3ae61ebdb183031de14ed01f8aa9cc84438b7e5d4a9f957d94",
+  "trusted_key_identity_sha256": "de07fc9a564aaf5beb56cac638f18c6c0639ea8c2fbaed1129566c2edc8f39cf",
+  "policy": "no /POLICY.BIN in the image; the kernel logs it absent and applies its development-permissive posture (dev-policy-key default)",
+  "signature_verification": "cellos-sign re-verifies each ELF after signing; kernel verifies at spawn (signing-required)"
+}

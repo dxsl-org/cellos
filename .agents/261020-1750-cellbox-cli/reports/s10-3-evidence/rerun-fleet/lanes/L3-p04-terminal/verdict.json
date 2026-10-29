@@ -1,0 +1,2064 @@
+{
+  "checks": {
+    "driver-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:shell-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:builtin-echo": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:builtin-pwd": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:builtin-free": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:builtin-date-changes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:builtin-ps-records": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:headless-no-ui-tasks": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:typed-pipeline": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:typed-pipeline-empty": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:file-create-ls": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:file-cat-roundtrip": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-echo": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-ls": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-cat": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-stdout-not-stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-ls-stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-free": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:stock-full-ring-drain-exact": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:stock-downstream-close-recovers": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:stock-full-ring-cancel": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:stock-fragmented-ring-drain-exact": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:stock-full-ring-host-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:negative-missing-stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:negative-missing-stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:negative-missing-both": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:negative-invalid-stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:negative-grants-host-isolation": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-filter-single": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-filter-pipeline": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:external-filter-exact-bytes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:soft-reset-after-tui-abandon": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:soft-reset-after-tui-pipeline": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:soft-reset-none-builtin-echo": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:soft-reset-none-external-echo": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:soft-reset-none-filter": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:exit-status": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:exit-status-external-7": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:exit-status-unknown-program": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-help": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-unsupported-before-reads": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-stdin-requires-a": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-stdin-match": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-tmp-tree": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-typed-roundtrip": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-escape": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-fx-big-exact": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-fx-wide": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-fx-ignore": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-fx-hidden": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-fx-binary": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-fx-enc": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-fx-denied-root": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-fx-denied-child": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:rg-fx-take-no-leak": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:edit-refusals": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:edit-save-reopen-exact": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:edit-conflict-keeps-buffer": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:edit-saveas-overwrite-race": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:edit-fat-save-refused": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:edit-paste-one-group": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:edit-dirty-exit-no-default": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:edit-resize": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:edit-quit-restores": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:edit-find-select-redo": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-recovers": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-output-stops": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-status-130": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-shell-alive": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-external-pipeline": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ctrl-c-idle-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:endless-local-sink-streams-live": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:endless-local-sink-ctrl-c-130": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:endless-local-sink-shell-alive": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:endless-local-sink-no-oom": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-denied-0": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-denied-1": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-denied-2": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-denied-3": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-denied-4": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-denied-5": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-denied-6": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-denied-7": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-denied-8": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-no-copy": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-never-shown": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ramdisk-read-still-works": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-read-silent": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-read-length": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-read-history": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:secret-read-never-drained": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:hostile-cat-relayed": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:hostile-next-command-exact": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:hostile-history-typed-only": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:paste-clean-control": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:paste-escape-rejected-sdk": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:paste-escape-rejected-owner": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:paste-escape-nothing-executed": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:net-denied-resolve": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:net-denied-tcp-connect": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:net-denied-udp-create": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:net-denied-udp-bind": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:net-denied-tcp-listen": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:net-denied-multicast-join": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:net-denied-l2-send": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:net-probe-done": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:net-curl-admitted": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:config-export-granted": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:config-export-system-denied": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:config-export-namespace-denied": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:config-denial-on-stderr-only": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:config-probe-set-denied": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:config-probe-delete-denied": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:sandbox-denied-getprocs": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:sandbox-denied-getprocs2": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:sandbox-denied-telemetry": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:sandbox-denied-meminfo": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:sandbox-denied-vfs-write": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:sandbox-no-file": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:control-allowed-getprocs": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:control-allowed-getprocs2": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:control-allowed-telemetry": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:control-allowed-meminfo": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:control-allowed-vfs-write": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:control-file-created": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:resize-accepted": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:frontend-controller-session": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:frontend-rm-interactive": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:frontend-top-quit": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:frontend-release-detached": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:frontend-reattach-redraw": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:frontend-reattach-cwd-preserved": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:frontend-reattach-history-preserved": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:frontend-old-attachment-stale": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:frontend-resize-after-reattach": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-echo-exact": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-argv-literal": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-ls-fixture": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-cat-stdin-bytes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-grep-status": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-records-jsonl": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-records-text": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-rg-records": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-top-batch": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-tui-refused": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-state-refused": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-launch-refused": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-stage-refused": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-unknown-127": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-mutate-effect": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-denials-same-as-shell": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-stderr-separate": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-missing-stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-consumer-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-cancel": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-frontend-argv-refused": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:shell-explicit-prefix": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:oneshot-no-tui-bytes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-pipe-batch": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-subst-refused": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-tui-frame": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-tui-refresh": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-tui-drill": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-tui-keys": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-tui-no-lifecycle": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-tui-resize": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-tui-quit-restores": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-tui-two-sessions": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-tui-idle-cost": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-tui-ctrl-c-130": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-launch": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-over-64-records": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-over-64-text": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-over-64-tui": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-cpu-idle": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-cpu-busy": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-cpu-two-busy": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-cpu-sum-bounded": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-drill-live": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-views-agree": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-no-lifecycle": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-exit-gone-tasks": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-exit-retains-cpu": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-quota-once": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-relaunch": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-id-reused": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-gone-cell-empty": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-tui-gone-notice": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:top-load-teardown": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:control-telemetry-truncated": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ps-reflects-new-shell": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-independent-output": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-independent-state": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-independent-stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-independent-resize": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-independent-exit": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:two-hosts-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:child-exit-then-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:relaunch-after-exit": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:repeat-open-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:repeat-no-leak": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:cancel-child": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:session-a-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-evidence-framing": {
+      "pass": true,
+      "detail": []
+    },
+    "host-exact:echo.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:echo.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:ls-error.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:ls-error.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:cat.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:cat.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:large-cat.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:large-cat.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:pressure-ls.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:pressure-ls.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-a.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-a.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-b.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-b.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-a-error.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-a-error.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-b-error.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:host-b-error.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:tui-abandon.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:tui-abandon.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:tui-pipeline.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:tui-pipeline.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:plain-filter.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:plain-filter.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:hostile-cat.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:hostile-cat.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:oneshot-echo.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:oneshot-echo.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:oneshot-stderr.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:oneshot-stderr.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-stdout.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-stdout.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-stderr.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-stderr.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-both.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-missing-both.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-invalid-stdout.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:negative-invalid-stdout.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:ls.stdout": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-exact:ls.stderr": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-free-accounting": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-free-stderr-empty": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-soft-reset-once:tui-abandon": {
+      "pass": true,
+      "detail": ""
+    },
+    "host-soft-reset-once:tui-pipeline": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:echo": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:status-probe": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:ls-alpha": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:ls-beta": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:partial-write-ls": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:host-a": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:host-b": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:ls-error": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:host-a-error": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:host-b-error": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:legacy-s3-ls-error": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-command-uart:after-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:0": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:1": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:2": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:3": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:4": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:5": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:6": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:7": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:8": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:9": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:10": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:11": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:12": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:13": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:14": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:15": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:16": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:17": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:18": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:19": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:20": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:21": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:22": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:23": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:24": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:25": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:26": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:27": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:28": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:29": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:30": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:31": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:32": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:33": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:34": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:35": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:36": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:37": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:38": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:39": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:40": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:41": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:42": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:43": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:44": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:45": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:46": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:47": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:48": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:49": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:50": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:51": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:52": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:53": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:54": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:55": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:56": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:57": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:58": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:59": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:60": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:61": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:62": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:63": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:64": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:65": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:66": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:67": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:68": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:69": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:70": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:71": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:72": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:73": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:74": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:75": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:76": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:77": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:78": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:79": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:80": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:81": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:82": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:83": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:84": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:85": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:86": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:87": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:88": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:89": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:90": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:91": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:92": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:93": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:94": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:95": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:96": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:97": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:98": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:99": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:100": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:101": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:102": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:103": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:104": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:105": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:106": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:107": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:108": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:109": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:110": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:111": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:112": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:113": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:114": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:115": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:116": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:117": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:118": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:119": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:120": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:121": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:122": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:123": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:124": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:125": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:126": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:127": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:128": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:129": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:130": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:131": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:132": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:133": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:134": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:135": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:136": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:137": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:138": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:139": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:140": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:141": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:142": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:143": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:144": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:145": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:146": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:147": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:148": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:149": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:150": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:151": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:152": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:153": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:154": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:155": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:156": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:157": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:158": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:159": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:160": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:161": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:162": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:163": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:164": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:165": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:166": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:167": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:168": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:169": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:170": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:171": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:172": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:173": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:174": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:175": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:176": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:177": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:178": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:179": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:180": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:181": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:182": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:183": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:184": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:185": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:186": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:187": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:188": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:189": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:190": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:191": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-binary-chunk-uart:192": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-negative-payload-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "oneshot-not-on-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "oneshot-consumer-close-bounded": {
+      "pass": true,
+      "detail": [
+        "60"
+      ]
+    },
+    "no-tui-bytes-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "invalid-ref-admission-not-helper": {
+      "pass": true,
+      "detail": ""
+    },
+    "stock-negative-published-nonzero:negative-missing-stdout": {
+      "pass": true,
+      "detail": [
+        "1"
+      ]
+    },
+    "stock-negative-published-nonzero:negative-missing-stderr": {
+      "pass": true,
+      "detail": [
+        "1"
+      ]
+    },
+    "stock-negative-published-nonzero:negative-missing-both": {
+      "pass": true,
+      "detail": [
+        "1"
+      ]
+    },
+    "stock-stop-before-write-deadline:stock-close": {
+      "pass": true,
+      "detail": [
+        "70"
+      ]
+    },
+    "stock-stop-before-write-deadline:stock-cancel": {
+      "pass": true,
+      "detail": [
+        "51"
+      ]
+    },
+    "endless-local-sink-ctrl-c-prompt-bounded": {
+      "pass": true,
+      "detail": [
+        "552"
+      ]
+    },
+    "rg-fixture-fat32-mounted": {
+      "pass": true,
+      "detail": ""
+    },
+    "rg-fixture-srv-cellosfs-mounted": {
+      "pass": true,
+      "detail": ""
+    },
+    "rg-fx-big-elapsed-recorded": {
+      "pass": true,
+      "detail": [
+        [
+          "312224",
+          "7340032"
+        ]
+      ]
+    },
+    "no-oom-heap-exhausted-uart": {
+      "pass": true,
+      "detail": []
+    },
+    "secret-token-not-on-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "read-secret-token-not-on-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "hostile-output-not-on-uart": {
+      "pass": true,
+      "detail": []
+    },
+    "legacy-no-context-free-uart-once": {
+      "pass": true,
+      "detail": [
+        "USER: Mem (KiB):    237576      83172      154404"
+      ]
+    },
+    "legacy-no-context-free-header-once": {
+      "pass": true,
+      "detail": ""
+    },
+    "unchanged-vfs-log-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "unchanged-input-log-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "net-curl-frame": {
+      "pass": true,
+      "detail": [
+        [
+          1851
+        ],
+        [
+          1862
+        ]
+      ]
+    },
+    "net-curl-network-failure-uart": {
+      "pass": true,
+      "detail": [
+        "[ INFO] [wx] 'curl': 5/263 cell pages lowered to read-only/execute-only",
+        "USER: curl: empty response"
+      ]
+    },
+    "net-curl-not-refused-uart": {
+      "pass": true,
+      "detail": []
+    },
+    "net-no-response-uart": {
+      "pass": true,
+      "detail": []
+    },
+    "net-probe-not-on-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "config-probe-not-on-uart": {
+      "pass": true,
+      "detail": []
+    },
+    "s2tw-probe-not-on-uart": {
+      "pass": true,
+      "detail": []
+    },
+    "qemu-restricted-slirp-no-forward": {
+      "pass": true,
+      "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase04-9poutlbm/serial.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase04-9poutlbm/phase04.iso -boot d -no-reboot -netdev user,id=net0,restrict=on -device e1000,netdev=net0 -drive file=/tmp/cellbox-phase04-9poutlbm/rg-fixture.img,if=none,format=raw,id=rgfx -device nvme,drive=rgfx,serial=cellosrg"
+    },
+    "no-unexpected-markers": {
+      "pass": true,
+      "detail": []
+    },
+    "no-FAIL-markers": {
+      "pass": true,
+      "detail": []
+    },
+    "driver-final-verdict": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-unexpected-launch-deny": {
+      "pass": true,
+      "detail": []
+    },
+    "unknown-program-denied": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-panic": {
+      "pass": true,
+      "detail": []
+    },
+    "frontend-detach-observed-uart": {
+      "pass": true,
+      "detail": [
+        [
+          2441
+        ],
+        [
+          2443
+        ]
+      ]
+    },
+    "frontend-reattach-once-uart": {
+      "pass": true,
+      "detail": [
+        2443
+      ]
+    },
+    "no-launch-context-refused-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-shell-prompt-on-uart": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-key-material-in-log": {
+      "pass": true,
+      "detail": ""
+    }
+  },
+  "scope": "private S3-output stock runtime gates; GUI and independent Phase02/03 regressions remain separate",
+  "coverage_notes": "AC-5 requires actual stock echo nonzero exits with missing stdout, stderr or both; invalid stdout refs must be rejected by canonical admission before publication, recorded distinctly from helper execution. All negative cases require empty owned streams, no unrelated host bytes, and independent no-UART-payload checks.\nAC-4 fragmented stock ls writes use 60-byte names and separate LF across full 4096-byte rings; exact retained bytes are checked, but internal write return counts are not externally exposed and are not independently observed.\ndate/env/uname/kill/shutdown/hotswap are signed and packaged but NOT launched: no broadened target admission, authority, shutdown or service mutation.\nS2-N: denial of Resolve/TcpConnect/UdpCreate/UdpBind/TcpListen/MulticastJoin/L2Send is observed as Err(0xFC) by a no-rights Cell; the unchanged net socket count is a host-test claim (service-net), not observed here. curl admission is observed as a network failure (no response) on restricted SLIRP; no data transfer is claimed.\nS2-T/S2-W: a telemetry refusal is observed as the syscall ABI's single generic error return (PermissionDenied is not distinguishable on the wire), so the same binary on its /bin fixture row must read rows for each call; the VFS refusal is Err(ERR_DENIED) to WriteAt through the delegated cwd handle. The kernel CapSet values themselves are host-test claims, not observed here.\nS5-3 option C: the shell's Lost(4)/FrontendAttached observations are its own fixed UART log lines; frontend holder death (resume revoked, Lost(4) then EOF) is not exercised because the holder is the driver itself; it is an input host-test claim here.\nS5-4a: the driver is the frontend, so no terminal emulator is in this loop: hostile output is judged as the exact relayed bytes plus the absence of any injected shell input (the next command's exact echo, history = typed lines only); screen effects are the GUI runner's claim. read -s: the token is typed 1.5 s after the command line, after the shell took its echo-off lease (the lease itself is not externally observable here). The physical-UART refusal of read -s is judged by the Phase02 serial runner.\nS6-5: TCG with one vCPU; every CPU threshold (D65-6) and every compared value is recorded as P04 INFO top-load, no CPU-speed or hardware claim follows. The same-snapshot numeric TUI = batch = records proof stays the constructed host pair (D64-14); here the views are compared on membership. top's own truncation rendering is host-tested; the runtime claim is the provider's explicit truncation (s2tw-probe trunc). Allocation failures, watchdog kills and faults during the load scenarios are judged by the log-wide no-OOM/no-panic checks and by both fixtures surviving to `bye` with status 0.\n",
+  "candidate_import": {
+    "mode": "import",
+    "lane": "phase04-terminal",
+    "profile": "headless",
+    "candidate_json": "/tmp/cellbox-s10-3-1EGP/cand/candidate.json",
+    "candidate_json_sha256": "a9f384a6a3c3ff8fbec8150ad0cf780aed229f1152434d2d84a047020865c07c",
+    "kernel_fixture_features": "default+phase02-terminal-profile,phase03-filter-profile,phase04-driver-profile",
+    "cellbox_features": "default",
+    "payload_match_sha256": "45eb7747c3157bbf482f9f90837521621d9ae3e7dc70c07790b77edf65f1dee9",
+    "payload_match_all_equal": true,
+    "shared": [
+      "/bin/cellbox",
+      "/bin/vfs",
+      "/bin/config",
+      "/bin/input",
+      "/bin/platform",
+      "/bin/nvme",
+      "/bin/e1000",
+      "/bin/net",
+      "/bin/ls",
+      "/bin/cat",
+      "/bin/echo",
+      "/bin/ps",
+      "/bin/kill",
+      "/bin/shutdown",
+      "init"
+    ],
+    "lane_only": [
+      "/data/bin/s2tw-probe",
+      "/data/bin/top-load",
+      "/bin/free",
+      "/bin/date",
+      "/bin/env",
+      "/bin/uname",
+      "/bin/hotswap",
+      "/bin/curl",
+      "/bin/phase04-terminal-driver",
+      "/bin/p03-filter",
+      "/bin/s2tw-probe"
+    ],
+    "counts_for": "behaviour of the payload-matched cells only; never kernel-level claims (S10-3.3)"
+  }
+}

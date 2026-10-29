@@ -1,0 +1,1709 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling typenum v1.20.1
+   Compiling rand_core v0.10.1
+   Compiling serde_core v1.0.229
+   Compiling thiserror v2.0.19
+   Compiling libm v0.2.16
+   Compiling serde v1.0.229
+   Compiling cmov v0.5.4
+   Compiling cfg-if v1.0.4
+   Compiling cell-build v0.2.0 (/home/dmin/cellos/libs/cell-build)
+   Compiling version_check v0.9.5
+   Compiling byteorder v1.5.0
+   Compiling stable_deref_trait v1.2.1
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling scopeguard v1.2.0
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling heapless v0.8.0
+   Compiling heck v0.5.0
+   Compiling cpufeatures v0.3.1
+   Compiling spin v0.9.9
+   Compiling tinyvec v1.13.3
+   Compiling foldhash v0.1.5
+   Compiling semver v1.0.28
+   Compiling rustversion v1.0.23
+   Compiling embedded-io v0.7.1
+   Compiling lock_api v0.4.14
+   Compiling equivalent v1.0.3
+   Compiling foldhash v0.2.0
+   Compiling allocator-api2 v0.2.21
+   Compiling unicode-normalization v0.1.25
+   Compiling ctutils v0.4.5
+   Compiling hash32 v0.3.1
+   Compiling rustc_version v0.4.1
+   Compiling hashbrown v0.15.5
+   Compiling base64ct v1.8.3
+   Compiling bitflags v2.13.1
+   Compiling ident_case v1.0.1
+   Compiling strsim v0.11.1
+   Compiling signature v3.0.0
+   Compiling log v0.4.33
+   Compiling memchr v2.8.3
+   Compiling subtle v2.6.1
+   Compiling cpufeatures v0.2.17
+   Compiling either v1.19.0
+   Compiling generic-array v0.14.7
+   Compiling heapless v0.9.3
+   Compiling spinning_top v0.2.5
+   Compiling unicode-segmentation v1.13.3
+   Compiling itoa v1.0.18
+   Compiling curve25519-dalek v5.0.0
+   Compiling static_assertions v1.1.0
+   Compiling indoc v2.0.8
+   Compiling linked_list_allocator v0.10.6
+   Compiling ryu v1.0.23
+   Compiling unicode-width v0.2.2
+   Compiling cpubits v0.1.1
+   Compiling itertools v0.14.0
+   Compiling winnow v1.0.4
+   Compiling virtue v0.0.17
+   Compiling sunset v0.6.0 (/home/dmin/cellos/third_party/sunset)
+   Compiling ed25519 v3.0.0
+   Compiling regex-syntax v0.8.11
+   Compiling line-clipping v0.3.8
+   Compiling driver-disk v0.1.0 (/home/dmin/cellos/cells/drivers/disk)
+   Compiling winnow v0.7.15
+   Compiling ascii v1.1.0
+   Compiling hashbrown v0.16.1
+   Compiling hashbrown v0.17.1
+   Compiling service-vfs v0.1.0 (/home/dmin/cellos/cells/services/vfs)
+   Compiling pem-rfc7468 v1.0.0
+   Compiling app-cellbox v0.1.0 (/home/dmin/cellos/cells/tools/cellbox)
+   Compiling driver-nvme v0.1.0 (/home/dmin/cellos/cells/drivers/nvme)
+   Compiling app-init v0.1.0 (/home/dmin/cellos/cells/tools/init)
+   Compiling fatfs v0.4.0 (https://github.com/rafalh/rust-fatfs#c4b88477)
+   Compiling ocel-service-proto v0.1.0 (/home/dmin/cellos/libs/ocel-service-proto)
+   Compiling cellos-fs v0.1.0 (/home/dmin/cellos/libs/cellos-fs)
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling sunset-sshwire-derive v0.3.0 (/home/dmin/cellos/third_party/sunset/sshwire-derive)
+   Compiling aho-corasick v1.1.4
+   Compiling bstr v1.13.1
+   Compiling lru v0.16.4
+   Compiling crypto-common v0.1.7
+   Compiling inout v0.1.4
+   Compiling block-buffer v0.10.4
+   Compiling syn v2.0.119
+   Compiling syn v3.0.3
+   Compiling castaway v0.2.4
+   Compiling digest v0.10.7
+   Compiling serde_spanned v1.1.2
+   Compiling toml_datetime v0.7.5+spec-1.1.0
+   Compiling compact_str v0.9.1
+   Compiling sha2 v0.10.9
+   Compiling core_maths v0.1.1
+   Compiling ab_glyph_rasterizer v0.1.10
+   Compiling ttf-parser v0.25.1
+   Compiling toml v0.9.12+spec-1.1.0
+   Compiling zeroize_derive v1.5.0
+   Compiling postcard-derive v0.2.2
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling strum_macros v0.27.2
+   Compiling snafu-derive v0.9.2
+   Compiling unicode-truncate v2.0.1
+   Compiling zeroize v1.9.0
+   Compiling owned_ttf_parser v0.25.1
+   Compiling ab_glyph v0.2.32
+   Compiling hybrid-array v0.4.15
+   Compiling cipher v0.4.4
+   Compiling regex-automata v0.4.16
+   Compiling darling_core v0.24.1
+   Compiling chacha20 v0.9.1
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling inout v0.2.5
+   Compiling snafu v0.9.2
+   Compiling digest v0.11.3
+   Compiling cipher v0.5.2
+   Compiling universal-hash v0.6.1
+   Compiling poly1305 v0.9.1
+   Compiling cobs v0.3.0
+   Compiling kasuari v0.4.13
+   Compiling strum v0.27.2
+   Compiling ratatui-core v0.1.0
+   Compiling ssh-encoding v0.3.0
+   Compiling sha2 v0.11.1
+   Compiling hmac v0.13.0
+   Compiling aes v0.9.3
+   Compiling ctr v0.10.1
+   Compiling postcard v1.1.3
+   Compiling ocel-pdf-proto v0.1.0 (/home/dmin/cellos/libs/ocel-pdf-proto)
+   Compiling dom-arena v0.1.0 (/home/dmin/cellos/libs/dom-arena)
+   Compiling ssh-cipher v0.3.0
+   Compiling ssh-key v0.7.0-rc.11
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling cellos-boot-config v0.1.0 (/home/dmin/cellos/libs/boot-config)
+   Compiling vigrep v0.1.0 (/home/dmin/cellos/libs/vigrep)
+   Compiling text-engine v0.1.0 (/home/dmin/cellos/libs/text-engine)
+   Compiling darling_macro v0.24.1
+   Compiling darling v0.24.1
+   Compiling instability v0.3.14
+   Compiling x25519-dalek v3.0.0
+   Compiling ed25519-dalek v3.0.0
+   Compiling terminal-sdk v0.1.0 (/home/dmin/cellos/libs/terminal)
+   Compiling ratatui-widgets v0.3.0
+warning: unused imports: `GLOBAL_VFS` and `vfs_fast_handler`
+  --> cells/services/vfs/src/main.rs:49:20
+   |
+49 | use fast_handler::{vfs_fast_handler, GLOBAL_VFS};
+   |                    ^^^^^^^^^^^^^^^^  ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `manager::VfsManager`
+  --> cells/services/vfs/src/main.rs:50:5
+   |
+50 | use manager::VfsManager;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `ostd::io::println`
+  --> cells/services/vfs/src/main.rs:51:5
+   |
+51 | use ostd::io::println;
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: static `GLOBAL_VFS` is never used
+ --> cells/services/vfs/src/fast_handler.rs:7:12
+  |
+7 | pub static GLOBAL_VFS: Mutex<Option<VfsManager>> = Mutex::new(None);
+  |            ^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `vfs_fast_handler` is never used
+  --> cells/services/vfs/src/fast_handler.rs:25:15
+   |
+25 | pub unsafe fn vfs_fast_handler(
+   |               ^^^^^^^^^^^^^^^^
+
+warning: method `take_owner_watch_cancellations` is never used
+  --> cells/services/vfs/src/manager/owned_state.rs:57:12
+   |
+ 4 | impl VfsManager {
+   | --------------- method in this implementation
+...
+57 |     pub fn take_owner_watch_cancellations(&mut self) -> alloc::vec::Vec<u64> {
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `reconcile` is never used
+   --> cells/services/vfs/src/prepared_cwd.rs:577:8
+    |
+577 | pub fn reconcile(vfs: &mut VfsManager) { reconcile_matching(vfs, None) }
+    |        ^^^^^^^^^
+
+   Compiling vissh v0.1.0 (/home/dmin/cellos/libs/vissh)
+warning: `service-vfs` (bin "service-vfs" test) generated 7 warnings (run `cargo fix --bin "service-vfs" -p service-vfs --tests` to apply 3 suggestions)
+   Compiling vitui v0.1.0 (/home/dmin/cellos/libs/vitui)
+warning: unused import: `shell::ViShell`
+   --> cells/tools/cellbox/src/main.rs:122:5
+    |
+122 | use shell::ViShell;
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `paste` is never read
+   --> cells/tools/cellbox/src/executor.rs:683:17
+    |
+683 |                 paste = false;
+    |                 ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+691 |                 paste = false;
+    |                 ------------- `paste` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `cmd_cd` is never used
+  --> cells/tools/cellbox/src/cmd_cwd.rs:31:8
+   |
+31 | pub fn cmd_cd(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+   |        ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `read_path_bytes_exact` is never used
+   --> cells/tools/cellbox/src/cmd_fs.rs:834:15
+    |
+834 | pub(crate) fn read_path_bytes_exact(resolved: &str) -> Result<Vec<u8>, &'static str> {
+    |               ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `cmd_clear` is never used
+  --> cells/tools/cellbox/src/commands.rs:35:8
+   |
+35 | pub fn cmd_clear() -> ViResult<()> {
+   |        ^^^^^^^^^
+
+warning: function `cmd_exec` is never used
+  --> cells/tools/cellbox/src/commands.rs:41:8
+   |
+41 | pub fn cmd_exec(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+   |        ^^^^^^^^
+
+warning: function `exec_load_and_spawn` is never used
+  --> cells/tools/cellbox/src/commands.rs:82:4
+   |
+82 | fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_argv: &[String]) -> ViResult<()> {
+   |    ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `FrontendLaunch` is never constructed
+  --> cells/tools/cellbox/src/context_session.rs:56:12
+   |
+56 | pub struct FrontendLaunch {
+   |            ^^^^^^^^^^^^^^
+
+warning: function `open` is never used
+  --> cells/tools/cellbox/src/context_session.rs:67:8
+   |
+67 | pub fn open(context: &ChildContext) -> Result<FrontendLaunch, Status> {
+   |        ^^^^
+
+warning: function `ensure_default_cwd` is never used
+   --> cells/tools/cellbox/src/context_session.rs:105:8
+    |
+105 | pub fn ensure_default_cwd() -> Result<(), Status> {
+    |        ^^^^^^^^^^^^^^^^^^
+
+warning: function `start_serial_session` is never used
+   --> cells/tools/cellbox/src/executor.rs:108:8
+    |
+108 | pub fn start_serial_session() -> Result<(), Status> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `start_frontend_session` is never used
+   --> cells/tools/cellbox/src/executor.rs:118:8
+    |
+118 | pub fn start_frontend_session(session: TerminalSession, output: FrontendOutput, merged: bool) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `close_session` is never used
+   --> cells/tools/cellbox/src/executor.rs:125:8
+    |
+125 | pub fn close_session() -> Result<(), Status> {
+    |        ^^^^^^^^^^^^^
+
+warning: fields `drawn` and `failed` are never read
+   --> cells/tools/cellbox/src/executor.rs:251:5
+    |
+250 | struct OwnerPrompt {
+    |        ----------- fields in this struct
+251 |     drawn: bool,
+    |     ^^^^^
+252 |     failed: bool,
+    |     ^^^^^^
+
+warning: methods `poll`, `give_up`, `relay`, and `restored` are never used
+   --> cells/tools/cellbox/src/executor.rs:282:8
+    |
+277 | impl OwnerPrompt {
+    | ---------------- methods in this implementation
+...
+282 |     fn poll(&mut self, session: &mut TerminalSession) {
+    |        ^^^^
+...
+306 |     fn give_up(&mut self, status: Status) {
+    |        ^^^^^^^
+...
+312 |     fn relay(&mut self, session: &mut TerminalSession, screen: &mut RelayScreen) -> Result<bool, Status> {
+    |        ^^^^^
+...
+315 |     fn restored(&mut self) {
+    |        ^^^^^^^^
+
+warning: function `restore_screen` is never used
+   --> cells/tools/cellbox/src/executor.rs:423:4
+    |
+423 | fn restore_screen() {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `restore_screen_locked` is never used
+   --> cells/tools/cellbox/src/executor.rs:431:4
+    |
+431 | fn restore_screen_locked(session: &mut TerminalSession) {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `terminal_read_line` is never used
+   --> cells/tools/cellbox/src/executor.rs:617:8
+    |
+617 | pub fn terminal_read_line(history: &mut Vec<String>) -> Result<Option<String>, Status> {
+    |        ^^^^^^^^^^^^^^^^^^
+
+warning: enum `SecretEnd` is never used
+   --> cells/tools/cellbox/src/executor.rs:718:6
+    |
+718 | enum SecretEnd {
+    |      ^^^^^^^^^
+
+warning: function `read_secret_events` is never used
+   --> cells/tools/cellbox/src/executor.rs:724:4
+    |
+724 | fn read_secret_events(session: &mut TerminalSession, line: &mut Wiped) -> Result<SecretEnd, Status> {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `terminal_read_secret` is never used
+   --> cells/tools/cellbox/src/executor.rs:759:8
+    |
+759 | pub fn terminal_read_secret() -> Result<Option<String>, Status> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: method `abort` is never used
+   --> cells/tools/cellbox/src/executor.rs:997:8
+    |
+995 | impl SubstFailed {
+    | ---------------- method in this implementation
+996 |     /// Record the status as `$?` and return it.
+997 |     fn abort(self) -> i32 {
+    |        ^^^^^
+
+warning: function `execute` is never used
+    --> cells/tools/cellbox/src/executor.rs:1225:8
+     |
+1225 | pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
+     |        ^^^^^^^
+
+warning: function `reject_line` is never used
+    --> cells/tools/cellbox/src/executor.rs:1351:4
+     |
+1351 | fn reject_line(reason: &str) -> i32 {
+     |    ^^^^^^^^^^^
+
+warning: function `explicit_argv` is never used
+    --> cells/tools/cellbox/src/executor.rs:1397:4
+     |
+1397 | fn explicit_argv(argv: Vec<String>) -> Result<Vec<String>, i32> {
+     |    ^^^^^^^^^^^^^
+
+warning: function `explicit_stage` is never used
+    --> cells/tools/cellbox/src/executor.rs:1410:4
+     |
+1410 | fn explicit_stage(stage: StageIn) -> Result<StageIn, i32> {
+     |    ^^^^^^^^^^^^^^
+
+warning: function `exec_simple` is never used
+    --> cells/tools/cellbox/src/executor.rs:1419:4
+     |
+1419 | fn exec_simple(cmd: &Cmd, jobs: &mut Jobs) -> i32 {
+     |    ^^^^^^^^^^^
+
+warning: function `exec_pipeline` is never used
+    --> cells/tools/cellbox/src/executor.rs:1461:4
+     |
+1461 | fn exec_pipeline(cmds: &[Cmd], jobs: &mut Jobs) -> i32 {
+     |    ^^^^^^^^^^^^^
+
+warning: function `run_byte_chain` is never used
+    --> cells/tools/cellbox/src/executor.rs:1492:4
+     |
+1492 | fn run_byte_chain(cmds: &[Cmd], mut stdin_data: Vec<u8>, jobs: &mut Jobs, statuses: &mut Vec<i32>) -> i32 {
+     |    ^^^^^^^^^^^^^^
+
+warning: function `capture_cmd` is never used
+    --> cells/tools/cellbox/src/executor.rs:1516:4
+     |
+1516 | fn capture_cmd(cmd: &Cmd, stdin: &[u8], jobs: &mut Jobs) -> (Vec<u8>, i32) {
+     |    ^^^^^^^^^^^
+
+warning: function `fail_member` is never used
+    --> cells/tools/cellbox/src/executor.rs:1523:4
+     |
+1523 | fn fail_member(members: &mut [(String, i32)], stage: usize, status: i32) -> i32 {
+     |    ^^^^^^^^^^^
+
+warning: enum `LocalOutcome` is never used
+    --> cells/tools/cellbox/src/executor.rs:1531:6
+     |
+1531 | enum LocalOutcome {
+     |      ^^^^^^^^^^^^
+
+warning: struct `OneShotSink` is never constructed
+    --> cells/tools/cellbox/src/executor.rs:1580:8
+     |
+1580 | struct OneShotSink;
+     |        ^^^^^^^^^^^
+
+warning: struct `TerminalSink` is never constructed
+    --> cells/tools/cellbox/src/executor.rs:1597:8
+     |
+1597 | struct TerminalSink {
+     |        ^^^^^^^^^^^^
+
+warning: function `exec_typed` is never used
+    --> cells/tools/cellbox/src/executor.rs:1643:4
+     |
+1643 | fn exec_typed(plan: &TypedPlan, cmds: &[Cmd], stages: &[StageIn], jobs: &mut Jobs) -> i32 {
+     |    ^^^^^^^^^^
+
+warning: function `exec_bytes` is never used
+    --> cells/tools/cellbox/src/executor.rs:1654:4
+     |
+1654 | fn exec_bytes(plan: &BytePlan, cmds: &[Cmd], stages: &[StageIn], jobs: &mut Jobs) -> i32 {
+     |    ^^^^^^^^^^
+
+warning: function `run_bytes` is never used
+    --> cells/tools/cellbox/src/executor.rs:1667:4
+     |
+1667 | fn run_bytes(
+     |    ^^^^^^^^^
+
+warning: function `byte_head` is never used
+    --> cells/tools/cellbox/src/executor.rs:1716:4
+     |
+1716 | fn byte_head(plan: &TypedPlan, cmds: &[Cmd], jobs: &mut Jobs) -> Result<(Vec<u8>, usize), i32> {
+     |    ^^^^^^^^^
+
+warning: function `run_typed` is never used
+    --> cells/tools/cellbox/src/executor.rs:1735:4
+     |
+1735 | fn run_typed(
+     |    ^^^^^^^^^
+
+warning: struct `SearchMember` is never constructed
+    --> cells/tools/cellbox/src/executor.rs:1982:8
+     |
+1982 | struct SearchMember {
+     |        ^^^^^^^^^^^^
+
+warning: method `record` is never used
+    --> cells/tools/cellbox/src/executor.rs:1991:8
+     |
+1987 | impl SearchMember {
+     | ----------------- method in this implementation
+...
+1991 |     fn record(&self, members: &mut [(String, i32)], latch: &InterruptLatch, report: bool) -> i32 {
+     |        ^^^^^^
+
+warning: function `exec_cmd` is never used
+    --> cells/tools/cellbox/src/executor.rs:2010:4
+     |
+2010 | fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
+     |    ^^^^^^^^
+
+warning: function `case_matches` is never used
+    --> cells/tools/cellbox/src/executor.rs:2179:4
+     |
+2179 | fn case_matches(pattern: &str, value: &str) -> bool {
+     |    ^^^^^^^^^^^^
+
+warning: function `usize_key` is never used
+    --> cells/tools/cellbox/src/executor.rs:2187:4
+     |
+2187 | fn usize_key(n: usize) -> String {
+     |    ^^^^^^^^^
+
+warning: function `i32_to_str` is never used
+    --> cells/tools/cellbox/src/executor.rs:2197:4
+     |
+2197 | fn i32_to_str(n: i32) -> &'static str {
+     |    ^^^^^^^^^^
+
+warning: field `0` is never read
+    --> cells/tools/cellbox/src/executor.rs:2219:12
+     |
+2219 |     Legacy(for<'a> fn(crate::text_engine::args::LegacyArgs<'a>) -> ViResult<()>),
+     |     ------ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |     |
+     |     field in this variant
+     |
+     = note: `Catalog` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+     |
+2219 -     Legacy(for<'a> fn(crate::text_engine::args::LegacyArgs<'a>) -> ViResult<()>),
+2219 +     Legacy(()),
+     |
+
+warning: field `0` is never read
+    --> cells/tools/cellbox/src/executor.rs:2220:12
+     |
+2220 |     Status(fn(&[String]) -> i32),
+     |     ------ ^^^^^^^^^^^^^^^^^^^^
+     |     |
+     |     field in this variant
+     |
+     = note: `Catalog` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+     |
+2220 -     Status(fn(&[String]) -> i32),
+2220 +     Status(()),
+     |
+
+warning: function `dispatch_catalog` is never used
+    --> cells/tools/cellbox/src/executor.rs:2282:4
+     |
+2282 | fn dispatch_catalog(prog: &str, args: &[String]) -> Option<i32> {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `dispatch_builtin` is never used
+    --> cells/tools/cellbox/src/executor.rs:2335:4
+     |
+2335 | fn dispatch_builtin(prog: &str, args: &[String], jobs: &mut Jobs) -> i32 {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `print_jobs` is never used
+    --> cells/tools/cellbox/src/executor.rs:2445:4
+     |
+2445 | fn print_jobs(jobs: &Jobs) {
+     |    ^^^^^^^^^^
+
+warning: function `cmd_read` is never used
+    --> cells/tools/cellbox/src/executor.rs:2548:4
+     |
+2548 | fn cmd_read(args: &[&str]) -> ViResult<()> {
+     |    ^^^^^^^^
+
+warning: function `cmd_source` is never used
+    --> cells/tools/cellbox/src/executor.rs:2595:4
+     |
+2595 | fn cmd_source(args: &[String], jobs: &mut Jobs) -> ViResult<()> {
+     |    ^^^^^^^^^^
+
+warning: function `spawn_external` is never used
+    --> cells/tools/cellbox/src/executor.rs:2626:4
+     |
+2626 | fn spawn_external(prog: &str, args: &[String]) -> i32 {
+     |    ^^^^^^^^^^^^^^
+
+warning: function `cmd_hv` is never used
+    --> cells/tools/cellbox/src/executor.rs:2745:4
+     |
+2745 | fn cmd_hv(args: &[String]) -> i32 {
+     |    ^^^^^^
+
+warning: function `spawn_serial_foreground` is never used
+    --> cells/tools/cellbox/src/executor.rs:3689:15
+     |
+3689 | pub(crate) fn spawn_serial_foreground(prog: &str, args: &[String]) -> i32 {
+     |               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `spawn_ssh_foreground` is never used
+    --> cells/tools/cellbox/src/executor.rs:3696:15
+     |
+3696 | pub(crate) fn spawn_ssh_foreground(prog: &str, args: &[String]) -> (i32, Option<SshCompletion>) {
+     |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `run_foreground` is never used
+    --> cells/tools/cellbox/src/executor.rs:3700:4
+     |
+3700 | fn run_foreground(prog: &str, args: &[String], completion: bool) -> (i32, Option<SshCompletion>) {
+     |    ^^^^^^^^^^^^^^
+
+warning: type alias `SshCompletion` is never used
+    --> cells/tools/cellbox/src/executor.rs:3834:6
+     |
+3834 | type SshCompletion = api::services::ssh_completion::CompletionV1;
+     |      ^^^^^^^^^^^^^
+
+warning: static `SSH_COMPLETION` is never used
+    --> cells/tools/cellbox/src/executor.rs:3837:8
+     |
+3837 | static SSH_COMPLETION: ostd::sync::Mutex<Option<SshCompletion>> = ostd::sync::Mutex::new(None);
+     |        ^^^^^^^^^^^^^^
+
+warning: function `set_ssh_completion` is never used
+    --> cells/tools/cellbox/src/executor.rs:3839:15
+     |
+3839 | pub(crate) fn set_ssh_completion(record: SshCompletion) {
+     |               ^^^^^^^^^^^^^^^^^^
+
+warning: function `cmd_completion` is never used
+    --> cells/tools/cellbox/src/executor.rs:3844:15
+     |
+3844 | pub(crate) fn cmd_completion(args: &[String]) -> i32 {
+     |               ^^^^^^^^^^^^^^
+
+warning: constant `EXT_CANCEL_STOP` is never used
+    --> cells/tools/cellbox/src/executor.rs:3871:7
+     |
+3871 | const EXT_CANCEL_STOP: u32 = 2;
+     |       ^^^^^^^^^^^^^^^
+
+warning: struct `StartFailure` is never constructed
+    --> cells/tools/cellbox/src/executor.rs:3874:8
+     |
+3874 | struct StartFailure {
+     |        ^^^^^^^^^^^^
+
+warning: function `setup_failure` is never used
+    --> cells/tools/cellbox/src/executor.rs:3879:4
+     |
+3879 | fn setup_failure(status: Status) -> StartFailure {
+     |    ^^^^^^^^^^^^^
+
+warning: struct `ExtStage` is never constructed
+    --> cells/tools/cellbox/src/executor.rs:3884:8
+     |
+3884 | struct ExtStage {
+     |        ^^^^^^^^
+
+warning: struct `ExtRun` is never constructed
+    --> cells/tools/cellbox/src/executor.rs:3900:8
+     |
+3900 | struct ExtRun {
+     |        ^^^^^^
+
+warning: multiple associated items are never used
+    --> cells/tools/cellbox/src/executor.rs:3943:8
+     |
+3934 | impl ExtRun {
+     | ----------- associated items in this implementation
+...
+3943 |     fn start(commands: &[StageIn], with_input: bool, latch: &Rc<InterruptLatch>) -> Result<ExtRun, StartFailure> {
+     |        ^^^^^
+...
+3988 |     fn stream(&self) -> Result<(Endpoint, Endpoint), Status> {
+     |        ^^^^^^
+...
+3993 |     fn release(&mut self, endpoint: Option<Endpoint>) {
+     |        ^^^^^^^
+...
+4000 |     fn launch(&mut self, commands: &[StageIn], cwd: &str, with_input: bool) -> Result<(), StartFailure> {
+     |        ^^^^^^
+...
+4102 |     fn set_feed(&mut self, bytes: Vec<u8>) {
+     |        ^^^^^^^^
+...
+4114 |     fn set_rows(&mut self, rows: typed::RowFeed) {
+     |        ^^^^^^^^
+...
+4119 |     fn take_row_failure(&mut self) -> Option<typed::RunFailure> {
+     |        ^^^^^^^^^^^^^^^^
+...
+4123 |     fn close_rows(&mut self) {
+     |        ^^^^^^^^^^
+...
+4132 |     fn refill(&mut self) -> Result<bool, StreamStop> {
+     |        ^^^^^^
+...
+4162 |     fn close_input(&mut self) {
+     |        ^^^^^^^^^^^
+...
+4170 |     fn close_output(&mut self) {
+     |        ^^^^^^^^^^^^
+...
+4176 |     fn close_errors(&mut self) {
+     |        ^^^^^^^^^^^^
+...
+4187 |     fn feed_step(&mut self) -> Result<bool, StreamStop> {
+     |        ^^^^^^^^^
+...
+4229 |     fn forward_terminal(&mut self, bytes: &[u8], diagnostic: bool) -> Result<(), StreamStop> {
+     |        ^^^^^^^^^^^^^^^^
+...
+4251 |     fn drain_errors(&mut self) -> bool {
+     |        ^^^^^^^^^^^^
+...
+4284 |     fn poll_interrupt(&mut self) {
+     |        ^^^^^^^^^^^^^^
+...
+4291 |     fn step(&mut self) -> Result<bool, StreamStop> {
+     |        ^^^^
+...
+4305 |     fn pause(&mut self, progress: bool) {
+     |        ^^^^^
+...
+4320 |     fn read_output(&mut self, out: &mut [u8]) -> Result<Option<usize>, StreamStop> {
+     |        ^^^^^^^^^^^
+...
+4359 |     fn close_consumer(&mut self) {
+     |        ^^^^^^^^^^^^^^
+...
+4364 |     fn settle(&mut self) -> Result<(), StreamStop> {
+     |        ^^^^^^
+...
+4376 |     fn conclude(&mut self) -> Vec<i32> {
+     |        ^^^^^^^^
+...
+4390 |     fn reap(&mut self, cancel: bool) {
+     |        ^^^^
+...
+4454 |     fn interrupted(&self) -> bool {
+     |        ^^^^^^^^^^^
+...
+4460 |     fn not_started(&self) -> usize {
+     |        ^^^^^^^^^^^
+...
+4466 |     fn was_cancelled(&self) -> bool {
+     |        ^^^^^^^^^^^^^
+
+warning: struct `ChildBytes` is never constructed
+    --> cells/tools/cellbox/src/executor.rs:4478:8
+     |
+4478 | struct ChildBytes(alloc::rc::Rc<core::cell::RefCell<ExtRun>>);
+     |        ^^^^^^^^^^
+
+warning: function `drive_external_sink` is never used
+    --> cells/tools/cellbox/src/executor.rs:4496:4
+     |
+4496 | fn drive_external_sink(
+     |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `settle_external_segment` is never used
+    --> cells/tools/cellbox/src/executor.rs:4532:4
+     |
+4532 | fn settle_external_segment(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `JobState` is never used
+ --> cells/tools/cellbox/src/jobs.rs:7:10
+  |
+7 | pub enum JobState {
+  |          ^^^^^^^^
+
+warning: struct `Job` is never constructed
+  --> cells/tools/cellbox/src/jobs.rs:14:8
+   |
+14 | struct Job {
+   |        ^^^
+
+warning: struct `JobView` is never constructed
+  --> cells/tools/cellbox/src/jobs.rs:23:12
+   |
+23 | pub struct JobView<'a> {
+   |            ^^^^^^^
+
+warning: struct `Jobs` is never constructed
+  --> cells/tools/cellbox/src/jobs.rs:33:12
+   |
+33 | pub struct Jobs {
+   |            ^^^^
+
+warning: associated items `new`, `add`, `set_state`, `complete`, `reap_done`, and `list` are never used
+  --> cells/tools/cellbox/src/jobs.rs:39:12
+   |
+38 | impl Jobs {
+   | --------- associated items in this implementation
+39 |     pub fn new() -> Self {
+   |            ^^^
+...
+47 |     pub fn add(&mut self, name: &str) -> usize {
+   |            ^^^
+...
+61 |     pub fn set_state(&mut self, id: usize, state: JobState) {
+   |            ^^^^^^^^^
+...
+68 |     pub fn complete(&mut self, id: usize, status: i32, members: Vec<(String, i32)>) {
+   |            ^^^^^^^^
+...
+78 |     pub fn reap_done(&mut self) {
+   |            ^^^^^^^^^
+...
+83 |     pub fn list(&self) -> impl Iterator<Item = JobView<'_>> {
+   |            ^^^^
+
+warning: constant `PS_USAGE` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:24:7
+   |
+24 | const PS_USAGE: &str = "Usage: ps --records [-p TID]";
+   |       ^^^^^^^^
+
+warning: constant `LS_USAGE` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:25:7
+   |
+25 | const LS_USAGE: &str = "Usage: ls --records [-a] [PATH]";
+   |       ^^^^^^^^
+
+warning: constant `TOP_USAGE` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:26:7
+   |
+26 | const TOP_USAGE: &str =
+   |       ^^^^^^^^^
+
+warning: function `row_producer` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:42:8
+   |
+42 | pub fn row_producer(argv: &[String], latch: &Rc<InterruptLatch>) -> Option<Result<Box<dyn RowSource>, i32>> {
+   |        ^^^^^^^^^^^^
+
+warning: function `read_file_bytes_exact` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:75:8
+   |
+75 | pub fn read_file_bytes_exact(path: &str) -> Result<Vec<u8>, i32> {
+   |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `field` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:86:4
+   |
+86 | fn field(name: &str, value: Value) -> (String, Value) {
+   |    ^^^^^
+
+warning: function `telemetry_error` is never used
+  --> cells/tools/cellbox/src/native_rows.rs:90:4
+   |
+90 | fn telemetry_error(command: &str, error: TopError) -> PipelineError {
+   |    ^^^^^^^^^^^^^^^
+
+warning: struct `PsSource` is never constructed
+  --> cells/tools/cellbox/src/native_rows.rs:98:8
+   |
+98 | struct PsSource {
+   |        ^^^^^^^^
+
+warning: associated function `from_args` is never used
+   --> cells/tools/cellbox/src/native_rows.rs:105:8
+    |
+104 | impl PsSource {
+    | ------------- associated function in this implementation
+105 |     fn from_args(args: &[&str]) -> Result<Box<dyn RowSource>, &'static str> {
+    |        ^^^^^^^^^
+
+warning: struct `LsSource` is never constructed
+   --> cells/tools/cellbox/src/native_rows.rs:145:8
+    |
+145 | struct LsSource {
+    |        ^^^^^^^^
+
+warning: associated items `from_args` and `fill` are never used
+   --> cells/tools/cellbox/src/native_rows.rs:153:8
+    |
+152 | impl LsSource {
+    | ------------- associated items in this implementation
+153 |     fn from_args(args: &[&str]) -> Result<Box<dyn RowSource>, &'static str> {
+    |        ^^^^^^^^^
+...
+173 |     fn fill(&mut self) -> Result<(), PipelineError> {
+    |        ^^^^
+
+warning: struct `TopSource` is never constructed
+   --> cells/tools/cellbox/src/native_rows.rs:213:8
+    |
+213 | struct TopSource {
+    |        ^^^^^^^^^
+
+warning: associated items `from_args` and `next_frame` are never used
+   --> cells/tools/cellbox/src/native_rows.rs:225:8
+    |
+224 | impl TopSource {
+    | -------------- associated items in this implementation
+225 |     fn from_args(args: &[&str], latch: &Rc<InterruptLatch>) -> Result<Box<dyn RowSource>, &'static str> {
+    |        ^^^^^^^^^
+...
+262 |     fn next_frame(&mut self) -> Result<Option<FrameItems>, TopError> {
+    |        ^^^^^^^^^^
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:130:16
+    |
+130 |     Background(Cmd),
+    |     ---------- ^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+130 -     Background(Cmd),
+130 +     Background(()),
+    |
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:133:13
+    |
+133 |     Invalid(&'static str),
+    |     ------- ^^^^^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+133 -     Invalid(&'static str),
+133 +     Invalid(()),
+    |
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:135:14
+    |
+135 |     Sequence(Vec<Ast>),
+    |     -------- ^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+135 -     Sequence(Vec<Ast>),
+135 +     Sequence(()),
+    |
+
+warning: fields `0` and `1` are never read
+   --> cells/tools/cellbox/src/parser.rs:137:9
+    |
+137 |     And(alloc::boxed::Box<Ast>, alloc::boxed::Box<Ast>),
+    |     --- ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     fields in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the fields to be of unit type to suppress this warning while preserving the field numbering, or remove the fields
+    |
+137 -     And(alloc::boxed::Box<Ast>, alloc::boxed::Box<Ast>),
+137 +     And((), ()),
+    |
+
+warning: fields `0` and `1` are never read
+   --> cells/tools/cellbox/src/parser.rs:139:8
+    |
+139 |     Or(alloc::boxed::Box<Ast>, alloc::boxed::Box<Ast>),
+    |     -- ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     fields in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the fields to be of unit type to suppress this warning while preserving the field numbering, or remove the fields
+    |
+139 -     Or(alloc::boxed::Box<Ast>, alloc::boxed::Box<Ast>),
+139 +     Or((), ()),
+    |
+
+warning: fields `cond` and `body` are never read
+   --> cells/tools/cellbox/src/parser.rs:142:9
+    |
+141 |     While {
+    |     ----- fields in this variant
+142 |         cond: alloc::boxed::Box<Ast>,
+    |         ^^^^
+143 |         body: alloc::boxed::Box<Ast>,
+    |         ^^^^
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `name` and `body` are never read
+   --> cells/tools/cellbox/src/parser.rs:150:9
+    |
+149 |     FuncDef {
+    |     ------- fields in this variant
+150 |         name: alloc::string::String,
+    |         ^^^^
+151 |         body: alloc::string::String,
+    |         ^^^^
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `expr` and `arms` are never read
+   --> cells/tools/cellbox/src/parser.rs:161:9
+    |
+160 |     Case {
+    |     ---- fields in this variant
+161 |         expr: alloc::string::String,
+    |         ^^^^
+162 |         arms: alloc::vec::Vec<(alloc::string::String, alloc::boxed::Box<Ast>)>,
+    |         ^^^^
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `var`, `words`, and `body` are never read
+   --> cells/tools/cellbox/src/parser.rs:169:9
+    |
+168 |     For {
+    |     --- fields in this variant
+169 |         var: alloc::string::String,
+    |         ^^^
+170 |         words: alloc::vec::Vec<alloc::string::String>,
+    |         ^^^^^
+171 |         body: alloc::boxed::Box<Ast>,
+    |         ^^^^
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `cond`, `then_b`, and `else_b` are never read
+   --> cells/tools/cellbox/src/parser.rs:177:9
+    |
+176 |     If {
+    |     -- fields in this variant
+177 |         cond: alloc::boxed::Box<Ast>,
+    |         ^^^^
+178 |         then_b: alloc::boxed::Box<Ast>,
+    |         ^^^^^^
+179 |         else_b: Option<alloc::boxed::Box<Ast>>,
+    |         ^^^^^^
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `usage_error` is never used
+  --> cells/tools/cellbox/src/rg.rs:96:4
+   |
+96 | fn usage_error(message: &str) -> i32 {
+   |    ^^^^^^^^^^^
+
+warning: function `stderr_report` is never used
+   --> cells/tools/cellbox/src/rg.rs:103:4
+    |
+103 | fn stderr_report() -> source::Report {
+    |    ^^^^^^^^^^^^^
+
+warning: function `roots` is never used
+   --> cells/tools/cellbox/src/rg.rs:170:4
+    |
+170 | fn roots(args: &RgArgs) -> Result<(Vec<Vec<u8>>, Vec<u8>), String> {
+    |    ^^^^^
+
+warning: function `producer` is never used
+   --> cells/tools/cellbox/src/rg.rs:192:8
+    |
+192 | pub fn producer(args: &RgArgs, latch: &Rc<InterruptLatch>) -> Result<Box<dyn RowSource>, i32> {
+    |        ^^^^^^^^
+
+warning: function `stdin_producer` is never used
+   --> cells/tools/cellbox/src/rg.rs:215:8
+    |
+215 | pub fn stdin_producer(
+    |        ^^^^^^^^^^^^^^
+
+warning: constant `USAGE` is never used
+  --> cells/tools/cellbox/src/rg/args.rs:31:11
+   |
+31 | pub const USAGE: &str = "\
+   |           ^^^^^
+
+warning: struct `Empty` is never constructed
+   --> cells/tools/cellbox/src/rg/source.rs:697:12
+    |
+697 | pub struct Empty;
+    |            ^^^^^
+
+warning: struct `VfsDir` is never constructed
+  --> cells/tools/cellbox/src/rg/tree.rs:26:12
+   |
+26 | pub struct VfsDir {
+   |            ^^^^^^
+
+warning: struct `VfsFile` is never constructed
+  --> cells/tools/cellbox/src/rg/tree.rs:32:12
+   |
+32 | pub struct VfsFile {
+   |            ^^^^^^^
+
+warning: struct `VfsTree` is never constructed
+  --> cells/tools/cellbox/src/rg/tree.rs:36:12
+   |
+36 | pub struct VfsTree {
+   |            ^^^^^^^
+
+warning: associated items `new`, `parent_handle`, and `evict_parent` are never used
+  --> cells/tools/cellbox/src/rg/tree.rs:47:12
+   |
+46 | impl VfsTree {
+   | ------------ associated items in this implementation
+47 |     pub fn new() -> VfsTree {
+   |            ^^^
+...
+52 |     fn parent_handle(&mut self, dir: &[u8]) -> Result<ViDirHandle, io::Error> {
+   |        ^^^^^^^^^^^^^
+...
+65 |     fn evict_parent(&mut self) {
+   |        ^^^^^^^^^^^^
+
+warning: function `utf8` is never used
+  --> cells/tools/cellbox/src/rg/tree.rs:78:4
+   |
+78 | fn utf8(path: &[u8]) -> Result<&str, io::Error> {
+   |    ^^^^
+
+warning: function `vfs_error` is never used
+  --> cells/tools/cellbox/src/rg/tree.rs:85:4
+   |
+85 | fn vfs_error(error: ViError) -> io::Error {
+   |    ^^^^^^^^^
+
+warning: function `split` is never used
+  --> cells/tools/cellbox/src/rg/tree.rs:96:4
+   |
+96 | fn split(path: &[u8]) -> Option<(&[u8], &[u8])> {
+   |    ^^^^^
+
+warning: constant `SSH_PATH` is never used
+  --> cells/tools/cellbox/src/ssh.rs:22:11
+   |
+22 | pub const SSH_PATH: &str = "/bin/cellbox-ssh";
+   |           ^^^^^^^^
+
+warning: constant `USAGE` is never used
+  --> cells/tools/cellbox/src/ssh.rs:26:7
+   |
+26 | const USAGE: &str = "usage: ssh --user USER --auth password|publickey [--identity KEY_ID] \
+   |       ^^^^^
+
+warning: constant `USAGE_STATUS` is never used
+  --> cells/tools/cellbox/src/ssh.rs:28:7
+   |
+28 | const USAGE_STATUS: i32 = 2;
+   |       ^^^^^^^^^^^^
+
+warning: constant `SESSION_LOST` is never used
+  --> cells/tools/cellbox/src/ssh.rs:32:11
+   |
+32 | pub const SESSION_LOST: i32 = 125;
+   |           ^^^^^^^^^^^^
+
+warning: function `cmd_ssh` is never used
+  --> cells/tools/cellbox/src/ssh.rs:60:8
+   |
+60 | pub fn cmd_ssh(argv: &[String]) -> i32 {
+   |        ^^^^^^^
+
+warning: function `record_phase` is never used
+   --> cells/tools/cellbox/src/ssh.rs:106:8
+    |
+106 | pub fn record_phase(phase: Phase) -> sc::Phase {
+    |        ^^^^^^^^^^^^
+
+warning: constant `MAX_FUNS` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:25:7
+   |
+25 | const MAX_FUNS: usize = 8;
+   |       ^^^^^^^^
+
+warning: constant `BODY_LIMIT` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:28:7
+   |
+28 | const BODY_LIMIT: usize = 479;
+   |       ^^^^^^^^^^
+
+warning: static `EXIT_REQUEST` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:39:8
+   |
+39 | static EXIT_REQUEST: Mutex<Option<i32>> = Mutex::new(None);
+   |        ^^^^^^^^^^^^
+
+warning: static `LOOP_SIGNAL` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:40:8
+   |
+40 | static LOOP_SIGNAL: Mutex<LoopSignal> = Mutex::new(LoopSignal::None);
+   |        ^^^^^^^^^^^
+
+warning: static `BG_SPAWN` is never used
+  --> cells/tools/cellbox/src/shell_state.rs:41:8
+   |
+41 | static BG_SPAWN: AtomicBool = AtomicBool::new(false);
+   |        ^^^^^^^^
+
+warning: function `set_stdin` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:212:8
+    |
+212 | pub fn set_stdin(data: &[u8]) {
+    |        ^^^^^^^^^
+
+warning: function `clear_stdin` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:218:8
+    |
+218 | pub fn clear_stdin() {
+    |        ^^^^^^^^^^^
+
+warning: function `unset_var` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:258:8
+    |
+258 | pub fn unset_var(key: &str) {
+    |        ^^^^^^^^^
+
+warning: function `set_status` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:273:8
+    |
+273 | pub fn set_status(code: i32) {
+    |        ^^^^^^^^^^
+
+warning: function `define_function` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:279:8
+    |
+279 | pub fn define_function(name: &str, body: &str) {
+    |        ^^^^^^^^^^^^^^^
+
+warning: enum `LoopSignal` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:299:10
+    |
+299 | pub enum LoopSignal {
+    |          ^^^^^^^^^^
+
+warning: function `set_loop_signal` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:305:8
+    |
+305 | pub fn set_loop_signal(signal: LoopSignal) {
+    |        ^^^^^^^^^^^^^^^
+
+warning: function `take_loop_signal` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:310:8
+    |
+310 | pub fn take_loop_signal() -> LoopSignal {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: function `request_exit` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:315:8
+    |
+315 | pub fn request_exit(code: i32) {
+    |        ^^^^^^^^^^^^
+
+warning: function `take_exit_request` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:321:8
+    |
+321 | pub fn take_exit_request() -> Option<i32> {
+    |        ^^^^^^^^^^^^^^^^^
+
+warning: function `bg_spawn` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:333:8
+    |
+333 | pub fn bg_spawn() -> bool {
+    |        ^^^^^^^^
+
+warning: function `set_bg_spawn` is never used
+   --> cells/tools/cellbox/src/shell_state.rs:337:8
+    |
+337 | pub fn set_bg_spawn(value: bool) {
+    |        ^^^^^^^^^^^^
+
+warning: function `rows_from_bytes` is never used
+   --> cells/tools/cellbox/src/typed.rs:859:8
+    |
+859 | pub fn rows_from_bytes(format: &Format, bytes: &[u8]) -> Result<Box<dyn RowSource>, PipelineError> {
+    |        ^^^^^^^^^^^^^^^
+
+warning: variants `Interrupted` and `Failed` are never constructed
+    --> cells/tools/cellbox/src/typed.rs:1045:5
+     |
+1043 | pub enum SinkStop {
+     |          -------- variants in this enum
+1044 |     /// The user interrupted the pipeline (Ctrl-C).
+1045 |     Interrupted,
+     |     ^^^^^^^^^^^
+1046 |     /// The destination failed, one diagnostic line.
+1047 |     Failed(String),
+     |     ^^^^^^
+     |
+     = note: `SinkStop` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `remove` and `expand` are never used
+  --> cells/tools/cellbox/src/aliases.rs:29:12
+   |
+15 | impl Aliases {
+   | ------------ methods in this implementation
+...
+29 |     pub fn remove(&mut self, name: &str) -> bool {
+   |            ^^^^^^
+...
+37 |     pub fn expand(&self, line: &str) -> Option<String> {
+   |            ^^^^^^
+
+warning: struct `AsyncStdin` is never constructed
+ --> cells/tools/cellbox/src/async_utils.rs:8:12
+  |
+8 | pub struct AsyncStdin;
+  |            ^^^^^^^^^^
+
+warning: associated items `read_line`, `handle_tab`, and `clear_line` are never used
+   --> cells/tools/cellbox/src/async_utils.rs:22:18
+    |
+ 10 | impl AsyncStdin {
+    | --------------- associated items in this implementation
+...
+ 22 |     pub async fn read_line(
+    |                  ^^^^^^^^^
+...
+257 |     fn handle_tab(buffer: &mut Vec<u8>) {
+    |        ^^^^^^^^^^
+...
+314 |     fn clear_line(current: &[u8]) {
+    |        ^^^^^^^^^^
+
+warning: struct `ConfigClient` is never constructed
+  --> cells/tools/cellbox/src/config_client.rs:20:12
+   |
+20 | pub struct ConfigClient {
+   |            ^^^^^^^^^^^^
+
+warning: associated functions `new` and `endpoint` are never used
+  --> cells/tools/cellbox/src/config_client.rs:26:12
+   |
+25 | impl ConfigClient {
+   | ----------------- associated functions in this implementation
+26 |     pub fn new() -> Self {
+   |            ^^^
+...
+32 |     fn endpoint() -> Option<usize> {
+   |        ^^^^^^^^
+
+warning: struct `ViShell` is never constructed
+  --> cells/tools/cellbox/src/shell.rs:14:12
+   |
+14 | pub struct ViShell<'a> {
+   |            ^^^^^^^
+
+warning: associated items `new`, `run`, and `dispatch` are never used
+  --> cells/tools/cellbox/src/shell.rs:31:12
+   |
+30 | impl<'a> ViShell<'a> {
+   | -------------------- associated items in this implementation
+31 |     pub fn new() -> Self {
+   |            ^^^
+...
+42 |     pub async fn run(&mut self) {
+   |                  ^^^
+...
+99 |     pub async fn dispatch(&mut self, line: &str) -> ViResult<()> {
+   |                  ^^^^^^^^
+
+warning: `app-cellbox` (bin "cellbox" test) generated 144 warnings (run `cargo fix --bin "cellbox" -p app-cellbox --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 38.09s
+     Running unittests src/main.rs (/tmp/cellbox-s10-3c-resume/host-target/x86_64-unknown-linux-gnu/debug/deps/cellbox-7ea6229a1b79c8f9)
+
+running 213 tests
+test cmd_sys::tests::invalid_zero_sized_or_overflowing_frame_snapshot_is_rejected ... ok
+test cmd_sys::tests::sleep_operand_is_whole_real_seconds_in_nanoseconds ... ok
+test cmd_sys::tests::sleep_returns_130_when_interrupted_and_0_when_elapsed ... ok
+test cmd_sys::tests::sleep_operand_other_than_digits_is_refused ... ok
+test cmd_sys::tests::valid_frame_snapshot_survives_independent_kib_flooring ... ok
+test commands::cat_tests::a_truncated_sequence_at_the_end_is_one_replacement ... ok
+test commands::cat_tests::a_vfs_directory_or_oversized_file_is_never_read ... ok
+test commands::cat_tests::a_whole_vfs_buffer_decodes_like_the_chunked_bootfs_reads ... ok
+test commands::cat_tests::every_byte_after_an_invalid_one_is_kept_at_any_read_size ... ok
+test commands::ls_tests::a_name_from_a_second_mount_is_not_listed_twice ... ok
+test commands::ps_top_tests::ps_accepts_its_flags_once_and_refuses_the_rest ... ok
+test commands::ps_top_tests::top_options_classify_sessions_and_report_usage_as_status_2 ... ok
+test config_client::tests::export_outcome_reports_status_and_message ... ok
+test config_client::tests::set_never_reaches_the_attested_tail ... ok
+test config_client::tests::set_reply_distinguishes_refusal_from_unavailability ... ok
+test context_session::tests::only_an_unset_cwd_defaults_to_the_root ... ok
+test context_session::tests::no_entry_or_any_other_entry_keeps_separate_streams ... ok
+test context_session::tests::only_denied_selects_the_legacy_launch ... ok
+test context_session::tests::the_exact_merged_entry_in_the_launch_context_requests_merged_streams ... ok
+test context_session::tests::waiting_yields_first_then_sleeps_a_tick ... ok
+test edit::tests::ctrl_c_copies_and_end_of_input_ends_the_session ... ok
+test edit::tests::a_mount_without_conditional_save_refuses_before_any_storage_call ... ok
+test edit::tests::dirty_exit_has_no_default_and_exits_only_after_a_committed_save ... ok
+test edit::tests::rendering_escapes_controls_and_expands_tabs_without_changing_bytes ... ok
+test edit::tests::save_as_onto_an_existing_file_needs_yes_and_commits_against_what_was_asked_about ... ok
+test edit::tests::save_is_bound_to_the_opening_observation_and_a_conflict_keeps_everything ... ok
+test edit::tests::unknown_or_refused_outcomes_never_mark_the_buffer_saved ... ok
+test edit::tests::unnamed_save_opens_save_as_and_prompts_are_cancelled_by_escape ... ok
+test executor::tests::a_failed_prompt_handshake_keeps_cancelling_until_it_is_in ... ok
+test executor::tests::builtin_output_stays_on_the_capture_stack_and_top_has_no_terminal_without_a_session ... ok
+test executor::tests::enter_and_control_j_submit_a_line_other_modified_keys_do_not ... ok
+test executor::tests::braced_parameters_expand_to_the_value_or_its_length ... ok
+test executor::tests::command_line_overflow_is_refused_whole_never_truncated ... ok
+test executor::tests::external_commands_resolve_to_bin_or_keep_an_absolute_path ... ok
+test executor::tests::frontend_detach_and_attach_notices_never_discard_an_answer ... ok
+test executor::tests::every_run_name_reaches_the_closed_table_or_admission_and_nothing_else_does ... ok
+test executor::tests::merged_forwarding_still_abandons_the_unsent_suffix_on_ctrl_c ... ok
+test executor::tests::merged_streams_deliver_newline_diagnostic_and_prompt_to_stdout_in_order ... ok
+test executor::tests::mixed_quote_expansion_is_segment_local ... ok
+test executor::tests::only_diagnostics_of_an_unmerged_shell_select_stderr ... ok
+test executor::tests::one_shot_words_are_literal_and_never_expanded ... ok
+test executor::tests::one_shot_records_default_to_typed_jsonl_and_text_selects_the_table ... ok
+test executor::tests::owner_notice_acknowledgement_retries_transient_refusals_only_within_its_bound ... ok
+test executor::tests::owner_trust_prompt_is_built_only_from_the_owner_notice ... ok
+test executor::tests::prompt_answers_on_control_j_but_not_inside_a_paste_or_on_release ... ok
+test executor::tests::prompt_line_editing_is_echo_driven_bounded_and_cancellable ... ok
+test executor::tests::single_key_classification_ignores_pastes_releases_and_unmapped_keys ... ok
+test executor::tests::terminal_forwarding_does_not_relabel_endpoint_errors_as_ctrl_c ... ok
+test executor::tests::serial_lf_cr_and_crlf_submit_through_the_real_decoder ... ok
+test executor::tests::terminal_forwarding_observes_interrupt_while_the_sink_stays_full ... ok
+test executor::tests::terminal_forwarding_retries_only_the_unsent_binary_suffix ... ok
+test executor::tests::the_merge_request_has_no_effect_outside_frontend_mode ... ok
+test executor::tests::unmerged_streams_keep_diagnostics_on_the_stderr_endpoint ... ok
+test executor::tests::the_in_shell_explicit_form_is_the_short_form_or_the_one_shot_answer ... ok
+test ledger::tests::builtin_entries_equal_the_executor_builtins ... ok
+test ledger::tests::counts_match_the_s2_gate ... ok
+test ledger::tests::catalog_table_is_generated_from_the_ledger ... ok
+test ledger::tests::effect_denied_builtins_are_exactly_the_proven_ones ... ok
+test ledger::tests::every_effect_denied_entry_names_a_runner_check_that_exists ... ok
+test ledger::tests::no_surface_name_pair_appears_twice ... ok
+test ledger::tests::refused_builtins_are_exactly_the_proven_ones ... ok
+test ledger::tests::every_refused_entry_names_a_runner_check_that_exists ... ok
+test ledger::tests::tool_entries_equal_the_cargo_bin_lists ... ok
+test oneshot::tests::refusals_name_the_command_and_their_class ... ok
+test oneshot::tests::argv_is_classified_by_its_first_word_only_and_kept_literal ... ok
+test oneshot::tests::status_mapping_output_failure_refusals_and_unknown ... ok
+test oneshot::tests::stdin_is_read_only_by_consumer_rows ... ok
+test oneshot::tests::stdin_over_the_bound_is_refused_and_errors_are_not_end_of_stream ... ok
+test oneshot::tests::the_in_shell_prefix_strips_run_names_and_refuses_the_rest ... ok
+test oneshot::tests::stdin_is_read_to_end_of_stream_byte_exact ... ok
+test oneshot::tests::the_launch_classification_table_row_by_row ... ok
+test oneshot::tests::the_table_builtins_equal_the_ledger_builtin_rows ... ok
+test oneshot::tests::catalog_one_shot_table_is_generated_from_the_table ... ok
+test oneshot::tests::the_table_covers_builtins_aliases_and_stages_exactly_once ... ok
+test parser::tests::parse_mixed_quote_segments ... ok
+test parser::tests::parse_background ... ok
+test parser::tests::parse_pipeline ... ok
+test parser::tests::parse_redirect_out ... ok
+test parser::tests::parse_empty_quoted_words ... ok
+test ledger::tests::every_separate_elf_is_a_retained_worker_and_never_in_the_suite ... ok
+test parser::typed_syntax_tests::background_marker_on_a_pipeline_is_kept_not_ignored ... ok
+test parser::tests::parse_sequence ... ok
+test parser::typed_syntax_tests::empty_pipeline_stage_is_invalid ... ok
+test parser::tests::parse_empty ... ok
+test parser::typed_syntax_tests::misplaced_background_marker_is_invalid ... ok
+test parser::tests::parse_simple ... ok
+test parser::typed_syntax_tests::redirect_without_target_is_invalid ... ok
+test oneshot::tests::retained_worker_paths_and_unknown_names_are_127_without_fallback ... ok
+test parser::typed_syntax_tests::quoted_comparison_operators_stay_arguments ... ok
+test parser::tests::parse_quote_metadata ... ok
+test parser::typed_syntax_tests::single_quoted_json_literal_keeps_double_quotes ... ok
+test parser::tests::parse_redirect_append ... ok
+test parser::typed_syntax_tests::unquoted_operator_remains_a_redirect ... ok
+test rg::tests::bidi_and_format_controls_are_escaped_per_byte ... ok
+test rg::tests::byte_heads_feed_rg_stdin ... ok
+test rg::tests::a_streamed_stdin_resume_outside_its_window_fails_with_two ... ok
+test rg::tests::a_take_on_a_stream_stops_the_producer ... ok
+test rg::tests::encoding_accepts_only_none ... ok
+test rg::tests::a_denied_directory_is_reported_and_the_walk_continues ... ok
+test rg::tests::conflicting_options_reject ... ok
+test rg::tests::context_rows_have_no_submatches_and_render_with_dashes ... ok
+test rg::tests::context_counts_are_decimal_up_to_twenty ... ok
+test rg::tests::an_interrupt_mid_file_stops_reads_and_releases_handles ... ok
+test rg::tests::limits_hold_at_the_bound_and_reject_one_past_it ... ok
+test rg::tests::diagnostics_escape_paths_and_reasons ... ok
+test rg::tests::operand_rules ... ok
+test rg::tests::rows_append_to_the_output ... ok
+test rg::tests::rg_alone_is_a_producer_with_the_search_text_renderer ... ok
+test rg::tests::close_after_an_error_reports_status_two ... ok
+test rg::tests::records_have_the_contract_fields_in_order ... ok
+test rg::tests::rows_that_are_not_search_lines_reject_and_write_nothing ... ok
+test rg::tests::mounts_are_counted_without_changing_the_status_and_other_kinds_fail ... ok
+test rg::tests::quiet_counts_without_rows_and_a_later_error_still_fails ... ok
+test rg::tests::rows_render_with_match_and_context_separators ... ok
+test rg::tests::escaping_matrix ... ok
+test rg::tests::every_supported_spelling_sets_its_field ... ok
+test rg::tests::scalar_options_reject_repetition_in_any_spelling ... ok
+test rg::tests::sole_help_sets_help_and_nothing_else ... ok
+test rg::tests::options_combine_and_operands_keep_their_order ... ok
+test rg::tests::stdin_is_the_sole_path_and_requires_a ... ok
+test rg::tests::rg_rows_may_feed_byte_consumers_without_to ... ok
+test rg::tests::the_line_comes_from_line_bytes_not_text ... ok
+test rg::tests::rg_admission_refusals_happen_before_any_effect ... ok
+test rg::tests::search_text_collects_rendered_lines ... ok
+test rg::tests::path_escapes_separators_and_invalid_bytes ... ok
+test rg::tests::stdin_bytes_search_and_statuses ... ok
+test screen_reset::tests::every_split_point_matches_the_unsplit_stream ... ok
+test rg::tests::unsupported_and_malformed_options_reject_naming_the_option ... ok
+test screen_reset::tests::relay_streams_are_tracked_separately_and_combined ... ok
+test rg::tests::value_options_consume_exactly_the_next_word ... ok
+test screen_reset::tests::several_parameters_in_one_sequence_apply_together ... ok
+test screen_reset::tests::tui_enter_then_restore_is_clean ... ok
+test screen_reset::tests::soft_reset_bytes_are_exact_and_restore_every_tracked_mode ... ok
+test rg::tests::text_selects_the_renderer_and_is_not_binary_search ... ok
+test rg::tests::text_display_comes_from_the_parser_and_text_words_survive ... ok
+test screen_reset::tests::tui_enter_without_restore_is_dirty_one_mode_at_a_time ... ok
+test ssh::tests::completion_records_carry_dispatch_uncertainty_and_exact_remote_outcomes ... ok
+test screen_reset::tests::unrelated_sequences_are_ignored ... ok
+test rg::tests::the_producer_completion_survives_the_chain ... ok
+test ssh::tests::escape_only_at_line_start ... ok
+test ssh::tests::first_trust_answers_map_to_session_outcomes_and_messages ... ok
+test top::tests::a_denied_seed_capture_never_reaches_the_terminal ... ok
+test top::tests::colour_mode_is_truecolor_only_on_the_gui_terminal ... ok
+test top::tests::enter_drills_into_the_incarnation_and_escape_returns_to_cells ... ok
+test ssh::tests::status_and_message_per_ending ... ok
+test rg::tests::take_closes_early_releasing_every_handle_with_no_further_reads ... ok
+test rg::tests::statuses_follow_the_contract ... ok
+test rg::tests::a_row_over_the_record_bound_fails_its_file_and_the_walk_continues ... ok
+test top::tests::interactive_top_refuses_without_a_terminal_or_below_the_delay_floor ... ok
+test top::tests::quit_keys_map_to_exit_statuses_and_nothing_else_acts ... ok
+test top::tests::selection_follows_its_row_across_sorts_and_frames ... ok
+test top::tests::o_cycles_the_shown_columns_and_r_reverses ... ok
+test top::tests::wait_core_elapses_at_the_deadline_and_stops_at_the_first_interrupt ... ok
+test top::tests::the_field_picker_yields_the_fields_option ... ok
+test typed::tests::empty_stream_yields_no_jsonl_rows ... ok
+test rg::tests::offsets_are_exact_over_a_bom_and_a_multi_chunk_file ... ok
+test typed::tests::external_byte_pipelines ... ok
+test typed::tests::external_head_must_be_followed_by_from ... ok
+test typed::tests::external_stage_cannot_both_start_and_end_a_typed_pipeline ... ok
+test typed::tests::argv_limit_matches_the_child_context_bound ... ok
+test typed::tests::a_collected_run_stops_at_the_interrupt_and_returns_nothing ... ok
+test typed::tests::background_refusals ... ok
+test typed::tests::external_pipelines_refuse_bad_forms_before_effects ... ok
+test typed::tests::earlier_stage_failures_are_listed_unless_the_shell_cancelled ... ok
+test typed::tests::external_tail_after_to_is_admitted_with_a_redirect ... ok
+test typed::tests::externals_stay_refused_without_a_terminal_session ... ok
+test typed::tests::from_redirect_heads_a_typed_pipeline ... ok
+test typed::tests::frames_admission_refuses_rows_only_stages_before_any_producer ... ok
+test typed::tests::more_than_sixteen_stages_are_refused ... ok
+test typed::tests::bytes_into_a_row_stage_need_from ... ok
+test screen_reset::tests::oversized_and_hostile_controls_are_bounded_and_ignored ... ok
+test typed::tests::plain_byte_pipelines_stay_legacy ... ok
+test typed::tests::producer_category_is_decided_by_name ... ok
+test typed::tests::json_document_is_decoded_at_end_of_stream ... ok
+test typed::tests::frames_out_of_order_fail_at_the_producer_stage ... ok
+test typed::tests::reaped_statuses ... ok
+test typed::tests::redirect_rules_for_typed_pipelines ... ok
+test typed::tests::redirect_default_for_frames_is_typed_envelopes ... ok
+test typed::tests::jsonl_lines_split_across_chunks_decode_incrementally ... ok
+test typed::tests::row_failure_is_attributed_and_returns_no_bytes ... ok
+test typed::tests::row_feed_failure_names_its_stage_and_closes_the_producer ... ok
+test typed::tests::row_feed_pulls_only_what_the_consumer_takes ... ok
+test typed::tests::rows_into_a_byte_command_need_an_explicit_to ... ok
+test typed::tests::stateful_and_session_stages_are_refused_before_effects ... ok
+test typed::tests::stream_failure_and_interrupt_surface_as_row_errors ... ok
+test typed::tests::row_feed_streams_the_same_bytes_as_run_rows ... ok
+test typed::tests::take_stops_an_endless_producer ... ok
+test typed::tests::table_aligns_columns_and_is_not_json ... ok
+test typed::tests::row_feed_and_run_rows_encode_frames_identically ... ok
+test typed::tests::malformed_line_aborts_and_closes_the_producer ... ok
+test typed::tests::take_zero_never_pulls ... ok
+test typed::tests::take_closes_the_producer_after_n_rows ... ok
+test typed::tests::to_feeds_builtin_byte_consumers_only ... ok
+test typed::tests::typed_pipeline_is_admitted_with_producer_head ... ok
+test typed::tests::terminal_stream_matches_collected_output ... ok
+test typed::tests::upstream_cancel_at_spawn_is_a_finished_consumer ... ok
+test typed::tests::terminal_table_streams_one_frame_at_a_time ... ok
+test top::tests::truncation_unavailable_cpu_and_denied_memory_are_marked_never_zero ... ok
+test top::tests::a_gone_incarnation_shows_a_notice_and_never_the_new_generation ... ok
+test rg::tests::an_rg_collected_run_over_its_bound_fails_with_two ... ok
+test top::tests::one_snapshot_gives_identical_numbers_in_the_tui_batch_text_and_records ... ok
+test top::tests::the_picker_and_a_clamped_view_stay_inside_their_area ... ok
+test top::tests::arrows_and_pages_move_the_selection_within_the_rows ... ok
+test top::tests::every_row_of_the_frame_reaches_the_last_column_and_bars_fill_their_rows ... ok
+test typed::tests::endless_terminal_stream_is_live_bounded_and_interruptible ... ok
+test typed::tests::overlong_unterminated_line_is_refused ... ok
+test rg::tests::a_streamed_stdin_resumes_inside_its_window ... ok
+test rg::tests::no_output_carries_control_bytes ... ok
+test rg::tests::heap_peak_with_32_unicode_case_insensitive_patterns ... ok
+test rg::tests::the_queue_never_exceeds_its_cap_plus_one_row ... ok
+test rg::tests::heap_peak_with_a_full_directory_and_maximal_ignore_files ... ok
+test typed::tests::collected_sink_still_refuses_past_its_bound ... ok
+test rg::tests::heap_peak_with_long_dense_lines_and_full_context ... ok
+
+test result: ok. 213 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+
+     Running unittests src/main.rs (/tmp/cellbox-s10-3c-resume/host-target/x86_64-unknown-linux-gnu/debug/deps/app_init-88562e0b0f37480f)
+
+running 13 tests
+test activation_state::tests::capacity_keeps_duplicate_demand_and_reclaims_slots ... ok
+test activation_state::tests::exhaustion_never_wraps_tokens_or_provider_generations ... ok
+test activation_state::tests::failed_reply_rollback_preserves_other_demand_and_watch ... ok
+test activation_state::tests::crash_revokes_all_shared_tokens_without_restart ... ok
+test activation_state::tests::failed_start_has_no_published_lease_and_can_be_retired ... ok
+test activation_state::tests::owner_generation_is_not_a_user_supplied_cell_alias ... ok
+test activation_state::tests::retirement_revokes_tokens_before_kill_and_old_completion_is_inert ... ok
+test activation_state::tests::root_watch_lasts_across_both_kinds_and_death_stops_both ... ok
+test activation_state::tests::sharing_duplicate_and_final_release ... ok
+test activation_state::tests::stale_release_cannot_affect_replacement_or_foreign_owner ... ok
+test boot::block_wait_tests::a_registered_driver_ends_the_wait_at_once ... ok
+test boot::block_wait_tests::a_live_nvme_cell_is_waited_for_up_to_the_budget ... ok
+test boot::block_wait_tests::without_an_nvme_cell_or_a_clock_the_former_window_applies ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/tmp/cellbox-s10-3c-resume/host-target/x86_64-unknown-linux-gnu/debug/deps/driver_nvme-477ac1d8354dcc92)
+
+running 6 tests
+test deadline::tests::a_wait_expires_at_its_budget_and_not_before ... ok
+test deadline::tests::many_fast_polls_do_not_expire_a_clocked_wait ... ok
+test deadline::tests::rdy_budget_follows_cap_to_with_a_floor ... ok
+test deadline::tests::slow_completions_are_reported_from_one_second ... ok
+test deadline::tests::without_a_clock_the_poll_count_is_the_bound ... ok
+test deadline::tests::a_yield_point_every_8192_polls ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/tmp/cellbox-s10-3c-resume/host-target/x86_64-unknown-linux-gnu/debug/deps/service_vfs-31cfdb2f187571c0)
+
+running 109 tests
+test access::guest_disk_tests::death_clears_authorization_and_new_tid_is_authorized ... ok
+test access::guest_disk_tests::guest_disk_ancestors_and_image_cannot_be_removed_recursively ... ok
+test access::guest_disk_tests::guest_disk_case_insensitive_fat_lookup_is_protected ... ok
+test access::guest_disk_tests::guest_disk_is_writable_only_by_live_hypervisor ... ok
+test access::guest_disk_tests::guest_disk_path_helper_matches_only_canonical_image ... ok
+test access::guest_disk_tests::guest_disk_sfn_aliases_and_83_names_are_protected ... ok
+test access::guest_disk_tests::multibyte_utf8_paths_do_not_panic_and_resolve_safely ... ok
+test access::kms::tests::alias_paths_fail_before_rule_selection ... ok
+test access::kms::tests::canonical_policy_path_rules_are_strict ... ok
+test access::kms::tests::directory_removal_cannot_remove_kms_namespace ... ok
+test access::kms::tests::namespace_is_reserved_to_live_kms_only ... ok
+test access::tests::a_path_matching_no_rule_is_denied_both_ways ... ok
+test access::tests::a_whole_path_rule_overrides_the_prefix_it_sits_under ... ok
+test access::tests::bin_is_readable_but_not_writable ... ok
+test access::tests::boot_configuration_cannot_be_replaced_through_fat_aliases_or_ancestors ... ok
+test access::tests::non_mutator_cannot_write_any_path ... ok
+test access::tests::reads_are_allowed_across_the_shipped_prefixes ... ok
+test access::tests::root_is_read_only ... ok
+test access::tests::unflagged_caller_is_denied_mutation_regardless_of_path_policy ... ok
+test caller::tests::attested_identity_becomes_the_cell_not_the_sending_thread ... ok
+test caller::tests::same_cell_generation_different_threads_is_the_same_principal ... ok
+test backend_cellosfs::tests::local_offset_rejection_does_not_poison_or_touch_disk ... ok
+test file_handles::tests::begin_and_finish_sync_read_restore_the_open_state ... ok
+test handle_table::tests::get_mut_rejects_another_cells_handle ... ok
+test handle_table::tests::a_respawned_cell_does_not_inherit_its_predecessors_handles ... ok
+test handle_table::tests::cap_sweep_yields_nothing_to_a_non_owner ... ok
+test caller::tests::unattested_generation_may_not_own_state ... ok
+test backend_cellosfs::tests::replacement_truncates_and_read_fault_never_becomes_empty_success ... ok
+test dirs::tests::inherited_set_rolls_back_if_ticket_space_exhausts_mid_bind ... ok
+test handle_table::tests::owner_can_reach_and_close_its_own_handle ... ok
+test handle_table::tests::path_of_is_visible_to_the_owner_only ... ok
+test file_handles::tests::per_owner_quota_is_32_handles ... ok
+test caller::tests::same_cell_different_generation_is_a_different_principal ... ok
+test file_handles::tests::file_handle_table_leased_entry_cleans_up_on_close_and_revocation ... ok
+test handle_table::tests::purge_owner_is_exact_to_the_generation ... ok
+test handle_table::tests::remove_rejects_another_cells_handle_and_keeps_the_entry ... ok
+test dirs::tests::exhausted_directory_ids_preserve_existing_owner_and_counts ... ok
+test backend_cellosfs::tests::unsupported_directory_rename_does_not_poison_following_operations ... ok
+test file_handles::tests::handles_are_not_reused_after_close ... ok
+test file_handles::tests::close_rejects_a_non_owner_and_keeps_the_entry ... ok
+test manager::read_path_tests::marks_follow_fat_name_matching_and_component_boundaries ... ok
+test caller::tests::caller_may_mutate_reflects_trailer_flag ... ok
+test backend_cellosfs::tests::ordinary_namespace_rejections_leave_ready_and_contents_unchanged ... ok
+test file_handles::tests::purge_owner_is_exact_to_the_generation ... ok
+test handle_table::tests::handle_table_leased_entry_drops_service_handle_on_remove ... ok
+test file_handles::tests::path_lookup_hides_unknown_and_wrong_owner_handles ... ok
+test file_handles::tests::monotonic_ids_fail_closed_on_exhaustion ... ok
+test file_handles::tests::parent_dir_revocation_reaps_cross_owner_entries ... ok
+test dispatch_grants::health_tests::directory_whole_file_reads_are_errors_not_empty_success ... ok
+test namespace::tests::canonical_srv_keys_reject_aliases_and_invalid_paths ... ok
+test namespace::tests::exclusive_reservations_block_both_shared_lease_types ... ok
+test manager::tests::higher_generation_reaps_predecessor_and_cross_cell_anchored_files ... ok
+test manager::read_path_tests::an_empty_directory_is_one_complete_page ... ok
+test namespace::tests::leases_release_once_without_underflow_and_remove_empty_entries ... ok
+test pending::tests::handle_sweep_neither_reads_nor_destroys_another_cells_slot ... ok
+test manager::read_path_tests::stale_cursors_and_vanished_directories_are_io_errors_not_empty_pages ... ok
+test manager::read_path_tests::modified_after_every_content_or_binding_mutation_and_not_after_reads ... ok
+test manager::read_path_tests::close_dir_revokes_paging_and_derived_file_state ... ok
+test pending::tests::owned_path_is_visible_to_the_issuing_cell_only ... ok
+test pending::tests::poll_rejects_a_handle_that_was_never_issued ... ok
+test namespace::tests::equal_key_pair_is_deduplicated ... ok
+test manager::tests::owner_death_purges_only_the_watched_owner ... ok
+test manager::read_path_tests::child_create_remove_and_mkdir_mark_changed_but_content_and_reads_do_not ... ok
+test namespace::tests::shared_leases_block_exclusive_reservations ... ok
+test namespace::tests::two_key_reservation_cleans_both_entries ... ok
+test pending::tests::a_respawned_cell_cannot_poll_its_predecessors_slot ... ok
+test pending::tests::poll_rejects_another_cells_handle ... ok
+test manager::read_path_tests::small_buffers_page_ramfs_and_cellosfs_without_losing_entries ... ok
+test pending::tests::poll_returns_data_to_the_issuing_cell ... ok
+test prepared_cwd::tests::cwd_projection_accepts_only_exact_owner_membership_grant ... ok
+test pending::tests::purge_owner_is_exact_to_the_generation ... ok
+test prepared_cwd::tests::prepared_directory_is_fresh_sealed_and_unusable_until_materialized ... ok
+test dispatch_grants::health_tests::poisoned_pending_read_is_consumed_only_by_its_authorized_owner ... ok
+test manager::read_path_tests::paging_holds_no_handles_and_the_handle_caps_still_apply ... ok
+test manager::tests::empty_runtime_config_is_not_replaced_with_image_defaults ... ok
+test namespace::tests::sorted_two_key_failure_is_atomic_without_partial_acquisition ... ok
+test prepared_cwd::tests::refused_reservation_never_removes_a_newer_child_generation ... ok
+test prepared_cwd::tests::idle_loop_blocks_only_once_every_reservation_waits_on_a_message ... ok
+test dispatch_grants::health_tests::faulting_ranged_read_unwinds_pin_and_does_not_fallback_or_issue_empty_data ... ok
+test manager::read_path_tests::mount_points_are_their_own_kind_and_never_capped ... ok
+test manager::read_path_tests::paging_returns_every_entry_once_and_complete_only_on_the_last_page ... ok
+test manager::read_path_tests::a_backend_that_cannot_page_answers_io ... ok
+test prepared_cwd::tests::source_revocation_retires_unpublished_lineage_without_ambient_fallback ... ok
+test prepared_cwd::tests::reservation_rejects_foreign_generation_and_existing_child_namespace ... ok
+test manager::read_path_tests::rename_marks_both_parents_and_an_open_srv_file_cannot_be_renamed_under_its_reader ... ok
+test manager::read_path_tests::permission_is_rechecked_on_every_page_and_state_query ... ok
+test backend_cellosfs::tests::every_mutation_flush_failure_closes_instance_without_retry ... ok
+test manager::tests::handle_traversal_can_open_mount_parent_directory ... ok
+test manager::tests::runtime_service_config_reads_the_persistent_file ... ok
+test dispatch_grants::health_tests::faulting_list_is_io_not_empty_and_authorization_still_wins ... ok
+test manager::read_path_tests::changes_during_paging_are_reported_on_every_later_page ... ok
+test prepared_cwd::tests::retired_and_dead_owner_state_polls_only_while_reconcile_can_progress ... ok
+test save::tests::transactions_are_bounded_per_caller_and_a_successor_generation_inherits_none ... ok
+test prepared_cwd::tests::silent_child_of_a_live_owner_lets_the_loop_block_until_the_owner_dies ... ok
+test trust::tests::lookup_answers_exact_unknown_mismatch_and_denies_without_connect_right ... ok
+test trust::tests::an_accepted_first_trust_is_stored_exactly_and_then_known ... ok
+test save::tests::mount_removes_stages_a_previous_boot_left ... ok
+test save::tests::stale_observations_conflict_and_leave_every_byte_in_place ... ok
+test trust::tests::a_known_or_changed_key_is_never_challenged ... ok
+test save::tests::backends_without_conditional_publication_refuse_before_staging ... ok
+test trust::tests::only_the_caller_with_matching_owner_bindings_commits ... ok
+test save::tests::create_then_replace_publish_exact_bytes_and_a_repeat_never_replays ... ok
+test trust::tests::challenges_are_bounded_per_caller_and_in_total ... ok
+test save::tests::unsealed_tampered_and_misdigested_stages_never_publish ... ok
+test trust::tests::absent_store_is_unknown_and_the_store_is_unreadable_by_callers ... ok
+test trust::tests::concurrent_first_trusts_never_overwrite_each_other ... ok
+test trust::tests::refused_expired_or_cancelled_confirmations_store_nothing ... ok
+test trust::tests::every_malformed_store_is_unavailable ... ok
+test manager::read_path_tests::fat_paging_covers_every_entry_and_an_iteration_error_is_never_a_short_listing ... ok
+
+test result: ok. 109 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+

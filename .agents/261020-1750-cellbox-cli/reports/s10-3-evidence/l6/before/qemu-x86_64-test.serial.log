@@ -1,0 +1,350 @@
+c[?7l[2JSeaBIOS (version 1.16.3-debian-1.16.3-2)
+
+
+iPXE (https://ipxe.org) 00:02.0 CA00 PCI2.10 PnP PMM+0EFCACF0+0EF0ACF0 CA00
+Press Ctrl-B to configure iPXE (PCI 00:02.0)...                                                                               
+
+
+Booting from DVD/CD...
+c[?7l[2Jc[?7l[2Jvbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+limine: Loading executable `boot():/boot/kernel.elf`...
+limine: Physical base:   0xe9f7000
+limine: Virtual base:    0xffffffff80000000
+limine: Slide:           0x0
+limine: ELF entry point: 0xffffffff80000000
+limine: Base revision:   3
+limine: Requests count:  7
+limine: Top of HHDM:     0x40000000
+acpi: Found RSDP at 0xf52c0
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Mode was already set, perfect!
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+paging: 1GiB pages are supported!
+acpi: Found RSDP at 0xf52c0
+acpi: Found "APIC" at 0xffe21fa
+[x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64
+[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT
+[INFO] CET-IBT: unavailable
+[INFO] PKU: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[boot] kernel_phys_base=0x000000000e9f7000
+[INFO] Frame allocator initialized
+[INFO] Initializing x86_64 paging (kernel PML4)...
+[INFO] x86_64 paging initialized
+[INFO] Activating x86_64 paging (mov cr3)...
+
+[kernel] x86_64 paging: PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x59000 — domain roots use tag 0 with a full CR3 flush)
+QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
+[INFO] x86 virt: root operation active (SVM)
+[INFO] Heap initialized
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] RAM Disk: read-only, 8192 KB (16384 sectors)
+[ INFO] UART Input Buffer Initialized
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ WARN] [x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 2 base=0x3e8 irq=4 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 3 base=0x2e8 irq=3 absent (16550 probe failed)
+[INFO] x86_64: ramdisk + UART RX IRQ initialised
+[ INFO] [pcie] ECAM fallback scan bus 0 @ 0xb0000000 (1 MiB window)
+[ INFO] [pcie] 00:00.0 vendor=8086 device=29c0 class=06:00:00 bar0=0x0
+[ INFO] [pcie] 00:01.0 vendor=1234 device=1111 class=03:00:00 bar0=0xfd000000
+[ INFO] [pcie] 00:02.0 vendor=8086 device=10d3 class=02:00:00 bar0=0xfeb80000
+[ WARN] [e1000] unsupported Ethernet 8086:10d3; driver gate closed
+[ INFO] [pcie] 00:1f.0 vendor=8086 device=2918 class=06:01:00 bar0=0x0
+[ INFO] [pcie] 00:1f.2 vendor=8086 device=2922 class=01:06:01 bar0=0x0
+[ INFO] [pcie] 00:1f.3 vendor=8086 device=2930 class=0c:05:00 bar0=0x0
+[ INFO] [pcie] ECAM scan complete: 6 device(s) found
+[ WARN] [vtd] no ACPI DMAR unit; using the board-declared q35 register base 0xfed90000 (fallback)
+[ INFO] [vtd] Intel VT-d not present (GCAP=0x0)
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 96
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [system-config] applied: logging=Info, default_cell_heap_mib=16
+[ INFO] [policy] loaded + verified (57 entries, flags 0x00)
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] Thread 'thread' (ID 1): KStack 0x543000-0x555000, UStackTop 0x569000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (no teardown for hypervisor authority)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x0000ff00 from task 9002
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000070 from task 9004
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0x55a000
+[ INFO] GRANT-RECLAIM-OWNED: PASS
+[ INFO] GRANT-RECLAIM-RECEIVED: PASS
+[ INFO] GRANT-RECLAIM-PINNED: PASS
+[INFO] grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)
+[ INFO] Thread 'thread' (ID 1): KStack 0x543000-0x555000, UStackTop 0x569000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ERROR] [selftest] COMPLETION-QUEUE: FAIL — an older waiter erased its replacement
+[ERROR] [selftest] COMPLETION-QUEUE: FAIL
+[INFO] completion-queue self-test FAIL
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [x86-smp] topology online=1 processor_ids=0 qualified=yes
+[INFO] Tier 2 admission: DISABLED (fleet profile) — domain-class artifacts are denied
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[INFO] [boot] x86_64 Limine linear framebuffer mapped and registered
+[ INFO] [early] VIFS1-first /bin/platform <- ramdisk (38488 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x1000037A2 flags=R-X
+[ INFO] ELF LOAD: 0x1000037A8-0x100004658 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x100005250 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] ELF LOAD: 0x100106038-0x10010703C flags=R--
+[ INFO] [wx] 'platform': 6/264 cell pages lowered to read-only/execute-only
+[INFO] Platform Cell spawned (x86 PCIe ECAM scanner)
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x102000000-0x102041316 flags=R-X
+[ INFO] ELF LOAD: 0x102041318-0x10204DF80 flags=R--
+[ INFO] ELF LOAD: 0x10204E000-0x10204FA28 flags=RW-
+[ INFO] ELF LOAD: 0x102050000-0x102150031 flags=RW-
+[ INFO] ELF LOAD: 0x102150038-0x10215103C flags=R--
+[ INFO] [wx] 'init': 79/338 cell pages lowered to read-only/execute-only
+[ INFO] Successfully spawned init with complete root authority (tid=2)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+[ INFO] [sched] hart 0 dispatched a task
+USER: Init: Starting Cellos Orchestrator...
+[ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/block error=NotFound
+[ WARN] [policy] narrowed "/bin/nvme" (tid 3): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x104000000-0x104003D02 flags=R-X
+[ INFO] ELF LOAD: 0x104003D08-0x104004A00 flags=R--
+[ INFO] ELF LOAD: 0x104005000-0x1040053B8 flags=RW-
+[ INFO] ELF LOAD: 0x104006000-0x104106031 flags=RW-
+[ INFO] ELF LOAD: 0x104107000-0x10410703C flags=R--
+[ INFO] [wx] 'nvme': 6/264 cell pages lowered to read-only/execute-only
+USER: [platform] ECAM scan buses 0-255 starting
+USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
+[ WARN] [policy] narrowed "/bin/ahci" (tid 4): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x106000000-0x106004C02 flags=R-X
+[ INFO] ELF LOAD: 0x106004C08-0x106005D70 flags=R--
+[ INFO] ELF LOAD: 0x106006000-0x1060062D0 flags=RW-
+[ INFO] ELF LOAD: 0x106007000-0x106107031 flags=RW-
+[ INFO] ELF LOAD: 0x106107038-0x10610803C flags=R--
+[ INFO] [wx] 'ahci': 7/265 cell pages lowered to read-only/execute-only
+USER: [platform] registered bus 0 device 1 function 0 class 3:0:0
+USER: [platform] unsupported Ethernet identity — registration skipped
+USER: [platform] registered bus 0 device 31 function 0 class 6:1:0
+USER: [platform] registered bus 0 device 31 function 2 class 1:6:1
+USER: [platform] registered bus 0 device 31 function 3 class 12:5:0
+USER: [platform] ECAM scan complete
+[ INFO] Syscall::Exit: task 1 exited with code 0
+USER: [ahci] ABAR claim ok base=0xfebd5000 len=0x1000
+USER: [ahci] controller bound bdf=00:1f.2 cap=0xc0141f05 version=0x00010000 pi=0x0000003f
+USER: [ahci] HBA reset complete (AE enabled)
+[ WARN] [iommu] board qemu-q35-x86_64 declares no DMA remapper; DMA is untranslated (identity addressing)
+[ WARN] [iommu] Cell 4 granted DMA BDF=00:1f.2 phys=0xb0f000 size=4096
+[ WARN] [iommu] Cell 4 granted DMA BDF=00:1f.2 phys=0xb10000 size=4096
+[ WARN] [iommu] Cell 4 granted DMA BDF=00:1f.2 phys=0xb11000 size=4096
+[ WARN] [iommu] Cell 4 granted DMA BDF=00:1f.2 phys=0xb12000 size=4096
+USER: [ahci] port 2 is not an ATA disk (SSTS=0x00000113 SIG=0xeb140101); skipping
+USER: [ahci] no SATA disk attached; driver cell idle
+[ INFO] Syscall::Exit: task 4 exited with code 0
+[ INFO] Syscall::Exit: task 3 exited with code 0
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (425600 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x1000523BB flags=R-X
+[ INFO] ELF LOAD: 0x1000523C0-0x100055F28 flags=R--
+[ INFO] ELF LOAD: 0x100056000-0x100057608 flags=RW-
+[ INFO] ELF LOAD: 0x100058000-0x100558040 flags=RW-
+[ INFO] ELF LOAD: 0x100558040-0x10055903C flags=R--
+[ INFO] [wx] 'vfs': 87/1370 cell pages lowered to read-only/execute-only
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+USER: [vfs] WARNING: FAT32 /mnt/sd mount failed
+USER: [vfs] WARNING: CellosFS open failed — volume unavailable
+USER: [vfs] WARNING: FAT32 /bin mount failed
+USER: [vfs] WARNING: CellosFS open failed — volume unavailable
+[ INFO] [service-registry] 1 -> tid 5 (cell 1 gen 110)
+[ INFO] [loader] SpawnFromElf: /bin/e1000 (29672 bytes from grant)
+[ WARN] [policy] narrowed "/bin/e1000" (tid 6): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x104000000-0x1040023D2 flags=R-X
+[ INFO] ELF LOAD: 0x1040023D8-0x104003508 flags=R--
+[ INFO] ELF LOAD: 0x104004000-0x104004280 flags=RW-
+[ INFO] ELF LOAD: 0x104005000-0x1041053A1 flags=RW-
+[ INFO] ELF LOAD: 0x104106000-0x10410603C flags=R--
+[ INFO] [wx] 'e1000': 5/263 cell pages lowered to read-only/execute-only
+USER: Init: e1000 launched.
+[ INFO] [loader] SpawnFromElf: /bin/igb (39424 bytes from grant)
+[ WARN] [policy] narrowed "/bin/igb" (tid 7): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x106000000-0x1060036B2 flags=R-X
+[ INFO] ELF LOAD: 0x1060036B8-0x1060046A8 flags=R--
+[ INFO] ELF LOAD: 0x106005000-0x1060055E0 flags=RW-
+[ INFO] ELF LOAD: 0x106006000-0x106106031 flags=RW-
+[ INFO] ELF LOAD: 0x106106038-0x10610703C flags=R--
+[ INFO] [wx] 'igb': 6/264 cell pages lowered to read-only/execute-only
+USER: Init: igb launched.
+[ INFO] [loader] SpawnFromElf: /bin/serial (35752 bytes from grant)
+[ INFO] ELF LOAD: 0x108000000-0x108002D92 flags=R-X
+[ INFO] ELF LOAD: 0x108002D98-0x1080045F0 flags=R--
+[ INFO] ELF LOAD: 0x108005000-0x1080052C8 flags=RW-
+[ INFO] ELF LOAD: 0x108006000-0x108106031 flags=RW-
+[ INFO] ELF LOAD: 0x108106038-0x10810606C flags=R--
+[ INFO] [wx] 'serial': 5/263 cell pages lowered to read-only/execute-only
+USER: [serial] port 0 base=0x03f8 irq=4 usable
+USER: [serial] port 1 base=0x02f8 irq=3 absent (kernel probe refused)
+USER: [serial] port 2 base=0x03e8 irq=4 absent (kernel probe refused)
+USER: [serial] port 3 base=0x02e8 irq=3 absent (kernel probe refused)
+[serial] port 0 marker base=0x03f8
+USER: [serial] port 0 tx marker bytes=36
+USER: Init: serial launched.
+[ INFO] [loader] SpawnFromElf: /bin/xhci (52712 bytes from grant)
+[ WARN] [policy] narrowed "/bin/xhci" (tid 9): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x10A000000-0x10A005A82 flags=R-X
+[ INFO] ELF LOAD: 0x10A005A88-0x10A007518 flags=R--
+[ INFO] ELF LOAD: 0x10A008000-0x10A008488 flags=RW-
+[ INFO] ELF LOAD: 0x10A009000-0x10A109031 flags=RW-
+[ INFO] ELF LOAD: 0x10A109038-0x10A10A03C flags=R--
+[ INFO] [wx] 'xhci': 9/267 cell pages lowered to read-only/execute-only
+USER: Init: xhci launched.
+[ INFO] [loader] SpawnFromElf: /bin/input (37744 bytes from grant)
+[ WARN] [policy] narrowed "/bin/input" (tid 10): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x10C000000-0x10C002623 flags=R-X
+[ INFO] ELF LOAD: 0x10C002628-0x10C004108 flags=R--
+[ INFO] ELF LOAD: 0x10C005000-0x10C005250 flags=RW-
+[ INFO] ELF LOAD: 0x10C006000-0x10C106031 flags=RW-
+[ INFO] ELF LOAD: 0x10C106038-0x10C10703C flags=R--
+[ INFO] [wx] 'input': 6/264 cell pages lowered to read-only/execute-only
+[ WARN] [input] registered input service TID 10
+USER: [input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing
+USER: [input] No VirtIO input device; relying on kernel push
+[ INFO] [service-registry] 3 -> tid 10 (cell 7 gen 115)
+USER: Init: input launched.
+[ INFO] [loader] SpawnFromElf: /bin/net (476536 bytes from grant)
+[ INFO] ELF LOAD: 0x10E000000-0x10E05C5FE flags=R-X
+[ INFO] ELF LOAD: 0x10E05C600-0x10E0625F8 flags=R--
+[ INFO] ELF LOAD: 0x10E063000-0x10E064BC8 flags=RW-
+[ INFO] ELF LOAD: 0x10E065000-0x10E96509B flags=RW-
+[ INFO] ELF LOAD: 0x10E9650A0-0x10E96603C flags=R--
+[ INFO] [wx] 'net': 100/2407 cell pages lowered to read-only/execute-only
+USER: [net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP
+USER: [net] Starting DHCP...
+USER: [net] NIC driver unavailable: legacy frame path
+USER: [net] DHCP: deconfigured
+[ INFO] [service-registry] 2 -> tid 11 (cell 8 gen 116)
+USER: Init: net launched.
+[ INFO] [loader] SpawnFromElf: /bin/compositor (72080 bytes from grant)
+[ INFO] ELF LOAD: 0x110000000-0x11000C255 flags=R-X
+[ INFO] ELF LOAD: 0x11000C258-0x11000D858 flags=R--
+[ INFO] ELF LOAD: 0x11000E000-0x11000E588 flags=RW-
+[ INFO] ELF LOAD: 0x11000F000-0x110B0F041 flags=RW-
+[ INFO] [wx] 'compositor': 14/2832 cell pages lowered to read-only/execute-only
+USER: [compositor] Compositor v0.2: software blending, VirtIO GPU, input routing
+[ INFO] [service-registry] 5 -> tid 12 (cell 9 gen 117)
+USER: Init: compositor launched.
+[ WARN] [gpu_cursor] GPU Driver Cell not registered
+USER: [compositor] hardware cursor unavailable — using software cursor
+USER: [net] NIC driver unavailable: legacy frame path
+USER: [net] NIC driver unavailable: legacy frame path
+[ INFO] Syscall::Exit: task 6 exited with code 0
+USER: [igb] no igb controller present; driver cell idle
+[ INFO] Syscall::Exit: task 7 exited with code 0
+USER: [xhci] no xHCI controller present; driver cell idle
+[ INFO] Syscall::Exit: task 9 exited with code 0
+[ INFO] [loader] SpawnFromElf: /bin/fb-console (588592 bytes from grant)
+[ INFO] ELF LOAD: 0x104000000-0x10401CE26 flags=R-X
+[ INFO] ELF LOAD: 0x10401CE28-0x104084160 flags=R--
+[ INFO] ELF LOAD: 0x104085000-0x104086B60 flags=RW-
+[ INFO] ELF LOAD: 0x104087000-0x104587031 flags=RW-
+[ INFO] ELF LOAD: 0x104587038-0x10458803C flags=R--
+[ INFO] [wx] 'fb-console': 134/1417 cell pages lowered to read-only/execute-only
+USER: [fb-console] starting
+USER: [fb-console] compositor found
+USER: Init: fb-console launched.
+USER: [fb-console] background surface created
+USER: [fb-console] initial damage submitted
+USER: [fb-console] first log batch received
+USER: [compositor] first scanout flush submitted
+[ INFO] [loader] SpawnFromElf: /bin/sshd (197048 bytes from grant)
+[ INFO] ELF LOAD: 0x106000000-0x106027F5E flags=R-X
+[ INFO] ELF LOAD: 0x106027F60-0x10602A9F0 flags=R--
+[ INFO] ELF LOAD: 0x10602B000-0x10602B4C8 flags=RW-
+[ INFO] ELF LOAD: 0x10602C000-0x10672C040 flags=RW-
+[ INFO] ELF LOAD: 0x10672C040-0x10672C074 flags=R--
+[ INFO] [wx] 'sshd': 43/1837 cell pages lowered to read-only/execute-only
+USER: [sshd] Cellos SSH-2.0 daemon starting...
+USER: [sshd] Network service resolved
+USER: Init: sshd launched.
+USER: [net] owner death watch unavailable; socket reclaim deferred
+[ INFO] [service-registry] 19 -> tid 2 (cell 2 gen 107)
+USER: [sshd] TCP listener active on 0.0.0.0:22
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ai-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/vfs-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: Init: services spawned.
+USER: Init: service registry verified (init registration is publication, not application readiness).
+USER: Init: OS ready.
+[ INFO] [loader] SpawnFromElf: /bin/shell (876112 bytes from grant)
+[ INFO] ELF LOAD: 0x10A000000-0x10A0A936D flags=R-X
+[ INFO] ELF LOAD: 0x10A0A9370-0x10A0B52D8 flags=R--
+[ INFO] ELF LOAD: 0x10A0B6000-0x10A0BA628 flags=RW-
+[ INFO] ELF LOAD: 0x10A0BB000-0x10A1BB052 flags=RW-
+[ INFO] ELF LOAD: 0x10A1BB058-0x10A1BC03C flags=R--
+[ INFO] [wx] 'shell': 183/445 cell pages lowered to read-only/execute-only
+USER: DEBUG: Shell Started (Async Mode)
+USER: DEBUG: Shell focus acquired (or timed out)
+USER: Init: shell launched.
+USER: Init: supervising services (auto-restart on crash)...
+USER: Init: service exited cleanly — policy says no restart.
+USER: Init: service exited cleanly — policy says no restart.
+USER: Init: service exited cleanly — policy says no restart.
+USER: [executor] dummy-waker=absent executor=parked source=TIMER PASS
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > 
+USER: [serial] serial cell ready: usable=1 declared=4 echoed=0
+qemu-system-x86_64: terminating on signal 15 from pid 1226067 (timeout)

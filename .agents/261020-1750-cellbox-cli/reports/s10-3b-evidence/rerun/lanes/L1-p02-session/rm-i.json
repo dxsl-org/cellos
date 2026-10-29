@@ -1,0 +1,1 @@
+{"create": true, "exists_before": true, "prompt_n": true, "kept_after_n": true, "kept_after_ctrl_c": true, "gone_after_y": true}

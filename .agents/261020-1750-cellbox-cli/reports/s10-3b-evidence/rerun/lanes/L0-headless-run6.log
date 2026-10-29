@@ -1,0 +1,197 @@
+==> Verifying every input against candidate.json (headless)
+inputs verified: iso 3cd9ee4d2da66186… kernel 93f57333ec662081… (default+policy-required) image 29e3a0d4893c1e6f… 25 files
+==> Main fixture disk: rg tree + /srv denied child (phase07_rg_fixture.py) and the FAT data tree
+[mkfat32] /tmp/cellbox-phase10-qjzlh2s4/disk-main/disk.img: base=LBA 2048, 524288 sectors, 130554 data clusters (FAT32), FATsz32=1020, data start=LBA 4120
+CellosFS fresh-blank /tmp/cellbox-phase10-qjzlh2s4/disk-main/disk.img verified; receipt /tmp/cellbox-phase10-qjzlh2s4/disk-main/srv-receipt.json
+rg fixture: /tmp/cellbox-phase10-qjzlh2s4/disk-main/disk.img (135 files), expectations /tmp/cellbox-phase10-qjzlh2s4/disk-main/rg-fixture-expected.json
+data tree on P1: 12 files read back exactly
+==> Starting the disposable OpenSSH fixture (D79-1)
+fixture: cellbox-p09-sshd-1507923-24052 127.0.0.1:45697 rekey 127.0.0.1:44779 SHA256:QNS5LGuPO2He2GURaMffDTNHQ0RbNSpD1cCo8pTXQ4o OpenSSH_9.9p2, OpenSSL 3.3.7 7 Apr 2026
+==> SSH fixture disk: the protected trust store (phase09_trust_disk.py)
+[mkfat32] /tmp/cellbox-phase10-qjzlh2s4/disk-ssh/disk.img: base=LBA 2048, 524288 sectors, 130554 data clusters (FAT32), FATsz32=1020, data start=LBA 4120
+CellosFS fresh-blank /tmp/cellbox-phase10-qjzlh2s4/disk-ssh/disk.img verified; receipt /tmp/cellbox-phase10-qjzlh2s4/disk-ssh/srv-receipt.json
+trust fixture: /tmp/cellbox-phase10-qjzlh2s4/disk-ssh/disk.img (10.0.2.2:45697 exact, host:45697 mismatched)
+==> Booting the candidate (headless, tcg): main boot (restricted SLIRP), then the ssh boot
+==> P10C-boot
+  PASS P10C-boot:prompt-reached
+  PASS P10C-boot:policy-loaded-verified
+  PASS P10C-boot:tier2-disabled-fleet
+  PASS P10C-boot:no-panic
+  PASS P10C-boot:no-deny-at-boot
+  PASS P10C-boot:signatures-admitted
+  PASS P10C-boot:no-spawn-failure
+  PASS P10C-boot:every-planned-cell-launched
+  PASS P10C-boot:ps-required-running
+  PASS P10C-boot:ps-only-planned-cells
+  PASS P10C-boot:ps-no-sshd-no-shell
+  PASS P10C-boot:manifest-no-sshd-no-shell
+  PASS P10C-boot:absent-hardware-drivers-exited-cleanly
+==> P10C-lf-submit
+  PASS P10C-lf-submit:n-runs-once
+  PASS P10C-lf-submit:r-runs-once
+  PASS P10C-lf-submit:rn-runs-once
+==> P10C-image-list
+  PASS P10C-image-list:ls-bin-equals-manifest
+  PASS P10C-image-list:cellbox-and-cellbox-ssh-present
+  PASS P10C-image-list:cellbox-ssh-same-signed-file
+==> P10C-explicit-forms
+  PASS P10C-explicit-forms:equal-bytes-and-status
+  PASS P10C-explicit-forms:cellbox-cd-refused-2
+==> P10C-typed
+  PASS P10C-typed:where-select-sort-take
+  PASS P10C-typed:to-jsonl-redirect
+  PASS P10C-typed:jsonl-round-trip
+  PASS P10C-typed:bad-type-refused
+  PASS P10C-typed:bad-type-before-effect
+  PASS P10C-typed:no-ansi-in-jsonl
+==> P10C-bytes
+  PASS P10C-bytes:disk-fixture-cat-exact
+  PASS P10C-bytes:disk-fixture-uart-bytes
+  PASS P10C-bytes:external-echo-exact
+  PASS P10C-bytes:external-stage-pipeline-exact
+  PASS P10C-bytes:builtin-after-external-refused-2
+  PASS P10C-bytes:external-cat-packaged-file-exact
+  PASS P10C-bytes:external-echo-file-length
+  PASS P10C-bytes:external-cat-file-length
+  PASS P10C-bytes:disk-raw-bytes-length
+  PASS P10C-bytes:external-file-content-exact
+  PASS P10C-bytes:external-cat-disk-path-status-1
+  PASS P10C-bytes:disk-non-utf8-lossy-text
+  PASS P10C-bytes:disk-non-utf8-uart-bytes
+  PASS P10C-bytes:disk-big-fixture-over-1mib
+  PASS P10C-bytes:disk-oversized-file-too-large-1
+  PASS P10C-bytes:disk-directory-is-a-directory-1
+==> P10C-rg
+  PASS P10C-rg:big-records-written
+  PASS P10C-rg:big-line-numbers
+  PASS P10C-rg:big-offsets
+  PASS P10C-rg:non-utf8-lines-kept
+  PASS P10C-rg:partial-error-status-2
+  PASS P10C-rg:denied-child-status-2
+  PASS P10C-rg:take-1-stops-walk
+==> P10C-top
+  PASS P10C-top:top-batch
+  PASS P10C-top:records-default-one-frame
+  PASS P10C-top:records-bounded-two-frames
+  PASS P10C-top:plain-take-on-frames-refused
+  PASS P10C-top:interactive-draws
+  PASS P10C-top:q-restores-then-prompt
+  PASS P10C-top:q-status-0
+==> P10C-edit
+  PASS P10C-edit:fixture-copied
+  PASS P10C-edit:create-opens
+  PASS P10C-edit:create-saved
+  PASS P10C-edit:create-quit
+  PASS P10C-edit:create-status-0
+  PASS P10C-edit:existing-opens
+  PASS P10C-edit:existing-saved
+  PASS P10C-edit:existing-quit
+  PASS P10C-edit:reopen
+  PASS P10C-edit:reopen-clean-quit-without-question
+  PASS P10C-edit:stored-sizes
+  PASS P10C-edit:created-bytes
+  PASS P10C-edit:crlf-kept
+  PASS P10C-edit:lf-lines-kept
+  PASS P10C-edit:unnamed-opens
+  PASS P10C-edit:dirty-exit-asks
+  PASS P10C-edit:enter-is-no-answer
+  PASS P10C-edit:discard-exits
+  PASS P10C-edit:discard-status-0
+==> P10C-selective-tui
+  PASS P10C-selective-tui:no-screen-controls:ls /
+  PASS P10C-selective-tui:no-screen-controls:ps
+  PASS P10C-selective-tui:no-screen-controls:cat /mnt/sd/p10/bytes.txt
+  PASS P10C-selective-tui:no-screen-controls:cellbox ls /
+  PASS P10C-selective-tui:no-screen-controls:top -b -n 1
+  PASS P10C-selective-tui:no-screen-controls:ps --records | to jsonl
+  PASS P10C-selective-tui:top-substitution-refused-2
+==> P10C-denials
+  PASS P10C-denials:bin-shell-refused
+  PASS P10C-denials:kill-refused-1
+  PASS P10C-denials:snapshot-refused-1
+  PASS P10C-denials:task-set-unchanged
+  PASS P10C-denials:export-config-unavailable-1
+  PASS P10C-denials:ssh-publickey-refused
+  PASS P10C-denials:srv-cellos-read-denied-1
+==> P10C-state-script
+  PASS P10C-state-script:variable
+  PASS P10C-state-script:function
+  PASS P10C-state-script:if-else
+  PASS P10C-state-script:for-loop
+  PASS P10C-state-script:source-disk-script
+  PASS P10C-state-script:source-sets-state
+  PASS P10C-state-script:status-of-failure
+  PASS P10C-state-script:status-of-success
+  PASS P10C-state-script:pipeline-background-refused
+  PASS P10C-state-script:misplaced-ampersand-refused
+  PASS P10C-state-script:refused-forms-no-effect
+  PASS P10C-state-script:plain-background-runs
+  PASS P10C-state-script:exit-code-4
+  PASS P10C-state-script:shell-restarted
+  PASS P10C-state-script:fresh-shell-has-no-state
+==> P10C-no-inbound
+  PASS P10C-no-inbound:main-no-listener-cell
+  PASS P10C-no-inbound:main-restricted-slirp-no-forward
+==> P10C-ctrl-c
+  PASS P10C-ctrl-c:sleep-ctrl-c-prompt
+  PASS P10C-ctrl-c:sleep-ctrl-c-130
+  PASS P10C-ctrl-c:rg-walk-ctrl-c-prompt
+  PASS P10C-ctrl-c:rg-walk-ctrl-c-130
+  PASS P10C-ctrl-c:endless-sink-flowing
+  PASS P10C-ctrl-c:endless-sink-ctrl-c-prompt
+  PASS P10C-ctrl-c:endless-sink-output-stops
+  PASS P10C-ctrl-c:endless-sink-ctrl-c-130
+  PASS P10C-ctrl-c:top-tui-ctrl-c-prompt
+  PASS P10C-ctrl-c:top-tui-ctrl-c-130
+  PASS P10C-ctrl-c:top-batch-ctrl-c-prompt
+  PASS P10C-ctrl-c:top-batch-ctrl-c-130
+  PASS P10C-ctrl-c:cat-sink-finite-control
+  PASS P10C-ctrl-c:cat-sink-ctrl-c-prompt
+  PASS P10C-ctrl-c:cat-sink-output-stops
+  PASS P10C-ctrl-c:cat-sink-ctrl-c-130
+==> P10C-ssh-serial
+  PASS P10C-ssh-serial:prompt
+  PASS P10C-ssh-serial:network-up
+  PASS P10C-ssh-serial:fails-closed-status
+  PASS P10C-ssh-serial:ended-without-any-key-typed
+  PASS P10C-ssh-serial:no-echo-after-password-prompt
+  PASS P10C-ssh-serial:server-saw-no-password
+==> P10C-no-inbound
+  PASS P10C-no-inbound:ssh-boot-no-listener-cell
+  PASS P10C-no-inbound:ssh-boot-no-forward
+==> P10C-not-on-uart
+  PASS P10C-not-on-uart:no-fixture-password-on-uart
+  PASS P10C-not-on-uart:no-fixture-host-key-line-1-on-uart
+  PASS P10C-not-on-uart:no-fixture-host-key-line-2-on-uart
+  PASS P10C-not-on-uart:no-fixture-host-key-line-3-on-uart
+  PASS P10C-not-on-uart:no-fixture-host-key-line-4-on-uart
+  PASS P10C-not-on-uart:no-fixture-host-key-line-5-on-uart
+  PASS P10C-not-on-uart:no-dev-signing-seed-on-uart
+  PASS P10C-not-on-uart:no-fixture-password-on-uart
+  PASS P10C-not-on-uart:no-fixture-host-key-line-1-on-uart
+  PASS P10C-not-on-uart:no-fixture-host-key-line-2-on-uart
+  PASS P10C-not-on-uart:no-fixture-host-key-line-3-on-uart
+  PASS P10C-not-on-uart:no-fixture-host-key-line-4-on-uart
+  PASS P10C-not-on-uart:no-fixture-host-key-line-5-on-uart
+  PASS P10C-not-on-uart:no-dev-signing-seed-on-uart
+  PASS P10C-not-on-uart:no-private-key-on-uart
+  PASS P10C-not-on-uart:no-secret-in-any-evidence-file
+PASS P10C-boot
+PASS P10C-lf-submit
+PASS P10C-image-list
+PASS P10C-explicit-forms
+PASS P10C-state-script
+PASS P10C-typed
+PASS P10C-bytes
+PASS P10C-rg
+PASS P10C-top
+PASS P10C-edit
+PASS P10C-selective-tui
+PASS P10C-denials
+PASS P10C-ssh-serial
+PASS P10C-no-inbound
+PASS P10C-ctrl-c
+PASS P10C-not-on-uart
+PASS: headless L0 (16 markers) in 653.4s
+==> Provenance, no-secret check, evidence digest
+ISO unchanged: True | no-secret hits: none | run 691 s

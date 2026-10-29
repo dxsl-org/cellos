@@ -1,0 +1,358 @@
+[
+ {
+  "cmd": "echo 'p03-start'",
+  "out": "\n[ INFO] Syscall::Exit: task 5 exited with code 0\nUSER: Init: service exited cleanly \u2014 policy says no restart.\nUSER: echo 'p03-start'\nUSER: p03-start\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | where tid '>=' int:0 | sort-by tid | select tid name | take 2 | to jsonl",
+  "out": "ps --records | where tid '>=' int:0 | sort-by tid | select tid name | take 2 | to jsonl\nUSER: {\"tid\":2,\"name\":\"init\"}\nUSER: {\"tid\":3,\"name\":\"nvme\"}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | where tid '>' uint:0 | sort-by tid --reverse | select tid | take 1 | to jsonl",
+  "out": "ps --records | where tid '>' uint:0 | sort-by tid --reverse | select tid | take 1 | to jsonl\nUSER: {\"tid\":7}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | where state '==' '\"Running\"' | select tid | take 1 > /tmp/p03.jsonl",
+  "out": "ps --records | where state '==' '\"Running\"' | select tid | take 1 > /tmp/p03.jsonl\nUSER: Cellos > "
+ },
+ {
+  "cmd": "cat /tmp/p03.jsonl",
+  "out": "cat /tmp/p03.jsonl\nUSER: {\"cellbox\":1,\"value\":[\"record\",[[\"tid\",[\"uint\",\"7\"]]]]}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "cat /tmp/p03.jsonl | from jsonl --typed | to text --field tid",
+  "out": "cat /tmp/p03.jsonl | from jsonl --typed | to text --field tid\nUSER: 7\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | take 0 | to jsonl",
+  "out": "ps --records | take 0 | to jsonl\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ls --records / | select name | take 3 | to json",
+  "out": "ls --records / | select name | take 3 | to json\nUSER: [{\"name\":\"bin\"},{\"name\":\"data\"},{\"name\":\"etc\"}]\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | grep x > /tmp/p03-refused",
+  "out": "ps --records | grep x > /tmp/p03-refused\nUSER: shell: `grep` cannot consume records or bytes here: end the typed stages with `to json|jsonl|text`\nUSER: Cellos > "
+ },
+ {
+  "cmd": "cat /tmp/p03-refused",
+  "out": "cat /tmp/p03-refused\nUSER: cat: /tmp/p03-refused: No such file or directory\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ls --records | cd /tmp",
+  "out": "ls --records | cd /tmp\nUSER: shell: `cd` changes shell state and cannot run inside a pipeline\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo 'a b' | from jsonl | to jsonl",
+  "out": "echo 'a b' | from jsonl | to jsonl\nUSER: shell: from: JSON parse error: line 1: unexpected character at byte 0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | take 1 &",
+  "out": "ps --records | take 1 &\nUSER: shell: background `&` is supported only for a single external command; the pipeline was not started\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | where name '>' int:1 | to jsonl",
+  "out": "ps --records | where name '>' int:1 | to jsonl\nUSER: shell: where: type mismatch during comparison\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | select nosuchfield | take 1 | to jsonl",
+  "out": "ps --records | select nosuchfield | take 1 | to jsonl\nUSER: shell: select: field 'nosuchfield' not found\nUSER: Cellos > "
+ },
+ {
+  "cmd": "top --records --frames 3 | take --frame 2 | to jsonl",
+  "out": "top --records --frames 3 | take --frame 2 | to jsonl\nUSER: {\"frame\":\"begin\",\"sample_id\":7,\"monotonic_ns\":67318747790,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e211b45aa567b4\",\"interval_ns\":1003743260,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":5,\"total_tasks\":5,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":233242624,\"mem_used_bytes\":68345856,\"mem_free_bytes\":164896768,\"memory_interval\":true}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":111,\"root_tid\":6,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":1096142990,\"cpu_tenths\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":112,\"root_tid\":7,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":511359070,\"cpu_tenths\":17,\"cpu_quality\":\"ok\",\"quota_bytes\":18696,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":72614010,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":806098930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3237946,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":109,\"root_tid\":4,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":244753930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":1016,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}\nUSER: {\"frame\":\"begin\",\"sample_id\":8,\"monotonic_ns\":68343067230,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e211b45aa567b4\",\"interval_ns\":1024319440,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":5,\"total_tasks\":5,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":233242624,\"mem_used_bytes\":68345856,\"mem_free_bytes\":164896768,\"memory_interval\":true}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":111,\"root_tid\":6,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":1126989260,\"cpu_tenths\":30,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":112,\"root_tid\":7,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":535389650,\"cpu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":18696,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":72614010,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":806098930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3237946,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":109,\"root_tid\":4,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":244753930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":1016,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "top --records | take 2",
+  "out": "top --records | take 2\nUSER: shell: take: input is a frame stream; use `take --frame`\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo stfr=$?",
+  "out": "echo stfr=$?\nUSER: stfr=2\nUSER: Cellos > "
+ },
+ {
+  "cmd": "top --records --frames 2 | sort-by --frame --reverse cpu_tenths | to jsonl",
+  "out": "top --records --frames 2 | sort-by --frame --reverse cpu_tenths | to jsonl\nUSER: {\"frame\":\"begin\",\"sample_id\":10,\"monotonic_ns\":83846965920,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e211b45aa567b4\",\"interval_ns\":1017989780,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":5,\"total_tasks\":5,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":233242624,\"mem_used_bytes\":68345856,\"mem_free_bytes\":164896768,\"memory_interval\":true}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":111,\"root_tid\":6,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":1395428500,\"cpu_tenths\":28,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":112,\"root_tid\":7,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":636086120,\"cpu_tenths\":17,\"cpu_quality\":\"ok\",\"quota_bytes\":18696,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":72614010,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":806098930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3237946,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":109,\"root_tid\":4,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":244753930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":1016,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}\nUSER: {\"frame\":\"begin\",\"sample_id\":11,\"monotonic_ns\":84871145330,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e211b45aa567b4\",\"interval_ns\":1024179410,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":5,\"total_tasks\":5,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":233242624,\"mem_used_bytes\":68345856,\"mem_free_bytes\":164896768,\"memory_interval\":true}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":111,\"root_tid\":6,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":1425394920,\"cpu_tenths\":29,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":112,\"root_tid\":7,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":658606730,\"cpu_tenths\":21,\"cpu_quality\":\"ok\",\"quota_bytes\":18696,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":72614010,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":806098930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3237946,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":109,\"root_tid\":4,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":244753930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":1016,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo hi > /tmp/p03.txt",
+  "out": "echo hi > /tmp/p03.txt\nUSER: Cellos > "
+ },
+ {
+  "cmd": "cat /tmp/p03.txt",
+  "out": "cat /tmp/p03.txt\nUSER: hi\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | select tid | take 500 | to jsonl",
+  "out": "ps --records | select tid | take 500 | to jsonl\nUSER: {\"tid\":2}\nUSER: {\"tid\":3}\nUSER: {\"tid\":4}\nUSER: {\"tid\":6}\nUSER: {\"tid\":7}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo x | /bin/p03-filter exit 0",
+  "out": "echo x | /bin/p03-filter exit 0\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 8 exited with code 0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo st0=$?",
+  "out": "echo st0=$?\nUSER: st0=0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo x | /bin/p03-filter exit 7",
+  "out": "echo x | /bin/p03-filter exit 7\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 9 exited with code 7\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo st7=$?",
+  "out": "echo st7=$?\nUSER: st7=7\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo x | /bin/p03-filter exit 200",
+  "out": "echo x | /bin/p03-filter exit 200\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 10 exited with code 200\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo st200=$?",
+  "out": "echo st200=$?\nUSER: st200=200\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo x | /bin/p03-filter exit nope",
+  "out": "echo x | /bin/p03-filter exit nope\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 11 exited with code 2\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo stbad=$?",
+  "out": "echo stbad=$?\nUSER: stbad=2\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo x | /bin/p03-filter exit 7 | /bin/p03-filter cat",
+  "out": "echo x | /bin/p03-filter exit 7 | /bin/p03-filter cat\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] ELF LOAD: 0x10C000000-0x10C00D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10C00D900-0x10C00EB78 flags=R--\n[ INFO] ELF LOAD: 0x10C00F000-0x10C00F468 flags=RW-\n[ INFO] ELF LOAD: 0x10C010000-0x10C110031 flags=RW-\n[ INFO] ELF LOAD: 0x10C110038-0x10C11103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 13 exited with code 7\n[ INFO] Syscall::Exit: task 12 exited with code 0\nUSER: shell: /bin/p03-filter exited with status 7\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo stmid=$?",
+  "out": "echo stmid=$?\nUSER: stmid=0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ls --records / | select name | to jsonl | /bin/p03-filter noread",
+  "out": "ls --records / | select name | to jsonl | /bin/p03-filter noread\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 14 exited with code 0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo stnr1=$?",
+  "out": "echo stnr1=$?\nUSER: stnr1=0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo x | /bin/p03-filter noread",
+  "out": "echo x | /bin/p03-filter noread\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 15 exited with code 0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo stnr2=$?",
+  "out": "echo stnr2=$?\nUSER: stnr2=0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "/bin/p03-filter endless | /bin/p03-filter noread",
+  "out": "/bin/p03-filter endless | /bin/p03-filter noread\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] ELF LOAD: 0x10C000000-0x10C00D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10C00D900-0x10C00EB78 flags=R--\n[ INFO] ELF LOAD: 0x10C00F000-0x10C00F468 flags=RW-\n[ INFO] ELF LOAD: 0x10C010000-0x10C110031 flags=RW-\n[ INFO] ELF LOAD: 0x10C110038-0x10C11103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 16 exited with code 0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo stee=$?",
+  "out": "echo stee=$?\nUSER: stee=0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "/bin/p03-filter gen | /bin/p03-filter hex",
+  "out": "/bin/p03-filter gen | /bin/p03-filter hex\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] ELF LOAD: 0x10C000000-0x10C00D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10C00D900-0x10C00EB78 flags=R--\n[ INFO] ELF LOAD: 0x10C00F000-0x10C00F468 flags=RW-\n[ INFO] ELF LOAD: 0x10C010000-0x10C110031 flags=RW-\n[ INFO] ELF LOAD: 0x10C110038-0x10C11103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 19 exited with code 0\n[ INFO] Syscall::Exit: task 18 exited with code 0\nUSER: p03-hex len=6 hex=00ff41fe807a\nUSER: Cellos > "
+ },
+ {
+  "cmd": "/bin/p03-filter gen | /bin/p03-filter cat | /bin/p03-filter hex",
+  "out": "/bin/p03-filter gen | /bin/p03-filter cat | /bin/p03-filter hex\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] ELF LOAD: 0x10C000000-0x10C00D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10C00D900-0x10C00EB78 flags=R--\n[ INFO] ELF LOAD: 0x10C00F000-0x10C00F468 flags=RW-\n[ INFO] ELF LOAD: 0x10C010000-0x10C110031 flags=RW-\n[ INFO] ELF LOAD: 0x10C110038-0x10C11103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] ELF LOAD: 0x10E000000-0x10E00D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10E00D900-0x10E00EB78 flags=R--\n[ INFO] ELF LOAD: 0x10E00F000-0x10E00F468 flags=RW-\n[ INFO] ELF LOAD: 0x10E010000-0x10E110031 flags=RW-\n[ INFO] ELF LOAD: 0x10E110038-0x10E11103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 22 exited with code 0\n[ INFO] Syscall::Exit: task 21 exited with code 0\n[ INFO] Syscall::Exit: task 20 exited with code 0\nUSER: p03-hex len=6 hex=00ff41fe807a\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo abcXYZ-09 | /bin/p03-filter upper",
+  "out": "echo abcXYZ-09 | /bin/p03-filter upper\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 23 exited with code 0\nUSER: ABCXYZ-09\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | select tid | take 1 | to jsonl | /bin/p03-filter cat",
+  "out": "ps --records | select tid | take 1 | to jsonl | /bin/p03-filter cat\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 24 exited with code 0\nUSER: {\"tid\":2}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "/bin/p03-filter rows | from jsonl | to jsonl",
+  "out": "/bin/p03-filter rows | from jsonl | to jsonl\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 25 exited with code 0\nUSER: {\"a\":1}\nUSER: {\"a\":2}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "/bin/p03-filter typed | from jsonl --typed | to text --field pid",
+  "out": "/bin/p03-filter typed | from jsonl --typed | to text --field pid\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 26 exited with code 0\nUSER: 7\nUSER: 9\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo '{\"a\":1}' | /bin/p03-filter cat | from jsonl | to jsonl",
+  "out": "echo '{\"a\":1}' | /bin/p03-filter cat | from jsonl | to jsonl\nUSER: shell: `echo` output is bytes: `from json|jsonl` must directly follow it before any typed stage\nUSER: Cellos > "
+ },
+ {
+  "cmd": "cat /tmp/p03.jsonl | /bin/p03-filter cat | from jsonl --typed | to text --field tid",
+  "out": "cat /tmp/p03.jsonl | /bin/p03-filter cat | from jsonl --typed | to text --field tid\nUSER: shell: `cat` output is bytes: `from json|jsonl` must directly follow it before any typed stage\nUSER: Cellos > "
+ },
+ {
+  "cmd": "top --records --frames 3 | to jsonl | /bin/p03-filter cat",
+  "out": "top --records --frames 3 | to jsonl | /bin/p03-filter cat\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\nUSER: {\"frame\":\"begin\",\"sample_id\":15,\"monotonic_ns\":212056260540,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e211b45aa567b4\",\"interval_ns\":1004125380,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":6,\"total_tasks\":6,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":233242624,\"mem_used_bytes\":70012928,\"mem_free_bytes\":163229696,\"memory_interval\":true}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":111,\"root_tid\":6,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3474165060,\"cpu_tenths\":28,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":112,\"root_tid\":7,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":1825447390,\"cpu_tenths\":17,\"cpu_quality\":\"ok\",\"quota_bytes\":150620,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":73303770,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":806098930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3237946,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":109,\"root_tid\":4,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":349548870,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":132,\"root_tid\":27,\"name\":\"p03-filter\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":1611170,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":936,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}\nUSER: {\"frame\":\"begin\",\"sample_id\":16,\"monotonic_ns\":213060646030,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e211b45aa567b4\",\"interval_ns\":1004385490,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":6,\"total_tasks\":6,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":233242624,\"mem_used_bytes\":70012928,\"mem_free_bytes\":163229696,\"memory_interval\":true}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":111,\"root_tid\":6,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3502090780,\"cpu_tenths\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":112,\"root_tid\":7,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":1842748090,\"cpu_tenths\":17,\"cpu_quality\":\"ok\",\"quota_bytes\":150620,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":73303770,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":806098930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3237946,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":109,\"root_tid\":4,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\"\n[ INFO] Syscall::Exit: task 27 exited with code 0\nUSER+ ,\"tasks\":1,\"cpu_ns\":349548870,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":132,\"root_tid\":27,\"name\":\"p03-filter\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2173590,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":936,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}\nUSER: {\"frame\":\"begin\",\"sample_id\":17,\"monotonic_ns\":214084644160,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e211b45aa567b4\",\"interval_ns\":1023998130,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":6,\"total_tasks\":6,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":233242624,\"mem_used_bytes\":70012928,\"mem_free_bytes\":163229696,\"memory_interval\":true}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":111,\"root_tid\":6,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3529177740,\"cpu_tenths\":26,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":112,\"root_tid\":7,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":1863425760,\"cpu_tenths\":20,\"cpu_quality\":\"ok\",\"quota_bytes\":150620,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":73303770,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":806098930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3237946,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":109,\"root_tid\":4,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":349548870,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":132,\"root_tid\":27,\"name\":\"p03-filter\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2721570,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":936,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "cat /tmp/p03.txt | /bin/p03-filter cat",
+  "out": "cat /tmp/p03.txt | /bin/p03-filter cat\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 28 exited with code 0\nUSER: hi\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo ext-to-ext | /bin/p03-filter upper | /bin/p03-filter cat",
+  "out": "echo ext-to-ext | /bin/p03-filter upper | /bin/p03-filter cat\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] ELF LOAD: 0x10C000000-0x10C00D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10C00D900-0x10C00EB78 flags=R--\n[ INFO] ELF LOAD: 0x10C00F000-0x10C00F468 flags=RW-\n[ INFO] ELF LOAD: 0x10C010000-0x10C110031 flags=RW-\n[ INFO] ELF LOAD: 0x10C110038-0x10C11103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] Syscall::Exit: task 30 exited with code 0\n[ INFO] Syscall::Exit: task 29 exited with code 0\nUSER: EXT-TO-EXT\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ls --records / | select name | to jsonl | /bin/p03-nosuchprog",
+  "out": "ls --records / | select name | to jsonl | /bin/p03-nosuchprog\n[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/p03-nosuchprog spawn_cap=false supervisor_cap=false\nUSER: shell: cannot start /bin/p03-nosuchprog: Denied\nUSER: Cellos > "
+ },
+ {
+  "cmd": "top --records --frames 100 | take --frame 2 | to jsonl | /bin/p03-filter cat",
+  "out": "top --records --frames 100 | take --frame 2 | to jsonl | /bin/p03-filter cat\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\nUSER: {\"frame\":\"begin\",\"sample_id\":19,\"monotonic_ns\":234579272880,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e211b45aa567b4\",\"interval_ns\":1004132790,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":6,\"total_tasks\":6,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":233242624,\"mem_used_bytes\":70012928,\"mem_free_bytes\":163229696,\"memory_interval\":true}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":111,\"root_tid\":6,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3878734270,\"cpu_tenths\":26,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":112,\"root_tid\":7,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2110837280,\"cpu_tenths\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":168581,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":73303770,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":806098930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3237946,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":109,\"root_tid\":4,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":364975990,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":136,\"root_tid\":31,\"name\":\"p03-filter\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":1684510,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":936,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}\nUSER: {\"frame\":\"begin\",\"sample_id\":20,\"monotonic_ns\":235583352210,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e211b45aa567b4\",\"interval_ns\":1004079330,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":6,\"total_tasks\":6,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":233242624,\"mem_used_bytes\":70012928,\"mem_free_bytes\":163229696,\"memory_interval\":true}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":111,\"root_tid\":6,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3908344780,\"cpu_tenths\":29,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":112,\"root_tid\":7,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2128853810,\"cpu_tenths\":17,\"cpu_quality\":\"ok\",\"quota_bytes\":168581,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":73303770,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":806098930,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3237946,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":109,\"root_tid\":4,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\"\n[ INFO] Syscall::Exit: task 31 exited with code 0\nUSER+ ,\"tasks\":1,\"cpu_ns\":364975990,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":136,\"root_tid\":31,\"name\":\"p03-filter\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2330950,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":936,\"limit_bytes\":16777216}}\nUSER: {\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "CTRL-C top-pipeline",
+  "out": "top --records --frames 1000 | to jsonl | /bin/p03-filter upper\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\nUSER: {\"FRAME\":\"BEGIN\",\"SAMPLE_ID\":22,\"MONOTONIC_NS\":244781377660,\"META\":{\"SCHEMA\":\"TOP.CELL.V1\",\"PROVIDER_EPOCH\":\"18E211B45AA567B4\",\"INTERVAL_NS\":1004156550,\"ONLINE_CPUS\":1,\"CPU_UNIT\":\"CORE_TENTHS\",\"CPU_AVAILABLE\":TRUE,\"TOTAL_CELLS\":6,\"TOTAL_TASKS\":6,\"GONE_CELLS\":0,\"GONE_TASKS\":NULL,\"MEM_STATE\":\"PRESENT\",\"MEM_TOTAL_BYTES\":233242624,\"MEM_USED_BYTES\":70012928,\"MEM_FREE_BYTES\":163229696,\"MEMORY_INTERVAL\":TRUE}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":5,\"GENERATION\":111,\"ROOT_TID\":6,\"NAME\":\"INPUT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":4064405630,\"CPU_TENTHS\":26,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":6,\"GENERATION\":112,\"ROOT_TID\":7,\"NAME\":\"CELLBOX\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":2217100070,\"CPU_TENTHS\":16,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":166456,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":1,\"GENERATION\":108,\"ROOT_TID\":3,\"NAME\":\"NVME\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":73303770,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":392,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":2,\"GENERATION\":107,\"ROOT_TID\":2,\"NAME\":\"INIT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":806098930,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":3237946,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":3,\"GENERATION\":109,\"ROOT_TID\":4,\"NAME\":\"VFS\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":381203120,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":4,\"GENERATION\":137,\"ROOT_TID\":32,\"NAME\":\"P03-FILTER\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":1687920,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":936,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"END\",\"COMPLETE\":TRUE,\"UNAVAILABLE_FIELDS\":[],\"DROPPED\":0}\nUSER: {\"FRAME\":\"BEGIN\",\"SAMPLE_ID\":23,\"MONOTONIC_NS\":245785518490,\"META\":{\"SCHEMA\":\"TOP.CELL.V1\",\"PROVIDER_EPOCH\":\"18E211B45AA567B4\",\"INTERVAL_NS\":1004140830,\"ONLINE_CPUS\":1,\"CPU_UNIT\":\"CORE_TENTHS\",\"CPU_AVAILABLE\":TRUE,\"TOTAL_CELLS\":6,\"TOTAL_TASKS\":6,\"GONE_CELLS\":0,\"GONE_TASKS\":NULL,\"MEM_STATE\":\"PRESENT\",\"MEM_TOTAL_BYTES\":233242624,\"MEM_USED_BYTES\":70012928,\"MEM_FREE_BYTES\":163229696,\"MEMORY_INTERVAL\":TRUE}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":5,\"GENERATION\":111,\"ROOT_TID\":6,\"NAME\":\"INPUT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":4090942060,\"CPU_TENTHS\":26,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":6,\"GENERATION\":112,\"ROOT_TID\":7,\"NAME\":\"CELLBOX\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":2233803220,\"CPU_TENTHS\":16,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":166456,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":1,\"GENERATION\":108,\"ROOT_TID\":3,\"NAME\":\"NVME\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":73303770,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":392,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":2,\"GENERATION\":107,\"ROOT_TID\":2,\"NAME\":\"INIT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":806098930,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":3237946,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":3,\"GENERATION\":109,\"ROOT_TID\":4,\"NAME\":\"VFS\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":381203120,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":4,\"GENERATION\":137,\"ROOT_TID\":32,\"NAME\":\"P03-FILTER\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":2282000,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":936,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"END\",\"COMPLETE\":TRUE,\"UNAVAILABLE_FIELDS\":[],\"DROPPED\":0}\nUSER: {\"FRAME\":\"BEGIN\",\"SAMPLE_ID\":24,\"MONOTONIC_NS\":246809755530,\"META\":{\"SCHEMA\":\"TOP.CELL.V1\",\"PROVIDER_EPOCH\":\"18E211B45AA567B4\",\"INTERVAL_NS\":1024237040,\"ONLINE_CPUS\":1,\"CPU_UNIT\":\"CORE_TENTHS\",\"CPU_AVAILABLE\":TRUE,\"TOTAL_CELLS\":6,\"TOTAL_TASKS\":6,\"GONE_CELLS\":0,\"GONE_TASKS\":NULL,\"MEM_STATE\":\"PRESENT\",\"MEM_TOTAL_BYTES\":233242624,\"MEM_USED_BYTES\":70012928,\"MEM_FREE_BYTES\":163229696,\"MEMORY_INTERVAL\":TRUE}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":5,\"GENERATION\":111,\"ROOT_TID\":6,\"NAME\":\"INPUT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":4118516290,\"CPU_TENTHS\":26,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":6,\"GENERATION\":112,\"ROOT_TID\":7,\"NAME\":\"CELLBOX\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":2254639550,\"CPU_TENTHS\":20,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":166456,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":1,\"GENERATION\":108,\"ROOT_TID\":3,\"NAME\":\"NVME\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":73303770,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":392,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":2,\"GENERATION\":107,\"ROOT_TID\":2,\"NAME\":\"INIT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":806098930,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":3237946,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":3,\"GENERATION\":109,\"ROOT_TID\":4,\"NAME\":\"VFS\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":381203120,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":4,\"GENERATION\":137,\"ROOT_TID\":32,\"NAME\":\"P03-FILTER\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":2760350,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":936,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"END\",\"COMPLETE\":TRUE,\"UNAVAILABLE_FIELDS\":[],\"DROPPED\":0}\nUSER: {\"FRAME\":\"BEGIN\",\"SAMPLE_ID\":25,\"MONOTONIC_NS\":247813955770,\"META\":{\"SCHEMA\":\"TOP.CELL.V1\",\"PROVIDER_EPOCH\":\"18E211B45AA567B4\",\"INTERVAL_NS\":1004200240,\"ONLINE_CPUS\":1,\"CPU_UNIT\":\"CORE_TENTHS\",\"CPU_AVAILABLE\":TRUE,\"TOTAL_CELLS\":6,\"TOTAL_TASKS\":6,\"GONE_CELLS\":0,\"GONE_TASKS\":NULL,\"MEM_STATE\":\"PRESENT\",\"MEM_TOTAL_BYTES\":233242624,\"MEM_USED_BYTES\":70012928,\"MEM_FREE_BYTES\":163229696,\"MEMORY_INTERVAL\":TRUE}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":5,\"GENERATION\":111,\"ROOT_TID\":6,\"NAME\":\"INPUT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":4148243600,\"CPU_TENTHS\":29,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":6,\"GENERATION\":112,\"ROOT_TID\":7,\"NAME\":\"CELLBOX\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":2273063120,\"CPU_TENTHS\":18,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":166456,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":1,\"GENERATION\":108,\"ROOT_TID\":3,\"NAME\":\"NVME\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":73303770,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":392,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":2,\"GENERATION\":107,\"ROOT_TID\":2,\"NAME\":\"INIT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":806098930,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":3237946,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":3,\"GENERATION\":109,\"ROOT_TID\":4,\"NAME\":\"VFS\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":381203120,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":4,\"GENERATION\":137,\"ROOT_TID\":32,\"NAME\":\"P03-FILTER\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":3007220,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":936,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"END\",\"COMPLETE\":TRUE,\"UNAVAILABLE_FIELDS\":[],\"DROPPED\":0}\nUSER: {\"FRAME\":\"BEGIN\",\"SAMPLE_ID\":26,\"MONOTONIC_NS\":248817983230,\"META\":{\"SCHEMA\":\"TOP.CELL.V1\",\"PROVIDER_EPOCH\":\"18E211B45AA567B4\",\"INTERVAL_NS\":1004027460,\"ONLINE_CPUS\":1,\"CPU_UNIT\":\"CORE_TENTHS\",\"CPU_AVAILABLE\":TRUE,\"TOTAL_CELLS\":6,\"TOTAL_TASKS\":6,\"GONE_CELLS\":0,\"GONE_TASKS\":NULL,\"MEM_STATE\":\"PRESENT\",\"MEM_TOTAL_BYTES\":233242624,\"MEM_USED_BYTES\":70012928,\"MEM_FREE_BYTES\":163229696,\"MEMORY_INTERVAL\":TRUE}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":5,\"GENERATION\":111,\"ROOT_TID\":6,\"NAME\":\"INPUT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":4178033820,\"CPU_TENTHS\":29,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":6,\"GENERATION\":112,\"ROOT_TID\":7,\"NAME\":\"CELLBOX\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":2292727770,\"CPU_TENTHS\":19,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":166456,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":1,\"GENERATION\":108,\"ROOT_TID\":3,\"NAME\":\"NVME\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":73303770,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":392,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":2,\"GENERATION\":107,\"ROOT_TID\":2,\"NAME\":\"INIT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":806098930,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":3237946,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":3,\"GENERATION\":109,\"ROOT_TID\":4,\"NAME\":\"VFS\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":381203120,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":4,\"GENERATION\":137,\"ROOT_TID\":32,\"NAME\":\"P03-FILTER\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":3489750,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":936,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"END\",\"COMPLETE\":TRUE,\"UNAVAILABLE_FIELDS\":[],\"DROPPED\":0}\nUSER: {\"FRAME\":\"BEGIN\",\"SAMPLE_ID\":27,\"MONOTONIC_NS\":249822188340,\"META\":{\"SCHEMA\":\"TOP.CELL.V1\",\"PROVIDER_EPOCH\":\"18E211B45AA567B4\",\"INTERVAL_NS\":1004205110,\"ONLINE_CPUS\":1,\"CPU_UNIT\":\"CORE_TENTHS\",\"CPU_AVAILABLE\":TRUE,\"TOTAL_CELLS\":6,\"TOTAL_TASKS\":6,\"GONE_CELLS\":0,\"GONE_TASKS\":NULL,\"MEM_STATE\":\"PRESENT\",\"MEM_TOTAL_BYTES\":233242624,\"MEM_USED_BYTES\":70012928,\"MEM_FREE_BYTES\":163229696,\"MEMORY_INTERVAL\":TRUE}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":5,\"GENERATION\":111,\"ROOT_TID\":6,\"NAME\":\"INPUT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":4204424690,\"CPU_TENTHS\":26,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":6,\"GENERATION\":112,\"ROOT_TID\":7,\"NAME\":\"CELLBOX\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":2309566330,\"CPU_TENTHS\":16,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":166456,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":1,\"GENERATION\":108,\"ROOT_TID\":3,\"NAME\":\"NVME\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":73303770,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":392,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":2,\"GENERATION\":107,\"ROOT_TID\":2,\"NAME\":\"INIT\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":806098930,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":3237946,\"LIMIT_BYTES\":16777216}}\nUSER: {\"FRAME\":\"ROW\",\"VALUE\":{\"CELL_ID\":3,\"GENERATION\":109,\"ROOT_TID\":4,\"NAME\":\"VFS\",\"NAME_TRUNCATED\":FALSE,\"STATE\":\"LIVE\",\"TASKS\":1,\"CPU_NS\":381203120,\"CPU_TENTHS\":0,\"CPU_QUALITY\":\"OK\",\"QUOTA_BYTES\":0,\"LIMIT_BYTES\":16777216}}\nUSER: ^C\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo stcc1=$?",
+  "out": "echo stcc1=$?\nUSER: stcc1=130\nUSER: Cellos > "
+ },
+ {
+  "cmd": "CTRL-C ext-pipeline",
+  "out": "/bin/p03-filter endless | /bin/p03-filter hex\n[ INFO] ELF LOAD: 0x106000000-0x10600D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10600D900-0x10600EB78 flags=R--\n[ INFO] ELF LOAD: 0x10600F000-0x10600F468 flags=RW-\n[ INFO] ELF LOAD: 0x106010000-0x106110031 flags=RW-\n[ INFO] ELF LOAD: 0x106110038-0x10611103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\n[ INFO] ELF LOAD: 0x10C000000-0x10C00D8FD flags=R-X\n[ INFO] ELF LOAD: 0x10C00D900-0x10C00EB78 flags=R--\n[ INFO] ELF LOAD: 0x10C00F000-0x10C00F468 flags=RW-\n[ INFO] ELF LOAD: 0x10C010000-0x10C110031 flags=RW-\n[ INFO] ELF LOAD: 0x10C110038-0x10C11103C flags=R--\n[ INFO] [wx] 'p03-filter': 16/274 cell pages lowered to read-only/execute-only\nUSER: ^C\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo stcc2=$?",
+  "out": "echo stcc2=$?\nUSER: stcc2=130\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo after-ctrl-c",
+  "out": "echo after-ctrl-c\nUSER: after-ctrl-c\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | select tid | take 501 | to jsonl",
+  "out": "ps --records | select tid | take 501 | to jsonl\nUSER: {\"tid\":2}\nUSER: {\"tid\":3}\nUSER: {\"tid\":4}\nUSER: {\"tid\":6}\nUSER: {\"tid\":7}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "rg wide-hit /mnt/sd/rg/wide | where line_number '==' uint:1 | select line_number | take 2 | to jsonl",
+  "out": "rg wide-hit /mnt/sd/rg/wide | where line_number '==' uint:1 | select line_number | take 2 | to jsonl\nUSER: {\"line_number\":1}\nUSER: {\"line_number\":1}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "rg ENCTOK /mnt/sd/rg/enc > /tmp/rgp.jsonl",
+  "out": "rg ENCTOK /mnt/sd/rg/enc > /tmp/rgp.jsonl\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo strgw=$?",
+  "out": "echo strgw=$?\nUSER: strgw=0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "cat /tmp/rgp.jsonl | from jsonl --typed | to text --field line_number",
+  "out": "cat /tmp/rgp.jsonl | from jsonl --typed | to text --field line_number\nUSER: 1\nUSER: 2\nUSER: 1\nUSER: 2\nUSER: Cellos > "
+ },
+ {
+  "cmd": "cat /mnt/sd/rg/enc/crlf.txt | rg -a ENCTOK -",
+  "out": "cat /mnt/sd/rg/enc/crlf.txt | rg -a ENCTOK -\nUSER: <stdin>:1:ENCTOK crlf\\r\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo strgs=$?",
+  "out": "echo strgs=$?\nUSER: strgs=0\nUSER: Cellos > "
+ },
+ {
+  "cmd": "rg wide-hit /mnt/sd/rg/wide | take 1",
+  "out": "rg wide-hit /mnt/sd/rg/wide | take 1\nUSER: /mnt/sd/rg/wide/wide000xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt:1:wide-hit\nUSER: Cellos > "
+ },
+ {
+  "cmd": "rg -q wide-hit /mnt/sd/rg/wide",
+  "out": "rg -q wide-hit /mnt/sd/rg/wide\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | select tid name | to jsonl",
+  "out": "ps --records | select tid name | to jsonl\nUSER: {\"tid\":2,\"name\":\"init\"}\nUSER: {\"tid\":3,\"name\":\"nvme\"}\nUSER: {\"tid\":4,\"name\":\"vfs\"}\nUSER: {\"tid\":6,\"name\":\"input\"}\nUSER: {\"tid\":7,\"name\":\"cellbox\"}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | where name '==' '\"cellbox\"' | select tid name | to jsonl",
+  "out": "ps --records | where name '==' '\"cellbox\"' | select tid name | to jsonl\nUSER: {\"tid\":7,\"name\":\"cellbox\"}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ls --records /bin | select name | to jsonl",
+  "out": "ls --records /bin | select name | to jsonl\nUSER: {\"name\":\"cat\"}\nUSER: {\"name\":\"cellbox\"}\nUSER: {\"name\":\"config\"}\nUSER: {\"name\":\"e1000\"}\nUSER: {\"name\":\"echo\"}\nUSER: {\"name\":\"input\"}\nUSER: {\"name\":\"kill\"}\nUSER: {\"name\":\"ls\"}\nUSER: {\"name\":\"nvme\"}\nUSER: {\"name\":\"p03-filter\"}\nUSER: {\"name\":\"platform\"}\nUSER: {\"name\":\"ps\"}\nUSER: {\"name\":\"shutdown\"}\nUSER: {\"name\":\"vfs\"}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "/bin/kill 6",
+  "out": "/bin/kill 6\n[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/kill spawn_cap=false supervisor_cap=false\nUSER: shell: foreground preparation failed: Denied\nUSER: Cellos > "
+ },
+ {
+  "cmd": "/bin/shell",
+  "out": "/bin/shell\n[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/shell spawn_cap=false supervisor_cap=false\nUSER: shell: foreground preparation failed: Denied\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo s1-alive",
+  "out": "echo s1-alive\nUSER: s1-alive\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | select tid name | take 500 | to jsonl",
+  "out": "ps --records | select tid name | take 500 | to jsonl\nUSER: {\"tid\":2,\"name\":\"init\"}\nUSER: {\"tid\":3,\"name\":\"nvme\"}\nUSER: {\"tid\":4,\"name\":\"vfs\"}\nUSER: {\"tid\":6,\"name\":\"input\"}\nUSER: {\"tid\":7,\"name\":\"cellbox\"}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | select tid name state | take 500 | to jsonl",
+  "out": "ps --records | select tid name state | take 500 | to jsonl\nUSER: {\"tid\":2,\"name\":\"init\",\"state\":\"Waiting\"}\nUSER: {\"tid\":3,\"name\":\"nvme\",\"state\":\"Waiting\"}\nUSER: {\"tid\":4,\"name\":\"vfs\",\"state\":\"Waiting\"}\nUSER: {\"tid\":6,\"name\":\"input\",\"state\":\"Ready\"}\nUSER: {\"tid\":7,\"name\":\"cellbox\",\"state\":\"Running\"}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "kill 2",
+  "out": "kill 2\nUSER: kill: not available from the suite shell, requires a lifecycle owner\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo s2-kill-status=$?",
+  "out": "echo s2-kill-status=$?\nUSER: s2-kill-status=1\nUSER: Cellos > "
+ },
+ {
+  "cmd": "blktest",
+  "out": "blktest\n[ WARN] [kernel] raw block opcode 500 denied for tid 7 (no bit 36)\nUSER: blkio: denied\nUSER: Cellos > "
+ },
+ {
+  "cmd": "snapshot",
+  "out": "snapshot\nUSER: snapshot: not available from the suite shell, requires a lifecycle owner\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo s2-snapshot-status=$?",
+  "out": "echo s2-snapshot-status=$?\nUSER: s2-snapshot-status=1\nUSER: Cellos > "
+ },
+ {
+  "cmd": "/bin/e1000",
+  "out": "/bin/e1000\n[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/e1000 spawn_cap=false supervisor_cap=false\nUSER: shell: foreground preparation failed: Denied\nUSER: Cellos > "
+ },
+ {
+  "cmd": "exec /bin/e1000 --forged-privileged-mode",
+  "out": "exec /bin/e1000 --forged-privileged-mode\n[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/e1000 spawn_cap=false supervisor_cap=false\nUSER: shell: foreground preparation failed: Denied\nUSER: Cellos > "
+ },
+ {
+  "cmd": "exec /bin/kill 1 --force",
+  "out": "exec /bin/kill 1 --force\n[ WARN] [loader] DENY launch edge: caller=7 name=cellbox route=Path target=/bin/kill spawn_cap=false supervisor_cap=false\nUSER: shell: foreground preparation failed: Denied\nUSER: Cellos > "
+ },
+ {
+  "cmd": "shutdown",
+  "out": "shutdown\n[ WARN] [kernel] raw opcode 502 denied for cellbox\nUSER: shutdown: use /bin/shutdown\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo s2-shutdown-status=$?",
+  "out": "echo s2-shutdown-status=$?\nUSER: s2-shutdown-status=1\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo s2-alive-after-shutdown",
+  "out": "echo s2-alive-after-shutdown\nUSER: s2-alive-after-shutdown\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo s2-alive",
+  "out": "echo s2-alive\nUSER: s2-alive\nUSER: Cellos > "
+ },
+ {
+  "cmd": "free",
+  "out": "free\nUSER:               total        used        free\nUSER: Mem (KiB):    227776      66744      161032\nUSER: Cellos > "
+ },
+ {
+  "cmd": "ps --records | select tid name state | take 501 | to jsonl",
+  "out": "ps --records | select tid name state | take 501 | to jsonl\nUSER: {\"tid\":2,\"name\":\"init\",\"state\":\"Waiting\"}\nUSER: {\"tid\":3,\"name\":\"nvme\",\"state\":\"Waiting\"}\nUSER: {\"tid\":4,\"name\":\"vfs\",\"state\":\"Waiting\"}\nUSER: {\"tid\":6,\"name\":\"input\",\"state\":\"Ready\"}\nUSER: {\"tid\":7,\"name\":\"cellbox\",\"state\":\"Running\"}\nUSER: Cellos > "
+ },
+ {
+  "cmd": "echo p03-end",
+  "out": "echo p03-end\nUSER: p03-end\nUSER: Cellos > "
+ },
+ {
+  "cmd": "/bin/shutdown",
+  "out": "/bin/shutdown\n[ INFO] ELF LOAD: 0x106000000-0x106002BEA flags=R-X\n[ INFO] ELF LOAD: 0x106002BF0-0x106003318 flags=R--\n[ INFO] ELF LOAD: 0x106004000-0x106004290 flags=RW-\n[ INFO] ELF LOAD: 0x106005000-0x106105031 flags=RW-\n[ INFO] [wx] 'shutdown': 4/262 cell pages lowered to read-only/execute-only\n"
+ }
+]

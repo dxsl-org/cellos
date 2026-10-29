@@ -1,0 +1,97 @@
+Checking: /tmp/cellbox-phase04-gui-i8q3krw4/embedded/kernel_fs.img
+Size: 12582912 bytes (12288 KB)
+Sig: 55aa (should be 55aa)
+FS type: b'  FAT16 '
+BPS=512 SPC=1 RES=1 FAT_CNT=2 ROOT_ENT=512 FAT_SZ=128
+Root dir at 131584, Data area at 147968
+  --- root ---
+    LFN[1] 'bin'
+    SFN BIN~1         -> LFN 'bin'  attr=10 clus=2 sz=0
+    LFN[1] 'etc'
+    SFN ETC~1         -> LFN 'etc'  attr=10 clus=4 sz=0
+    LFN[1] 'gui-list'
+    SFN GUI-LI~1      -> LFN 'gui-list'  attr=10 clus=6 sz=0
+    LFN[1] 'gui-text'
+    SFN GUI-TE~1      -> LFN 'gui-text'  attr=10 clus=7 sz=0
+    LFN[1] 'p04-output'
+    SFN P04-OU~1      -> LFN 'p04-output'  attr=10 clus=8 sz=0
+bin dir (SFN='BIN~1') at cluster 2, offset 147968
+  --- /bin ---
+    SFN .                    attr=10 clus=2 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'vfs'
+    SFN VFS~1         -> LFN 'vfs'  attr=20 clus=9 sz=613456
+    LFN[1] 'config'
+    SFN CONFIG~1      -> LFN 'config'  attr=20 clus=1208 sz=47376
+    LFN[1] 'input'
+    SFN INPUT~1       -> LFN 'input'  attr=20 clus=1301 sz=167120
+    LFN[1] 'platform'
+    SFN PLATFO~1      -> LFN 'platform'  attr=20 clus=1628 sz=38488
+    LFN[1] 'compositor'
+    SFN COMPOS~1      -> LFN 'compositor'  attr=20 clus=1704 sz=107816
+    LFN[1] 'fb-console'
+    SFN FB-CON~1      -> LFN 'fb-console'  attr=20 clus=1915 sz=584344
+    LFN[1] 'desktop'
+    SFN DESKTO~1      -> LFN 'desktop'  attr=20 clus=3057 sz=1161480
+    LFN[1] 'files'
+    SFN FILES~1       -> LFN 'files'  attr=20 clus=5326 sz=2326864
+    LFN[1] 'ls'
+    SFN LS~1          -> LFN 'ls'  attr=20 clus=9871 sz=30288
+    LFN[1] 'cat'
+    SFN CAT~1         -> LFN 'cat'  attr=20 clus=9931 sz=30328
+    LFN[1] 'echo'
+    SFN ECHO~1        -> LFN 'echo'  attr=20 clus=9991 sz=30296
+    LFN[1] 'p03-filter'
+    SFN P03-FI~1      -> LFN 'p03-filter'  attr=20 clus=10051 sz=87480
+    LFN[1] 'cellbox'
+    SFN CELLBO~1      -> LFN 'cellbox'  attr=20 clus=10222 sz=3094016
+    LFN[1] 'terminal'
+    SFN TERMIN~1      -> LFN 'terminal'  attr=20 clus=16265 sz=950600
+etc dir (SFN='ETC~1') at cluster 4, offset 148992
+  --- /etc ---
+    SFN .                    attr=10 clus=4 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellos'
+    SFN CELLOS~1      -> LFN 'cellos'  attr=10 clus=5 sz=0
+cellos dir (SFN='CELLOS~1') at cluster 5, offset 149504
+  --- /etc/cellos ---
+    SFN .                    attr=10 clus=5 sz=0
+    SFN ..                   attr=10 clus=4 sz=0
+    LFN[1] 'system.toml'
+    SFN SYSTEM~1.TOM  -> LFN 'system.toml'  attr=20 clus=18154 sz=128
+    LFN[2] ''
+    LFN[1] 'services.toml'
+    SFN SERVIC~1.TOM  -> LFN 'services.toml'  attr=20 clus=18155 sz=553
+    LFN[2] ''
+    LFN[1] 'autoload.toml'
+    SFN AUTOLO~1.TOM  -> LFN 'autoload.toml'  attr=20 clus=18157 sz=271
+gui-list dir (SFN='GUI-LI~1') at cluster 6, offset 150016
+  --- /gui-list ---
+    SFN .                    attr=10 clus=6 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'alpha-entry'
+    SFN ALPHA-~1      -> LFN 'alpha-entry'  attr=20 clus=18122 sz=32
+    LFN[1] 'beta-entry'
+    SFN BETA-E~1      -> LFN 'beta-entry'  attr=20 clus=18123 sz=32
+gui-text dir (SFN='GUI-TE~1') at cluster 7, offset 150528
+  --- /gui-text ---
+    SFN .                    attr=10 clus=7 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'note.txt'
+    SFN NOTE~1.TXT    -> LFN 'note.txt'  attr=20 clus=18124 sz=34
+p04-output dir (SFN='P04-OU~1') at cluster 8, offset 151040
+  --- /p04-output ---
+    SFN .                    attr=10 clus=8 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[2] ''
+    LFN[1] 'vt-sample.bin'
+    SFN VT-SAM~1.BIN  -> LFN 'vt-sample.bin'  attr=20 clus=18125 sz=650
+    LFN[2] 'bin'
+    LFN[1] 'vt-alt-enter.'
+    SFN VT-ALT~1.BIN  -> LFN 'vt-alt-enter.bin'  attr=20 clus=18127 sz=88
+    LFN[2] 'in'
+    LFN[1] 'vt-alt-exit.b'
+    SFN VT-ALT~2.BIN  -> LFN 'vt-alt-exit.bin'  attr=20 clus=18128 sz=12
+    LFN[2] 'n'
+    LFN[1] 'vt-hostile.bi'
+    SFN VT-HOS~1.BIN  -> LFN 'vt-hostile.bin'  attr=20 clus=18129 sz=12628

@@ -1,0 +1,576 @@
+{
+  "counts": {
+    "P10C-ctrl-c:sleep-ctrl-c-prompt": {
+      "pass": 8,
+      "fail": 2,
+      "not-reached": 0
+    },
+    "P10C-ctrl-c:sleep-ctrl-c-130": {
+      "pass": 8,
+      "fail": 0,
+      "not-reached": 2
+    },
+    "P10C-ctrl-c:top-batch-ctrl-c-prompt": {
+      "pass": 8,
+      "fail": 0,
+      "not-reached": 2
+    },
+    "P10C-ctrl-c:top-batch-ctrl-c-130": {
+      "pass": 8,
+      "fail": 0,
+      "not-reached": 2
+    },
+    "P10C-ctrl-c:cat-sink-ctrl-c-prompt": {
+      "pass": 8,
+      "fail": 0,
+      "not-reached": 2
+    },
+    "P10C-ctrl-c:cat-sink-output-stops": {
+      "pass": 8,
+      "fail": 0,
+      "not-reached": 2
+    },
+    "P10C-ctrl-c:cat-sink-ctrl-c-130": {
+      "pass": 8,
+      "fail": 0,
+      "not-reached": 2
+    },
+    "P10C-bytes:disk-non-utf8-lossy-text": {
+      "pass": 10,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10C-bytes:disk-non-utf8-uart-bytes": {
+      "pass": 10,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10C-bytes:disk-oversized-file-too-large-1": {
+      "pass": 10,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10C-bytes:disk-directory-is-a-directory-1": {
+      "pass": 10,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-0-clear-typed-line-exact": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-0-clear-output-exact": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-0-clear-control-before-frame-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-0-clear-control-one-char-change-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-0-clear-before-after-window-pixels-changed": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-1-history-clear-typed-line-exact": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-1-history-clear-output-exact": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-1-history-clear-control-before-frame-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-1-history-clear-control-one-char-change-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-1-history-clear-before-after-window-pixels-changed": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-2-cat-typed-line-exact": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-2-cat-output-exact": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-2-cat-control-before-frame-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-2-cat-control-one-char-change-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-2-cat-control-params17-bold-red-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-2-cat-before-after-window-pixels-changed": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-3-echo-as-typed-typed-line-exact": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-3-echo-as-typed-output-exact": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-3-echo-as-typed-control-before-frame-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-3-echo-as-typed-control-one-char-change-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-3-echo-as-typed-before-after-window-pixels-changed": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-4-history-typed-line-exact": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-4-history-output-exact": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-4-history-control-before-frame-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-4-history-control-one-char-change-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-4-history-control-history-not-cleared-differs": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    },
+    "P10G-vt:HOSTILE-4-history-before-after-window-pixels-changed": {
+      "pass": 6,
+      "fail": 0,
+      "not-reached": 0
+    }
+  },
+  "runs": {
+    "L0-headless-run1": {
+      "P10C-ctrl-c": {
+        "sleep-ctrl-c-prompt": true,
+        "sleep-ctrl-c-130": true,
+        "top-batch-ctrl-c-prompt": true,
+        "top-batch-ctrl-c-130": true,
+        "cat-sink-ctrl-c-prompt": true,
+        "cat-sink-output-stops": true,
+        "cat-sink-ctrl-c-130": true
+      },
+      "P10C-bytes": {
+        "disk-non-utf8-lossy-text": true,
+        "disk-non-utf8-uart-bytes": true,
+        "disk-oversized-file-too-large-1": true,
+        "disk-directory-is-a-directory-1": true
+      }
+    },
+    "L0-headless-run2": {
+      "P10C-ctrl-c": {
+        "sleep-ctrl-c-prompt": true,
+        "sleep-ctrl-c-130": true,
+        "top-batch-ctrl-c-prompt": true,
+        "top-batch-ctrl-c-130": true,
+        "cat-sink-ctrl-c-prompt": true,
+        "cat-sink-output-stops": true,
+        "cat-sink-ctrl-c-130": true
+      },
+      "P10C-bytes": {
+        "disk-non-utf8-lossy-text": true,
+        "disk-non-utf8-uart-bytes": true,
+        "disk-oversized-file-too-large-1": true,
+        "disk-directory-is-a-directory-1": true
+      }
+    },
+    "L0-headless-run3": {
+      "P10C-ctrl-c": {
+        "sleep-ctrl-c-prompt": true,
+        "sleep-ctrl-c-130": true,
+        "top-batch-ctrl-c-prompt": true,
+        "top-batch-ctrl-c-130": true,
+        "cat-sink-ctrl-c-prompt": true,
+        "cat-sink-output-stops": true,
+        "cat-sink-ctrl-c-130": true
+      },
+      "P10C-bytes": {
+        "disk-non-utf8-lossy-text": true,
+        "disk-non-utf8-uart-bytes": true,
+        "disk-oversized-file-too-large-1": true,
+        "disk-directory-is-a-directory-1": true
+      }
+    },
+    "L0-headless-run4": {
+      "P10C-ctrl-c": {
+        "sleep-ctrl-c-prompt": true,
+        "sleep-ctrl-c-130": true,
+        "top-batch-ctrl-c-prompt": true,
+        "top-batch-ctrl-c-130": true,
+        "cat-sink-ctrl-c-prompt": true,
+        "cat-sink-output-stops": true,
+        "cat-sink-ctrl-c-130": true
+      },
+      "P10C-bytes": {
+        "disk-non-utf8-lossy-text": true,
+        "disk-non-utf8-uart-bytes": true,
+        "disk-oversized-file-too-large-1": true,
+        "disk-directory-is-a-directory-1": true
+      }
+    },
+    "L0-headless-run5": {
+      "P10C-ctrl-c": {
+        "sleep-ctrl-c-prompt": true,
+        "sleep-ctrl-c-130": true,
+        "top-batch-ctrl-c-prompt": true,
+        "top-batch-ctrl-c-130": true,
+        "cat-sink-ctrl-c-prompt": true,
+        "cat-sink-output-stops": true,
+        "cat-sink-ctrl-c-130": true
+      },
+      "P10C-bytes": {
+        "disk-non-utf8-lossy-text": true,
+        "disk-non-utf8-uart-bytes": true,
+        "disk-oversized-file-too-large-1": true,
+        "disk-directory-is-a-directory-1": true
+      }
+    },
+    "L0-headless-run6": {
+      "P10C-ctrl-c": {
+        "sleep-ctrl-c-prompt": true,
+        "sleep-ctrl-c-130": true,
+        "top-batch-ctrl-c-prompt": true,
+        "top-batch-ctrl-c-130": true,
+        "cat-sink-ctrl-c-prompt": true,
+        "cat-sink-output-stops": true,
+        "cat-sink-ctrl-c-130": true
+      },
+      "P10C-bytes": {
+        "disk-non-utf8-lossy-text": true,
+        "disk-non-utf8-uart-bytes": true,
+        "disk-oversized-file-too-large-1": true,
+        "disk-directory-is-a-directory-1": true
+      }
+    },
+    "L0-desktop-run1": {
+      "P10G-vt": {
+        "marker_pass": true,
+        "hostile": {
+          "HOSTILE-0-clear-typed-line-exact": true,
+          "HOSTILE-0-clear-output-exact": true,
+          "HOSTILE-0-clear-control-before-frame-differs": true,
+          "HOSTILE-0-clear-control-one-char-change-differs": true,
+          "HOSTILE-0-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-1-history-clear-typed-line-exact": true,
+          "HOSTILE-1-history-clear-output-exact": true,
+          "HOSTILE-1-history-clear-control-before-frame-differs": true,
+          "HOSTILE-1-history-clear-control-one-char-change-differs": true,
+          "HOSTILE-1-history-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-2-cat-typed-line-exact": true,
+          "HOSTILE-2-cat-output-exact": true,
+          "HOSTILE-2-cat-control-before-frame-differs": true,
+          "HOSTILE-2-cat-control-one-char-change-differs": true,
+          "HOSTILE-2-cat-control-params17-bold-red-differs": true,
+          "HOSTILE-2-cat-before-after-window-pixels-changed": true,
+          "HOSTILE-3-echo-as-typed-typed-line-exact": true,
+          "HOSTILE-3-echo-as-typed-output-exact": true,
+          "HOSTILE-3-echo-as-typed-control-before-frame-differs": true,
+          "HOSTILE-3-echo-as-typed-control-one-char-change-differs": true,
+          "HOSTILE-3-echo-as-typed-before-after-window-pixels-changed": true,
+          "HOSTILE-4-history-typed-line-exact": true,
+          "HOSTILE-4-history-output-exact": true,
+          "HOSTILE-4-history-control-before-frame-differs": true,
+          "HOSTILE-4-history-control-one-char-change-differs": true,
+          "HOSTILE-4-history-control-history-not-cleared-differs": true,
+          "HOSTILE-4-history-before-after-window-pixels-changed": true
+        }
+      }
+    },
+    "L0-desktop-run2": {
+      "P10G-vt": {
+        "marker_pass": true,
+        "hostile": {
+          "HOSTILE-0-clear-typed-line-exact": true,
+          "HOSTILE-0-clear-output-exact": true,
+          "HOSTILE-0-clear-control-before-frame-differs": true,
+          "HOSTILE-0-clear-control-one-char-change-differs": true,
+          "HOSTILE-0-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-1-history-clear-typed-line-exact": true,
+          "HOSTILE-1-history-clear-output-exact": true,
+          "HOSTILE-1-history-clear-control-before-frame-differs": true,
+          "HOSTILE-1-history-clear-control-one-char-change-differs": true,
+          "HOSTILE-1-history-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-2-cat-typed-line-exact": true,
+          "HOSTILE-2-cat-output-exact": true,
+          "HOSTILE-2-cat-control-before-frame-differs": true,
+          "HOSTILE-2-cat-control-one-char-change-differs": true,
+          "HOSTILE-2-cat-control-params17-bold-red-differs": true,
+          "HOSTILE-2-cat-before-after-window-pixels-changed": true,
+          "HOSTILE-3-echo-as-typed-typed-line-exact": true,
+          "HOSTILE-3-echo-as-typed-output-exact": true,
+          "HOSTILE-3-echo-as-typed-control-before-frame-differs": true,
+          "HOSTILE-3-echo-as-typed-control-one-char-change-differs": true,
+          "HOSTILE-3-echo-as-typed-before-after-window-pixels-changed": true,
+          "HOSTILE-4-history-typed-line-exact": true,
+          "HOSTILE-4-history-output-exact": true,
+          "HOSTILE-4-history-control-before-frame-differs": true,
+          "HOSTILE-4-history-control-one-char-change-differs": true,
+          "HOSTILE-4-history-control-history-not-cleared-differs": true,
+          "HOSTILE-4-history-before-after-window-pixels-changed": true
+        }
+      }
+    },
+    "L0-desktop-run5": {
+      "P10G-vt": {
+        "marker_pass": false,
+        "hostile": {}
+      }
+    },
+    "L0-desktop-run6": {
+      "P10G-vt": {
+        "marker_pass": true,
+        "hostile": {
+          "HOSTILE-0-clear-typed-line-exact": true,
+          "HOSTILE-0-clear-output-exact": true,
+          "HOSTILE-0-clear-control-before-frame-differs": true,
+          "HOSTILE-0-clear-control-one-char-change-differs": true,
+          "HOSTILE-0-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-1-history-clear-typed-line-exact": true,
+          "HOSTILE-1-history-clear-output-exact": true,
+          "HOSTILE-1-history-clear-control-before-frame-differs": true,
+          "HOSTILE-1-history-clear-control-one-char-change-differs": true,
+          "HOSTILE-1-history-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-2-cat-typed-line-exact": true,
+          "HOSTILE-2-cat-output-exact": true,
+          "HOSTILE-2-cat-control-before-frame-differs": true,
+          "HOSTILE-2-cat-control-one-char-change-differs": true,
+          "HOSTILE-2-cat-control-params17-bold-red-differs": true,
+          "HOSTILE-2-cat-before-after-window-pixels-changed": true,
+          "HOSTILE-3-echo-as-typed-typed-line-exact": true,
+          "HOSTILE-3-echo-as-typed-output-exact": true,
+          "HOSTILE-3-echo-as-typed-control-before-frame-differs": true,
+          "HOSTILE-3-echo-as-typed-control-one-char-change-differs": true,
+          "HOSTILE-3-echo-as-typed-before-after-window-pixels-changed": true,
+          "HOSTILE-4-history-typed-line-exact": true,
+          "HOSTILE-4-history-output-exact": true,
+          "HOSTILE-4-history-control-before-frame-differs": true,
+          "HOSTILE-4-history-control-one-char-change-differs": true,
+          "HOSTILE-4-history-control-history-not-cleared-differs": true,
+          "HOSTILE-4-history-before-after-window-pixels-changed": true
+        }
+      }
+    },
+    "L0-headless-run7": {
+      "P10C-ctrl-c": {
+        "sleep-ctrl-c-prompt": false,
+        "sleep-ctrl-c-130": "not-reached",
+        "top-batch-ctrl-c-prompt": "not-reached",
+        "top-batch-ctrl-c-130": "not-reached",
+        "cat-sink-ctrl-c-prompt": "not-reached",
+        "cat-sink-output-stops": "not-reached",
+        "cat-sink-ctrl-c-130": "not-reached"
+      },
+      "P10C-bytes": {
+        "disk-non-utf8-lossy-text": true,
+        "disk-non-utf8-uart-bytes": true,
+        "disk-oversized-file-too-large-1": true,
+        "disk-directory-is-a-directory-1": true
+      }
+    },
+    "L0-headless-run8": {
+      "P10C-ctrl-c": {
+        "sleep-ctrl-c-prompt": true,
+        "sleep-ctrl-c-130": true,
+        "top-batch-ctrl-c-prompt": true,
+        "top-batch-ctrl-c-130": true,
+        "cat-sink-ctrl-c-prompt": true,
+        "cat-sink-output-stops": true,
+        "cat-sink-ctrl-c-130": true
+      },
+      "P10C-bytes": {
+        "disk-non-utf8-lossy-text": true,
+        "disk-non-utf8-uart-bytes": true,
+        "disk-oversized-file-too-large-1": true,
+        "disk-directory-is-a-directory-1": true
+      }
+    },
+    "L0-headless-run10": {
+      "P10C-ctrl-c": {
+        "sleep-ctrl-c-prompt": false,
+        "sleep-ctrl-c-130": "not-reached",
+        "top-batch-ctrl-c-prompt": "not-reached",
+        "top-batch-ctrl-c-130": "not-reached",
+        "cat-sink-ctrl-c-prompt": "not-reached",
+        "cat-sink-output-stops": "not-reached",
+        "cat-sink-ctrl-c-130": "not-reached"
+      },
+      "P10C-bytes": {
+        "disk-non-utf8-lossy-text": true,
+        "disk-non-utf8-uart-bytes": true,
+        "disk-oversized-file-too-large-1": true,
+        "disk-directory-is-a-directory-1": true
+      }
+    },
+    "L0-headless-run12": {
+      "P10C-ctrl-c": {
+        "sleep-ctrl-c-prompt": true,
+        "sleep-ctrl-c-130": true,
+        "top-batch-ctrl-c-prompt": true,
+        "top-batch-ctrl-c-130": true,
+        "cat-sink-ctrl-c-prompt": true,
+        "cat-sink-output-stops": true,
+        "cat-sink-ctrl-c-130": true
+      },
+      "P10C-bytes": {
+        "disk-non-utf8-lossy-text": true,
+        "disk-non-utf8-uart-bytes": true,
+        "disk-oversized-file-too-large-1": true,
+        "disk-directory-is-a-directory-1": true
+      }
+    },
+    "L0-desktop-run7": {
+      "P10G-vt": {
+        "marker_pass": true,
+        "hostile": {
+          "HOSTILE-0-clear-typed-line-exact": true,
+          "HOSTILE-0-clear-output-exact": true,
+          "HOSTILE-0-clear-control-before-frame-differs": true,
+          "HOSTILE-0-clear-control-one-char-change-differs": true,
+          "HOSTILE-0-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-1-history-clear-typed-line-exact": true,
+          "HOSTILE-1-history-clear-output-exact": true,
+          "HOSTILE-1-history-clear-control-before-frame-differs": true,
+          "HOSTILE-1-history-clear-control-one-char-change-differs": true,
+          "HOSTILE-1-history-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-2-cat-typed-line-exact": true,
+          "HOSTILE-2-cat-output-exact": true,
+          "HOSTILE-2-cat-control-before-frame-differs": true,
+          "HOSTILE-2-cat-control-one-char-change-differs": true,
+          "HOSTILE-2-cat-control-params17-bold-red-differs": true,
+          "HOSTILE-2-cat-before-after-window-pixels-changed": true,
+          "HOSTILE-3-echo-as-typed-typed-line-exact": true,
+          "HOSTILE-3-echo-as-typed-output-exact": true,
+          "HOSTILE-3-echo-as-typed-control-before-frame-differs": true,
+          "HOSTILE-3-echo-as-typed-control-one-char-change-differs": true,
+          "HOSTILE-3-echo-as-typed-before-after-window-pixels-changed": true,
+          "HOSTILE-4-history-typed-line-exact": true,
+          "HOSTILE-4-history-output-exact": true,
+          "HOSTILE-4-history-control-before-frame-differs": true,
+          "HOSTILE-4-history-control-one-char-change-differs": true,
+          "HOSTILE-4-history-control-history-not-cleared-differs": true,
+          "HOSTILE-4-history-before-after-window-pixels-changed": true
+        }
+      }
+    },
+    "L0-desktop-run10": {
+      "P10G-vt": {
+        "marker_pass": true,
+        "hostile": {
+          "HOSTILE-0-clear-typed-line-exact": true,
+          "HOSTILE-0-clear-output-exact": true,
+          "HOSTILE-0-clear-control-before-frame-differs": true,
+          "HOSTILE-0-clear-control-one-char-change-differs": true,
+          "HOSTILE-0-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-1-history-clear-typed-line-exact": true,
+          "HOSTILE-1-history-clear-output-exact": true,
+          "HOSTILE-1-history-clear-control-before-frame-differs": true,
+          "HOSTILE-1-history-clear-control-one-char-change-differs": true,
+          "HOSTILE-1-history-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-2-cat-typed-line-exact": true,
+          "HOSTILE-2-cat-output-exact": true,
+          "HOSTILE-2-cat-control-before-frame-differs": true,
+          "HOSTILE-2-cat-control-one-char-change-differs": true,
+          "HOSTILE-2-cat-control-params17-bold-red-differs": true,
+          "HOSTILE-2-cat-before-after-window-pixels-changed": true,
+          "HOSTILE-3-echo-as-typed-typed-line-exact": true,
+          "HOSTILE-3-echo-as-typed-output-exact": true,
+          "HOSTILE-3-echo-as-typed-control-before-frame-differs": true,
+          "HOSTILE-3-echo-as-typed-control-one-char-change-differs": true,
+          "HOSTILE-3-echo-as-typed-before-after-window-pixels-changed": true,
+          "HOSTILE-4-history-typed-line-exact": true,
+          "HOSTILE-4-history-output-exact": true,
+          "HOSTILE-4-history-control-before-frame-differs": true,
+          "HOSTILE-4-history-control-one-char-change-differs": true,
+          "HOSTILE-4-history-control-history-not-cleared-differs": true,
+          "HOSTILE-4-history-before-after-window-pixels-changed": true
+        }
+      }
+    },
+    "L0-desktop-run12": {
+      "P10G-vt": {
+        "marker_pass": true,
+        "hostile": {
+          "HOSTILE-0-clear-typed-line-exact": true,
+          "HOSTILE-0-clear-output-exact": true,
+          "HOSTILE-0-clear-control-before-frame-differs": true,
+          "HOSTILE-0-clear-control-one-char-change-differs": true,
+          "HOSTILE-0-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-1-history-clear-typed-line-exact": true,
+          "HOSTILE-1-history-clear-output-exact": true,
+          "HOSTILE-1-history-clear-control-before-frame-differs": true,
+          "HOSTILE-1-history-clear-control-one-char-change-differs": true,
+          "HOSTILE-1-history-clear-before-after-window-pixels-changed": true,
+          "HOSTILE-2-cat-typed-line-exact": true,
+          "HOSTILE-2-cat-output-exact": true,
+          "HOSTILE-2-cat-control-before-frame-differs": true,
+          "HOSTILE-2-cat-control-one-char-change-differs": true,
+          "HOSTILE-2-cat-control-params17-bold-red-differs": true,
+          "HOSTILE-2-cat-before-after-window-pixels-changed": true,
+          "HOSTILE-3-echo-as-typed-typed-line-exact": true,
+          "HOSTILE-3-echo-as-typed-output-exact": true,
+          "HOSTILE-3-echo-as-typed-control-before-frame-differs": true,
+          "HOSTILE-3-echo-as-typed-control-one-char-change-differs": true,
+          "HOSTILE-3-echo-as-typed-before-after-window-pixels-changed": true,
+          "HOSTILE-4-history-typed-line-exact": true,
+          "HOSTILE-4-history-output-exact": true,
+          "HOSTILE-4-history-control-before-frame-differs": true,
+          "HOSTILE-4-history-control-one-char-change-differs": true,
+          "HOSTILE-4-history-control-history-not-cleared-differs": true,
+          "HOSTILE-4-history-before-after-window-pixels-changed": true
+        }
+      }
+    }
+  }
+}

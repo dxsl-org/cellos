@@ -1,0 +1,416 @@
+{
+  "checks": {
+    "driver-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:shell-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-conf": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-refusals": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-changed-host-key": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-first-trust-no": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-first-trust-paste-refused": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-first-trust-yes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-first-trust-known-after": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-wrong-password": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-exec-bytes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-exec-stdin-eof": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-exec-signal": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-pty-shell": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-pty-resize": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-pty-escape-disconnect": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-shell-alive": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:shell-long-line": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-completion-auth": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-completion-trust": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-completion-exec": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-completion-signal": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-completion-pty": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-fault-before-request": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-fault-may-have-run": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-fault-accepted": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-fault-exit-before-drain": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-rekey-bytes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-rekey-time": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-rekey-peer": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-backpressure-bytes": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-timeout-overall": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-timeout-request": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-timeout-kex": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-cancel-exec": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:ssh-fault-restores": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:session-a-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-unexpected-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "no-FAIL-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "driver-final-verdict": {
+      "pass": true,
+      "detail": ""
+    },
+    "boot-ceiling-selftest-pass": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-cellbox-ssh-edge-error": {
+      "pass": true,
+      "detail": ""
+    },
+    "sshd-s96-split": {
+      "pass": true,
+      "detail": ""
+    },
+    "sshd-saw-guest-connections": {
+      "pass": true,
+      "detail": "['172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1', '172.17.0.1']"
+    },
+    "sshd-accepted-password-six": {
+      "pass": true,
+      "detail": "['Accepted password for tester from 172.17.0.1 port 49244 ssh2', 'Accepted password for tester from 172.17.0.1 port 50978 ssh2', 'Accepted password for tester from 172.17.0.1 port 50998 ssh2', 'Accepted password for tester from 172.17.0.1 port 46630 ssh2', 'Accepted password for tester from 172.17.0.1 port 46644 ssh2', 'Accepted password for tester from 172.17.0.1 port 46656 ssh2']"
+    },
+    "sshd-failed-password-once": {
+      "pass": true,
+      "detail": "['Failed password for tester from 172.17.0.1 port 50988 ssh2']"
+    },
+    "lane-rekey-policy:ssh-completion-auth": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-completion-trust": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-completion-exec": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-completion-signal": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-completion-pty": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-fault-before-request": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-fault-may-have-run": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-fault-accepted": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-fault-exit-before-drain": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-rekey-bytes": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-rekey-time": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-rekey-peer": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-backpressure-bytes": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-timeout-overall": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-timeout-request": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-timeout-kex": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "lane-rekey-policy:ssh-cancel-exec": {
+      "pass": true,
+      "detail": "no single `ssh-test-config rekey=lane` (not the p09-faults build?)"
+    },
+    "rekeys:ssh-rekey-bytes": {
+      "pass": true,
+      "detail": "[1]"
+    },
+    "rekeys:ssh-rekey-time": {
+      "pass": true,
+      "detail": "[1]"
+    },
+    "rekeys:ssh-rekey-peer": {
+      "pass": true,
+      "detail": "[64]"
+    },
+    "sink-bytes:ssh-rekey-bytes": {
+      "pass": true,
+      "detail": "(4194304, 'bb9f8df61474d25e71fa00722318cd387396ca1736605e1248821cc0de3d3af8', 2048, 16384)"
+    },
+    "sink-bytes:ssh-rekey-peer": {
+      "pass": true,
+      "detail": "(1048576, '30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58', 2048, 16384)"
+    },
+    "sink-bytes:ssh-backpressure-bytes": {
+      "pass": true,
+      "detail": "((8388608, 'f7c4e1cb91335d1bde703ebc61af3b4f01aabfd93c8f5a61ee9e20c7cbe9eeac', 2048, 16384), ['f7c4e1cb91335d1bde703ebc61af3b4f01aabfd93c8f5a61ee9e20c7cbe9eeac'])"
+    },
+    "sink-bounded:ssh-rekey-bytes": {
+      "pass": true,
+      "detail": "(4194304, 'bb9f8df61474d25e71fa00722318cd387396ca1736605e1248821cc0de3d3af8', 2048, 16384)"
+    },
+    "sink-bounded:ssh-rekey-peer": {
+      "pass": true,
+      "detail": "(1048576, '30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58', 2048, 16384)"
+    },
+    "sink-bounded:ssh-backpressure-bytes": {
+      "pass": true,
+      "detail": "(8388608, 'f7c4e1cb91335d1bde703ebc61af3b4f01aabfd93c8f5a61ee9e20c7cbe9eeac', 2048, 16384)"
+    },
+    "p09-hook:ssh-fault-before-request": {
+      "pass": true,
+      "detail": "([('before-request', 'kill')], [{'case': 'ssh-fault-before-request', 'point': 'before-request', 'action': 'kill', 'seen': 1793003946.1242166, 'fixture': {'argv': ['docker', 'exec', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'killed 78 sshd-session: tester [priv]                                \\nkilled 80 sshd-session: tester                                       \\n', 'stderr': '', 'started': 1793003946.1242197, 'ended': 1793003946.237751}}])"
+    },
+    "p09-hook:ssh-fault-may-have-run": {
+      "pass": true,
+      "detail": "([('may-have-run', 'kill')], [{'case': 'ssh-fault-may-have-run', 'point': 'may-have-run', 'action': 'kill', 'seen': 1793003956.5306456, 'fixture': {'argv': ['docker', 'exec', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'killed 96 sshd-session: tester [priv]                                \\nkilled 98 sshd-session: tester                                       \\n', 'stderr': '', 'started': 1793003956.5306475, 'ended': 1793003956.6316478}}])"
+    },
+    "p09-hook:ssh-fault-accepted": {
+      "pass": true,
+      "detail": "([('accepted', 'kill')], [{'case': 'ssh-fault-accepted', 'point': 'accepted', 'action': 'kill', 'seen': 1793003967.3540761, 'fixture': {'argv': ['docker', 'exec', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'killed 115 sshd-session: tester [priv]                                \\nkilled 117 sshd-session: tester@notty                                 \\n', 'stderr': '', 'started': 1793003967.3540788, 'ended': 1793003967.4383576}}])"
+    },
+    "p09-hook:ssh-fault-exit-before-drain": {
+      "pass": true,
+      "detail": "([('exit-before-drain', 'kill')], [{'case': 'ssh-fault-exit-before-drain', 'point': 'exit-before-drain', 'action': 'kill', 'seen': 1793003973.2034247, 'fixture': {'argv': ['docker', 'exec', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'killed 136 sshd-session: tester [priv]                                \\nkilled 138 sshd-session: tester@notty                                 \\n', 'stderr': '', 'started': 1793003973.203428, 'ended': 1793003973.3021362}}])"
+    },
+    "p09-hook:ssh-timeout-request": {
+      "pass": true,
+      "detail": "([('before-request', 'pause')], [{'case': 'ssh-timeout-request', 'point': 'before-request', 'action': 'pause', 'seen': 1793004130.7888894, 'fixture': {'argv': ['docker', 'pause', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'cellbox-p09-sshd-1333518-27161\\n', 'stderr': '', 'started': 1793004130.7889073, 'ended': 1793004130.8341312}}])"
+    },
+    "p09-hook:ssh-timeout-kex": {
+      "pass": true,
+      "detail": "([('rekey-start', 'pause')], [{'case': 'ssh-timeout-kex', 'point': 'rekey-start', 'action': 'pause', 'seen': 1793004185.8931863, 'fixture': {'argv': ['docker', 'pause', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'cellbox-p09-sshd-1333518-27161\\n', 'stderr': '', 'started': 1793004185.8931904, 'ended': 1793004185.9270236}}])"
+    },
+    "p09-hooks-only-expected": {
+      "pass": true,
+      "detail": "[{'case': 'ssh-fault-before-request', 'point': 'before-request', 'action': 'kill', 'seen': 1793003946.1242166, 'fixture': {'argv': ['docker', 'exec', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'killed 78 sshd-session: tester [priv]                                \\nkilled 80 sshd-session: tester                                       \\n', 'stderr': '', 'started': 1793003946.1242197, 'ended': 1793003946.237751}}, {'case': 'ssh-fault-before-request', 'point': 'restore', 'action': 'none', 'seen': 1793003951.192975, 'fixture': None}, {'case': 'ssh-fault-may-have-run', 'point': 'may-have-run', 'action': 'kill', 'seen': 1793003956.5306456, 'fixture': {'argv': ['docker', 'exec', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'killed 96 sshd-session: tester [priv]                                \\nkilled 98 sshd-session: tester                                       \\n', 'stderr': '', 'started': 1793003956.5306475, 'ended': 1793003956.6316478}}, {'case': 'ssh-fault-may-have-run', 'point': 'restore', 'action': 'none', 'seen': 1793003961.6248024, 'fixture': None}, {'case': 'ssh-fault-accepted', 'point': 'accepted', 'action': 'kill', 'seen': 1793003967.3540761, 'fixture': {'argv': ['docker', 'exec', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'killed 115 sshd-session: tester [priv]                                \\nkilled 117 sshd-session: tester@notty                                 \\n', 'stderr': '', 'started': 1793003967.3540788, 'ended': 1793003967.4383576}}, {'case': 'ssh-fault-accepted', 'point': 'restore', 'action': 'none', 'seen': 1793003967.501392, 'fixture': None}, {'case': 'ssh-fault-exit-before-drain', 'point': 'exit-before-drain', 'action': 'kill', 'seen': 1793003973.2034247, 'fixture': {'argv': ['docker', 'exec', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'killed 136 sshd-session: tester [priv]                                \\nkilled 138 sshd-session: tester@notty                                 \\n', 'stderr': '', 'started': 1793003973.203428, 'ended': 1793003973.3021362}}, {'case': 'ssh-fault-exit-before-drain', 'point': 'restore', 'action': 'none', 'seen': 1793003973.3601077, 'fixture': None}, {'case': 'ssh-timeout-request', 'point': 'before-request', 'action': 'pause', 'seen': 1793004130.7888894, 'fixture': {'argv': ['docker', 'pause', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'cellbox-p09-sshd-1333518-27161\\n', 'stderr': '', 'started': 1793004130.7889073, 'ended': 1793004130.8341312}}, {'case': 'ssh-timeout-request', 'point': 'restore', 'action': 'unpause', 'seen': 1793004160.8683882, 'fixture': {'argv': ['docker', 'unpause', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'cellbox-p09-sshd-1333518-27161\\n', 'stderr': '', 'started': 1793004160.86839, 'ended': 1793004160.8937795}}, {'case': 'ssh-timeout-kex', 'point': 'rekey-start', 'action': 'pause', 'seen': 1793004185.8931863, 'fixture': {'argv': ['docker', 'pause', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'cellbox-p09-sshd-1333518-27161\\n', 'stderr': '', 'started': 1793004185.8931904, 'ended': 1793004185.9270236}}, {'case': 'ssh-timeout-kex', 'point': 'restore', 'action': 'unpause', 'seen': 1793004215.965355, 'fixture': {'argv': ['docker', 'unpause', 'cellbox-p09-sshd-1333518-27161'], 'rc': 0, 'stdout': 'cellbox-p09-sshd-1333518-27161\\n', 'stderr': '', 'started': 1793004215.9653573, 'ended': 1793004215.9893343}}]"
+    },
+    "remote-ledger-collected": {
+      "pass": true,
+      "detail": ""
+    },
+    "remote-executions:completion-trust": {
+      "pass": true,
+      "detail": "0"
+    },
+    "remote-executions:completion-exec": {
+      "pass": true,
+      "detail": "1"
+    },
+    "remote-executions:completion-signal": {
+      "pass": true,
+      "detail": "1"
+    },
+    "remote-executions:before-request": {
+      "pass": true,
+      "detail": "0"
+    },
+    "remote-executions:may-have-run": {
+      "pass": true,
+      "detail": "0"
+    },
+    "remote-executions:accepted": {
+      "pass": true,
+      "detail": "1"
+    },
+    "remote-executions:exit-before-drain": {
+      "pass": true,
+      "detail": "1"
+    },
+    "remote-executions:rekey-bytes": {
+      "pass": true,
+      "detail": "1"
+    },
+    "remote-executions:rekey-time": {
+      "pass": true,
+      "detail": "1"
+    },
+    "remote-executions:rekey-peer": {
+      "pass": true,
+      "detail": "1"
+    },
+    "remote-executions:backpressure": {
+      "pass": true,
+      "detail": "1"
+    },
+    "remote-executions:timeout-overall": {
+      "pass": true,
+      "detail": "1"
+    },
+    "remote-executions:timeout-request": {
+      "pass": true,
+      "detail": "0"
+    },
+    "remote-executions:timeout-kex": {
+      "pass": true,
+      "detail": "1"
+    },
+    "remote-executions:cancel-exec": {
+      "pass": true,
+      "detail": "1"
+    },
+    "no-replay": {
+      "pass": true,
+      "detail": "{'p09x-completion-exec': 1, 'p09x-completion-signal': 1, 'p09x-accepted': 1, 'p09x-exit-before-drain': 1, 'p09x-rekey-bytes': 1, 'p09x-rekey-time': 1, 'p09x-rekey-peer': 1, 'p09x-backpressure': 1, 'p09x-timeout-overall': 1, 'p09x-timeout-kex': 1, 'p09x-cancel-exec': 1}"
+    },
+    "sshd-one-session-per-connection": {
+      "pass": true,
+      "detail": "([0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1], 11)"
+    },
+    "trust-store-volume-mounted": {
+      "pass": true,
+      "detail": ""
+    },
+    "password-not-on-serial": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-weak-entropy": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-key-material-in-log": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-panic": {
+      "pass": true,
+      "detail": ""
+    },
+    "qemu-one-user-netdev-no-forward": {
+      "pass": true,
+      "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-o74_l6e4/serial.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-o74_l6e4/phase09.iso -boot d -no-reboot -netdev user,id=net0 -device e1000,netdev=net0 -drive file=/tmp/cellbox-phase09-o74_l6e4/trust-fixture.img,if=none,format=raw,id=p09fx -device nvme,drive=p09fx,serial=cellosp09\n"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+[qemu-x86_64-test] Booting ISO=/tmp/cellbox-s10-3-7yWa/cand/headless.iso (window=90s)
+[INFO] Tier 2 admission: ENABLED (development profile)
+USER: [net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP
+USER: [net] Starting DHCP...
+USER: [net] NIC driver unavailable: legacy frame path
+[ INFO] [service-registry] 2 -> tid 11 (cell 8 gen 116)
+USER: Init: net launched.
+USER: [net] DHCP: deconfigured
+[ INFO] [service-registry] 19 -> tid 2 (cell 2 gen 107)
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ai-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/vfs-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: Init: services spawned.
+USER: Init: service registry verified (init registration is publication, not application readiness).
+USER: Init: OS ready.
+USER: [net] NIC driver unavailable: legacy frame path
+USER: [net] NIC driver unavailable: legacy frame path
+[ INFO] [loader] SpawnFromElf: /bin/cellbox (3076760 bytes from grant)
+[ INFO] ELF LOAD: 0x110000000-0x1101EEB53 flags=R-X
+[ INFO] ELF LOAD: 0x1101EEB58-0x11027B220 flags=R--
+[ INFO] ELF LOAD: 0x11027C000-0x1102A36F0 flags=RW-
+[ INFO] ELF LOAD: 0x1102A4000-0x1109A4148 flags=RW-
+[ INFO] ELF LOAD: 0x1109A4148-0x1109A503C flags=R--
+[ INFO] [wx] 'cellbox': 637/2470 cell pages lowered to read-only/execute-only
+USER: shell: starting
+USER: Init: cellbox launched.
+USER: Init: supervising services (auto-restart on crash)...
+[ INFO] Syscall::Exit: task 6 exited with code 0
+USER: Init: service exited cleanly — policy says no restart.
+USER: [igb] no igb controller present; driver cell idle
+[ INFO] Syscall::Exit: task 7 exited with code 0
+USER: Init: service exited cleanly — policy says no restart.
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > 
+USER: [xhci] no xHCI controller present; driver cell idle
+[ INFO] Syscall::Exit: task 9 exited with code 0
+USER: Init: service exited cleanly — policy says no restart.
+USER: [serial] serial cell ready: usable=1 declared=4 echoed=0
+qemu-system-x86_64: terminating on signal 15 from pid 1226023 (timeout)
+FAIL: production x86_64 image did not report a disabled Tier 2 admission posture

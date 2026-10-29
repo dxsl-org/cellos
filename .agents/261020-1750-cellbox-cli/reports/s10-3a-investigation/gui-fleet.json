@@ -1,0 +1,25 @@
+{
+ "pin1-terminal": [
+  "[ INFO] [loader] SpawnFromElf: /bin/terminal (950600 bytes from grant)",
+  "[ WARN] [policy] narrowed \"/bin/terminal\" (tid 16): dropped 0b01110000000000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]",
+  "USER: [desktop] Spawned PID 16",
+  "USER: [terminal] Terminal surface ready. Entering event loop.",
+  "USER: [serial] serial cell ready: usable=1 declared=4 echoed=0"
+ ],
+ "pin2": [
+  "[ WARN] [loader] DENY launch edge: caller=14 name=desktop route=Elf target=/bin/ocel spawn_cap=false supervisor_cap=false",
+  "USER: [desktop] Spawned PID 18",
+  "USER: [ocel] Window initialized and painted."
+ ],
+ "pin3-files": [
+  "[ INFO] [loader] SpawnFromElf: /bin/files (2326864 bytes from grant)",
+  "[ WARN] [policy] narrowed \"/bin/files\" (tid 19): dropped 0b01110000000000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]",
+  "USER: [desktop] Spawned PID 19",
+  "USER: [files] Files surface ready. Entering event loop."
+ ],
+ "pin4": [
+  "[ INFO] [loader] SpawnFromElf: /bin/chrome (1142976 bytes from grant)",
+  "[ WARN] [policy] narrowed \"/bin/chrome\" (tid 20): dropped 0b01110000000000000 [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]",
+  "USER: [desktop] Spawned PID 20"
+ ]
+}

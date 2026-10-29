@@ -1,0 +1,19 @@
+{
+  "diagnostic_only": true,
+  "scan_complete_before_cap": true,
+  "scan_complete_before_dma": true,
+  "sq_cdw0": 65542,
+  "sq_prp1": 38813696,
+  "sq_cns": 1,
+  "expected_identify_address": 38813696,
+  "first_cqe": [
+    0,
+    0,
+    1,
+    0,
+    1,
+    1
+  ],
+  "identify_nonzero_bytes": 133,
+  "pass": true
+}

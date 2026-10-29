@@ -1,0 +1,163 @@
+{
+ "candidate_json": "/tmp/cellbox-s10-3b-tsbn/cand/candidate.json",
+ "candidate_sha256": "9c4d16ebcf61b8554aaa64e38ab1e0fda637dfe29943f21c671aaefb128e77bb",
+ "profile": "desktop",
+ "iso": {
+  "path": "/tmp/cellbox-s10-3b-tsbn/cand/desktop.iso",
+  "sha256": "a026edc2e6be86a8259ee6d66158cad216a46a9442bcf88dd26968697e40e6ac",
+  "size": 32051200
+ },
+ "kernel": {
+  "path": "/tmp/cellbox-s10-3b-tsbn/cand/desktop.kernel.elf",
+  "sha256": "929e5b42c06761379524ef4a61ba3020a31d1f068e48510d92ebcc8752342598",
+  "size": 28178496,
+  "features": [
+   "default",
+   "policy-required"
+  ]
+ },
+ "kernel_fs_img": {
+  "path": "/tmp/cellbox-s10-3b-tsbn/cand/desktop/kernel_fs.img",
+  "sha256": "b521055ae810c35c92d18cb3cd5dfa2f8640574f48ce56ac34c3a655b358cd73",
+  "size": 25165824
+ },
+ "init": {
+  "path": "/tmp/cellbox-s10-3b-tsbn/cand/desktop/init",
+  "sha256": "67a35f69e0dced140c05a04a1e37ddd4780c14ccc414aca7c906dce400f352c9",
+  "size": 403016,
+  "payload_sha256": "4dbc2f5db7f1dd08fc5193f680a37b711ed021b78a999fd61d2dd469ad163af3"
+ },
+ "manifest_sha256": "23428d19f6048463e548e3c01a1b896e3858ab54c7967a763324fde4ef48a08c",
+ "boot_config": "/tmp/cellbox-s10-3b-tsbn/cand/desktop/boot-config",
+ "dir": "/tmp/cellbox-s10-3b-tsbn/cand/desktop",
+ "files": {
+  "/POLICY.BIN": {
+   "sha256": "f0be61df403852caef4a27fecd6db470d1effedf0071a5a1144491fbf4e08008",
+   "payload_sha256": null
+  },
+  "/bin/ahci": {
+   "sha256": "db36dd7987b2babb23f68281e8ebb80481d6706ab5f8d7f9ed174b7fdaf190c2",
+   "payload_sha256": "993c91ef9e83c81147d1f05752d5f82e60cc1c14504989b223da31b06441ba57"
+  },
+  "/bin/cat": {
+   "sha256": "72561d164d33db7194fe492069e948cd2fe67ed16d6071cad7f7dc8558359f24",
+   "payload_sha256": "f79982e1e084d8d44303e8cd0ea970d3028635857ae4bc4b734813c83ea24c55"
+  },
+  "/bin/cellbox": {
+   "sha256": "8ea134442bb27719cf4c2ce5a8f3613f5667f88f1762a1d731cba9fd83ab54a2",
+   "payload_sha256": "67ff3b3d36b2990be5e957a77afeb2c57d023c9454b2ccb303ea49ccdd0467af"
+  },
+  "/bin/cellbox-ssh": {
+   "sha256": "8ea134442bb27719cf4c2ce5a8f3613f5667f88f1762a1d731cba9fd83ab54a2",
+   "payload_sha256": "67ff3b3d36b2990be5e957a77afeb2c57d023c9454b2ccb303ea49ccdd0467af"
+  },
+  "/bin/chrome": {
+   "sha256": "e5b7e8f7be97970c5203d57dc091cc2a626fb30b158f0a5a6b7252ba8c785bea",
+   "payload_sha256": "912c5f3fbc2ee579563a2ff0d4c66e9287ad9f31ffd3e5ae1506611519b79bff"
+  },
+  "/bin/compositor": {
+   "sha256": "11aa61be89c71a7603133958be420e290da54949855a429eacb9796c284acc68",
+   "payload_sha256": "68fe7b959fbf3b016854aa2e2a11cd939e88d8a520143074f8840a506494d17a"
+  },
+  "/bin/config": {
+   "sha256": "e8caf5a4aaea0dac15c2c62a1bf48360ab2c2f77eaaa5d7ddcc65e08ec67124e",
+   "payload_sha256": "1c85044a8d8c5442a6d0f15c829a7a04ebaf8915aec28d11012029f1a77ec8b6"
+  },
+  "/bin/desktop": {
+   "sha256": "50ead2aedada0ab7b28aac45c50828a434a237da4bd27fd32b250a6b44eb8ce8",
+   "payload_sha256": "b5866accc12af3e59a283a5e53c38976d866e4177fa2df4cfb05cf286538654b"
+  },
+  "/bin/e1000": {
+   "sha256": "60456ca9fc087b9da5a40f9b1c51463456118593f8e5a6475206667e4de80158",
+   "payload_sha256": "278188e74deae1d32662cdfb3d3d800fd19aa3e085b714b737be2ef9d1f0a0ea"
+  },
+  "/bin/echo": {
+   "sha256": "e93af5d2e7bf5321ec6adf9337bd4d7bf04b09dd18099760dd76f2bd2118ce68",
+   "payload_sha256": "88fc809da0d021b181971a4af9111b1971bf87a848c3e402ae929cbb3ffb0eff"
+  },
+  "/bin/fb-console": {
+   "sha256": "138edc208cfc803426ee5dfa2a57f63db9b425f08a18eafc032830131a2a1e81",
+   "payload_sha256": "bb7a3b6c5ecadd7758ce2bb7ac88a2b3f9d44fb4d27cd9ff69ff233195a7e0b2"
+  },
+  "/bin/files": {
+   "sha256": "5ece74bd2200e6da98d5602d3e23cd3066e62abadc7be2316709d1536e472d4e",
+   "payload_sha256": "2253652127b0708a34db8b85465553047dc1b79114b48700d606bb2178a427c9"
+  },
+  "/bin/igb": {
+   "sha256": "98eabf6cda57d0f8515f2b7d191e66fc455b4648b02ef6285c466cb4fb0c9113",
+   "payload_sha256": "56590e4f9815efa8b294e962ffd9035943a9bc63dde6100f630139bf613247f6"
+  },
+  "/bin/input": {
+   "sha256": "e8596a8b7e943d3bb057d177806f9ebb9ca538c311bd8e813dfa99f83bf5d289",
+   "payload_sha256": "f86f762b62434b77e5a7ea9a1d58643033485d4ae8d12168c022f3fa3ac17cd9"
+  },
+  "/bin/kill": {
+   "sha256": "2cee8c326efe5e527319c53114faf2653eedc97441f5b42e1feea7f5c4df3a4a",
+   "payload_sha256": "ba5e4320af4bc2a95a1bb86944ec2d37fe7e8bf1fd020ad45354f744ce8964d6"
+  },
+  "/bin/ls": {
+   "sha256": "baf3cf964c9eaa561934cc65c51516a32789fad0aafea3d252e80a448cf3193b",
+   "payload_sha256": "8f7ab1d6a3d2df57cdbaeadd111c504d609e0385a1e7d06f2869bfc82d3b3676"
+  },
+  "/bin/net": {
+   "sha256": "d8893fa0ace50ef525d1c649fdfb0ce5ebd0b41b3497a6d3bb26d6ebe01d4f80",
+   "payload_sha256": "217af13d845e76349218bc6a73a0a54f93d8a743a3e87a82d05f578df0f02657"
+  },
+  "/bin/nvme": {
+   "sha256": "d87033b065b9c8b712d25fceee871c923adc9d0d9c76d5d99eb2e5f1e5daae58",
+   "payload_sha256": "24b6d803beea673c4f7b3cbedf6362f531049727f0167de9e17fd802fbcd1ca7"
+  },
+  "/bin/ocel": {
+   "sha256": "513aee92a37569e2b6b14842abcde27bc7d8e0867852ba8fb26187b2ace6d3bb",
+   "payload_sha256": "f6f48f188ff88e0f25c10905cb24d2f5c3bd5ca34345e2e1cbedb3be3193eb28"
+  },
+  "/bin/platform": {
+   "sha256": "50636909b8c93cd0295329095b6e619f3df77263e35c796bb3967dbe5bde33d4",
+   "payload_sha256": "fe052ab8bccd0b13f4039130097d51f6ead86254a4d95ac0cd544f9018722027"
+  },
+  "/bin/ps": {
+   "sha256": "f78b1cd3c700bda48756a885845fbb978a61703889bfc064c23ef5a6516d4916",
+   "payload_sha256": "8696faa6f092187b7be2e48d16c2a18785106b3fe89090ab118d030f4e4ee1fe"
+  },
+  "/bin/serial": {
+   "sha256": "0de9237fb735574507a0027f9ec3ed61f3589fbd56160a5ab28de8b81b68c835",
+   "payload_sha256": "1ac05ebfe30cbb44e3576075781418fcf54c8d1b42905c95cff5d17a9b2fbe49"
+  },
+  "/bin/shutdown": {
+   "sha256": "6d81b26696b698bf5f4c27ca1a517f9af73d5f22b4d28650474877be924494cd",
+   "payload_sha256": "bf19755d26371d98626b60ba8ebfa097569a9e7644bbd78f76adf236531de005"
+  },
+  "/bin/terminal": {
+   "sha256": "816718a20188bb797a65622d17087010e8d41c7a933248dc303847c7d11ff3cc",
+   "payload_sha256": "09837ed91e29a1cf1159b375b15cb581996897369c536ba64acf574649fd68c3"
+  },
+  "/bin/tier2-exploit": {
+   "sha256": "f651193c77dc7bb328ba48995276fd3fe8d40cb249b4532535c72c1817d513ed",
+   "payload_sha256": null
+  },
+  "/bin/tier2-smoke": {
+   "sha256": "257f9d4d047e76dbbe9b7a450ba18b196f078cff838644eb0fc3ff84002f1df1",
+   "payload_sha256": null
+  },
+  "/bin/vfs": {
+   "sha256": "3571793e2221fa002acbdddb9ba628af3efb3e803d510f3bd9222151e5aa6b73",
+   "payload_sha256": "28243dc59aec328e3be2bdad597406ce7f8c28b68136786df82c386f318b0613"
+  },
+  "/bin/xhci": {
+   "sha256": "d519bdc1510da2bd53027519ae4c05b15df66773b9cac7b7ebe5fd06a719a19d",
+   "payload_sha256": "58b4f05a6d8003367bd3cac8234317afdde9bd90232d0414cf4b2ab506c449e6"
+  },
+  "/etc/cellos/autoload.toml": {
+   "sha256": "db4350656ff38522e029ab6f0328c6404d5e2362fe4d371c396426361d04ee6a",
+   "payload_sha256": null
+  },
+  "/etc/cellos/services.toml": {
+   "sha256": "eff37d25775ecf1eea7012290db0a3f4994d69b35318ce621b0cfd6bc503f160",
+   "payload_sha256": null
+  },
+  "/etc/cellos/system.toml": {
+   "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293",
+   "payload_sha256": null
+  }
+ }
+}

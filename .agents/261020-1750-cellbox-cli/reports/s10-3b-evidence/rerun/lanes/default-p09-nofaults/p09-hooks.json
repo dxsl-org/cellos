@@ -1,0 +1,44 @@
+[
+  {
+    "case": "ssh-fault-before-request",
+    "point": "restore",
+    "action": "none",
+    "seen": 1793015707.0515656,
+    "fixture": null
+  },
+  {
+    "case": "ssh-fault-may-have-run",
+    "point": "restore",
+    "action": "none",
+    "seen": 1793015732.2703526,
+    "fixture": null
+  },
+  {
+    "case": "ssh-fault-accepted",
+    "point": "restore",
+    "action": "none",
+    "seen": 1793015757.7298486,
+    "fixture": null
+  },
+  {
+    "case": "ssh-fault-exit-before-drain",
+    "point": "restore",
+    "action": "none",
+    "seen": 1793015767.6855478,
+    "fixture": null
+  },
+  {
+    "case": "ssh-timeout-request",
+    "point": "restore",
+    "action": "none",
+    "seen": 1793015925.834336,
+    "fixture": null
+  },
+  {
+    "case": "ssh-timeout-kex",
+    "point": "restore",
+    "action": "none",
+    "seen": 1793015990.9140365,
+    "fixture": null
+  }
+]

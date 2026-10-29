@@ -1,0 +1,190 @@
+{
+  "schema": "cellos-phase10-payload-match/1",
+  "mode": "import",
+  "lane": "phase04-gui",
+  "profile": "desktop",
+  "candidate_json_sha256": "a9f384a6a3c3ff8fbec8150ad0cf780aed229f1152434d2d84a047020865c07c",
+  "binaries": [
+    {
+      "path": "/bin/vfs",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/service-vfs",
+      "candidate_sha256": "3571793e2221fa002acbdddb9ba628af3efb3e803d510f3bd9222151e5aa6b73",
+      "candidate_payload_sha256": "28243dc59aec328e3be2bdad597406ce7f8c28b68136786df82c386f318b0613",
+      "lane_sha256": "22039e029895380589c8c133b723ec8907b478cdb64d8e2b6d3079e422c939a2",
+      "lane_payload_sha256": "28243dc59aec328e3be2bdad597406ce7f8c28b68136786df82c386f318b0613",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/config",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/service-config",
+      "candidate_sha256": "e8caf5a4aaea0dac15c2c62a1bf48360ab2c2f77eaaa5d7ddcc65e08ec67124e",
+      "candidate_payload_sha256": "1c85044a8d8c5442a6d0f15c829a7a04ebaf8915aec28d11012029f1a77ec8b6",
+      "lane_sha256": "3dd8812e4009b4659ad0d862c7ba7910e97a886c1441b1b9d9817dc0585fc940",
+      "lane_payload_sha256": "1c85044a8d8c5442a6d0f15c829a7a04ebaf8915aec28d11012029f1a77ec8b6",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/input",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/service-input",
+      "candidate_sha256": "e8596a8b7e943d3bb057d177806f9ebb9ca538c311bd8e813dfa99f83bf5d289",
+      "candidate_payload_sha256": "f86f762b62434b77e5a7ea9a1d58643033485d4ae8d12168c022f3fa3ac17cd9",
+      "lane_sha256": "23e1f31f3c481cc47f6fbe7e35b0c8d2bd82641d0e03bb843ffe602b10a9876c",
+      "lane_payload_sha256": "f86f762b62434b77e5a7ea9a1d58643033485d4ae8d12168c022f3fa3ac17cd9",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/platform",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/platform",
+      "candidate_sha256": "50636909b8c93cd0295329095b6e619f3df77263e35c796bb3967dbe5bde33d4",
+      "candidate_payload_sha256": "fe052ab8bccd0b13f4039130097d51f6ead86254a4d95ac0cd544f9018722027",
+      "lane_sha256": "7648db1ba46bbd28b7ea244e7ca7ba2bd7dd99351bd3b4e805d31e7fd7459416",
+      "lane_payload_sha256": "fe052ab8bccd0b13f4039130097d51f6ead86254a4d95ac0cd544f9018722027",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/compositor",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/service-compositor",
+      "candidate_sha256": "11aa61be89c71a7603133958be420e290da54949855a429eacb9796c284acc68",
+      "candidate_payload_sha256": "68fe7b959fbf3b016854aa2e2a11cd939e88d8a520143074f8840a506494d17a",
+      "lane_sha256": "f05536e3914980efa9444ed32e6b9a2109cb740e97a06bad61ecaaf291e28a7b",
+      "lane_payload_sha256": "68fe7b959fbf3b016854aa2e2a11cd939e88d8a520143074f8840a506494d17a",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/fb-console",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/fb-console",
+      "candidate_sha256": "138edc208cfc803426ee5dfa2a57f63db9b425f08a18eafc032830131a2a1e81",
+      "candidate_payload_sha256": "bb7a3b6c5ecadd7758ce2bb7ac88a2b3f9d44fb4d27cd9ff69ff233195a7e0b2",
+      "lane_sha256": "a58cef665e583650d7efc8f677f7d70cca7bfbed36779af8d76e52357083816d",
+      "lane_payload_sha256": "bb7a3b6c5ecadd7758ce2bb7ac88a2b3f9d44fb4d27cd9ff69ff233195a7e0b2",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/desktop",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/desktop",
+      "candidate_sha256": "50ead2aedada0ab7b28aac45c50828a434a237da4bd27fd32b250a6b44eb8ce8",
+      "candidate_payload_sha256": "b5866accc12af3e59a283a5e53c38976d866e4177fa2df4cfb05cf286538654b",
+      "lane_sha256": "99cc7a41706a1874aa81a1a8451173c38e9f41e008524b0e29c630cff37b7127",
+      "lane_payload_sha256": "b5866accc12af3e59a283a5e53c38976d866e4177fa2df4cfb05cf286538654b",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/files",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/files",
+      "candidate_sha256": "5ece74bd2200e6da98d5602d3e23cd3066e62abadc7be2316709d1536e472d4e",
+      "candidate_payload_sha256": "2253652127b0708a34db8b85465553047dc1b79114b48700d606bb2178a427c9",
+      "lane_sha256": "67f03cb223bb1743b1f412ddf5a1de536e7f5feb95a19da4ab744df95d8dbac2",
+      "lane_payload_sha256": "2253652127b0708a34db8b85465553047dc1b79114b48700d606bb2178a427c9",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/ls",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/ls",
+      "candidate_sha256": "baf3cf964c9eaa561934cc65c51516a32789fad0aafea3d252e80a448cf3193b",
+      "candidate_payload_sha256": "8f7ab1d6a3d2df57cdbaeadd111c504d609e0385a1e7d06f2869bfc82d3b3676",
+      "lane_sha256": "b98f0cc9ac7ce4ba93dd7715a7d8e92469a563e99c9b282643116c8d5005b726",
+      "lane_payload_sha256": "8f7ab1d6a3d2df57cdbaeadd111c504d609e0385a1e7d06f2869bfc82d3b3676",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/cat",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/cat",
+      "candidate_sha256": "72561d164d33db7194fe492069e948cd2fe67ed16d6071cad7f7dc8558359f24",
+      "candidate_payload_sha256": "f79982e1e084d8d44303e8cd0ea970d3028635857ae4bc4b734813c83ea24c55",
+      "lane_sha256": "860ade9e78c935cf5240db4edeb84a8633647667caf91af8f58de77852564616",
+      "lane_payload_sha256": "f79982e1e084d8d44303e8cd0ea970d3028635857ae4bc4b734813c83ea24c55",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/echo",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/echo",
+      "candidate_sha256": "e93af5d2e7bf5321ec6adf9337bd4d7bf04b09dd18099760dd76f2bd2118ce68",
+      "candidate_payload_sha256": "88fc809da0d021b181971a4af9111b1971bf87a848c3e402ae929cbb3ffb0eff",
+      "lane_sha256": "b6d41e51ebd160bb1116fa9c01e17f565c501124bbf88c093df27f9293019af0",
+      "lane_payload_sha256": "88fc809da0d021b181971a4af9111b1971bf87a848c3e402ae929cbb3ffb0eff",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/cellbox",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/cellbox",
+      "candidate_sha256": "013153a824ce93ac5c8f2584edf41ff7610f66f0d7e5fbf9718d5bd0e98a7788",
+      "candidate_payload_sha256": "7fe2e505ef700c95d8bd8df77486ffa017aaf807719c1659522d58b20846271a",
+      "lane_sha256": "52327bff8e7aa911a3fe4f7f3e4a488efc5c643ee9a2d40a6453ec383fe33244",
+      "lane_payload_sha256": "7fe2e505ef700c95d8bd8df77486ffa017aaf807719c1659522d58b20846271a",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "/bin/terminal",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/terminal",
+      "candidate_sha256": "816718a20188bb797a65622d17087010e8d41c7a933248dc303847c7d11ff3cc",
+      "candidate_payload_sha256": "09837ed91e29a1cf1159b375b15cb581996897369c536ba64acf574649fd68c3",
+      "lane_sha256": "cbee3a7faa9a69fbd1981a0385d72415659935b2828d8f9132867ab9f54132d8",
+      "lane_payload_sha256": "09837ed91e29a1cf1159b375b15cb581996897369c536ba64acf574649fd68c3",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    },
+    {
+      "path": "init",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/app-init",
+      "candidate_sha256": "67a35f69e0dced140c05a04a1e37ddd4780c14ccc414aca7c906dce400f352c9",
+      "candidate_payload_sha256": "4dbc2f5db7f1dd08fc5193f680a37b711ed021b78a999fd61d2dd469ad163af3",
+      "lane_sha256": "c672c2cf1bae8ebc0f23fdd0a1fb82e0b3be6fa2804e7412cde1dd437e9e9d1a",
+      "lane_payload_sha256": "4dbc2f5db7f1dd08fc5193f680a37b711ed021b78a999fd61d2dd469ad163af3",
+      "equal": true,
+      "byte_identical": false,
+      "in_image": true,
+      "lane_signature_valid": true
+    }
+  ],
+  "lane_only": [
+    {
+      "path": "/bin/p03-filter",
+      "lane_file": "/tmp/cellbox-phase04-gui-gbhrgetj/cells-target/x86_64-unknown-none/release/phase03-filter",
+      "reason": "not packaged in the candidate profile",
+      "lane_only": true,
+      "lane_sha256": "d5c1137b773b404fdf2b3bae4bf9b07e6962d364c9804ae9a22ab22b62e3b2ae",
+      "lane_payload_sha256": "e311724afff4b5c131d85b510cfbfae32ef0300855c4dd3bcd750402a8327791",
+      "in_image": true
+    }
+  ],
+  "all_equal": true,
+  "failures": []
+}

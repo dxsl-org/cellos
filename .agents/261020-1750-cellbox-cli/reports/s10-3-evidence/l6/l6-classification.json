@@ -1,0 +1,361 @@
+{
+  "before_isos": {
+    "headless": {
+      "path": "/home/dmin/cellos/build/vicell-x86.iso",
+      "sha256": "eb1cb8130476120a2f25ab63f6d1ef45036d497722005ffef93e62433abfef09"
+    },
+    "desktop": {
+      "path": "/home/dmin/cellos/build/cellos-x86_64.iso",
+      "sha256": "b9a08fcb9050b5dd5c89cafa059c5ba20820f8bec4957fdc38d93cbf9d585b76"
+    },
+    "pc": {
+      "path": "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-pc.iso",
+      "sha256": "273a3be0dda2d6f2aea25ad83a9ddd4b37709da4bbdf2cd5acbe84be41eb3dc8"
+    }
+  },
+  "after_isos": {
+    "headless": {
+      "path": "/tmp/cellbox-s10-3-7yWa/cand/headless.iso",
+      "sha256": "469757151060239396e0d3280e5a7e95122023b937846a8ba7e666e0ced46276"
+    },
+    "desktop": {
+      "path": "/tmp/cellbox-s10-3-7yWa/cand/desktop.iso",
+      "sha256": "c621d461e36d19b8643cd60cebdc1ec7b5437907e291f60b680bfd53cbf3908d"
+    },
+    "pc": {
+      "path": "/tmp/cellbox-s10-3-7yWa/cand/pc.iso",
+      "sha256": "6b3e5f706ceb0a60337cd01b612dea5476738f16b062aea50d3c892a06c69940"
+    }
+  },
+  "rows": [
+    {
+      "consumer": "x86_64-boot",
+      "test": "x86_boots_to_shell_prompt",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "x86_64-boot",
+      "test": "x86_echo_command",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "x86_64-boot",
+      "test": "x86_init_spawns",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "x86_64-boot",
+      "test": "x86_kernel_banner",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "x86_64-boot",
+      "test": "x86_ls_command",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "x86_64-boot",
+      "test": "x86_ps_command",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "x86_64-boot",
+      "test": "x86_scheduler_initializes",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "x86_64-boot",
+      "test": "x86_tier2_admission_is_refused_until_switch_is_qualified",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "x86_64-boot",
+      "test": "x86_tier2_fault_isolation_fixture_is_refused",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "nvme-x86",
+      "test": "nvme_boot_reaches_shell_x86",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "nvme-x86",
+      "test": "nvme_driver_cell_registers_x86",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "nvme-x86",
+      "test": "nvme_fat32_mount_x86",
+      "before": "pass",
+      "after": "fail",
+      "verdict": "REGRESSION"
+    },
+    {
+      "consumer": "virtio-x86",
+      "test": "x86_virtio_blk_initialises",
+      "before": "ignored",
+      "after": "ignored",
+      "verdict": "ignored->ignored"
+    },
+    {
+      "consumer": "virtio-x86",
+      "test": "x86_virtio_pci_no_device_no_hang",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "pcie-multibus-x86",
+      "test": "bus1_nvme_dma_completes_under_vtd",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "pcie-multibus-x86",
+      "test": "bus1_nvme_is_discovered_and_initialized",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "handoff",
+      "test": "handoff_x86_32_bare_paging",
+      "before": "skip",
+      "after": "skip",
+      "verdict": "skip"
+    },
+    {
+      "consumer": "handoff",
+      "test": "handoff_x86_32_heap",
+      "before": "skip",
+      "after": "skip",
+      "verdict": "skip"
+    },
+    {
+      "consumer": "handoff",
+      "test": "handoff_x86_32_kernel_starts",
+      "before": "skip",
+      "after": "skip",
+      "verdict": "skip"
+    },
+    {
+      "consumer": "handoff",
+      "test": "handoff_x86_32_scheduler_initialized",
+      "before": "skip",
+      "after": "skip",
+      "verdict": "skip"
+    },
+    {
+      "consumer": "handoff",
+      "test": "handoff_x86_frame_allocator",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "handoff",
+      "test": "handoff_x86_heap",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "handoff",
+      "test": "handoff_x86_kernel_builds",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "handoff",
+      "test": "handoff_x86_kernel_starts",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "handoff",
+      "test": "handoff_x86_limine_paging",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "handoff",
+      "test": "handoff_x86_phys_base",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "ahci-x86",
+      "test": "ahci_and_nvme_both_register_x86",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "ahci-x86",
+      "test": "ahci_boot_reaches_shell_x86",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "ahci-x86",
+      "test": "ahci_driver_cell_identifies_sata_x86",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "ahci-x86",
+      "test": "ahci_driver_cell_registers_block_driver_x86",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "ahci-x86",
+      "test": "ahci_fat32_persistence_reboot_x86",
+      "before": "pass",
+      "after": "fail",
+      "verdict": "REGRESSION"
+    },
+    {
+      "consumer": "xhci-x86",
+      "test": "xhci_boot_without_keyboard_reaches_shell_x86",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "xhci-x86",
+      "test": "xhci_com1_input_still_works_x86",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "xhci-x86",
+      "test": "xhci_driver_cell_enumerates_usb_keyboard_x86",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "xhci-x86",
+      "test": "xhci_injected_key_decodes_in_cell_x86",
+      "before": "fail",
+      "after": "fail",
+      "verdict": "pre-existing-failure"
+    },
+    {
+      "consumer": "serial-x86",
+      "test": "serial_x86_multiport_tx_rx_and_console_unchanged",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "nic-x86",
+      "test": "nic_x86_e1000_dhcp",
+      "before": "pass",
+      "after": "fail",
+      "verdict": "REGRESSION"
+    },
+    {
+      "consumer": "nic-x86",
+      "test": "nic_x86_vtd_e1000_dhcp",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "igb-x86",
+      "test": "igb_x86_dhcp",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "igb-x86",
+      "test": "igb_x86_vtd_dhcp",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "iommu-dmar-x86",
+      "test": "q35_without_a_remapper_names_the_fallback_and_the_identity_contract",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "iommu-dmar-x86",
+      "test": "x86_pc_discovers_the_vtd_base_from_acpi_dmar",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "iommu-dmar-x86",
+      "test": "x86_pc_without_a_remapper_refuses_untranslated_dma",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "desktop-x86",
+      "test": "desktop_x86_boots_to_shell_and_compositor",
+      "before": "pass",
+      "after": "pass",
+      "verdict": "pass"
+    },
+    {
+      "consumer": "qemu-x86_64-test.sh",
+      "test": "boot-to-prompt",
+      "before": "pass",
+      "after": "fail",
+      "verdict": "REGRESSION"
+    }
+  ],
+  "counts": {
+    "REGRESSION": 4,
+    "ignored->ignored": 1,
+    "pass": 35,
+    "pre-existing-failure": 1,
+    "skip": 4
+  },
+  "regressions": [
+    "nvme-x86::nvme_fat32_mount_x86",
+    "ahci-x86::ahci_fat32_persistence_reboot_x86",
+    "nic-x86::nic_x86_e1000_dhcp",
+    "qemu-x86_64-test.sh::boot-to-prompt"
+  ],
+  "verdict": "FAIL"
+}

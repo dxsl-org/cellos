@@ -1,0 +1,61 @@
+Checking: /tmp/cellbox-phase02-nekpob25/embedded/kernel_fs.img
+Size: 8388608 bytes (8192 KB)
+Sig: 55aa (should be 55aa)
+FS type: b'  FAT16 '
+BPS=512 SPC=1 RES=1 FAT_CNT=2 ROOT_ENT=512 FAT_SZ=96
+Root dir at 98816, Data area at 115200
+  --- root ---
+    LFN[1] 'bin'
+    SFN BIN~1         -> LFN 'bin'  attr=10 clus=2 sz=0
+    LFN[1] 'etc'
+    SFN ETC~1         -> LFN 'etc'  attr=10 clus=4 sz=0
+bin dir (SFN='BIN~1') at cluster 2, offset 115200
+  --- /bin ---
+    SFN .                    attr=10 clus=2 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellbox'
+    SFN CELLBO~1      -> LFN 'cellbox'  attr=20 clus=6 sz=3093952
+    LFN[1] 'vfs'
+    SFN VFS~1         -> LFN 'vfs'  attr=20 clus=6049 sz=613440
+    LFN[1] 'config'
+    SFN CONFIG~1      -> LFN 'config'  attr=20 clus=7248 sz=47384
+    LFN[1] 'input'
+    SFN INPUT~1       -> LFN 'input'  attr=20 clus=7341 sz=167240
+    LFN[1] 'platform'
+    SFN PLATFO~1      -> LFN 'platform'  attr=20 clus=7668 sz=38488
+    LFN[1] 'nvme'
+    SFN NVME~1        -> LFN 'nvme'  attr=20 clus=7744 sz=40800
+    LFN[1] 'e1000'
+    SFN E1000~1       -> LFN 'e1000'  attr=20 clus=7824 sz=29672
+    LFN[1] 'ls'
+    SFN LS~1          -> LFN 'ls'  attr=20 clus=7882 sz=30288
+    LFN[1] 'cat'
+    SFN CAT~1         -> LFN 'cat'  attr=20 clus=7942 sz=30328
+    LFN[1] 'echo'
+    SFN ECHO~1        -> LFN 'echo'  attr=20 clus=8002 sz=30296
+    LFN[1] 'ps'
+    SFN PS~1          -> LFN 'ps'  attr=20 clus=8062 sz=30192
+    LFN[2] 'on-parent'
+    LFN[1] 'phase02-sessi'
+    SFN PHASE0~1      -> LFN 'phase02-session-parent'  attr=20 clus=8121 sz=168448
+    LFN[2] 'on-child'
+    LFN[1] 'phase02-sessi'
+    SFN PHASE0~2      -> LFN 'phase02-session-child'  attr=20 clus=8450 sz=122256
+etc dir (SFN='ETC~1') at cluster 4, offset 116224
+  --- /etc ---
+    SFN .                    attr=10 clus=4 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellos'
+    SFN CELLOS~1      -> LFN 'cellos'  attr=10 clus=5 sz=0
+cellos dir (SFN='CELLOS~1') at cluster 5, offset 116736
+  --- /etc/cellos ---
+    SFN .                    attr=10 clus=5 sz=0
+    SFN ..                   attr=10 clus=4 sz=0
+    LFN[1] 'system.toml'
+    SFN SYSTEM~1.TOM  -> LFN 'system.toml'  attr=20 clus=8689 sz=128
+    LFN[2] ''
+    LFN[1] 'services.toml'
+    SFN SERVIC~1.TOM  -> LFN 'services.toml'  attr=20 clus=8690 sz=527
+    LFN[2] ''
+    LFN[1] 'autoload.toml'
+    SFN AUTOLO~1.TOM  -> LFN 'autoload.toml'  attr=20 clus=8692 sz=170
