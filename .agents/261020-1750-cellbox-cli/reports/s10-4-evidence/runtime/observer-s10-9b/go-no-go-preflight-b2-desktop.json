@@ -1,0 +1,927 @@
+{
+  "schema": "cellos.s10-9b.go-no-go/1",
+  "checks": {
+    "frozen_sources": {
+      "ok": true,
+      "detail": {
+        "files": 43,
+        "drift": []
+      }
+    },
+    "frozen_s107_sources": {
+      "ok": true,
+      "detail": {
+        "files": 66,
+        "drift": []
+      }
+    },
+    "frozen_s108_sources": {
+      "ok": true,
+      "detail": {
+        "files": 80,
+        "drift": []
+      }
+    },
+    "frozen_s109_sources": {
+      "ok": true,
+      "detail": {
+        "files": 97,
+        "drift": []
+      }
+    },
+    "prior_archives": {
+      "ok": true,
+      "detail": {
+        "archives": 25,
+        "changed": []
+      }
+    },
+    "prior_run_evidence": {
+      "ok": true,
+      "detail": {
+        "manifests": 7,
+        "results": [
+          {
+            "root": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-7-evidence/harness",
+            "ok": true,
+            "listed": 12,
+            "modified_or_missing": [],
+            "unlisted": []
+          },
+          {
+            "root": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-7-evidence/measurement-runs/b2-headless",
+            "ok": true,
+            "listed": 28,
+            "modified_or_missing": [],
+            "unlisted": []
+          },
+          {
+            "root": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-7-evidence/measurement-runs/cand-desktop",
+            "ok": true,
+            "listed": 218,
+            "modified_or_missing": [],
+            "unlisted": []
+          },
+          {
+            "root": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-7-evidence/measurement-runs/cand-headless",
+            "ok": true,
+            "listed": 43,
+            "modified_or_missing": [],
+            "unlisted": []
+          },
+          {
+            "root": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-8-evidence/harness",
+            "ok": true,
+            "listed": 41,
+            "modified_or_missing": [],
+            "unlisted": []
+          },
+          {
+            "root": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-8-evidence/measurement-runs/cand-desktop",
+            "ok": true,
+            "listed": 226,
+            "modified_or_missing": [],
+            "unlisted": []
+          },
+          {
+            "root": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-8-evidence/measurement-runs/cand-headless",
+            "ok": true,
+            "listed": 22,
+            "modified_or_missing": [],
+            "unlisted": []
+          }
+        ]
+      }
+    },
+    "prior_run_evidence_s109": {
+      "ok": true,
+      "detail": {
+        "manifests": 4,
+        "results": [
+          {
+            "root": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-9-evidence/harness",
+            "ok": true,
+            "listed": 42,
+            "modified_or_missing": [],
+            "unlisted": []
+          },
+          {
+            "root": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-9-evidence/measurement-runs/cand-headless",
+            "ok": true,
+            "listed": 47,
+            "modified_or_missing": [],
+            "unlisted": []
+          },
+          {
+            "root": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-9-evidence/measurement-runs/cand-desktop",
+            "ok": true,
+            "listed": 333,
+            "modified_or_missing": [],
+            "unlisted": []
+          },
+          {
+            "root": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-9-evidence/b2-desktop-v2",
+            "ok": true,
+            "listed": 63,
+            "modified_or_missing": [],
+            "unlisted": []
+          }
+        ]
+      }
+    },
+    "protected_census": {
+      "ok": true,
+      "detail": {
+        "exact_unchanged": false,
+        "paths": 546,
+        "promoted_expected": [
+          "/home/dmin/cellos/kernel/src/embedded-x86_64/boot-config/autoload.toml",
+          "/home/dmin/cellos/kernel/src/embedded-x86_64/boot-config/services.toml",
+          "/home/dmin/cellos/kernel/src/embedded-x86_64/init",
+          "/home/dmin/cellos/kernel/src/embedded-x86_64/kernel_fs.img",
+          "/home/dmin/cellos/target/x86_64-unknown-none/release/cellos-kernel"
+        ],
+        "relocated": [
+          "/tmp/cellbox-s10-3d-resume/cand/pc.kernel.elf",
+          "/tmp/cellbox-s10-3d-resume/cand/candidate.json",
+          "/tmp/cellbox-s10-3d-resume/cand/headless.kernel.elf",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop.kernel.elf",
+          "/tmp/cellbox-s10-3d-resume/cand/pc.iso",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop.iso",
+          "/tmp/cellbox-s10-3d-resume/cand/headless.iso",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/init",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/manifest.json",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/kernel_fs.img",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/init",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/manifest.json",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/kernel_fs.img",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/ocel",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/shutdown",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/e1000",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/serial",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/ls",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cat",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/igb",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/POLICY.BIN",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/files",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cellbox",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/vfs",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/compositor",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/kill",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/tier2-smoke",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/platform",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/echo",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/xhci",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/ps",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/input",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/etc-cellos-services.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/desktop",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/config",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/etc-cellos-autoload.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/net",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/etc-cellos-system.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cellbox-ssh",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/nvme",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/chrome",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/ahci",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/tier2-exploit",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/fb-console",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/boot-config/system.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/boot-config/services.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/boot-config/autoload.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/shutdown",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/e1000",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/serial",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/ls",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/cat",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/igb",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/POLICY.BIN",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/cellbox",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/vfs",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/kill",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/tier2-smoke",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/platform",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/echo",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/xhci",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/ps",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/input",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/etc-cellos-services.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/config",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/etc-cellos-autoload.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/net",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/etc-cellos-system.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/cellbox-ssh",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/nvme",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/ahci",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/tier2-exploit",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/boot-config/system.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/boot-config/services.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/boot-config/autoload.toml"
+        ],
+        "unexplained_changed": [],
+        "unexplained_missing": [],
+        "explained_only": true,
+        "note": "exact_unchanged is false because the approved S10-5 promotion (after the S10-4.17 record) rewrote the listed canonical paths and the /tmp candidate copy no longer exists; every difference is matched to promotion.json / the byte-identical ~/.cache candidate twin"
+      }
+    },
+    "gate": {
+      "ok": true,
+      "detail": {
+        "tests_run": 706,
+        "status": "PASS",
+        "components": {
+          "retained_original": 144,
+          "retained_prior_current": 47,
+          "feed_hook_new": 78,
+          "feed_hook_new_executed": 77,
+          "memory": 35,
+          "s10_7": 91,
+          "s10_8": 85,
+          "s10_9": 142,
+          "new_s10_9b": 85
+        },
+        "frozen_files": 108,
+        "drift": []
+      }
+    },
+    "collision_census": {
+      "ok": true,
+      "detail": {
+        "unintended_new": {},
+        "new_classes": [
+          "s109b_b2d.B2DesktopMachine",
+          "s109b_b2d.B2DesktopObserver",
+          "s109b_b2d.B2DesktopSurface",
+          "s109b_b2d.B2DesktopTargets"
+        ]
+      }
+    },
+    "environment": {
+      "ok": true,
+      "detail": {
+        "tmp_free_bytes": 775170936832,
+        "qemu": "/usr/bin/qemu-system-x86_64"
+      }
+    },
+    "no_other_qemu": {
+      "ok": true,
+      "detail": {
+        "qemu_pids": [],
+        "rule": "no other VM may run; this harness only ever signals the PID it started"
+      }
+    },
+    "schedule": {
+      "ok": true,
+      "detail": {
+        "source": "/tmp/cellbox-s10-7/worktree/cells/apps/terminal/src/session.rs",
+        "banner_matches": true,
+        "commands": {
+          "b2d-echo": true,
+          "b2d-ls": true,
+          "b2d-cat": true,
+          "b2d-ps": true
+        },
+        "terminal_elf_has_banner": true,
+        "snapshots": [
+          "initial-prompt",
+          "ordinary-prompt-idle",
+          "b2d-echo",
+          "b2d-ls",
+          "b2d-cat",
+          "b2d-ps",
+          "complete"
+        ],
+        "phases": [
+          "desktop-ready",
+          "terminal-launch",
+          "initial-prompt",
+          "ordinary-prompt-idle",
+          "b2d-echo",
+          "b2d-ls",
+          "b2d-cat",
+          "b2d-ps",
+          "complete"
+        ]
+      }
+    },
+    "qemu_identity": {
+      "ok": true,
+      "detail": {
+        "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+        "binding": true
+      }
+    }
+  },
+  "sets": {
+    "b2-desktop": {
+      "kernels_isos": {
+        "ok": true,
+        "detail": {
+          "set": "b2-desktop",
+          "paths": {
+            "kernel": "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-kernel.elf",
+            "control_kernel": "/tmp/cellbox-s10-7/b2-image-v2/desktop-kernel.elf",
+            "iso": "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.iso",
+            "qcow2": "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.qcow2",
+            "kernel_fs_img": "/tmp/cellbox-s10-7/b2-image-v2/desktop-kernel_fs.img",
+            "init": "/tmp/cellbox-s10-7/b2-image-v2/desktop-init"
+          },
+          "expected": {
+            "kernel": "de5c9662202b805278ff3366bd4fbb2fdea84547b7e2a2f983a36809b091dc83",
+            "iso": "cf134c7af9da1a4ec881e90d7222e1b02ca71de8e4da954d79c3794b7c7b42ba",
+            "qcow2": "0f8ea10d14c6985c11991432e475937a72d67f292de8b39d947ee7d78393b1c8",
+            "kernel_fs_img": "b05ab5e197b6c9a4bbf4e7d703e77536e57dc6c4a0d001980904a342e9d463cd",
+            "init": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104",
+            "control_kernel": "486d1883665d7667c6ffbcefdea3858e82ab8b75ffc379d037f3c4a7adc44f8c"
+          },
+          "actual": {
+            "kernel": "de5c9662202b805278ff3366bd4fbb2fdea84547b7e2a2f983a36809b091dc83",
+            "control_kernel": "486d1883665d7667c6ffbcefdea3858e82ab8b75ffc379d037f3c4a7adc44f8c",
+            "iso": "cf134c7af9da1a4ec881e90d7222e1b02ca71de8e4da954d79c3794b7c7b42ba",
+            "qcow2": "0f8ea10d14c6985c11991432e475937a72d67f292de8b39d947ee7d78393b1c8",
+            "kernel_fs_img": "b05ab5e197b6c9a4bbf4e7d703e77536e57dc6c4a0d001980904a342e9d463cd",
+            "init": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104"
+          },
+          "match": {
+            "kernel": true,
+            "iso": true,
+            "qcow2": true,
+            "kernel_fs_img": true,
+            "init": true,
+            "control_kernel": true
+          },
+          "pins_equal_manifest_json": true,
+          "all_match": true
+        }
+      },
+      "hooks_provenance": {
+        "ok": true,
+        "detail": {
+          "kernel_features": [
+            "dev-policy-key",
+            "dev-signing-key",
+            "dev-weak-rng",
+            "signing-required",
+            "native-domains",
+            "qemu-dev-https",
+            "large-cell-va",
+            "test-hooks"
+          ],
+          "kernel_sha256": "de5c9662202b805278ff3366bd4fbb2fdea84547b7e2a2f983a36809b091dc83",
+          "features_contain_test_hooks": true,
+          "kernel_sha_matches_file": true,
+          "kernel_has_test_hook_symbol": true,
+          "control_kernel_has_test_hook_symbol": false,
+          "cpu_locals_va": "0xffffffff812b3080",
+          "tss_tables_va": "0xffffffff812b2ec0"
+        }
+      },
+      "run_token": {
+        "ok": true,
+        "detail": {
+          "token": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-9b/RUN_CONSUMED-s109-b2-desktop",
+          "consumed": false,
+          "evidence_dir_exists": false
+        }
+      },
+      "private_io": {
+        "ok": true,
+        "detail": {
+          "violations": [],
+          "sock_dir_mode": "0o700",
+          "argv_template": [
+            "qemu-system-x86_64",
+            "-machine",
+            "q35",
+            "-accel",
+            "tcg",
+            "-cpu",
+            "qemu64,+pdpe1gb",
+            "-m",
+            "256M",
+            "-display",
+            "none",
+            "-chardev",
+            "socket,id=ser0,path=$WORK/sock/measurement-serial.sock,server=on,wait=off",
+            "-serial",
+            "chardev:ser0",
+            "-qmp",
+            "unix:$WORK/sock/measurement-qmp.sock,server=on,wait=off",
+            "-monitor",
+            "none",
+            "-drive",
+            "file=/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.iso,media=cdrom,readonly=on,format=raw",
+            "-boot",
+            "d",
+            "-no-reboot",
+            "-netdev",
+            "user,id=net0,restrict=on",
+            "-device",
+            "e1000,netdev=net0",
+            "-device",
+            "virtio-keyboard-pci",
+            "-device",
+            "virtio-tablet-pci",
+            "-chardev",
+            "socket,path=$WORK/sock/gdb.sock,server=on,wait=off,id=gdb0",
+            "-gdb",
+            "chardev:gdb0",
+            "-S",
+            "-D",
+            "$WORK/evidence/qemu-trace.log",
+            "-msg",
+            "timestamp=on"
+          ]
+        }
+      },
+      "inputs": {
+        "ok": true,
+        "detail": {
+          "b2_tasks": {
+            "terminal": {
+              "sha256": "a7d6926f7307ae3b",
+              "windows": 3,
+              "heap_arena": [
+                561152,
+                4194304
+              ]
+            },
+            "shell": {
+              "sha256": "225fb29f45a6bf48",
+              "windows": 3,
+              "heap_arena": [
+                770128,
+                1048576
+              ]
+            }
+          },
+          "static_verification": {
+            "ok": true,
+            "checks": [
+              {
+                "detail": {
+                  "extra": [],
+                  "missing": []
+                },
+                "name": "image file set == tracked base file set + {desktop,files,terminal,chrome}",
+                "ok": true
+              },
+              {
+                "detail": "2b27cba990ae8c6a595a0d00349a5903c66454683a08ec0f2b6cb5558b0c848b",
+                "name": "/bin/chrome bytes == signed source-built app-chrome",
+                "ok": true
+              },
+              {
+                "detail": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90",
+                "name": "/bin/shell bytes == signed source-built app-shell",
+                "ok": true
+              },
+              {
+                "detail": "9fb4d1ff159ea0faf3d373043ccd25cc2bcea72b60346636d84f1208a7c0dc72",
+                "name": "/bin/cat bytes == signed source-built cat",
+                "ok": true
+              },
+              {
+                "detail": "bc0f6d0b99010c43bd9a00b749565af2af42a4bae7dfe95ca0ff92601bde32c3",
+                "name": "/bin/desktop bytes == signed source-built desktop",
+                "ok": true
+              },
+              {
+                "detail": "3c387e2423de914a4cba6e6a00f4eab8e007e67bd348578d09c19bb7f1c56d9d",
+                "name": "/bin/ahci bytes == signed source-built driver-ahci",
+                "ok": true
+              },
+              {
+                "detail": "323191b427c90125b3ba777d497ee1aaa70553b39de87db3529db2ab643ca5e4",
+                "name": "/bin/e1000 bytes == signed source-built driver-e1000",
+                "ok": true
+              },
+              {
+                "detail": "5d78bbdf53392e82320ac2287e91d9aa78f76ebafb9b162f15211e5570ac678c",
+                "name": "/bin/igb bytes == signed source-built driver-igb",
+                "ok": true
+              },
+              {
+                "detail": "e3441646c8febe528af54a83c165e0c936c912bac8a8ad8481e512f868218d7e",
+                "name": "/bin/nvme bytes == signed source-built driver-nvme",
+                "ok": true
+              },
+              {
+                "detail": "04f0d96ac1e608bc372202307fcc64eb24f2c91a25d2c65b41eecfc9f4ef8bb0",
+                "name": "/bin/serial bytes == signed source-built driver-serial-x86",
+                "ok": true
+              },
+              {
+                "detail": "411a05009338dc78ca602e0558befd0297934a77bcac81e0bc44aded77a0eea1",
+                "name": "/bin/xhci bytes == signed source-built driver-xhci",
+                "ok": true
+              },
+              {
+                "detail": "861ca14a7b28eab867eee713ebc9c110701873bc41edff2055a3ad415bb574c0",
+                "name": "/bin/echo bytes == signed source-built echo",
+                "ok": true
+              },
+              {
+                "detail": "c8a9b0e7eef952722e14beb6d883c2e249cdaa67140209fe3c729c4906c308e5",
+                "name": "/bin/fb-console bytes == signed source-built fb-console",
+                "ok": true
+              },
+              {
+                "detail": "e19358bec82a94d2e028ff27f549eaa300c5db7c795f13d7f8d104b1e1a2cf80",
+                "name": "/bin/files bytes == signed source-built files",
+                "ok": true
+              },
+              {
+                "detail": "b5fe3980d032c912b90447e886b4f8ac708dc5872a7714cad5c1a5f7a4cc2851",
+                "name": "/bin/kill bytes == signed source-built kill",
+                "ok": true
+              },
+              {
+                "detail": "3a99ac33ff89f237c3fd908bcdb0b3e233bcb99c5570440d3a5b6a7f02adcffc",
+                "name": "/bin/ls bytes == signed source-built ls",
+                "ok": true
+              },
+              {
+                "detail": "ffa317c68036a4d4577f7f7c8a48794261c172b1787072d9564725c998c759ff",
+                "name": "/bin/ocel bytes == signed source-built ocel-desktop",
+                "ok": true
+              },
+              {
+                "detail": "b5371860a45303815dd77a2b562d08055024ac7eead9cd0e143e30333341544a",
+                "name": "/bin/ps bytes == signed source-built ps",
+                "ok": true
+              },
+              {
+                "detail": "cbd40113306ccebd8cc224e17bd3a2c42d1934cbd9d2f3d494d393864dc4a129",
+                "name": "/bin/compositor bytes == signed source-built service-compositor",
+                "ok": true
+              },
+              {
+                "detail": "6ec6aff2029b8b814ffca2235d3f1451cec188ef6ee859c40cf46455b2f54551",
+                "name": "/bin/config bytes == signed source-built service-config",
+                "ok": true
+              },
+              {
+                "detail": "4dd998ebae0787d954f3a43a79c1fd265ae1af592a7b9c8ec13f06298a6f49e3",
+                "name": "/bin/input bytes == signed source-built service-input",
+                "ok": true
+              },
+              {
+                "detail": "3c0a9beb3d3e3803e7b4b8e720b0c07d5ed208e3fb235b3f6bb7082b841a1ee4",
+                "name": "/bin/net bytes == signed source-built service-net-qemu-dev-https",
+                "ok": true
+              },
+              {
+                "detail": "390916f2c91c3f50f7888de652aaba710f504d6c324a7cf9e243cde343295dc5",
+                "name": "/bin/platform bytes == signed source-built service-platform",
+                "ok": true
+              },
+              {
+                "detail": "a411135852ff12f36d9057a3bb4439bd046c1352427d2ed760e92b2a2d118708",
+                "name": "/bin/sshd bytes == signed source-built service-sshd",
+                "ok": true
+              },
+              {
+                "detail": "5046e588278049c5fba87a7542e28b52ad578c1150e48f700c9a1c762e1ebb31",
+                "name": "/bin/vfs bytes == signed source-built service-vfs",
+                "ok": true
+              },
+              {
+                "detail": "a7d6926f7307ae3b2670e181ed3115855c40c3be7502b78106ef8e54e9771d6c",
+                "name": "/bin/terminal bytes == signed source-built terminal",
+                "ok": true
+              },
+              {
+                "detail": "99bc7921da2879e783cc78faed1869c8d88da7083259176696c6e8ebb8f2c924",
+                "name": "/bin/ocel-quickjs unchanged tracked historical bytes (deliberately not rebuilt)",
+                "ok": true
+              },
+              {
+                "detail": "74da62ea56a05631ef4ea8dbaaaed6bb1453b85c75018446ba5b3296d3366a6f",
+                "name": "/bin/tier2-smoke unchanged tracked historical bytes (deliberately not rebuilt)",
+                "ok": true
+              },
+              {
+                "detail": "64ffc91b920ef75506ed6ba7f07839ff85569b3b87c46bfcf638dcd49f4600f2",
+                "name": "/bin/tier2-exploit unchanged tracked historical bytes (deliberately not rebuilt)",
+                "ok": true
+              },
+              {
+                "detail": "ef21d5086163ff08c82c34ea0f5927630b260309ed5cb2fa5ef85ee6e06dc910",
+                "name": "/POLICY.BIN unchanged tracked historical bytes (deliberately not rebuilt)",
+                "ok": true
+              },
+              {
+                "detail": [
+                  "/data/ocel-js-demo.html",
+                  "/data/ocel-native-web.css",
+                  "/data/ocel-native-web.html",
+                  "/data/ocel-native-web.js",
+                  "/etc/cellos/services.toml",
+                  "/etc/cellos/system.toml",
+                  "/welcome.md"
+                ],
+                "name": "all other tracked files byte-identical to base (data files, toml configs)",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/etc/cellos/autoload.toml == package-desktop-x86.py autoload (desktop + shell)",
+                "ok": true
+              },
+              {
+                "detail": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90",
+                "name": "/bin/shell == S10-7.1 signed B2 app-shell (S10-4 B2 hash)",
+                "ok": true
+              },
+              {
+                "detail": "3a99ac33ff89f237c3fd908bcdb0b3e233bcb99c5570440d3a5b6a7f02adcffc",
+                "name": "/bin/ls == S10-7.1 signed B2 ls (S10-4 B2 hash)",
+                "ok": true
+              },
+              {
+                "detail": "9fb4d1ff159ea0faf3d373043ccd25cc2bcea72b60346636d84f1208a7c0dc72",
+                "name": "/bin/cat == S10-7.1 signed B2 cat (S10-4 B2 hash)",
+                "ok": true
+              },
+              {
+                "detail": "861ca14a7b28eab867eee713ebc9c110701873bc41edff2055a3ad415bb574c0",
+                "name": "/bin/echo == S10-7.1 signed B2 echo (S10-4 B2 hash)",
+                "ok": true
+              },
+              {
+                "detail": "b5371860a45303815dd77a2b562d08055024ac7eead9cd0e143e30333341544a",
+                "name": "/bin/ps == S10-7.1 signed B2 ps (S10-4 B2 hash)",
+                "ok": true
+              },
+              {
+                "detail": "b5fe3980d032c912b90447e886b4f8ac708dc5872a7714cad5c1a5f7a4cc2851",
+                "name": "/bin/kill == S10-7.1 signed B2 kill (S10-4 B2 hash)",
+                "ok": true
+              },
+              {
+                "detail": {},
+                "name": "every rebuilt artifact also built in 7.1 is byte-identical (unsigned and signed)",
+                "ok": true
+              },
+              {
+                "detail": {
+                  "tracked_vfs": 5242944,
+                  "v1_vfs": 5242944,
+                  "v2_vfs": 17825856
+                },
+                "name": "rebuilt vfs heap segment >= 16 MiB (VFS_HEAP_BYTES) and > rebuilt ocel size 4341072",
+                "ok": true
+              },
+              {
+                "detail": {
+                  "tracked_vfs": 5242944,
+                  "v1_vfs": 5242944,
+                  "v2_vfs": 17825856
+                },
+                "name": "7.1/7.2 failure cause visible statically: tracked vfs RW segment (5 MiB+64) leaves a 4 MiB heap < rebuilt ocel size 4341072; source heap is 16 MiB",
+                "ok": true
+              },
+              {
+                "detail": [
+                  "/bin/tier2-exploit",
+                  "/bin/tier2-smoke"
+                ],
+                "name": "every ELF in the image passes the historical dev-signature verify except the two tracked tier2 test fixtures (unsigned in the tracked base and 7.1; not spawned at boot, signing-required would deny them)",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/POLICY.BIN, services.toml, system.toml present",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "shell ELF carries the \"Cellos > \" prompt literal",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/bin/desktop present",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/bin/terminal present",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/bin/files present",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/bin/chrome present",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/bin/compositor present",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/bin/fb-console present",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/bin/sshd present",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/bin/vfs present",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/bin/net present",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "/bin/input present",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "init == tracked init (not a service; unchanged)",
+                "ok": true
+              },
+              {
+                "detail": "OK: signature valid (/tmp/cellbox-s10-7/b2-image-v2/desktop-init)",
+                "name": "init dev signature verifies",
+                "ok": true
+              },
+              {
+                "detail": 1936934,
+                "name": "non-hooks kernel embeds v2 kernel_fs.img byte-for-byte (single copy)",
+                "ok": true
+              },
+              {
+                "detail": 1526223,
+                "name": "non-hooks kernel embeds init byte-for-byte",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "non-hooks kernel does NOT embed the tracked historical kernel_fs.img",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "non-hooks kernel is ELF64 x86-64 EXEC",
+                "ok": true
+              },
+              {
+                "detail": 2195627,
+                "name": "test-hooks kernel embeds v2 kernel_fs.img byte-for-byte (single copy)",
+                "ok": true
+              },
+              {
+                "detail": 1782464,
+                "name": "test-hooks kernel embeds init byte-for-byte",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "test-hooks kernel does NOT embed the tracked historical kernel_fs.img",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "test-hooks kernel is ELF64 x86-64 EXEC",
+                "ok": true
+              },
+              {
+                "detail": {
+                  "hooks": "de5c9662202b805278ff3366bd4fbb2fdea84547b7e2a2f983a36809b091dc83",
+                  "nonhooks": "486d1883665d7667c6ffbcefdea3858e82ab8b75ffc379d037f3c4a7adc44f8c"
+                },
+                "name": "test-hooks kernel differs from non-hooks kernel",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "non-hooks kernel differs from the 7.1 desktop kernel (different embedded image)",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "non-hooks ISO /boot/kernel.elf == kernel ELF",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "non-hooks ISO /boot/limine.conf == scripts/x86/limine.conf",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "non-hooks qcow2 info is qcow2",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "non-hooks qcow2 round-trips to the bios-installed ISO",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "non-hooks disk LBA0 has 0x55AA boot signature",
+                "ok": true
+              },
+              {
+                "detail": "e found on the image.\n248/359 = 69.08% allocated, 0.00% fragmented, 0.00% compressed clusters\nImage end offset: 16580608",
+                "name": "non-hooks qcow2 qemu-img check clean",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "test-hooks ISO /boot/kernel.elf == kernel ELF",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "test-hooks ISO /boot/limine.conf == scripts/x86/limine.conf",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "test-hooks qcow2 info is qcow2",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "test-hooks qcow2 round-trips to the bios-installed ISO",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "test-hooks disk LBA0 has 0x55AA boot signature",
+                "ok": true
+              },
+              {
+                "detail": "e found on the image.\n253/363 = 69.70% allocated, 0.00% fragmented, 0.00% compressed clusters\nImage end offset: 16908288",
+                "name": "test-hooks qcow2 qemu-img check clean",
+                "ok": true
+              },
+              {
+                "detail": [
+                  "boot/kernel.elf"
+                ],
+                "name": "hooks ISO tree differs from non-hooks ISO tree ONLY in boot/kernel.elf",
+                "ok": true
+              },
+              {
+                "detail": 23,
+                "name": "every cargo build used +nightly-2026-05-01 --release --locked --offline",
+                "ok": true
+              },
+              {
+                "detail": [
+                  "dev-policy-key,dev-signing-key,dev-weak-rng,signing-required,native-domains,qemu-dev-https,large-cell-va",
+                  "dev-policy-key,dev-signing-key,dev-weak-rng,signing-required,native-domains,qemu-dev-https,large-cell-va,test-hooks"
+                ],
+                "name": "hooks kernel command differs from non-hooks only by feature test-hooks",
+                "ok": true
+              },
+              {
+                "detail": null,
+                "name": "test-hooks appears on the kernel build only",
+                "ok": true
+              }
+            ],
+            "sha256": "c92d63a490961e17b70c05a6457eca490f72a255c39826df2fa822003ecf5ed5"
+          },
+          "glyph_oracle": {
+            "path": "/tmp/cellbox-s10-7/measure/cand-desktop/run-inputs/host-target/x86_64-unknown-linux-gnu/release/phase04-gui-glyphs",
+            "exists": true,
+            "sha256": "820c92d2dc0aa5c1f50533a42283974b07998111adaff8e416f56dd4481eec79",
+            "expected": "820c92d2dc0aa5c1f50533a42283974b07998111adaff8e416f56dd4481eec79"
+          },
+          "schedule": {
+            "path": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-9b/schedule-b2-desktop.json",
+            "exists": true
+          }
+        }
+      }
+    }
+  },
+  "go_by_set": {
+    "b2-desktop": true
+  },
+  "informational": {
+    "foreign_qemu_pids_present": [],
+    "policy": "never signalled; a run kills only machine.proc.pid it started"
+  },
+  "go": true
+}

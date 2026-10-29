@@ -1,0 +1,2271 @@
+{
+  "set": "b2-desktop",
+  "classification": {
+    "class": "B",
+    "reason": "allocator peak not measured",
+    "missing_snapshots": []
+  },
+  "status": "COMPLETE",
+  "error": null,
+  "observer_error": null,
+  "cleanup_error": null,
+  "expected_class": "B (every phase and snapshot complete, allocator peak not measurable in B2)",
+  "kernel_provenance": {
+    "kernel_build": "b2-desktop-v2-test-hooks",
+    "kernel_sha256": "de5c9662202b805278ff3366bd4fbb2fdea84547b7e2a2f983a36809b091dc83",
+    "kernel_features": [
+      "dev-policy-key",
+      "dev-signing-key",
+      "dev-weak-rng",
+      "signing-required",
+      "native-domains",
+      "qemu-dev-https",
+      "large-cell-va",
+      "test-hooks"
+    ],
+    "kernel_path": "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-kernel.elf",
+    "profile": "desktop",
+    "set": "b2-desktop",
+    "kind": "b2",
+    "control_kernel_non_hooks_sha256": "486d1883665d7667c6ffbcefdea3858e82ab8b75ffc379d037f3c4a7adc44f8c",
+    "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+    "measurement_kernel_is_not_the_promoted_kernel": true,
+    "image": "S10-9.3 B2 desktop v2 (services rebuilt from source at 3471028bc, non-pristine, historical comparator)"
+  },
+  "argv": [
+    "qemu-system-x86_64",
+    "-machine",
+    "q35",
+    "-accel",
+    "tcg",
+    "-cpu",
+    "qemu64,+pdpe1gb",
+    "-m",
+    "256M",
+    "-display",
+    "none",
+    "-chardev",
+    "socket,id=ser0,path=/tmp/cellbox-s10-9b/run-b2-desktop-1b5703/vm/sock/measurement-serial.sock,server=on,wait=off",
+    "-serial",
+    "chardev:ser0",
+    "-qmp",
+    "unix:/tmp/cellbox-s10-9b/run-b2-desktop-1b5703/vm/sock/measurement-qmp.sock,server=on,wait=off",
+    "-monitor",
+    "none",
+    "-drive",
+    "file=/tmp/cellbox-s10-9b/run-b2-desktop-1b5703/vm/iso/desktop-test-hooks-cellos-x86_64-desktop.iso,media=cdrom,readonly=on,format=raw",
+    "-boot",
+    "d",
+    "-no-reboot",
+    "-netdev",
+    "user,id=net0,restrict=on",
+    "-device",
+    "e1000,netdev=net0",
+    "-device",
+    "virtio-keyboard-pci",
+    "-device",
+    "virtio-tablet-pci",
+    "-chardev",
+    "socket,path=/tmp/cellbox-s10-9b/run-b2-desktop-1b5703/vm/sock/gdb.sock,server=on,wait=off,id=gdb0",
+    "-gdb",
+    "chardev:gdb0",
+    "-S",
+    "-D",
+    "/tmp/cellbox-s10-9b/run-b2-desktop-1b5703/vm/evidence/qemu-trace.log",
+    "-msg",
+    "timestamp=on",
+    "-trace",
+    "enable=gdbstub_io_command",
+    "-trace",
+    "enable=gdbstub_io_reply",
+    "-trace",
+    "enable=gdbstub_hit_watchpoint",
+    "-trace",
+    "enable=gdbstub_hit_break",
+    "-trace",
+    "enable=breakpoint_singlestep"
+  ],
+  "focus_task": "terminal",
+  "memory_table": [
+    {
+      "file": "memory-00-initial-prompt.json",
+      "phase": "initial-prompt",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-00-initial-prompt.json",
+      "phase": "initial-prompt",
+      "task": "terminal",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "distinct_frame_bytes": 6336512,
+      "distinct_frame_bytes_excluding_heap_arena": 6336512,
+      "errors": []
+    },
+    {
+      "file": "memory-01-ordinary-prompt-idle.json",
+      "phase": "ordinary-prompt-idle",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-01-ordinary-prompt-idle.json",
+      "phase": "ordinary-prompt-idle",
+      "task": "terminal",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "distinct_frame_bytes": 6336512,
+      "distinct_frame_bytes_excluding_heap_arena": 6336512,
+      "errors": []
+    },
+    {
+      "file": "memory-02-b2d-echo.json",
+      "phase": "b2d-echo",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-02-b2d-echo.json",
+      "phase": "b2d-echo",
+      "task": "terminal",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "distinct_frame_bytes": 6336512,
+      "distinct_frame_bytes_excluding_heap_arena": 6336512,
+      "errors": []
+    },
+    {
+      "file": "memory-03-b2d-ls.json",
+      "phase": "b2d-ls",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-03-b2d-ls.json",
+      "phase": "b2d-ls",
+      "task": "terminal",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "distinct_frame_bytes": 6336512,
+      "distinct_frame_bytes_excluding_heap_arena": 6336512,
+      "errors": []
+    },
+    {
+      "file": "memory-04-b2d-cat.json",
+      "phase": "b2d-cat",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-04-b2d-cat.json",
+      "phase": "b2d-cat",
+      "task": "terminal",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "distinct_frame_bytes": 6336512,
+      "distinct_frame_bytes_excluding_heap_arena": 6336512,
+      "errors": []
+    },
+    {
+      "file": "memory-05-b2d-ps.json",
+      "phase": "b2d-ps",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-05-b2d-ps.json",
+      "phase": "b2d-ps",
+      "task": "terminal",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "distinct_frame_bytes": 6336512,
+      "distinct_frame_bytes_excluding_heap_arena": 6336512,
+      "errors": []
+    },
+    {
+      "file": "memory-06-complete.json",
+      "phase": "complete",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-06-complete.json",
+      "phase": "complete",
+      "task": "terminal",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "distinct_frame_bytes": 6336512,
+      "distinct_frame_bytes_excluding_heap_arena": 6336512,
+      "errors": []
+    }
+  ],
+  "memory_report": [
+    {
+      "file": "memory-00-initial-prompt.json",
+      "phase": "initial-prompt",
+      "task": "shell",
+      "ordinal": 1,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 695597,
+          "mapped_backed_bytes": 696320,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 50656,
+          "mapped_backed_bytes": 57344,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 17960,
+          "mapped_backed_bytes": 20480,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 1048658,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4068,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 1048576,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 3018752,
+        "distinct_frame_bytes": 1957888,
+        "distinct_frame_bytes_excluding_heap_arena": 1957888,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 9168,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 56368
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 14048,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 51488
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 6980091984,
+        "size_bytes": 1048576,
+        "page_span": [
+          6980091904,
+          6981144576
+        ],
+        "pages": 257,
+        "present_pages": 257,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 1052672,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 257,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 257
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 257,
+          "elf-load-4": 1
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-00-initial-prompt.json",
+      "phase": "initial-prompt",
+      "task": "terminal",
+      "ordinal": 2,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 140326,
+          "mapped_backed_bytes": 143360,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 411184,
+          "mapped_backed_bytes": 413696,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 7320,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 5242929,
+          "mapped_backed_bytes": 5246976,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4100,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 4194304,
+          "mapped_backed_bytes": 4194304,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 10539008,
+        "distinct_frame_bytes": 6336512,
+        "distinct_frame_bytes_excluding_heap_arena": 6336512,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 6632,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 255512
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 13936,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 248208
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 7248318464,
+        "size_bytes": 4194304,
+        "page_span": [
+          7248318464,
+          7252512768
+        ],
+        "pages": 1024,
+        "present_pages": 1024,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 4194304,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 1024,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 1024
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 1024
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-01-ordinary-prompt-idle.json",
+      "phase": "ordinary-prompt-idle",
+      "task": "shell",
+      "ordinal": 1,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 695597,
+          "mapped_backed_bytes": 696320,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 50656,
+          "mapped_backed_bytes": 57344,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 17960,
+          "mapped_backed_bytes": 20480,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 1048658,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4068,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 1048576,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 3018752,
+        "distinct_frame_bytes": 1957888,
+        "distinct_frame_bytes_excluding_heap_arena": 1957888,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 9168,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 56368
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 14048,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 51488
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 6980091984,
+        "size_bytes": 1048576,
+        "page_span": [
+          6980091904,
+          6981144576
+        ],
+        "pages": 257,
+        "present_pages": 257,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 1052672,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 257,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 257
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 257,
+          "elf-load-4": 1
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-01-ordinary-prompt-idle.json",
+      "phase": "ordinary-prompt-idle",
+      "task": "terminal",
+      "ordinal": 2,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 140326,
+          "mapped_backed_bytes": 143360,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 411184,
+          "mapped_backed_bytes": 413696,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 7320,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 5242929,
+          "mapped_backed_bytes": 5246976,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4100,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 4194304,
+          "mapped_backed_bytes": 4194304,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 10539008,
+        "distinct_frame_bytes": 6336512,
+        "distinct_frame_bytes_excluding_heap_arena": 6336512,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 6632,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 255512
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 13936,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 248208
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 7248318464,
+        "size_bytes": 4194304,
+        "page_span": [
+          7248318464,
+          7252512768
+        ],
+        "pages": 1024,
+        "present_pages": 1024,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 4194304,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 1024,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 1024
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 1024
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-02-b2d-echo.json",
+      "phase": "b2d-echo",
+      "task": "shell",
+      "ordinal": 1,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 695597,
+          "mapped_backed_bytes": 696320,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 50656,
+          "mapped_backed_bytes": 57344,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 17960,
+          "mapped_backed_bytes": 20480,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 1048658,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4068,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 1048576,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 3018752,
+        "distinct_frame_bytes": 1957888,
+        "distinct_frame_bytes_excluding_heap_arena": 1957888,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 9168,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 56368
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 14048,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 51488
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 6980091984,
+        "size_bytes": 1048576,
+        "page_span": [
+          6980091904,
+          6981144576
+        ],
+        "pages": 257,
+        "present_pages": 257,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 1052672,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 257,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 257
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 257,
+          "elf-load-4": 1
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-02-b2d-echo.json",
+      "phase": "b2d-echo",
+      "task": "terminal",
+      "ordinal": 2,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 140326,
+          "mapped_backed_bytes": 143360,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 411184,
+          "mapped_backed_bytes": 413696,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 7320,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 5242929,
+          "mapped_backed_bytes": 5246976,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4100,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 4194304,
+          "mapped_backed_bytes": 4194304,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 10539008,
+        "distinct_frame_bytes": 6336512,
+        "distinct_frame_bytes_excluding_heap_arena": 6336512,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 6632,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 255512
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 13936,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 248208
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 7248318464,
+        "size_bytes": 4194304,
+        "page_span": [
+          7248318464,
+          7252512768
+        ],
+        "pages": 1024,
+        "present_pages": 1024,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 4194304,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 1024,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 1024
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 1024
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-03-b2d-ls.json",
+      "phase": "b2d-ls",
+      "task": "shell",
+      "ordinal": 1,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 695597,
+          "mapped_backed_bytes": 696320,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 50656,
+          "mapped_backed_bytes": 57344,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 17960,
+          "mapped_backed_bytes": 20480,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 1048658,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4068,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 1048576,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 3018752,
+        "distinct_frame_bytes": 1957888,
+        "distinct_frame_bytes_excluding_heap_arena": 1957888,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 9168,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 56368
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 14048,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 51488
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 6980091984,
+        "size_bytes": 1048576,
+        "page_span": [
+          6980091904,
+          6981144576
+        ],
+        "pages": 257,
+        "present_pages": 257,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 1052672,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 257,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 257
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 257,
+          "elf-load-4": 1
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-03-b2d-ls.json",
+      "phase": "b2d-ls",
+      "task": "terminal",
+      "ordinal": 2,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 140326,
+          "mapped_backed_bytes": 143360,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 411184,
+          "mapped_backed_bytes": 413696,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 7320,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 5242929,
+          "mapped_backed_bytes": 5246976,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4100,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 4194304,
+          "mapped_backed_bytes": 4194304,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 10539008,
+        "distinct_frame_bytes": 6336512,
+        "distinct_frame_bytes_excluding_heap_arena": 6336512,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 6632,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 255512
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 13936,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 248208
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 7248318464,
+        "size_bytes": 4194304,
+        "page_span": [
+          7248318464,
+          7252512768
+        ],
+        "pages": 1024,
+        "present_pages": 1024,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 4194304,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 1024,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 1024
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 1024
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-04-b2d-cat.json",
+      "phase": "b2d-cat",
+      "task": "shell",
+      "ordinal": 1,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 695597,
+          "mapped_backed_bytes": 696320,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 50656,
+          "mapped_backed_bytes": 57344,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 17960,
+          "mapped_backed_bytes": 20480,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 1048658,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4068,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 1048576,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 3018752,
+        "distinct_frame_bytes": 1957888,
+        "distinct_frame_bytes_excluding_heap_arena": 1957888,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 9168,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 56368
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 14048,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 51488
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 6980091984,
+        "size_bytes": 1048576,
+        "page_span": [
+          6980091904,
+          6981144576
+        ],
+        "pages": 257,
+        "present_pages": 257,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 1052672,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 257,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 257
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 257,
+          "elf-load-4": 1
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-04-b2d-cat.json",
+      "phase": "b2d-cat",
+      "task": "terminal",
+      "ordinal": 2,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 140326,
+          "mapped_backed_bytes": 143360,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 411184,
+          "mapped_backed_bytes": 413696,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 7320,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 5242929,
+          "mapped_backed_bytes": 5246976,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4100,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 4194304,
+          "mapped_backed_bytes": 4194304,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 10539008,
+        "distinct_frame_bytes": 6336512,
+        "distinct_frame_bytes_excluding_heap_arena": 6336512,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 6632,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 255512
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 13936,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 248208
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 7248318464,
+        "size_bytes": 4194304,
+        "page_span": [
+          7248318464,
+          7252512768
+        ],
+        "pages": 1024,
+        "present_pages": 1024,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 4194304,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 1024,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 1024
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 1024
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-05-b2d-ps.json",
+      "phase": "b2d-ps",
+      "task": "shell",
+      "ordinal": 1,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 695597,
+          "mapped_backed_bytes": 696320,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 50656,
+          "mapped_backed_bytes": 57344,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 17960,
+          "mapped_backed_bytes": 20480,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 1048658,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4068,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 1048576,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 3018752,
+        "distinct_frame_bytes": 1957888,
+        "distinct_frame_bytes_excluding_heap_arena": 1957888,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 9168,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 56368
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 14048,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 51488
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 6980091984,
+        "size_bytes": 1048576,
+        "page_span": [
+          6980091904,
+          6981144576
+        ],
+        "pages": 257,
+        "present_pages": 257,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 1052672,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 257,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 257
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 257,
+          "elf-load-4": 1
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-05-b2d-ps.json",
+      "phase": "b2d-ps",
+      "task": "terminal",
+      "ordinal": 2,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 140326,
+          "mapped_backed_bytes": 143360,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 411184,
+          "mapped_backed_bytes": 413696,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 7320,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 5242929,
+          "mapped_backed_bytes": 5246976,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4100,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 4194304,
+          "mapped_backed_bytes": 4194304,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 10539008,
+        "distinct_frame_bytes": 6336512,
+        "distinct_frame_bytes_excluding_heap_arena": 6336512,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 6632,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 255512
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 13936,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 248208
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 7248318464,
+        "size_bytes": 4194304,
+        "page_span": [
+          7248318464,
+          7252512768
+        ],
+        "pages": 1024,
+        "present_pages": 1024,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 4194304,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 1024,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 1024
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 1024
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-06-complete.json",
+      "phase": "complete",
+      "task": "shell",
+      "ordinal": 1,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14048
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 695597,
+          "mapped_backed_bytes": 696320,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 50656,
+          "mapped_backed_bytes": 57344,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 17960,
+          "mapped_backed_bytes": 20480,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 1048658,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4068,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 65536,
+          "mapped_backed_bytes": 65536,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 1048576,
+          "mapped_backed_bytes": 1052672,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 3018752,
+        "distinct_frame_bytes": 1957888,
+        "distinct_frame_bytes_excluding_heap_arena": 1957888,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 9168,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 56368
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 65536,
+          "depth_bytes": 14048,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 51488
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 6980091984,
+        "size_bytes": 1048576,
+        "page_span": [
+          6980091904,
+          6981144576
+        ],
+        "pages": 257,
+        "present_pages": 257,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 1052672,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 257,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 257
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 257,
+          "elf-load-4": 1
+        }
+      },
+      "errors": []
+    },
+    {
+      "file": "memory-06-complete.json",
+      "phase": "complete",
+      "task": "terminal",
+      "ordinal": 2,
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "stack_depth_bytes": {
+        "user": 6632,
+        "kernel": 13936
+      },
+      "regions": [
+        {
+          "label": "elf-load-0",
+          "kind": "elf-segment",
+          "size_bytes": 140326,
+          "mapped_backed_bytes": 143360,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-1",
+          "kind": "elf-segment",
+          "size_bytes": 411184,
+          "mapped_backed_bytes": 413696,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-2",
+          "kind": "elf-segment",
+          "size_bytes": 7320,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-3",
+          "kind": "elf-segment",
+          "size_bytes": 5242929,
+          "mapped_backed_bytes": 5246976,
+          "fully_mapped": true
+        },
+        {
+          "label": "elf-load-4",
+          "kind": "elf-segment",
+          "size_bytes": 4100,
+          "mapped_backed_bytes": 8192,
+          "fully_mapped": true
+        },
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "size_bytes": 262144,
+          "mapped_backed_bytes": 262144,
+          "fully_mapped": true
+        },
+        {
+          "label": "heap-arena",
+          "kind": "heap-arena",
+          "size_bytes": 4194304,
+          "mapped_backed_bytes": 4194304,
+          "fully_mapped": true
+        }
+      ],
+      "resident_total": {
+        "sum_of_region_mapped_backed_bytes": 10539008,
+        "distinct_frame_bytes": 6336512,
+        "distinct_frame_bytes_excluding_heap_arena": 6336512,
+        "not_present_pages": 0,
+        "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 6632,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 255512
+        },
+        {
+          "label": "kernel-stack",
+          "usable_bytes": 262144,
+          "depth_bytes": 13936,
+          "exact": true,
+          "status": "partial",
+          "prime_evidence": "pre-run-verified",
+          "depth_valid": true,
+          "untouched_prefix_bytes": 248208
+        }
+      ],
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 7248318464,
+        "size_bytes": 4194304,
+        "page_span": [
+          7248318464,
+          7252512768
+        ],
+        "pages": 1024,
+        "present_pages": 1024,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 4194304,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 1024,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 1024
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 1024
+        }
+      },
+      "errors": []
+    }
+  ],
+  "phases": {
+    "phases_entered": [
+      "desktop-ready",
+      "terminal-launch",
+      "initial-prompt",
+      "ordinary-prompt-idle",
+      "b2d-echo",
+      "b2d-ls",
+      "b2d-cat",
+      "b2d-ps",
+      "complete"
+    ],
+    "phases_expected": [
+      "desktop-ready",
+      "terminal-launch",
+      "initial-prompt",
+      "ordinary-prompt-idle",
+      "b2d-echo",
+      "b2d-ls",
+      "b2d-cat",
+      "b2d-ps",
+      "complete"
+    ],
+    "phases_not_entered": [],
+    "commands": [
+      {
+        "phase": "b2d-echo",
+        "command": "echo b2-shared-subset",
+        "exact_screen_match": true,
+        "seconds": 5.204345581,
+        "model_rows_after": [
+          "=== CellOS GUI Terminal (x86_64) ===",
+          "Type 'help' for commands. Single-reader stream lease active.",
+          "",
+          "Cellos > echo b2-shared-subset",
+          "b2-shared-subset",
+          "Cellos > "
+        ]
+      },
+      {
+        "phase": "b2d-ls",
+        "command": "ls /",
+        "exact_screen_match": true,
+        "seconds": 3.148529726,
+        "model_rows_after": [
+          "=== CellOS GUI Terminal (x86_64) ===",
+          "Type 'help' for commands. Single-reader stream lease active.",
+          "",
+          "Cellos > echo b2-shared-subset",
+          "b2-shared-subset",
+          "Cellos > ls /",
+          "bin/  apps/  data/  etc/  welcome.md",
+          "Cellos > "
+        ]
+      },
+      {
+        "phase": "b2d-cat",
+        "command": "cat /etc/cellos/system.toml",
+        "exact_screen_match": true,
+        "seconds": 5.948127661,
+        "model_rows_after": [
+          "=== CellOS GUI Terminal (x86_64) ===",
+          "Type 'help' for commands. Single-reader stream lease active.",
+          "",
+          "Cellos > echo b2-shared-subset",
+          "b2-shared-subset",
+          "Cellos > ls /",
+          "bin/  apps/  data/  etc/  welcome.md",
+          "Cellos > cat /etc/cellos/system.toml",
+          "shell: command not found: cat",
+          "Cellos > "
+        ]
+      },
+      {
+        "phase": "b2d-ps",
+        "command": "ps",
+        "exact_screen_match": true,
+        "seconds": 5.056029872,
+        "model_rows_after": [
+          "=== CellOS GUI Terminal (x86_64) ===",
+          "Type 'help' for commands. Single-reader stream lease active.",
+          "",
+          "Cellos > echo b2-shared-subset",
+          "b2-shared-subset",
+          "Cellos > ls /",
+          "bin/  apps/  data/  etc/  welcome.md",
+          "Cellos > cat /etc/cellos/system.toml",
+          "shell: command not found: cat",
+          "Cellos > ps",
+          "PID  NAME         STATUS",
+          " 1   kernel       running",
+          " 2   init         running",
+          " 5   vfs          running",
+          " 6   e1000        running",
+          " 10  input        running",
+          " 11  net          running",
+          " 12  compositor   running",
+          " 14  desktop      running",
+          " 15  terminal     running (active)",
+          "Cellos > "
+        ]
+      }
+    ]
+  },
+  "idle": {
+    "samples": 100,
+    "samples_expected": 100,
+    "frames_with_changed_pixels": 0,
+    "qemu_cpu_ticks_delta": 1020,
+    "serial_bytes": 0,
+    "start_ns": 33036602253402,
+    "end_ns": 33046602532285
+  },
+  "comparator_notes": {
+    "gui_terminal": "the B2 GUI terminal interprets a few builtins in-process with fixed outputs (no shell, no spawn, no VFS access, no exit status)",
+    "allocator_peak": "not measured: no Cellbox heapwatch/allocator guard hooks in the B2 terminal/shell",
+    "status": "not applicable (no exit status in the B2 GUI terminal)",
+    "recovery_10s_criterion": "not applicable (no cancellable command, no recovery wait engaged)",
+    "ceiling": "QEMU/TCG guest numbers on a hooks measurement kernel; non-pristine historical B2 desktop image (services rebuilt from source at 3471028bc, a few tracked historical bytes kept); only terminal and shell are memory-measured"
+  },
+  "observer_pause_ns_total": 1714354448,
+  "runner_seconds": 269.963622679,
+  "preservation": {
+    "census_unchanged": true,
+    "census_paths": 546,
+    "census_before_file": "census-before.json",
+    "census_after_file": "census-after.json",
+    "frozen_sources": {
+      "ok": true,
+      "detail": {
+        "files": 43,
+        "drift": []
+      }
+    },
+    "frozen_s107_sources": {
+      "ok": true,
+      "detail": {
+        "files": 66,
+        "drift": []
+      }
+    },
+    "frozen_s108_sources": {
+      "ok": true,
+      "detail": {
+        "files": 80,
+        "drift": []
+      }
+    },
+    "frozen_s109_sources": {
+      "ok": true,
+      "detail": {
+        "files": 97,
+        "drift": []
+      }
+    },
+    "prior_archives": {
+      "ok": true,
+      "detail": {
+        "archives": 25,
+        "changed": []
+      }
+    },
+    "qemu_pids_after_run": [],
+    "frozen_s109b_sources": {
+      "ok": true,
+      "detail": {
+        "drift": []
+      }
+    },
+    "kernel_iso_qcow2_hashes": {
+      "file": "hashes-after.json",
+      "all_match": true,
+      "match": {
+        "kernel": true,
+        "iso": true,
+        "qcow2": true,
+        "kernel_fs_img": true,
+        "init": true,
+        "control_kernel": true
+      }
+    }
+  },
+  "candidate_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "retained_redirects": {
+    "common.W": [
+      "/tmp/cellbox-s10-4",
+      "/tmp/cellbox-s10-7/harness-prep/retained-W"
+    ],
+    "observer.W": [
+      "/tmp/cellbox-s10-4",
+      "/tmp/cellbox-s10-7/harness-prep/retained-W"
+    ]
+  },
+  "rerun_authorized": false,
+  "cbx27_met": false,
+  "phase10_criterion4_met": false,
+  "b2_headless": "class B COMPLETE in S10-7.4, not rerun"
+}

@@ -1,0 +1,4 @@
+{
+  "qemu_pids": [],
+  "rule": "no other VM may run (also a go/no-go gate)"
+}

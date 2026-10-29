@@ -1,0 +1,20 @@
+{
+  "run": "ONE --run executed once (token RUN_CONSUMED-s109-b2-desktop claimed with O_EXCL after the go decision, before the VM). No retry. Work dir (private, outside the repo): /tmp/cellbox-s10-9b/run-b2-desktop-1b5703; evidence archived in ../measurement-run/.",
+  "result": {"status": "COMPLETE", "class": "B", "reason": "allocator peak not measured", "stop_text": null, "error": null, "observer_error": null, "cleanup_error": null},
+  "timeline_s_from_vm_start": {"desktop_ready": 152.7, "terminal_click": 155.8, "exact_initial_prompt": 234.2, "runner_total": 269.96, "window_cap": 900},
+  "observation_not_investigated": "desktop ready took 152.7 s on this run (the S10-9 cand-desktop run reached it after 20.8 s); not diagnosed. 15 unmatched (other-cell) entry stops plus 2 matched spawns: the autoloaded /bin/shell was spawned at 202.5 s (after the desktop was ready and after the taskbar click, Init logs `shell launched` after `desktop launched`) and the terminal at 230.3 s, both with observer phase label `terminal-launch`; the initial-prompt snapshot was therefore the first to include both tasks.",
+  "phases": "desktop-ready, terminal-launch, initial-prompt, ordinary-prompt-idle (100 samples, 0 changed-pixel frames), b2d-echo, b2d-ls, b2d-cat, b2d-ps, complete; every kept command passed typed-line-exact, output-exact and both negative controls (16 oracle checks).",
+  "memory": {
+    "tasks": ["terminal (focus, 64-page stacks)", "shell (autoloaded, 16-page stacks)"],
+    "snapshots": 7,
+    "records": 14,
+    "all_ok_and_exact": true,
+    "terminal": {"regions_B": {"elf-load-0": [140326, 143360], "elf-load-1": [411184, 413696], "elf-load-2": [7320, 8192], "elf-load-3": [5242929, 5246976], "elf-load-4": [4100, 8192], "user-stack": [262144, 262144], "kernel-stack": [262144, 262144], "heap-arena": [4194304, 4194304]}, "regions_note": "[size_bytes, mapped_backed_bytes]; heap arena ___CUSTOM_HEAP_ARENA lies inside elf-load-3 (.bss)", "sum_mapped_backed_bytes": 10539008, "distinct_frame_bytes": 6336512, "user_stack_depth_bytes": 6632, "kernel_stack_depth_bytes": 13936, "depth_constant_in_every_snapshot": true},
+    "shell": {"regions_B": {"elf-load-0": [695597, 696320], "elf-load-1": [50656, 57344], "elf-load-2": [17960, 20480], "elf-load-3": [1048658, 1052672], "elf-load-4": [4068, 8192], "user-stack": [65536, 65536], "kernel-stack": [65536, 65536], "heap-arena": [1048576, 1052672]}, "sum_mapped_backed_bytes": 3018752, "distinct_frame_bytes": 1957888, "user_stack_depth_bytes": 9168, "kernel_stack_depth_bytes": 14048, "depth_constant_in_every_snapshot": true},
+    "flags": "every stack record: exact=true, status=partial (lower-bound sentinel depth), prime_evidence=pre-run-verified, depth_valid=true; every record ok=true, all_stack_depths_exact=true, errors=[]",
+    "comparators_for_orientation_only": "b2-headless shell (S10-7.4): same five ELF regions/heap arena/stacks and sums (3,018,752 / 1,957,888), kernel depth 14,016 (+32 here), user 9,168 at prompt/idle then up to 32,096 after commands. Candidate desktop Cellbox (S10-9): sum 16,568,320, distinct 10,264,576, user 26,264->48,856, kernel 16,072. NOT a feature-equivalent comparison: the B2 GUI terminal runs fixed builtins in-process.",
+    "allocator_peak": "not measured (no heapwatch in B2)"
+  },
+  "preservation": {"census_paths": 546, "census_equal_before_after": true, "present": 470, "relocated_missing": 76, "frozen_sources": "retained 43 / S10-7 / S10-8 / S10-9 (97) / S10-9b (108) all byte-identical", "prior_archives": "25 byte-identical", "hooks_v2_kernel_iso_qcow2_kernel_fs_init_hashes": "equal before and after the run (hashes-before.json, hashes-after.json)", "qemu_pids_before": [], "qemu_pids_after": []},
+  "not_claimed": "CBX-27 and Phase 10 criterion 4 stay UNMET (cbx27_met=false, phase10_criterion4_met=false in summary.json); rerun_authorized=false."
+}

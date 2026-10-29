@@ -1,0 +1,722 @@
+{
+  "schema": "cellos.s10-9b.collision-census/1",
+  "question": "names defined by the new S10-9b classes vs threading.Thread, the retained observer/client/machine/surface MROs and the S10-7 B2 classes",
+  "method": "class __dict__ members + AST `self.<x> =` assignments in every function; base side: dir() plus the same AST over the whole MRO",
+  "base_name_counts": {
+    "threading.Thread": 57,
+    "observer.Observer": 105,
+    "coordinated.CoordinatedObserver": 106,
+    "hook_observer.HookObserver": 119,
+    "common.Machine": 47,
+    "phase10_canonical_drive.Machine": 39,
+    "s107_machine.MeasurementMachine": 50,
+    "s107_b2.B2MemoryObserver": 115,
+    "s107_b2.B2Targets": 25,
+    "common.Surface": 44,
+    "coordinated.CoordinatedSurface": 45,
+    "gui_temporal.TemporalSurface": 45,
+    "hook_surface.HookSurface": 45,
+    "rsp.RspClient": 75,
+    "recurring.RecurringClient": 87,
+    "run_atomic.AtomicClient": 92
+  },
+  "new_classes": {
+    "s109b_b2d.B2DesktopTargets": {
+      "class": "s109b_b2d.B2DesktopTargets",
+      "defined": {
+        "members": [
+          "__init__"
+        ],
+        "instance_attributes": [
+          "targets"
+        ]
+      },
+      "collisions": {
+        "__init__": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Machine",
+            "common.Surface",
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "recurring.RecurringClient",
+            "rsp.RspClient",
+            "run_atomic.AtomicClient",
+            "s107_b2.B2MemoryObserver",
+            "s107_b2.B2Targets",
+            "s107_machine.MeasurementMachine",
+            "threading.Thread"
+          ]
+        },
+        "targets": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "s107_b2.B2MemoryObserver",
+            "s107_b2.B2Targets"
+          ]
+        }
+      },
+      "intentional_overrides": [
+        {
+          "name": "__init__",
+          "bases": [
+            "common.Machine",
+            "common.Surface",
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "recurring.RecurringClient",
+            "rsp.RspClient",
+            "run_atomic.AtomicClient",
+            "s107_b2.B2MemoryObserver",
+            "s107_b2.B2Targets",
+            "s107_machine.MeasurementMachine",
+            "threading.Thread"
+          ],
+          "reason": "replaces B2Targets.__init__ (headless tool table) with the desktop table; `match` is inherited unchanged",
+          "chains_to_super": false
+        },
+        {
+          "name": "targets",
+          "bases": [
+            "s107_b2.B2MemoryObserver",
+            "s107_b2.B2Targets"
+          ],
+          "reason": "same attribute as B2Targets.targets (list of target records); `match` is inherited and reads it",
+          "chains_to_super": false
+        }
+      ],
+      "unintended": []
+    },
+    "s109b_b2d.B2DesktopObserver": {
+      "class": "s109b_b2d.B2DesktopObserver",
+      "defined": {
+        "members": [
+          "__init__",
+          "_b2_entry",
+          "_snapshot"
+        ],
+        "instance_attributes": [
+          "focus",
+          "gate",
+          "live",
+          "memory_failure",
+          "unmatched_entries"
+        ]
+      },
+      "collisions": {
+        "__init__": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Machine",
+            "common.Surface",
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "recurring.RecurringClient",
+            "rsp.RspClient",
+            "run_atomic.AtomicClient",
+            "s107_b2.B2MemoryObserver",
+            "s107_b2.B2Targets",
+            "s107_machine.MeasurementMachine",
+            "threading.Thread"
+          ]
+        },
+        "_b2_entry": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "s107_b2.B2MemoryObserver"
+          ]
+        },
+        "_snapshot": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "s107_b2.B2MemoryObserver"
+          ]
+        },
+        "focus": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "s107_b2.B2MemoryObserver"
+          ]
+        },
+        "gate": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "run_atomic.AtomicClient"
+          ]
+        },
+        "live": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "s107_b2.B2MemoryObserver"
+          ]
+        },
+        "memory_failure": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "s107_b2.B2MemoryObserver"
+          ]
+        },
+        "unmatched_entries": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "s107_b2.B2MemoryObserver"
+          ]
+        }
+      },
+      "intentional_overrides": [
+        {
+          "name": "__init__",
+          "bases": [
+            "common.Machine",
+            "common.Surface",
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "recurring.RecurringClient",
+            "rsp.RspClient",
+            "run_atomic.AtomicClient",
+            "s107_b2.B2MemoryObserver",
+            "s107_b2.B2Targets",
+            "s107_machine.MeasurementMachine",
+            "threading.Thread"
+          ],
+          "reason": "constructor extension: stores the input gate, chains to B2MemoryObserver.__init__",
+          "chains_to_super": true
+        },
+        {
+          "name": "_b2_entry",
+          "bases": [
+            "s107_b2.B2MemoryObserver"
+          ],
+          "reason": "replaces B2MemoryObserver._b2_entry: same record, focus task is `terminal`; called by the inherited B2MemoryObserver._handle",
+          "chains_to_super": false
+        },
+        {
+          "name": "_snapshot",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "s107_b2.B2MemoryObserver"
+          ],
+          "reason": "replaces B2MemoryObserver._snapshot: same per-spawn memory record, focus task is `terminal` instead of `shell`",
+          "chains_to_super": false
+        },
+        {
+          "name": "focus",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "s107_b2.B2MemoryObserver"
+          ],
+          "reason": "same attribute the retained observers use for the focus instance (entry base pc); retained snapshot code is replaced here",
+          "chains_to_super": false
+        },
+        {
+          "name": "gate",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "run_atomic.AtomicClient"
+          ],
+          "reason": "the attribute CoordinatedObserver.__init__ would set; that constructor is bypassed (it chains to the Cellbox-specific Observer.__init__ that parses /bin/cellbox), exactly as B2MemoryObserver bypasses Observer.__init__",
+          "chains_to_super": false
+        },
+        {
+          "name": "live",
+          "bases": [
+            "s107_b2.B2MemoryObserver"
+          ],
+          "reason": "same attribute B2MemoryObserver.__init__ initialises (pc -> live spawn); written by the replaced entry handler",
+          "chains_to_super": false
+        },
+        {
+          "name": "memory_failure",
+          "bases": [
+            "s107_b2.B2MemoryObserver"
+          ],
+          "reason": "same attribute B2MemoryObserver._b2_entry sets and write_results reads; same meaning",
+          "chains_to_super": false
+        },
+        {
+          "name": "unmatched_entries",
+          "bases": [
+            "s107_b2.B2MemoryObserver"
+          ],
+          "reason": "same counter B2MemoryObserver._b2_entry increments and write_results reads; same meaning",
+          "chains_to_super": false
+        }
+      ],
+      "unintended": []
+    },
+    "s109b_b2d.B2DesktopMachine": {
+      "class": "s109b_b2d.B2DesktopMachine",
+      "defined": {
+        "members": [
+          "__init__",
+          "stop"
+        ],
+        "instance_attributes": [
+          "argv",
+          "gdb_path",
+          "inputs",
+          "observed",
+          "private_iso",
+          "provenance",
+          "source_disk_sha",
+          "spec",
+          "start_ns",
+          "started",
+          "work"
+        ]
+      },
+      "collisions": {
+        "__init__": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Machine",
+            "common.Surface",
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "recurring.RecurringClient",
+            "rsp.RspClient",
+            "run_atomic.AtomicClient",
+            "s107_b2.B2MemoryObserver",
+            "s107_b2.B2Targets",
+            "s107_machine.MeasurementMachine",
+            "threading.Thread"
+          ]
+        },
+        "stop": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Machine",
+            "phase10_canonical_drive.Machine",
+            "s107_machine.MeasurementMachine"
+          ]
+        },
+        "argv": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine",
+            "phase10_canonical_drive.Machine",
+            "s107_machine.MeasurementMachine"
+          ]
+        },
+        "gdb_path": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ]
+        },
+        "inputs": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ]
+        },
+        "observed": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ]
+        },
+        "provenance": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "s107_machine.MeasurementMachine"
+          ]
+        },
+        "source_disk_sha": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ]
+        },
+        "spec": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "s107_machine.MeasurementMachine"
+          ]
+        },
+        "start_ns": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ]
+        },
+        "started": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ]
+        },
+        "work": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ]
+        }
+      },
+      "intentional_overrides": [
+        {
+          "name": "__init__",
+          "bases": [
+            "common.Machine",
+            "common.Surface",
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "recurring.RecurringClient",
+            "rsp.RspClient",
+            "run_atomic.AtomicClient",
+            "s107_b2.B2MemoryObserver",
+            "s107_b2.B2Targets",
+            "s107_machine.MeasurementMachine",
+            "threading.Thread"
+          ],
+          "reason": "replaces MeasurementMachine.__init__ (verifies the candidate/B2-headless manifest) with the v2 pins; chains to D.Machine.__init__ explicitly like the retained class",
+          "chains_to_super": false
+        },
+        {
+          "name": "stop",
+          "bases": [
+            "common.Machine",
+            "phase10_canonical_drive.Machine",
+            "s107_machine.MeasurementMachine"
+          ],
+          "reason": "replaces MeasurementMachine.stop: same shutdown/receipt code, input proof against the v2 pins",
+          "chains_to_super": false
+        },
+        {
+          "name": "argv",
+          "bases": [
+            "common.Machine",
+            "phase10_canonical_drive.Machine",
+            "s107_machine.MeasurementMachine"
+          ],
+          "reason": "the attribute the replaced MeasurementMachine/common.Machine constructor assigns; same meaning",
+          "chains_to_super": false
+        },
+        {
+          "name": "gdb_path",
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ],
+          "reason": "the attribute the replaced MeasurementMachine/common.Machine constructor assigns; same meaning",
+          "chains_to_super": false
+        },
+        {
+          "name": "inputs",
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ],
+          "reason": "the attribute the replaced MeasurementMachine/common.Machine constructor assigns; same meaning",
+          "chains_to_super": false
+        },
+        {
+          "name": "observed",
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ],
+          "reason": "the attribute the replaced MeasurementMachine/common.Machine constructor assigns; same meaning",
+          "chains_to_super": false
+        },
+        {
+          "name": "provenance",
+          "bases": [
+            "s107_machine.MeasurementMachine"
+          ],
+          "reason": "the attribute the replaced MeasurementMachine/common.Machine constructor assigns; same meaning",
+          "chains_to_super": false
+        },
+        {
+          "name": "source_disk_sha",
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ],
+          "reason": "the attribute the replaced MeasurementMachine/common.Machine constructor assigns; same meaning",
+          "chains_to_super": false
+        },
+        {
+          "name": "spec",
+          "bases": [
+            "s107_machine.MeasurementMachine"
+          ],
+          "reason": "the attribute the replaced MeasurementMachine/common.Machine constructor assigns; same meaning",
+          "chains_to_super": false
+        },
+        {
+          "name": "start_ns",
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ],
+          "reason": "the attribute the replaced MeasurementMachine/common.Machine constructor assigns; same meaning",
+          "chains_to_super": false
+        },
+        {
+          "name": "started",
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ],
+          "reason": "the attribute the replaced MeasurementMachine/common.Machine constructor assigns; same meaning",
+          "chains_to_super": false
+        },
+        {
+          "name": "work",
+          "bases": [
+            "common.Machine",
+            "s107_machine.MeasurementMachine"
+          ],
+          "reason": "the attribute the replaced MeasurementMachine/common.Machine constructor assigns; same meaning",
+          "chains_to_super": false
+        }
+      ],
+      "unintended": []
+    },
+    "s109b_b2d.B2DesktopSurface": {
+      "class": "s109b_b2d.B2DesktopSurface",
+      "defined": {
+        "members": [
+          "__init__",
+          "ready",
+          "shared_subset"
+        ],
+        "instance_attributes": [
+          "command_results",
+          "d",
+          "schedule",
+          "timestamps"
+        ]
+      },
+      "collisions": {
+        "__init__": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Machine",
+            "common.Surface",
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "recurring.RecurringClient",
+            "rsp.RspClient",
+            "run_atomic.AtomicClient",
+            "s107_b2.B2MemoryObserver",
+            "s107_b2.B2Targets",
+            "s107_machine.MeasurementMachine",
+            "threading.Thread"
+          ]
+        },
+        "ready": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Surface",
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "observer.Observer",
+            "s107_b2.B2MemoryObserver"
+          ]
+        },
+        "d": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Surface",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_surface.HookSurface"
+          ]
+        },
+        "timestamps": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Surface",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_surface.HookSurface"
+          ]
+        }
+      },
+      "intentional_overrides": [
+        {
+          "name": "__init__",
+          "bases": [
+            "common.Machine",
+            "common.Surface",
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "recurring.RecurringClient",
+            "rsp.RspClient",
+            "run_atomic.AtomicClient",
+            "s107_b2.B2MemoryObserver",
+            "s107_b2.B2Targets",
+            "s107_machine.MeasurementMachine",
+            "threading.Thread"
+          ],
+          "reason": "constructor extension: schedule + result list, chains to CoordinatedSurface.__init__",
+          "chains_to_super": true
+        },
+        {
+          "name": "ready",
+          "bases": [
+            "common.Surface",
+            "coordinated.CoordinatedObserver",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_observer.HookObserver",
+            "hook_surface.HookSurface",
+            "observer.Observer",
+            "s107_b2.B2MemoryObserver"
+          ],
+          "reason": "replaces the retained desktop ready: same sequence, expected rows are the B2 terminal source literals",
+          "chains_to_super": false
+        },
+        {
+          "name": "d",
+          "bases": [
+            "common.Surface",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_surface.HookSurface"
+          ],
+          "reason": "the Desk the retained ready() creates (`self.d`), read by the retained sample_idle/snapshot code; same meaning",
+          "chains_to_super": false
+        },
+        {
+          "name": "timestamps",
+          "bases": [
+            "common.Surface",
+            "coordinated.CoordinatedSurface",
+            "gui_temporal.TemporalSurface",
+            "hook_surface.HookSurface"
+          ],
+          "reason": "the readiness timestamps the retained ready() records (same keys), read by the runner classification; same meaning",
+          "chains_to_super": false
+        }
+      ],
+      "unintended": []
+    }
+  },
+  "unintended_new": {},
+  "declared_but_not_colliding": [],
+  "empty": true
+}

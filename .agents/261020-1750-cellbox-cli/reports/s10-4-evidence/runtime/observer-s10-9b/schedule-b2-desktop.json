@@ -1,0 +1,66 @@
+{
+  "schema": "cellos.s10-9b.b2-desktop-schedule/1",
+  "set": "b2-desktop",
+  "profile": "desktop",
+  "purpose": "S10-9b B2 historical DESKTOP comparator (one run, CP1 S10-9 allowance after the b2-desktop v2 set boot-smoked READY): the SHARED command subset of the S10-7 b2-headless schedule, driven through the retained real-GUI machinery (QMP input via the coordinated InputGate, screendump, glyph-oracle exact re-render), memory observed on the hooks kernel (mapped-backed regions + exact stack watermarks).",
+  "source_of_original_order": "runtime/run.py run_one(): ready(desktop ready, terminal launch, initial prompt) -> sample_idle('ordinary-prompt-idle') -> streams() -> top_idle() -> phase('complete') + snapshot('complete'); and observer-s10-7/schedule-b2.json (b2-headless shared subset: initial-prompt, ordinary-prompt-idle, echo, ls, cat, ps, complete). The kept phases preserve that relative order.",
+  "how_the_b2_desktop_terminal_works": {
+    "source": "cells/apps/terminal/src/{main,session,grid}.rs at 3471028bc (worktree /tmp/cellbox-s10-7/worktree), compiled bytes verified (strings of signed /bin/terminal contain the banner and the builtin tables)",
+    "embeds_shell": false,
+    "spawns_bin_shell": false,
+    "mechanism": "The GUI Terminal cell contains a self-contained builtin command interpreter (TerminalSession::execute_command): help, clear, uname, pwd, ls, ps, date, echo, exit; anything else prints `shell: command not found: <name>`. `ls` ignores its arguments and prints a fixed string, `ps` prints a fixed 9-row table, `date` a fixed date, `cat` does not exist. There is no exit status (`$?` is not expanded; `echo` prints its arguments verbatim). Commands never spawn a process: /bin/ls /bin/cat /bin/echo /bin/ps /bin/kill exist in the image but a typed line does not run them. The autoloaded /bin/shell cell (serial console, never typed into in a GUI-only run) is a separate task.",
+    "prompt": "Cellos > ",
+    "banner": ["=== CellOS GUI Terminal (x86_64) ===", "Type 'help' for commands. Single-reader stream lease active."],
+    "initial_rows": ["=== CellOS GUI Terminal (x86_64) ===", "Type 'help' for commands. Single-reader stream lease active.", "", "Cellos > "],
+    "initial_cursor_cell": [9, 3],
+    "geometry": {"window": [720, 480], "origin_on_screen": [140, 100], "cell": [9, 18], "pad": [8, 6], "font": "JetBrains Mono Regular 14 px", "grid": "80x26 cells in the cell, 79x26 drawn (column 80 does not fit the 720 px window)", "launcher": "taskbar Terminal button at (214, 782), identical to the retained harness (TASKBAR/TASKBAR_Y)"},
+    "task_identification": "terminal and shell are identified at their entry stops by byte equality of three 48-byte .text windows against the signed ELFs of the v2 image (hash-pinned against static-verification.json image.files); the terminal is the focus task (the GUI shell analogue); the shell is measured as a second task, not interacted with.",
+    "oracle": "the retained pixel oracle (Proof/Desk of phase04_gui_drive + phase10 Desk: glyph-binary exact re-render of the whole 720x480 window with the cursor cell masked, window located as the exact bbox of the Terminal background colour, cursor detector, one-character-change and previous-frame negative controls) is used unchanged. Only the EXPECTED rows differ: they are the literal strings of the B2 terminal source. libs/ostd typography/font/font_atlas, the font assets and libs/viui are byte-identical between the current tree (glyph oracle build) and the 3471028bc worktree, and the terminal render geometry/colours/clip equal the oracle's constants, so expected pixels are the guest's rasterization."
+  },
+  "prompt": "Cellos > ",
+  "deadlines": {"command_s": 120, "total_window_s": 900, "note": "original harness values, nothing raised or added for B2 desktop; the GUI-only per-input admission budget (5 s) and the 240/300/900 s boot and drawing waits of the retained desktop ready sequence are unchanged"},
+  "idle": {"seconds": 10, "samples_expected": 100, "sampler": "common.Surface.sample_idle (10 Hz target, whole-QEMU CPU ticks, GUI frame diff outside the cursor cell)"},
+  "status": {
+    "applicable": false,
+    "reason": "The B2 GUI terminal has no exit status: `echo st=$?` would print the literal text `st=$?`, and select_status (fail closed on a missing st=<digits> row) cannot hold. Command completion is therefore judged by the exact-screen oracle (typed line exact, then one acceptable exact output screen with a fresh prompt) instead of a status row. No status probe is typed (it would add a shifted-key workload without a shared-command purpose; the select_status fail-closed behaviour on the expected B2 rows is proven offline)."
+  },
+  "memory": {
+    "snapshot_at": "every kept phase marked snapshot=true",
+    "measured_tasks": ["terminal (focus, GUI shell analogue, 64-page stacks)", "shell (autoloaded /bin/shell, 16-page stacks, idle on the serial console)"],
+    "per_task": ["mapped regions (ELF PT_LOAD, user stack, kernel stack, heap arena: terminal ___CUSTOM_HEAP_ARENA 4 MiB, shell HEAP_MEM 1 MiB)", "user-stack and kernel-stack sentinel watermark (0xA5, test-hooks kernel)", "pre-run verify_primed proof at the entry stop"],
+    "allocator_peak": "NOT MEASURED for B2: neither the B2 terminal nor the B2 shell has Cellbox heapwatch/allocator guard hooks",
+    "unmeasured_tasks": "compositor, desktop, vfs and the other cells are not memory-measured (as in every earlier S10 run, only the focus tasks)"
+  },
+  "phases": [
+    {"name": "desktop-ready", "kind": "desktop-ready", "original_phase": "(ready) desktop ready", "snapshot": false,
+     "justification": "Shared: the retained desktop ready sequence waits for `[desktop] Ready. Entering event loop.` (present in the B2 desktop serial log, boot smoke), pauses 3 s and checks the 1280x800 screen with no Terminal window."},
+    {"name": "terminal-launch", "kind": "terminal-launch", "original_phase": "terminal-launch", "snapshot": false,
+     "justification": "Shared: Terminal launched by the taskbar click at the retained coordinates; waits for `[terminal] Terminal surface ready. Entering event loop.` (string present in the signed B2 terminal), then the Terminal window must appear as the exact 720x480 background bbox."},
+    {"name": "initial-prompt", "kind": "ready", "original_phase": "initial-prompt", "snapshot": true,
+     "expect_rows": ["=== CellOS GUI Terminal (x86_64) ===", "Type 'help' for commands. Single-reader stream lease active.", "", "Cellos > "],
+     "justification": "Shared: exact initial screen through the retained expect_screen + the two retained negative controls (window differs from the pre-launch screen by >1000 pixels, wrong-prompt `Cellos # ` differs by >=10 pixels) and the initial cursor cell check. Only the banner text differs from the Cellbox terminal (B2 prints its own banner)."},
+    {"name": "ordinary-prompt-idle", "kind": "idle", "seconds": 10, "samples_expected": 100, "original_phase": "ordinary-prompt-idle", "snapshot": true,
+     "justification": "Shared: idle redraw at the prompt, 10 s x 100 samples, identical sampler (B2 redraws only on key events, so the GUI diff is expected to be zero)."},
+    {"name": "b2d-echo", "kind": "command", "command": "echo b2-shared-subset", "expect_rows": ["b2-shared-subset"], "original_phase": null, "snapshot": true,
+     "justification": "Shared command `echo` (builtin of the B2 terminal and of the B2 shell); replaces the role of the original finite typed command."},
+    {"name": "b2d-ls", "kind": "command", "command": "ls /", "expect_rows": ["bin/  apps/  data/  etc/  welcome.md"], "original_phase": null, "snapshot": true,
+     "justification": "Shared command `ls /`. The B2 GUI terminal answers with a FIXED string independent of its argument and of the VFS (session.rs); the row is recorded as exactly that comparator fact, not as a directory listing."},
+    {"name": "b2d-cat", "kind": "command", "command": "cat /etc/cellos/system.toml", "expect_rows": ["shell: command not found: cat"], "original_phase": null, "snapshot": true,
+     "justification": "Shared command `cat` of an existing image file: the B2 GUI terminal has NO `cat`, so the exact expected outcome is its `command not found` line (session.rs execute_command default arm). Recorded as the B2 desktop comparator fact; this phase exercises the same typed-command path and keeps the shared-subset order."},
+    {"name": "b2d-ps", "kind": "command", "command": "ps", "expect_rows": ["PID  NAME         STATUS", " 1   kernel       running", " 2   init         running", " 5   vfs          running", " 6   e1000        running", " 10  input        running", " 11  net          running", " 12  compositor   running", " 14  desktop      running", " 15  terminal     running (active)"], "original_phase": null, "snapshot": true,
+     "justification": "Shared command `ps`: the B2 GUI terminal prints a FIXED nine-row table (session.rs), not a live process list."},
+    {"name": "complete", "kind": "snapshot", "original_phase": "complete", "snapshot": true,
+     "justification": "Shared: final snapshot, as the original schedule."}
+  ],
+  "on_phase_failure": "STOP (no retry): an exact-screen mismatch/timeout, an input-admission failure or a memory wiring failure ends the run and is classified (C/D/E); nothing is re-driven. Unlike the headless B2 run there is no status row to tolerate: the oracle result IS the expected result.",
+  "dropped": [
+    {"original_phase": "finite-stream", "command": "top --records -d 1 --frames 2 | to jsonl | cat", "reason": "needs `top --records`, `to jsonl` and typed pipelines: Cellbox features absent in B2; the B2 GUI terminal has no pipelines, no `top`, no jsonl."},
+    {"original_phase": "endless-collected-cat", "command": "top --records --frames 100000 | to jsonl | cat", "reason": "same missing features; B2 has no cat at all in the GUI terminal."},
+    {"original_phase": "endless-terminal-stream", "command": "top --records --frames 100000 | to jsonl", "reason": "needs `top --records` and `to jsonl`; no B2 equivalent."},
+    {"original_phase": "rg-large", "command": "rg -F p10-literal-that-occurs-nowhere-0123456789 /mnt/sd/rg/big.log", "reason": "B2 has no `rg`; the B2 desktop run attaches no /mnt/sd data disk."},
+    {"original_phase": "interactive-top / interactive-top-idle", "command": "top", "reason": "the B2 GUI terminal has no `top`; the Cellbox top renderer oracle does not apply."},
+    {"original_phase": "interrupt (Ctrl-C) recovery with st=130, latency-recording recovery waits", "command": "Ctrl-C + echo st=$?", "reason": "no cancellable command exists (every B2 builtin returns at once) and no exit status exists; the S10-8/S10-9 recovery-wait credit machinery is therefore not engaged and recovery_10s_criterion is not applicable."},
+    {"original_phase": "ssh / edit / outbound network", "command": "(not in the S10-4 schedule)", "reason": "absent in B2; the QEMU user netdev is restricted without forwards as in every S10 run."},
+    {"original_phase": "status epoch (`echo st=$?`)", "command": "echo st=$?", "reason": "see `status`: not applicable in the B2 GUI terminal."}
+  ]
+}
