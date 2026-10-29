@@ -3210,3 +3210,36 @@ Candidate full-schedule peaks for the focus Cellbox become measured (stacks exac
 - **Rg-large interrupt and `top` interrupt remain unobserved to completion; no full-schedule candidate peak exists; no matched feature-equivalent comparator; b2-desktop null; RSS beyond mapped-backed absent. CBX-27 and Phase 10 criterion 4 stay UNMET. No rerun authorized; nothing pushed.** Evidence `reports/s10-8-evidence/`, code `runtime/observer-s10-8/`.
 
 - **S10-7/S10-8 limited-result CP2 GRANTED by the user 2026-10-29; both CLOSED PARTIAL.** Accepts only the actual measured values and stops recorded above (S10-7.4 classes C/C/B, S10-8 classes E/C, B2 desktop diagnostic failure), the 120 s credited-wait cap interpretation, the excluded stale S10-4.17 preflight test, and all disclosed deviations. Not approved/unchanged: full-workload peaks, `complete`/`top` snapshots, matched feature-equivalent comparator, RSS beyond mapped-backed, other cells' stacks, promoted-kernel timing. **CBX-27 and Phase 10 criterion 4 stay UNMET; no further rerun authorized; any further measurement needs a new CP1.**
+
+## 9. S10-9 further measurement: atomic-RSP headless, latency-recording recovery waits, boot-baseline harvest, optional B2-desktop rebuild — CP1 DRAFT (status AWAITING CP1; design only; nothing edited, built or run)
+
+**Requested by the user ("tiếp tục đo", 2026-10-29) after S10-7/S10-8 closed partial.** No rerun is authorized without this CP1. CBX-27 closes only if every element is actually evidenced; the expected outcome of the base plan is a narrower partial, see the ceiling below.
+
+### Evidence read for this draft (retained S10-8, read-only)
+- **Headless E is a host-client stop, not a workload result.** Boot stalled ~9.27 s after the observer connected; the last RSP receive is a complete checksum-valid `$T05thread:01;#07` with no ack/parse event afterwards and the client stayed running until the 900 s interrupt timed out. The S10-4.14 atomic RSP client (`observer-rsp-atomic`, deterministic before/after reproduction, 144 tests) fixes exactly this mode but S10-7/S10-8 headless runners kept the retained non-atomic client.
+- **Desktop C at `rg-large`:** the final screen (`gui-failure-01.png`) shows `rg -F p10-literal-that-occurs-nowhere-0123456789 /mnt/sd/rg/big.log`, `^C`, no new prompt after 14.22 s wall (3.99 s credited pause, i.e. ~10 s of unpaused guest time). Earlier Ctrl-C recoveries on the same screen succeeded (collected-cat 7.33 s wall, terminal-stream 13.94 s). Cause open: slow cancellation of an in-flight VFS/NVMe read under TCG + test-hooks + per-allocation observer stops, a product recovery defect, or both. A fixed 10-s-unpaused criterion cannot separate them.
+- **Free extra data already in the serial logs:** the hooks kernel's `[stack-baseline]` lines at the first sample after tick 1500 (boot phase, not end-of-workload), e.g. init user 20,760 B, vfs kernel 15,656 B / user 73,432 B, net kernel 14,544 B / user 22,168 B, cellbox user 15,016-35,352 B. These are boot-time watermarks of other cells, previously not harvested.
+
+### Slices (strict order; stop on first unmet gate; no retry)
+| Slice | Work | Gate |
+|---|---|---|
+| S10-9.0 | Offline: (a) classify the S10-8 headless stop against `observer-rsp-atomic` (feed the retained `rsp-traffic.jsonl` to the before/after clients; confirm or withdraw the race attribution); (b) harvest every `[stack-baseline]` line from all retained serial logs (S10-7.4, S10-8, boot smokes) into a table keyed by profile/kernel/cell/phase, labelled boot-phase only | table + attribution verdict, no VM |
+| S10-9.1 | New sibling `runtime/observer-s10-9/`: headless runner on the atomic RSP client; **latency-recording recovery waits (D9-1)**; keep everything else of S10-8 (pause credit, `_wiring_stop`, memory wiring) | tests incl. before/after fixture for the T05 race on the headless path |
+| S10-9.2 | ONE clean offline gate (retained set + S10-7/S10-8/S10-9 tests, one invocation, 0 fail/error/skip, stale preflight test excluded and disclosed), new go/no-go and tokens `RUN_CONSUMED-s109-*`, census before/after files | go/no-go all true |
+| S10-9.3 (optional, D9-3) | Rebuild the B2 desktop image with services rebuilt from source at `3471028bc` instead of the tracked historical bytes (reverses 7.1 deviation 2), one non-hooks boot smoke, then hooks kernel smoke; one attempt each, stop on failure | boot smokes READY, else b2-desktop stays null |
+| S10-9.4 | ONE run each: cand-headless, cand-desktop (and b2-desktop only if 9.3 READY), same kernels/argv as S10-7.4/8, no rerun | classes A-E |
+| S10-9.5 | Report, acceptance/records, CP2 request | docs |
+
+### Decisions requested
+| ID | Question | Options | Recommended |
+|---|---|---|---|
+| **D9-1** | Treatment of the three Ctrl-C recovery waits (headless top, desktop collected-cat/terminal-stream/rg/top) | **A** keep S10-8 pause-credit 10 s (rg-large likely repeats the stop); **B** latency-recording: wait up to 120 s (retained phase cap) of observer-credited wall time, record time-to-prompt and the credited pause, report the 10 s product criterion as NOT EVALUATED (never "met" or "failed") and make no product-latency claim from these runs; a prompt that never returns within 120 s stops the run as before; **C** disable heap-watch during recovery waits only (weakens coverage census) | **B** |
+| D9-2 | Run set | cand-headless and cand-desktop once each (b2-headless already class B COMPLETE, not rerun) | both |
+| D9-3 | Optional B2 desktop rebuild/smokes | yes (S10-9.3) / no (stays null) | yes, but only because without it no desktop comparator can ever exist; a failed smoke ends it |
+| D9-4 | After these runs | no further rerun for any outcome and close S10-9 partial (recommended) / allow one more CP1 | no rerun |
+
+### Honest ceiling
+- Even class A on both candidate profiles gives full-schedule focus-Cellbox peaks on hooks kernels only. The comparator stays headless shared-subset only (B2 shell builtins, no allocator, no top/rg/finite-stream) unless 9.3 succeeds, and then only the same shared subset on desktop. RSS stays "mapped-backed under eager SAS"; other cells' stacks are boot-phase only; timing on the promoted kernel is unmeasured. A feature-equivalent before/after for rg/edit/ssh/top is impossible because B2 has no such features. I therefore expect **CBX-27 to stay unmet unless you explicitly accept those ceilings as satisfying the row** (a separate disposition decision like DS6-1 option B). Phase 10 criterion 1 stays open (CBX-23/24/25).
+- Preservation: 546-path census (before/after files saved), frozen sources, prior archives byte-exact; no guest writes, no product/candidate/canonical edit, no push without request.
+
+- **Status 2026-10-29:** S10-9 is **proposed only**. CBX-27 and Phase 10 criteria 1 and 4 remain **UNMET**.
