@@ -1,0 +1,140 @@
+{
+  "failures": [],
+  "results": {
+    "V1 /bin/cellbox == /bin/cellbox-ssh": {
+      "ok": true
+    },
+    "V1 autoload starts exactly one /bin/cellbox ['sh']": {
+      "ok": true
+    },
+    "V1 boot-config dir has exactly 3 files": {
+      "ok": true
+    },
+    "V1 boot-config/autoload.toml cmp+sha": {
+      "detail": {
+        "bytes": 358,
+        "sha256": "db4350656ff38522e029ab6f0328c6404d5e2362fe4d371c396426361d04ee6a"
+      },
+      "ok": true
+    },
+    "V1 boot-config/services.toml cmp+sha": {
+      "detail": {
+        "bytes": 897,
+        "sha256": "eff37d25775ecf1eea7012290db0a3f4994d69b35318ce621b0cfd6bc503f160"
+      },
+      "ok": true
+    },
+    "V1 boot-config/system.toml cmp+sha": {
+      "detail": {
+        "bytes": 128,
+        "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+      },
+      "ok": true
+    },
+    "V1 every image file sha256 == candidate.json": {
+      "detail": [],
+      "ok": true
+    },
+    "V1 image has the 32 manifest paths": {
+      "detail": {
+        "count": 32,
+        "extra": [],
+        "missing": []
+      },
+      "ok": true
+    },
+    "V1 init cmp+sha": {
+      "detail": {
+        "bytes": 406976,
+        "sha256": "c0bd14580fda0d697a2edd66b19168107fa6877a190bc06c1a8a482b467b23f3"
+      },
+      "ok": true
+    },
+    "V1 init sha == candidate.json": {
+      "ok": true
+    },
+    "V1 kernel_fs.img cmp+sha": {
+      "detail": {
+        "bytes": 25165824,
+        "sha256": "3848cefb25f0e7c4abc67feccf3d8886292e25da60a88b4633552651292479ec"
+      },
+      "ok": true
+    },
+    "V1 kernel_fs.img sha == candidate.json": {
+      "ok": true
+    },
+    "V1 manifest sha == candidate.json": {
+      "ok": true
+    },
+    "V1 manifest.json cmp+sha": {
+      "detail": {
+        "bytes": 7956,
+        "sha256": "af55e60245832b348e1e20b7689d35d84fe6747b7b359e886ebe3a4a81ae4e8d"
+      },
+      "ok": true
+    },
+    "V1 no /bin/shell, /bin/sshd": {
+      "ok": true
+    },
+    "V1 no quarantined hash in any image file": {
+      "ok": true
+    },
+    "V1 no sshd/shell/config service rows": {
+      "ok": true
+    },
+    "V1 no temp leftovers in embedded dir": {
+      "ok": true
+    },
+    "V2 check_default_kernel.py admits it": {
+      "detail": "",
+      "ok": true
+    },
+    "V2 kernel embeds init at 1,655,200": {
+      "detail": 1655200,
+      "ok": true
+    },
+    "V2 kernel embeds kernel_fs.img at 2,064,272": {
+      "detail": 2064272,
+      "ok": true
+    },
+    "V2 kernel sha == desktop.kernel.elf": {
+      "ok": true
+    },
+    "V3 469-path delta is exactly the intended five (system.toml identical)": {
+      "detail": {
+        "changed": [
+          "kernel/src/embedded-x86_64/boot-config/autoload.toml",
+          "kernel/src/embedded-x86_64/boot-config/services.toml",
+          "kernel/src/embedded-x86_64/init",
+          "kernel/src/embedded-x86_64/kernel_fs.img",
+          "target/x86_64-unknown-none/release/cellos-kernel"
+        ],
+        "not_changed": [],
+        "unexpected": []
+      },
+      "ok": true
+    },
+    "V3 boot-config/system.toml unchanged 74ecea5c": {
+      "ok": true
+    },
+    "V3 build/vicell-x86.iso unchanged eb1cb813": {
+      "ok": true
+    },
+    "V3 candidate source dir hashes": {
+      "ok": true
+    },
+    "V3 durable candidate.json": {
+      "ok": true
+    },
+    "V3 kernel/src/main.rs unchanged a9636fee": {
+      "ok": true
+    },
+    "V3 manifest.json added (untracked)": {
+      "ok": true
+    },
+    "V3 quarantine archive re-hash": {
+      "detail": "/home/dmin/.cache/cellos-quarantine/cellbox-s10-5-20261029T041842Z",
+      "ok": true
+    }
+  }
+}

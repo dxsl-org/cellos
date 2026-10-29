@@ -1,0 +1,13 @@
+test_a_clean_image_embedded_in_the_kernel_is_admitted (__main__.DefaultKernelRuleTests.test_a_clean_image_embedded_in_the_kernel_is_admitted) ... ok
+test_a_quarantined_hash_is_refused_under_any_name (__main__.DefaultKernelRuleTests.test_a_quarantined_hash_is_refused_under_any_name) ... ok
+test_an_unreadable_image_is_refused (__main__.DefaultKernelRuleTests.test_an_unreadable_image_is_refused) ... ok
+test_missing_or_empty_inputs_are_refused (__main__.DefaultKernelRuleTests.test_missing_or_empty_inputs_are_refused) ... ok
+test_retired_paths_are_refused (__main__.DefaultKernelRuleTests.test_retired_paths_are_refused) ... ok
+test_the_alias_must_exist_and_equal_the_suite (__main__.DefaultKernelRuleTests.test_the_alias_must_exist_and_equal_the_suite) ... ok
+test_the_kernel_must_contain_the_exact_image_and_init_bytes (__main__.DefaultKernelRuleTests.test_the_kernel_must_contain_the_exact_image_and_init_bytes) ... ok
+test_usage (__main__.DefaultKernelRuleTests.test_usage) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.005s
+
+OK

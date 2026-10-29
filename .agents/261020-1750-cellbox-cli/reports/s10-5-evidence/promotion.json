@@ -1,0 +1,37 @@
+{
+  "finished_utc": "2026-10-29T04:23:23.257602+00:00",
+  "old_boot_config_moved_to": "/tmp/cellbox-s10-5-scratch/old-boot-config",
+  "promoted": {
+    "kernel/src/embedded-x86_64/boot-config/autoload.toml": {
+      "bytes": 358,
+      "sha256": "db4350656ff38522e029ab6f0328c6404d5e2362fe4d371c396426361d04ee6a"
+    },
+    "kernel/src/embedded-x86_64/boot-config/services.toml": {
+      "bytes": 897,
+      "sha256": "eff37d25775ecf1eea7012290db0a3f4994d69b35318ce621b0cfd6bc503f160"
+    },
+    "kernel/src/embedded-x86_64/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "kernel/src/embedded-x86_64/init": {
+      "bytes": 406976,
+      "sha256": "c0bd14580fda0d697a2edd66b19168107fa6877a190bc06c1a8a482b467b23f3"
+    },
+    "kernel/src/embedded-x86_64/kernel_fs.img": {
+      "bytes": 25165824,
+      "sha256": "3848cefb25f0e7c4abc67feccf3d8886292e25da60a88b4633552651292479ec"
+    },
+    "kernel/src/embedded-x86_64/manifest.json": {
+      "bytes": 7956,
+      "sha256": "af55e60245832b348e1e20b7689d35d84fe6747b7b359e886ebe3a4a81ae4e8d"
+    },
+    "target/x86_64-unknown-none/release/cellos-kernel": {
+      "bytes": 28182592,
+      "sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a"
+    }
+  },
+  "source": "/home/dmin/.cache/cellos-candidates/4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "source_candidate_json_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "started_utc": "2026-10-29T04:23:22.064280+00:00"
+}

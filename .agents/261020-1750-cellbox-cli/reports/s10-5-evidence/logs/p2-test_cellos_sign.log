@@ -1,0 +1,88 @@
+test_named_opt_in_admits_a_dev_signature (__main__.AdmissionSentinelTests.test_named_opt_in_admits_a_dev_signature) ... WARNING: minting an UNCHECKED dev signature — no F1/F5 check ran. This binary must never be shipped in an image.
+ok
+test_named_opt_in_never_admits_a_production_key (__main__.AdmissionSentinelTests.test_named_opt_in_never_admits_a_production_key) ... ok
+test_sentinel_from_the_checked_wrapper_admits_signing (__main__.AdmissionSentinelTests.test_sentinel_from_the_checked_wrapper_admits_signing) ... ok
+test_unchecked_direct_signing_is_refused (__main__.AdmissionSentinelTests.test_unchecked_direct_signing_is_refused) ... ok
+test_duplicate_path_is_fatal (__main__.AllowlistTests.test_duplicate_path_is_fatal) ... ok
+test_missing_required_field_is_fatal (__main__.AllowlistTests.test_missing_required_field_is_fatal) ... ok
+test_parses_both_tables (__main__.AllowlistTests.test_parses_both_tables) ... ok
+test_staleness_uses_review_by_then_max_age (__main__.AllowlistTests.test_staleness_uses_review_by_then_max_age) ... ok
+test_unknown_field_is_fatal (__main__.AllowlistTests.test_unknown_field_is_fatal) ... ok
+test_wrong_version_is_fatal (__main__.AllowlistTests.test_wrong_version_is_fatal) ... ok
+test_batch_atomicity_on_a_route (__main__.CandidateRouteTests.test_batch_atomicity_on_a_route) ... ok
+test_caller_must_be_the_pinned_recipe (__main__.CandidateRouteTests.test_caller_must_be_the_pinned_recipe) ... ok
+test_candidate_root_inside_the_repository (__main__.CandidateRouteTests.test_candidate_root_inside_the_repository) ... ok
+test_candidate_routes_stay_outside_the_repository_in_the_same_tree (__main__.CandidateRouteTests.test_candidate_routes_stay_outside_the_repository_in_the_same_tree) ... ok
+test_canonical_routes_admit_only_the_exact_canonical_root (__main__.CandidateRouteTests.test_canonical_routes_admit_only_the_exact_canonical_root) ... ok
+test_canonical_routes_are_unreachable_from_the_cli (__main__.CandidateRouteTests.test_canonical_routes_are_unreachable_from_the_cli) ... ok
+test_canonical_routes_keep_every_other_rule (__main__.CandidateRouteTests.test_canonical_routes_keep_every_other_rule) ... ok
+test_cli_has_no_route_and_still_refuses_dev_cellbox (__main__.CandidateRouteTests.test_cli_has_no_route_and_still_refuses_dev_cellbox) ... OK:   F5 — pinned
+OK:   F1 — 0 crates and 0 files scanned; unsafe confined to 0 allowlisted files
+OK:   F5 — pinned
+OK:   F1 — 0 crates and 0 files scanned; unsafe confined to 0 allowlisted files
+ok
+test_desktop_route_admits_terminal (__main__.CandidateRouteTests.test_desktop_route_admits_terminal) ... ok
+test_headless_route_admits_its_batch_with_the_dev_key (__main__.CandidateRouteTests.test_headless_route_admits_its_batch_with_the_dev_key) ... ok
+test_names_outside_the_route (__main__.CandidateRouteTests.test_names_outside_the_route) ... ok
+test_no_environment_bypass_without_a_route (__main__.CandidateRouteTests.test_no_environment_bypass_without_a_route) ... ok
+test_quarantined_hash_on_every_route_whatever_the_environment (__main__.CandidateRouteTests.test_quarantined_hash_on_every_route_whatever_the_environment) ... ok
+test_quarantined_set_is_exactly_the_two_literals (__main__.CandidateRouteTests.test_quarantined_set_is_exactly_the_two_literals) ... ok
+test_route_is_rechecked_after_the_key_is_loaded (__main__.CandidateRouteTests.test_route_is_rechecked_after_the_key_is_loaded) ... ok
+test_route_pin_is_the_reviewed_assembler (__main__.CandidateRouteTests.test_route_pin_is_the_reviewed_assembler) ... ok
+test_route_signature_verifies_against_the_dev_key (__main__.CandidateRouteTests.test_route_signature_verifies_against_the_dev_key) ... ok
+test_routes_take_the_dev_key_only (__main__.CandidateRouteTests.test_routes_take_the_dev_key_only) ... ok
+test_sign_route_runs_the_f1_f5_check_first (__main__.CandidateRouteTests.test_sign_route_runs_the_f1_f5_check_first) ... ok
+test_targets_must_be_plain_unlinked_files_inside_the_root (__main__.CandidateRouteTests.test_targets_must_be_plain_unlinked_files_inside_the_root) ... ok
+test_unknown_route_name (__main__.CandidateRouteTests.test_unknown_route_name) ... ok
+test_blocked_symlink_name_cannot_point_to_an_unblocked_basename (__main__.CellboxContainmentTests.test_blocked_symlink_name_cannot_point_to_an_unblocked_basename) ... ok
+test_default_iso_refuses_before_overwriting_previous_output (__main__.CellboxContainmentTests.test_default_iso_refuses_before_overwriting_previous_output)
+S10-2b: the default kernel is refused by content (here: not a clean, readable image). ... ok
+test_default_kernel_symlink_cannot_bypass_the_content_rule (__main__.CellboxContainmentTests.test_default_kernel_symlink_cannot_bypass_the_content_rule) ... ok
+test_entire_signing_batch_is_rejected_without_mutating_earlier_targets (__main__.CellboxContainmentTests.test_entire_signing_batch_is_rejected_without_mutating_earlier_targets) ... ok
+test_explicit_kernel_elsewhere_is_not_checked_by_the_helper (__main__.CellboxContainmentTests.test_explicit_kernel_elsewhere_is_not_checked_by_the_helper)
+An explicit X86_KERNEL (fixture/lane/candidate) never runs the default-kernel helper. ... ok
+test_packager_only_runs_the_assembler_and_keeps_an_existing_image (__main__.CellboxContainmentTests.test_packager_only_runs_the_assembler_and_keeps_an_existing_image)
+S10-2b: G1 is open, but the packager is only a thin caller of the assembler ... ok
+test_symlink_alias_cannot_hide_a_blocked_artifact_name (__main__.CellboxContainmentTests.test_symlink_alias_cannot_hide_a_blocked_artifact_name) ... ok
+test_a_batch_with_an_unblocked_name_is_unaffected_by_the_allowance (__main__.CellboxPrivateFixtureAllowanceTests.test_a_batch_with_an_unblocked_name_is_unaffected_by_the_allowance) ... ok
+test_allowance_never_rides_on_the_default_or_dev_key (__main__.CellboxPrivateFixtureAllowanceTests.test_allowance_never_rides_on_the_default_or_dev_key) ... ok
+test_allowance_requires_exactly_the_env_var_and_a_private_seed (__main__.CellboxPrivateFixtureAllowanceTests.test_allowance_requires_exactly_the_env_var_and_a_private_seed) ... ok
+test_default_still_refuses_fixture_names (__main__.CellboxPrivateFixtureAllowanceTests.test_default_still_refuses_fixture_names) ... ok
+test_dev_seed_constant_matches_the_signer (__main__.CellboxPrivateFixtureAllowanceTests.test_dev_seed_constant_matches_the_signer) ... ok
+test_post_preflight_defense_refuses_dev_seed_for_every_fixture_name (__main__.CellboxPrivateFixtureAllowanceTests.test_post_preflight_defense_refuses_dev_seed_for_every_fixture_name) ... ok
+test_quarantined_hashes_stay_refused_under_the_allowance (__main__.CellboxPrivateFixtureAllowanceTests.test_quarantined_hashes_stay_refused_under_the_allowance) ... ok
+test_terminal_aliases_are_admitted_only_under_the_exact_conditions (__main__.CellboxPrivateFixtureAllowanceTests.test_terminal_aliases_are_admitted_only_under_the_exact_conditions) ... ok
+test_allowlist_clears_both_layers_and_reports_unused_entries (__main__.PolicyTests.test_allowlist_clears_both_layers_and_reports_unused_entries) ... ok
+test_clean_crate_with_attribute_passes (__main__.PolicyTests.test_clean_crate_with_attribute_passes) ... ok
+test_missing_attribute_is_a_violation (__main__.PolicyTests.test_missing_attribute_is_a_violation) ... ok
+test_unsafe_in_a_comment_is_not_a_violation (__main__.PolicyTests.test_unsafe_in_a_comment_is_not_a_violation) ... ok
+test_unsafe_in_a_file_outside_the_module_graph_is_caught (__main__.PolicyTests.test_unsafe_in_a_file_outside_the_module_graph_is_caught) ... ok
+test_dev_key_is_always_allowed (__main__.ProdKeyGuardTests.test_dev_key_is_always_allowed) ... ok
+test_falsey_ci_marker_does_not_count (__main__.ProdKeyGuardTests.test_falsey_ci_marker_does_not_count) ... ok
+test_named_override_allows_a_kms_signer (__main__.ProdKeyGuardTests.test_named_override_allows_a_kms_signer) ... ok
+test_prod_key_allowed_in_ci (__main__.ProdKeyGuardTests.test_prod_key_allowed_in_ci) ... ok
+test_prod_key_refused_outside_ci (__main__.ProdKeyGuardTests.test_prod_key_refused_outside_ci) ... ok
+test_a_string_hiding_a_comment_opener_fails_the_check (__main__.ScannerLiteralTests.test_a_string_hiding_a_comment_opener_fails_the_check) ... ok
+test_attribute_must_start_a_line (__main__.ScannerLiteralTests.test_attribute_must_start_a_line) ... ok
+test_attribute_spelled_inside_a_string_is_not_the_attribute (__main__.ScannerLiteralTests.test_attribute_spelled_inside_a_string_is_not_the_attribute) ... ok
+test_block_comment_opener_in_a_string_does_not_swallow_code (__main__.ScannerLiteralTests.test_block_comment_opener_in_a_string_does_not_swallow_code) ... ok
+test_combined_fake_attribute_and_hidden_comment_opener (__main__.ScannerLiteralTests.test_combined_fake_attribute_and_hidden_comment_opener) ... ok
+test_lifetimes_are_not_char_literals (__main__.ScannerLiteralTests.test_lifetimes_are_not_char_literals) ... ok
+test_line_comment_marker_in_a_string_does_not_swallow_code (__main__.ScannerLiteralTests.test_line_comment_marker_in_a_string_does_not_swallow_code) ... ok
+test_quote_and_comment_openers_in_char_and_byte_literals (__main__.ScannerLiteralTests.test_quote_and_comment_openers_in_char_and_byte_literals) ... ok
+test_raw_string_does_not_swallow_code (__main__.ScannerLiteralTests.test_raw_string_does_not_swallow_code) ... ok
+test_real_attribute_and_real_comments_still_read_correctly (__main__.ScannerLiteralTests.test_real_attribute_and_real_comments_still_read_correctly) ... ok
+test_stripping_preserves_line_structure (__main__.ScannerLiteralTests.test_stripping_preserves_line_structure) ... ok
+test_skipped_f5_refuses_to_sign_even_without_the_flag (__main__.SignPathStrictnessTests.test_skipped_f5_refuses_to_sign_even_without_the_flag) ... SKIP: F5 — no working rustc on PATH
+FAIL: --strict requires F5 to be verified, but it was skipped
+REFUSED: not signing — the F1/F5 check above did not pass.
+ok
+test_verified_f5_signs (__main__.SignPathStrictnessTests.test_verified_f5_signs) ... OK:   signed 1 cell(s) with the dev key after a passing F1/F5 check
+ok
+test_absent_pin_reads_as_none_and_fails_the_check (__main__.ToolchainTests.test_absent_pin_reads_as_none_and_fails_the_check) ... ok
+test_reads_the_pin_from_disk (__main__.ToolchainTests.test_reads_the_pin_from_disk) ... ok
+
+----------------------------------------------------------------------
+Ran 71 tests in 0.345s
+
+OK

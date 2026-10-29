@@ -1,0 +1,65 @@
+{
+  "archive": "/home/dmin/.cache/cellos-quarantine/cellbox-s10-5-20261029T041842Z",
+  "entries": {
+    "pre-s10-2b/.github/workflows/ci.yml": {
+      "bytes": 99463,
+      "sha256": "33ebc835e374a6ec5bb6816e60741b0f1836f5f188de87d52cb15bc0845bd0a8"
+    },
+    "pre-s10-2b/scripts/assemble-x86-image.py": {
+      "bytes": 27112,
+      "sha256": "6ea177363aecff6b12c293403df528be28920d05f2281531fb3d2d5b5e1f5cb3"
+    },
+    "pre-s10-2b/scripts/build-cloud-images.sh": {
+      "bytes": 7425,
+      "sha256": "9ef65fdf02351058c02a0a6e04b0a0bbb965c2d28dc080e6cff45fdd2eff780b"
+    },
+    "pre-s10-2b/scripts/cellos_sign/cli.py": {
+      "bytes": 7422,
+      "sha256": "ed92c59aff7694458f089e669376acec223099331547c94b2223aa320b126efa"
+    },
+    "pre-s10-2b/scripts/cellos_sign/signing.py": {
+      "bytes": 13838,
+      "sha256": "a1d25650f79383f7e09af9a95a9b4ad153bec8884f5f8913daf94fb181d1c876"
+    },
+    "pre-s10-2b/scripts/package-desktop-x86.py": {
+      "bytes": 1873,
+      "sha256": "286bef7acf3dd90f2b4ad37869168d509e8c8cc636c3eca6fedf48c8439cabcc"
+    },
+    "pre-s10-2b/scripts/test_assemble_x86_image.py": {
+      "bytes": 27182,
+      "sha256": "7ae332e71b954b2db2f7702d68f46eea58b2201224f5cf99f79fbfdab90f8a1a"
+    },
+    "pre-s10-2b/scripts/test_cellos_sign.py": {
+      "bytes": 42758,
+      "sha256": "e3101a8354769182ed65db91cbaf7222be3198c0249f156c398f802eb11adb76"
+    },
+    "pre-s10-2b/scripts/x86/make-iso-ci.sh": {
+      "bytes": 3205,
+      "sha256": "0e62af27bc279610017b6f891d375e6478e149759ef00e47e86139b762c2ec9c"
+    },
+    "quarantined/kernel/src/embedded-x86_64/boot-config/autoload.toml": {
+      "bytes": 152,
+      "sha256": "07849a42c41e05b98c6058e96b2715a8e53044ee6a6bb451a059e035a39e150b"
+    },
+    "quarantined/kernel/src/embedded-x86_64/boot-config/services.toml": {
+      "bytes": 1071,
+      "sha256": "5c97bad0e8fd22d17312243481a8c16774cb14bf2322086fc6d75f3bbe429cb9"
+    },
+    "quarantined/kernel/src/embedded-x86_64/boot-config/system.toml": {
+      "bytes": 128,
+      "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+    },
+    "quarantined/kernel/src/embedded-x86_64/init": {
+      "bytes": 393152,
+      "sha256": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104"
+    },
+    "quarantined/kernel/src/embedded-x86_64/kernel_fs.img": {
+      "bytes": 16777216,
+      "sha256": "447d0348735a25e8b396c11c0091ff3d214b0c0b392043bb0515d4104a298e2c"
+    },
+    "quarantined/target/x86_64-unknown-none/release/cellos-kernel": {
+      "bytes": 19769472,
+      "sha256": "12cb0bac7849d425b2bacbb5ed503229328c525d71744fcf68d20d5c8a61ac67"
+    }
+  }
+}

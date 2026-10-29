@@ -1,0 +1,18 @@
+kernel sha256: 12cb0bac7849d425b2bacbb5ed503229328c525d71744fcf68d20d5c8a61ac67
+image  sha256: 447d0348735a25e8b396c11c0091ff3d214b0c0b392043bb0515d4104a298e2c
+ROLLOUT BLOCKED: default x86 kernel refused: quarantined bytes in the image: /bin/cellbox; see .agents/261020-1750-cellbox-cli/reports/rollout-containment.md
+check_default_kernel.py exit=1
+ROLLOUT BLOCKED: cloud images are outside the Phase 10 release (D10-9 A); see .agents/261020-1750-cellbox-cli/reports/rollout-containment.md
+build-cloud-images.sh exit=1
+--- S10-2b file hashes
+b74cc99787ab69dde04dac5c517acb6f771016043c23841bc7b40ab0b3bec7ed  scripts/assemble-x86-image.py
+ba97129308e60c50d59ff669831ab47d344b3ccbf44e8f17fbf052c9666c9511  scripts/cellos_sign/signing.py
+ed92c59aff7694458f089e669376acec223099331547c94b2223aa320b126efa  scripts/cellos_sign/cli.py
+d80517a8517f4e7689828ec89c663d88c0c7a51b29711621fd2b7b0350c4f4cd  scripts/package-desktop-x86.py
+8f5bef774ad048cd456b3e3f0c3a2a0181ac8c81405d4a202de2554b9988593b  scripts/x86/make-iso-ci.sh
+150f40a8e52ce05859e8eeb6dfda2e405bd93b0d0338898ebdf287a4524f6f6a  scripts/x86/check_default_kernel.py
+ee4885b91dd350f7d87e2e50b132eb01bcbf30a6d7711d85dec1cda9789a1e07  scripts/build-cloud-images.sh
+a08c603b969d9a183f097605c902443c8f6fd2f04fbd663b71cb6ef3e5672183  scripts/test_cellos_sign.py
+d78b4eeb2a2c5fc065662c0444352fcff4d1c094e53757778ac4f3634a09c4c5  scripts/test_assemble_x86_image.py
+eff3ddc778307e5e97a7528c4e57a3f05201eacf934623e18b62c0f83e44278b  scripts/test_check_default_kernel.py
+0d77f752b62a2c92e1b89bdde366caf911ca553ca7bb41638942e7fc0def9a79  .github/workflows/ci.yml
