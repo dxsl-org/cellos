@@ -3198,3 +3198,5 @@ Candidate full-schedule peaks for the focus Cellbox become measured (stacks exac
 **Preservation:** 546 protected paths (with the S10-5 deltas as already explained), 43 frozen sources, 25+ prior archives byte-exact; new sibling dir `runtime/observer-s10-8/` and `reports/s10-8-evidence/`; no guest writes, no product/candidate/canonical edit, no commit of images, no push without separate request.
 
 - **Status 2026-10-29:** S10-8 is **proposed only**; CBX-27 and Phase 10 criteria 1 and 4 remain **UNMET**.
+
+- **S10-8 CP1 APPROVED by the user 2026-10-29 as recommended: D8-1=B (pause-credit deadline), D8-2 both sets once, D8-3 no further rerun for any outcome, D8-4 b2-desktop stays null.** Execution order S10-8.0 -> 8.4; stop on the first unmet gate.
