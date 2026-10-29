@@ -1,0 +1,412 @@
+{
+  "name": "ordinary-prompt-idle",
+  "start_ns": 29325287654982,
+  "end_ns": 29335288101667,
+  "target_hz": 10,
+  "samples": [
+    {
+      "monotonic_ns": 29325287955023,
+      "serial_bytes": 0
+    },
+    {
+      "monotonic_ns": 29325388054746,
+      "serial_bytes": 338
+    },
+    {
+      "monotonic_ns": 29325488053372,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29325588084626,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29325688050978,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29325788049365,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29325888091416,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29325988045815,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29326088052000,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29326188046964,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29326288126521,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29326388057915,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29326488121925,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29326588075817,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29326688057517,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29326788053922,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29326888066971,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29326988051470,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29327088062900,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29327188060418,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29327288045816,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29327388082569,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29327488051915,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29327588049713,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29327688044565,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29327788199559,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29327888043708,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29327988039991,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29328088038450,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29328188049648,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29328288114258,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29328388049526,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29328488051444,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29328588051197,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29328688052925,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29328788054777,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29328888068337,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29328988059211,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29329088042439,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29329188042908,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29329288043933,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29329388039572,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29329488042725,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29329588058135,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29329688073933,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29329788056340,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29329888048498,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29329988046702,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29330088049229,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29330188049282,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29330288041813,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29330388083032,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29330488116280,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29330588061402,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29330688071172,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29330788085141,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29330888101703,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29330988048658,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29331088054228,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29331188047377,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29331288044696,
+      "serial_bytes": 339
+    },
+    {
+      "monotonic_ns": 29331388045851,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29331488040340,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29331588039081,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29331688081858,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29331788175865,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29331888050575,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29331988059671,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29332088049657,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29332188076388,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29332288059488,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29332388065041,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29332488047134,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29332588051480,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29332688064448,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29332788066909,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29332888082949,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29332988066200,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29333088056067,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29333188083118,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29333288077421,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29333388057268,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29333488111333,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29333588048385,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29333688056385,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29333788067662,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29333888057186,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29333988067189,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29334088059300,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29334188070151,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29334288049855,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29334388043518,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29334488110627,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29334588059764,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29334688047194,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29334788050789,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29334888144556,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29334988057954,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29335088062901,
+      "serial_bytes": 402
+    },
+    {
+      "monotonic_ns": 29335188052721,
+      "serial_bytes": 402
+    }
+  ],
+  "qemu_cpu_ticks_delta": 709,
+  "host_ticks_per_second": 100,
+  "serial_bytes": 402,
+  "scope": "whole-QEMU CPU incl sampling overhead; content changes not redraw calls"
+}

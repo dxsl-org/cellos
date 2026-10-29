@@ -1,0 +1,1981 @@
+{
+  "schema": "cellos.s10-9.stack-baseline-table/1",
+  "scope": "BOOT-PHASE ONLY: sentinel-primed stack watermarks (lower bound) printed once by the test-hooks measurement kernels at the first sample after tick 1500; NOT end-of-workload peaks; measurement kernels are not the promoted kernel; QEMU/TCG guest numbers",
+  "key_format": "<profile>/<kernel_build>@<kernel sha12>/<cell>/<phase>/<kind>#<occurrence in one log>",
+  "fields_per_entry": [
+    "used_bytes",
+    "usable_bytes",
+    "used_pages",
+    "alloc_bytes (in observations)",
+    "observations[] with source/line/serial context"
+  ],
+  "sources": [
+    {
+      "source": "s10-7.4/cand-headless/serial-measurement.log",
+      "run": "s10-7.4/cand-headless",
+      "set": "cand-headless",
+      "log": "cooked",
+      "path": "s10-7-evidence/measurement-runs/cand-headless/evidence/serial-measurement.log",
+      "present": true,
+      "lines_total": 747,
+      "lines": 8,
+      "malformed": [],
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74"
+    },
+    {
+      "source": "s10-7.4/cand-headless/serial-measurement.raw.log",
+      "run": "s10-7.4/cand-headless",
+      "set": "cand-headless",
+      "log": "raw",
+      "path": "s10-7-evidence/measurement-runs/cand-headless/evidence/serial-measurement.raw.log",
+      "present": true,
+      "lines_total": 747,
+      "lines": 8,
+      "malformed": [],
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74"
+    },
+    {
+      "source": "s10-7.4/cand-desktop/serial-measurement.log",
+      "run": "s10-7.4/cand-desktop",
+      "set": "cand-desktop",
+      "log": "cooked",
+      "path": "s10-7-evidence/measurement-runs/cand-desktop/evidence/serial-measurement.log",
+      "present": true,
+      "lines_total": 755,
+      "lines": 10,
+      "malformed": [],
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "control_kernel_non_hooks_sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a"
+    },
+    {
+      "source": "s10-7.4/cand-desktop/serial-measurement.raw.log",
+      "run": "s10-7.4/cand-desktop",
+      "set": "cand-desktop",
+      "log": "raw",
+      "path": "s10-7-evidence/measurement-runs/cand-desktop/evidence/serial-measurement.raw.log",
+      "present": true,
+      "lines_total": 755,
+      "lines": 10,
+      "malformed": [],
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "control_kernel_non_hooks_sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a"
+    },
+    {
+      "source": "s10-7.4/b2-headless/serial-measurement.log",
+      "run": "s10-7.4/b2-headless",
+      "set": "b2-headless",
+      "log": "cooked",
+      "path": "s10-7-evidence/measurement-runs/b2-headless/evidence/serial-measurement.log",
+      "present": true,
+      "lines_total": 690,
+      "lines": 8,
+      "malformed": [],
+      "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "control_kernel_non_hooks_sha256": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672"
+    },
+    {
+      "source": "s10-7.4/b2-headless/serial-measurement.raw.log",
+      "run": "s10-7.4/b2-headless",
+      "set": "b2-headless",
+      "log": "raw",
+      "path": "s10-7-evidence/measurement-runs/b2-headless/evidence/serial-measurement.raw.log",
+      "present": true,
+      "lines_total": 690,
+      "lines": 8,
+      "malformed": [],
+      "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "control_kernel_non_hooks_sha256": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672"
+    },
+    {
+      "source": "s10-8/cand-headless/serial-measurement.log",
+      "run": "s10-8/cand-headless",
+      "set": "cand-headless",
+      "log": "cooked",
+      "path": "s10-8-evidence/measurement-runs/cand-headless/evidence/serial-measurement.log",
+      "present": true,
+      "lines_total": 621,
+      "lines": 0,
+      "malformed": [],
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74"
+    },
+    {
+      "source": "s10-8/cand-headless/serial-measurement.raw.log",
+      "run": "s10-8/cand-headless",
+      "set": "cand-headless",
+      "log": "raw",
+      "path": "s10-8-evidence/measurement-runs/cand-headless/evidence/serial-measurement.raw.log",
+      "present": true,
+      "lines_total": 621,
+      "lines": 0,
+      "malformed": [],
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74"
+    },
+    {
+      "source": "s10-8/cand-desktop/serial-measurement.log",
+      "run": "s10-8/cand-desktop",
+      "set": "cand-desktop",
+      "log": "cooked",
+      "path": "s10-8-evidence/measurement-runs/cand-desktop/evidence/serial-measurement.log",
+      "present": true,
+      "lines_total": 754,
+      "lines": 10,
+      "malformed": [],
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "control_kernel_non_hooks_sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a"
+    },
+    {
+      "source": "s10-8/cand-desktop/serial-measurement.raw.log",
+      "run": "s10-8/cand-desktop",
+      "set": "cand-desktop",
+      "log": "raw",
+      "path": "s10-8-evidence/measurement-runs/cand-desktop/evidence/serial-measurement.raw.log",
+      "present": true,
+      "lines_total": 754,
+      "lines": 10,
+      "malformed": [],
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "control_kernel_non_hooks_sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a"
+    },
+    {
+      "source": "s10-7-boot-smoke/cand-headless/serial.log",
+      "run": "s10-7-boot-smoke/cand-headless",
+      "set": "cand-headless",
+      "log": "smoke",
+      "path": "s10-7-evidence/boot-smoke/cand-headless/serial.log",
+      "present": true,
+      "lines_total": 634,
+      "lines": 0,
+      "malformed": [],
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74"
+    },
+    {
+      "source": "s10-7-boot-smoke/cand-desktop/serial.log",
+      "run": "s10-7-boot-smoke/cand-desktop",
+      "set": "cand-desktop",
+      "log": "smoke",
+      "path": "s10-7-evidence/boot-smoke/cand-desktop/serial.log",
+      "present": true,
+      "lines_total": 712,
+      "lines": 0,
+      "malformed": [],
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "control_kernel_non_hooks_sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a"
+    },
+    {
+      "source": "s10-7-boot-smoke/b2-headless/serial.log",
+      "run": "s10-7-boot-smoke/b2-headless",
+      "set": "b2-headless",
+      "log": "smoke",
+      "path": "s10-7-evidence/boot-smoke/b2-headless/serial.log",
+      "present": true,
+      "lines_total": 615,
+      "lines": 0,
+      "malformed": [],
+      "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "control_kernel_non_hooks_sha256": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672"
+    },
+    {
+      "source": "s10-7-boot-smoke/b2-desktop/serial.log",
+      "run": "s10-7-boot-smoke/b2-desktop",
+      "set": "b2-desktop",
+      "log": "smoke",
+      "path": "s10-7-evidence/boot-smoke/b2-desktop/serial.log",
+      "present": true,
+      "lines_total": 684,
+      "lines": 0,
+      "malformed": [],
+      "kernel_sha256": "8d876239e5821240f2b9a3be9770ed9ff3bbaad9a278782fe3272d90050f1b5e",
+      "control_kernel_non_hooks_sha256": "5959acd79291fe693aa0deaacac5cc67dcc16cb76e911705f5290bfa1e3ba828"
+    },
+    {
+      "source": "s10-7-b2-desktop-diagnostic/serial.log",
+      "run": "s10-7-b2-desktop-diagnostic",
+      "set": "b2-desktop",
+      "log": "diagnostic (non-hooks boot)",
+      "path": "s10-7-evidence/b2-desktop-diagnostic/serial.log",
+      "present": true,
+      "lines_total": 384,
+      "lines": 0,
+      "malformed": [],
+      "kernel_sha256": "8d876239e5821240f2b9a3be9770ed9ff3bbaad9a278782fe3272d90050f1b5e",
+      "control_kernel_non_hooks_sha256": "5959acd79291fe693aa0deaacac5cc67dcc16cb76e911705f5290bfa1e3ba828"
+    }
+  ],
+  "cooked_vs_raw_log_agreement": {
+    "s10-7.4/b2-headless": {
+      "cooked": 8,
+      "raw": 8,
+      "equal": true
+    },
+    "s10-7.4/cand-desktop": {
+      "cooked": 10,
+      "raw": 10,
+      "equal": true
+    },
+    "s10-7.4/cand-headless": {
+      "cooked": 8,
+      "raw": 8,
+      "equal": true
+    },
+    "s10-8/cand-desktop": {
+      "cooked": 10,
+      "raw": 10,
+      "equal": true
+    },
+    "s10-8/cand-headless": {
+      "cooked": 0,
+      "raw": 0,
+      "equal": true
+    }
+  },
+  "completeness": {
+    "method": "grep -rlaE '^\\\\[ *[A-Z]+\\\\] \\\\[stack-baseline\\\\] name=' over reports/ (anchored at line start: JSON/markdown/source mentions do not match)",
+    "files_with_emission_lines": [
+      "s10-7-evidence/measurement-runs/b2-headless/evidence/serial-measurement.log",
+      "s10-7-evidence/measurement-runs/b2-headless/evidence/serial-measurement.raw.log",
+      "s10-7-evidence/measurement-runs/cand-desktop/evidence/serial-measurement.log",
+      "s10-7-evidence/measurement-runs/cand-desktop/evidence/serial-measurement.raw.log",
+      "s10-7-evidence/measurement-runs/cand-headless/evidence/serial-measurement.log",
+      "s10-7-evidence/measurement-runs/cand-headless/evidence/serial-measurement.raw.log",
+      "s10-8-evidence/measurement-runs/cand-desktop/evidence/serial-measurement.log",
+      "s10-8-evidence/measurement-runs/cand-desktop/evidence/serial-measurement.raw.log"
+    ],
+    "files_not_harvested": [],
+    "complete": true
+  },
+  "entry_count": 26,
+  "observation_count": 72,
+  "entries_with_differing_values_across_logs": [],
+  "cells_by_profile": {
+    "desktop": [
+      "cellbox",
+      "init",
+      "net",
+      "vfs"
+    ],
+    "headless": [
+      "cellbox",
+      "init",
+      "net",
+      "shell",
+      "vfs"
+    ]
+  },
+  "cross_checks": [
+    {
+      "run": "s10-7.4/cand-headless",
+      "focus_cellbox_occurrence": 1,
+      "baseline_user_used_bytes": 45720,
+      "memory_observer_user_depths_over_run": [
+        26264,
+        35352,
+        45720
+      ],
+      "baseline_user_equals_one_of_the_measured_depths": true,
+      "baseline_kernel_used_bytes": 16072,
+      "memory_observer_kernel_depths_over_run": [
+        16072
+      ],
+      "baseline_kernel_equals_measured_kernel_depth": true
+    },
+    {
+      "run": "s10-7.4/cand-desktop",
+      "focus_cellbox_occurrence": 2,
+      "baseline_user_used_bytes": 35352,
+      "memory_observer_user_depths_over_run": [
+        35352,
+        45720
+      ],
+      "baseline_user_equals_one_of_the_measured_depths": true,
+      "baseline_kernel_used_bytes": 16072,
+      "memory_observer_kernel_depths_over_run": [
+        16072
+      ],
+      "baseline_kernel_equals_measured_kernel_depth": true
+    },
+    {
+      "run": "s10-8/cand-desktop",
+      "focus_cellbox_occurrence": 2,
+      "baseline_user_used_bytes": 35352,
+      "memory_observer_user_depths_over_run": [
+        35352,
+        45720
+      ],
+      "baseline_user_equals_one_of_the_measured_depths": true,
+      "baseline_kernel_used_bytes": 16072,
+      "memory_observer_kernel_depths_over_run": [
+        16072
+      ],
+      "baseline_kernel_equals_measured_kernel_depth": true
+    }
+  ],
+  "entries": [
+    {
+      "key": "desktop/cand-desktop-test-hooks@360a5c10eb29/cellbox/boot/kernel#1",
+      "profile": "desktop",
+      "kernel_build": "cand-desktop-test-hooks",
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "cell": "cellbox",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "cooked",
+          "line": 752,
+          "used_bytes": 16072,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "raw",
+          "line": 752,
+          "used_bytes": 16072,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.log",
+          "run": "s10-8/cand-desktop",
+          "log": "cooked",
+          "line": 750,
+          "used_bytes": 16072,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-8/cand-desktop",
+          "log": "raw",
+          "line": 750,
+          "used_bytes": 16072,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 16072,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        16072
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 24.52,
+      "independent_runs": [
+        "s10-7.4/cand-desktop",
+        "s10-8/cand-desktop"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "desktop/cand-desktop-test-hooks@360a5c10eb29/cellbox/boot/kernel#2",
+      "profile": "desktop",
+      "kernel_build": "cand-desktop-test-hooks",
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "cell": "cellbox",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 2,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "cooked",
+          "line": 754,
+          "used_bytes": 16072,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "raw",
+          "line": 754,
+          "used_bytes": 16072,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.log",
+          "run": "s10-8/cand-desktop",
+          "log": "cooked",
+          "line": 752,
+          "used_bytes": 16072,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-8/cand-desktop",
+          "log": "raw",
+          "line": 752,
+          "used_bytes": 16072,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 16072,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        16072
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 24.52,
+      "independent_runs": [
+        "s10-7.4/cand-desktop",
+        "s10-8/cand-desktop"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "desktop/cand-desktop-test-hooks@360a5c10eb29/cellbox/boot/user#1",
+      "profile": "desktop",
+      "kernel_build": "cand-desktop-test-hooks",
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "cell": "cellbox",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "cooked",
+          "line": 753,
+          "used_bytes": 15016,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "raw",
+          "line": 753,
+          "used_bytes": 15016,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.log",
+          "run": "s10-8/cand-desktop",
+          "log": "cooked",
+          "line": 751,
+          "used_bytes": 15016,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-8/cand-desktop",
+          "log": "raw",
+          "line": 751,
+          "used_bytes": 15016,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 15016,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        15016
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 22.91,
+      "independent_runs": [
+        "s10-7.4/cand-desktop",
+        "s10-8/cand-desktop"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "desktop/cand-desktop-test-hooks@360a5c10eb29/cellbox/boot/user#2",
+      "profile": "desktop",
+      "kernel_build": "cand-desktop-test-hooks",
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "cell": "cellbox",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 2,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "cooked",
+          "line": 755,
+          "used_bytes": 35352,
+          "used_pages": 9,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "raw",
+          "line": 755,
+          "used_bytes": 35352,
+          "used_pages": 9,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.log",
+          "run": "s10-8/cand-desktop",
+          "log": "cooked",
+          "line": 753,
+          "used_bytes": 35352,
+          "used_pages": 9,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-8/cand-desktop",
+          "log": "raw",
+          "line": 753,
+          "used_bytes": 35352,
+          "used_pages": 9,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 35352,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        35352
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 53.94,
+      "independent_runs": [
+        "s10-7.4/cand-desktop",
+        "s10-8/cand-desktop"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "desktop/cand-desktop-test-hooks@360a5c10eb29/init/boot/kernel#1",
+      "profile": "desktop",
+      "kernel_build": "cand-desktop-test-hooks",
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "cell": "init",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "cooked",
+          "line": 746,
+          "used_bytes": 21464,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": [
+            "[ INFO] [wx] 'cellbox': 641/2474 cell pages lowered to read-only/execute-only",
+            "USER: shell: starting",
+            "USER: [terminal] Terminal surface ready. Entering event loop."
+          ]
+        },
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "raw",
+          "line": 746,
+          "used_bytes": 21464,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": [
+            "[ INFO] [wx] 'cellbox': 641/2474 cell pages lowered to read-only/execute-only",
+            "USER: shell: starting",
+            "USER: [terminal] Terminal surface ready. Entering event loop."
+          ]
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.log",
+          "run": "s10-8/cand-desktop",
+          "log": "cooked",
+          "line": 744,
+          "used_bytes": 21464,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": [
+            "[ INFO] [wx] 'cellbox': 641/2474 cell pages lowered to read-only/execute-only",
+            "USER: shell: starting",
+            "USER: [terminal] Terminal surface ready. Entering event loop."
+          ]
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-8/cand-desktop",
+          "log": "raw",
+          "line": 744,
+          "used_bytes": 21464,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": [
+            "[ INFO] [wx] 'cellbox': 641/2474 cell pages lowered to read-only/execute-only",
+            "USER: shell: starting",
+            "USER: [terminal] Terminal surface ready. Entering event loop."
+          ]
+        }
+      ],
+      "used_bytes": 21464,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        21464
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 32.75,
+      "independent_runs": [
+        "s10-7.4/cand-desktop",
+        "s10-8/cand-desktop"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "desktop/cand-desktop-test-hooks@360a5c10eb29/init/boot/user#1",
+      "profile": "desktop",
+      "kernel_build": "cand-desktop-test-hooks",
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "cell": "init",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "cooked",
+          "line": 747,
+          "used_bytes": 20760,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "raw",
+          "line": 747,
+          "used_bytes": 20760,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.log",
+          "run": "s10-8/cand-desktop",
+          "log": "cooked",
+          "line": 745,
+          "used_bytes": 20760,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-8/cand-desktop",
+          "log": "raw",
+          "line": 745,
+          "used_bytes": 20760,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 20760,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        20760
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 31.68,
+      "independent_runs": [
+        "s10-7.4/cand-desktop",
+        "s10-8/cand-desktop"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "desktop/cand-desktop-test-hooks@360a5c10eb29/net/boot/kernel#1",
+      "profile": "desktop",
+      "kernel_build": "cand-desktop-test-hooks",
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "cell": "net",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "cooked",
+          "line": 750,
+          "used_bytes": 14544,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "raw",
+          "line": 750,
+          "used_bytes": 14544,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.log",
+          "run": "s10-8/cand-desktop",
+          "log": "cooked",
+          "line": 748,
+          "used_bytes": 14544,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-8/cand-desktop",
+          "log": "raw",
+          "line": 748,
+          "used_bytes": 14544,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 14544,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        14544
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 22.19,
+      "independent_runs": [
+        "s10-7.4/cand-desktop",
+        "s10-8/cand-desktop"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "desktop/cand-desktop-test-hooks@360a5c10eb29/net/boot/user#1",
+      "profile": "desktop",
+      "kernel_build": "cand-desktop-test-hooks",
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "cell": "net",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "cooked",
+          "line": 751,
+          "used_bytes": 22168,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "raw",
+          "line": 751,
+          "used_bytes": 22168,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.log",
+          "run": "s10-8/cand-desktop",
+          "log": "cooked",
+          "line": 749,
+          "used_bytes": 22168,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-8/cand-desktop",
+          "log": "raw",
+          "line": 749,
+          "used_bytes": 22168,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 22168,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        22168
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 33.83,
+      "independent_runs": [
+        "s10-7.4/cand-desktop",
+        "s10-8/cand-desktop"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "desktop/cand-desktop-test-hooks@360a5c10eb29/vfs/boot/kernel#1",
+      "profile": "desktop",
+      "kernel_build": "cand-desktop-test-hooks",
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "cell": "vfs",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "cooked",
+          "line": 748,
+          "used_bytes": 15656,
+          "used_pages": 4,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "raw",
+          "line": 748,
+          "used_bytes": 15656,
+          "used_pages": 4,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.log",
+          "run": "s10-8/cand-desktop",
+          "log": "cooked",
+          "line": 746,
+          "used_bytes": 15656,
+          "used_pages": 4,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-8/cand-desktop",
+          "log": "raw",
+          "line": 746,
+          "used_bytes": 15656,
+          "used_pages": 4,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 15656,
+      "usable_bytes": 262144,
+      "used_bytes_all_observed": [
+        15656
+      ],
+      "usable_bytes_all_observed": [
+        262144
+      ],
+      "used_pct_of_usable": 5.97,
+      "independent_runs": [
+        "s10-7.4/cand-desktop",
+        "s10-8/cand-desktop"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "desktop/cand-desktop-test-hooks@360a5c10eb29/vfs/boot/user#1",
+      "profile": "desktop",
+      "kernel_build": "cand-desktop-test-hooks",
+      "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "cell": "vfs",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "cooked",
+          "line": 749,
+          "used_bytes": 73432,
+          "used_pages": 18,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-desktop",
+          "log": "raw",
+          "line": 749,
+          "used_bytes": 73432,
+          "used_pages": 18,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.log",
+          "run": "s10-8/cand-desktop",
+          "log": "cooked",
+          "line": 747,
+          "used_bytes": 73432,
+          "used_pages": 18,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-8/cand-desktop/serial-measurement.raw.log",
+          "run": "s10-8/cand-desktop",
+          "log": "raw",
+          "line": 747,
+          "used_bytes": 73432,
+          "used_pages": 18,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 73432,
+      "usable_bytes": 262144,
+      "used_bytes_all_observed": [
+        73432
+      ],
+      "usable_bytes_all_observed": [
+        262144
+      ],
+      "used_pct_of_usable": 28.01,
+      "independent_runs": [
+        "s10-7.4/cand-desktop",
+        "s10-8/cand-desktop"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/b2-headless-test-hooks@19a30055837b/init/boot/kernel#1",
+      "profile": "headless",
+      "kernel_build": "b2-headless-test-hooks",
+      "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "cell": "init",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "cooked",
+          "line": 627,
+          "used_bytes": 19976,
+          "used_pages": 5,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": [
+            "USER: Init: services spawned.",
+            "USER: Init: service registry verified (init registration is publication, not application readiness).",
+            "USER: Init: OS ready."
+          ]
+        },
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "raw",
+          "line": 627,
+          "used_bytes": 19976,
+          "used_pages": 5,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": [
+            "USER: Init: services spawned.",
+            "USER: Init: service registry verified (init registration is publication, not application readiness).",
+            "USER: Init: OS ready."
+          ]
+        }
+      ],
+      "used_bytes": 19976,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        19976
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 30.48,
+      "independent_runs": [
+        "s10-7.4/b2-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/b2-headless-test-hooks@19a30055837b/init/boot/user#1",
+      "profile": "headless",
+      "kernel_build": "b2-headless-test-hooks",
+      "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "cell": "init",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "cooked",
+          "line": 628,
+          "used_bytes": 15432,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "raw",
+          "line": 628,
+          "used_bytes": 15432,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 15432,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        15432
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 23.55,
+      "independent_runs": [
+        "s10-7.4/b2-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/b2-headless-test-hooks@19a30055837b/net/boot/kernel#1",
+      "profile": "headless",
+      "kernel_build": "b2-headless-test-hooks",
+      "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "cell": "net",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "cooked",
+          "line": 631,
+          "used_bytes": 14016,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "raw",
+          "line": 631,
+          "used_bytes": 14016,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 14016,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        14016
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 21.39,
+      "independent_runs": [
+        "s10-7.4/b2-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/b2-headless-test-hooks@19a30055837b/net/boot/user#1",
+      "profile": "headless",
+      "kernel_build": "b2-headless-test-hooks",
+      "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "cell": "net",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "cooked",
+          "line": 632,
+          "used_bytes": 22168,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "raw",
+          "line": 632,
+          "used_bytes": 22168,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 22168,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        22168
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 33.83,
+      "independent_runs": [
+        "s10-7.4/b2-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/b2-headless-test-hooks@19a30055837b/shell/boot/kernel#1",
+      "profile": "headless",
+      "kernel_build": "b2-headless-test-hooks",
+      "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "cell": "shell",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "cooked",
+          "line": 641,
+          "used_bytes": 288,
+          "used_pages": 1,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": [
+            "[ INFO] ELF LOAD: 0x10C0BC000-0x10C1BC052 flags=RW-",
+            "[ INFO] ELF LOAD: 0x10C1BC058-0x10C1BD03C flags=R--",
+            "[ INFO] [wx] 'shell': 184/446 cell pages lowered to read-only/execute-only"
+          ]
+        },
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "raw",
+          "line": 641,
+          "used_bytes": 288,
+          "used_pages": 1,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": [
+            "[ INFO] ELF LOAD: 0x10C0BC000-0x10C1BC052 flags=RW-",
+            "[ INFO] ELF LOAD: 0x10C1BC058-0x10C1BD03C flags=R--",
+            "[ INFO] [wx] 'shell': 184/446 cell pages lowered to read-only/execute-only"
+          ]
+        }
+      ],
+      "used_bytes": 288,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        288
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 0.44,
+      "independent_runs": [
+        "s10-7.4/b2-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/b2-headless-test-hooks@19a30055837b/shell/boot/user#1",
+      "profile": "headless",
+      "kernel_build": "b2-headless-test-hooks",
+      "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "cell": "shell",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "cooked",
+          "line": 642,
+          "used_bytes": 0,
+          "used_pages": 0,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "raw",
+          "line": 642,
+          "used_bytes": 0,
+          "used_pages": 0,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 0,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        0
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 0.0,
+      "independent_runs": [
+        "s10-7.4/b2-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/b2-headless-test-hooks@19a30055837b/vfs/boot/kernel#1",
+      "profile": "headless",
+      "kernel_build": "b2-headless-test-hooks",
+      "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "cell": "vfs",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "cooked",
+          "line": 629,
+          "used_bytes": 14680,
+          "used_pages": 4,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "raw",
+          "line": 629,
+          "used_bytes": 14680,
+          "used_pages": 4,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 14680,
+      "usable_bytes": 262144,
+      "used_bytes_all_observed": [
+        14680
+      ],
+      "usable_bytes_all_observed": [
+        262144
+      ],
+      "used_pct_of_usable": 5.6,
+      "independent_runs": [
+        "s10-7.4/b2-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/b2-headless-test-hooks@19a30055837b/vfs/boot/user#1",
+      "profile": "headless",
+      "kernel_build": "b2-headless-test-hooks",
+      "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "cell": "vfs",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "cooked",
+          "line": 630,
+          "used_bytes": 64072,
+          "used_pages": 16,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/b2-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/b2-headless",
+          "log": "raw",
+          "line": 630,
+          "used_bytes": 64072,
+          "used_pages": 16,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 64072,
+      "usable_bytes": 262144,
+      "used_bytes_all_observed": [
+        64072
+      ],
+      "usable_bytes_all_observed": [
+        262144
+      ],
+      "used_pct_of_usable": 24.44,
+      "independent_runs": [
+        "s10-7.4/b2-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/cand-headless-test-hooks@3e279f9eb715/cellbox/boot/kernel#1",
+      "profile": "headless",
+      "kernel_build": "cand-headless-test-hooks",
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "cell": "cellbox",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "cooked",
+          "line": 690,
+          "used_bytes": 16072,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "raw",
+          "line": 690,
+          "used_bytes": 16072,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 16072,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        16072
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 24.52,
+      "independent_runs": [
+        "s10-7.4/cand-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/cand-headless-test-hooks@3e279f9eb715/cellbox/boot/user#1",
+      "profile": "headless",
+      "kernel_build": "cand-headless-test-hooks",
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "cell": "cellbox",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "cooked",
+          "line": 691,
+          "used_bytes": 45720,
+          "used_pages": 12,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "raw",
+          "line": 691,
+          "used_bytes": 45720,
+          "used_pages": 12,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 45720,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        45720
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 69.76,
+      "independent_runs": [
+        "s10-7.4/cand-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/cand-headless-test-hooks@3e279f9eb715/init/boot/kernel#1",
+      "profile": "headless",
+      "kernel_build": "cand-headless-test-hooks",
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "cell": "init",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "cooked",
+          "line": 684,
+          "used_bytes": 21464,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": [
+            "USER: top --records -d 1 -",
+            "USER: [net-bridge] NIC driver reply timeout; frame not acknowledged",
+            "USER: -frames 2 | to jsonl | cat"
+          ]
+        },
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "raw",
+          "line": 684,
+          "used_bytes": 21464,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": [
+            "USER: top --records -d 1 -",
+            "USER: [net-bridge] NIC driver reply timeout; frame not acknowledged",
+            "USER: -frames 2 | to jsonl | cat"
+          ]
+        }
+      ],
+      "used_bytes": 21464,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        21464
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 32.75,
+      "independent_runs": [
+        "s10-7.4/cand-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/cand-headless-test-hooks@3e279f9eb715/init/boot/user#1",
+      "profile": "headless",
+      "kernel_build": "cand-headless-test-hooks",
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "cell": "init",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "cooked",
+          "line": 685,
+          "used_bytes": 20760,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "raw",
+          "line": 685,
+          "used_bytes": 20760,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 20760,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        20760
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 31.68,
+      "independent_runs": [
+        "s10-7.4/cand-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/cand-headless-test-hooks@3e279f9eb715/net/boot/kernel#1",
+      "profile": "headless",
+      "kernel_build": "cand-headless-test-hooks",
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "cell": "net",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "cooked",
+          "line": 688,
+          "used_bytes": 14568,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "raw",
+          "line": 688,
+          "used_bytes": 14568,
+          "used_pages": 4,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 14568,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        14568
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 22.23,
+      "independent_runs": [
+        "s10-7.4/cand-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/cand-headless-test-hooks@3e279f9eb715/net/boot/user#1",
+      "profile": "headless",
+      "kernel_build": "cand-headless-test-hooks",
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "cell": "net",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "cooked",
+          "line": 689,
+          "used_bytes": 22168,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "raw",
+          "line": 689,
+          "used_bytes": 22168,
+          "used_pages": 6,
+          "alloc_bytes": 73728,
+          "usable_bytes": 65536,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 22168,
+      "usable_bytes": 65536,
+      "used_bytes_all_observed": [
+        22168
+      ],
+      "usable_bytes_all_observed": [
+        65536
+      ],
+      "used_pct_of_usable": 33.83,
+      "independent_runs": [
+        "s10-7.4/cand-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/cand-headless-test-hooks@3e279f9eb715/vfs/boot/kernel#1",
+      "profile": "headless",
+      "kernel_build": "cand-headless-test-hooks",
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "cell": "vfs",
+      "phase": "boot",
+      "kind": "kernel",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "cooked",
+          "line": 686,
+          "used_bytes": 15656,
+          "used_pages": 4,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "raw",
+          "line": 686,
+          "used_bytes": 15656,
+          "used_pages": 4,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 15656,
+      "usable_bytes": 262144,
+      "used_bytes_all_observed": [
+        15656
+      ],
+      "usable_bytes_all_observed": [
+        262144
+      ],
+      "used_pct_of_usable": 5.97,
+      "independent_runs": [
+        "s10-7.4/cand-headless"
+      ],
+      "value_equal_across_all_logs": true
+    },
+    {
+      "key": "headless/cand-headless-test-hooks@3e279f9eb715/vfs/boot/user#1",
+      "profile": "headless",
+      "kernel_build": "cand-headless-test-hooks",
+      "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "cell": "vfs",
+      "phase": "boot",
+      "kind": "user",
+      "occurrence": 1,
+      "scope": "boot-phase only (kernel label phase=boot; emitted once at the first sample after tick 1500)",
+      "observations": [
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "cooked",
+          "line": 687,
+          "used_bytes": 73432,
+          "used_pages": 18,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        },
+        {
+          "source": "s10-7.4/cand-headless/serial-measurement.raw.log",
+          "run": "s10-7.4/cand-headless",
+          "log": "raw",
+          "line": 687,
+          "used_bytes": 73432,
+          "used_pages": 18,
+          "alloc_bytes": 270336,
+          "usable_bytes": 262144,
+          "baseline": "authoritative-input",
+          "level": "WARN",
+          "serial_lines_before_block": []
+        }
+      ],
+      "used_bytes": 73432,
+      "usable_bytes": 262144,
+      "used_bytes_all_observed": [
+        73432
+      ],
+      "usable_bytes_all_observed": [
+        262144
+      ],
+      "used_pct_of_usable": 28.01,
+      "independent_runs": [
+        "s10-7.4/cand-headless"
+      ],
+      "value_equal_across_all_logs": true
+    }
+  ]
+}

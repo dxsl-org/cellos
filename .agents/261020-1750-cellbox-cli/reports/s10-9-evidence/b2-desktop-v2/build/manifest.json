@@ -1,0 +1,1340 @@
+{
+  "artifacts": {
+    "cmd-logs/04-rustc.log": {
+      "bytes": 212,
+      "sha256": "bad5444a63089c36f7ab533cfb95f78c2ef4a4440bbed965d6458e322361da30"
+    },
+    "cmd-logs/05-cargo.log": {
+      "bytes": 44,
+      "sha256": "44723352161599307344f2bea07569fd8cb23e82cca593b39f8f834d30af93f2"
+    },
+    "cmd-logs/06-rustc-active.log": {
+      "bytes": 212,
+      "sha256": "bad5444a63089c36f7ab533cfb95f78c2ef4a4440bbed965d6458e322361da30"
+    },
+    "cmd-logs/101-build-service-vfs.log": {
+      "bytes": 225,
+      "sha256": "d0dc0899e4a09a45a34f033328e4495384ea52ba3d574a03fe83769ae95f3240"
+    },
+    "cmd-logs/102-build-service-config.log": {
+      "bytes": 149,
+      "sha256": "7269212e3ae276d26acab28197d733b68be8b6ace391916531c7a7ab525fbfb6"
+    },
+    "cmd-logs/103-build-service-input.log": {
+      "bytes": 147,
+      "sha256": "b7e2e36ff11fd6da873b8344cb10c2cffbfea19c2c40f6ce1ee18d0758094ed7"
+    },
+    "cmd-logs/104-build-service-platform.log": {
+      "bytes": 153,
+      "sha256": "38041b95c7a8ab59882821b4e1a0fc39755fe096d88ba8e4120e094077f94c71"
+    },
+    "cmd-logs/105-build-driver-nvme.log": {
+      "bytes": 143,
+      "sha256": "e25c02c79b0e4ff6058035a31b49ff44e5ddcd87374ee6c37f534eb5f06c3456"
+    },
+    "cmd-logs/106-build-driver-e1000.log": {
+      "bytes": 145,
+      "sha256": "01cc248ad92dbc6f8a91180c3b6bda60c5eb264825059be83d24e68e0779e81d"
+    },
+    "cmd-logs/107-build-driver-igb.log": {
+      "bytes": 141,
+      "sha256": "015afa708577302264e0911469232ab1de561a1e6122fea57142c31e63f3a476"
+    },
+    "cmd-logs/108-build-driver-ahci.log": {
+      "bytes": 143,
+      "sha256": "9464a95efdbaf8188bd5beea165ee6b831fb32aa8daae0af0f5cefcfb81b35e8"
+    },
+    "cmd-logs/109-build-driver-xhci.log": {
+      "bytes": 143,
+      "sha256": "4daf5e2a963aad913cc005419db41ed206a86d0fb61283142315b96407ebfe03"
+    },
+    "cmd-logs/110-build-driver-serial-x86.log": {
+      "bytes": 155,
+      "sha256": "3c7031c677b8e47cd174f218aa45db01a6882deffe59575179cafc64c3fe3153"
+    },
+    "cmd-logs/111-build-service-compositor.log": {
+      "bytes": 1797,
+      "sha256": "ea638ef7d294109072a69032791c05f8f3452f14f024e20fbfe9a35f604b2f65"
+    },
+    "cmd-logs/112-build-fb-console.log": {
+      "bytes": 145,
+      "sha256": "cd754b6fdc3dfb668d74f2f813a885e63d51dbe8cf0cf6fe56f1a95e07934434"
+    },
+    "cmd-logs/113-build-service-sshd.log": {
+      "bytes": 6148,
+      "sha256": "22f98c3db35dc7ef0eddff9d588deba473c59c5df749d0320aaa18d2b8c0f6b2"
+    },
+    "cmd-logs/114-build-desktop.log": {
+      "bytes": 204,
+      "sha256": "3fd5419e6cf3dbc8eef05c710cde31648f16e4ce704f742f0a7324d80ea50f5e"
+    },
+    "cmd-logs/115-build-files.log": {
+      "bytes": 135,
+      "sha256": "e4b635096753c9c1ddced3fb01ff074c5cd37242188b69bfc7416529becde78b"
+    },
+    "cmd-logs/116-build-terminal.log": {
+      "bytes": 141,
+      "sha256": "1303a05ab92932f9df879298b368581a91b72d08991442f58208c0841fe3fd8e"
+    },
+    "cmd-logs/117-build-app-chrome.log": {
+      "bytes": 141,
+      "sha256": "f45cf350a90733581370fb16f298731d15d7bcfc741e0eab95f7bc952de27bad"
+    },
+    "cmd-logs/118-build-app-shell.log": {
+      "bytes": 140,
+      "sha256": "e8d3f174f5dc7c72c74903c9ac0050918c7ac58c226ba2e8739a8c6ff8879207"
+    },
+    "cmd-logs/119-build-ocel-desktop.log": {
+      "bytes": 1577,
+      "sha256": "cf5ece3c33a5d468ad9458d0620ab16f6919ffae3e132314ee42555faf0a2bbf"
+    },
+    "cmd-logs/120-build-service-net-qemu-dev-https.log": {
+      "bytes": 1695,
+      "sha256": "dff12aac3269a431d0549409bf2a8801a9b3bfefc61f1a10bcf34de7841fb500"
+    },
+    "cmd-logs/150-build-app-sys-tools.log": {
+      "bytes": 148,
+      "sha256": "15b1737064b3402b085fcf04f48f26fc797b541ec1200b8e1a4cf120f825ddea"
+    },
+    "cmd-logs/200-sign-desktop-v2.log": {
+      "bytes": 11739,
+      "sha256": "ea409c93e8133e725388bc444833f0ad055a55439918813ca333276824c5d3b2"
+    },
+    "cmd-logs/210-inspect-fat-desktop.log": {
+      "bytes": 4616,
+      "sha256": "ce214bb38c97b8403085885a15036f6f38d4b4b04a8ea199c0dd5619ac82afc6"
+    },
+    "cmd-logs/300-build-kernel-desktop.log": {
+      "bytes": 262,
+      "sha256": "6b866b6c584b1d7ad669e8d1c49a83a0c205a965deddfce7d5493f2f41431de8"
+    },
+    "cmd-logs/301-build-kernel-desktop-test-hooks.log": {
+      "bytes": 431,
+      "sha256": "7f5dc24d1f80a2e4b1e6483b2577283452da7dbbd237411acbc4191a62ad7c70"
+    },
+    "cmd-logs/310-iso.log": {
+      "bytes": 851,
+      "sha256": "46b98d0bb96ca8c144add80a5c1142a868366558d236c50141ef416854a64beb"
+    },
+    "cmd-logs/310-limine-bios-install.log": {
+      "bytes": 526,
+      "sha256": "a5850adf08f1826ef675e0e5bdb1d110a4f9630762a63fa6fa177fd82404e3f1"
+    },
+    "cmd-logs/310-qemu-img.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "cmd-logs/311-iso.log": {
+      "bytes": 895,
+      "sha256": "a7b2f7779af19ffc2bfdb0b85e45665e02c25e0a8bb0e2fe7143e805b16cf4d2"
+    },
+    "cmd-logs/311-limine-bios-install.log": {
+      "bytes": 526,
+      "sha256": "0b8bf24a546f66425b6d2e831143fa5cd953277dd313b54a627241c22c198d82"
+    },
+    "cmd-logs/311-qemu-img.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "desktop-base-tracked-init": {
+      "bytes": 393152,
+      "sha256": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104"
+    },
+    "desktop-base-tracked-kernel_fs.img": {
+      "bytes": 12582912,
+      "sha256": "a4cba963e6bff4c39e0716ca036d6f7b1325499a357a04771e2a2927cd5ef5f3"
+    },
+    "desktop-cellos-x86_64-desktop.iso": {
+      "bytes": 23474176,
+      "sha256": "f4e12ae83722f860ea3ff6ea5ffd907d3425472670f57a908254bba55c7eeeec"
+    },
+    "desktop-cellos-x86_64-desktop.qcow2": {
+      "bytes": 16580608,
+      "sha256": "a5ac6ad51aae9231e77294c090bd654091a2973cb1b1dfa2f3ff6a0797201f2c"
+    },
+    "desktop-init": {
+      "bytes": 393152,
+      "sha256": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104"
+    },
+    "desktop-kernel.elf": {
+      "bytes": 19601784,
+      "sha256": "486d1883665d7667c6ffbcefdea3858e82ab8b75ffc379d037f3c4a7adc44f8c"
+    },
+    "desktop-kernel_fs.img": {
+      "bytes": 16777216,
+      "sha256": "b05ab5e197b6c9a4bbf4e7d703e77536e57dc6c4a0d001980904a342e9d463cd"
+    },
+    "desktop-test-hooks-cellos-x86_64-desktop.iso": {
+      "bytes": 23785472,
+      "sha256": "cf134c7af9da1a4ec881e90d7222e1b02ca71de8e4da954d79c3794b7c7b42ba"
+    },
+    "desktop-test-hooks-cellos-x86_64-desktop.qcow2": {
+      "bytes": 16908288,
+      "sha256": "0f8ea10d14c6985c11991432e475937a72d67f292de8b39d947ee7d78393b1c8"
+    },
+    "desktop-test-hooks-kernel.elf": {
+      "bytes": 19914728,
+      "sha256": "de5c9662202b805278ff3366bd4fbb2fdea84547b7e2a2f983a36809b091dc83"
+    },
+    "limine.conf": {
+      "bytes": 121,
+      "sha256": "362a5a5018ccf279eadd86cd011f8e99135107bb4cae556dc7ca322a7827eb43"
+    },
+    "logs/metadata.stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "logs/non-hooks-iso-files.txt": {
+      "bytes": 619,
+      "sha256": "29909cfac2f94e0f2d11a1a00bf543c83499a41fcc43dbeb43067de0d07c5f23"
+    },
+    "logs/non-hooks-kernel-readelf.txt": {
+      "bytes": 1798,
+      "sha256": "8b5a0f0f73a84d0dc750510084e3d1e18f17a11ab32ae1c9f2acfe03a30024be"
+    },
+    "logs/test-hooks-iso-files.txt": {
+      "bytes": 619,
+      "sha256": "c7786ad25d1aa8208b0344eb2e14a2a0ae40332e956ec255c8af34ab95e47f26"
+    },
+    "logs/test-hooks-kernel-readelf.txt": {
+      "bytes": 1798,
+      "sha256": "120d8a94d5aa0770a06bef8f835ffb350cb2c91a63db8b854f39c0a6eefd8aea"
+    },
+    "logs/tree-vs-commit.json": {
+      "bytes": 507,
+      "sha256": "36be9f103f652dbcdbcbea4067710e94004cd49df78949a443f1c04b11009b7d"
+    },
+    "logs/whole-workspace-check.log": {
+      "bytes": 4944,
+      "sha256": "e4ac70e4428113387cdabf8c28dea57da9cc1adea1677b58c88fa4784597e5f8"
+    },
+    "logs/whole-workspace-check.rc": {
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    "patches/b2-lock.patch": {
+      "bytes": 969,
+      "sha256": "19c8e2834b2ac5cf5da64a563e178e2711ce0d79a95b6693b011410491efbe0c"
+    },
+    "patches/b2-manifest.patch": {
+      "bytes": 383,
+      "sha256": "d0bd41b4761ad015043451ba90c84a5a86060d405b04aa6c18a5e2a438a7e4d9"
+    },
+    "signed/app-chrome": {
+      "bytes": 1136480,
+      "sha256": "2b27cba990ae8c6a595a0d00349a5903c66454683a08ec0f2b6cb5558b0c848b"
+    },
+    "signed/app-shell": {
+      "bytes": 881120,
+      "sha256": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90"
+    },
+    "signed/cat": {
+      "bytes": 20976,
+      "sha256": "9fb4d1ff159ea0faf3d373043ccd25cc2bcea72b60346636d84f1208a7c0dc72"
+    },
+    "signed/desktop": {
+      "bytes": 1168328,
+      "sha256": "bc0f6d0b99010c43bd9a00b749565af2af42a4bae7dfe95ca0ff92601bde32c3"
+    },
+    "signed/driver-ahci": {
+      "bytes": 44720,
+      "sha256": "3c387e2423de914a4cba6e6a00f4eab8e007e67bd348578d09c19bb7f1c56d9d"
+    },
+    "signed/driver-e1000": {
+      "bytes": 29672,
+      "sha256": "323191b427c90125b3ba777d497ee1aaa70553b39de87db3529db2ab643ca5e4"
+    },
+    "signed/driver-igb": {
+      "bytes": 39424,
+      "sha256": "5d78bbdf53392e82320ac2287e91d9aa78f76ebafb9b162f15211e5570ac678c"
+    },
+    "signed/driver-nvme": {
+      "bytes": 36096,
+      "sha256": "e3441646c8febe528af54a83c165e0c936c912bac8a8ad8481e512f868218d7e"
+    },
+    "signed/driver-serial-x86": {
+      "bytes": 35752,
+      "sha256": "04f0d96ac1e608bc372202307fcc64eb24f2c91a25d2c65b41eecfc9f4ef8bb0"
+    },
+    "signed/driver-xhci": {
+      "bytes": 52712,
+      "sha256": "411a05009338dc78ca602e0558befd0297934a77bcac81e0bc44aded77a0eea1"
+    },
+    "signed/echo": {
+      "bytes": 20952,
+      "sha256": "861ca14a7b28eab867eee713ebc9c110701873bc41edff2055a3ad415bb574c0"
+    },
+    "signed/fb-console": {
+      "bytes": 588440,
+      "sha256": "c8a9b0e7eef952722e14beb6d883c2e249cdaa67140209fe3c729c4906c308e5"
+    },
+    "signed/files": {
+      "bytes": 1178112,
+      "sha256": "e19358bec82a94d2e028ff27f549eaa300c5db7c795f13d7f8d104b1e1a2cf80"
+    },
+    "signed/kill": {
+      "bytes": 21096,
+      "sha256": "b5fe3980d032c912b90447e886b4f8ac708dc5872a7714cad5c1a5f7a4cc2851"
+    },
+    "signed/ls": {
+      "bytes": 20952,
+      "sha256": "3a99ac33ff89f237c3fd908bcdb0b3e233bcb99c5570440d3a5b6a7f02adcffc"
+    },
+    "signed/ocel-desktop": {
+      "bytes": 4341072,
+      "sha256": "ffa317c68036a4d4577f7f7c8a48794261c172b1787072d9564725c998c759ff"
+    },
+    "signed/ps": {
+      "bytes": 15432,
+      "sha256": "b5371860a45303815dd77a2b562d08055024ac7eead9cd0e143e30333341544a"
+    },
+    "signed/service-compositor": {
+      "bytes": 112064,
+      "sha256": "cbd40113306ccebd8cc224e17bd3a2c42d1934cbd9d2f3d494d393864dc4a129"
+    },
+    "signed/service-config": {
+      "bytes": 42912,
+      "sha256": "6ec6aff2029b8b814ffca2235d3f1451cec188ef6ee859c40cf46455b2f54551"
+    },
+    "signed/service-input": {
+      "bytes": 37920,
+      "sha256": "4dd998ebae0787d954f3a43a79c1fd265ae1af592a7b9c8ec13f06298a6f49e3"
+    },
+    "signed/service-net-qemu-dev-https": {
+      "bytes": 801536,
+      "sha256": "3c0a9beb3d3e3803e7b4b8e720b0c07d5ed208e3fb235b3f6bb7082b841a1ee4"
+    },
+    "signed/service-platform": {
+      "bytes": 38488,
+      "sha256": "390916f2c91c3f50f7888de652aaba710f504d6c324a7cf9e243cde343295dc5"
+    },
+    "signed/service-sshd": {
+      "bytes": 197048,
+      "sha256": "a411135852ff12f36d9057a3bb4439bd046c1352427d2ed760e92b2a2d118708"
+    },
+    "signed/service-vfs": {
+      "bytes": 425624,
+      "sha256": "5046e588278049c5fba87a7542e28b52ad578c1150e48f700c9a1c762e1ebb31"
+    },
+    "signed/terminal": {
+      "bytes": 598888,
+      "sha256": "a7d6926f7307ae3b2670e181ed3115855c40c3be7502b78106ef8e54e9771d6c"
+    },
+    "signing-scope-desktop-v2.json": {
+      "bytes": 74615,
+      "sha256": "e38900efd907a59bbbea465e80c26038c660a1ace7d69c39f2d1cd583114c4ba"
+    },
+    "static-verification.json": {
+      "bytes": 28465,
+      "sha256": "c92d63a490961e17b70c05a6457eca490f72a255c39826df2fa822003ecf5ed5"
+    },
+    "unsigned/app-chrome": {
+      "bytes": 1136632,
+      "sha256": "83dd44b3e3585fcf5eaa2928a9fd542553819732c2622cd05807d5a03dc26657"
+    },
+    "unsigned/app-shell": {
+      "bytes": 880992,
+      "sha256": "2951a28b324ebd5e85922f3ba51128811e2fbbe84166c2ab54540b436d82648f"
+    },
+    "unsigned/cat": {
+      "bytes": 24424,
+      "sha256": "959c64e60c7668e13f6f6043ad1bf968ddb710ddf0a4014d113498e353fc507f"
+    },
+    "unsigned/desktop": {
+      "bytes": 1168480,
+      "sha256": "578750bfc814f51cb4b09fa09556a3228b460b69109d09f361550fdec906e39e"
+    },
+    "unsigned/driver-ahci": {
+      "bytes": 44592,
+      "sha256": "ccd725ba927ba4ca757015b83c645e8dd05403bb30f24abacc12c01855e40198"
+    },
+    "unsigned/driver-e1000": {
+      "bytes": 29544,
+      "sha256": "41c319007686a2e5429daaaed72b41180d4278a08e998033092b7b2d02955c0d"
+    },
+    "unsigned/driver-igb": {
+      "bytes": 39296,
+      "sha256": "2154face764b05de58ea8dbe34b839027c89cc02bb027d811c09697d111ed32d"
+    },
+    "unsigned/driver-nvme": {
+      "bytes": 35968,
+      "sha256": "9be10173338f9edc1810d891bcef0dd54c4e36ab740ee7c4bf5c1ee78895871b"
+    },
+    "unsigned/driver-serial-x86": {
+      "bytes": 35624,
+      "sha256": "56e844e27dfbaf67aaa6d617f46080883104bd1638faf4ad855cbf7f27d323a3"
+    },
+    "unsigned/driver-xhci": {
+      "bytes": 52584,
+      "sha256": "91ce9314e44b2fa8cb9a296ccd5e2ef23d33d9f9aed28782f4c98c469727bbc4"
+    },
+    "unsigned/echo": {
+      "bytes": 24424,
+      "sha256": "4f25b11d26759227f611a4ec1a6a7f4e3a87ca5bf5eff32d652aa0c1ec60346d"
+    },
+    "unsigned/fb-console": {
+      "bytes": 588600,
+      "sha256": "312504eb79b586abec9a5fc8ecf46dd20337ad71622e2a11663dc7633ef3f38e"
+    },
+    "unsigned/files": {
+      "bytes": 1178272,
+      "sha256": "1dd411901153cbc3de2f897dc524cce63c644ccb14aa21aa309198a5c626f7f6"
+    },
+    "unsigned/kill": {
+      "bytes": 24496,
+      "sha256": "8839eb6c288077dca80e0dae46933df67a1b9159bf0ad9f18c2e07051204cdda"
+    },
+    "unsigned/ls": {
+      "bytes": 24424,
+      "sha256": "3a4d5478565c00a3b9d6d97c28f3730cc2add03a20493883b971c48970c0778c"
+    },
+    "unsigned/ocel-desktop": {
+      "bytes": 4341240,
+      "sha256": "f8020e0e537d5a8b630f603f7982583034a33bb7116ca28f4aa52a2ebbd2c3f9"
+    },
+    "unsigned/ps": {
+      "bytes": 15304,
+      "sha256": "c567c9beed845f897b0792c3aadc0fd4a7e84a1a9f449a2e4cb95bfd03e72c49"
+    },
+    "unsigned/service-compositor": {
+      "bytes": 114736,
+      "sha256": "be76cae9f0b701bf342b6288e6befa59ef4d191ae98c2aff7692596767e9b970"
+    },
+    "unsigned/service-config": {
+      "bytes": 42784,
+      "sha256": "ae8ab7977295dd4c181c1ba91450a60634252de8e600c69c405d908942d61fdc"
+    },
+    "unsigned/service-input": {
+      "bytes": 37792,
+      "sha256": "264273c223e7769580de9a04a953b1f8d24481991abe2354435d0f1edfa0de75"
+    },
+    "unsigned/service-net-qemu-dev-https": {
+      "bytes": 801408,
+      "sha256": "03958c8ac0f2adf17d6f003aa83892482c4e14ef8a03b1337e50bdfb6ba2008c"
+    },
+    "unsigned/service-platform": {
+      "bytes": 38360,
+      "sha256": "6a7c5d5d96f65de16e3ff2c20d0a8386848f433dde763aa6c335c8b0cf129eac"
+    },
+    "unsigned/service-sshd": {
+      "bytes": 196920,
+      "sha256": "3f62393ac71a1f95dc4ff80906adea4a73cd4a4f3e4330dcaea46172216dd54b"
+    },
+    "unsigned/service-vfs": {
+      "bytes": 425496,
+      "sha256": "a0365791f652d67834255f08c9ccb99dde0cb4d0dd2d235d3d7fc255d4a3541c"
+    },
+    "unsigned/terminal": {
+      "bytes": 599040,
+      "sha256": "80fc1dd71deaf0f48f2db5235a7dcffe891071690adc3a43d18a2021c56cacfd"
+    }
+  },
+  "authorized_deltas_applied": [
+    "b2-manifest.patch",
+    "b2-lock.patch",
+    "F1 scoped-signing exception (scoped mirror root; whole-workspace F1 still refuses)"
+  ],
+  "boot_sets": {
+    "non-hooks": {
+      "init": "desktop-init",
+      "iso": "desktop-cellos-x86_64-desktop.iso",
+      "kernel": "desktop-kernel.elf",
+      "kernel_fs": "desktop-kernel_fs.img",
+      "qcow2": "desktop-cellos-x86_64-desktop.qcow2",
+      "sha256": {
+        "init": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104",
+        "iso": "f4e12ae83722f860ea3ff6ea5ffd907d3425472670f57a908254bba55c7eeeec",
+        "kernel": "486d1883665d7667c6ffbcefdea3858e82ab8b75ffc379d037f3c4a7adc44f8c",
+        "kernel_fs": "b05ab5e197b6c9a4bbf4e7d703e77536e57dc6c4a0d001980904a342e9d463cd",
+        "qcow2": "a5ac6ad51aae9231e77294c090bd654091a2973cb1b1dfa2f3ff6a0797201f2c"
+      }
+    },
+    "test-hooks": {
+      "init": "desktop-init",
+      "iso": "desktop-test-hooks-cellos-x86_64-desktop.iso",
+      "kernel": "desktop-test-hooks-kernel.elf",
+      "kernel_fs": "desktop-kernel_fs.img",
+      "qcow2": "desktop-test-hooks-cellos-x86_64-desktop.qcow2",
+      "sha256": {
+        "init": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104",
+        "iso": "cf134c7af9da1a4ec881e90d7222e1b02ca71de8e4da954d79c3794b7c7b42ba",
+        "kernel": "de5c9662202b805278ff3366bd4fbb2fdea84547b7e2a2f983a36809b091dc83",
+        "kernel_fs": "b05ab5e197b6c9a4bbf4e7d703e77536e57dc6c4a0d001980904a342e9d463cd",
+        "qcow2": "0f8ea10d14c6985c11991432e475937a72d67f292de8b39d947ee7d78393b1c8"
+      }
+    }
+  },
+  "build_tool_sha256": {
+    "Cargo.lock": "602d86533ff1ec968011c94d2339940e5143478d80b32555de19b5d9d6da9b84",
+    "Cargo.toml": "7800781c26534e128dfdb3566d0e79a70aa4f43ee95407e123722bd45619d037",
+    "limine/limine-8.7.0/bin/limine": "407fd5356216f25225eb2a224b1f45ca4e8f02013237e04495bdf8aa93d648d7",
+    "run-desktop.sh": "80d8ca489e17ae9608841fa84100dc07d99f21d719ab1cee2363f2c32553d2d7",
+    "rust-toolchain.toml": "b4b678c357f82bd2a267cfc27cb005562e054ae4aebb072bda9a0af14847edb1",
+    "scripts/cellos-sign": "c4964d60d95fcca977e64876d0c4d86cd2f5d993de84fcc0959612221613e813",
+    "scripts/cellos_sign/__init__.py": "b8d84078e60506142599d27a31e5f055181aa04b80defd88067c7e92ad6548bd",
+    "scripts/cellos_sign/allowlist.py": "a58b8ffa9bbf68ab7da144393195cd1a1e6d88cbf0f399101c0a577507d8d524",
+    "scripts/cellos_sign/cli.py": "fa5516cd03f3b74592124e4dbcd3e3300f5591996bcbe91588a075bc1d4d9c98",
+    "scripts/cellos_sign/lexer.py": "47760ca487eff94d4c0de589a84af0f547178c12d8e6b6b7d0b711c389a76d14",
+    "scripts/cellos_sign/policy.py": "5566dec5578d5c964c616c025cb49818b71f49be4859b186d18ea63d10dc1083",
+    "scripts/cellos_sign/scan.py": "5b93ac6ee338e12cfad6ddf6ca71d3d54bfb89fe54b12cece8fbdfdee19e5b20",
+    "scripts/cellos_sign/signing.py": "44f1908530d68ce4b6365a587f1c12afa5177c56a1915e30e6faa14e0d3151e1",
+    "scripts/cellos_sign/toolchain.py": "3d45630702e3def6ce00bde116b69a0457a09592c494b29612709839569a0685",
+    "scripts/generate-boot-config.py": "8ffc3177151f0fc8e3366d97698445d782b1db40e4c2bc91e0c4bf485e6a9d0e",
+    "scripts/package-desktop-x86.py": "8603cd5d7521046cefc7d8566dfb54e3f23f2edcd77fda9958ebbb21f8c0d7bb",
+    "scripts/package-ocel-profile.py": "f9ff43be6ad0a27c3539de803e59553ba59ca9ed197d46750bb6f7bbfb9fa31b",
+    "scripts/sign-cell.py": "1be5d58070a2e1288cb505b4f41ae9e993899d2481ad12f3ac51268f50a6d230",
+    "scripts/sign-policy.py": "a6fcef814b73ee16ff12fb0b08f4f436bc1829af748e16e84d0cc634b738988f",
+    "scripts/unsafe-allowlist.toml": "91984e5e39dd7d077c85ec13e3e0f8718462d2b852b89ef2d28dee34b5c22dd3",
+    "scripts/x86/limine.conf": "362a5a5018ccf279eadd86cd011f8e99135107bb4cae556dc7ca322a7827eb43",
+    "scripts/x86/make-iso-ci.sh": "b1fd65196ce24e0d6166b9e78ed84bc8301008eee5656da87d93927d460e9304",
+    "tools/inspect_fat.py": "a41dfad334ac7f459fa71f010aebea9b82e43eb0b5a3e0e8daf533044d745031",
+    "tools/mkfat32.py": "b82c284a714ed2f546783085da035328d351b37e712624924b27eb5826500565"
+  },
+  "commands": [
+    {
+      "argv": [
+        "rustc",
+        "+nightly-2026-05-01",
+        "-Vv"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {},
+      "label": "04-rustc",
+      "log_sha256": "bad5444a63089c36f7ab533cfb95f78c2ef4a4440bbed965d6458e322361da30",
+      "returncode": 0,
+      "seconds": 1.6
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "-V"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {},
+      "label": "05-cargo",
+      "log_sha256": "44723352161599307344f2bea07569fd8cb23e82cca593b39f8f834d30af93f2",
+      "returncode": 0,
+      "seconds": 0.5
+    },
+    {
+      "argv": [
+        "rustc",
+        "-Vv"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {},
+      "label": "06-rustc-active",
+      "log_sha256": "bad5444a63089c36f7ab533cfb95f78c2ef4a4440bbed965d6458e322361da30",
+      "returncode": 0,
+      "seconds": 0.1
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "service-vfs",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "101-build-service-vfs",
+      "log_sha256": "d0dc0899e4a09a45a34f033328e4495384ea52ba3d574a03fe83769ae95f3240",
+      "returncode": 0,
+      "seconds": 16.7
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "service-config",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "102-build-service-config",
+      "log_sha256": "7269212e3ae276d26acab28197d733b68be8b6ace391916531c7a7ab525fbfb6",
+      "returncode": 0,
+      "seconds": 3.3
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "service-input",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "103-build-service-input",
+      "log_sha256": "b7e2e36ff11fd6da873b8344cb10c2cffbfea19c2c40f6ce1ee18d0758094ed7",
+      "returncode": 0,
+      "seconds": 1.9
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "service-platform",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "104-build-service-platform",
+      "log_sha256": "38041b95c7a8ab59882821b4e1a0fc39755fe096d88ba8e4120e094077f94c71",
+      "returncode": 0,
+      "seconds": 0.9
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "driver-nvme",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "105-build-driver-nvme",
+      "log_sha256": "e25c02c79b0e4ff6058035a31b49ff44e5ddcd87374ee6c37f534eb5f06c3456",
+      "returncode": 0,
+      "seconds": 0.8
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "driver-e1000",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "106-build-driver-e1000",
+      "log_sha256": "01cc248ad92dbc6f8a91180c3b6bda60c5eb264825059be83d24e68e0779e81d",
+      "returncode": 0,
+      "seconds": 0.8
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "driver-igb",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "107-build-driver-igb",
+      "log_sha256": "015afa708577302264e0911469232ab1de561a1e6122fea57142c31e63f3a476",
+      "returncode": 0,
+      "seconds": 0.9
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "driver-ahci",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "108-build-driver-ahci",
+      "log_sha256": "9464a95efdbaf8188bd5beea165ee6b831fb32aa8daae0af0f5cefcfb81b35e8",
+      "returncode": 0,
+      "seconds": 0.9
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "driver-xhci",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "109-build-driver-xhci",
+      "log_sha256": "4daf5e2a963aad913cc005419db41ed206a86d0fb61283142315b96407ebfe03",
+      "returncode": 0,
+      "seconds": 1.0
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "driver-serial-x86",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "110-build-driver-serial-x86",
+      "log_sha256": "3c7031c677b8e47cd174f218aa45db01a6882deffe59575179cafc64c3fe3153",
+      "returncode": 0,
+      "seconds": 0.8
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "service-compositor",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "111-build-service-compositor",
+      "log_sha256": "ea638ef7d294109072a69032791c05f8f3452f14f024e20fbfe9a35f604b2f65",
+      "returncode": 0,
+      "seconds": 3.4
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "fb-console",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "112-build-fb-console",
+      "log_sha256": "cd754b6fdc3dfb668d74f2f813a885e63d51dbe8cf0cf6fe56f1a95e07934434",
+      "returncode": 0,
+      "seconds": 1.5
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "service-sshd",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "113-build-service-sshd",
+      "log_sha256": "22f98c3db35dc7ef0eddff9d588deba473c59c5df749d0320aaa18d2b8c0f6b2",
+      "returncode": 0,
+      "seconds": 4.7
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "desktop",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "114-build-desktop",
+      "log_sha256": "3fd5419e6cf3dbc8eef05c710cde31648f16e4ce704f742f0a7324d80ea50f5e",
+      "returncode": 0,
+      "seconds": 2.6
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "files",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "115-build-files",
+      "log_sha256": "e4b635096753c9c1ddced3fb01ff074c5cd37242188b69bfc7416529becde78b",
+      "returncode": 0,
+      "seconds": 1.8
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "terminal",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "116-build-terminal",
+      "log_sha256": "1303a05ab92932f9df879298b368581a91b72d08991442f58208c0841fe3fd8e",
+      "returncode": 0,
+      "seconds": 1.7
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "app-chrome",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "117-build-app-chrome",
+      "log_sha256": "f45cf350a90733581370fb16f298731d15d7bcfc741e0eab95f7bc952de27bad",
+      "returncode": 0,
+      "seconds": 1.4
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "app-shell",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "118-build-app-shell",
+      "log_sha256": "e8d3f174f5dc7c72c74903c9ac0050918c7ac58c226ba2e8739a8c6ff8879207",
+      "returncode": 0,
+      "seconds": 5.5
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "ocel",
+        "--no-default-features",
+        "--features",
+        "desktop",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "119-build-ocel-desktop",
+      "log_sha256": "cf5ece3c33a5d468ad9458d0620ab16f6919ffae3e132314ee42555faf0a2bbf",
+      "returncode": 0,
+      "seconds": 16.2
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "service-net",
+        "--no-default-features",
+        "--features",
+        "qemu-dev-https",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "120-build-service-net-qemu-dev-https",
+      "log_sha256": "dff12aac3269a431d0549409bf2a8801a9b3bfefc61f1a10bcf34de7841fb500",
+      "returncode": 0,
+      "seconds": 11.4
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "app-sys-tools",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "RUSTFLAGS": "-C relocation-model=pic"
+      },
+      "label": "150-build-app-sys-tools",
+      "log_sha256": "15b1737064b3402b085fcf04f48f26fc797b541ec1200b8e1a4cf120f825ddea",
+      "returncode": 0,
+      "seconds": 1.6
+    },
+    {
+      "argv": [
+        "python3",
+        "/tmp/cellbox-s10-7/signing-root-desktop-v2/scripts/cellos-sign",
+        "--repo",
+        "/tmp/cellbox-s10-7/signing-root-desktop-v2",
+        "--objcopy",
+        "objcopy",
+        "--sign",
+        "/tmp/cellbox-s10-9/stage/service-vfs/service-vfs",
+        "/tmp/cellbox-s10-9/stage/service-config/service-config",
+        "/tmp/cellbox-s10-9/stage/service-input/service-input",
+        "/tmp/cellbox-s10-9/stage/service-platform/platform",
+        "/tmp/cellbox-s10-9/stage/driver-nvme/driver-nvme",
+        "/tmp/cellbox-s10-9/stage/driver-e1000/driver-e1000",
+        "/tmp/cellbox-s10-9/stage/driver-igb/driver-igb",
+        "/tmp/cellbox-s10-9/stage/driver-ahci/driver-ahci",
+        "/tmp/cellbox-s10-9/stage/driver-xhci/driver-xhci",
+        "/tmp/cellbox-s10-9/stage/driver-serial-x86/driver-serial-x86",
+        "/tmp/cellbox-s10-9/stage/service-compositor/service-compositor",
+        "/tmp/cellbox-s10-9/stage/fb-console/fb-console",
+        "/tmp/cellbox-s10-9/stage/service-sshd/service-sshd",
+        "/tmp/cellbox-s10-9/stage/desktop/desktop",
+        "/tmp/cellbox-s10-9/stage/files/files",
+        "/tmp/cellbox-s10-9/stage/terminal/terminal",
+        "/tmp/cellbox-s10-9/stage/app-chrome/chrome",
+        "/tmp/cellbox-s10-9/stage/app-shell/app-shell",
+        "/tmp/cellbox-s10-9/stage/ocel-desktop/ocel",
+        "/tmp/cellbox-s10-9/stage/service-net-qemu-dev-https/service-net",
+        "/tmp/cellbox-s10-9/stage/ls/ls",
+        "/tmp/cellbox-s10-9/stage/cat/cat",
+        "/tmp/cellbox-s10-9/stage/echo/echo",
+        "/tmp/cellbox-s10-9/stage/ps/ps",
+        "/tmp/cellbox-s10-9/stage/kill/kill"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {},
+      "label": "200-sign-desktop-v2",
+      "log_sha256": "ea409c93e8133e725388bc444833f0ad055a55439918813ca333276824c5d3b2",
+      "returncode": 0,
+      "seconds": 0.9
+    },
+    {
+      "argv": [
+        "python3",
+        "tools/inspect_fat.py",
+        "/tmp/cellbox-s10-7/b2-image-v2/desktop-kernel_fs.img"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {},
+      "label": "210-inspect-fat-desktop",
+      "log_sha256": "ce214bb38c97b8403085885a15036f6f38d4b4b04a8ea199c0dd5619ac82afc6",
+      "returncode": 0,
+      "seconds": 0.0
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "cellos-kernel",
+        "--target",
+        "x86_64-unknown-none",
+        "--features",
+        "dev-policy-key,dev-signing-key,dev-weak-rng,signing-required,native-domains,qemu-dev-https,large-cell-va"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static"
+      },
+      "label": "300-build-kernel-desktop",
+      "log_sha256": "6b866b6c584b1d7ad669e8d1c49a83a0c205a965deddfce7d5493f2f41431de8",
+      "returncode": 0,
+      "seconds": 15.2
+    },
+    {
+      "argv": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "cellos-kernel",
+        "--target",
+        "x86_64-unknown-none",
+        "--features",
+        "dev-policy-key,dev-signing-key,dev-weak-rng,signing-required,native-domains,qemu-dev-https,large-cell-va,test-hooks"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "CARGO_NET_OFFLINE": "true",
+        "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target",
+        "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static"
+      },
+      "label": "301-build-kernel-desktop-test-hooks",
+      "log_sha256": "7f5dc24d1f80a2e4b1e6483b2577283452da7dbbd237411acbc4191a62ad7c70",
+      "returncode": 0,
+      "seconds": 16.2
+    },
+    {
+      "argv": [
+        "bash",
+        "scripts/x86/make-iso-ci.sh",
+        "/tmp/cellbox-s10-7/b2-image-v2/desktop-cellos-x86_64-desktop.iso"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "X86_ISO_ROOT": "/tmp/cellbox-s10-7/iso-root-v2-10",
+        "X86_KERNEL": "/tmp/cellbox-s10-7/b2-image-v2/desktop-kernel.elf"
+      },
+      "label": "310-iso",
+      "log_sha256": "46b98d0bb96ca8c144add80a5c1142a868366558d236c50141ef416854a64beb",
+      "returncode": 0,
+      "seconds": 0.5
+    },
+    {
+      "argv": [
+        "limine/limine-8.7.0/bin/limine",
+        "bios-install",
+        "/tmp/cellbox-s10-7/b2-image-v2/desktop-cellos-x86_64-desktop.iso"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {},
+      "label": "310-limine-bios-install",
+      "log_sha256": "a5850adf08f1826ef675e0e5bdb1d110a4f9630762a63fa6fa177fd82404e3f1",
+      "returncode": 0,
+      "seconds": 0.0
+    },
+    {
+      "argv": [
+        "qemu-img",
+        "convert",
+        "-f",
+        "raw",
+        "-O",
+        "qcow2",
+        "/tmp/cellbox-s10-7/b2-image-v2/desktop-cellos-x86_64-desktop.iso",
+        "/tmp/cellbox-s10-7/b2-image-v2/desktop-cellos-x86_64-desktop.qcow2"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {},
+      "label": "310-qemu-img",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "returncode": 0,
+      "seconds": 0.7
+    },
+    {
+      "argv": [
+        "bash",
+        "scripts/x86/make-iso-ci.sh",
+        "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.iso"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {
+        "X86_ISO_ROOT": "/tmp/cellbox-s10-7/iso-root-v2-11",
+        "X86_KERNEL": "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-kernel.elf"
+      },
+      "label": "311-iso",
+      "log_sha256": "a7b2f7779af19ffc2bfdb0b85e45665e02c25e0a8bb0e2fe7143e805b16cf4d2",
+      "returncode": 0,
+      "seconds": 0.2
+    },
+    {
+      "argv": [
+        "limine/limine-8.7.0/bin/limine",
+        "bios-install",
+        "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.iso"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {},
+      "label": "311-limine-bios-install",
+      "log_sha256": "0b8bf24a546f66425b6d2e831143fa5cd953277dd313b54a627241c22c198d82",
+      "returncode": 0,
+      "seconds": 0.0
+    },
+    {
+      "argv": [
+        "qemu-img",
+        "convert",
+        "-f",
+        "raw",
+        "-O",
+        "qcow2",
+        "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.iso",
+        "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.qcow2"
+      ],
+      "cwd": "/tmp/cellbox-s10-7/worktree",
+      "env_overrides": {},
+      "label": "311-qemu-img",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "returncode": 0,
+      "seconds": 0.3
+    }
+  ],
+  "commit": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+  "deltas_beyond_authorized": [],
+  "kept_tracked_historical": [
+    "/bin/ocel-quickjs",
+    "/bin/tier2-smoke",
+    "/bin/tier2-exploit",
+    "/POLICY.BIN",
+    "/data/*",
+    "/etc/cellos/{services,system}.toml",
+    "init (embedded)"
+  ],
+  "non_pristine": true,
+  "purpose": "S10-9.3 B2 desktop v2: services rebuilt from source at the commit instead of tracked historical bytes (reverses S10-7.1 deviation 2)",
+  "rebuilt_from_source_and_signed": {
+    "app-chrome": "/bin/chrome",
+    "app-shell": "/bin/shell",
+    "cat": "/bin/cat",
+    "desktop": "/bin/desktop",
+    "driver-ahci": "/bin/ahci",
+    "driver-e1000": "/bin/e1000",
+    "driver-igb": "/bin/igb",
+    "driver-nvme": "/bin/nvme",
+    "driver-serial-x86": "/bin/serial",
+    "driver-xhci": "/bin/xhci",
+    "echo": "/bin/echo",
+    "fb-console": "/bin/fb-console",
+    "files": "/bin/files",
+    "kill": "/bin/kill",
+    "ls": "/bin/ls",
+    "ocel-desktop": "/bin/ocel",
+    "ps": "/bin/ps",
+    "service-compositor": "/bin/compositor",
+    "service-config": "/bin/config",
+    "service-input": "/bin/input",
+    "service-net-qemu-dev-https": "/bin/net",
+    "service-platform": "/bin/platform",
+    "service-sshd": "/bin/sshd",
+    "service-vfs": "/bin/vfs",
+    "terminal": "/bin/terminal"
+  },
+  "static_verification": {
+    "checks": 82,
+    "file": "static-verification.json",
+    "ok": true,
+    "passed": 82
+  },
+  "tool_versions": {
+    "cargo": "cargo 1.97.0-nightly (eb9b60f1f 2026-04-24)\n",
+    "python": "3.12.3",
+    "qemu": "QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.17)",
+    "rustc": "rustc 1.97.0-nightly (f53b654a8 2026-04-30)\nbinary: rustc\ncommit-hash: f53b654a8882fd5fc036c4ca7a4ff41ce32497a6\ncommit-date: 2026-04-30\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0-nightly\nLLVM version: 22.1.4\n",
+    "xorriso": "xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project."
+  },
+  "worktree": "/tmp/cellbox-s10-7/worktree"
+}

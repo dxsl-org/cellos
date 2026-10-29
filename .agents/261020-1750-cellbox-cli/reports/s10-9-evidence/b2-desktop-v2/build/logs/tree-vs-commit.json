@@ -1,0 +1,15 @@
+{
+  "commit": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+  "tracked_blobs_compared": 9020,
+  "differing_from_commit": [
+    "Cargo.lock",
+    "Cargo.toml"
+  ],
+  "explained_by": [
+    "b2-manifest.patch -> Cargo.toml",
+    "b2-lock.patch -> Cargo.lock"
+  ],
+  "patched_files_equal_commit_plus_patches": true,
+  "embedded_kernel_fs_img_sha256": "a4cba963e6bff4c39e0716ca036d6f7b1325499a357a04771e2a2927cd5ef5f3",
+  "embedded_init_sha256": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104"
+}

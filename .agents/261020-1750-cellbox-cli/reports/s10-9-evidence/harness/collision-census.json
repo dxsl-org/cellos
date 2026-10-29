@@ -1,0 +1,341 @@
+{
+  "schema": "cellos.s10-9.collision-census/1",
+  "question": "names defined by new S10-9 classes vs threading.Thread, Observer, CoordinatedObserver, HookObserver, Machine, RspClient/DiagnosticClient/RecurringClient/AtomicClient (whole MROs)",
+  "method": "class __dict__ members + AST `self.<x> =` assignments in every function; base side: dir() plus the same AST over the whole MRO",
+  "base_name_counts": {
+    "threading.Thread": 57,
+    "observer.Observer": 105,
+    "coordinated.CoordinatedObserver": 106,
+    "hook_observer.HookObserver": 119,
+    "common.Machine": 47,
+    "phase10_canonical_drive.Machine": 39,
+    "rsp.RspClient": 75,
+    "diagnostic.DiagnosticClient": 79,
+    "recurring.RecurringClient": 87,
+    "run_atomic.AtomicClient": 92
+  },
+  "new_classes": {
+    "s109_credit.LatencyWait": {
+      "class": "s109_credit.LatencyWait",
+      "defined": {
+        "members": [
+          "__init__",
+          "active",
+          "credited_ns",
+          "finish"
+        ],
+        "instance_attributes": [
+          "base_deadline_ns",
+          "began_ns",
+          "budget_ns",
+          "capped_by",
+          "effective_deadline_ns",
+          "evaluated_pause_ns",
+          "global_deadline_ns",
+          "original_10s_deadline_ns",
+          "pause",
+          "pause_now_ns",
+          "pause_start_ns",
+          "record"
+        ]
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": [
+        "__init__"
+      ]
+    },
+    "s109_credit.LatencyRecoveryMixin": {
+      "class": "s109_credit.LatencyRecoveryMixin",
+      "defined": {
+        "members": [
+          "_credit_start"
+        ],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s109_run.AtomicHeadlessClient": {
+      "class": "s109_run.AtomicHeadlessClient",
+      "defined": {
+        "members": [],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s109_run.LatencyDesktopSurface": {
+      "class": "s109_run.LatencyDesktopSurface",
+      "defined": {
+        "members": [],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s109_run.LatencyHeadlessSurface": {
+      "class": "s109_run.LatencyHeadlessSurface",
+      "defined": {
+        "members": [],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    }
+  },
+  "unintended_new": {},
+  "surface_chain_overrides": {
+    "s109_run.LatencyDesktopSurface": [],
+    "s109_run.LatencyHeadlessSurface": []
+  },
+  "surface_chain_unintended": {},
+  "latency_wait_factory_replaces_s108_factory_only": true,
+  "s108_classes_informational": {
+    "s108_memory.MemoryMixin": {
+      "class": "s108_memory.MemoryMixin",
+      "defined": {
+        "members": [
+          "SKIP_SNAPSHOT_NAMES",
+          "__init__",
+          "_entry",
+          "_memory_entry",
+          "_memory_snapshot",
+          "_snapshot",
+          "_wiring_stop",
+          "write_results"
+        ],
+        "instance_attributes": [
+          "memory",
+          "memory_entries",
+          "memory_failure",
+          "memory_records"
+        ]
+      },
+      "collisions": {
+        "__init__": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Machine",
+            "coordinated.CoordinatedObserver",
+            "diagnostic.DiagnosticClient",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "recurring.RecurringClient",
+            "rsp.RspClient",
+            "run_atomic.AtomicClient",
+            "threading.Thread"
+          ]
+        },
+        "_entry": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "_snapshot": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "write_results": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        }
+      },
+      "intentional_overrides": [
+        {
+          "name": "__init__",
+          "bases": [
+            "common.Machine",
+            "coordinated.CoordinatedObserver",
+            "diagnostic.DiagnosticClient",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "recurring.RecurringClient",
+            "rsp.RspClient",
+            "run_atomic.AtomicClient",
+            "threading.Thread"
+          ],
+          "reason": "constructor extension, chains to the retained observer constructor",
+          "chains_to_super": true
+        },
+        {
+          "name": "_entry",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "reason": "adds the entry-stop memory record after the retained entry handling",
+          "chains_to_super": true
+        },
+        {
+          "name": "_snapshot",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "reason": "adds the memory record after the retained snapshot handling",
+          "chains_to_super": true
+        },
+        {
+          "name": "write_results",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "reason": "adds memory-summary.json after the retained result writer",
+          "chains_to_super": true
+        }
+      ],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s108_run.MemoryHookObserver": {
+      "class": "s108_run.MemoryHookObserver",
+      "defined": {
+        "members": [
+          "SKIP_SNAPSHOT_NAMES"
+        ],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s108_run.MemoryPlainObserver": {
+      "class": "s108_run.MemoryPlainObserver",
+      "defined": {
+        "members": [
+          "SKIP_SNAPSHOT_NAMES"
+        ],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s108_credit.PauseSource": {
+      "class": "s108_credit.PauseSource",
+      "defined": {
+        "members": [
+          "__init__",
+          "read"
+        ],
+        "instance_attributes": [
+          "last",
+          "observer"
+        ]
+      },
+      "collisions": {
+        "observer": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "diagnostic.DiagnosticClient",
+            "recurring.RecurringClient",
+            "run_atomic.AtomicClient"
+          ]
+        }
+      },
+      "intentional_overrides": [],
+      "unintended": [
+        {
+          "name": "observer",
+          "bases": [
+            "diagnostic.DiagnosticClient",
+            "recurring.RecurringClient",
+            "run_atomic.AtomicClient"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        }
+      ],
+      "standalone_helper_dunders_not_overrides": [
+        "__init__"
+      ]
+    },
+    "s108_credit.CreditedWait": {
+      "class": "s108_credit.CreditedWait",
+      "defined": {
+        "members": [
+          "__init__",
+          "active",
+          "credited_ns",
+          "finish"
+        ],
+        "instance_attributes": [
+          "base_deadline_ns",
+          "began_ns",
+          "capped_by",
+          "effective_deadline_ns",
+          "evaluated_pause_ns",
+          "global_deadline_ns",
+          "pause",
+          "pause_now_ns",
+          "pause_start_ns",
+          "phase_deadline_ns",
+          "record"
+        ]
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": [
+        "__init__"
+      ]
+    }
+  },
+  "s108_collisions_found": {
+    "s108_credit.PauseSource": [
+      {
+        "name": "observer",
+        "bases": [
+          "diagnostic.DiagnosticClient",
+          "recurring.RecurringClient",
+          "run_atomic.AtomicClient"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      }
+    ]
+  },
+  "s108_collisions_note": "informational, not gating: S10-8 standalone helpers are never part of any censused MRO (e.g. PauseSource.observer is an attribute of a helper object, not of a client/observer subclass); the widened RSP-client registry is what newly lists it",
+  "empty": true
+}

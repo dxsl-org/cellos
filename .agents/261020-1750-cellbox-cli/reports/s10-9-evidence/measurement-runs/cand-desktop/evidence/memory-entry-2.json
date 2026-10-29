@@ -1,0 +1,61 @@
+{
+  "label": "foreground-terminal#2",
+  "user_stack": {
+    "bottom": 45285376,
+    "top": 45350912,
+    "pages": 16,
+    "source": "entry-stop rsp page + present-page run + guard pages absent"
+  },
+  "kernel_stack": {
+    "bottom": 45211648,
+    "top": 45277184,
+    "pages": 16,
+    "kernel_rsp": 45276896,
+    "tss_rsp0": 45276896,
+    "owner_check": {
+      "sepc": 4697620480,
+      "regs2": 45350912,
+      "iretq_rip": 4697620480,
+      "iretq_cs": 35,
+      "iretq_rsp": 45350912,
+      "iretq_ss": 27,
+      "note": "sepc/regs[2] are required; the iretq words are recorded evidence only"
+    },
+    "cpu_locals_va": 18446744071590363392,
+    "tss_va": 18446744071590358916,
+    "source": "CPU_LOCALS[0].kernel_rsp == TSS.rsp0 at the entry stop; top-kernel_rsp == 288 (trap frame)"
+  },
+  "initial_rsp": 45350912,
+  "primed_proofs": {
+    "user-stack": {
+      "start": 45285376,
+      "limit": 45350912,
+      "bytes_checked": 65536,
+      "pattern": 165
+    },
+    "kernel-stack": {
+      "start": 45211648,
+      "limit": 45273088,
+      "bytes_checked": 61440,
+      "pattern": 165
+    }
+  },
+  "primed_status": {
+    "user-stack": {
+      "verified": true,
+      "start": 45285376,
+      "limit": 45350912,
+      "bytes_checked": 65536
+    },
+    "kernel-stack": {
+      "verified": true,
+      "start": 45211648,
+      "limit": 45273088,
+      "bytes_checked": 61440
+    }
+  },
+  "proof_scope": "pre-run verify_primed taken at the ENTRY STOP (before the first user instruction); the top page of the kernel stack (trap frame, switch frame) and the user page holding the initial rsp are written by the spawn path before that stop and are excluded from the proof, so a depth below one page cannot be told from untouched.",
+  "ns": 29557094942395,
+  "instance": 2,
+  "role": "foreground-terminal"
+}

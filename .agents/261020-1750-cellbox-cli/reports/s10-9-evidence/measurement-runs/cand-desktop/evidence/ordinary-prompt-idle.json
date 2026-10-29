@@ -1,0 +1,912 @@
+{
+  "name": "ordinary-prompt-idle",
+  "start_ns": 29567065416533,
+  "end_ns": 29577065949351,
+  "target_hz": 10,
+  "samples": [
+    {
+      "monotonic_ns": 29567065880394,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-000.png"
+    },
+    {
+      "monotonic_ns": 29567165961159,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-001.png"
+    },
+    {
+      "monotonic_ns": 29567265964142,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-002.png"
+    },
+    {
+      "monotonic_ns": 29567365957633,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-003.png"
+    },
+    {
+      "monotonic_ns": 29567466011820,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-004.png"
+    },
+    {
+      "monotonic_ns": 29567566002499,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-005.png"
+    },
+    {
+      "monotonic_ns": 29567665967079,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-006.png"
+    },
+    {
+      "monotonic_ns": 29567765967395,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-007.png"
+    },
+    {
+      "monotonic_ns": 29567865960610,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-008.png"
+    },
+    {
+      "monotonic_ns": 29567965979520,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-009.png"
+    },
+    {
+      "monotonic_ns": 29568065959277,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-010.png"
+    },
+    {
+      "monotonic_ns": 29568165961408,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-011.png"
+    },
+    {
+      "monotonic_ns": 29568265964895,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-012.png"
+    },
+    {
+      "monotonic_ns": 29568365962922,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-013.png"
+    },
+    {
+      "monotonic_ns": 29568465961806,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-014.png"
+    },
+    {
+      "monotonic_ns": 29568565955747,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-015.png"
+    },
+    {
+      "monotonic_ns": 29568665970537,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-016.png"
+    },
+    {
+      "monotonic_ns": 29568765973873,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-017.png"
+    },
+    {
+      "monotonic_ns": 29568865970814,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-018.png"
+    },
+    {
+      "monotonic_ns": 29568965968100,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-019.png"
+    },
+    {
+      "monotonic_ns": 29569065960225,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-020.png"
+    },
+    {
+      "monotonic_ns": 29569165951271,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-021.png"
+    },
+    {
+      "monotonic_ns": 29569265966027,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-022.png"
+    },
+    {
+      "monotonic_ns": 29569365959834,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-023.png"
+    },
+    {
+      "monotonic_ns": 29569465962885,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-024.png"
+    },
+    {
+      "monotonic_ns": 29569565963719,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-025.png"
+    },
+    {
+      "monotonic_ns": 29569665962290,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-026.png"
+    },
+    {
+      "monotonic_ns": 29569765967848,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-027.png"
+    },
+    {
+      "monotonic_ns": 29569865959482,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-028.png"
+    },
+    {
+      "monotonic_ns": 29569965975167,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-029.png"
+    },
+    {
+      "monotonic_ns": 29570065960698,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-030.png"
+    },
+    {
+      "monotonic_ns": 29570165966014,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-031.png"
+    },
+    {
+      "monotonic_ns": 29570265971493,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-032.png"
+    },
+    {
+      "monotonic_ns": 29570365966842,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-033.png"
+    },
+    {
+      "monotonic_ns": 29570465967711,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-034.png"
+    },
+    {
+      "monotonic_ns": 29570565959401,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-035.png"
+    },
+    {
+      "monotonic_ns": 29570665969856,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-036.png"
+    },
+    {
+      "monotonic_ns": 29570765964353,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-037.png"
+    },
+    {
+      "monotonic_ns": 29570865964125,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-038.png"
+    },
+    {
+      "monotonic_ns": 29570965968689,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-039.png"
+    },
+    {
+      "monotonic_ns": 29571065968947,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-040.png"
+    },
+    {
+      "monotonic_ns": 29571165955232,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-041.png"
+    },
+    {
+      "monotonic_ns": 29571265977118,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-042.png"
+    },
+    {
+      "monotonic_ns": 29571365959431,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-043.png"
+    },
+    {
+      "monotonic_ns": 29571465957846,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-044.png"
+    },
+    {
+      "monotonic_ns": 29571565957972,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-045.png"
+    },
+    {
+      "monotonic_ns": 29571665956065,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-046.png"
+    },
+    {
+      "monotonic_ns": 29571765966904,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-047.png"
+    },
+    {
+      "monotonic_ns": 29571865956967,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-048.png"
+    },
+    {
+      "monotonic_ns": 29571965963673,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-049.png"
+    },
+    {
+      "monotonic_ns": 29572065965065,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-050.png"
+    },
+    {
+      "monotonic_ns": 29572165973699,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-051.png"
+    },
+    {
+      "monotonic_ns": 29572265958824,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-052.png"
+    },
+    {
+      "monotonic_ns": 29572365957433,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-053.png"
+    },
+    {
+      "monotonic_ns": 29572465976073,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-054.png"
+    },
+    {
+      "monotonic_ns": 29572565957359,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-055.png"
+    },
+    {
+      "monotonic_ns": 29572665948492,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-056.png"
+    },
+    {
+      "monotonic_ns": 29572765970105,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-057.png"
+    },
+    {
+      "monotonic_ns": 29572865966209,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-058.png"
+    },
+    {
+      "monotonic_ns": 29572965966801,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-059.png"
+    },
+    {
+      "monotonic_ns": 29573065967970,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-060.png"
+    },
+    {
+      "monotonic_ns": 29573165966872,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-061.png"
+    },
+    {
+      "monotonic_ns": 29573265963602,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-062.png"
+    },
+    {
+      "monotonic_ns": 29573366012976,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-063.png"
+    },
+    {
+      "monotonic_ns": 29573465960278,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-064.png"
+    },
+    {
+      "monotonic_ns": 29573565958457,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-065.png"
+    },
+    {
+      "monotonic_ns": 29573665983392,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-066.png"
+    },
+    {
+      "monotonic_ns": 29573765962531,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-067.png"
+    },
+    {
+      "monotonic_ns": 29573865959070,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-068.png"
+    },
+    {
+      "monotonic_ns": 29573965952597,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-069.png"
+    },
+    {
+      "monotonic_ns": 29574065957950,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-070.png"
+    },
+    {
+      "monotonic_ns": 29574165960529,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-071.png"
+    },
+    {
+      "monotonic_ns": 29574265968434,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-072.png"
+    },
+    {
+      "monotonic_ns": 29574365957904,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-073.png"
+    },
+    {
+      "monotonic_ns": 29574465963411,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-074.png"
+    },
+    {
+      "monotonic_ns": 29574565963464,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-075.png"
+    },
+    {
+      "monotonic_ns": 29574665966946,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-076.png"
+    },
+    {
+      "monotonic_ns": 29574765970405,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-077.png"
+    },
+    {
+      "monotonic_ns": 29574865954797,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-078.png"
+    },
+    {
+      "monotonic_ns": 29574965954738,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-079.png"
+    },
+    {
+      "monotonic_ns": 29575065958800,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-080.png"
+    },
+    {
+      "monotonic_ns": 29575165957382,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-081.png"
+    },
+    {
+      "monotonic_ns": 29575265968553,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-082.png"
+    },
+    {
+      "monotonic_ns": 29575365957791,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-083.png"
+    },
+    {
+      "monotonic_ns": 29575465950749,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-084.png"
+    },
+    {
+      "monotonic_ns": 29575565955349,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-085.png"
+    },
+    {
+      "monotonic_ns": 29575665975386,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-086.png"
+    },
+    {
+      "monotonic_ns": 29575765958479,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-087.png"
+    },
+    {
+      "monotonic_ns": 29575865962444,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-088.png"
+    },
+    {
+      "monotonic_ns": 29575965948171,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-089.png"
+    },
+    {
+      "monotonic_ns": 29576065951474,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-090.png"
+    },
+    {
+      "monotonic_ns": 29576166066621,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-091.png"
+    },
+    {
+      "monotonic_ns": 29576265969096,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-092.png"
+    },
+    {
+      "monotonic_ns": 29576365988919,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-093.png"
+    },
+    {
+      "monotonic_ns": 29576465960316,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-094.png"
+    },
+    {
+      "monotonic_ns": 29576566009375,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-095.png"
+    },
+    {
+      "monotonic_ns": 29576665960565,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-096.png"
+    },
+    {
+      "monotonic_ns": 29576765966086,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-097.png"
+    },
+    {
+      "monotonic_ns": 29576865975562,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-098.png"
+    },
+    {
+      "monotonic_ns": 29576965962085,
+      "changed_pixels": 0,
+      "cursor": [
+        9,
+        2
+      ],
+      "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/screens/ordinary-prompt-idle-099.png"
+    }
+  ],
+  "qemu_cpu_ticks_delta": 1021,
+  "host_ticks_per_second": 100,
+  "serial_bytes": 0,
+  "scope": "whole-QEMU CPU incl sampling overhead; content changes not redraw calls"
+}

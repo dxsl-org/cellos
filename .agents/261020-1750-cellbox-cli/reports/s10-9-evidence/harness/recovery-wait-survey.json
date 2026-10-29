@@ -1,0 +1,112 @@
+{
+  "purpose": "S10-9.1 survey of every original 10 s recovery wait (re-derived from the retained source; confirms the S10-8 survey)",
+  "recovery_waits_latency_recorded": [
+    [
+      "new interrupt prompt",
+      10
+    ],
+    [
+      "runtime new GUI prompt",
+      10
+    ]
+  ],
+  "survey_of_retained_waits_label_timeout_s": {
+    "common.Surface": [
+      [
+        "Terminal surface",
+        300
+      ],
+      [
+        "desktop ready",
+        900
+      ],
+      [
+        "exact initial idle prompt prefix",
+        900
+      ],
+      [
+        "live JSON terminal stream",
+        120
+      ],
+      [
+        "new interrupt prompt",
+        10
+      ],
+      [
+        "runtime live JSON terminal stream",
+        120
+      ],
+      [
+        "runtime new GUI prompt",
+        10
+      ],
+      [
+        "runtime top title bar",
+        180
+      ],
+      [
+        "top real cell row",
+        120
+      ]
+    ],
+    "HookSurface": [
+      [
+        "Terminal surface",
+        300
+      ],
+      [
+        "desktop ready",
+        900
+      ]
+    ],
+    "CoordinatedSurface": [],
+    "TemporalSurface": [
+      [
+        "Terminal surface",
+        300
+      ],
+      [
+        "desktop ready",
+        900
+      ]
+    ]
+  },
+  "ten_second_waits_found": [
+    [
+      "new interrupt prompt",
+      10
+    ],
+    [
+      "runtime new GUI prompt",
+      10
+    ]
+  ],
+  "other_original_10s_recovery_waits": "none: the only 10 s waits in common.Surface/HookSurface/CoordinatedSurface/TemporalSurface are the two above",
+  "interrupt_call_sites_in_common.Surface(each goes through the two waits, headless via Surface.wait, desktop via gui_fresh->Desk.wait_for)": [
+    "result=self.sample_idle('interactive-top-idle');result['interrupt']=self.interrupt(before);return result",
+    "self.snapshot('collected-cat-buffered');cat_cancel=self.interrupt(before);self.quiescent();self.snapshot('collected-cat-cancelled')",
+    "live_ns=time.monotonic_ns();self.pause(10);self.snapshot('terminal-stream-live');cancel=self.interrupt(before);self.quiescent();self.snapshot('terminal-stream-cancelled')",
+    "self.phase('rg-large');before=self.submit('rg -F p10-literal-that-occurs-nowhere-0123456789 /mnt/sd/rg/big.log');self.pause(3);rg=self.interrupt(before);self.snapshot('rg-cancelled')"
+  ],
+  "recoveries": [
+    "interactive top Ctrl-C (headless top interrupt; desktop interactive-top-idle)",
+    "collected-cat Ctrl-C",
+    "terminal-stream Ctrl-C",
+    "rg-large Ctrl-C"
+  ],
+  "fixed_pause_durations_s_not_deadlines": [
+    2,
+    3,
+    4,
+    10
+  ],
+  "unchanged_deadlines": {
+    "command_s": 120,
+    "status_s": 60,
+    "total_window_s": 900,
+    "status_after_recovery": true
+  },
+  "new_rule": "effective_deadline = min(start + 120 s + pause_in_wait, machine_start + 900 s); outcome/time_to_prompt/credited pause recorded; recovery_10s_criterion = not_evaluated",
+  "interrupt_source": "    def interrupt(self,before):\n        stamp=time.monotonic_ns()\n        if self.d:self.d.ctrl_c();rows=self.gui_fresh()\n        else:\n            self.sh.send(b'\\x03');self.wait(lambda:self.sh.idle(count=before[0]+1),10,'new interrupt prompt');rows=[]\n        recovered=time.monotonic_ns();status=self.status();need(status==130,f'interrupt status {status}')\n        return {'ctrl_c_ns':stamp,'prompt_ns':recovered,'ctrl_c_to_prompt_ms':(recovered-stamp)/1e6,'status':status,'rows':rows}\n",
+  "gui_fresh_source": "    def gui_fresh(self):\n        d=self.d\n        def pred(img):\n            got=d.read_screen(img)\n            if got:\n                rows,cursor=got\n                if rows and rows[-1]==D.PROMPT.rstrip() and cursor==(len(D.PROMPT),len(rows)-1):return got\n        img,got=d.wait_for(pred,'runtime new GUI prompt',10,interval=.1)\n        rows,cursor=got;d.model[:]=rows[:-1]+[D.PROMPT];d.state['img']=img;d.shot('recovered',img);return rows\n"
+}

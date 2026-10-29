@@ -1,0 +1,88 @@
+{
+  "scope": "Every offline iteration before the go decision, recorded honestly. None involved a VM, QEMU, guest, network or prior-archive write. Individual module runs were development runs and are NOT the gate; the gate is gate-attempts/attempt-01 (ONE invocation, PASS).",
+  "iterations": [
+    {
+      "n": 1,
+      "what": "s109_census.py first run",
+      "result": "empty (OK)",
+      "note": "widening the registry to the RSP client MROs newly lists the S10-8 standalone helper attribute PauseSource.observer as informational (not gating, documented in the census); one editing slip while adding that note replaced the wrong dict line and was repaired in the next edit before any further run"
+    },
+    {
+      "n": 2,
+      "what": "s109_rsp_replay classify() first run (development)",
+      "result": "verdict CONFIRMED; old client loses in late-wake window 82..163 us, atomic client delivers in all 401 cases",
+      "note": "the first draft of the module (never executed) had placeholder code and a scanner that dropped the rows following a frame; both rewritten before this run (streaming scanner with per-window rows)"
+    },
+    {
+      "n": 3,
+      "what": "s109_rsp_replay classify() with overhead variants",
+      "result": "CONFIRMED; windows shift with the inter-poll overhead (0/20/100/150 us) and the atomic client never loses"
+    },
+    {
+      "n": 4,
+      "what": "s109_stack_baseline.py first run (no write)",
+      "result": "26 entries / 72 observations, completeness scan complete, cross-checks all true"
+    },
+    {
+      "n": 5,
+      "what": "test_s109_credit first run",
+      "result": "34 OK"
+    },
+    {
+      "n": 6,
+      "what": "test_s109_wiring first run",
+      "result": "18 tests: 3 FAIL + 2 ERROR (all test-side: `_ack_frame` is not an RspClient attribute; joining an unstarted observer thread; journal contains `state` rows; atomic fixture makes 1 receive call, not 2)",
+      "fix": "test assertions corrected; no production change"
+    },
+    {
+      "n": 7,
+      "what": "test_s109_wiring second and third runs",
+      "result": "18 OK; second run showed ResourceWarnings from the retained Observer constructor journals; test closes them; third run with -W error::ResourceWarning: 18 OK"
+    },
+    {
+      "n": 8,
+      "what": "test_s109_rsp_replay first run",
+      "result": "31 OK (a placeholder expression in one assertion had been replaced before the first execution)"
+    },
+    {
+      "n": 9,
+      "what": "test_s109_baseline run via the eval tool",
+      "result": "killed by the eval tool 30 s cell deadline; output lost; re-run in bash (next row)"
+    },
+    {
+      "n": 10,
+      "what": "test_s109_baseline run in bash",
+      "result": "17 tests, 1 ERROR: relative_to() on a temp path in build_table",
+      "fix": "rel() helper (relative if under reports/, else absolute) in s109_stack_baseline.py; parse_line now returns None for a non-integer value (reported as malformed) instead of raising; 17 OK on the next run"
+    },
+    {
+      "n": 11,
+      "what": "test_s109_census first run",
+      "result": "11 tests, 1 FAIL: negative control built a super-chained override via a dynamic function whose source has `super(Chained, self)`",
+      "fix": "negative control rewritten as a real class named MemoryMixin with zero-arg super(); 11 OK"
+    },
+    {
+      "n": 12,
+      "what": "test_s109_gonogo run via the eval tool",
+      "result": "killed by the eval tool 30 s cell deadline; output lost; re-run in bash (next row)"
+    },
+    {
+      "n": 13,
+      "what": "test_s109_gonogo run in bash",
+      "result": "31 tests, 2 FAIL (test-side): frozen-file-count lower bound 100 vs actual 80; set of evidence-path readers omitted s109_env.py (docstring) and misjudged the quoting of the other two",
+      "fix": "test assertions corrected; 31 OK on the next run"
+    },
+    {
+      "n": 14,
+      "what": "s109_rsp_replay.py --write, s109_stack_baseline.py --write, s109_census.py --write",
+      "result": "evidence written under reports/s10-9-evidence/"
+    },
+    {
+      "n": 15,
+      "what": "s109_gate.py attempt-01 (the ONE gate invocation)",
+      "result": "PASS: 621 tests, 0 failures, 0 errors, 0 skipped = 268 retained (269 minus 1 excluded) + 35 memory + 91 S10-7.4 + 85 S10-8 + 142 new S10-9 (34 credit, 18 wiring, 31 rsp replay, 17 baseline, 11 census, 31 go/no-go)"
+    }
+  ],
+  "excluded_retained_test": "test_t7_t11_flow.PreservationAndPolicy.test_preflight_defines_every_go_no_go_criterion (S10-4.17 pre-run preflight; false by design now: run token exists, /tmp/cellbox-s10-4 trace and canonical/before.json gone, census rewritten by S10-5). Run alone against the current environment: excluded-retained-test-current-state.txt (FileNotFoundError /tmp/cellbox-s10-4/canonical/before.json). Not mocked.",
+  "source_hashes_frozen_by_the_gate": "frozen-sources-s10-9.sha256 (observer-s10-9 + observer-s10-8 + observer-s10-7 + observer-memory + retained)"
+}

@@ -1,0 +1,93 @@
+{
+  "slice": "S10-9.3",
+  "status": "BUILT; non-hooks smoke READY; hooks smoke READY",
+  "commit": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+  "build_artifacts": "/tmp/cellbox-s10-7/b2-image-v2/ (hashes in build/manifest.json)",
+  "static_verification": {
+    "checks": 82,
+    "file": "static-verification.json",
+    "ok": true,
+    "passed": 82
+  },
+  "boot_sets": {
+    "non-hooks": {
+      "init": "desktop-init",
+      "iso": "desktop-cellos-x86_64-desktop.iso",
+      "kernel": "desktop-kernel.elf",
+      "kernel_fs": "desktop-kernel_fs.img",
+      "qcow2": "desktop-cellos-x86_64-desktop.qcow2",
+      "sha256": {
+        "init": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104",
+        "iso": "f4e12ae83722f860ea3ff6ea5ffd907d3425472670f57a908254bba55c7eeeec",
+        "kernel": "486d1883665d7667c6ffbcefdea3858e82ab8b75ffc379d037f3c4a7adc44f8c",
+        "kernel_fs": "b05ab5e197b6c9a4bbf4e7d703e77536e57dc6c4a0d001980904a342e9d463cd",
+        "qcow2": "a5ac6ad51aae9231e77294c090bd654091a2973cb1b1dfa2f3ff6a0797201f2c"
+      }
+    },
+    "test-hooks": {
+      "init": "desktop-init",
+      "iso": "desktop-test-hooks-cellos-x86_64-desktop.iso",
+      "kernel": "desktop-test-hooks-kernel.elf",
+      "kernel_fs": "desktop-kernel_fs.img",
+      "qcow2": "desktop-test-hooks-cellos-x86_64-desktop.qcow2",
+      "sha256": {
+        "init": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104",
+        "iso": "cf134c7af9da1a4ec881e90d7222e1b02ca71de8e4da954d79c3794b7c7b42ba",
+        "kernel": "de5c9662202b805278ff3366bd4fbb2fdea84547b7e2a2f983a36809b091dc83",
+        "kernel_fs": "b05ab5e197b6c9a4bbf4e7d703e77536e57dc6c4a0d001980904a342e9d463cd",
+        "qcow2": "0f8ea10d14c6985c11991432e475937a72d67f292de8b39d947ee7d78393b1c8"
+      }
+    }
+  },
+  "smoke_nonhooks": {
+    "status": "READY",
+    "reason": "",
+    "wall_time_to_ready_s": 12.76,
+    "wall_time_total_s": 16.78,
+    "serial_bytes": 22754,
+    "serial_sha256": "ce2d2ea797d0b82db3afd257227646abe46215b1215465eb8cb3f6b1135e29ad",
+    "disk_source": "/tmp/cellbox-s10-7/b2-image-v2/desktop-cellos-x86_64-desktop.qcow2",
+    "disk_source_sha256": "a5ac6ad51aae9231e77294c090bd654091a2973cb1b1dfa2f3ff6a0797201f2c",
+    "ready_line": [
+      "USER: [desktop] Ready. Entering event loop."
+    ],
+    "panic": [],
+    "OOM": [],
+    "FAIL_lines": [
+      "[ERROR] [selftest] COMPLETION-QUEUE: FAIL \u2014 an older waiter erased its replacement",
+      "[ERROR] [selftest] COMPLETION-QUEUE: FAIL",
+      "[INFO] completion-queue self-test FAIL"
+    ]
+  },
+  "smoke_hooks": {
+    "status": "READY",
+    "reason": "",
+    "wall_time_to_ready_s": 15.02,
+    "wall_time_total_s": 19.04,
+    "serial_bytes": 42678,
+    "serial_sha256": "9451bdd0d04093326305f06af71de7d6dcd9b65eeaf48e215b4328b214ef4e81",
+    "disk_source": "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.qcow2",
+    "disk_source_sha256": "0f8ea10d14c6985c11991432e475937a72d67f292de8b39d947ee7d78393b1c8",
+    "ready_line": [
+      "USER: [desktop] Ready. Entering event loop."
+    ],
+    "panic": [],
+    "OOM": [],
+    "FAIL_lines": [
+      "[ERROR] [selftest] COMPLETION-QUEUE: FAIL \u2014 an older waiter erased its replacement",
+      "[ERROR] [selftest] COMPLETION-QUEUE: FAIL",
+      "[INFO] completion-queue self-test FAIL",
+      "[ERROR] X86-VMM-SMOKE: FAIL e1=Preempted e2=Preempted"
+    ]
+  },
+  "authorized_deltas_applied": [
+    "b2-manifest.patch",
+    "b2-lock.patch",
+    "F1 scoped-signing exception (scoped mirror root; whole-workspace F1 still refuses)"
+  ],
+  "deltas_beyond_authorized": [],
+  "no_measurement_run": true,
+  "no_retry": true,
+  "run_desktop_sh_executed": false,
+  "package_desktop_x86_py_executed": false
+}

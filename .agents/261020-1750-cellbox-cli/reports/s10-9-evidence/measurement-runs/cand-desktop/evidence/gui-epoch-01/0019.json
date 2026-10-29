@@ -1,0 +1,26 @@
+{
+  "index": 19,
+  "monotonic_ns": 29631589222587,
+  "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s109-58298f/vm/evidence/gui-epoch-01/0019.png",
+  "exact_read": [
+    [
+      "",
+      "=== Cellos shell ready \u2014 type 'help' for commands ===",
+      "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+    ],
+    [
+      0,
+      3
+    ]
+  ],
+  "gating": false,
+  "accepted": false,
+  "oracle": {
+    "status": "PENDING",
+    "code": "quiescence",
+    "reason": null,
+    "cls": null,
+    "prompt": true,
+    "last_hit_ns": 29630642521845
+  }
+}

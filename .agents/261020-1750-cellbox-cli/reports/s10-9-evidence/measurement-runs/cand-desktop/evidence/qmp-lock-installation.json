@@ -1,0 +1,15 @@
+{
+  "actual_qmp_object_id": 139131700762848,
+  "shared_lock_id": 139131711495808,
+  "lock": "threading.RLock",
+  "source_binding": {
+    "verified": true,
+    "binary_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+    "version": "1:8.2.2+ds-0ubuntu1.17",
+    "proof_sha256": "de42153d85b858cb47a17df7d2186b140aef4e57c15c35f056a7d118707137e1",
+    "next_protocol_sha256": "663a6f5ade81c40c066bcb598fb5c6ae42dec3a31ee0a268111dff72490e6db9",
+    "zero_prefix_scope": "Only events of the exact structured VM-not-running rejected batch; not earlier accepted batches"
+  },
+  "input_budget_seconds": 5,
+  "max_input_attempts_per_batch": 64
+}

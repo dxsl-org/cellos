@@ -1,0 +1,74 @@
+{
+  "task": "S10-9 CP1 approved (D9-1=B, D9-2 both sets once, D9-3=yes, D9-4 no further rerun); this record covers S10-9.0, 9.1, 9.2 only (OFFLINE: no VM/QEMU started, no run token consumed)",
+  "code_dir": "reports/s10-4-evidence/runtime/observer-s10-9/ (new; observer-s10-7, observer-s10-8, observer-memory, observer-rsp-atomic and every retained file untouched: frozen-source and prior-archive checks pass)",
+  "verdict_9_0a": {
+    "verdict": "CONFIRMED",
+    "summary": "receive-race attribution CONFIRMED (to the same ceiling as S10-4.14: the swallowed first poll exception is not logged)",
+    "evidence": "s10-9.0a-rsp-classification/classification.json"
+  },
+  "stack_baseline_9_0b": "s10-9.0b-stack-baseline/stack-baseline-table.json: 26 entries, 72 observations, boot-phase only",
+  "recovery_wait_rule_9_1": {
+    "effective_deadline": "min(start + 120 s + pause_in_wait, machine_start + 900 s)",
+    "interpretation_disclosed": "D9-1=B text \"up to 120 s (retained phase cap) of observer-credited wall time\" implemented as 120 s of wall time minus the observer pause credited inside that wait (S10-8 accounting), i.e. the credit is NOT capped at 120 s of wall time as in S10-8, only by the unchanged 900 s window; if the user meant a 120 s hard wall cap this is a deviation to confirm",
+    "recorded": [
+      "time_to_prompt_s",
+      "pause_measured_in_wait_ns",
+      "pause_credited_ns",
+      "time_to_prompt_minus_measured_pause_s (upper bound)",
+      "effective_deadline_ns",
+      "effective_timeout_s",
+      "outcome"
+    ],
+    "recovery_10s_criterion": "not_evaluated",
+    "no_prompt_within_budget": "Stop as before"
+  },
+  "headless_rsp_client_9_1": "AtomicHeadlessClient = run_atomic AtomicReceiveMixin over the retained RecurringClient, created only through s109_run.headless_client; desktop unchanged (RET.F.AtomicClient)",
+  "gate_9_2": {
+    "attempt": "gate-attempts/attempt-01",
+    "tests_run": 621,
+    "components": {
+      "retained": 268,
+      "memory": 35,
+      "s10_7": 91,
+      "s10_8": 85,
+      "new_s10_9": 142
+    },
+    "excluded": "1 stale S10-4.17 pre-run preflight test (disclosed, run alone in excluded-retained-test-current-state.txt, not mocked)",
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "go_no_go": "go-no-go.json: go true for cand-headless and cand-desktop (frozen retained 43 / S10-7 66 / S10-8 80 files, 25 prior archives, 7 prior evidence manifests, 546-path census explained-only, gate PASS with 97 frozen files, collision census empty, per-set kernel/ISO/init/kernel_fs hashes, test-hooks provenance, private I/O argv, inputs, QEMU identity)",
+  "set_hashes": {
+    "cand-headless": {
+      "kernel": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "control_kernel": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+      "iso": "b534c7512b844a8d05a360e5c5e9b04fce58803aefb04c5fc93f77f4fe215563",
+      "kernel_fs_img": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+      "init": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab"
+    },
+    "cand-desktop": {
+      "kernel": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+      "control_kernel": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a",
+      "iso": "52f51a9cc49b2e14e2591a3f76ea6d6bd76651178721420281f93ec3cf898a49",
+      "kernel_fs_img": "3848cefb25f0e7c4abc67feccf3d8886292e25da60a88b4633552651292479ec",
+      "init": "c0bd14580fda0d697a2edd66b19168107fa6877a190bc06c1a8a482b467b23f3"
+    }
+  },
+  "run_tokens_NOT_consumed": [
+    "RUN_CONSUMED-s109-cand-headless",
+    "RUN_CONSUMED-s109-cand-desktop"
+  ],
+  "run_commands": {
+    "cand-headless": {
+      "preflight": "cd reports/s10-4-evidence/runtime/observer-s10-9 && PYTHONDONTWRITEBYTECODE=1 python3 -B run_cand_headless.py --preflight",
+      "run": "PYTHONDONTWRITEBYTECODE=1 python3 -B run_cand_headless.py --run"
+    },
+    "cand-desktop": {
+      "preflight": "PYTHONDONTWRITEBYTECODE=1 python3 -B run_cand_desktop.py --preflight",
+      "run": "PYTHONDONTWRITEBYTECODE=1 python3 -B run_cand_desktop.py --run"
+    },
+    "order": "headless first, then desktop, strictly one VM at a time; --run re-evaluates the go/no-go, claims RUN_CONSUMED-s109-<set> with O_EXCL BEFORE any VM exists, saves census-before.json/census-after.json (546 paths) and archives under reports/s10-9-evidence/measurement-runs/<set>/"
+  },
+  "not_done": "S10-9.3 (b2-desktop rebuild/smokes) and S10-9.4 runs are separate steps; nothing was committed or pushed"
+}

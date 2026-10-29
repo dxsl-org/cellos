@@ -1,0 +1,1904 @@
+{
+  "set": "cand-headless",
+  "profile": "headless",
+  "status": "COMPLETE",
+  "candidate_runs": 1,
+  "mode": "S10-9-headless-memory-armed-latency-recovery",
+  "start_ns": 29309310784391,
+  "original_window_seconds": 900,
+  "command_deadlines_unchanged": true,
+  "deadlines": {
+    "command_s": 120,
+    "status_s": 60,
+    "total_window_s": 900
+  },
+  "recovery_wait_policy": {
+    "decision": "D9-1=B (approved 2026-10-29): latency-recording recovery waits",
+    "applies_to": [
+      "headless: Surface.wait(label=new interrupt prompt, 10 s original)",
+      "desktop: Desk.wait_for(what=runtime new GUI prompt, 10 s original)"
+    ],
+    "covered_recoveries": [
+      "collected-cat Ctrl-C",
+      "terminal-stream Ctrl-C",
+      "rg-large Ctrl-C",
+      "interactive top Ctrl-C (all four go through the two waits above)"
+    ],
+    "effective_deadline": "min(start + 120 s + pause_in_wait, machine_start + 900 s)",
+    "interpretation": "120 s = retained phase cap (command_s) measured as observer-pause-credited wall time (wall minus completed observer pause intervals); unlike S10-8 there is no 120 s hard wall-clock cap on the credited wait, only the unchanged 900 s window",
+    "pause_accounting": "Observer.pause_ns difference (retained: sum of completed _stopped-handling intervals), same as S10-8",
+    "recorded": [
+      "time_to_prompt_s (wall)",
+      "pause_measured_in_wait_ns / pause_credited_ns",
+      "time_to_prompt_minus_measured_pause_s (upper bound)",
+      "effective_deadline_ns / effective_timeout_s",
+      "outcome"
+    ],
+    "recovery_10s_criterion": "not_evaluated",
+    "no_prompt_within_budget": "stops the run as before (Stop: timeout ...)",
+    "global_window_s": 900,
+    "unchanged": [
+      "120 s finite/command wait",
+      "60 s status wait",
+      "180/240/300/900 s boot and drawing waits",
+      "every pause(N) observation duration"
+    ],
+    "ceiling": "the product 10 s recovery criterion is NOT EVALUATED by these runs (never met, never failed); recorded numbers are observer-throttled QEMU/TCG test-hooks guest numbers and support no product-latency claim"
+  },
+  "recovery_10s_criterion": "not_evaluated",
+  "rsp_client": "AtomicHeadlessClient (AtomicReceiveMixin over RecurringClient)",
+  "qemu_pid": 74797,
+  "argv": [
+    "qemu-system-x86_64",
+    "-machine",
+    "q35",
+    "-accel",
+    "tcg",
+    "-cpu",
+    "qemu64,+pdpe1gb",
+    "-m",
+    "256M",
+    "-display",
+    "none",
+    "-chardev",
+    "socket,id=ser0,path=/tmp/cellbox-s10-7/measure/cand-headless/run-s109-4b28f7/vm/sock/measurement-serial.sock,server=on,wait=off",
+    "-serial",
+    "chardev:ser0",
+    "-qmp",
+    "unix:/tmp/cellbox-s10-7/measure/cand-headless/run-s109-4b28f7/vm/sock/measurement-qmp.sock,server=on,wait=off",
+    "-monitor",
+    "none",
+    "-drive",
+    "file=/tmp/cellbox-s10-7/measure/cand-headless/vicell-x86-test-hooks.iso,media=cdrom,readonly=on,format=raw",
+    "-boot",
+    "d",
+    "-no-reboot",
+    "-netdev",
+    "user,id=net0,restrict=on",
+    "-device",
+    "e1000,netdev=net0",
+    "-drive",
+    "file=/tmp/cellbox-s10-7/measure/cand-headless/run-s109-4b28f7/vm/disk.img,if=none,format=raw,id=p10fx",
+    "-device",
+    "nvme,drive=p10fx,serial=cellosp10",
+    "-chardev",
+    "socket,path=/tmp/cellbox-s10-7/measure/cand-headless/run-s109-4b28f7/vm/sock/gdb.sock,server=on,wait=off,id=gdb0",
+    "-gdb",
+    "chardev:gdb0",
+    "-S",
+    "-D",
+    "/tmp/cellbox-s10-7/measure/cand-headless/run-s109-4b28f7/vm/evidence/qemu-trace.log",
+    "-msg",
+    "timestamp=on",
+    "-trace",
+    "enable=gdbstub_io_command",
+    "-trace",
+    "enable=gdbstub_io_reply",
+    "-trace",
+    "enable=gdbstub_hit_watchpoint",
+    "-trace",
+    "enable=gdbstub_hit_break",
+    "-trace",
+    "enable=breakpoint_singlestep"
+  ],
+  "ordinary_idle": {
+    "name": "ordinary-prompt-idle",
+    "start_ns": 29325287654982,
+    "end_ns": 29335288101667,
+    "target_hz": 10,
+    "samples": [
+      {
+        "monotonic_ns": 29325287955023,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 29325388054746,
+        "serial_bytes": 338
+      },
+      {
+        "monotonic_ns": 29325488053372,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29325588084626,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29325688050978,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29325788049365,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29325888091416,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29325988045815,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29326088052000,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29326188046964,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29326288126521,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29326388057915,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29326488121925,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29326588075817,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29326688057517,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29326788053922,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29326888066971,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29326988051470,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29327088062900,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29327188060418,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29327288045816,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29327388082569,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29327488051915,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29327588049713,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29327688044565,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29327788199559,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29327888043708,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29327988039991,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29328088038450,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29328188049648,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29328288114258,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29328388049526,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29328488051444,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29328588051197,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29328688052925,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29328788054777,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29328888068337,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29328988059211,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29329088042439,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29329188042908,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29329288043933,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29329388039572,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29329488042725,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29329588058135,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29329688073933,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29329788056340,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29329888048498,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29329988046702,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29330088049229,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29330188049282,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29330288041813,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29330388083032,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29330488116280,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29330588061402,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29330688071172,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29330788085141,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29330888101703,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29330988048658,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29331088054228,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29331188047377,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29331288044696,
+        "serial_bytes": 339
+      },
+      {
+        "monotonic_ns": 29331388045851,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29331488040340,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29331588039081,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29331688081858,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29331788175865,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29331888050575,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29331988059671,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29332088049657,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29332188076388,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29332288059488,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29332388065041,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29332488047134,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29332588051480,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29332688064448,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29332788066909,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29332888082949,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29332988066200,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29333088056067,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29333188083118,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29333288077421,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29333388057268,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29333488111333,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29333588048385,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29333688056385,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29333788067662,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29333888057186,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29333988067189,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29334088059300,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29334188070151,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29334288049855,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29334388043518,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29334488110627,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29334588059764,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29334688047194,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29334788050789,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29334888144556,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29334988057954,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29335088062901,
+        "serial_bytes": 402
+      },
+      {
+        "monotonic_ns": 29335188052721,
+        "serial_bytes": 402
+      }
+    ],
+    "qemu_cpu_ticks_delta": 709,
+    "host_ticks_per_second": 100,
+    "serial_bytes": 402,
+    "scope": "whole-QEMU CPU incl sampling overhead; content changes not redraw calls"
+  },
+  "streams": {
+    "collected_cat_submit_ns": 29355963888675,
+    "collected_cat_zero_json_seconds": 10,
+    "collected_cat_cancel": {
+      "ctrl_c_ns": 29366074863129,
+      "prompt_ns": 29367113319333,
+      "ctrl_c_to_prompt_ms": 1038.456204,
+      "status": 130,
+      "rows": []
+    },
+    "flow_submit_ns": 29372667352020,
+    "first_live_observed_ns": 29379687250283,
+    "terminal_stream_cancel": {
+      "ctrl_c_ns": 29389778097436,
+      "prompt_ns": 29390552584671,
+      "ctrl_c_to_prompt_ms": 774.487235,
+      "status": 130,
+      "rows": []
+    },
+    "rg_cancel": {
+      "ctrl_c_ns": 29399191635968,
+      "prompt_ns": 29405201763147,
+      "ctrl_c_to_prompt_ms": 6010.127179,
+      "status": 130,
+      "rows": []
+    },
+    "quiescence_seconds": 4,
+    "fixture_bytes": 7340032,
+    "scope": "Collected cat buffers; no-cat terminal sink streams. Separate contract-correct boundedness measures, not generic throughput."
+  },
+  "top_idle": {
+    "name": "interactive-top-idle",
+    "start_ns": 29442074319449,
+    "end_ns": 29452074516487,
+    "target_hz": 10,
+    "samples": [
+      {
+        "monotonic_ns": 29442074445705,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 29442174531140,
+        "serial_bytes": 512
+      },
+      {
+        "monotonic_ns": 29442274518496,
+        "serial_bytes": 1536
+      },
+      {
+        "monotonic_ns": 29442374535175,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29442474536365,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29442574537442,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29442674535327,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29442774536117,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29442874540517,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29442974552193,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29443074538798,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29443174537050,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29443274537749,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29443374545188,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29443474581057,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29443574528330,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29443674526293,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29443774555886,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29443874634026,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29443974518714,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29444074524396,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29444174549255,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29444274526227,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29444374519141,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29444474515743,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29444574529056,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29444674519849,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29444774575484,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29444874520992,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29444974686159,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29445074519314,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29445174526519,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29445274573564,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29445374539552,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29445474521195,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29445574519969,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29445674522181,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29445774520376,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29445874613534,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29445974568763,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29446074522115,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29446174548104,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29446274521179,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29446374547267,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29446474610321,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29446574531764,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29446674528374,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29446774530610,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29446874546560,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29446974578343,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29447074520062,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29447174616338,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29447274545078,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29447374581445,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29447474516130,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29447574519338,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29447674531570,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29447774522776,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29447874522344,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29447974622819,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29448074529435,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29448174521636,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29448274527637,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29448374582456,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29448474548522,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29448574557754,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29448674522286,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29448774683174,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29448874520565,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29448974522847,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29449074525599,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29449174515274,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29449274551826,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29449374566730,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29449474520194,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29449574521408,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29449674599477,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29449774520587,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29449874523557,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29449974583676,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29450074526128,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29450174529680,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29450274518983,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29450374567194,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29450474549438,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29450574560175,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29450674522513,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29450774522225,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29450874522960,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29450974586392,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29451074664016,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29451174622015,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29451274524346,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29451374544790,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29451474520465,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29451574601225,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29451674561052,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29451774574226,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29451874528451,
+        "serial_bytes": 1837
+      },
+      {
+        "monotonic_ns": 29451974527907,
+        "serial_bytes": 1837
+      }
+    ],
+    "qemu_cpu_ticks_delta": 626,
+    "host_ticks_per_second": 100,
+    "serial_bytes": 1837,
+    "scope": "whole-QEMU CPU incl sampling overhead; content changes not redraw calls",
+    "interrupt": {
+      "ctrl_c_ns": 29452165303160,
+      "prompt_ns": 29478683021406,
+      "ctrl_c_to_prompt_ms": 26517.718246,
+      "status": 130,
+      "rows": []
+    }
+  },
+  "surface_events": [
+    {
+      "phase": "initial-prompt",
+      "monotonic_ns": 29325171950304
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "monotonic_ns": 29325287652855
+    },
+    {
+      "phase": "finite-stream",
+      "monotonic_ns": 29335420085527
+    },
+    {
+      "command": "top --records -d 1 --frames 2 | to jsonl | cat",
+      "name": "finite-stream",
+      "start_ns": 29335420103579,
+      "end_ns": 29354408375662,
+      "rows": [
+        "[net-bridge] NIC driver reply timeout; frame not acknowledged",
+        "{\"frame\":\"begin\",\"sample_id\":2,\"monotonic_ns\":23997168810,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e304a7b9e2e756\",\"interval_ns\":1045360620,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":8,\"total_tasks\":8,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":234041344,\"mem_used_bytes\":81780736,\"mem_free_bytes\":152260608,\"memory_interval\":true}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":8,\"generation\":163,\"root_tid\":10,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2558398930,\"cpu_tenths\":367,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":165,\"root_tid\":12,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":1573785820,\"cpu_tenths\":235,\"cpu_quality\":\"ok\",\"quota_bytes\":18704,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":200103940,\"cpu_tenths\":13,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":162482600,\"cpu_tenths\":6,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":174341010,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3410979190,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2742184,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2867285300,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"serial\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4933184760,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+        "{\"frame\":\"begin\",\"sample_id\":3,\"monotonic_ns\":26082241460,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e304a7b9e2e756\",\"interval_ns\":2085072650,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":8,\"total_tasks\":8,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":234041344,\"mem_used_bytes\":81780736,\"mem_free_bytes\":152260608,\"memory_interval\":true}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":8,\"generation\":163,\"root_tid\":10,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3400955830,\"cpu_tenths\":404,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":165,\"root_tid\":12,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2282742270,\"cpu_tenths\":340,\"cpu_quality\":\"ok\",\"quota_bytes\":18704,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":258667240,\"cpu_tenths\":28,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":186155250,\"cpu_tenths\":11,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":174341010,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3410979190,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2742184,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2867285300,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"serial\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4933184760,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}"
+      ]
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 29354408382944,
+      "end_ns": 29355874847311,
+      "rows": [
+        "echo st=$?",
+        "st=0"
+      ]
+    },
+    {
+      "phase": "endless-collected-cat",
+      "monotonic_ns": 29355963575004
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 29367113332683,
+      "end_ns": 29368558789105,
+      "rows": [
+        "echo st=$?",
+        "st=130"
+      ]
+    },
+    {
+      "phase": "endless-terminal-stream",
+      "monotonic_ns": 29372666963802
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 29390552597020,
+      "end_ns": 29392060170030,
+      "rows": [
+        "echo st=$?",
+        "st=130"
+      ]
+    },
+    {
+      "phase": "rg-large",
+      "monotonic_ns": 29396191264597
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 29405201767077,
+      "end_ns": 29406668256387,
+      "rows": [
+        "echo st=$?",
+        "st=130"
+      ]
+    },
+    {
+      "phase": "interactive-top",
+      "monotonic_ns": 29406765359372
+    },
+    {
+      "phase": "interactive-top-idle",
+      "monotonic_ns": 29442074317180
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 29478683036101,
+      "end_ns": 29480194443440,
+      "rows": [
+        "echo st=$?",
+        "st=130"
+      ]
+    },
+    {
+      "phase": "complete",
+      "monotonic_ns": 29480194469104
+    }
+  ],
+  "timestamps": {
+    "exact_prompt_ns": 29325166369665,
+    "prompt_prefix_end_offset": 43790,
+    "predicate_observed_ns": 29325171949092
+  },
+  "recovery_waits": [
+    {
+      "label": "new interrupt prompt",
+      "phase": "endless-collected-cat",
+      "mode": "latency-recording (D9-1=B)",
+      "original_timeout_s": 10,
+      "budget_s": 120,
+      "global_window_s": 900,
+      "start_ns": 29366074884779,
+      "pause_at_start_ns": 21108917799,
+      "outcome": "satisfied",
+      "recovery_10s_criterion": "not_evaluated",
+      "end_ns": 29367113310964,
+      "waited_s": 1.038426185,
+      "time_to_prompt_s": 1.038426185,
+      "pause_at_end_ns": 22036515607,
+      "pause_at_last_evaluation_ns": 22036515607,
+      "pause_measured_in_wait_ns": 927597808,
+      "pause_credited_ns": 927597808,
+      "time_to_prompt_minus_measured_pause_s": 0.110828377,
+      "unpaused_time_bound": "upper bound: an observer pause interval still in progress when the prompt returned is not subtracted",
+      "original_10s_deadline_ns": 29376074884779,
+      "base_deadline_ns": 29486074884779,
+      "effective_deadline_ns": 29487002482587,
+      "effective_timeout_s": 120.927597808,
+      "capped_by": null,
+      "criterion_note": "the product 10 s recovery criterion is NOT EVALUATED by these runs (never met, never failed); recorded numbers are observer-throttled QEMU/TCG test-hooks guest numbers and support no product-latency claim",
+      "method": "Observer.pause_ns difference (retained: sum of completed _stopped intervals), same accounting as S10-8"
+    },
+    {
+      "label": "new interrupt prompt",
+      "phase": "endless-terminal-stream",
+      "mode": "latency-recording (D9-1=B)",
+      "original_timeout_s": 10,
+      "budget_s": 120,
+      "global_window_s": 900,
+      "start_ns": 29389778130920,
+      "pause_at_start_ns": 34379305531,
+      "outcome": "satisfied",
+      "recovery_10s_criterion": "not_evaluated",
+      "end_ns": 29390552576773,
+      "waited_s": 0.774445853,
+      "time_to_prompt_s": 0.774445853,
+      "pause_at_end_ns": 35045996541,
+      "pause_at_last_evaluation_ns": 35045996541,
+      "pause_measured_in_wait_ns": 666691010,
+      "pause_credited_ns": 666691010,
+      "time_to_prompt_minus_measured_pause_s": 0.107754843,
+      "unpaused_time_bound": "upper bound: an observer pause interval still in progress when the prompt returned is not subtracted",
+      "original_10s_deadline_ns": 29399778130920,
+      "base_deadline_ns": 29509778130920,
+      "effective_deadline_ns": 29510444821930,
+      "effective_timeout_s": 120.66669101,
+      "capped_by": null,
+      "criterion_note": "the product 10 s recovery criterion is NOT EVALUATED by these runs (never met, never failed); recorded numbers are observer-throttled QEMU/TCG test-hooks guest numbers and support no product-latency claim",
+      "method": "Observer.pause_ns difference (retained: sum of completed _stopped intervals), same accounting as S10-8"
+    },
+    {
+      "label": "new interrupt prompt",
+      "phase": "rg-large",
+      "mode": "latency-recording (D9-1=B)",
+      "original_timeout_s": 10,
+      "budget_s": 120,
+      "global_window_s": 900,
+      "start_ns": 29399191648551,
+      "pause_at_start_ns": 37309030670,
+      "outcome": "satisfied",
+      "recovery_10s_criterion": "not_evaluated",
+      "end_ns": 29405201756141,
+      "waited_s": 6.01010759,
+      "time_to_prompt_s": 6.01010759,
+      "pause_at_end_ns": 42493912553,
+      "pause_at_last_evaluation_ns": 42493912553,
+      "pause_measured_in_wait_ns": 5184881883,
+      "pause_credited_ns": 5184881883,
+      "time_to_prompt_minus_measured_pause_s": 0.825225707,
+      "unpaused_time_bound": "upper bound: an observer pause interval still in progress when the prompt returned is not subtracted",
+      "original_10s_deadline_ns": 29409191648551,
+      "base_deadline_ns": 29519191648551,
+      "effective_deadline_ns": 29524376530434,
+      "effective_timeout_s": 125.184881883,
+      "capped_by": null,
+      "criterion_note": "the product 10 s recovery criterion is NOT EVALUATED by these runs (never met, never failed); recorded numbers are observer-throttled QEMU/TCG test-hooks guest numbers and support no product-latency claim",
+      "method": "Observer.pause_ns difference (retained: sum of completed _stopped intervals), same accounting as S10-8"
+    },
+    {
+      "label": "new interrupt prompt",
+      "phase": "interactive-top-idle",
+      "mode": "latency-recording (D9-1=B)",
+      "original_timeout_s": 10,
+      "budget_s": 120,
+      "global_window_s": 900,
+      "start_ns": 29452165321649,
+      "pause_at_start_ns": 78885107233,
+      "outcome": "satisfied",
+      "recovery_10s_criterion": "not_evaluated",
+      "end_ns": 29478683014665,
+      "waited_s": 26.517693016,
+      "time_to_prompt_s": 26.517693016,
+      "pause_at_end_ns": 99616813179,
+      "pause_at_last_evaluation_ns": 99616813179,
+      "pause_measured_in_wait_ns": 20731705946,
+      "pause_credited_ns": 20731705946,
+      "time_to_prompt_minus_measured_pause_s": 5.78598707,
+      "unpaused_time_bound": "upper bound: an observer pause interval still in progress when the prompt returned is not subtracted",
+      "original_10s_deadline_ns": 29462165321649,
+      "base_deadline_ns": 29572165321649,
+      "effective_deadline_ns": 29592897027595,
+      "effective_timeout_s": 140.731705946,
+      "capped_by": null,
+      "criterion_note": "the product 10 s recovery criterion is NOT EVALUATED by these runs (never met, never failed); recorded numbers are observer-throttled QEMU/TCG test-hooks guest numbers and support no product-latency claim",
+      "method": "Observer.pause_ns difference (retained: sum of completed _stopped intervals), same accounting as S10-8"
+    }
+  ],
+  "end_ns": 29480773873262,
+  "workload_complete": true,
+  "decisions": [
+    {
+      "event_id": 1,
+      "first_ordinal": 830,
+      "site": 4597891249,
+      "start_ns": 29346178526289,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "finite-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "finite-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 830,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "finite-stream",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "fce7e2d74262061587e7ef8b23be4c4c90c89dbb62848307163e85200a946b80",
+        "site": 4597891249,
+        "TB": "0x7f44e0009180",
+        "exit_flag": 3,
+        "vcpu_tid": 74801,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 831,
+      "after_rip": 4597891253,
+      "terminal_latch_cleared": true,
+      "end_ns": 29346188600790
+    },
+    {
+      "event_id": 2,
+      "first_ordinal": 1068,
+      "site": 4597890822,
+      "start_ns": 29349777674138,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "finite-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "finite-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 1068,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "finite-stream",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "239c01af67ba5c77d0766ed319b673d4b95e21a3f3398d74a1d0a7b1f4a9f6ea",
+        "site": 4597890822,
+        "TB": "0x7f44e0006c80",
+        "exit_flag": 3,
+        "vcpu_tid": 74801,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 1069,
+      "after_rip": 4597890823,
+      "terminal_latch_cleared": true,
+      "end_ns": 29349787224516
+    },
+    {
+      "event_id": 3,
+      "first_ordinal": 2411,
+      "site": 4597890822,
+      "start_ns": 29366667185654,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "endless-collected-cat",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "endless-collected-cat",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 2411,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "endless-collected-cat",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "a95ba0bbe2d8a37c84282440247f2a3788c0845680176cd4543e81481352a3f2",
+        "site": 4597890822,
+        "TB": "0x7f44e0005d00",
+        "exit_flag": 3,
+        "vcpu_tid": 74801,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 2412,
+      "after_rip": 4597890823,
+      "terminal_latch_cleared": true,
+      "end_ns": 29366676882294
+    },
+    {
+      "event_id": 4,
+      "first_ordinal": 3934,
+      "site": 4597890822,
+      "start_ns": 29390432664501,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "endless-terminal-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "endless-terminal-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 3934,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "endless-terminal-stream",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "2b0a098186ec877cbb82d1aa2be7724e7fffdd59030989bebbc645cc9ab24f8d",
+        "site": 4597890822,
+        "TB": "0x7f44e0005c00",
+        "exit_flag": 3,
+        "vcpu_tid": 74801,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 3935,
+      "after_rip": 4597890823,
+      "terminal_latch_cleared": true,
+      "end_ns": 29390442197946
+    },
+    {
+      "event_id": 5,
+      "first_ordinal": 6724,
+      "site": 4597890822,
+      "start_ns": 29426324983614,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 6724,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "interactive-top",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "5103f1267e036b8a4e61c688e90fc53078199939a8a24583877104c123dd569c",
+        "site": 4597890822,
+        "TB": "0x7f44e0006e80",
+        "exit_flag": 3,
+        "vcpu_tid": 74801,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 6725,
+      "after_rip": 4597890823,
+      "terminal_latch_cleared": true,
+      "end_ns": 29426334329940
+    },
+    {
+      "event_id": 6,
+      "first_ordinal": 6862,
+      "site": 4597891249,
+      "start_ns": 29427739363724,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 6862,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "interactive-top",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "b685980067bb7c4dcc1a9c748a4aed123d968de0dccdeea7904e1e10b3b82e58",
+        "site": 4597891249,
+        "TB": "0x7f44e0012d40",
+        "exit_flag": 3,
+        "vcpu_tid": 74801,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 6863,
+      "after_rip": 4597891253,
+      "terminal_latch_cleared": true,
+      "end_ns": 29427749045329
+    },
+    {
+      "event_id": 7,
+      "first_ordinal": 8840,
+      "site": 4597890822,
+      "start_ns": 29450632584417,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "interactive-top-idle",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "interactive-top-idle",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 8840,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "interactive-top-idle",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "6e373285182f3e821469063358f5fb7f95fa1c5348990f00a6e29e786006db37",
+        "site": 4597890822,
+        "TB": "0x7f44e0006980",
+        "exit_flag": 3,
+        "vcpu_tid": 74801,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 8841,
+      "after_rip": 4597890823,
+      "terminal_latch_cleared": true,
+      "end_ns": 29450642259412
+    },
+    {
+      "event_id": 8,
+      "first_ordinal": 11037,
+      "site": 4597890822,
+      "start_ns": 29475349816716,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "interactive-top-idle",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "interactive-top-idle",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 11037,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "interactive-top-idle",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "100a4be9bbf047ba09fe9e76f57d008d401b291343f1fec9ae5656480901af66",
+        "site": 4597890822,
+        "TB": "0x7f44e0017640",
+        "exit_flag": 3,
+        "vcpu_tid": 74801,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 11038,
+      "after_rip": 4597890823,
+      "terminal_latch_cleared": true,
+      "end_ns": 29475360809357
+    }
+  ],
+  "native_scope_count": 11439,
+  "additional_native_packets": 8,
+  "observer_pause_ns_total": 100732246253
+}

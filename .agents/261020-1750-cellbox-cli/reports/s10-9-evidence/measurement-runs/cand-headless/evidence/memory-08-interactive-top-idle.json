@@ -1,0 +1,388 @@
+{
+  "schema": "cellos.s10-7.memory-snapshot/1",
+  "phase": "interactive-top-idle",
+  "instance": 1,
+  "cr3": 364544,
+  "monotonic_ns": 29452164787878,
+  "provenance": {
+    "kernel_build": "cand-headless-test-hooks",
+    "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+    "kernel_features": [
+      "default",
+      "policy-required",
+      "test-hooks"
+    ],
+    "kernel_path": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-test-hooks.kernel.elf",
+    "profile": "headless",
+    "set": "cand-headless",
+    "kind": "candidate",
+    "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+    "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+    "measurement_kernel_is_not_the_promoted_kernel": true
+  },
+  "resident": {
+    "scope": "guest present mapped backing, eager SAS identity mapping; NOT host RSS, NOT working set, NOT physical-memory",
+    "regions": [
+      {
+        "label": "elf-load-0",
+        "kind": "elf-segment",
+        "va": 4596957184,
+        "size_bytes": 2043603,
+        "page_span": [
+          4596957184,
+          4599001088
+        ],
+        "pages": 499,
+        "present_pages": 499,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 2043904,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 499,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 499
+        },
+        "extra": {
+          "p_flags": 5,
+          "filesz": 2043603
+        },
+        "overlaps": {
+          "elf-load-1": 1
+        }
+      },
+      {
+        "label": "elf-load-1",
+        "kind": "elf-segment",
+        "va": 4599000792,
+        "size_bytes": 574288,
+        "page_span": [
+          4598996992,
+          4599578624
+        ],
+        "pages": 142,
+        "present_pages": 142,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 581632,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 142,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 142
+        },
+        "extra": {
+          "p_flags": 4,
+          "filesz": 574288
+        },
+        "overlaps": {
+          "elf-load-0": 1
+        }
+      },
+      {
+        "label": "elf-load-2",
+        "kind": "elf-segment",
+        "va": 4599578624,
+        "size_bytes": 161560,
+        "page_span": [
+          4599578624,
+          4599742464
+        ],
+        "pages": 40,
+        "present_pages": 40,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 163840,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 40,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 40
+        },
+        "extra": {
+          "p_flags": 6,
+          "filesz": 161560
+        },
+        "overlaps": {}
+      },
+      {
+        "label": "elf-load-3",
+        "kind": "elf-segment",
+        "va": 4599742464,
+        "size_bytes": 7340360,
+        "page_span": [
+          4599742464,
+          4607086592
+        ],
+        "pages": 1793,
+        "present_pages": 1793,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 7344128,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 1793,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 1793
+        },
+        "extra": {
+          "p_flags": 6,
+          "filesz": 0
+        },
+        "overlaps": {
+          "elf-load-4": 1,
+          "heap-arena": 1537
+        }
+      },
+      {
+        "label": "elf-load-4",
+        "kind": "elf-segment",
+        "va": 4607082824,
+        "size_bytes": 3828,
+        "page_span": [
+          4607082496,
+          4607090688
+        ],
+        "pages": 2,
+        "present_pages": 2,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 8192,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 2,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 2
+        },
+        "extra": {
+          "p_flags": 4,
+          "filesz": 3828
+        },
+        "overlaps": {
+          "elf-load-3": 1
+        }
+      },
+      {
+        "label": "user-stack",
+        "kind": "user-stack",
+        "va": 38592512,
+        "size_bytes": 65536,
+        "page_span": [
+          38592512,
+          38658048
+        ],
+        "pages": 16,
+        "present_pages": 16,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 65536,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 16,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 16
+        },
+        "extra": {
+          "source": "observer instance stack_bottom/stack_top (guard pages below verified unmapped at entry)"
+        },
+        "overlaps": {}
+      },
+      {
+        "label": "kernel-stack",
+        "kind": "kernel-stack",
+        "va": 38518784,
+        "size_bytes": 65536,
+        "page_span": [
+          38518784,
+          38584320
+        ],
+        "pages": 16,
+        "present_pages": 16,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 65536,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 16,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 16
+        },
+        "extra": {
+          "source": "caller-supplied usable range (the observer does not know it)"
+        },
+        "overlaps": {}
+      },
+      {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 4599742560,
+        "size_bytes": 6291456,
+        "page_span": [
+          4599742464,
+          4606038016
+        ],
+        "pages": 1537,
+        "present_pages": 1537,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 6295552,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 1537,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 1537
+        },
+        "extra": {
+          "source": "caller-supplied",
+          "allocator_used_bytes": 228296
+        },
+        "overlaps": {
+          "elf-load-3": 1537
+        }
+      }
+    ],
+    "total": {
+      "sum_of_region_mapped_backed_bytes": 16568320,
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "not_present_pages": 0,
+      "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+    }
+  },
+  "stacks": [
+    {
+      "label": "user-stack",
+      "kind": "user-stack",
+      "usable_start": 38592512,
+      "top": 38658048,
+      "usable_bytes": 65536,
+      "pattern": 165,
+      "untouched_prefix_bytes": 19816,
+      "depth_bytes": 45720,
+      "depth_pages": 12,
+      "status": "partial",
+      "exact": true,
+      "depth_valid": true,
+      "prime_evidence": "pre-run-verified",
+      "primed_proof": {
+        "start": 38592512,
+        "limit": 38658048,
+        "bytes_checked": 65536,
+        "pattern": 165
+      },
+      "semantics": "mirror of kernel test_hook_watermark_bytes: usable - leading run of pattern bytes; lower bound of true depth"
+    },
+    {
+      "label": "kernel-stack",
+      "kind": "kernel-stack",
+      "usable_start": 38518784,
+      "top": 38584320,
+      "usable_bytes": 65536,
+      "pattern": 165,
+      "untouched_prefix_bytes": 49464,
+      "depth_bytes": 16072,
+      "depth_pages": 4,
+      "status": "partial",
+      "exact": true,
+      "depth_valid": true,
+      "prime_evidence": "pre-run-verified",
+      "primed_proof": {
+        "start": 38518784,
+        "limit": 38580224,
+        "bytes_checked": 61440,
+        "pattern": 165
+      },
+      "semantics": "mirror of kernel test_hook_watermark_bytes: usable - leading run of pattern bytes; lower bound of true depth"
+    }
+  ],
+  "stack_depth_bytes": {
+    "user": 45720,
+    "kernel": 16072
+  },
+  "heap_arena": {
+    "label": "heap-arena",
+    "kind": "heap-arena",
+    "va": 4599742560,
+    "size_bytes": 6291456,
+    "page_span": [
+      4599742464,
+      4606038016
+    ],
+    "pages": 1537,
+    "present_pages": 1537,
+    "not_present_pages": 0,
+    "mapped_backed_bytes": 6295552,
+    "not_present_bytes": 0,
+    "fully_mapped": true,
+    "distinct_frames": 1537,
+    "not_present_ranges": [],
+    "leaf_page_sizes": {
+      "4096": 1537
+    },
+    "extra": {
+      "source": "caller-supplied",
+      "allocator_used_bytes": 228296
+    },
+    "overlaps": {
+      "elf-load-3": 1537
+    }
+  },
+  "errors": [],
+  "ok": true,
+  "all_stack_depths_exact": true,
+  "limits": [
+    "All numbers are guest-resident bytes under QEMU/TCG of one paused vCPU; not host RSS, working set, physical-memory, or Intel/VMX production figures.",
+    "mapped_backed_bytes counts guest-present 4 KiB pages under the eager SAS identity mapping (no demand paging/swap found in kernel/src by source reading): resident by construction, not an accessed/dirty-bit measurement.",
+    "Stack depth is a sentinel scan: valid only if the stack was primed (kernel feature `test-hooks`, pattern 0xA5, whole usable range). It is meaningful ONLY for the separately built labelled test-hooks measurement kernel, never for the promoted candidate kernel.",
+    "depth_bytes is a LOWER BOUND of true depth: zero-valued or pattern-equal (0xA5) stores are invisible; any non-pattern byte (including a stray write) below the real deepest store raises the reported depth.",
+    "exact=true only with a pre-run verify_primed proof; a fully consumed range without proof (saturated-unproven) cannot be told from an unprimed stack and is not a valid depth.",
+    "Peaks are since priming (task spawn); a snapshot is point-in-time at the pause and says nothing about later growth. The kernel stack depth includes the spawn trap frame at its top; the user stack depth includes initial argv/auxv-like setup if the loader writes it.",
+    "The heap arena is reported separately and may lie inside an ELF segment (.bss), so region sums can double count; use total.distinct_frame_bytes[_excluding_heap_arena]. allocator_used_bytes (Heap.used) is a separate observer measurement, not residency."
+  ],
+  "entry": {
+    "label": "headless#1",
+    "initial_rsp": 38658048,
+    "primed_status": {
+      "user-stack": {
+        "verified": true,
+        "start": 38592512,
+        "limit": 38658048,
+        "bytes_checked": 65536
+      },
+      "kernel-stack": {
+        "verified": true,
+        "start": 38518784,
+        "limit": 38580224,
+        "bytes_checked": 61440
+      }
+    },
+    "proof_scope": "pre-run verify_primed taken at the ENTRY STOP (before the first user instruction); the top page of the kernel stack (trap frame, switch frame) and the user page holding the initial rsp are written by the spawn path before that stop and are excluded from the proof, so a depth below one page cannot be told from untouched.",
+    "role": "headless",
+    "kernel_stack": {
+      "bottom": 38518784,
+      "top": 38584320,
+      "pages": 16,
+      "kernel_rsp": 38584032,
+      "tss_rsp0": 38584032,
+      "owner_check": {
+        "sepc": 4596957184,
+        "regs2": 38658048,
+        "iretq_rip": 4596957184,
+        "iretq_cs": 35,
+        "iretq_rsp": 38658048,
+        "iretq_ss": 27,
+        "note": "sepc/regs[2] are required; the iretq words are recorded evidence only"
+      },
+      "cpu_locals_va": 18446744071577780480,
+      "tss_va": 18446744071577776004,
+      "source": "CPU_LOCALS[0].kernel_rsp == TSS.rsp0 at the entry stop; top-kernel_rsp == 288 (trap frame)"
+    },
+    "user_stack": {
+      "bottom": 38592512,
+      "top": 38658048,
+      "pages": 16,
+      "source": "entry-stop rsp page + present-page run + guard pages absent"
+    }
+  },
+  "sp_not_used": "the vCPU rsp at a pause belongs to an arbitrary task, not the focus instance; no sp cross-check is claimed"
+}

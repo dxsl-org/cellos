@@ -1,0 +1,418 @@
+{
+  "set": "cand-headless",
+  "classification": {
+    "class": "A",
+    "reason": "all snapshots ok and exact; allocator peak measured",
+    "missing_snapshots": []
+  },
+  "status": "COMPLETE",
+  "error": null,
+  "observer_error": null,
+  "cleanup_error": null,
+  "kernel_provenance": {
+    "kernel_build": "cand-headless-test-hooks",
+    "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+    "kernel_features": [
+      "default",
+      "policy-required",
+      "test-hooks"
+    ],
+    "kernel_path": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-test-hooks.kernel.elf",
+    "profile": "headless",
+    "set": "cand-headless",
+    "kind": "candidate",
+    "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+    "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+    "measurement_kernel_is_not_the_promoted_kernel": true
+  },
+  "memory_table": [
+    {
+      "file": "memory-00-initial-prompt.json",
+      "phase": "initial-prompt",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 26264,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-01-ordinary-prompt-idle.json",
+      "phase": "ordinary-prompt-idle",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 35352,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-02-finite-stream.json",
+      "phase": "finite-stream",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-03-collected-cat-buffered.json",
+      "phase": "collected-cat-buffered",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-04-collected-cat-cancelled.json",
+      "phase": "collected-cat-cancelled",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-05-terminal-stream-live.json",
+      "phase": "terminal-stream-live",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-06-terminal-stream-cancelled.json",
+      "phase": "terminal-stream-cancelled",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-07-rg-cancelled.json",
+      "phase": "rg-cancelled",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-08-interactive-top-idle.json",
+      "phase": "interactive-top-idle",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-09-complete.json",
+      "phase": "complete",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    }
+  ],
+  "rsp_client": "AtomicHeadlessClient (AtomicReceiveMixin over RecurringClient)",
+  "rsp_wire_events": {
+    "wire_frame_pending": 301005,
+    "packet_rx": 301005,
+    "wire_terminal": 0,
+    "rx": 385044,
+    "tx_ack_plus": 301005,
+    "rows": 1935847,
+    "journal": "rsp-traffic.jsonl"
+  },
+  "recovery_wait_policy": {
+    "decision": "D9-1=B (approved 2026-10-29): latency-recording recovery waits",
+    "applies_to": [
+      "headless: Surface.wait(label=new interrupt prompt, 10 s original)",
+      "desktop: Desk.wait_for(what=runtime new GUI prompt, 10 s original)"
+    ],
+    "covered_recoveries": [
+      "collected-cat Ctrl-C",
+      "terminal-stream Ctrl-C",
+      "rg-large Ctrl-C",
+      "interactive top Ctrl-C (all four go through the two waits above)"
+    ],
+    "effective_deadline": "min(start + 120 s + pause_in_wait, machine_start + 900 s)",
+    "interpretation": "120 s = retained phase cap (command_s) measured as observer-pause-credited wall time (wall minus completed observer pause intervals); unlike S10-8 there is no 120 s hard wall-clock cap on the credited wait, only the unchanged 900 s window",
+    "pause_accounting": "Observer.pause_ns difference (retained: sum of completed _stopped-handling intervals), same as S10-8",
+    "recorded": [
+      "time_to_prompt_s (wall)",
+      "pause_measured_in_wait_ns / pause_credited_ns",
+      "time_to_prompt_minus_measured_pause_s (upper bound)",
+      "effective_deadline_ns / effective_timeout_s",
+      "outcome"
+    ],
+    "recovery_10s_criterion": "not_evaluated",
+    "no_prompt_within_budget": "stops the run as before (Stop: timeout ...)",
+    "global_window_s": 900,
+    "unchanged": [
+      "120 s finite/command wait",
+      "60 s status wait",
+      "180/240/300/900 s boot and drawing waits",
+      "every pause(N) observation duration"
+    ],
+    "ceiling": "the product 10 s recovery criterion is NOT EVALUATED by these runs (never met, never failed); recorded numbers are observer-throttled QEMU/TCG test-hooks guest numbers and support no product-latency claim"
+  },
+  "recovery_waits": [
+    {
+      "label": "new interrupt prompt",
+      "phase": "endless-collected-cat",
+      "mode": "latency-recording (D9-1=B)",
+      "original_timeout_s": 10,
+      "budget_s": 120,
+      "global_window_s": 900,
+      "start_ns": 29366074884779,
+      "pause_at_start_ns": 21108917799,
+      "outcome": "satisfied",
+      "recovery_10s_criterion": "not_evaluated",
+      "end_ns": 29367113310964,
+      "waited_s": 1.038426185,
+      "time_to_prompt_s": 1.038426185,
+      "pause_at_end_ns": 22036515607,
+      "pause_at_last_evaluation_ns": 22036515607,
+      "pause_measured_in_wait_ns": 927597808,
+      "pause_credited_ns": 927597808,
+      "time_to_prompt_minus_measured_pause_s": 0.110828377,
+      "unpaused_time_bound": "upper bound: an observer pause interval still in progress when the prompt returned is not subtracted",
+      "original_10s_deadline_ns": 29376074884779,
+      "base_deadline_ns": 29486074884779,
+      "effective_deadline_ns": 29487002482587,
+      "effective_timeout_s": 120.927597808,
+      "capped_by": null,
+      "criterion_note": "the product 10 s recovery criterion is NOT EVALUATED by these runs (never met, never failed); recorded numbers are observer-throttled QEMU/TCG test-hooks guest numbers and support no product-latency claim",
+      "method": "Observer.pause_ns difference (retained: sum of completed _stopped intervals), same accounting as S10-8"
+    },
+    {
+      "label": "new interrupt prompt",
+      "phase": "endless-terminal-stream",
+      "mode": "latency-recording (D9-1=B)",
+      "original_timeout_s": 10,
+      "budget_s": 120,
+      "global_window_s": 900,
+      "start_ns": 29389778130920,
+      "pause_at_start_ns": 34379305531,
+      "outcome": "satisfied",
+      "recovery_10s_criterion": "not_evaluated",
+      "end_ns": 29390552576773,
+      "waited_s": 0.774445853,
+      "time_to_prompt_s": 0.774445853,
+      "pause_at_end_ns": 35045996541,
+      "pause_at_last_evaluation_ns": 35045996541,
+      "pause_measured_in_wait_ns": 666691010,
+      "pause_credited_ns": 666691010,
+      "time_to_prompt_minus_measured_pause_s": 0.107754843,
+      "unpaused_time_bound": "upper bound: an observer pause interval still in progress when the prompt returned is not subtracted",
+      "original_10s_deadline_ns": 29399778130920,
+      "base_deadline_ns": 29509778130920,
+      "effective_deadline_ns": 29510444821930,
+      "effective_timeout_s": 120.66669101,
+      "capped_by": null,
+      "criterion_note": "the product 10 s recovery criterion is NOT EVALUATED by these runs (never met, never failed); recorded numbers are observer-throttled QEMU/TCG test-hooks guest numbers and support no product-latency claim",
+      "method": "Observer.pause_ns difference (retained: sum of completed _stopped intervals), same accounting as S10-8"
+    },
+    {
+      "label": "new interrupt prompt",
+      "phase": "rg-large",
+      "mode": "latency-recording (D9-1=B)",
+      "original_timeout_s": 10,
+      "budget_s": 120,
+      "global_window_s": 900,
+      "start_ns": 29399191648551,
+      "pause_at_start_ns": 37309030670,
+      "outcome": "satisfied",
+      "recovery_10s_criterion": "not_evaluated",
+      "end_ns": 29405201756141,
+      "waited_s": 6.01010759,
+      "time_to_prompt_s": 6.01010759,
+      "pause_at_end_ns": 42493912553,
+      "pause_at_last_evaluation_ns": 42493912553,
+      "pause_measured_in_wait_ns": 5184881883,
+      "pause_credited_ns": 5184881883,
+      "time_to_prompt_minus_measured_pause_s": 0.825225707,
+      "unpaused_time_bound": "upper bound: an observer pause interval still in progress when the prompt returned is not subtracted",
+      "original_10s_deadline_ns": 29409191648551,
+      "base_deadline_ns": 29519191648551,
+      "effective_deadline_ns": 29524376530434,
+      "effective_timeout_s": 125.184881883,
+      "capped_by": null,
+      "criterion_note": "the product 10 s recovery criterion is NOT EVALUATED by these runs (never met, never failed); recorded numbers are observer-throttled QEMU/TCG test-hooks guest numbers and support no product-latency claim",
+      "method": "Observer.pause_ns difference (retained: sum of completed _stopped intervals), same accounting as S10-8"
+    },
+    {
+      "label": "new interrupt prompt",
+      "phase": "interactive-top-idle",
+      "mode": "latency-recording (D9-1=B)",
+      "original_timeout_s": 10,
+      "budget_s": 120,
+      "global_window_s": 900,
+      "start_ns": 29452165321649,
+      "pause_at_start_ns": 78885107233,
+      "outcome": "satisfied",
+      "recovery_10s_criterion": "not_evaluated",
+      "end_ns": 29478683014665,
+      "waited_s": 26.517693016,
+      "time_to_prompt_s": 26.517693016,
+      "pause_at_end_ns": 99616813179,
+      "pause_at_last_evaluation_ns": 99616813179,
+      "pause_measured_in_wait_ns": 20731705946,
+      "pause_credited_ns": 20731705946,
+      "time_to_prompt_minus_measured_pause_s": 5.78598707,
+      "unpaused_time_bound": "upper bound: an observer pause interval still in progress when the prompt returned is not subtracted",
+      "original_10s_deadline_ns": 29462165321649,
+      "base_deadline_ns": 29572165321649,
+      "effective_deadline_ns": 29592897027595,
+      "effective_timeout_s": 140.731705946,
+      "capped_by": null,
+      "criterion_note": "the product 10 s recovery criterion is NOT EVALUATED by these runs (never met, never failed); recorded numbers are observer-throttled QEMU/TCG test-hooks guest numbers and support no product-latency claim",
+      "method": "Observer.pause_ns difference (retained: sum of completed _stopped intervals), same accounting as S10-8"
+    }
+  ],
+  "recovery_10s_criterion": "not_evaluated",
+  "recovery_note": "the product 10 s recovery criterion is NOT EVALUATED by these runs (never met, never failed); recorded numbers are observer-throttled QEMU/TCG test-hooks guest numbers and support no product-latency claim",
+  "observer_pause_ns_total": 100732246253,
+  "preservation": {
+    "census_unchanged": true,
+    "census_paths": 546,
+    "census_before_file": "census-before.json",
+    "census_after_file": "census-after.json",
+    "frozen_sources": {
+      "ok": true,
+      "detail": {
+        "files": 43,
+        "drift": []
+      }
+    },
+    "frozen_s107_sources": {
+      "ok": true,
+      "detail": {
+        "files": 66,
+        "drift": []
+      }
+    },
+    "frozen_s108_sources": {
+      "ok": true,
+      "detail": {
+        "files": 80,
+        "drift": []
+      }
+    },
+    "prior_archives": {
+      "ok": true,
+      "detail": {
+        "archives": 25,
+        "changed": []
+      }
+    },
+    "frozen_s109_sources": {
+      "ok": true,
+      "detail": {
+        "drift": []
+      }
+    },
+    "kernel_set_hashes": {
+      "set": "cand-headless",
+      "paths": {
+        "kernel": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-test-hooks.kernel.elf",
+        "control_kernel": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-control.kernel.elf",
+        "iso": "/tmp/cellbox-s10-7/measure/cand-headless/vicell-x86-test-hooks.iso",
+        "kernel_fs_img": "/tmp/cellbox-s10-7/measure/cand-headless/kernel_fs.img",
+        "init": "/tmp/cellbox-s10-7/measure/cand-headless/init"
+      },
+      "expected": {
+        "kernel": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+        "control_kernel": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+        "iso": "b534c7512b844a8d05a360e5c5e9b04fce58803aefb04c5fc93f77f4fe215563",
+        "kernel_fs_img": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+        "init": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab"
+      },
+      "actual": {
+        "kernel": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+        "control_kernel": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+        "iso": "b534c7512b844a8d05a360e5c5e9b04fce58803aefb04c5fc93f77f4fe215563",
+        "kernel_fs_img": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+        "init": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab"
+      },
+      "match": {
+        "kernel": true,
+        "control_kernel": true,
+        "iso": true,
+        "kernel_fs_img": true,
+        "init": true
+      },
+      "all_match": true
+    }
+  },
+  "candidate_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "retained_redirects": {
+    "common.W": [
+      "/tmp/cellbox-s10-4",
+      "/tmp/cellbox-s10-7/harness-prep/retained-W"
+    ],
+    "observer.W": [
+      "/tmp/cellbox-s10-4",
+      "/tmp/cellbox-s10-7/harness-prep/retained-W"
+    ]
+  },
+  "rerun_authorized": false,
+  "cbx27_met": false,
+  "phase10_criterion4_met": false,
+  "b2_headless": "class B COMPLETE in S10-7.4; not rerun (D9-2)",
+  "b2_desktop": "S10-9.3 (D9-3 = yes) is a separate, later boot-only step; it is not part of these two candidate runs"
+}

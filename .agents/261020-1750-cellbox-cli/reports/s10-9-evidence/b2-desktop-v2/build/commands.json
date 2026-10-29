@@ -1,0 +1,861 @@
+[
+  {
+    "label": "04-rustc",
+    "argv": [
+      "rustc",
+      "+nightly-2026-05-01",
+      "-Vv"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/04-rustc.log",
+    "log_sha256": "bad5444a63089c36f7ab533cfb95f78c2ef4a4440bbed965d6458e322361da30",
+    "start": 1793280781.1186314,
+    "seconds": 1.6,
+    "env_overrides": {}
+  },
+  {
+    "label": "05-cargo",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "-V"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/05-cargo.log",
+    "log_sha256": "44723352161599307344f2bea07569fd8cb23e82cca593b39f8f834d30af93f2",
+    "start": 1793280782.7455025,
+    "seconds": 0.5,
+    "env_overrides": {}
+  },
+  {
+    "label": "06-rustc-active",
+    "argv": [
+      "rustc",
+      "-Vv"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/06-rustc-active.log",
+    "log_sha256": "bad5444a63089c36f7ab533cfb95f78c2ef4a4440bbed965d6458e322361da30",
+    "start": 1793280783.270065,
+    "seconds": 0.1,
+    "env_overrides": {}
+  },
+  {
+    "label": "101-build-service-vfs",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "service-vfs",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/101-build-service-vfs.log",
+    "log_sha256": "d0dc0899e4a09a45a34f033328e4495384ea52ba3d574a03fe83769ae95f3240",
+    "start": 1793280785.7923284,
+    "seconds": 16.7,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "102-build-service-config",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "service-config",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/102-build-service-config.log",
+    "log_sha256": "7269212e3ae276d26acab28197d733b68be8b6ace391916531c7a7ab525fbfb6",
+    "start": 1793280802.4587212,
+    "seconds": 3.3,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "103-build-service-input",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "service-input",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/103-build-service-input.log",
+    "log_sha256": "b7e2e36ff11fd6da873b8344cb10c2cffbfea19c2c40f6ce1ee18d0758094ed7",
+    "start": 1793280805.782845,
+    "seconds": 1.9,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "104-build-service-platform",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "service-platform",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/104-build-service-platform.log",
+    "log_sha256": "38041b95c7a8ab59882821b4e1a0fc39755fe096d88ba8e4120e094077f94c71",
+    "start": 1793280807.6526754,
+    "seconds": 0.9,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "105-build-driver-nvme",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "driver-nvme",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/105-build-driver-nvme.log",
+    "log_sha256": "e25c02c79b0e4ff6058035a31b49ff44e5ddcd87374ee6c37f534eb5f06c3456",
+    "start": 1793280808.5188656,
+    "seconds": 0.8,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "106-build-driver-e1000",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "driver-e1000",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/106-build-driver-e1000.log",
+    "log_sha256": "01cc248ad92dbc6f8a91180c3b6bda60c5eb264825059be83d24e68e0779e81d",
+    "start": 1793280809.3349302,
+    "seconds": 0.8,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "107-build-driver-igb",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "driver-igb",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/107-build-driver-igb.log",
+    "log_sha256": "015afa708577302264e0911469232ab1de561a1e6122fea57142c31e63f3a476",
+    "start": 1793280810.1512196,
+    "seconds": 0.9,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "108-build-driver-ahci",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "driver-ahci",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/108-build-driver-ahci.log",
+    "log_sha256": "9464a95efdbaf8188bd5beea165ee6b831fb32aa8daae0af0f5cefcfb81b35e8",
+    "start": 1793280811.017815,
+    "seconds": 0.9,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "109-build-driver-xhci",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "driver-xhci",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/109-build-driver-xhci.log",
+    "log_sha256": "4daf5e2a963aad913cc005419db41ed206a86d0fb61283142315b96407ebfe03",
+    "start": 1793280811.884502,
+    "seconds": 1.0,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "110-build-driver-serial-x86",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "driver-serial-x86",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/110-build-driver-serial-x86.log",
+    "log_sha256": "3c7031c677b8e47cd174f218aa45db01a6882deffe59575179cafc64c3fe3153",
+    "start": 1793280812.8513477,
+    "seconds": 0.8,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "111-build-service-compositor",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "service-compositor",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/111-build-service-compositor.log",
+    "log_sha256": "ea638ef7d294109072a69032791c05f8f3452f14f024e20fbfe9a35f604b2f65",
+    "start": 1793280813.6678543,
+    "seconds": 3.4,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "112-build-fb-console",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "fb-console",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/112-build-fb-console.log",
+    "log_sha256": "cd754b6fdc3dfb668d74f2f813a885e63d51dbe8cf0cf6fe56f1a95e07934434",
+    "start": 1793280817.0417497,
+    "seconds": 1.5,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "113-build-service-sshd",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "service-sshd",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/113-build-service-sshd.log",
+    "log_sha256": "22f98c3db35dc7ef0eddff9d588deba473c59c5df749d0320aaa18d2b8c0f6b2",
+    "start": 1793280818.5600934,
+    "seconds": 4.7,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "114-build-desktop",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "desktop",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/114-build-desktop.log",
+    "log_sha256": "3fd5419e6cf3dbc8eef05c710cde31648f16e4ce704f742f0a7324d80ea50f5e",
+    "start": 1793280823.286099,
+    "seconds": 2.6,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "115-build-files",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "files",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/115-build-files.log",
+    "log_sha256": "e4b635096753c9c1ddced3fb01ff074c5cd37242188b69bfc7416529becde78b",
+    "start": 1793280825.9071712,
+    "seconds": 1.8,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "116-build-terminal",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "terminal",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/116-build-terminal.log",
+    "log_sha256": "1303a05ab92932f9df879298b368581a91b72d08991442f58208c0841fe3fd8e",
+    "start": 1793280827.7268574,
+    "seconds": 1.7,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "117-build-app-chrome",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "app-chrome",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/117-build-app-chrome.log",
+    "log_sha256": "f45cf350a90733581370fb16f298731d15d7bcfc741e0eab95f7bc952de27bad",
+    "start": 1793280829.4454975,
+    "seconds": 1.4,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "118-build-app-shell",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "app-shell",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/118-build-app-shell.log",
+    "log_sha256": "e8d3f174f5dc7c72c74903c9ac0050918c7ac58c226ba2e8739a8c6ff8879207",
+    "start": 1793280830.863669,
+    "seconds": 5.5,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "119-build-ocel-desktop",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "ocel",
+      "--no-default-features",
+      "--features",
+      "desktop",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/119-build-ocel-desktop.log",
+    "log_sha256": "cf5ece3c33a5d468ad9458d0620ab16f6919ffae3e132314ee42555faf0a2bbf",
+    "start": 1793280836.3410842,
+    "seconds": 16.2,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "120-build-service-net-qemu-dev-https",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "service-net",
+      "--no-default-features",
+      "--features",
+      "qemu-dev-https",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/120-build-service-net-qemu-dev-https.log",
+    "log_sha256": "dff12aac3269a431d0549409bf2a8801a9b3bfefc61f1a10bcf34de7841fb500",
+    "start": 1793280852.495512,
+    "seconds": 11.4,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "150-build-app-sys-tools",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "app-sys-tools",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/150-build-app-sys-tools.log",
+    "log_sha256": "15b1737064b3402b085fcf04f48f26fc797b541ec1200b8e1a4cf120f825ddea",
+    "start": 1793280863.8926725,
+    "seconds": 1.6,
+    "env_overrides": {
+      "RUSTFLAGS": "-C relocation-model=pic",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "200-sign-desktop-v2",
+    "argv": [
+      "python3",
+      "/tmp/cellbox-s10-7/signing-root-desktop-v2/scripts/cellos-sign",
+      "--repo",
+      "/tmp/cellbox-s10-7/signing-root-desktop-v2",
+      "--objcopy",
+      "objcopy",
+      "--sign",
+      "/tmp/cellbox-s10-9/stage/service-vfs/service-vfs",
+      "/tmp/cellbox-s10-9/stage/service-config/service-config",
+      "/tmp/cellbox-s10-9/stage/service-input/service-input",
+      "/tmp/cellbox-s10-9/stage/service-platform/platform",
+      "/tmp/cellbox-s10-9/stage/driver-nvme/driver-nvme",
+      "/tmp/cellbox-s10-9/stage/driver-e1000/driver-e1000",
+      "/tmp/cellbox-s10-9/stage/driver-igb/driver-igb",
+      "/tmp/cellbox-s10-9/stage/driver-ahci/driver-ahci",
+      "/tmp/cellbox-s10-9/stage/driver-xhci/driver-xhci",
+      "/tmp/cellbox-s10-9/stage/driver-serial-x86/driver-serial-x86",
+      "/tmp/cellbox-s10-9/stage/service-compositor/service-compositor",
+      "/tmp/cellbox-s10-9/stage/fb-console/fb-console",
+      "/tmp/cellbox-s10-9/stage/service-sshd/service-sshd",
+      "/tmp/cellbox-s10-9/stage/desktop/desktop",
+      "/tmp/cellbox-s10-9/stage/files/files",
+      "/tmp/cellbox-s10-9/stage/terminal/terminal",
+      "/tmp/cellbox-s10-9/stage/app-chrome/chrome",
+      "/tmp/cellbox-s10-9/stage/app-shell/app-shell",
+      "/tmp/cellbox-s10-9/stage/ocel-desktop/ocel",
+      "/tmp/cellbox-s10-9/stage/service-net-qemu-dev-https/service-net",
+      "/tmp/cellbox-s10-9/stage/ls/ls",
+      "/tmp/cellbox-s10-9/stage/cat/cat",
+      "/tmp/cellbox-s10-9/stage/echo/echo",
+      "/tmp/cellbox-s10-9/stage/ps/ps",
+      "/tmp/cellbox-s10-9/stage/kill/kill"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/200-sign-desktop-v2.log",
+    "log_sha256": "ea409c93e8133e725388bc444833f0ad055a55439918813ca333276824c5d3b2",
+    "start": 1793280875.5375974,
+    "seconds": 0.9,
+    "env_overrides": {}
+  },
+  {
+    "label": "210-inspect-fat-desktop",
+    "argv": [
+      "python3",
+      "tools/inspect_fat.py",
+      "/tmp/cellbox-s10-7/b2-image-v2/desktop-kernel_fs.img"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/210-inspect-fat-desktop.log",
+    "log_sha256": "ce214bb38c97b8403085885a15036f6f38d4b4b04a8ea199c0dd5619ac82afc6",
+    "start": 1793280880.9840155,
+    "seconds": 0.0,
+    "env_overrides": {}
+  },
+  {
+    "label": "300-build-kernel-desktop",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "cellos-kernel",
+      "--target",
+      "x86_64-unknown-none",
+      "--features",
+      "dev-policy-key,dev-signing-key,dev-weak-rng,signing-required,native-domains,qemu-dev-https,large-cell-va"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/300-build-kernel-desktop.log",
+    "log_sha256": "6b866b6c584b1d7ad669e8d1c49a83a0c205a965deddfce7d5493f2f41431de8",
+    "start": 1793280881.121881,
+    "seconds": 15.2,
+    "env_overrides": {
+      "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "301-build-kernel-desktop-test-hooks",
+    "argv": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "cellos-kernel",
+      "--target",
+      "x86_64-unknown-none",
+      "--features",
+      "dev-policy-key,dev-signing-key,dev-weak-rng,signing-required,native-domains,qemu-dev-https,large-cell-va,test-hooks"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/301-build-kernel-desktop-test-hooks.log",
+    "log_sha256": "7f5dc24d1f80a2e4b1e6483b2577283452da7dbbd237411acbc4191a62ad7c70",
+    "start": 1793280896.3276303,
+    "seconds": 16.2,
+    "env_overrides": {
+      "CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS": "-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TARGET_DIR": "/tmp/cellbox-s10-7/worktree/target"
+    }
+  },
+  {
+    "label": "310-iso",
+    "argv": [
+      "bash",
+      "scripts/x86/make-iso-ci.sh",
+      "/tmp/cellbox-s10-7/b2-image-v2/desktop-cellos-x86_64-desktop.iso"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/310-iso.log",
+    "log_sha256": "46b98d0bb96ca8c144add80a5c1142a868366558d236c50141ef416854a64beb",
+    "start": 1793280912.5490105,
+    "seconds": 0.5,
+    "env_overrides": {
+      "X86_KERNEL": "/tmp/cellbox-s10-7/b2-image-v2/desktop-kernel.elf",
+      "X86_ISO_ROOT": "/tmp/cellbox-s10-7/iso-root-v2-10"
+    }
+  },
+  {
+    "label": "310-limine-bios-install",
+    "argv": [
+      "limine/limine-8.7.0/bin/limine",
+      "bios-install",
+      "/tmp/cellbox-s10-7/b2-image-v2/desktop-cellos-x86_64-desktop.iso"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/310-limine-bios-install.log",
+    "log_sha256": "a5850adf08f1826ef675e0e5bdb1d110a4f9630762a63fa6fa177fd82404e3f1",
+    "start": 1793280913.0151052,
+    "seconds": 0.0,
+    "env_overrides": {}
+  },
+  {
+    "label": "310-qemu-img",
+    "argv": [
+      "qemu-img",
+      "convert",
+      "-f",
+      "raw",
+      "-O",
+      "qcow2",
+      "/tmp/cellbox-s10-7/b2-image-v2/desktop-cellos-x86_64-desktop.iso",
+      "/tmp/cellbox-s10-7/b2-image-v2/desktop-cellos-x86_64-desktop.qcow2"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/310-qemu-img.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "start": 1793280913.0611367,
+    "seconds": 0.7,
+    "env_overrides": {}
+  },
+  {
+    "label": "311-iso",
+    "argv": [
+      "bash",
+      "scripts/x86/make-iso-ci.sh",
+      "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.iso"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/311-iso.log",
+    "log_sha256": "a7b2f7779af19ffc2bfdb0b85e45665e02c25e0a8bb0e2fe7143e805b16cf4d2",
+    "start": 1793280913.7382371,
+    "seconds": 0.2,
+    "env_overrides": {
+      "X86_KERNEL": "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-kernel.elf",
+      "X86_ISO_ROOT": "/tmp/cellbox-s10-7/iso-root-v2-11"
+    }
+  },
+  {
+    "label": "311-limine-bios-install",
+    "argv": [
+      "limine/limine-8.7.0/bin/limine",
+      "bios-install",
+      "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.iso"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/311-limine-bios-install.log",
+    "log_sha256": "0b8bf24a546f66425b6d2e831143fa5cd953277dd313b54a627241c22c198d82",
+    "start": 1793280913.9037642,
+    "seconds": 0.0,
+    "env_overrides": {}
+  },
+  {
+    "label": "311-qemu-img",
+    "argv": [
+      "qemu-img",
+      "convert",
+      "-f",
+      "raw",
+      "-O",
+      "qcow2",
+      "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.iso",
+      "/tmp/cellbox-s10-7/b2-image-v2/desktop-test-hooks-cellos-x86_64-desktop.qcow2"
+    ],
+    "cwd": "/tmp/cellbox-s10-7/worktree",
+    "returncode": 0,
+    "log": "/tmp/cellbox-s10-7/b2-image-v2/cmd-logs/311-qemu-img.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "start": 1793280913.9073937,
+    "seconds": 0.3,
+    "env_overrides": {}
+  }
+]

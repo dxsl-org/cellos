@@ -1,0 +1,799 @@
+{
+  "question": "S10-8 cand-headless class-E stop: is the retained non-atomic RSP receive race (S10-4.14 mode) the cause?",
+  "verdict": "CONFIRMED",
+  "journal": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-8-evidence/measurement-runs/cand-headless/evidence/rsp-traffic.jsonl",
+  "journal_signature": {
+    "signature": true,
+    "frame": "$T05thread:01;#07",
+    "rows_after_frame": [
+      [
+        "tx",
+        "03"
+      ],
+      [
+        "state",
+        "closed"
+      ]
+    ],
+    "valid_checksum": true,
+    "seconds_frame_to_shutdown_interrupt": 889.562228307,
+    "seconds_interrupt_to_closed": 5.020906228
+  },
+  "last_segment": {
+    "arrival_s_after_running": 0.200194548,
+    "arrival_s_after_c_tx": 0.200206884,
+    "continue_ack_s_after_c_tx": 2.3464e-05,
+    "poll_boundary_estimate": {
+      "poll_n": 2,
+      "implied_overhead_ms": 0.19454799999998884
+    }
+  },
+  "precedent_s10_4_13_journal": {
+    "journal": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-input-coordinated/desktop/evidence/rsp-traffic.jsonl",
+    "signature": {
+      "signature": true,
+      "frame": "$T05thread:01;#07",
+      "rows_after_frame": [
+        [
+          "tx",
+          "03"
+        ],
+        [
+          "state",
+          "closed"
+        ]
+      ],
+      "valid_checksum": true,
+      "seconds_frame_to_shutdown_interrupt": 877.362516731,
+      "seconds_interrupt_to_closed": 5.005235842
+    },
+    "arrival_s_after_running": 5.30984037,
+    "poll_boundary_estimate": {
+      "poll_n": 53,
+      "implied_overhead_ms": 0.18923788461536833
+    },
+    "note": "the S10-4.13 desktop stop whose cause S10-4.14 CONFIRMED by deterministic reproduction (fixture before/after)"
+  },
+  "host_poll_calibration": {
+    "polls": 60,
+    "method": "real socketpair, idle peer, RspClient.wait_stop(timeout=.1) repeated; no QEMU/VM/guest",
+    "overhead_ms": {
+      "min": 0.17736699956003021,
+      "mean": 0.262089933494275,
+      "median": 0.2642650000780067,
+      "max": 0.4089899979589917
+    }
+  },
+  "replay_sweep": {
+    "timing_parameters": {
+      "late_us": "timer wake latency 0..400 us step 1 (journal cannot record it)",
+      "overhead_us": 20,
+      "start_offset_s": "journal: state running recorded 12.3 us after tx $c#63"
+    },
+    "old_non_atomic_RecurringClient": {
+      "cases": 401,
+      "lost_cases": 82,
+      "loss_intervals_late_us": [
+        [
+          82,
+          163
+        ]
+      ],
+      "all_delivered": false
+    },
+    "new_AtomicHeadlessClient": {
+      "cases": 401,
+      "lost_cases": 0,
+      "loss_intervals_late_us": [],
+      "all_delivered": true
+    },
+    "overhead_variants": {
+      "overhead_0_us": {
+        "old_non_atomic_RecurringClient": {
+          "cases": 401,
+          "lost_cases": 92,
+          "loss_intervals_late_us": [
+            [
+              92,
+              183
+            ]
+          ],
+          "all_delivered": false
+        },
+        "new_AtomicHeadlessClient": {
+          "cases": 401,
+          "lost_cases": 0,
+          "loss_intervals_late_us": [],
+          "all_delivered": true
+        }
+      },
+      "overhead_100_us": {
+        "old_non_atomic_RecurringClient": {
+          "cases": 401,
+          "lost_cases": 42,
+          "loss_intervals_late_us": [
+            [
+              42,
+              83
+            ]
+          ],
+          "all_delivered": false
+        },
+        "new_AtomicHeadlessClient": {
+          "cases": 401,
+          "lost_cases": 0,
+          "loss_intervals_late_us": [],
+          "all_delivered": true
+        }
+      },
+      "overhead_150_us": {
+        "old_non_atomic_RecurringClient": {
+          "cases": 401,
+          "lost_cases": 17,
+          "loss_intervals_late_us": [
+            [
+              17,
+              33
+            ]
+          ],
+          "all_delivered": false
+        },
+        "new_AtomicHeadlessClient": {
+          "cases": 401,
+          "lost_cases": 0,
+          "loss_intervals_late_us": [],
+          "all_delivered": true
+        }
+      }
+    }
+  },
+  "replay_example_instance": {
+    "late_us": 82,
+    "old_non_atomic_RecurringClient": {
+      "delivered_stop": null,
+      "polls": [
+        {
+          "poll": 1,
+          "began_s": 1.2336e-05,
+          "ended_s": 0.100105464,
+          "error": "RspTimeout: RSP receive timed out"
+        },
+        {
+          "poll": 2,
+          "began_s": 0.10012546400000001,
+          "ended_s": 0.200206884,
+          "error": "RspTimeout: RSP deadline expired"
+        },
+        {
+          "poll": 3,
+          "began_s": 0.200226884,
+          "ended_s": 0.300308884,
+          "error": "RspTimeout: RSP receive timed out"
+        },
+        {
+          "poll": 4,
+          "began_s": 0.300328884,
+          "ended_s": 0.400410884,
+          "error": "RspTimeout: RSP receive timed out"
+        },
+        {
+          "poll": 5,
+          "began_s": 0.40043088400000004,
+          "ended_s": 0.500512884,
+          "error": "RspTimeout: RSP receive timed out"
+        },
+        {
+          "poll": 6,
+          "began_s": 0.5005328840000001,
+          "ended_s": 0.6006148840000001,
+          "error": "RspTimeout: RSP receive timed out"
+        },
+        {
+          "poll": 7,
+          "began_s": 0.6006348840000001,
+          "ended_s": 0.7007168840000001,
+          "error": "RspTimeout: RSP receive timed out"
+        },
+        {
+          "poll": 8,
+          "began_s": 0.7007368840000001,
+          "ended_s": 0.8008188840000001,
+          "error": "RspTimeout: RSP receive timed out"
+        }
+      ],
+      "error": null,
+      "sent": [
+        "2463233633",
+        "03"
+      ],
+      "acks_sent": 0,
+      "client_state": "running",
+      "journal_events": [
+        [
+          "packet_tx",
+          "63"
+        ],
+        [
+          "tx",
+          "2463233633"
+        ],
+        [
+          "state",
+          "running"
+        ],
+        [
+          "rx",
+          "2b"
+        ],
+        [
+          "rx",
+          "245430357468726561643a30313b233037"
+        ],
+        [
+          "tx",
+          "03"
+        ]
+      ],
+      "buffer_hex": "",
+      "shutdown_interrupt": {
+        "result": "RspTimeout: RSP receive timed out",
+        "started_s": 0.8008388840000001,
+        "sent_03": true
+      }
+    },
+    "new_AtomicHeadlessClient": {
+      "delivered_stop": "T05thread:01;",
+      "polls": [
+        {
+          "poll": 1,
+          "began_s": 1.2336e-05,
+          "ended_s": 0.100105464,
+          "error": "RspTimeout: RSP receive timed out"
+        },
+        {
+          "poll": 2,
+          "began_s": 0.10012546400000001,
+          "ended_s": 0.200206884,
+          "error": "RspTimeout: RSP deadline expired"
+        },
+        {
+          "poll": 3,
+          "began_s": 0.200226884,
+          "ended_s": 0.200226884,
+          "returned": "T05thread:01;"
+        }
+      ],
+      "error": null,
+      "sent": [
+        "2463233633",
+        "2b"
+      ],
+      "acks_sent": 1,
+      "client_state": "stopped",
+      "journal_events": [
+        [
+          "packet_tx",
+          "63"
+        ],
+        [
+          "tx",
+          "2463233633"
+        ],
+        [
+          "state",
+          "running"
+        ],
+        [
+          "rx",
+          "2b"
+        ],
+        [
+          "rx",
+          "245430357468726561643a30313b233037"
+        ],
+        [
+          "wire_frame_pending",
+          "5430357468726561643a30313b"
+        ],
+        [
+          "tx",
+          "2b"
+        ],
+        [
+          "packet_rx",
+          "5430357468726561643a30313b"
+        ],
+        [
+          "state",
+          "stopped"
+        ]
+      ],
+      "buffer_hex": "",
+      "shutdown_interrupt": null
+    },
+    "retained_s10_8_events": [
+      [
+        "packet_tx",
+        "63"
+      ],
+      [
+        "tx",
+        "2463233633"
+      ],
+      [
+        "state",
+        "running"
+      ],
+      [
+        "rx",
+        "2b"
+      ],
+      [
+        "rx",
+        "245430357468726561643a30313b233037"
+      ],
+      [
+        "tx",
+        "03"
+      ],
+      [
+        "state",
+        "closed"
+      ]
+    ],
+    "old_replay_journal_equals_retained_tail": true,
+    "old_replay_shutdown_interrupt_error_equals_retained": true
+  },
+  "journal_census": [
+    {
+      "journal": "s10-4-evidence/runtime/headless-observed-1/rsp-traffic.jsonl",
+      "rows": 17170,
+      "frames": 3112,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/interleaved-echo-observer-failure/evidence/rsp-traffic.jsonl",
+      "rows": 92123,
+      "frames": 16510,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/native-step-no-progress-investigation/watch-step-investigation/write-watch-only.rsp.jsonl",
+      "rows": 1,
+      "frames": 0,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/native-step-no-progress-investigation/watch-step-investigation/write-watch-plus-execute.rsp.jsonl",
+      "rows": 1,
+      "frames": 0,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/native-step-no-progress-investigation/watch-step-investigation-ready/write-watch-only.rsp.jsonl",
+      "rows": 156,
+      "frames": 28,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/native-step-no-progress-investigation/watch-step-investigation-ready/write-watch-plus-execute.rsp.jsonl",
+      "rows": 160,
+      "frames": 28,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/native-step-no-progress-investigation/watch-step-loop-investigation/rsp.jsonl",
+      "rows": 46157,
+      "frames": 8017,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-diagnostic/evidence/rsp-traffic.jsonl",
+      "rows": 83336,
+      "frames": 15311,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-feed-hook/desktop/evidence/rsp-traffic.jsonl",
+      "rows": 554578,
+      "frames": 85812,
+      "undispatched": 0,
+      "atomic_wire_events": 85812,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-feed-hook/gate-attempts/attempt-01/retained-test-reproduction/reproduction-after-rsp.jsonl",
+      "rows": 6,
+      "frames": 1,
+      "undispatched": 0,
+      "atomic_wire_events": 1,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-feed-hook/gate-attempts/attempt-02/retained-test-reproduction/reproduction-after-rsp.jsonl",
+      "rows": 6,
+      "frames": 1,
+      "undispatched": 0,
+      "atomic_wire_events": 1,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-gui-temporal/desktop/evidence/rsp-traffic.jsonl",
+      "rows": 355488,
+      "frames": 54938,
+      "undispatched": 0,
+      "atomic_wire_events": 54938,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-gui-temporal/retained-test-reproduction/reproduction-after-rsp.jsonl",
+      "rows": 6,
+      "frames": 1,
+      "undispatched": 0,
+      "atomic_wire_events": 1,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-input-coordinated/desktop/evidence/rsp-traffic.jsonl",
+      "rows": 4828,
+      "frames": 896,
+      "undispatched": 1,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [
+        {
+          "row": 4825,
+          "wire": "$T05thread:01;#07",
+          "payload": "T05thread:01;",
+          "rows_after": [
+            [
+              "tx",
+              "03"
+            ],
+            [
+              "state",
+              "closed"
+            ]
+          ]
+        }
+      ],
+      "ends_with_lost_stop_signature": true
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-qmp-serialized/desktop/evidence/rsp-traffic.jsonl",
+      "rows": 14689,
+      "frames": 2671,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-recurring/desktop/evidence/rsp-traffic.jsonl",
+      "rows": 12787,
+      "frames": 2272,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-recurring/headless/evidence/rsp-traffic.jsonl",
+      "rows": 1352684,
+      "frames": 238532,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-rsp-atomic/desktop/evidence/rsp-traffic.jsonl",
+      "rows": 354840,
+      "frames": 54880,
+      "undispatched": 0,
+      "atomic_wire_events": 54880,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-rsp-atomic/reproduction-after-rsp.jsonl",
+      "rows": 6,
+      "frames": 1,
+      "undispatched": 0,
+      "atomic_wire_events": 1,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-rsp-atomic/reproduction-before-rsp.jsonl",
+      "rows": 2,
+      "frames": 1,
+      "undispatched": 1,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [
+        {
+          "row": 0,
+          "wire": "$T05thread:01;#07",
+          "payload": "T05thread:01;",
+          "rows_after": [
+            [
+              "state",
+              "closed"
+            ]
+          ]
+        }
+      ],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-s10-7/gate-attempts/attempt-01/retained-test-reproduction/reproduction-after-rsp.jsonl",
+      "rows": 6,
+      "frames": 1,
+      "undispatched": 0,
+      "atomic_wire_events": 1,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-s10-7/gate-attempts/attempt-02/retained-test-reproduction/reproduction-after-rsp.jsonl",
+      "rows": 6,
+      "frames": 1,
+      "undispatched": 0,
+      "atomic_wire_events": 1,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-s10-8/gate-attempts/attempt-01/retained-test-reproduction/reproduction-after-rsp.jsonl",
+      "rows": 6,
+      "frames": 1,
+      "undispatched": 0,
+      "atomic_wire_events": 1,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-step-amendment/evidence/rsp-traffic.jsonl",
+      "rows": 2866,
+      "frames": 564,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/observer-step-amendment-corrected/evidence/rsp-traffic.jsonl",
+      "rows": 32241,
+      "frames": 5749,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-4-evidence/runtime/qemu-xml-namespace-observer-failure/evidence/rsp-traffic.jsonl",
+      "rows": 20,
+      "frames": 3,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-7-evidence/measurement-runs/b2-headless/evidence/rsp-traffic.jsonl",
+      "rows": 14276,
+      "frames": 2701,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-7-evidence/measurement-runs/cand-desktop/evidence/rsp-traffic.jsonl",
+      "rows": 765082,
+      "frames": 119316,
+      "undispatched": 0,
+      "atomic_wire_events": 119316,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-7-evidence/measurement-runs/cand-headless/evidence/rsp-traffic.jsonl",
+      "rows": 1415647,
+      "frames": 261273,
+      "undispatched": 0,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-8-evidence/harness/gate-attempts/attempt-01/retained-test-reproduction/reproduction-after-rsp.jsonl",
+      "rows": 6,
+      "frames": 1,
+      "undispatched": 0,
+      "atomic_wire_events": 1,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-8-evidence/measurement-runs/cand-desktop/evidence/rsp-traffic.jsonl",
+      "rows": 921229,
+      "frames": 141727,
+      "undispatched": 0,
+      "atomic_wire_events": 141727,
+      "client_class_by_journal": "atomic (wire_* events present)",
+      "undispatched_frames": [],
+      "ends_with_lost_stop_signature": false
+    },
+    {
+      "journal": "s10-8-evidence/measurement-runs/cand-headless/evidence/rsp-traffic.jsonl",
+      "rows": 3871,
+      "frames": 740,
+      "undispatched": 1,
+      "atomic_wire_events": 0,
+      "client_class_by_journal": "non-atomic",
+      "undispatched_frames": [
+        {
+          "row": 3868,
+          "wire": "$T05thread:01;#07",
+          "payload": "T05thread:01;",
+          "rows_after": [
+            [
+              "tx",
+              "03"
+            ],
+            [
+              "state",
+              "closed"
+            ]
+          ]
+        }
+      ],
+      "ends_with_lost_stop_signature": true
+    }
+  ],
+  "fixtures_reproduce_before": {
+    "rsp.RspClient (non-atomic, retained)": {
+      "client_type": "RspClient",
+      "stop_received_across_original_polls": false,
+      "positive_ACK_count": 0,
+      "decoded_stop_dispatch_count": 0,
+      "old_loss_signature": true,
+      "no_guest_control_packet": true,
+      "no_timeout_increase": true,
+      "receive_calls": 2,
+      "final_buffer_hex": "",
+      "first_poll": {
+        "ordinal": 1,
+        "start": 0.0,
+        "timeout": 0.1,
+        "error": "RspTimeout: RSP deadline expired",
+        "end": 0.1,
+        "buffer_hex": "",
+        "state": "running",
+        "ACK_count": 0
+      }
+    },
+    "atomic_rsp.AtomicRspClient": {
+      "client_type": "AtomicRspClient",
+      "stop_received_across_original_polls": true,
+      "positive_ACK_count": 1,
+      "decoded_stop_dispatch_count": 1,
+      "old_loss_signature": false,
+      "no_guest_control_packet": true,
+      "no_timeout_increase": true,
+      "receive_calls": 1,
+      "final_buffer_hex": "",
+      "first_poll": {
+        "ordinal": 1,
+        "start": 0.0,
+        "timeout": 0.1,
+        "error": "RspTimeout: RSP deadline expired",
+        "end": 0.1,
+        "buffer_hex": "245430357468726561643a30313b233037",
+        "state": "running",
+        "ACK_count": 0
+      }
+    },
+    "old_non_atomic_RecurringClient": {
+      "client_type": "RecurringClient",
+      "stop_received_across_original_polls": false,
+      "positive_ACK_count": 0,
+      "decoded_stop_dispatch_count": 0,
+      "old_loss_signature": true,
+      "no_guest_control_packet": true,
+      "no_timeout_increase": true,
+      "receive_calls": 2,
+      "final_buffer_hex": "",
+      "first_poll": {
+        "ordinal": 1,
+        "start": 0.0,
+        "timeout": 0.1,
+        "error": "RspTimeout: RSP deadline expired",
+        "end": 0.1,
+        "buffer_hex": "",
+        "state": "running",
+        "ACK_count": 0
+      }
+    },
+    "new_AtomicHeadlessClient": {
+      "client_type": "AtomicHeadlessClient",
+      "stop_received_across_original_polls": true,
+      "positive_ACK_count": 1,
+      "decoded_stop_dispatch_count": 1,
+      "old_loss_signature": false,
+      "no_guest_control_packet": true,
+      "no_timeout_increase": true,
+      "receive_calls": 1,
+      "final_buffer_hex": "",
+      "first_poll": {
+        "ordinal": 1,
+        "start": 0.0,
+        "timeout": 0.1,
+        "error": "RspTimeout: RSP deadline expired",
+        "end": 0.1,
+        "buffer_hex": "245430357468726561643a30313b233037",
+        "state": "running",
+        "ACK_count": 0
+      }
+    }
+  }
+}
