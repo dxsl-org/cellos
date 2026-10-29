@@ -86,13 +86,13 @@ echo "==> Building production cells (init without tier2-entry, shell, vfs, confi
 # the test-hooks image and would make init launch the domain fixtures at boot.
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p app-init
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    -p app-shell -p service-vfs -p service-config -p service-input -p app-sys-tools
+    -p app-cellbox -p service-vfs -p service-config -p service-input -p app-sys-tools
 
 echo "==> Building the domain-class Tier-2 fixtures (tier2-smoke, tier2-exploit)..."
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p tier2-smoke -p tier2-exploit
 
 CELL_BINARIES=(
-    "$REL/app-shell"
+    "$REL/cellbox"
     "$REL/service-vfs"
     "$REL/service-config"
     "$REL/service-input"
@@ -101,11 +101,12 @@ CELL_BINARIES=(
     "$REL/echo"
     "$REL/ps"
     "$REL/kill"
+    "$REL/shutdown"
     "$REL/tier2-smoke"
     "$REL/tier2-exploit"
 )
 CELL_IMAGE_PATHS=(
-    /bin/shell
+    /bin/cellbox
     /bin/vfs
     /bin/config
     /bin/input
@@ -114,6 +115,7 @@ CELL_IMAGE_PATHS=(
     /bin/echo
     /bin/ps
     /bin/kill
+    /bin/shutdown
     /bin/tier2-smoke
     /bin/tier2-exploit
 )
@@ -154,7 +156,7 @@ class_of() {
 }
 SMOKE_CLASS="$(class_of "$REPO_ROOT/$REL/tier2-smoke")"
 EXPLOIT_CLASS="$(class_of "$REPO_ROOT/$REL/tier2-exploit")"
-SHELL_CLASS="$(class_of "$REPO_ROOT/$REL/app-shell")"
+SHELL_CLASS="$(class_of "$REPO_ROOT/$REL/cellbox")"
 if [[ "$SMOKE_CLASS" != "untrusted" ]]; then
     echo "FAIL: $REL/tier2-smoke must carry an UNTRUSTED manifest (got: '$SMOKE_CLASS')" >&2
     exit 1
@@ -164,7 +166,7 @@ if [[ "$EXPLOIT_CLASS" != "untrusted" ]]; then
     exit 1
 fi
 if [[ "$SHELL_CLASS" != "legacy (no explicit class)" ]]; then
-    echo "FAIL: $REL/app-shell must stay a non-domain cell (got: '$SHELL_CLASS')" >&2
+    echo "FAIL: $REL/cellbox must stay a non-domain cell (got: '$SHELL_CLASS')" >&2
     exit 1
 fi
 if ! has_section "$REL/tier2-smoke" sig; then
@@ -175,11 +177,11 @@ if has_section "$REL/tier2-exploit" sig; then
     echo "FAIL: $REL/tier2-exploit must stay unsigned (the unsigned class route)" >&2
     exit 1
 fi
-if ! has_section "$REL/app-shell" sig; then
-    echo "FAIL: $REL/app-shell must be signed to be admitted as a Tier 1 cell" >&2
+if ! has_section "$REL/cellbox" sig; then
+    echo "FAIL: $REL/cellbox must be signed to be admitted as a Tier 1 cell" >&2
     exit 1
 fi
-echo "    tier2-smoke: signed + untrusted   tier2-exploit: unsigned + untrusted   app-shell: signed + legacy"
+echo "    tier2-smoke: signed + untrusted   tier2-exploit: unsigned + untrusted   cellbox: signed + legacy"
 
 echo "==> Assembling kernel_fs.img (VIFS1 ramdisk)..."
 "$PYTHON_BIN" tools/mkfat32.py "$TH_DIR/kernel_fs.img" "${FAT_CELL_ARGS[@]}"

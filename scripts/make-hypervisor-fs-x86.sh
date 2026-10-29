@@ -65,7 +65,7 @@ RUSTFLAGS="-C relocation-model=pic" cargo build --release \
     --target "$TARGET" \
     -Z build-std=core,alloc \
     "${INIT_FEATURE_ARGS[@]}" \
-    -p app-init -p app-shell -p service-config \
+    -p app-init -p app-cellbox -p service-config \
     -p service-platform -p driver-nvme -p driver-e1000 \
     -p service-net -p service-hypervisor \
     "${HOSTILE_PACKAGE_ARGS[@]}"
@@ -74,7 +74,7 @@ RUSTFLAGS="-C relocation-model=pic" cargo build --release \
 source "$(dirname "$0")/lib-sign-cells.sh"
 echo "[make-hv-fs-x86] Signing x86_64 cells..."
 SIGN_TARGETS=()
-for b in app-init service-vfs service-config app-shell platform driver-nvme driver-e1000 service-net hypervisor supervisor; do
+for b in app-init service-vfs service-config cellbox platform driver-nvme driver-e1000 service-net hypervisor supervisor; do
     if [[ -f "$BIN_DIR/$b" ]]; then
         SIGN_TARGETS+=("$BIN_DIR/$b")
     fi
@@ -83,7 +83,7 @@ sign_cells "${SIGN_TARGETS[@]}"
 
 # ── Step 3: Assemble kernel_fs.img ──────────────────────────────────────────
 mkdir -p "$EMBEDDED_HV"
-# /bin/shell remains available to the PC profile. The server profile
+# /bin/cellbox remains available to the PC profile. The server profile
 # profile does not start it; it supervises VFS then Net before starting the
 # hypervisor. Hostile backend recovery additionally supervises /bin/supervisor
 # after Net, leaving the nested guest as the only interactive console.
@@ -103,7 +103,7 @@ add_required_cell() {
 add_required_cell app-init /bin/init
 add_required_cell service-vfs /bin/vfs
 add_required_cell service-config /bin/config
-add_required_cell app-shell /bin/shell
+add_required_cell cellbox /bin/cellbox
 add_required_cell platform /bin/platform
 add_required_cell driver-nvme /bin/nvme
 add_required_cell driver-e1000 /bin/e1000

@@ -473,7 +473,7 @@ fn vfs_fat16_reboot_persistence() {
     qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write did not return to prompt: {e}\n{}", qemu.dump()));
 
-    qemu.send_line("shutdown");
+    qemu.send_line("/bin/shutdown");
     qemu.wait_for("System shutting down", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("shutdown did not run: {e}\n{}", qemu.dump()));
 
@@ -656,7 +656,7 @@ fn vfs_fat16_subdir_persistence() {
         )
     });
 
-    qemu.send_line("shutdown");
+    qemu.send_line("/bin/shutdown");
     qemu.wait_for("System shutting down", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("shutdown did not run: {e}\n{}", qemu.dump()));
     assert!(
@@ -1999,7 +1999,7 @@ fn stack_sizing_paths_emit_kernel_and_user_watermarks() {
 
     for (name, phase) in [
         ("init", "boot"),
-        ("shell", "boot"),
+        ("cellbox", "boot"),
         ("vfs", "boot"),
         ("vfs-test", "exit"),
         ("net", "boot"),

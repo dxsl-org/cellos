@@ -31,7 +31,7 @@ if (-not $env:LIBCLANG_PATH) {
 # ── Step 1: build production cells (shell, config) — unchanged versions needed
 # in the image so init can bootstrap the full service stack.
 Write-Host "==> Building base cells (no test-hooks)..."
-cargo build --release -p app-shell -p service-config 2>&1 | Select-Object -Last 3
+cargo build --release -p app-cellbox -p service-config 2>&1 | Select-Object -Last 3
 
 # ── Step 2: build test-hooks variants of vfs and vfs-test.
 # init is built without features; vfs-test spawn is unconditional in init/main.rs
@@ -48,7 +48,7 @@ $required = @{
     "service-vfs (test-hooks)"  = "$rel\service-vfs"
     "app-vfs-test (test-hooks)" = "$rel\vfs-test"
     "atomic-publication-probe" = "$rel\atomic-publication-probe"
-    "app-shell"                 = "$rel\app-shell"
+    "cellbox"                 = "$rel\cellbox"
     "service-config"            = "$rel\service-config"
 }
 foreach ($kv in $required.GetEnumerator()) {
@@ -75,7 +75,7 @@ Set-Content -Path "$tmpDir\hostname" -Value "ViCell-test" -NoNewline -Encoding a
 python "$tools\mkfat32.py" `
     "$th_dir\kernel_fs.img" `
     "$rel\app-init"       "/bin/init" `
-    "$rel\app-shell"      "/bin/shell" `
+    "$rel\cellbox"      "/bin/cellbox" `
     "$rel\service-vfs"    "/bin/vfs" `
     "$rel\service-config" "/bin/config" `
     "$rel\vfs-test"       "/bin/vfs-test" `

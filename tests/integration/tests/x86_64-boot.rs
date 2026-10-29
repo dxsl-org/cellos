@@ -18,7 +18,7 @@
 //! identical to the AArch64 suite.
 
 use std::path::PathBuf;
-use vicell_integration_tests::{qemu_binary_x86, QemuRunner};
+use vicell_integration_tests::{qemu_binary_x86, x86_iso_path, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 45;
 const CMD_TIMEOUT: u64 = 10;
@@ -32,10 +32,7 @@ fn repo_root() -> PathBuf {
 }
 
 fn iso_path() -> String {
-    repo_root()
-        .join("build/vicell-x86.iso")
-        .to_string_lossy()
-        .into_owned()
+    x86_iso_path(&repo_root())
 }
 
 fn prerequisites_ok() -> bool {

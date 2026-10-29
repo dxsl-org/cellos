@@ -79,10 +79,7 @@ fn x86_kernel_path() -> String {
 }
 
 fn x86_iso_path() -> String {
-    repo_root()
-        .join("build/vicell-x86.iso")
-        .to_string_lossy()
-        .into_owned()
+    vicell_integration_tests::x86_iso_path(&repo_root())
 }
 
 // ---------------------------------------------------------------------------

@@ -28,7 +28,7 @@ $buildArgs = @(
     "--release",
     "--target", $Target,
     "-p", "app-init",
-    "-p", "app-shell",
+    "-p", "app-cellbox",
     "-p", "service-vfs",
     "-p", "service-config",
     "-p", "service-net",
@@ -53,7 +53,7 @@ cargo build @buildArgs 2>&1 | Select-Object -Last 10
 
 $cells = @(
     @{ Bin = "app-init";          Dst = "init"        },
-    @{ Bin = "app-shell";         Dst = "shell"       },
+    @{ Bin = "cellbox";         Dst = "cellbox"       },
     @{ Bin = "service-vfs";       Dst = "vfs"         },
     @{ Bin = "service-config";    Dst = "config"      },
     @{ Bin = "service-net";       Dst = "net"         },

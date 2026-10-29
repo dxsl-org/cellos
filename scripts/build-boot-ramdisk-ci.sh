@@ -49,11 +49,11 @@ echo "==> Building bootstrap cells (init, shell, vfs, config, platform, block)..
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p app-init -p app-shell -p service-vfs -p service-config \
+    -p app-init -p app-cellbox -p service-vfs -p service-config \
     -p service-platform -p driver-virtio-blk \
     "${EXTRA_PACKAGES[@]}"
 
-for bin in app-init app-shell service-vfs service-config platform driver-virtio-blk; do
+for bin in app-init cellbox service-vfs service-config platform driver-virtio-blk; do
     if [[ ! -f "$REL/$bin" ]]; then
         echo "FAIL: missing bootstrap binary: $REL/$bin" >&2; exit 1
     fi
@@ -63,7 +63,7 @@ done
 source scripts/lib-sign-cells.sh
 
 CELLS_TO_SIGN=(
-    "$REL/app-init" "$REL/app-shell" "$REL/service-vfs"
+    "$REL/app-init" "$REL/cellbox" "$REL/service-vfs"
     "$REL/service-config" "$REL/platform" "$REL/driver-virtio-blk"
 )
 EXTRA_FAT_ARGS=()
@@ -119,7 +119,7 @@ printf 'Welcome to ViCell!' > "$TMPDIR_KFS/readme"
     --config-output-dir "$EMB/boot-config" \
     "$EMB/kernel_fs.img" \
     "$REL/app-init"          /bin/init \
-    "$REL/app-shell"         /bin/shell \
+    "$REL/cellbox"         /bin/cellbox \
     "$REL/service-vfs"       /bin/vfs \
     "$REL/service-config"    /bin/config \
     "$REL/platform"          /bin/platform \

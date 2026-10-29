@@ -12,7 +12,7 @@
 //! Tests skip gracefully when any prerequisite is absent.
 
 use std::path::PathBuf;
-use vicell_integration_tests::{qemu_binary_x86, QemuRunner};
+use vicell_integration_tests::{qemu_binary_x86, x86_iso_path, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 45;
 
@@ -25,10 +25,7 @@ fn repo_root() -> PathBuf {
 }
 
 fn iso_path() -> String {
-    repo_root()
-        .join("build/vicell-x86.iso")
-        .to_string_lossy()
-        .into_owned()
+    x86_iso_path(&repo_root())
 }
 
 fn prerequisites_ok() -> bool {

@@ -70,7 +70,7 @@ jobs:
           cargo build --release \
             --target riscv64gc-unknown-none-elf \
             -Z build-std=core,alloc \
-            -p app-init -p app-shell -p service-vfs -p service-config \
+            -p app-init -p app-cellbox -p service-vfs -p service-config \
             -p service-platform -p driver-virtio-blk -p app-bench
 
       - name: Rebuild kernel with bench-aware ramdisk
@@ -83,7 +83,7 @@ jobs:
           cp "$REL/app-init" kernel/src/embedded/init
           python3 tools/mkfat32.py kernel/src/embedded/kernel_fs.img \
             "$REL/app-init"          /bin/init \
-            "$REL/app-shell"         /bin/shell \
+            "$REL/cellbox"         /bin/cellbox \
             "$REL/service-vfs"       /bin/vfs \
             "$REL/service-config"    /bin/config \
             "$REL/platform"          /bin/platform \

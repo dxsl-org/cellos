@@ -147,7 +147,7 @@ init_size, init_clusters = write_file("INIT", 3, "target/riscv64gc-unknown-none-
 # Inject SHELL
 shell_name = b"SHELL      "
 shell_cluster_start = 3 + init_clusters
-shell_size, shell_clusters = write_file("SHELL", shell_cluster_start, "target/riscv64gc-unknown-none-elf/release/app-shell")
+shell_size, shell_clusters = write_file("SHELL", shell_cluster_start, "target/riscv64gc-unknown-none-elf/release/cellbox")
 
 # Create Directory Entries in Root (Cluster 2)
 # Root Dir starts at data_start_sector

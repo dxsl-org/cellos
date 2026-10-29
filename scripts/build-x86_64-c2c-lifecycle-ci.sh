@@ -71,7 +71,7 @@ rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init" "$KERNEL" "$ISO_OUT"
 echo "==> Building base cells (init, shell, vfs, config, platform, drivers, sys tools)..."
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p app-init
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    -p app-shell -p service-vfs -p service-config -p service-platform
+    -p app-cellbox -p service-vfs -p service-config -p service-platform
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p driver-nvme -p driver-e1000 -p app-sys-tools
 
@@ -79,7 +79,7 @@ echo "==> Building the $WORKLOAD workload cells..."
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p "$WORKLOAD_PACKAGE"
 
 CELL_BINARIES=(
-    "$REL/app-shell"
+    "$REL/cellbox"
     "$REL/service-vfs"
     "$REL/service-config"
     "$REL/platform"
@@ -91,7 +91,7 @@ CELL_BINARIES=(
     "$REL/ps"
 )
 CELL_IMAGE_PATHS=(
-    /bin/shell
+    /bin/cellbox
     /bin/vfs
     /bin/config
     /bin/platform

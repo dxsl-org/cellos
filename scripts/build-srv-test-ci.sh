@@ -46,7 +46,7 @@ echo "==> Building base cells (init, shell, config, platform, block)..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p app-init -p app-shell -p service-config \
+    -p app-init -p app-cellbox -p service-config \
     -p service-platform -p driver-virtio-blk
 
 echo "==> Building service-vfs (full — no test-hooks, full quota, CellosFS Native)..."
@@ -62,7 +62,7 @@ cargo build --release \
     -p app-srv-test -p app-posix-shim-test
 
 echo "==> Verifying cell binaries..."
-for bin in app-init app-shell service-vfs service-config srv-test posix-shim-test platform driver-virtio-blk; do
+for bin in app-init cellbox service-vfs service-config srv-test posix-shim-test platform driver-virtio-blk; do
     if [[ ! -f "$REL/$bin" ]]; then
         echo "FAIL: missing required binary: $REL/$bin" >&2; exit 1
     fi
@@ -72,7 +72,7 @@ done
 source scripts/lib-sign-cells.sh
 
 echo "==> Signing cells..."
-sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" "$REL/service-config" \
+sign_cells "$REL/app-init" "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" \
            "$REL/srv-test" "$REL/posix-shim-test" "$REL/platform" "$REL/driver-virtio-blk"
 
 echo "==> Assembling kernel_fs.img (srv-test)..."
@@ -88,7 +88,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
 "$PYTHON_BIN" tools/mkfat32.py \
     "$SRV_DIR/kernel_fs.img" \
     "$REL/app-init"       /bin/init \
-    "$REL/app-shell"      /bin/shell \
+    "$REL/cellbox"      /bin/cellbox \
     "$REL/service-vfs"    /bin/vfs \
     "$REL/service-config" /bin/config \
     "$REL/platform"       /bin/platform \

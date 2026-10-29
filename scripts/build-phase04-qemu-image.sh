@@ -29,7 +29,7 @@ case "$TARGET" in
 esac
 
 PACKAGES=(
-  app-init app-shell service-platform service-vfs service-config
+  app-init app-cellbox service-platform service-vfs service-config
   driver-virtio-blk driver-virtio-net driver-virtio-gpu
   service-input service-net service-compositor service-net-broker supervisor
   periph-demo sensor-demo spi-demo pwm-demo adc-demo can-demo robot-demo
@@ -45,7 +45,7 @@ cargo build --release --target "$TARGET" "${PACKAGE_ARGS[@]}"
 
 REL="target/$TARGET/release"
 PAIRS=(
-  app-shell /bin/shell
+  cellbox /bin/cellbox
   platform /bin/platform
   service-vfs /bin/vfs
   service-config /bin/config

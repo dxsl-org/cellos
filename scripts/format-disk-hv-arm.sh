@@ -64,7 +64,7 @@ fi
 
 declare -A CELLS=(
     [app-init]=init
-    [app-shell]=shell
+    [cellbox]=cellbox
     [service-vfs]=vfs
     [service-config]=config
     [service-net]=net

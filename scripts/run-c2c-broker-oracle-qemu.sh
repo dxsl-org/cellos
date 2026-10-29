@@ -85,7 +85,7 @@ chmod 0600 "$KEY_FILE"
 
 COMMON_PACKAGES=(
     -p app-init
-    -p app-shell
+    -p app-cellbox
     -p service-config
     -p service-platform
     -p driver-virtio-blk
@@ -110,7 +110,7 @@ rm -f -- "$KEY_FILE"
 REL="$CARGO_TARGET_DIR/$TARGET/release"
 CELL_BINARIES=(
     "$REL/app-init"
-    "$REL/app-shell"
+    "$REL/cellbox"
     "$REL/service-vfs"
     "$REL/service-config"
     "$REL/platform"
@@ -141,7 +141,7 @@ printf 'Cellos C2C broker oracle\n' > "$WORK/readme.txt"
     --config-features c2c-broker \
     "$EMBEDDED/kernel_fs.img" \
     "$REL/app-init"          /bin/init \
-    "$REL/app-shell"         /bin/shell \
+    "$REL/cellbox"         /bin/cellbox \
     "$REL/service-vfs"       /bin/vfs \
     "$REL/service-config"    /bin/config \
     "$REL/platform"          /bin/platform \

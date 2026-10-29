@@ -5,7 +5,7 @@ set -e
 
 DISK_IMG="disk_8mb.img"
 INIT_BIN="target/riscv64gc-unknown-none-elf/debug/app-init"
-SHELL_BIN="target/riscv64gc-unknown-none-elf/debug/app-shell"
+SHELL_BIN="target/riscv64gc-unknown-none-elf/debug/cellbox"
 
 echo "Creating 8MB FAT32 image..."
 # 8MB = 16384 sectors of 512 bytes

@@ -353,7 +353,7 @@ fn ahci_fat32_persistence_reboot_x86() {
     // off, so the marker is durable because every FAT write was written through
     // to the device; dropping the runner kills QEMU and releases the image.
     let checkpoint = qemu.output_checkpoint();
-    qemu.send_line("shutdown");
+    qemu.send_line("/bin/shutdown");
     let _ = qemu.wait_for_after("System shutting down", checkpoint, CMD_TIMEOUT);
     let first_boot = qemu.dump();
     drop(qemu);

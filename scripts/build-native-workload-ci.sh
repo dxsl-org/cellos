@@ -18,7 +18,7 @@ echo "==> Building base cells..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p app-init -p app-shell -p service-config \
+    -p app-init -p app-cellbox -p service-config \
     -p service-platform -p driver-virtio-blk
 
 echo "==> Building service-vfs..."
@@ -48,7 +48,7 @@ cargo build --release \
 source scripts/lib-sign-cells.sh
 
 echo "==> Signing cells..."
-sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" "$REL/service-config" \
+sign_cells "$REL/app-init" "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" \
            "$REL/platform" "$REL/driver-virtio-blk" "$REL/supervisor" \
            "$REL/hotswap-demo-v1" "$REL/hotswap-demo-v2" "$REL/bench" "$REL/bench-probe"
 
@@ -64,7 +64,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
 "$PYTHON_BIN" tools/mkfat32.py \
     "$WORKLOAD_DIR/kernel_fs.img" \
     "$REL/app-init"          /bin/init \
-    "$REL/app-shell"         /bin/shell \
+    "$REL/cellbox"         /bin/cellbox \
     "$REL/service-vfs"       /bin/vfs \
     "$REL/service-config"    /bin/config \
     "$REL/platform"          /bin/platform \

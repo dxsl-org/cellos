@@ -23,7 +23,7 @@ $embedded = "kernel\src\embedded"
 Write-Host "Building embedded cells in $buildProfile mode..."
 $buildArgs = @(
     "-p", "app-init",
-    "-p", "app-shell",
+    "-p", "app-cellbox",
     "-p", "service-vfs",
     "-p", "service-config"
 )
@@ -34,7 +34,7 @@ cargo build @buildArgs 2>&1 | Select-Object -Last 5
 # Only these 4 cells are embedded in the kernel binary; others load via SpawnFromPath.
 $cells = @(
     @{ Bin = "app-init";       Dst = "init"   },
-    @{ Bin = "app-shell";      Dst = "shell"  },
+    @{ Bin = "cellbox";      Dst = "cellbox"  },
     @{ Bin = "service-vfs";    Dst = "vfs"    },
     @{ Bin = "service-config"; Dst = "config" }
 )

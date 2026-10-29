@@ -92,20 +92,13 @@ fn shell_launch_profile_allows_vfs_test_and_routes_snapshot_via_supervisor() {
 
     let prompts_before_snapshot = prompt_count(&qemu.dump());
     qemu.send_line("snapshot");
-    qemu.wait_for("[snapshot] unavailable", CMD_TIMEOUT)
-        .unwrap_or_else(|e| {
-            panic!(
-                "kernel snapshot unavailability not observed: {e}\n{}",
-                qemu.dump()
-            )
-        });
-    qemu.wait_for("snapshot: unavailable on this platform", CMD_TIMEOUT)
-        .unwrap_or_else(|e| {
-            panic!(
-                "shell snapshot unavailability not observed: {e}\n{}",
-                qemu.dump()
-            )
-        });
+    // S2c-min: the suite shell holds no lifecycle authority; the builtin refuses without
+    // contacting the Supervisor, so no `[snapshot]` kernel line may appear.
+    qemu.wait_for(
+        "snapshot: not available from the suite shell, requires a lifecycle owner",
+        CMD_TIMEOUT,
+    )
+    .unwrap_or_else(|e| panic!("shell snapshot refusal not observed: {e}\n{}", qemu.dump()));
     wait_for_prompt_advance(&qemu, prompts_before_snapshot, CMD_TIMEOUT);
 
     let prompts_before_bench = prompt_count(&qemu.dump());

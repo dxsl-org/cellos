@@ -180,7 +180,7 @@ fi
 
 echo "[ai-oracle] building $ARCH cells"
 env "${AARCH64_CFLAGS[@]}" cargo build --quiet --locked --release --target "$TARGET" "${BUILD_STD[@]}" \
-    -p app-init -p app-shell -p service-vfs -p service-config -p service-platform \
+    -p app-init -p app-cellbox -p service-vfs -p service-config -p service-platform \
     -p driver-virtio-blk -p ai-test
 env "${AARCH64_CFLAGS[@]}" cargo build --quiet --locked --release --target "$TARGET" "${BUILD_STD[@]}" \
     -p service-ai "${AI_FEATURES[@]}"
@@ -188,7 +188,7 @@ env "${AARCH64_CFLAGS[@]}" cargo build --quiet --locked --release --target "$TAR
 REL="$CARGO_TARGET_DIR/$TARGET/release"
 CELL_BINARIES=(
     "$REL/app-init"
-    "$REL/app-shell"
+    "$REL/cellbox"
     "$REL/service-vfs"
     "$REL/service-config"
     "$REL/platform"
@@ -216,7 +216,7 @@ echo "[ai-oracle] assembling VIFS1"
 "$PYTHON_BIN" tools/mkfat32.py \
     "$EMBEDDED/kernel_fs.img" \
     "$REL/app-init"            /bin/init \
-    "$REL/app-shell"           /bin/shell \
+    "$REL/cellbox"           /bin/cellbox \
     "$REL/service-vfs"         /bin/vfs \
     "$REL/service-config"      /bin/config \
     "$REL/platform"            /bin/platform \

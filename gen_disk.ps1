@@ -114,7 +114,7 @@ function Add-FailedOptional([string]$what) {
 }
 
 Build-Cargo -What "core services + drivers" -Tail 5 -Packages @(
-    'app-init', 'app-shell', 'service-platform',
+    'app-init', 'app-cellbox', 'service-platform',
     'service-vfs', 'service-config',
     'service-input', 'service-net', 'service-compositor', 'service-kms', 'service-net-broker',
     'supervisor', 'driver-nvme', 'driver-e1000', 'driver-virtio-net', 'driver-virtio-blk', 'driver-virtio-gpu')
@@ -255,7 +255,7 @@ function Add-RequiredCellToSign {
 
 # Collect the cells that are embedded / placed in the disk image.
 Add-RequiredCellToSign "$rel_dir/app-init" "app-init"
-Add-RequiredCellToSign "$rel_dir/app-shell" "app-shell"
+Add-RequiredCellToSign "$rel_dir/cellbox" "cellbox"
 Add-CellToSign "$rel_dir/platform"
 Add-RequiredCellToSign "$rel_dir/service-vfs" "service-vfs"
 Add-RequiredCellToSign "$rel_dir/service-config" "service-config"
@@ -308,6 +308,7 @@ Add-CellToSign "$rel_dir/cat"
 Add-CellToSign "$rel_dir/echo"
 Add-CellToSign "$rel_dir/ps"
 Add-CellToSign "$rel_dir/kill"
+Add-CellToSign "$rel_dir/shutdown"
 Add-RequiredCellToSign "$rel_dir/free" "app-sys-tools (free binary)"
 Add-RequiredCellToSign "$rel_dir/hotswap" "app-sys-tools (hotswap binary)"
 if (Test-Path "$rel_dir/lua")          { Add-CellToSign "$rel_dir/lua" }
@@ -346,7 +347,7 @@ Copy-Item "$rel_dir/app-init"       "$embedded/init"   -Force
 
 # 2. Paths — all bootstrap table entries use RELEASE builds.
 $init_bin   = "$rel_dir/app-init"
-$shell_bin  = "$rel_dir/app-shell"
+$shell_bin  = "$rel_dir/cellbox"
 $vfs_bin    = "$rel_dir/service-vfs"
 $config_bin = "$rel_dir/service-config"
 $lua_bin    = "$rel_dir/lua"
@@ -412,12 +413,13 @@ $cat_bin  = "$rel_dir/cat"
 $echo_bin = "$rel_dir/echo"
 $ps_bin   = "$rel_dir/ps"
 $kill_bin = "$rel_dir/kill"
+$shutdown_bin = "$rel_dir/shutdown"
 $free_bin = "$rel_dir/free"
 $hotswap_bin = "$rel_dir/hotswap"
 
 foreach ($pair in @(
     @{ Path = $init_bin;   Name = "app-init" },
-    @{ Path = $shell_bin;  Name = "app-shell" },
+    @{ Path = $shell_bin;  Name = "cellbox" },
     @{ Path = $vfs_bin;    Name = "service-vfs" },
     @{ Path = $config_bin; Name = "service-config" }
 )) {
@@ -499,7 +501,7 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $policy_bin)) {
 $kfs_args = @(
     "kernel/src/embedded/kernel_fs.img",
     "$rel_dir/app-init",       "/bin/init",
-    "$rel_dir/app-shell",      "/bin/shell",
+    "$rel_dir/cellbox",      "/bin/cellbox",
     "$rel_dir/service-vfs",    "/bin/vfs",
     "$rel_dir/service-config", "/bin/config",
     "$tmpDir/hostname",        "/etc/hostname",
@@ -570,7 +572,7 @@ $table_args = @(
     "disk_v3.img",
     "/bin/vfs=$vfs_bin",
     "/bin/config=$config_bin",
-    "/bin/shell=$shell_bin"
+    "/bin/cellbox=$shell_bin"
 )
 if ($lua_bin)   { $table_args += "/bin/lua=$lua_bin" }
 if ($upy_bin)   { $table_args += "/bin/python=$upy_bin" }
@@ -651,6 +653,7 @@ if (Test-Path $cat_bin)  { $table_args += "/bin/cat=$cat_bin" }
 if (Test-Path $echo_bin) { $table_args += "/bin/echo=$echo_bin" }
 if (Test-Path $ps_bin)   { $table_args += "/bin/ps=$ps_bin" }
 if (Test-Path $kill_bin) { $table_args += "/bin/kill=$kill_bin" }
+if (Test-Path $shutdown_bin) { $table_args += "/bin/shutdown=$shutdown_bin" }
 if (Test-Path $free_bin) { $table_args += "/bin/free=$free_bin" }
 if (Test-Path $hotswap_bin) { $table_args += "/bin/hotswap=$hotswap_bin" }
 $configArgs = @('--config-output-dir', "$embedded/boot-config")

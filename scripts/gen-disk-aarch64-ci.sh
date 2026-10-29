@@ -146,7 +146,7 @@ echo "==> toolchain: python=$PYTHON_BIN cc=$CC_aarch64_unknown_none_softfloat re
 
 # ── 1. Build the cells ────────────────────────────────────────────────────────
 # The package list mirrors `.github/workflows/ci.yml`'s `Build aarch64 cells` step
-# (app-init, app-shell, service-vfs, service-config, service-net, service-input,
+# (app-init, cellbox, service-vfs, service-config, service-net, service-input,
 # service-compositor, periph-demo, input-test, app-sys-tools) minus the cells the
 # image below does not carry, plus `driver-virtio-net` and `service-httpd`, which
 # the integration suite's HTTP row needs and the CI prompt-only boot check does
@@ -159,7 +159,7 @@ build_cells() {
 }
 
 if [[ $BUILD_CELLS -eq 1 ]]; then
-    build_cells "bootstrap + core services" -p app-init -p app-shell -p service-vfs -p service-config
+    build_cells "bootstrap + core services" -p app-init -p app-cellbox -p service-vfs -p service-config
     build_cells "sys tools (ls, cat, echo, ps, kill)" -p app-sys-tools
     build_cells "input service + input-test" -p service-input -p input-test
     build_cells "network stack + httpd" -p service-net -p driver-virtio-net -p service-httpd
@@ -173,7 +173,7 @@ fi
 # unsigned cell is DENIED at spawn under `signing-required` and the guest never
 # reaches a shell. Fail here, where the cause is obvious.
 CELL_BINARIES=(
-    "$REL/app-shell"
+    "$REL/cellbox"
     "$REL/service-vfs"
     "$REL/service-config"
     "$REL/service-input"
@@ -184,12 +184,13 @@ CELL_BINARIES=(
     "$REL/echo"
     "$REL/ps"
     "$REL/kill"
+    "$REL/shutdown"
     "$REL/service-net"
     "$REL/driver-virtio-net"
     "$REL/service-httpd"
 )
 CELL_IMAGE_PATHS=(
-    /bin/shell
+    /bin/cellbox
     /bin/vfs
     /bin/config
     /bin/input
@@ -200,6 +201,7 @@ CELL_IMAGE_PATHS=(
     /bin/echo
     /bin/ps
     /bin/kill
+    /bin/shutdown
     /bin/net
     /bin/virtio-net
     /bin/httpd
@@ -246,24 +248,24 @@ has_section() {
 # The artifacts the suite drives must be signed, and the image must NOT contain a
 # domain-class cell: this is the production image, not the refusal witness, and a
 # `/bin/tier2-*` here would make the refusal tests pass against the wrong image.
-for signed in "$REL/app-shell" "$REL/periph-demo" "$REL/service-net" "$REL/service-httpd"; do
+for signed in "$REL/cellbox" "$REL/periph-demo" "$REL/service-net" "$REL/service-httpd"; do
     if ! has_section "$signed" sig; then
         echo "FAIL: $signed must carry a __ViCell_sig section to be admitted at all" >&2
         exit 1
     fi
 done
 
-# Class check via the same tool the refusal lane uses. app-shell must stay a
+# Class check via the same tool the refusal lane uses. cellbox must stay a
 # non-domain cell (a domain-class shell would be refused and no boot test could
 # pass), and periph-demo must stay non-domain too.
 check_class() {
     (cd "$SCRIPT_DIR/../tools" && "$PYTHON_BIN" check_elf.py "$1" 2>/dev/null || true) \
         | sed -n 's/^Protection class: //p'
 }
-SHELL_CLASS="$(check_class "$REPO_ROOT/$REL/app-shell")"
+SHELL_CLASS="$(check_class "$REPO_ROOT/$REL/cellbox")"
 PERIPH_CLASS="$(check_class "$REPO_ROOT/$REL/periph-demo")"
 if [[ "$SHELL_CLASS" != "legacy (no explicit class)" ]]; then
-    echo "FAIL: $REL/app-shell must stay a non-domain cell (got: '$SHELL_CLASS')" >&2
+    echo "FAIL: $REL/cellbox must stay a non-domain cell (got: '$SHELL_CLASS')" >&2
     exit 1
 fi
 if [[ "$PERIPH_CLASS" == "untrusted" ]]; then
@@ -271,7 +273,7 @@ if [[ "$PERIPH_CLASS" == "untrusted" ]]; then
     echo "      production image refuses those at admission, so the demo could never run." >&2
     exit 1
 fi
-echo "    app-shell: signed + $SHELL_CLASS   periph-demo: signed + $PERIPH_CLASS"
+echo "    cellbox: signed + $SHELL_CLASS   periph-demo: signed + $PERIPH_CLASS"
 
 # ── 4. VIFS1 (kernel_fs.img) ──────────────────────────────────────────────────
 # VIFS1 carries the bootstrap chain, the cells whose launch edge needs the kernel
@@ -473,7 +475,7 @@ verify_row "/bin/input-test"    "$REL/input-test"
 verify_row "/bin/httpd"         "$REL/service-httpd"
 verify_row "/bin/virtio-net"    "$REL/driver-virtio-net"
 verify_row "/bin/vfs"           "$REL/service-vfs"
-verify_row "/bin/shell"         "$REL/app-shell"
+verify_row "/bin/cellbox"         "$REL/cellbox"
 
 # A production disk carries no domain-class fixture: those belong to
 # scripts/build-aarch64-prod-refusal-ci.sh's own image, and a stray /bin/tier2-*

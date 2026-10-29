@@ -91,7 +91,10 @@ fn desktop_x86_boots_to_shell_and_compositor() {
     );
 
     // Capture initial desktop framebuffer state
-    let init_capture_path = repo_root().join("build/screen-test-initial.ppm");
+    // Captures go to the system temp directory, never into the repository's build/.
+    let capture_dir = std::env::temp_dir();
+    let init_capture_path =
+        capture_dir.join(format!("cellos-desktop-x86-{}-initial.ppm", std::process::id()));
     let init_str = init_capture_path.to_string_lossy().to_string();
     assert!(
         qemu.capture_qemu_screen(&init_str) && init_capture_path.exists(),
@@ -112,7 +115,8 @@ fn desktop_x86_boots_to_shell_and_compositor() {
     std::thread::sleep(std::time::Duration::from_millis(300));
 
     // Capture moved desktop framebuffer and prove compositor repainted cursor at new coordinates
-    let moved_capture_path = repo_root().join("build/screen-test-moved.ppm");
+    let moved_capture_path =
+        capture_dir.join(format!("cellos-desktop-x86-{}-moved.ppm", std::process::id()));
     let moved_str = moved_capture_path.to_string_lossy().to_string();
     assert!(
         qemu.capture_qemu_screen(&moved_str) && moved_capture_path.exists(),

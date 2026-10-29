@@ -38,13 +38,13 @@ esac
 # (the same set the x86 image lanes stage).
 case "$ARCH" in
     x86_64)
-        BOOTSTRAP_PKGS=(app-init app-shell service-vfs service-config service-platform driver-nvme driver-e1000)
-        BOOTSTRAP_BINS=(app-init app-shell service-vfs service-config platform driver-nvme driver-e1000)
+        BOOTSTRAP_PKGS=(app-init app-cellbox service-vfs service-config service-platform driver-nvme driver-e1000)
+        BOOTSTRAP_BINS=(app-init cellbox service-vfs service-config platform driver-nvme driver-e1000)
         FAT_DRIVERS=("_REL_/driver-nvme" /bin/nvme "_REL_/driver-e1000" /bin/e1000)
         ;;
     *)
-        BOOTSTRAP_PKGS=(app-init app-shell service-vfs service-config service-platform driver-virtio-blk)
-        BOOTSTRAP_BINS=(app-init app-shell service-vfs service-config platform driver-virtio-blk)
+        BOOTSTRAP_PKGS=(app-init app-cellbox service-vfs service-config service-platform driver-virtio-blk)
+        BOOTSTRAP_BINS=(app-init cellbox service-vfs service-config platform driver-virtio-blk)
         FAT_DRIVERS=("_REL_/driver-virtio-blk" /bin/block)
         ;;
 esac
@@ -152,7 +152,7 @@ printf 'Cellos Tier 1 Rust std runtime verification\n' > "$WORK/readme.txt"
 "$PYTHON_BIN" tools/mkfat32.py \
     "$EMBEDDED/kernel_fs.img" \
     "$REL/app-init"          /bin/init \
-    "$REL/app-shell"         /bin/shell \
+    "$REL/cellbox"         /bin/cellbox \
     "$REL/service-vfs"       /bin/vfs \
     "$REL/service-config"    /bin/config \
     "$REL/platform"          /bin/platform \

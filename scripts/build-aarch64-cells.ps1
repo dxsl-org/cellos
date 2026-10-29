@@ -109,9 +109,9 @@ $previousRustflags = $env:RUSTFLAGS
 try {
 $env:RUSTFLAGS = $rustflags
 
-Write-Host "Building app-shell..."
-cargo build --release -p app-shell --target $target 2>&1 | Select-Object -Last 8
-Assert-CellBuild 'app-shell' $LASTEXITCODE
+Write-Host "Building cellbox..."
+cargo build --release -p app-cellbox --target $target 2>&1 | Select-Object -Last 8
+Assert-CellBuild 'cellbox' $LASTEXITCODE
 
 Write-Host "Building service-vfs (littlefs /data via clang cross-compile)..."
 cargo build --release -p service-vfs --target $target 2>&1 | Select-Object -Last 8
@@ -237,7 +237,7 @@ $initSrc = if ($BoardRpi3) {
 # (data abort at 0x0A000000). RPi3 storage is the in-kernel Arasan SDHCI path and
 # its NIC is the LAN9514 reached through /bin/dwc2-usb.
 $cells = @(
-    @{ Bin = "app-shell";      Dst = "/bin/shell"       },
+    @{ Bin = "cellbox";      Dst = "/bin/cellbox"       },
     @{ Bin = "service-vfs";    Dst = "/bin/vfs"         },
     @{ Bin = "service-config"; Dst = "/bin/config"      },
     @{ Bin = "service-input";  Dst = "/bin/input"       },
@@ -250,6 +250,7 @@ $cells = @(
     @{ Bin = "echo";           Dst = "/bin/echo"        },
     @{ Bin = "ps";             Dst = "/bin/ps"          },
     @{ Bin = "kill";           Dst = "/bin/kill"        },
+    @{ Bin = "shutdown";           Dst = "/bin/shutdown"        },
     @{ Bin = "service-net";    Dst = "/bin/net"         },
     @{ Bin = "service-httpd";  Dst = "/bin/httpd"       },
     @{ Bin = "tier2-smoke";    Dst = "/bin/tier2-smoke"   },
@@ -359,7 +360,7 @@ if ($AiCells) {
     Write-Host '  AI cells packed without a checkpoint: the service will read /mnt/sd/ai-model.gguf'
 }
 
-foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-input', 'periph-demo', 'sensor-demo', 'spi-demo')) {
+foreach ($required in @('cellbox', 'service-vfs', 'service-config', 'service-input', 'periph-demo', 'sensor-demo', 'spi-demo')) {
     if ($required -notin $found) {
         throw "Required aarch64 cell missing from image inputs: $required"
     }

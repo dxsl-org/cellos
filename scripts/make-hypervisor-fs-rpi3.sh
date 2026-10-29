@@ -151,7 +151,7 @@ INIT_FEATURES=app-init/board-rpi3,app-init/input
 if (( !MINIMAL_DRIVERS )); then
     INIT_FEATURES+=,app-init/usb-host
 fi
-BUILD_PACKAGES=(-p app-init -p app-shell -p service-vfs -p service-input)
+BUILD_PACKAGES=(-p app-init -p app-cellbox -p service-vfs -p service-input)
 if (( TIER3 )); then
     INIT_FEATURES+=,app-init/tier3
     BUILD_PACKAGES+=(-p service-hypervisor)
@@ -246,7 +246,7 @@ fi
 # but unbootable VIFS1 image, and /vmlinuz plus /initrd.gz must always be there.
 # shellcheck source=scripts/lib-sign-cells.sh
 source scripts/lib-sign-cells.sh
-SIGN_TARGETS=("$BIN_DIR/app-init" "$BIN_DIR/app-shell" "$BIN_DIR/service-vfs" \
+SIGN_TARGETS=("$BIN_DIR/app-init" "$BIN_DIR/cellbox" "$BIN_DIR/service-vfs" \
     "$BIN_DIR/service-input" "$BIN_DIR/service-net")
 if (( !MINIMAL_DRIVERS )); then
     SIGN_TARGETS+=("$BIN_DIR/driver-dwc2-usb" "$BIN_DIR/driver-lan9514")
@@ -288,7 +288,7 @@ else
         scripts/rpi3-guest-init "$INITRD"
 fi
 FAT_ARGS=("$BIN_DIR/app-init" bin/init \
-    "$BIN_DIR/app-shell" bin/shell \
+    "$BIN_DIR/cellbox" bin/cellbox \
     "$BIN_DIR/service-vfs" bin/vfs \
     "$BIN_DIR/service-input" bin/input \
     "$BIN_DIR/service-net" bin/net)

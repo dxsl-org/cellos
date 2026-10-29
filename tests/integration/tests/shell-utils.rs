@@ -1,8 +1,8 @@
 //! Shell utility integration test (Phase E — Shell M3.1).
 //!
-//! Boots a shell-test kernel (compiled with `app-shell --features shell_test`)
+//! Boots a shell-test kernel (compiled with `app-cellbox --features shell_test`)
 //! and waits for the `[shell-test] COMPLETE` marker before checking the final
-//! result printed by `cells/tools/shell/src/shell_test.rs`.
+//! result printed by `cells/tools/cellbox/src/shell_test.rs`.
 //!
 //! Prerequisites:
 //!   bash scripts/build-shell-test-ci.sh

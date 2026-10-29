@@ -36,7 +36,7 @@
 #
 # FLAVOUR RULE: only build-test-hooks-ci.sh may build service-vfs / app-vfs-test
 # with `--features test-hooks`, and only build-shell-test-ci.sh may build
-# app-shell with `--features shell_test`; every image assembled here uses the
+# cellbox with `--features shell_test`; every image assembled here uses the
 # production flavour. The assertions below turn a violation into a build failure
 # instead of a mysterious lane failure.
 #
@@ -150,7 +150,7 @@ build_optional() {
 }
 
 if [[ $BUILD_CELLS -eq 1 ]]; then
-    build_cells "core services + drivers" -p app-init -p app-shell -p service-platform \
+    build_cells "core services + drivers" -p app-init -p app-cellbox -p service-platform \
         -p service-vfs -p service-config -p service-input -p service-net \
         -p service-compositor -p service-kms -p service-net-broker -p supervisor \
         -p driver-nvme -p driver-e1000 -p driver-virtio-net -p driver-virtio-blk \
@@ -206,7 +206,7 @@ fi
 # exits at its first match, `strings` then dies on SIGPIPE (status 141), and the
 # pipeline's non-zero status makes the `if` false — the guard silently passes with
 # the marker present. Capture the dump first. (Measured 2026-10-02 while adding
-# the app-shell guard: it reported a clean shell on a `--no-cells` run that had
+# the cellbox guard: it reported a clean shell on a `--no-cells` run that had
 # embedded the shell_test harness, and the two test-hooks guards above it were
 # disabled by the same flaw.)
 assert_absent_marker() {
@@ -229,13 +229,13 @@ assert_absent_marker "$REL/service-vfs" "access/selftest.rs" \
 assert_absent_marker "$REL/vfs-test" "rdir-quota" \
     "app-vfs-test must be built WITHOUT --features test-hooks for a production disk (scripts/build-test-hooks-ci.sh owns that flavour)."
 
-# app-shell's `shell_test` flavour replaces the REPL with a deterministic scenario
-# harness. scripts/build-shell-test-ci.sh builds it at $REL/app-shell and copies
+# cellbox's `shell_test` flavour replaces the REPL with a deterministic scenario
+# harness. scripts/build-shell-test-ci.sh builds it at $REL/cellbox and copies
 # only the KERNEL to cellos-kernel-shell-test, so the harness binary outlives that
-# lane: a later `--no-cells` run embeds it as /bin/shell, the guest never prints
+# lane: a later `--no-cells` run embeds it as /bin/cellbox, the guest never prints
 # `Cellos >`, and every boot lane fails on a phantom cause.
-assert_absent_marker "$REL/app-shell" "[shell-test] COMPLETE" \
-    "app-shell must be built WITHOUT --features shell_test for a production disk (scripts/build-shell-test-ci.sh owns that flavour); re-run a full 'bash scripts/gen-disk-ci.sh' without --no-cells."
+assert_absent_marker "$REL/cellbox" "[shell-test] COMPLETE" \
+    "cellbox must be built WITHOUT --features shell_test for a production disk (scripts/build-shell-test-ci.sh owns that flavour); re-run a full 'bash scripts/gen-disk-ci.sh' without --no-cells."
 
 # tier2-smoke must be a current build: the phase-01 sentinel only exists in the
 # closed-lifecycle branch, which RV64 no longer compiles in (dead-code eliminated).
@@ -243,7 +243,7 @@ assert_absent_marker "$REL/tier2-smoke" "Grant registration denied fail-closed (
     "tier2-smoke is a phase-01-era binary (closed-lifecycle branch present)."
 
 # Required artifacts: gen_disk.ps1's Add-RequiredCellToSign list.
-for required in app-init app-shell service-vfs service-config service-kms supervisor \
+for required in app-init cellbox service-vfs service-config service-kms supervisor \
                 bench viui-demo backend-supervisor backend-worker hotswap-demo-v1 \
                 hotswap-demo-v2 free hotswap; do
     if [[ ! -f "$REL/$required" ]]; then
@@ -264,7 +264,7 @@ source scripts/lib-sign-cells.sh
 SIGNABLE=()
 add_signable() { [[ -f $1 ]] && SIGNABLE+=("$1"); return 0; }
 
-for cell in app-init app-shell platform service-vfs service-config service-net service-kms \
+for cell in app-init cellbox platform service-vfs service-config service-net service-kms \
             service-net-broker service-compositor supervisor driver-nvme driver-e1000 \
             driver-virtio-net driver-virtio-blk driver-virtio-gpu service-ai service-httpd \
             ai-test service-input bench bench-probe capacity-probe heavy-probe app-net-tools app-sys-tools \
@@ -272,7 +272,7 @@ for cell in app-init app-shell platform service-vfs service-config service-net s
             hypha-core hypha-tool-fs hypha-tool-sys hypha-tool-spawn input-test \
             window-policy-probe viui-demo audio-demo app-https-demo http-smoke cfi-test wx-test \
             vfs-test backend-supervisor backend-worker hotswap-demo-v1 hotswap-demo-v2 ls cat \
-            echo ps kill free hotswap posix-shim-test tier2-smoke tier2-exploit tetris \
+            echo ps kill shutdown free hotswap posix-shim-test tier2-smoke tier2-exploit tetris \
             tetris-c tetris-lua doom lua micropython; do
     add_signable "$REL/$cell"
 done
@@ -304,7 +304,7 @@ KFS="$EMBED_DIR/kernel_fs.img"
 kfs_args=(
     "$KFS"
     "$REL/app-init"       "/bin/init"
-    "$REL/app-shell"      "/bin/shell"
+    "$REL/cellbox"      "/bin/cellbox"
     "$REL/service-vfs"    "/bin/vfs"
     "$REL/service-config" "/bin/config"
     "$KFS_TMP/hostname"   "/etc/hostname"
@@ -354,7 +354,7 @@ table_args=(
     "$DISK.new"
     "/bin/vfs=$REL/service-vfs"
     "/bin/config=$REL/service-config"
-    "/bin/shell=$REL/app-shell"
+    "/bin/cellbox=$REL/cellbox"
 )
 add_row() { [[ -f $1 ]] && table_args+=("$2=$1"); return 0; }
 
@@ -431,6 +431,7 @@ add_row "$REL/cat"                    "/bin/cat"
 add_row "$REL/echo"                   "/bin/echo"
 add_row "$REL/ps"                     "/bin/ps"
 add_row "$REL/kill"                   "/bin/kill"
+add_row "$REL/shutdown"                   "/bin/shutdown"
 add_row "$REL/free"                   "/bin/free"
 add_row "$REL/hotswap"                "/bin/hotswap"
 config_args=()
@@ -449,7 +450,7 @@ done
 "$PYTHON_BIN" tools/inspect_fat.py "$KFS" > "$KFS_TMP/fat-layout.txt"
 if ! grep -q -- '--- /bin ---' "$KFS_TMP/fat-layout.txt" ||
    ! grep -q -- "LFN 'vfs'" "$KFS_TMP/fat-layout.txt" ||
-   ! grep -q -- "LFN 'shell'" "$KFS_TMP/fat-layout.txt" ||
+   ! grep -q -- "LFN 'cellbox'" "$KFS_TMP/fat-layout.txt" ||
    ! grep -q -- "LFN 'bench-probe'" "$KFS_TMP/fat-layout.txt"; then
     echo "FAIL: kernel_fs.img lacks a required bootstrap cell" >&2
     cat "$KFS_TMP/fat-layout.txt" >&2

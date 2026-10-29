@@ -2,7 +2,7 @@
 # Build the shell-test kernel for Phase E shell utility integration tests (Linux CI).
 #
 # The shell-test kernel is identical to the standard release kernel except that
-# app-shell is compiled with --features shell_test, replacing the interactive
+# cellbox is compiled with --features shell_test, replacing the interactive
 # REPL with the deterministic scenario harness in shell_test.rs.
 #
 # Produces: target/riscv64gc-unknown-none-elf/release/cellos-kernel-shell-test
@@ -54,10 +54,10 @@ echo "==> Building shell (shell_test feature)..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p app-shell --features shell_test
+    -p app-cellbox --features shell_test
 
 echo "==> Verifying cell binaries..."
-for bin in app-init app-shell service-vfs service-config; do
+for bin in app-init cellbox service-vfs service-config; do
     if [[ ! -f "$REL/$bin" ]]; then
         echo "FAIL: missing required binary: $REL/$bin" >&2; exit 1
     fi
@@ -67,7 +67,7 @@ done
 source scripts/lib-sign-cells.sh
 
 echo "==> Signing cells..."
-sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" "$REL/service-config"
+sign_cells "$REL/app-init" "$REL/cellbox" "$REL/service-vfs" "$REL/service-config"
 
 echo "==> Assembling kernel_fs.img (shell-test)..."
 mkdir -p "$ST_DIR"
@@ -82,7 +82,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
 "$PYTHON_BIN" tools/mkfat32.py \
     "$ST_DIR/kernel_fs.img" \
     "$REL/app-init"        /bin/init \
-    "$REL/app-shell"       /bin/shell \
+    "$REL/cellbox"       /bin/cellbox \
     "$REL/service-vfs"     /bin/vfs \
     "$REL/service-config"  /bin/config \
     "$TMPDIR_KFS/hostname" /etc/hostname \
@@ -94,7 +94,7 @@ fi
 "$PYTHON_BIN" tools/inspect_fat.py "$ST_DIR/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
 if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- 'SFN SHELL' "$TMPDIR_KFS/fat-layout.txt"; then
-    echo "FAIL: kernel_fs.img does not contain /bin/shell" >&2
+    echo "FAIL: kernel_fs.img does not contain /bin/cellbox" >&2
     exit 1
 fi
 assert_policy_in_image "$TMPDIR_KFS/fat-layout.txt" || exit 1

@@ -205,7 +205,7 @@ jobs:
             cc_pkg: ""
             cc_bin: cc
             cells_args: >-
-              -p app-init -p app-shell -p service-vfs -p service-config
+              -p app-init -p app-cellbox -p service-vfs -p service-config
               -p service-platform -p driver-nvme -p driver-e1000 -p app-sys-tools
     steps:
       - uses: actions/checkout@v4
@@ -584,7 +584,7 @@ jobs:
           cargo build --release
           --target aarch64-unknown-none-softfloat
           -Z build-std=core,alloc
-          -p app-init -p app-shell -p service-vfs -p service-config
+          -p app-init -p app-cellbox -p service-vfs -p service-config
           -p service-net -p service-input -p service-compositor
           -p periph-demo -p input-test -p app-sys-tools
 
@@ -619,12 +619,12 @@ jobs:
           # shellcheck source=scripts/lib-sign-cells.sh
           source scripts/lib-sign-cells.sh
           sign_cells \
-            "$REL/app-shell" "$REL/service-vfs" "$REL/service-config" \
+            "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" \
             "$REL/service-input" "$REL/input-test" "$REL/periph-demo" \
             "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps" "$REL/kill"
           python3 tools/mkfat32.py \
             kernel/src/embedded-aarch64/kernel_fs.img \
-            "$REL/app-shell"      /bin/shell \
+            "$REL/cellbox"      /bin/cellbox \
             "$REL/service-vfs"    /bin/vfs \
             "$REL/service-config" /bin/config \
             "$REL/service-input"  /bin/input \
@@ -713,7 +713,7 @@ jobs:
           cargo build --release
           --target aarch64-unknown-none-softfloat
           -Z build-std=core,alloc
-          -p app-init -p app-shell -p service-vfs -p service-config
+          -p app-init -p app-cellbox -p service-vfs -p service-config
           -p service-net -p service-hypervisor -p driver-virtio-blk
 
       - name: Build hypervisor kernel_fs.img (embeds Alpine)
@@ -818,7 +818,7 @@ jobs:
           cargo build --release
           --target aarch64-unknown-none-softfloat
           -Z build-std=core,alloc
-          -p app-init -p app-shell -p service-vfs -p service-config
+          -p app-init -p app-cellbox -p service-vfs -p service-config
           -p service-net -p service-hypervisor
 
       - name: Build hypervisor kernel_fs.img (embeds Alpine)
@@ -912,75 +912,37 @@ jobs:
         timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-x86 xorriso
 
-      - name: Build x86_64 cells
-        # Cells use relocation-model=pic (mirrors build-x86_64-cells.ps1);
-        # freestanding CFLAGS keep host-cc builtins out of the bare-metal link.
-        env:
-          CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS: "-C relocation-model=pic"
-          CC_x86_64_unknown_none: cc
-          CFLAGS_x86_64_unknown_none: -ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
-          BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
-        run: >
-          cargo build --release
-          --target x86_64-unknown-none
-          -Z build-std=core,alloc
-          -p app-shell -p service-vfs -p service-config
-          -p service-input
-          -p service-platform -p driver-nvme -p driver-e1000 -p driver-igb -p driver-ahci -p driver-xhci -p app-sys-tools
-          && cargo build --release
-          --target x86_64-unknown-none
-          -Z build-std=core,alloc
-          -p app-init --features input
-
       # kernel_fs.img is a gitignored build artifact; the committed copy goes
-      # stale against the kernel ABI — assemble a fresh one (mirrors
-      # scripts/build-x86_64-cells.ps1's image layout).
+      # stale against the kernel ABI — assemble a fresh one.
       # cellos_sign verifies the F1/F5 policy through `cryptography`'s Ed25519.
       - name: Install Python cryptography (cell signing)
         timeout-minutes: 5
         run: python3 -m pip install --user --quiet cryptography
 
-      - name: Assemble x86_64 kernel_fs.img
-        # Every cell the loader spawns must carry the dev-key signature: an
-        # unsigned cell is classified domain-class (ADR-0015) and a production
-        # x86_64 kernel refuses a domain launch with `NotSupported`, which shows up
-        # as "Init: shell spawn failed" after the ELF loads. `init` takes the
-        # explicit embedded path instead and is not signed.
-        run: |
-          REL=target/x86_64-unknown-none/release
-          PYTHON_BIN=python3
-          # shellcheck source=scripts/lib-sign-cells.sh
-          source scripts/lib-sign-cells.sh
-          sign_cells \
-            "$REL/app-shell" "$REL/service-vfs" "$REL/service-config" \
-            "$REL/service-input" \
-            "$REL/platform" "$REL/driver-nvme" "$REL/driver-e1000" "$REL/driver-igb" \
-            "$REL/driver-ahci" "$REL/driver-xhci" \
-            "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps"
-          python3 tools/mkfat32.py \
-            kernel/src/embedded-x86_64/kernel_fs.img \
-            "$REL/app-shell"      /bin/shell \
-            "$REL/service-vfs"    /bin/vfs \
-            "$REL/service-config" /bin/config \
-            "$REL/service-input"  /bin/input \
-            "$REL/platform"       /bin/platform \
-            "$REL/driver-nvme"    /bin/nvme \
-            "$REL/driver-e1000"   /bin/e1000 \
-            "$REL/driver-igb"     /bin/igb \
-            "$REL/driver-ahci"    /bin/ahci \
-            "$REL/driver-xhci"    /bin/xhci \
-            "$REL/ls"             /bin/ls \
-            "$REL/cat"            /bin/cat \
-            "$REL/echo"           /bin/echo \
-            "$REL/ps"             /bin/ps
-          cp "$REL/app-init" kernel/src/embedded-x86_64/init
+      - name: Assemble x86_64 kernel_fs.img (headless profile)
+        # scripts/assemble-x86-image.py is the single x86 image recipe (also
+        # behind build-x86_64-cells.ps1): it builds every cell and init from
+        # source with relocation-model=pic, dev-key signs them, checks the inputs
+        # and the read-back image, and publishes kernel_fs.img, init, boot-config/
+        # and manifest.json. Freestanding CFLAGS keep host-cc builtins out of the
+        # bare-metal link. S10-2b admits this canonical route (out-dir
+        # kernel/src/embedded-x86_64, cargo target dir <repo>/target) for the dev
+        # key only; the CI bytes are a fresh headless build, not the qualified bytes.
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS: "-C relocation-model=pic"
+          CC_x86_64_unknown_none: cc
+          CFLAGS_x86_64_unknown_none: -ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+          BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
+        run: python3 scripts/assemble-x86-image.py --profile headless --out-dir kernel/src/embedded-x86_64
 
       - name: Build x86_64 kernel
-        run: >
-          cargo build --release
-          -p cellos-kernel
-          --target x86_64-unknown-none
-          -Z build-std=core,alloc
+        # The canonical fleet profile (Phase 10 S10-3a): the features come from the
+        # assembler's manifest (`kernel_features`, `CANONICAL_KERNEL_FEATURES`), so Tier 2
+        # admission is DISABLED, as the boot test below requires.
+        run: |
+          KERNEL_FEATURES="$(python3 -c 'import json; print(",".join(json.load(open("kernel/src/embedded-x86_64/manifest.json"))["kernel_features"]))')"
+          cargo build --release -p cellos-kernel --target x86_64-unknown-none \
+            -Z build-std=core,alloc --features "$KERNEL_FEATURES"
 
       - name: Build Limine ISO
         run: bash scripts/x86/make-iso-ci.sh build/vicell-x86.iso
@@ -1039,7 +1001,8 @@ jobs:
       # silently replaced by the PC one.
       - name: Build the x86_64-pc profile image (phase 05 lanes)
         run: |
-          cargo build --release -p cellos-kernel --target x86_64-unknown-none --features board-x86-pc
+          KERNEL_FEATURES="$(python3 -c 'import json; print(",".join(json.load(open("kernel/src/embedded-x86_64/manifest.json"))["kernel_features"]))')"
+          cargo build --release -p cellos-kernel --target x86_64-unknown-none --features "board-x86-pc,$KERNEL_FEATURES"
           cp target/x86_64-unknown-none/release/cellos-kernel "$RUNNER_TEMP/cellos-kernel-pc"
           X86_KERNEL="$RUNNER_TEMP/cellos-kernel-pc" \
             X86_ISO_ROOT="$RUNNER_TEMP/x86-pc-iso-root" \
@@ -1682,7 +1645,7 @@ jobs:
         # libs/types, libs/api and libs/text-engine use cfg_attr(not(test), no_std)
         # and define no panic/alloc lang items, so they run on the host without a
         # bare-metal target. text-engine holds the pure grep/sed/awk/top logic that
-        # app-shell cannot host-test itself (it links ostd, which owns those items).
+        # cellbox cannot host-test itself (it links ostd, which owns those items).
         # ai-proto/ai-sdk (the frozen AI wire contract and client) and hypha-llm-gateway
         # (whose local-backend decision table is policy, not plumbing) are host-testable
         # for the same reason: ai-sdk keeps `ostd` behind the `ostd-transport` feature,
@@ -1725,10 +1688,14 @@ jobs:
             --target x86_64-unknown-linux-gnu
           cargo test -p viui -p service-kms -p service-net \
             --target x86_64-unknown-linux-gnu
-          cargo test -p cellos-boards -p app-shell -p service-input \
+          cargo test -p cellos-boards -p app-cellbox -p service-input \
             -p service-platform --target x86_64-unknown-linux-gnu
           cargo test -p driver-i2c-bcm -p driver-spi-bcm -p service-compositor \
             -p service-hypervisor --target x86_64-unknown-linux-gnu
+          # Phase 10 S10-3c: the NVMe driver's time budgets and init's block-driver wait.
+          # Both bins gate `no_std`/`no_main` on `not(test)`, so the hosted test build
+          # gets libtest's entry; before that, neither crate's tests ever linked.
+          cargo test -p driver-nvme -p app-init --target x86_64-unknown-linux-gnu
           # `app-net-tools` and `app-wasm` are bin-only crates whose entry comes
           # from `ostd::cell_main!`: the macro now emits `#[no_mangle]` only for
           # the bare-metal target and their headers gate `no_std`/`no_main` the

@@ -94,7 +94,7 @@ if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
     cargo build --release \
         --target aarch64-unknown-none-softfloat \
         -Z build-std=core,alloc \
-        -p app-shell -p service-config
+        -p app-cellbox -p service-config
 
     echo "==> Building development-Silo cells (init, service-silo, service-kms)..."
     SOURCE_DATE_EPOCH=1 CARGO_INCREMENTAL=0 \
@@ -123,7 +123,7 @@ else
     cargo build --release \
         --target aarch64-unknown-none-softfloat \
         -Z build-std=core,alloc \
-        -p app-shell -p service-config
+        -p app-cellbox -p service-config
 fi
 
 echo "==> Building test-hooks cells (service-vfs, app-vfs-test, atomic-publication-probe)..."
@@ -182,7 +182,7 @@ cargo build --release \
 
 CELL_BINARIES=(
     "$REL/app-init"
-    "$REL/app-shell"
+    "$REL/cellbox"
     "$REL/service-vfs"
     "$REL/service-config"
     "$REL/vfs-test"
@@ -195,7 +195,7 @@ CELL_BINARIES=(
 )
 CELL_IMAGE_PATHS=(
     /bin/init
-    /bin/shell
+    /bin/cellbox
     /bin/vfs
     /bin/config
     /bin/vfs-test

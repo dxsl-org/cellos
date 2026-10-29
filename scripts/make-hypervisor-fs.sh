@@ -6,7 +6,7 @@
 #   1. Fetches Alpine aarch64 netboot artifacts (via fetch-alpine-artifacts.sh).
 #   2. Builds the aarch64 cells (including service-hypervisor).
 #   3. Creates kernel/src/embedded-hv/kernel_fs.img with:
-#        - Regular boot cells (init, shell, vfs, config) from existing embedded img
+#        - Regular boot cells (init, cellbox, vfs, config) from existing embedded img
 #        - /vmlinuz   (Alpine vmlinuz-virt)
 #        - /initrd.gz (Alpine initramfs-virt, renamed from initramfs-virt)
 #   4. Prints the EMBEDDED_OVERRIDE instruction for the kernel build.
@@ -83,7 +83,7 @@ cargo build --release \
 cargo build --release \
     --target "$TARGET" \
     $INIT_FEATURES \
-    -p app-init -p app-shell -p service-config \
+    -p app-init -p app-cellbox -p service-config \
     -p service-net -p service-input -p service-compositor -p supervisor \
     -p driver-virtio-blk -p driver-virtio-gpu -p service-hypervisor
 
@@ -91,7 +91,7 @@ cargo build --release \
 source "$(dirname "$0")/lib-sign-cells.sh"
 echo "[make-hv-fs] Signing aarch64 cells..."
 SIGN_TARGETS=()
-for b in app-init app-shell service-vfs service-config service-net service-input service-compositor supervisor driver-virtio-blk driver-virtio-gpu hypervisor; do
+for b in app-init cellbox service-vfs service-config service-net service-input service-compositor supervisor driver-virtio-blk driver-virtio-gpu hypervisor; do
     if [[ -f "$BIN_DIR/$b" ]]; then
         SIGN_TARGETS+=("$BIN_DIR/$b")
     fi
@@ -108,10 +108,12 @@ MKFAT_ARGS=()
 
 # Copy embedded cells from existing aarch64 embedded dir or fresh build.
 # Bootstrap lookup expects the standard VIFS1 layout (/bin/<cell>) — cells at
-# the FAT root are invisible to it ("bootstrap /bin/shell not in VIFS1").
-for cell in init shell vfs config net input compositor supervisor block virtio-gpu; do
+# the FAT root are invisible to it ("bootstrap /bin/cellbox not in VIFS1").
+for cell in init cellbox vfs config net input compositor supervisor block virtio-gpu; do
     src="$BIN_DIR/app-$cell"
     [[ ! -f "$src" ]] && src="$BIN_DIR/service-$cell"
+    # The app-cellbox package builds the binary `cellbox` (its [[bin]] name).
+    [[ "$cell" == "cellbox" ]] && src="$BIN_DIR/cellbox"
     [[ "$cell" == "supervisor" ]] && src="$BIN_DIR/supervisor"
     [[ "$cell" == "block" ]] && src="$BIN_DIR/driver-virtio-blk"
     [[ "$cell" == "virtio-gpu" ]] && src="$BIN_DIR/driver-virtio-gpu"

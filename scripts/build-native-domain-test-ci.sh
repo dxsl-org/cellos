@@ -72,7 +72,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
 "$PYTHON_BIN" tools/mkfat32.py \
     "$DOMAIN_EMBED/kernel_fs.img" \
     "$REL/app-init"         /bin/init \
-    "$REL/app-shell"        /bin/shell \
+    "$REL/cellbox"        /bin/cellbox \
     "$REL/service-vfs"      /bin/vfs \
     "$REL/service-config"   /bin/config \
     "$REL/vfs-test"         /bin/vfs-test \

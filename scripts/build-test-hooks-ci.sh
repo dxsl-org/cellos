@@ -39,7 +39,7 @@ echo "==> Building base cells (init, shell, config)..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p app-init -p app-shell -p service-config
+    -p app-init -p app-cellbox -p service-config
 
 echo "==> Building test-hooks cells (service-vfs, app-vfs-test, atomic-publication-probe)..."
 cargo build --release \
@@ -64,7 +64,7 @@ cargo build --release \
     -p service-net -p driver-virtio-net
 
 echo "==> Verifying cell binaries..."
-for bin in app-init app-shell service-vfs service-config vfs-test service-net driver-virtio-net atomic-publication-probe; do
+for bin in app-init cellbox service-vfs service-config vfs-test service-net driver-virtio-net atomic-publication-probe; do
     if [[ ! -f "$REL/$bin" ]]; then
         echo "FAIL: missing required binary: $REL/$bin" >&2; exit 1
     fi
@@ -74,7 +74,7 @@ done
 source scripts/lib-sign-cells.sh
 
 echo "==> Signing cells..."
-sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" \
+sign_cells "$REL/app-init" "$REL/cellbox" "$REL/service-vfs" \
            "$REL/service-config" "$REL/vfs-test" "$REL/service-net" \
            "$REL/driver-virtio-net" "$REL/atomic-publication-probe"
 
@@ -91,7 +91,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
 "$PYTHON_BIN" tools/mkfat32.py \
     "$TH_DIR/kernel_fs.img" \
     "$REL/app-init"         /bin/init \
-    "$REL/app-shell"        /bin/shell \
+    "$REL/cellbox"        /bin/cellbox \
     "$REL/service-vfs"      /bin/vfs \
     "$REL/service-config"   /bin/config \
     "$REL/vfs-test"         /bin/vfs-test \

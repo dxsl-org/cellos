@@ -54,7 +54,7 @@ cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     --features tier2-entry,tier2-rpc-entry \
     -p app-init
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    -p app-shell -p service-vfs -p service-config -p service-platform
+    -p app-cellbox -p service-vfs -p service-config -p service-platform
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p driver-nvme -p driver-e1000 -p app-sys-tools
 
@@ -74,7 +74,7 @@ cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p tier2-rpc-provider -p tier2-rpc-driver
 
 CELL_BINARIES=(
-    "$REL/app-shell"
+    "$REL/cellbox"
     "$REL/service-vfs"
     "$REL/service-config"
     "$REL/platform"
@@ -91,7 +91,7 @@ CELL_BINARIES=(
     "$REL/cpp-smoke"
 )
 CELL_IMAGE_PATHS=(
-    /bin/shell
+    /bin/cellbox
     /bin/vfs
     /bin/config
     /bin/platform

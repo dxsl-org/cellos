@@ -17,7 +17,7 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use vicell_integration_tests::{qemu_x86_binary, QemuRunner};
+use vicell_integration_tests::{qemu_x86_binary, x86_iso_path, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 45;
 const CMD_TIMEOUT: u64 = 15;
@@ -31,10 +31,7 @@ fn repo_root() -> PathBuf {
 }
 
 fn iso_path() -> String {
-    repo_root()
-        .join("build/vicell-x86.iso")
-        .to_string_lossy()
-        .into_owned()
+    x86_iso_path(&repo_root())
 }
 
 fn prerequisites_ok() -> bool {

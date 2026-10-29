@@ -29,7 +29,7 @@ echo "[format-disk-arm] Collecting cell binaries from $BIN_DIR..."
 
 declare -A CELLS=(
     [app-init]=init
-    [app-shell]=shell
+    [cellbox]=cellbox
     [service-vfs]=vfs
     [service-config]=config
     [service-net]=net

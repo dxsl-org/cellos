@@ -155,6 +155,22 @@ pub fn qemu_binary_x86() -> String {
     "qemu-system-x86_64".to_string()
 }
 
+/// The default x86_64 Limine ISO for the consumers that have no lane-specific override.
+///
+/// Order: `$VICELL_X86_ISO` (non-empty) → `<repo_root>/build/vicell-x86.iso`. The override
+/// lets a candidate ISO outside the repository be tested without writing `build/`.
+pub fn x86_iso_path(repo_root: &Path) -> String {
+    if let Ok(p) = std::env::var("VICELL_X86_ISO") {
+        if !p.is_empty() {
+            return p;
+        }
+    }
+    repo_root
+        .join("build/vicell-x86.iso")
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// Resolve the qemu-system-riscv32 binary.
 ///
 /// Order: `$ViCell_QEMU_RV32` env override → bare name on PATH → Windows default.
@@ -600,7 +616,7 @@ impl QemuRunner {
     /// Boot QEMU with an AArch64 kernel AND a VirtIO block disk (full boot mode).
     ///
     /// Adds the full peripheral set needed to spawn all services (VirtIO block,
-    /// net SLIRP, RNG) so init can load /bin/vfs, /bin/shell, etc. from the disk.
+    /// net SLIRP, RNG) so init can load /bin/vfs, /bin/cellbox, etc. from the disk.
     /// The guest serial is bridged to a TCP socket for bidirectional I/O as usual.
     pub fn boot_aarch64_with_disk(kernel: &str, disk: &str) -> Self {
         Self::boot_aarch64_with_disk_and_netdev(kernel, disk, "user,id=net0")
