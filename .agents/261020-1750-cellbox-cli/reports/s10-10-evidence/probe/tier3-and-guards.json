@@ -1,0 +1,280 @@
+{
+  "probe": "S10-10.0 (a)(b)(d)",
+  "agent": "ProbeTier3",
+  "readonly": true,
+  "head": "c319809c857261963680357be4672e9a1d66422a",
+  "git_status_clean": true,
+  "not_done": [
+    "no VM/QEMU launch",
+    "no build",
+    "no signing/key generation",
+    "no network",
+    "no edits to existing files",
+    "tests not run"
+  ],
+  "a": {
+    "plans": {
+      "260711-1917-tier3b-x86-vtx": {
+        "status": "pending",
+        "executionStatus": "blocked",
+        "lock": "CELL-CONTRACT-0024",
+        "p09": "pending; required Intel C2C Tier-3 prerequisite",
+        "svm_m1": "PASS on QEMU +svm TCG 2026-07-23"
+      },
+      "260712-0952-tier3b-vm-hardening-compat": {
+        "status": "pending",
+        "executionStatus": "blocked",
+        "p04_p08": "coding not done"
+      },
+      "260722-2330-tier3b-finish-g5-lite": {
+        "status": "pending",
+        "executionStatus": "blocked"
+      },
+      "260724-1632-tier3b-virtio-gpu": {
+        "status": "partial",
+        "x86": "phase 06 follow-up, gated"
+      },
+      "controller_inconsistency": "261011-1200 plan.md:86 says P09 complete; plan.md:619, phase-09-guest-adapter.md and ownership-handoffs.md:28 say pending; tranche4 dossier says QUALIFIED. [INFERENCE] authoritative = pending/blocked"
+    },
+    "lock_relations_touched": [
+      {
+        "id": "L11",
+        "plan": "260711-1917-tier3b-x86-vtx",
+        "owner": "controller P09 (after P04,P05,P07,P08); P10 exact machine"
+      },
+      {
+        "id": "L13",
+        "plan": "260712-0952-tier3b-vm-hardening-compat",
+        "owner": "controller P05 + P09"
+      },
+      {
+        "id": "L18",
+        "plan": "260722-2330-tier3b-finish-g5-lite",
+        "owner": "controller P09 with P06, P05"
+      }
+    ],
+    "lock_relations_adjacent": [
+      "L37 261004-1957-x86-pc-lane",
+      "L36 260927-1100-c2c-anywhere-tier-aware",
+      "L32 260827-1004-hardware-independent-roadmap",
+      "L25 260821-0642-app-tiers-completion"
+    ],
+    "unfreeze_procedure": ".agents/cell-contract-0024-locks.md:293-299 (no automatic release; owner handoff required)",
+    "code_x86": {
+      "kernel": "kernel/src/hypervisor.rs + svm_registry.rs (X86Vcpu Svm|Vmx, EPT/NPT, VmxVcpu init_pvh); no tests in vmx_vcpu.rs/vmcs.rs",
+      "hal_trait_doc_stale": "hal/arch/x86/src/hypervisor.rs:4-6 says VT-x not implemented",
+      "hv_cell": "cells/services/hypervisor/src: boot_x86, run_loop_x86, loader_image_x86 (PVH vmlinux), PIC/PIT/16550, virtio-mmio blk/net/console; no VMX-specific code",
+      "vm_runner": "cells/apps/vm-runner/src/main.rs:51-123 prints 'MicroVM active' and exits 0; sends nothing to hypervisor service (stub)",
+      "chrome_app": "prints Intel VT-x string only; does not spawn/lookup hypervisor",
+      "canonical_image_contains_hypervisor_or_vm_runner": "no per assemble-x86-image.py:108-132 [INFERENCE for the image itself]",
+      "hv_recipe": "scripts/make-hypervisor-fs-x86.sh requires signed cellbox (:106) -> stopped by G2a",
+      "accel_all_x86_guest_lanes": "-accel tcg -cpu qemu64,+pdpe1gb,+svm; no KVM path",
+      "qemu": {
+        "pinned": "~/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 (10.2.0)",
+        "system": "/usr/bin/qemu-system-x86_64 8.2.2 (SVM-incompatible per script)"
+      }
+    },
+    "guest_images": {
+      "build-linux-base-image.sh": "Alpine 3.21 rootfs ext4 only (no kernel); no sshd; init -> cage/entrypoint/sh",
+      "build-chrome-app.sh": "Chromium payload only",
+      "built_artifacts": {
+        "build/linux-base.ext4": {
+          "bytes": 536870912,
+          "sha256": "b1b02e0bbba383221b64f2d65dbadeba1d4f20d42db75d9c232e4348ac778ea0",
+          "sshd_ssh_dropbear_etc_ssh": "not found (debugfs read-only)"
+        },
+        "build/chrome-app.ext4": {
+          "bytes": 367001600,
+          "sha256": "5f7f197d0ac8e42759c5738dfecdfe36a3a9f360cee71c892353d4eb2714adcc"
+        }
+      },
+      "ubuntu_wide_guest": "build-ubuntu-wide-guest-x86.sh + lib-build-ubuntu-rootfs.sh; no ssh mention; artifacts not built; [INFERENCE] cloud rootfs ships openssh-server but nothing enables it"
+    },
+    "networking": {
+      "guest_nic": "virtio-mmio net 0xd0000200 IRQ6, MAC 52:54:00:AA:BB:CC",
+      "path": "virtio_net -> net_backend L2Send/L2Recv -> Net Cell (Right::L2) -> NIC driver",
+      "cell_to_guest": "no internal loopback in net/src/interface.rs:576-609,376-396; reachable only over external wire",
+      "qemu_user_net": "[INFERENCE] no hairpin between two MACs; host-loopback hostfwd route conceivable, unproven",
+      "client_auth": "password supported (D79-6); publickey refused"
+    },
+    "vmx_source_git": {
+      "committed": true,
+      "commit": "15830f4fd (2026-10-29 12:41:11 +0700, lungmat8)",
+      "main_rs_log3": [
+        "15830f4fd",
+        "3c3b38b7e",
+        "1d791550d"
+      ],
+      "main_rs_sha256": "a9636fee1f3b63b89a1058c5053d9cf446b84aede4cb10808362823539408c64",
+      "stale_docs": [
+        "phase-10-s0-proposal.md:1263,1299 call it uncommitted",
+        "kernel/src/main.rs:608-611 comment contradicts code",
+        "docs/guides/tier3b-linux-vm.md:434"
+      ],
+      "promoted_kernel": {
+        "sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a",
+        "mtime": "2026-10-29 11:23:22",
+        "built_before_commit_minutes": 78,
+        "strings": "has 'VmxVcpu::new failed','init_pvh failed'; lacks 'hypervisor present'"
+      },
+      "behaviour": "HEAD attempts VMXON under a hypervisor; a2951b38a had gated it after VMXON #GP on a KVM lane"
+    }
+  },
+  "b": {
+    "vmx_guest_under_kvm_evidence": "none found",
+    "retained_virt_lines": "all 'root operation active (SVM)' (qemu64 TCG)",
+    "only_kvm_run": "reports/phase-02-evidence/qemu-argv-kvm.txt (-accel kvm -cpu host, fabd6ab7, before VMX commit, VMXON not attempted)",
+    "only_kvm_vmx_statement": "commit a2951b38a message: VMXON #GP on KVM lane",
+    "host": {
+      "nested": "Y",
+      "dev_kvm": "crw-rw---- root:kvm",
+      "vmx_flags": 56,
+      "cpu": "Intel i7-14700",
+      "kernel": "6.18.40.1-microsoft-standard-WSL2"
+    },
+    "unknown": "whether HEAD/promoted kernel reaches VMX root or runs any VMX guest under nested KVM"
+  },
+  "d": {
+    "guards": [
+      {
+        "id": "G1",
+        "file": "scripts/package-desktop-x86.py:1-35",
+        "state": "open (lifted S10-2b)",
+        "sha256": "d80517a8517f4e7689828ec89c663d88c0c7a51b29711621fd2b7b0350c4f4cd",
+        "rec": "keep"
+      },
+      {
+        "id": "G2a",
+        "file": "scripts/cellos_sign/signing.py:231-251,278-281,148-157,79-94",
+        "state": "closed except 4 pinned assembler routes and private-fixture (env+explicit non-dev seed)",
+        "sha256": "ba97129308e60c50d59ff669831ab47d344b3ccbf44e8f17fbf052c9666c9511",
+        "pin": "b74cc99787ab69dde04dac5c517acb6f771016043c23841bc7b40ab0b3bec7ed (assemble-x86-image.py, matches live)",
+        "rec": "keep; new route = further lift"
+      },
+      {
+        "id": "G2b",
+        "file": "scripts/cellos_sign/signing.py:38-41,220-229,275",
+        "state": "closed, final, unconditional",
+        "hashes": [
+          "64eb28f3be3d08bf2560d6eb0b58bee4a33ff8ea3439bcd5ed6e1ccc42f84a39",
+          "636497acc2bdf735471173c5c428e61d16b1d8c870935cfe868e6d0120e52fa2"
+        ],
+        "rec": "keep permanent"
+      },
+      {
+        "id": "G2c/G2d",
+        "file": "signing.py:278-281,116-131",
+        "state": "closed",
+        "rec": "keep"
+      },
+      {
+        "id": "G3",
+        "file": "scripts/x86/make-iso-ci.sh:25-35 + scripts/x86/check_default_kernel.py",
+        "state": "open conditionally (content rule); explicit X86_KERNEL unchecked",
+        "sha256": {
+          "make-iso-ci.sh": "8f5bef774ad048cd456b3e3f0c3a2a0181ac8c81405d4a202de2554b9988593b",
+          "check_default_kernel.py": "150f40a8e52ce05859e8eeb6dfda2e405bd93b0d0338898ebdf287a4524f6f6a"
+        },
+        "rec": "keep"
+      },
+      {
+        "id": "G4",
+        "file": "kernel/build.rs:128-148",
+        "state": "closed (fixture kernels out of canonical)",
+        "sha256": "c46adb3053a91e3513f525017f4cb69601a87c882f2e8195951c09a0518cc22b",
+        "rec": "keep"
+      },
+      {
+        "id": "G5 lane aliases",
+        "file": "qemu-phase02-session-test.sh:95-97; qemu-phase03-pipeline-test.sh:85-87; qemu-phase04-terminal-test.sh:191-193; qemu-phase04-gui-test.sh:152-154",
+        "state": "closed",
+        "rec": "keep"
+      },
+      {
+        "id": "non-Intel refusal (D10-10 A)",
+        "file": "effect of G2a on gen-disk-ci.sh:256-262, lib-sign-cells.sh:85, make-hypervisor-fs-x86.sh:106, build-aarch64-cells.ps1:315",
+        "state": "closed",
+        "rec": "keep; also blocks x86 hypervisor image recipe"
+      },
+      {
+        "id": "cloud-image refusal (D10-9 A)",
+        "file": "scripts/build-cloud-images.sh:19-23",
+        "state": "closed",
+        "sha256": "ee4885b91dd350f7d87e2e50b132eb01bcbf30a6d7711d85dec1cda9789a1e07",
+        "rec": "keep"
+      }
+    ],
+    "test_def_counts_not_run": {
+      "test_cellos_sign.py": 71,
+      "test_check_default_kernel.py": 8
+    },
+    "d10_3_A_consistent": true
+  },
+  "go_no_go": [
+    {
+      "item": "Intel VMX/EPT Tier-3 guest endpoint (P09)",
+      "call": "NO-GO in Cellbox",
+      "first": "controller P01 handoff for L11/L13/L18; admitted VMX lane M1-M4; P04/P05/P07/P08",
+      "locked_paths": [
+        "hal/arch/x86/src/x86_64/vmx*.rs,vmcs.rs,world_switch.rs",
+        "kernel/src/hypervisor/svm_registry.rs",
+        "kernel/src/main.rs",
+        "cells/services/hypervisor/"
+      ],
+      "without_locked": false
+    },
+    {
+      "item": "boot-only VMX-root fact finding under nested KVM",
+      "call": "CONDITIONAL GO (own CP1; no CBX row satisfied)",
+      "first": "isolated /tmp HEAD kernel build or promoted kernel; accept VMXON #GP risk",
+      "locked_paths": [],
+      "without_locked": true
+    },
+    {
+      "item": "guest image with sshd",
+      "call": "NO-GO today",
+      "first": "new recipe, pinned openssh, temp host key/password, PVH kernel+initrd",
+      "locked_paths": [],
+      "without_locked": true
+    },
+    {
+      "item": "cell->guest route",
+      "call": "NO-GO until designed/proven",
+      "first": "hostfwd-via-host-loopback design or Net Cell change; loopback-only approval",
+      "locked_paths": [
+        "Net Cell hairpin would touch service authority"
+      ],
+      "without_locked": true,
+      "note": "hostfwd unproven"
+    },
+    {
+      "item": "guest endpoint on SVM/TCG VMM",
+      "call": "USER DECISION (ceiling reduction, not Intel)",
+      "first": "scope decision; private-fixture signing; items 3,4; QEMU 10.2.0",
+      "locked_paths": [],
+      "without_locked": true
+    },
+    {
+      "item": "credentials",
+      "call": "GO password only",
+      "first": "per-run temp password + host key",
+      "locked_paths": [],
+      "without_locked": true
+    },
+    {
+      "item": "containment",
+      "call": "no change",
+      "first": "",
+      "locked_paths": [],
+      "without_locked": true
+    }
+  ],
+  "not_checked": [
+    "no tests/QEMU/cargo/signing run",
+    "run_loop_x86.rs body; ci.yml; fetch-alpine-x86.sh",
+    "private-lane launch profile for hypervisor cell",
+    "promoted image contents for /bin/hypervisor",
+    "full .agents sweep (bounded greps only)",
+    "nested VMX not exercised"
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "probe": "S10-10.0(c) KMS prerequisite chain for SSH ed25519 key class",
+  "date": "2026-10-30",
+  "head": "c319809c857261963680357be4672e9a1d66422a",
+  "mode": "read-only; no build, test, VM, key generation, network, or edit",
+  "decision_context": "D10-2 = E: open a KMS program for SSH key custody as a separate plan; no implementation authorised",
+  "labels": {"INFERENCE": "not observed in a file or command output"},
+  "kms_today": {
+    "frame": {"message_len": 128, "payload_len": 112, "header_len": 16, "refs": ["libs/types/src/kms.rs:23-28", "libs/types/src/kms/frame/request.rs:5-17,41"], "append_only": "libs/types/src/kms.rs:23; docs/code-standards.md:54-58"},
+    "opcodes": {"defined": "1-14", "signing": "8 SignTls13ClientCertificateVerify only", "ref": "libs/types/src/kms/model.rs:25-57"},
+    "key_algorithms": ["C2cX25519=1", "RelayP256Sha256=2"],
+    "ssh_key_class": false,
+    "ed25519_dependency_in_kms": false,
+    "kms_cargo_deps": ["p256", "sha2 0.10", "blake2", "constant_time_eq", "api", "types", "ostd"],
+    "chunk_precedent": {"relay_csr_chunk_len": 104, "ref": "libs/types/src/kms/csr.rs:15-16"},
+    "caller_admission": {
+      "mechanism": "sys_recv_attested trailer {flags,cell_id,generation,sender_tid}; no path/name",
+      "admitted": ["net-broker (auth.rs:84)", "service-net (auth.rs:102; opcodes 7,8)", "supervisor (auth.rs:120)"],
+      "validated_caller": "cells/services/kms/src/auth.rs:132-140",
+      "registry_lookup": "cells/services/kms/src/main.rs:34-36",
+      "cellbox_ssh_admitted": false,
+      "flag_bits": {"used": "0 VFS_MUTATE, 1-4 NET, 5 CONFIG_WRITE", "reserved": "6..31", "ref": "libs/api/src/abi/caller_identity.rs:45-75"},
+      "launch_edge_cellbox_ssh": "kernel/src/loader/launch_profile/profiles.rs:75 (NET_CLIENT only)"
+    },
+    "persistence_fail_closed": {
+      "load_stub": "cells/services/kms/src/storage.rs:75-79 returns PermissionDenied",
+      "persist_stub": "cells/services/kms/src/storage.rs:85-88 returns PermissionDenied",
+      "boot_seals": "cells/services/kms/src/dispatch.rs:261-270",
+      "persist_failure_seals": "cells/services/kms/src/dispatch.rs:94-109",
+      "provider_unavailable_on_x86": "cells/services/kms/src/storage/provider/relay.rs:37-50,181-199",
+      "hardware_provider_compile_error": "cells/services/kms/src/lib.rs:38-42",
+      "silo_aarch64_only": ["cells/services/kms/src/lib.rs:44-50", "cells/services/kms/build.rs:8-15"],
+      "journal": {
+        "files": ["/srv/cellos/kms/slot-a.bin", "/srv/cellos/kms/slot-b.bin"],
+        "record_len": 186,
+        "sealed_leaf_len": 64,
+        "mac": "BLAKE2s-MAC 32B, authenticates only",
+        "journal_key_source_at_runtime": "none (tests only: tests/storage.rs:14-15)",
+        "refs": ["cells/services/kms/src/storage/record.rs:10-12,17,49,128-134"]
+      },
+      "rollback": {
+        "both_slots_missing_or_corrupt": "loads as Empty (journal.rs:38,154-172; tests/storage.rs:103-110)",
+        "anti_rollback_capable_runtime": false,
+        "refs": ["cells/services/kms/src/storage/provider.rs:36-42", "cells/services/kms/src/storage/root.rs:54-60"]
+      },
+      "vfs_namespace": ["cells/services/vfs/src/access/rules.rs:39-52,93-96", "cells/services/vfs/src/access/kms.rs:4-56"],
+      "srv_backend": "CellosFS Native, not an admitted durable journal (cells/services/vfs/src/manager.rs:94-100)"
+    },
+    "signing_api": "SignTls13ClientCertificateVerify only (cells/services/kms/src/dispatch/relay.rs:43-113)",
+    "node_identity_ops": "Acquire/NoiseStaticDh/Rotate end in SecureRootRequired (dispatch/node_identity.rs:44,71,89)",
+    "image_presence": {"enabled_when": "ui feature and not board-rpi3 (scripts/generate-boot-config.py:49-50)", "service_id": 13, "ref": "config/services.toml:89-94", "canonical_x86_image_ships_kms": "NOT CHECKED"}
+  },
+  "protected_persistence_needs": {
+    "required": ["authenticated root with stable non-exportable identity", "sealed state (confidentiality + integrity)", "monotonic rollback floor outside AP-writable storage", "seal on any failure"],
+    "spec": ".agents/260825-1726-kms-silo-production-root/spec.md PERSIST-001..008, LANE-002 (filesystem-held key rejected as a gate)",
+    "plans": {
+      "260825-1726-kms-silo-production-root": {
+        "status": "in-progress", "executionStatus": "blocked", "lock": "CELL-CONTRACT-0024",
+        "phases": {"1": "completed", "2": "completed (AArch64 DEV_REFERENCE only)", "3": "completed", "4": "blocked (entry gates AC-001..011; defines real persistence/time for relay)", "5": "pending", "6": "completed NO-GO (ADR-0006)", "7": "blocked (ADR-0006)", "8": "blocked (ADR-0006)"},
+        "scope_note": "persistence contract targets the relay P-256 lifecycle (ProtectedRelayState 64 B), not a general sealed key store"
+      },
+      "260826-1605-phase4-dev-reference-authority": {
+        "status": "blocked", "blockedBy": ["hardware-assets", "aws-dev-account", ".agents/261011-1200-cell-contract-authority/plan.md"],
+        "phases": {"1": "blocked", "2": "blocked; SOFTWARE_HARNESS complete", "3": "blocked; manifest SOFTWARE_HARNESS complete", "4": "blocked; SOFTWARE_HARNESS complete, hardware gates open", "5": "blocked; SOFTWARE_HARNESS cores complete, public endpoint not draft-11 conforming", "6": "pending (Frozen-ABI KMS Authority Integration; would replace the PermissionDenied stubs)", "7": "pending", "8": "pending"},
+        "protocol_closed": "libs/authority-protocol/src/lib.rs:3-6 (14 typed ops; no runtime unseal or caller-selected keys); INFERENCE: SSH leaf needs a protocol revision"
+      },
+      "261025-cellosfs-crash-safety": {
+        "status": "planned", "phases": "1-7 all pending, no detailed plan or CP1",
+        "skeleton": "libs/cellos-fs/src/engine.rs:844-852 sync_durable always DurabilityUnavailable",
+        "committed_durable_unreturned": "libs/api/src/services/ipc.rs:346",
+        "dependency": "INFERENCE: soft for labelled dev-posture custody; hard for 'survives power loss' and production-grade claims unless sealed state is in authority NVRAM"
+      }
+    }
+  },
+  "cellbox_sunset_side": {
+    "sunset": {"version": "0.6.0 0BSD commit 62b98f39", "agent_ed25519": "third_party/sunset/src/sign.rs:339-340,430-436", "agent_sign_event": "third_party/sunset/src/cliauth.rs:132-134; event.rs:129-146", "owned_sig_ed25519_public": "sign.rs:268-270", "sshwire_write_public": "sshwire.rs:196", "authsigmsg_fields_pub_crate": "auth.rs:14-17", "patch_needed": "INFERENCE: none strictly required if the embedder serialises then parses; optional accessor patch 0007"},
+    "vissh": {"agentsign_skipped": "libs/vissh/src/session.rs:367-368", "args_ready": "libs/vissh/src/args.rs:12-15,143-148,183-187", "cellbox_refusal": "cells/tools/cellbox/src/ssh.rs:760-761"},
+    "signing_fit": {"rfc4252_blob_bytes_approx": 175, "kms_typed_request_bytes_approx": "70-80", "chunking_needed_for_sign": false, "session_id_len": 32, "basis": "INFERENCE from RFC 4252 and profile curve25519-sha256 only"},
+    "import_chunking": {"bytes_per_frame_approx": 100, "contract_cap_bytes": 65536, "worst_case_frames_approx": 650, "typical_unencrypted_key_frames_approx": 5, "passphrase_max_bytes": 1024, "passphrase_frames_approx": 11, "basis": "INFERENCE"},
+    "openssh_v1_parsing": {"ssh_key_in_lock": "0.7.0-rc.11 (Cargo.lock:3729-3740) without the encryption feature", "encryption_feature": ["dep:bcrypt-pbkdf", "alloc", "cipher/aes", "cipher/chacha20poly1305", "rand_core"], "needs": "bcrypt-pbkdf 0.11 with alloc", "contract_cipher": "AES-256-CTR only (command-contracts.md:142)", "alternative": "own minimal v1 parser with allowlist before KDF"},
+    "bcrypt_pbkdf": {"in_lock": false, "grep_count_in_Cargo.lock": 0, "in_local_registry_cache": false, "vendor_dir": "absent", "network_fetch_required": true, "license_policy": "deny.toml:26-39 allows MIT, Apache-2.0, 0BSD", "license_of_crate": "INFERENCE MIT OR Apache-2.0 (not verifiable offline)", "already_in_lock": ["aes 0.9.3", "ctr 0.10.1", "ed25519-dalek 3.0.0", "sha2 0.10.9 and 0.11.1", "ssh-cipher 0.3.0", "ssh-encoding 0.3.0"]},
+    "kdf_cost_risk": "INFERENCE: bcrypt up to 64 rounds in the single-threaded KMS loop stalls other KMS services; slow under TCG",
+    "contract_conflict": {"statement": "command-contracts.md:142 forbids an import command in the CLI; phase-09-s0-proposal.md:108 offered a cellbox ssh-key import builtin", "action": "K0 records a contract delta; import is a non-CLI credential-owner path"}
+  },
+  "locks_and_protected_paths": [
+    {"step": "any edit under cells/services/kms/**", "relation": "260825-1726-kms-silo-production-root (cell-contract-0024-locks.md:145)", "owner": "P01 then P08/P10, explicit per-slice handoff"},
+    {"step": "real root, authority, sealed state, time", "relation": "260825-1726 and 260826-1605-phase4-dev-reference-authority (locks.md:147); ADR-0006; hardware and AWS gates", "owner": "P01 then P08/P10"},
+    {"step": "libs/types/src/kms/** additions", "relation": "Law 1 (docs/code-standards.md:40-70): two confirmations; append-only", "owner": "user as accountable maintainer"},
+    {"step": "new caller flag", "relation": "Law 1 (libs/api/src/abi/caller_identity.rs) plus kernel permission files (task/cap.rs, syscall.rs, tcb.rs, policy.rs, loader/boot_ceiling.rs, launch_profile/profiles.rs, scripts/sign-policy.py) per phase-01-config-right-cp1.md; row 260603-1803-phase-h-vfs-hardening (locks.md:118)", "owner": "P05; precedent Cellbox adopted slice locks.md:113"},
+    {"step": "blobs under /srv/cellos/kms", "relation": "no VFS rule change needed (access/rules.rs:39-52)", "owner": "P05/P06 if the store moves"},
+    {"step": "durability claims", "relation": "261025-cellosfs-crash-safety (not in the 2026-10-11 inventory); maps to P06; INFERENCE, ownership unrecorded", "owner": "P06"},
+    {"step": "Cargo.lock bcrypt-pbkdf", "relation": "none locked; deny.toml gate; network authorisation", "owner": "maintainer"},
+    {"step": "cellbox, vissh, ostd kms client", "relation": "Cellbox plan; libs/ostd is not Law 1", "owner": "Cellbox"},
+    {"step": "image/signing/CI", "relation": "KMS sources listed in build/*manifest*.json (e.g. exact-delta-package-manifest-initial.json); which manifest is the S10 546-path census NOT CHECKED", "owner": "S10 preservation rules"}
+  ],
+  "tiers": {
+    "T0_volatile_dev_custody": {"proves": ["key bytes never in cellbox/UART/logs", "session-bound signature", "kernel-attested caller admission", "refusal matrix", "login to controlled other host"], "does_not_prove": ["persistence", "confidentiality at rest", "rollback", "crash safety", "protection from a compromised admitted caller beyond session binding"]},
+    "T1_dev_persistent": {"adds": ["sealed blob under /srv/cellos/kms with dev root key", "x86 development provider", "record version bump"], "proves": ["key survives QEMU reboot", "torn inactive blob tolerated"], "does_not_prove": ["rollback resistance (delete/revert = Empty)", "crash durability (synced, not crash-proof)", "confidentiality vs disk+image holder", "any production claim"]},
+    "T2_production_grade": {"needs": ["authority-held root", "sealed state", "monotonic floor outside AP storage", "signed time", "qualified provider", "crash-safe store"], "status": "blocked: hardware assets, AWS account, ADR-0006 NO-GO, lock handoff; no x86 authority found by name (INFERENCE)"}
+  },
+  "slice_dag": {
+    "effort_classes": {"S": "days", "M": "1-2 weeks", "L": "weeks plus external dependency"},
+    "slices": [
+      {"id": "K0", "name": "charter, tiers, lock adoption packet, contract delta, decisions D-K1..D-K7 (docs only)", "entry": "user approval of KSSH-CP1-A", "effort": "S"},
+      {"id": "K1", "name": "dependency admission bcrypt-pbkdf, parser choice", "entry": "K0 + explicit network authorisation", "effort": "S"},
+      {"id": "K2", "name": "KMS ABI CP1/CP2: SshEd25519, opcodes 15+, errors, fixtures", "entry": "K0 + Law-1 confirmation 1 then 2", "effort": "M"},
+      {"id": "K3", "name": "caller admission right (flag, CapSet bit, launch row, sign-policy row)", "entry": "K0, K2 CP1, kernel-permission lock handoff", "effort": "M-L"},
+      {"id": "K4", "name": "storage tier: T0 none; T1 x86 dev provider + record v2 + dev root + production exclusion", "entry": "K0, D-K1 (K4b also D-K2)", "effort": "M"},
+      {"id": "K5", "name": "KMS implementation: chunked import, OpenSSH v1, ed25519 sign, reconstruct+self-verify, replay ids", "entry": "K1, K2 CP2, K3 (or test-hook flag), K4", "effort": "L"},
+      {"id": "K6", "name": "cellbox/vissh integration; lift publickey refusal; re-open pipeline exec and non-UTF-8 stdin", "entry": "K5, K3", "effort": "M"},
+      {"id": "K7", "name": "admin import surface, non-CLI", "entry": "K2, K5, D-K3", "effort": "S-M"},
+      {"id": "K8", "name": "QEMU evidence: login, negatives, no key bytes, reboot persistence, rollback shown unprotected", "entry": "K6, K7", "effort": "M"},
+      {"id": "K9", "name": "T2 production-grade custody", "entry": "260826-1605 P1-P6, ADR-0006 GO, SSH leaf in authority protocol, X", "effort": "L, not estimated"},
+      {"id": "X", "name": "261025-cellosfs-crash-safety P1-P7", "entry": "own CP1s", "effort": "L"}
+    ],
+    "edges": ["K0->K1", "K0->K2", "K0->K4", "K2->K3", "K2->K5", "K2->K7", "K1->K5", "K4->K5", "K3->K6", "K5->K6", "K5->K7", "K6->K8", "K7->K8", "K9->K8rerun", "X->K9", "X~>K4b(soft)"],
+    "critical_path": "K0, K2 CP1, K1, K3, K5, K6, K8"
+  },
+  "first_cp1": {
+    "id": "KSSH-CP1-A",
+    "scope": "charter and ceiling, documents only; no code, key, or network",
+    "requests": [
+      "open the plan with slices K0-K9 and tiers T0/T1/T2",
+      "D-K1 recommended: T0 then T1 labelled DEV_POSTURE; T2 separate",
+      "D-K2: CellosFS crash safety soft for T0/T1, hard for T2 and power-loss claims",
+      "D-K3: import is a non-CLI credential-owner path; record contract delta",
+      "D-K4: ssh-key encryption feature versus own parser with AES-256-CTR-only allowlist",
+      "D-K5: decrypt once and re-seal versus passphrase-wrapped per-session unlock",
+      "D-K6: new kernel-attested caller flag versus registration handshake (not available)",
+      "D-K7: new x86 development provider for T1",
+      "draft the lock-adoption packet; K1 network fetch only at K1's own CP1"
+    ]
+  },
+  "not_checked": [
+    "compile, test, lane runs",
+    "canonical x86 image ships or launches /bin/kms",
+    "VFS write_file flush behaviour",
+    "kernel task cap/syscall/tcb and policy files (relied on phase-01-config-right-cp1.md)",
+    "lifecycle/mod.rs and enrollment dispatch beyond cited lines",
+    "phase 01/03/05 bodies; ADR-0008/0009 bodies",
+    "bcrypt-pbkdf, blowfish, pbkdf2 license and versions (offline)",
+    "ssh-key encryption feature builds with sha2 0.11",
+    "x86 TPM or authority code beyond by-name search of libs/",
+    "which build/*.json is the S10 546-path census",
+    ".agents/261011-1200-cell-contract-authority body"
+  ]
+}
