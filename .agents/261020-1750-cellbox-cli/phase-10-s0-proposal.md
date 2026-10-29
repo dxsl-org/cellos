@@ -3243,3 +3243,5 @@ Candidate full-schedule peaks for the focus Cellbox become measured (stacks exac
 - Preservation: 546-path census (before/after files saved), frozen sources, prior archives byte-exact; no guest writes, no product/candidate/canonical edit, no push without request.
 
 - **Status 2026-10-29:** S10-9 is **proposed only**. CBX-27 and Phase 10 criteria 1 and 4 remain **UNMET**.
+
+- **S10-9 CP1 APPROVED by the user 2026-10-29 as recommended: D9-1=B (latency-recording recovery waits, 10 s criterion NOT EVALUATED), D9-2 cand-headless and cand-desktop once each, D9-3=yes (B2 desktop rebuild with services from source; one non-hooks smoke then one hooks smoke), D9-4 no further rerun.** Execution S10-9.0 -> 9.5, stop on first unmet gate; VM runs strictly sequential.
