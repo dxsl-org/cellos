@@ -1,0 +1,25 @@
+# /apps/chrome/chrome.toml
+# CellOS Tier 3 Linux Guest Application Configuration
+
+name = "Google Chrome"
+version = "130.0"
+description = "Chromium Web Browser running on CellOS Tier 3 Linux MicroVM"
+icon = "/apps/chrome/chrome.png"
+type = "tier3-linux"
+
+[guest]
+base = "/sys/guests/linux-base.ext4"   # Shared base Linux image
+app  = "/apps/chrome/chrome.ext4"      # Chrome application payload volume
+mode = "gui"                           # "gui" (Wayland/Cage) or "headless"
+ram_mb = 1024                          # 1 GiB RAM for guest
+script = "/apps/chrome/chrome.lua"     # Dynamic Lua hook script
+entrypoint = "/opt/app/chromium/chrome --no-sandbox"
+
+[display]
+width = 1280
+height = 800
+title = "Google Chrome"
+
+[env]
+WAYLAND_DISPLAY = "wayland-0"
+XDG_RUNTIME_DIR = "/run/user/0"
