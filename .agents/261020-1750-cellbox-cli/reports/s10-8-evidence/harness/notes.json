@@ -1,0 +1,22 @@
+{
+  "task": "S10-8 CP1 approved: D8-1=B pause-credit, D8-2 both sets once, D8-3 no further rerun, D8-4 b2-desktop null; b2-headless not rerun",
+  "code_dir": "reports/s10-4-evidence/runtime/observer-s10-8/ (new); observer-s10-7 and every retained file untouched (frozen-source and prior-archive checks pass before and after each run)",
+  "fix_8_0": "MemoryMixin._stop renamed _wiring_stop (s108_memory.py); collision census over all new classes empty (collision-census.json); census reproduces the S10-7 defect",
+  "credit_8_1": "effective_deadline = min(start+10s+P, start+PHASE_MAX_S, machine_start+900s); P = Observer.pause_ns difference over the wait (retained accounting: sum of COMPLETED _stopped intervals; an interval still in progress is not credited); fail closed (common.Stop) when pause_ns is missing/non-int/negative/backwards, observer absent or machine start unknown",
+  "interpretation_disclosed": "the approved text says \"each phase's own maximum\" but the retained schedule has no per-phase maximum table; implemented as PHASE_MAX_S = 120 s (the retained command_s / largest workload wait) = hard cap on the TOTAL wall duration of one credited recovery wait; this number is my interpretation",
+  "only_two_waits_credited": [
+    "headless Surface.wait label=new interrupt prompt timeout=10",
+    "desktop Desk.wait_for what=runtime new GUI prompt timeout=10"
+  ],
+  "unchanged": "finite/command 120 s, status 60 s, all 180/240/300/900 s waits, every pause(N); desktop credit is applied only inside gui_fresh by temporarily setting an instance wait_for on the desk (restored in finally)",
+  "argv": "identical to the recorded S10-7.4 argv of each set (test_run_argv_equals_the_recorded_s10_7_4_argv_of_each_set), same measurement kernels/ISOs/fixture disks",
+  "run_tokens": [
+    "RUN_CONSUMED-s108-cand-headless",
+    "RUN_CONSUMED-s108-cand-desktop"
+  ],
+  "runs": {
+    "cand-headless": "class E; 900s measurement window expired; boot stalled at +9.27 s (see summary); no recovery wait reached",
+    "cand-desktop": "class C; STOP timeout waiting for runtime new GUI prompt in rg-large interrupt after 3 credited waits"
+  },
+  "headless_stall_observation": "rsp-traffic.jsonl: last rx at +9.272 s is a complete stop packet $T05thread:01;#07 with NO following ack tx, packet_rx or state event; client state stayed running until the shutdown interrupt at +898.8 s timed out (RspTimeout). Serial log ends while loading /bin/xhci. Same stop reply in S10-7 was followed by tx/packet_rx/state. [INFERENCE] retained non-atomic RspClient stop-packet receive race (the headless recurring client has no AtomicReceiveMixin; observer-rsp-atomic/reproduce_before.py documents the class); not proven for this instance; no rerun permitted (D8-3)"
+}

@@ -1,0 +1,1616 @@
+{
+  "schema": "cellos.s10-8.collision-census/1",
+  "question": "names defined by new mixins/classes vs threading.Thread, Observer, CoordinatedObserver, HookObserver, Machine (whole MROs)",
+  "method": "class __dict__ members + AST `self.<x> =` assignments in every function; base side: dir() plus the same AST over the whole MRO",
+  "base_name_counts": {
+    "threading.Thread": 57,
+    "observer.Observer": 105,
+    "coordinated.CoordinatedObserver": 106,
+    "hook_observer.HookObserver": 119,
+    "common.Machine": 47,
+    "phase10_canonical_drive.Machine": 39
+  },
+  "new_classes": {
+    "s108_memory.MemoryMixin": {
+      "class": "s108_memory.MemoryMixin",
+      "defined": {
+        "members": [
+          "SKIP_SNAPSHOT_NAMES",
+          "__init__",
+          "_entry",
+          "_memory_entry",
+          "_memory_snapshot",
+          "_snapshot",
+          "_wiring_stop",
+          "write_results"
+        ],
+        "instance_attributes": [
+          "memory",
+          "memory_entries",
+          "memory_failure",
+          "memory_records"
+        ]
+      },
+      "collisions": {
+        "__init__": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Machine",
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "threading.Thread"
+          ]
+        },
+        "_entry": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "_snapshot": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "write_results": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        }
+      },
+      "intentional_overrides": [
+        {
+          "name": "__init__",
+          "bases": [
+            "common.Machine",
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "threading.Thread"
+          ],
+          "reason": "constructor extension, chains to the retained observer constructor",
+          "chains_to_super": true
+        },
+        {
+          "name": "_entry",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "reason": "adds the entry-stop memory record after the retained entry handling",
+          "chains_to_super": true
+        },
+        {
+          "name": "_snapshot",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "reason": "adds the memory record after the retained snapshot handling",
+          "chains_to_super": true
+        },
+        {
+          "name": "write_results",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "reason": "adds memory-summary.json after the retained result writer",
+          "chains_to_super": true
+        }
+      ],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s108_run.MemoryHookObserver": {
+      "class": "s108_run.MemoryHookObserver",
+      "defined": {
+        "members": [
+          "SKIP_SNAPSHOT_NAMES"
+        ],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s108_run.MemoryPlainObserver": {
+      "class": "s108_run.MemoryPlainObserver",
+      "defined": {
+        "members": [
+          "SKIP_SNAPSHOT_NAMES"
+        ],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s108_credit.PauseSource": {
+      "class": "s108_credit.PauseSource",
+      "defined": {
+        "members": [
+          "__init__",
+          "read"
+        ],
+        "instance_attributes": [
+          "last",
+          "observer"
+        ]
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": [
+        "__init__"
+      ]
+    },
+    "s108_credit.CreditedWait": {
+      "class": "s108_credit.CreditedWait",
+      "defined": {
+        "members": [
+          "__init__",
+          "active",
+          "credited_ns",
+          "finish"
+        ],
+        "instance_attributes": [
+          "base_deadline_ns",
+          "began_ns",
+          "capped_by",
+          "effective_deadline_ns",
+          "evaluated_pause_ns",
+          "global_deadline_ns",
+          "pause",
+          "pause_now_ns",
+          "pause_start_ns",
+          "phase_deadline_ns",
+          "record"
+        ]
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": [
+        "__init__"
+      ]
+    },
+    "s108_credit.CreditedRecoveryMixin": {
+      "class": "s108_credit.CreditedRecoveryMixin",
+      "defined": {
+        "members": [
+          "_credit_ledger",
+          "_credit_start",
+          "gui_fresh",
+          "wait"
+        ],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s108_run.CreditedDesktopSurface": {
+      "class": "s108_run.CreditedDesktopSurface",
+      "defined": {
+        "members": [],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s108_run.CreditedHeadlessSurface": {
+      "class": "s108_run.CreditedHeadlessSurface",
+      "defined": {
+        "members": [],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    }
+  },
+  "unintended_new": {},
+  "surface_chain_overrides": {
+    "s108_run.CreditedDesktopSurface": [
+      {
+        "name": "gui_fresh",
+        "chains_to_super": true,
+        "declared": true
+      },
+      {
+        "name": "wait",
+        "chains_to_super": true,
+        "declared": true
+      }
+    ],
+    "s108_run.CreditedHeadlessSurface": [
+      {
+        "name": "gui_fresh",
+        "chains_to_super": true,
+        "declared": true
+      },
+      {
+        "name": "wait",
+        "chains_to_super": true,
+        "declared": true
+      }
+    ]
+  },
+  "surface_chain_unintended": {},
+  "s107_classes_informational": {
+    "s107_memory.MemoryMixin": {
+      "class": "s107_memory.MemoryMixin",
+      "defined": {
+        "members": [
+          "SKIP_SNAPSHOT_NAMES",
+          "__init__",
+          "_entry",
+          "_memory_entry",
+          "_memory_snapshot",
+          "_snapshot",
+          "_stop",
+          "write_results"
+        ],
+        "instance_attributes": [
+          "memory",
+          "memory_entries",
+          "memory_failure",
+          "memory_records"
+        ]
+      },
+      "collisions": {
+        "__init__": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Machine",
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "threading.Thread"
+          ]
+        },
+        "_entry": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "_snapshot": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "_stop": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "threading.Thread"
+          ]
+        },
+        "write_results": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        }
+      },
+      "intentional_overrides": [
+        {
+          "name": "__init__",
+          "bases": [
+            "common.Machine",
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "threading.Thread"
+          ],
+          "reason": "constructor extension, chains to the retained observer constructor",
+          "chains_to_super": true
+        },
+        {
+          "name": "_entry",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "reason": "adds the entry-stop memory record after the retained entry handling",
+          "chains_to_super": true
+        },
+        {
+          "name": "_snapshot",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "reason": "adds the memory record after the retained snapshot handling",
+          "chains_to_super": true
+        },
+        {
+          "name": "write_results",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "reason": "adds memory-summary.json after the retained result writer",
+          "chains_to_super": true
+        }
+      ],
+      "unintended": [
+        {
+          "name": "_stop",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "threading.Thread"
+          ],
+          "kinds": [
+            "members"
+          ]
+        }
+      ],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s107_run.MemoryHookObserver": {
+      "class": "s107_run.MemoryHookObserver",
+      "defined": {
+        "members": [
+          "SKIP_SNAPSHOT_NAMES"
+        ],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s107_run.MemoryPlainObserver": {
+      "class": "s107_run.MemoryPlainObserver",
+      "defined": {
+        "members": [
+          "SKIP_SNAPSHOT_NAMES"
+        ],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s107_b2.B2MemoryObserver": {
+      "class": "s107_b2.B2MemoryObserver",
+      "defined": {
+        "members": [
+          "__init__",
+          "_b2_entry",
+          "_handle",
+          "_regions",
+          "_snapshot",
+          "_stacks_present",
+          "write_results"
+        ],
+        "instance_attributes": [
+          "breaks",
+          "client",
+          "counters",
+          "coverage",
+          "done",
+          "draw_events",
+          "entry_ordinal",
+          "error",
+          "events",
+          "focus",
+          "instances",
+          "live",
+          "m",
+          "memory",
+          "memory_failure",
+          "memory_records",
+          "pause_ns",
+          "phase",
+          "profile",
+          "ready",
+          "requests",
+          "snapshots",
+          "spawns",
+          "stack_events",
+          "targets",
+          "unmatched_entries",
+          "watches"
+        ]
+      },
+      "collisions": {
+        "__init__": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Machine",
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "threading.Thread"
+          ]
+        },
+        "_handle": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "_snapshot": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "write_results": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "breaks": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "client": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "counters": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "coverage": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "done": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "draw_events": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "entry_ordinal": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "error": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "events": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "focus": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "instances": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "m": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "pause_ns": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "phase": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "profile": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "ready": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "requests": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "snapshots": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "stack_events": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        },
+        "watches": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ]
+        }
+      },
+      "intentional_overrides": [],
+      "unintended": [
+        {
+          "name": "__init__",
+          "bases": [
+            "common.Machine",
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "threading.Thread"
+          ],
+          "kinds": [
+            "members"
+          ]
+        },
+        {
+          "name": "_handle",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "members"
+          ]
+        },
+        {
+          "name": "_snapshot",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "members"
+          ]
+        },
+        {
+          "name": "write_results",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "members"
+          ]
+        },
+        {
+          "name": "breaks",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "client",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "counters",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "coverage",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "done",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "draw_events",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "entry_ordinal",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "error",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "events",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "focus",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "instances",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "m",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "pause_ns",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "phase",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "profile",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "ready",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "requests",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "snapshots",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "stack_events",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "watches",
+          "bases": [
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        }
+      ],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s107_machine.DesktopStatusMixin": {
+      "class": "s107_machine.DesktopStatusMixin",
+      "defined": {
+        "members": [
+          "status"
+        ],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s107_machine.HeadlessStatusMixin": {
+      "class": "s107_machine.HeadlessStatusMixin",
+      "defined": {
+        "members": [
+          "status"
+        ],
+        "instance_attributes": []
+      },
+      "collisions": {},
+      "intentional_overrides": [],
+      "unintended": [],
+      "standalone_helper_dunders_not_overrides": []
+    },
+    "s107_machine.MeasurementMachine": {
+      "class": "s107_machine.MeasurementMachine",
+      "defined": {
+        "members": [
+          "__init__",
+          "_drop_data_disk",
+          "stop"
+        ],
+        "instance_attributes": [
+          "argv",
+          "gdb_path",
+          "inputs",
+          "observed",
+          "provenance",
+          "source_disk_sha",
+          "spec",
+          "start_ns",
+          "started",
+          "work"
+        ]
+      },
+      "collisions": {
+        "__init__": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Machine",
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "threading.Thread"
+          ]
+        },
+        "stop": {
+          "kinds": [
+            "members"
+          ],
+          "bases": [
+            "common.Machine",
+            "phase10_canonical_drive.Machine"
+          ]
+        },
+        "argv": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine",
+            "phase10_canonical_drive.Machine"
+          ]
+        },
+        "gdb_path": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine"
+          ]
+        },
+        "inputs": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine"
+          ]
+        },
+        "observed": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine"
+          ]
+        },
+        "source_disk_sha": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine"
+          ]
+        },
+        "start_ns": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine"
+          ]
+        },
+        "started": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine"
+          ]
+        },
+        "work": {
+          "kinds": [
+            "instance"
+          ],
+          "bases": [
+            "common.Machine"
+          ]
+        }
+      },
+      "intentional_overrides": [],
+      "unintended": [
+        {
+          "name": "__init__",
+          "bases": [
+            "common.Machine",
+            "coordinated.CoordinatedObserver",
+            "hook_observer.HookObserver",
+            "observer.Observer",
+            "phase10_canonical_drive.Machine",
+            "threading.Thread"
+          ],
+          "kinds": [
+            "members"
+          ]
+        },
+        {
+          "name": "stop",
+          "bases": [
+            "common.Machine",
+            "phase10_canonical_drive.Machine"
+          ],
+          "kinds": [
+            "members"
+          ]
+        },
+        {
+          "name": "argv",
+          "bases": [
+            "common.Machine",
+            "phase10_canonical_drive.Machine"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "gdb_path",
+          "bases": [
+            "common.Machine"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "inputs",
+          "bases": [
+            "common.Machine"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "observed",
+          "bases": [
+            "common.Machine"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "source_disk_sha",
+          "bases": [
+            "common.Machine"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "start_ns",
+          "bases": [
+            "common.Machine"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "started",
+          "bases": [
+            "common.Machine"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        },
+        {
+          "name": "work",
+          "bases": [
+            "common.Machine"
+          ],
+          "kinds": [
+            "instance"
+          ]
+        }
+      ],
+      "standalone_helper_dunders_not_overrides": []
+    }
+  },
+  "s107_collisions_found": {
+    "s107_memory.MemoryMixin": [
+      {
+        "name": "_stop",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer",
+          "threading.Thread"
+        ],
+        "kinds": [
+          "members"
+        ]
+      }
+    ],
+    "s107_b2.B2MemoryObserver": [
+      {
+        "name": "__init__",
+        "bases": [
+          "common.Machine",
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer",
+          "phase10_canonical_drive.Machine",
+          "threading.Thread"
+        ],
+        "kinds": [
+          "members"
+        ]
+      },
+      {
+        "name": "_handle",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "members"
+        ]
+      },
+      {
+        "name": "_snapshot",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "members"
+        ]
+      },
+      {
+        "name": "write_results",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "members"
+        ]
+      },
+      {
+        "name": "breaks",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "client",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "counters",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "coverage",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "done",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "draw_events",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "entry_ordinal",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "error",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "events",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "focus",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "instances",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "m",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "pause_ns",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "phase",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "profile",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "ready",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "requests",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "snapshots",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "stack_events",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "watches",
+        "bases": [
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      }
+    ],
+    "s107_machine.MeasurementMachine": [
+      {
+        "name": "__init__",
+        "bases": [
+          "common.Machine",
+          "coordinated.CoordinatedObserver",
+          "hook_observer.HookObserver",
+          "observer.Observer",
+          "phase10_canonical_drive.Machine",
+          "threading.Thread"
+        ],
+        "kinds": [
+          "members"
+        ]
+      },
+      {
+        "name": "stop",
+        "bases": [
+          "common.Machine",
+          "phase10_canonical_drive.Machine"
+        ],
+        "kinds": [
+          "members"
+        ]
+      },
+      {
+        "name": "argv",
+        "bases": [
+          "common.Machine",
+          "phase10_canonical_drive.Machine"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "gdb_path",
+        "bases": [
+          "common.Machine"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "inputs",
+        "bases": [
+          "common.Machine"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "observed",
+        "bases": [
+          "common.Machine"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "source_disk_sha",
+        "bases": [
+          "common.Machine"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "start_ns",
+        "bases": [
+          "common.Machine"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "started",
+        "bases": [
+          "common.Machine"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      },
+      {
+        "name": "work",
+        "bases": [
+          "common.Machine"
+        ],
+        "kinds": [
+          "instance"
+        ]
+      }
+    ]
+  },
+  "empty": true
+}

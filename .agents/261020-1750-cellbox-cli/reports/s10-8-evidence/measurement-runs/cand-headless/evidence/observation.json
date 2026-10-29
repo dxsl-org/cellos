@@ -1,0 +1,16 @@
+{
+  "status": "STOP_OBSERVATION",
+  "error": "RspTimeout: RSP receive timed out",
+  "profile": "headless",
+  "instances": [],
+  "focus_base": null,
+  "heap_post_event_count": 0,
+  "observer_pause_ns": 231897348,
+  "stack_write_attempts": [],
+  "snapshots": [],
+  "draw_events": [],
+  "resident_bytes": null,
+  "exact_stack_peak_bytes": null,
+  "kernel_stack_peak_bytes": null,
+  "historical_runtime_baseline": null
+}

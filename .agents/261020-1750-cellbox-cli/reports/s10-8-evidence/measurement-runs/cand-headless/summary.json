@@ -1,0 +1,142 @@
+{
+  "set": "cand-headless",
+  "classification": {
+    "class": "E",
+    "reason": "ready/prompt never reached",
+    "missing_snapshots": [
+      "initial-prompt",
+      "ordinary-prompt-idle",
+      "finite-stream",
+      "collected-cat-buffered",
+      "collected-cat-cancelled",
+      "terminal-stream-live",
+      "terminal-stream-cancelled",
+      "rg-cancelled",
+      "interactive-top-idle",
+      "complete"
+    ]
+  },
+  "status": "STOP",
+  "error": "Stop: 900s measurement window expired",
+  "observer_error": "Stop: observation blocker: RspTimeout: RSP receive timed out",
+  "cleanup_error": null,
+  "kernel_provenance": {
+    "kernel_build": "cand-headless-test-hooks",
+    "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+    "kernel_features": [
+      "default",
+      "policy-required",
+      "test-hooks"
+    ],
+    "kernel_path": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-test-hooks.kernel.elf",
+    "profile": "headless",
+    "set": "cand-headless",
+    "kind": "candidate",
+    "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+    "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+    "measurement_kernel_is_not_the_promoted_kernel": true
+  },
+  "memory_table": [],
+  "pause_credit_rule": {
+    "decision": "D8-1=B (approved 2026-10-29)",
+    "applies_to": [
+      "headless: Surface.wait(label=new interrupt prompt, 10 s)",
+      "desktop: Desk.wait_for(what=runtime new GUI prompt, 10 s)"
+    ],
+    "effective_deadline": "min(start + 10 s + pause_in_wait, start + phase_max, machine_start + 900 s)",
+    "pause_accounting": "Observer.pause_ns difference (retained: sum of completed _stopped-handling intervals)",
+    "phase_max_s": 120,
+    "phase_max_interpretation": "no per-phase table exists in the retained schedule; the largest single workload wait (120 s command/stream-flow) bounds a recovery wait",
+    "global_window_s": 900,
+    "unchanged": [
+      "120 s finite/command wait",
+      "60 s status wait",
+      "180/240/300/900 s boot and drawing waits",
+      "every pause(N) observation duration"
+    ],
+    "ceiling": "not a product timing claim; measures recovery in 10 s of unpaused guest time"
+  },
+  "pause_credits": [],
+  "observer_pause_ns_total": 231897348,
+  "preservation": {
+    "census_unchanged": true,
+    "census_paths": 546,
+    "census_before_file": "census-before.json",
+    "census_after_file": "census-after.json",
+    "frozen_sources": {
+      "ok": true,
+      "detail": {
+        "files": 43,
+        "drift": []
+      }
+    },
+    "frozen_s107_sources": {
+      "ok": true,
+      "detail": {
+        "files": 66,
+        "drift": []
+      }
+    },
+    "prior_archives": {
+      "ok": true,
+      "detail": {
+        "archives": 25,
+        "changed": []
+      }
+    },
+    "frozen_s108_sources": {
+      "ok": true,
+      "detail": {
+        "drift": []
+      }
+    },
+    "kernel_set_hashes": {
+      "set": "cand-headless",
+      "paths": {
+        "kernel": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-test-hooks.kernel.elf",
+        "control_kernel": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-control.kernel.elf",
+        "iso": "/tmp/cellbox-s10-7/measure/cand-headless/vicell-x86-test-hooks.iso",
+        "kernel_fs_img": "/tmp/cellbox-s10-7/measure/cand-headless/kernel_fs.img",
+        "init": "/tmp/cellbox-s10-7/measure/cand-headless/init"
+      },
+      "expected": {
+        "kernel": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+        "control_kernel": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+        "iso": "b534c7512b844a8d05a360e5c5e9b04fce58803aefb04c5fc93f77f4fe215563",
+        "kernel_fs_img": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+        "init": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab"
+      },
+      "actual": {
+        "kernel": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+        "control_kernel": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+        "iso": "b534c7512b844a8d05a360e5c5e9b04fce58803aefb04c5fc93f77f4fe215563",
+        "kernel_fs_img": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+        "init": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab"
+      },
+      "match": {
+        "kernel": true,
+        "control_kernel": true,
+        "iso": true,
+        "kernel_fs_img": true,
+        "init": true
+      },
+      "all_match": true
+    }
+  },
+  "candidate_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "retained_redirects": {
+    "common.W": [
+      "/tmp/cellbox-s10-4",
+      "/tmp/cellbox-s10-7/harness-prep/retained-W"
+    ],
+    "observer.W": [
+      "/tmp/cellbox-s10-4",
+      "/tmp/cellbox-s10-7/harness-prep/retained-W"
+    ]
+  },
+  "rerun_authorized": false,
+  "cbx27_met": false,
+  "phase10_criterion4_met": false,
+  "b2_headless": "class B COMPLETE in S10-7.4; not rerun (D8-2)",
+  "b2_desktop": "stays null (D8-4): image defect, no repair authorized"
+}

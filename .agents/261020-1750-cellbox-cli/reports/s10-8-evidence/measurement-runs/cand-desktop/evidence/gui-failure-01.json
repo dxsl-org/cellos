@@ -1,0 +1,493 @@
+{
+  "error": "Stop: timeout waiting for runtime new GUI prompt",
+  "context": {
+    "wait_for": "runtime new GUI prompt",
+    "timeout_seconds": 10,
+    "start_ns": 26627561952433,
+    "end_ns": 26641783519435,
+    "pause_credit": {
+      "label": "runtime new GUI prompt",
+      "phase": "rg-large",
+      "original_timeout_s": 10,
+      "phase_max_s": 120,
+      "global_window_s": 900,
+      "start_ns": 26627561947373,
+      "pause_at_start_ns": 52499571973,
+      "outcome": "timeout",
+      "end_ns": 26641783501608,
+      "waited_s": 14.221554235,
+      "pause_at_end_ns": 56489904860,
+      "pause_at_last_evaluation_ns": 56489904860,
+      "pause_measured_in_wait_ns": 3990332887,
+      "pause_credited_ns": 3990332887,
+      "original_deadline_ns": 26637561947373,
+      "effective_deadline_ns": 26641552280260,
+      "effective_timeout_s": 13.990332887,
+      "capped_by": null,
+      "method": "Observer.pause_ns difference (retained: sum of completed _stopped intervals)"
+    }
+  },
+  "retained_ns": 26641840829328,
+  "last_frame_ns": 26641590569531,
+  "last_frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s108-fab586/vm/evidence/gui-failure-01.png",
+  "last_exact_read": [
+    [
+      "hs\":4,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191046900,\"cpu_tenths",
+      "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4907039750,\"cpu_tenth",
+      "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+      "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6357961460,\"cpu_tenths",
+      "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+      "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121390080,\"cpu_tent",
+      "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+      "{\"frame\":\"begin\",\"sample_id\":8,\"monotonic_ns\":218382357850,\"meta\":{\"schema\":\"to",
+      "p.cell.v1\",\"provider_epoch\":\"18e301e93c5fc6c0\",\"interval_ns\":5334241900,\"online",
+      "_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":13,\"total_",
+      "tasks\":13,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_byt",
+      "es\":208850944,\"mem_used_bytes\":130572288,\"mem_free_bytes\":78278656,\"memory_inte",
+      "rval\":true}}",
+      "^C",
+      "Cellos > echo st=$?",
+      "st=130",
+      "Cellos > rg -F p10-literal-that-occurs-nowhere-0123456789 /mnt/sd/rg/big.log",
+      "^C"
+    ],
+    [
+      0,
+      25
+    ]
+  ],
+  "epoch": {
+    "id": 2,
+    "name": "status",
+    "command": "echo st=$?",
+    "kind": "status",
+    "oracle": {
+      "status": "READY",
+      "code": null,
+      "reason": null,
+      "cls": null,
+      "frames": 0,
+      "expected_cursor": [
+        9,
+        2
+      ],
+      "scrolls": 0,
+      "hits": 2,
+      "bytes": 15,
+      "last_hit_ns": 26448914600742
+    },
+    "timeout_seconds": 60,
+    "start_ns": 26431960630292,
+    "state": "COMPLETE",
+    "samples": [
+      {
+        "index": 0,
+        "monotonic_ns": 26445509152809,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s108-fab586/vm/evidence/gui-epoch-02/0000.png",
+        "exact_read": [
+          [
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":772602290,\"cpu_tenths",
+            "\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":165,\"root_tid\":12,\"name\":\"com",
+            "positor\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2826414810,\"c",
+            "pu_tenths\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10356739460,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":472569270,\"cpu_tenth",
+            "s\":20,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191046900,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4907039750,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6357961460,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121390080,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos > echo st=$?"
+          ],
+          [
+            19,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 1,
+        "monotonic_ns": 26447148242571,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s108-fab586/vm/evidence/gui-epoch-02/0001.png",
+        "exact_read": [
+          [
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":772602290,\"cpu_tenths",
+            "\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":165,\"root_tid\":12,\"name\":\"com",
+            "positor\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2826414810,\"c",
+            "pu_tenths\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10356739460,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":472569270,\"cpu_tenth",
+            "s\":20,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191046900,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4907039750,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6357961460,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121390080,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos > echo st=$?"
+          ],
+          [
+            19,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 2,
+        "monotonic_ns": 26448758291704,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s108-fab586/vm/evidence/gui-epoch-02/0002.png",
+        "exact_read": [
+          [
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":772602290,\"cpu_tenths",
+            "\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":165,\"root_tid\":12,\"name\":\"com",
+            "positor\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2826414810,\"c",
+            "pu_tenths\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10356739460,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":472569270,\"cpu_tenth",
+            "s\":20,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191046900,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4907039750,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6357961460,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121390080,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos > echo st=$?"
+          ],
+          [
+            19,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 3,
+        "monotonic_ns": 26450368623713,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s108-fab586/vm/evidence/gui-epoch-02/0003.png",
+        "exact_read": [
+          [
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":772602290,\"cpu_tenths",
+            "\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":165,\"root_tid\":12,\"name\":\"com",
+            "positor\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2826414810,\"c",
+            "pu_tenths\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10356739460,\"c"
+          ],
+          null
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "quiescence",
+          "reason": null,
+          "cls": null,
+          "prompt": true,
+          "last_hit_ns": 26448914600742
+        }
+      },
+      {
+        "index": 4,
+        "monotonic_ns": 26451995126399,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s108-fab586/vm/evidence/gui-epoch-02/0004.png",
+        "exact_read": [
+          [
+            "\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":165,\"root_tid\":12,\"name\":\"com",
+            "positor\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2826414810,\"c",
+            "pu_tenths\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10356739460,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":472569270,\"cpu_tenth",
+            "s\":20,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191046900,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4907039750,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6357961460,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121390080,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos > echo st=$?",
+            "st=0",
+            "Cellos >"
+          ],
+          [
+            9,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "READY",
+          "code": null,
+          "reason": null,
+          "cls": null,
+          "frames": 0,
+          "expected_cursor": [
+            9,
+            2
+          ],
+          "scrolls": 0,
+          "hits": 2,
+          "bytes": 15,
+          "last_hit_ns": 26448914600742
+        },
+        "screen_match": true
+      },
+      {
+        "index": 5,
+        "monotonic_ns": 26453681242154,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s108-fab586/vm/evidence/gui-epoch-02/0005.png",
+        "exact_read": [
+          [
+            "\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":165,\"root_tid\":12,\"name\":\"com",
+            "positor\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2826414810,\"c",
+            "pu_tenths\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10356739460,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":472569270,\"cpu_tenth",
+            "s\":20,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191046900,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4907039750,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6357961460,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121390080,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos > echo st=$?",
+            "st=0",
+            "Cellos >"
+          ],
+          [
+            9,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": true,
+        "oracle": {
+          "status": "READY",
+          "code": null,
+          "reason": null,
+          "cls": null,
+          "frames": 0,
+          "expected_cursor": [
+            9,
+            2
+          ],
+          "scrolls": 0,
+          "hits": 2,
+          "bytes": 15,
+          "last_hit_ns": 26448914600742
+        },
+        "screen_match": true
+      }
+    ],
+    "ledger": null,
+    "typed_rows": [
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":772602290,\"cpu_tenths",
+      "\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":165,\"root_tid\":12,\"name\":\"com",
+      "positor\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2826414810,\"c",
+      "pu_tenths\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+      "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10356739460,\"c",
+      "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+      "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":472569270,\"cpu_tenth",
+      "s\":20,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191046900,\"cpu_tenths",
+      "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4907039750,\"cpu_tenth",
+      "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+      "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6357961460,\"cpu_tenths",
+      "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+      "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121390080,\"cpu_tent",
+      "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+      "Cellos > echo st=$?"
+    ],
+    "typed_cursor": [
+      19,
+      25
+    ],
+    "typed_grab_ns": 26445067614355,
+    "typed_exact_ns": 26445150976002,
+    "pre_hits": 28,
+    "Enter_batch_id": 66,
+    "Enter_commit": {
+      "id": 66,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d5d7d7d0a",
+      "deadline": 26450.150983289,
+      "start": 26445.150983289,
+      "finish": 26445.151949627,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 2113,
+          "start": 26445.151433789,
+          "outcome": "COMMITTED",
+          "finish": 26445.151944747,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 2113,
+      "caller": "MainThread",
+      "caller_deadline": 26491.960625007,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    "commit_finish_ns": 26445151944747,
+    "armed_ns": 26445452056973,
+    "end_ns": 26453794016105,
+    "oracle_final": {
+      "status": "READY",
+      "code": null,
+      "reason": null,
+      "cls": null,
+      "frames": 0,
+      "expected_rows": [
+        "Cellos > echo st=$?",
+        "st=0",
+        "Cellos >"
+      ],
+      "expected_cursor": [
+        9,
+        2
+      ],
+      "scrolls": 0,
+      "hits": 2,
+      "bytes": 15,
+      "last_hit_ns": 26448914600742
+    }
+  },
+  "gate_phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+  "natural_resume_epoch": 5329,
+  "last_input_batch": {
+    "id": 247,
+    "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226374726c227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202263227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202263227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226374726c227d7d7d5d7d7d0a",
+    "deadline": 26632.560795801,
+    "start": 26627.560795801,
+    "finish": 26627.561894743,
+    "attempts": [
+      {
+        "attempt": 1,
+        "epoch": 5006,
+        "start": 26627.561169047,
+        "outcome": "COMMITTED",
+        "finish": 26627.561889081,
+        "reply": {
+          "return": {}
+        }
+      }
+    ],
+    "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+    "epoch": 5006,
+    "caller": "MainThread",
+    "caller_deadline": null,
+    "outcome": "COMMITTED",
+    "commit_count": 1
+  },
+  "scope": "Last already-observed framebuffer/read; no extra grab/resume/input at timeout"
+}

@@ -1,0 +1,26 @@
+{
+  "entry": 4664066048,
+  "hook_pc": 4664187520,
+  "cr3": 364544,
+  "cs": 35,
+  "initial_rsp": 45010944,
+  "stack_top": 45010944,
+  "windows_checked": [
+    "entry",
+    "feed-prologue",
+    "feed-ret-epilogue",
+    "call-site-0x146",
+    "call-site-0x1a0",
+    "call-site-0x1e0",
+    "call-site-0x228"
+  ],
+  "pages": [
+    4664066048,
+    4664184832,
+    4664188928
+  ],
+  "phase": "terminal-launch",
+  "ns": 26318135545540,
+  "terminal_entry_count": 1,
+  "z1_installed": "Z1,11601da80,1"
+}

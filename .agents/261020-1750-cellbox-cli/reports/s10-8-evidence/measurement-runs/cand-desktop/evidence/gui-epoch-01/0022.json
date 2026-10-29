@@ -1,0 +1,34 @@
+{
+  "index": 22,
+  "monotonic_ns": 26428549585268,
+  "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-s108-fab586/vm/evidence/gui-epoch-01/0022.png",
+  "exact_read": [
+    [
+      "",
+      "=== Cellos shell ready \u2014 type 'help' for commands ===",
+      "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+    ],
+    [
+      0,
+      3
+    ]
+  ],
+  "gating": false,
+  "accepted": false,
+  "oracle": {
+    "status": "READY",
+    "code": null,
+    "reason": null,
+    "cls": null,
+    "frames": 2,
+    "expected_cursor": [
+      9,
+      25
+    ],
+    "scrolls": 68,
+    "hits": 15,
+    "bytes": 6907,
+    "last_hit_ns": 26425353646708
+  },
+  "screen_match": false
+}

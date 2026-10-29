@@ -1,0 +1,89 @@
+{
+  "recovery_waits_credited": [
+    [
+      "new interrupt prompt",
+      10
+    ],
+    [
+      "runtime new GUI prompt",
+      10
+    ]
+  ],
+  "survey_of_retained_waits_label_timeout_s": {
+    "common.Surface": [
+      [
+        "new interrupt prompt",
+        10
+      ],
+      [
+        "runtime new GUI prompt",
+        10
+      ],
+      [
+        "live JSON terminal stream",
+        120
+      ],
+      [
+        "runtime live JSON terminal stream",
+        120
+      ],
+      [
+        "top real cell row",
+        120
+      ],
+      [
+        "runtime top title bar",
+        180
+      ],
+      [
+        "Terminal surface",
+        300
+      ],
+      [
+        "desktop ready",
+        900
+      ],
+      [
+        "exact initial idle prompt prefix",
+        900
+      ]
+    ],
+    "HookSurface": [
+      [
+        "Terminal surface",
+        300
+      ],
+      [
+        "desktop ready",
+        900
+      ]
+    ],
+    "CoordinatedSurface": [],
+    "TemporalSurface": [
+      [
+        "Terminal surface",
+        300
+      ],
+      [
+        "desktop ready",
+        900
+      ]
+    ]
+  },
+  "fixed_pause_durations_s_not_deadlines": [
+    2,
+    3,
+    4,
+    10
+  ],
+  "unchanged_deadlines": {
+    "command_s": 120,
+    "status_s": 60,
+    "total_window_s": 900
+  },
+  "interrupt_source": "def interrupt(self,before):\n        stamp=time.monotonic_ns()\n        if self.d:self.d.ctrl_c();rows=self.gui_fresh()\n        else:\n            self.sh.send(b'\\x03');self.wait(lambda:self.sh.idle(count=before[0]+1),10,'new interrupt prompt');rows=[]\n        recovered=time.monotonic_ns();status=self.status();need(status==130,f'interrupt status {status}')\n        return {'ctrl_c_ns':stamp,'prompt_ns':recovered,'ctrl_c_to_prompt_ms':(recovered-stamp)/1e6,'status':status,'rows':rows}",
+  "gui_fresh_source": "def gui_fresh(self):\n        d=self.d\n        def pred(img):\n            got=d.read_screen(img)\n            if got:\n                rows,cursor=got\n                if rows and rows[-1]==D.PROMPT.rstrip() and cursor==(len(D.PROMPT),len(rows)-1):return got\n        img,got=d.wait_for(pred,'runtime new GUI prompt',10,interval=.1)\n        rows,cursor=got;d.model[:]=rows[:-1]+[D.PROMPT];d.state['img']=img;d.shot('recovered',img);return rows",
+  "other_recovery_waits_found": "none: the only 10 s waits in common.Surface/HookSurface/CoordinatedSurface/TemporalSurface are the two above; status after recovery (60 s) and every pause(N) are unchanged",
+  "phase_max_s": 120,
+  "phase_max_note": "interpretation: the retained schedule has no per-phase table; the largest workload wait (120 s) bounds a credited recovery wait"
+}

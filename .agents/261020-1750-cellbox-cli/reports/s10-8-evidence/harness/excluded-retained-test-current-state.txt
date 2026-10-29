@@ -1,0 +1,31 @@
+# Excluded retained test run ALONE against the CURRENT environment (not part of the gate).
+# links: {'/tmp/cellbox-s10-3d-resume/cand': '/home/dmin/.cache/cellos-candidates/4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821', '/tmp/cellbox-phase10-a3hg7abb/host-target/x86_64-unknown-linux-gnu/release/phase04-gui-glyphs': '/tmp/cellbox-s10-7/measure/cand-desktop/run-inputs/host-target/x86_64-unknown-linux-gnu/release/phase04-gui-glyphs'}
+test_preflight_defines_every_go_no_go_criterion (test_t7_t11_flow.PreservationAndPolicy.test_preflight_defines_every_go_no_go_criterion) ... ERROR
+
+======================================================================
+ERROR: test_preflight_defines_every_go_no_go_criterion (test_t7_t11_flow.PreservationAndPolicy.test_preflight_defines_every_go_no_go_criterion)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-feed-hook/test_t7_t11_flow.py", line 402, in test_preflight_defines_every_go_no_go_criterion
+    result, _h, _b, before = RH.preflight()
+                             ^^^^^^^^^^^^^^
+  File "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-feed-hook/run_hook.py", line 126, in preflight
+    before = X.protected_paths()
+             ^^^^^^^^^^^^^^^^^^^
+  File "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic/diagnostic.py", line 269, in protected_paths
+    prior = json.loads((W / 'canonical/before.json').read_text())
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1029, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1015, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/cellbox-s10-4/canonical/before.json'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.213s
+
+FAILED (errors=1)
+
+# wasSuccessful = False failures 0 errors 1

@@ -1,0 +1,62 @@
+{
+  "scope": "Every offline iteration before the go decision, recorded honestly. None involved a VM, QEMU, guest or prior-archive write. Individual module runs were development runs and are NOT the gate; the gate is gate-attempts/attempt-01 (ONE invocation, PASS).",
+  "iterations": [
+    {
+      "n": 1,
+      "what": "s108_census.py first run",
+      "result": "NameError: census_class",
+      "cause": "my own edit slip removed the function while tidying a duplicate definition",
+      "fix": "function restored; no design change"
+    },
+    {
+      "n": 2,
+      "what": "s108_census.py second run (census over the new classes)",
+      "result": "NOT EMPTY: PauseSource.__init__, CreditedWait.__init__ (standalone helpers) and CreditedWait.start_ns vs common.Machine.start_ns",
+      "cause": "raw name overlap of a helper attribute with a Machine attribute; dunder __init__ of standalone helpers is not an override",
+      "fix": "attribute renamed to began_ns; census rule: standalone helper dunders are recorded but are not collisions; mixins must chain with super(). Same run also reproduced the S10-7 defect (MemoryMixin._stop vs threading.Thread._stop)"
+    },
+    {
+      "n": 3,
+      "what": "test_s108_wiring first run",
+      "result": "21 OK but an unhandled exception message from the hook-observer thread test",
+      "cause": "test passed object() as the gate; retained CoordinatedObserver.run() calls gate.terminate()",
+      "fix": "test uses a gate stub with terminate(); no production change"
+    },
+    {
+      "n": 4,
+      "what": "test_s108_wiring second run",
+      "result": "21 OK (incl. negative control: the S10-7 mixin raises the TypeError at join)"
+    },
+    {
+      "n": 5,
+      "what": "test_s108_credit first run",
+      "result": "ImportError: No module named common",
+      "cause": "s108_credit imported the retained common before the runtime dir was on sys.path",
+      "fix": "sys.path insert of the runtime dir in s108_credit"
+    },
+    {
+      "n": 6,
+      "what": "test_s108_credit second run",
+      "result": "35 OK"
+    },
+    {
+      "n": 7,
+      "what": "test_s108_census",
+      "result": "7 OK"
+    },
+    {
+      "n": 8,
+      "what": "test_s108_gonogo first run",
+      "result": "22 tests, 1 FAIL",
+      "cause": "test asserted the string s10-7-evidence is absent from sources but a docstring names it",
+      "fix": "test now checks only quoted path components; no production change"
+    },
+    {
+      "n": 9,
+      "what": "s108_gate.py attempt-01 (the ONE gate invocation)",
+      "result": "PASS: 479 tests, 0 failures, 0 errors, 0 skipped = 268 retained (269 minus 1 excluded) + 35 memory + 91 S10-7.4 + 85 new S10-8 (21 wiring, 35 credit, 7 census, 22 go/no-go)"
+    }
+  ],
+  "excluded_retained_test": "test_t7_t11_flow.PreservationAndPolicy.test_preflight_defines_every_go_no_go_criterion (S10-4.17 pre-run preflight; false by design now: run token exists, /tmp/cellbox-s10-4 trace and canonical/before.json gone, census rewritten by S10-5). Run alone against the current environment: excluded-retained-test-current-state.txt (FileNotFoundError /tmp/cellbox-s10-4/canonical/before.json). Not mocked.",
+  "source_hashes_frozen_by_the_gate": "frozen-sources-s10-8.sha256 (observer-s10-8 + observer-s10-7 + observer-memory + retained)"
+}

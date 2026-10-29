@@ -1,0 +1,12 @@
+{
+  "set": "cand-desktop",
+  "files_match_manifest": true,
+  "actual": {
+    "kernel": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+    "control_kernel": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a",
+    "iso": "52f51a9cc49b2e14e2591a3f76ea6d6bd76651178721420281f93ec3cf898a49",
+    "kernel_fs_img": "3848cefb25f0e7c4abc67feccf3d8886292e25da60a88b4633552651292479ec",
+    "init": "c0bd14580fda0d697a2edd66b19168107fa6877a190bc06c1a8a482b467b23f3"
+  },
+  "source_disk_unchanged": true
+}

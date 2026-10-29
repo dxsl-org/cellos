@@ -1,0 +1,312 @@
+{
+  "schema": "cellos.s10-8.go-no-go/1",
+  "checks": {
+    "frozen_sources": {
+      "ok": true,
+      "detail": {
+        "files": 43,
+        "drift": []
+      }
+    },
+    "frozen_s107_sources": {
+      "ok": true,
+      "detail": {
+        "files": 66,
+        "drift": []
+      }
+    },
+    "prior_archives": {
+      "ok": true,
+      "detail": {
+        "archives": 25,
+        "changed": []
+      }
+    },
+    "protected_census": {
+      "ok": true,
+      "detail": {
+        "exact_unchanged": false,
+        "paths": 546,
+        "promoted_expected": [
+          "/home/dmin/cellos/kernel/src/embedded-x86_64/boot-config/autoload.toml",
+          "/home/dmin/cellos/kernel/src/embedded-x86_64/boot-config/services.toml",
+          "/home/dmin/cellos/kernel/src/embedded-x86_64/init",
+          "/home/dmin/cellos/kernel/src/embedded-x86_64/kernel_fs.img",
+          "/home/dmin/cellos/target/x86_64-unknown-none/release/cellos-kernel"
+        ],
+        "relocated": [
+          "/tmp/cellbox-s10-3d-resume/cand/pc.kernel.elf",
+          "/tmp/cellbox-s10-3d-resume/cand/candidate.json",
+          "/tmp/cellbox-s10-3d-resume/cand/headless.kernel.elf",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop.kernel.elf",
+          "/tmp/cellbox-s10-3d-resume/cand/pc.iso",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop.iso",
+          "/tmp/cellbox-s10-3d-resume/cand/headless.iso",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/init",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/manifest.json",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/kernel_fs.img",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/init",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/manifest.json",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/kernel_fs.img",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/ocel",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/shutdown",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/e1000",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/serial",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/ls",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cat",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/igb",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/POLICY.BIN",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/files",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cellbox",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/vfs",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/compositor",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/kill",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/tier2-smoke",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/platform",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/echo",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/xhci",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/ps",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/input",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/etc-cellos-services.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/desktop",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/config",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/etc-cellos-autoload.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/net",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/etc-cellos-system.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cellbox-ssh",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/nvme",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/chrome",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/ahci",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/tier2-exploit",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/files/fb-console",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/boot-config/system.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/boot-config/services.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/desktop/boot-config/autoload.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/shutdown",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/e1000",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/serial",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/ls",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/cat",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/igb",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/POLICY.BIN",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/cellbox",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/vfs",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/kill",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/tier2-smoke",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/platform",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/echo",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/xhci",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/ps",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/input",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/etc-cellos-services.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/config",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/etc-cellos-autoload.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/net",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/etc-cellos-system.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/cellbox-ssh",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/nvme",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/ahci",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/files/tier2-exploit",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/boot-config/system.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/boot-config/services.toml",
+          "/tmp/cellbox-s10-3d-resume/cand/headless/boot-config/autoload.toml"
+        ],
+        "unexplained_changed": [],
+        "unexplained_missing": [],
+        "explained_only": true,
+        "note": "exact_unchanged is false because the approved S10-5 promotion (after the S10-4.17 record) rewrote the listed canonical paths and the /tmp candidate copy no longer exists; every difference is matched to promotion.json / the byte-identical ~/.cache candidate twin"
+      }
+    },
+    "gate": {
+      "ok": true,
+      "detail": {
+        "tests_run": 479,
+        "status": "PASS",
+        "components": {
+          "retained_original": 144,
+          "retained_prior_current": 47,
+          "feed_hook_new": 78,
+          "feed_hook_new_executed": 77,
+          "memory": 35,
+          "s10_7": 91,
+          "new_s10_8": 85
+        },
+        "frozen_files": 80,
+        "drift": []
+      }
+    },
+    "collision_census": {
+      "ok": true,
+      "detail": {
+        "unintended_new": {},
+        "surface_chain_unintended": {},
+        "new_classes": [
+          "s108_credit.CreditedRecoveryMixin",
+          "s108_credit.CreditedWait",
+          "s108_credit.PauseSource",
+          "s108_memory.MemoryMixin",
+          "s108_run.CreditedDesktopSurface",
+          "s108_run.CreditedHeadlessSurface",
+          "s108_run.MemoryHookObserver",
+          "s108_run.MemoryPlainObserver"
+        ]
+      }
+    },
+    "environment": {
+      "ok": true,
+      "detail": {
+        "tmp_free_bytes": 778593730560,
+        "qemu": "/usr/bin/qemu-system-x86_64"
+      }
+    },
+    "qemu_identity": {
+      "ok": true,
+      "detail": {
+        "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+        "binding": true
+      }
+    }
+  },
+  "sets": {
+    "cand-headless": {
+      "kernels_isos": {
+        "ok": true,
+        "detail": {
+          "set": "cand-headless",
+          "paths": {
+            "kernel": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-test-hooks.kernel.elf",
+            "control_kernel": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-control.kernel.elf",
+            "iso": "/tmp/cellbox-s10-7/measure/cand-headless/vicell-x86-test-hooks.iso",
+            "kernel_fs_img": "/tmp/cellbox-s10-7/measure/cand-headless/kernel_fs.img",
+            "init": "/tmp/cellbox-s10-7/measure/cand-headless/init"
+          },
+          "expected": {
+            "kernel": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+            "control_kernel": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+            "iso": "b534c7512b844a8d05a360e5c5e9b04fce58803aefb04c5fc93f77f4fe215563",
+            "kernel_fs_img": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+            "init": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab"
+          },
+          "actual": {
+            "kernel": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+            "control_kernel": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+            "iso": "b534c7512b844a8d05a360e5c5e9b04fce58803aefb04c5fc93f77f4fe215563",
+            "kernel_fs_img": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+            "init": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab"
+          },
+          "match": {
+            "kernel": true,
+            "control_kernel": true,
+            "iso": true,
+            "kernel_fs_img": true,
+            "init": true
+          },
+          "all_match": true
+        }
+      },
+      "hooks_provenance": {
+        "ok": true,
+        "detail": {
+          "kernel_features": [
+            "default",
+            "policy-required",
+            "test-hooks"
+          ],
+          "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+          "features_contain_test_hooks": true,
+          "kernel_sha_matches_file": true,
+          "kernel_has_test_hook_symbol": true,
+          "control_kernel_has_test_hook_symbol": false,
+          "cpu_locals_va": "0xffffffff80efc100",
+          "tss_tables_va": "0xffffffff80efaf40"
+        }
+      },
+      "run_token": {
+        "ok": true,
+        "detail": {
+          "token": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-8/RUN_CONSUMED-s108-cand-headless",
+          "consumed": false,
+          "evidence_dir_exists": false
+        }
+      },
+      "private_io": {
+        "ok": true,
+        "detail": {
+          "violations": [],
+          "sock_dir_mode": "0o700",
+          "argv_template": [
+            "qemu-system-x86_64",
+            "-machine",
+            "q35",
+            "-accel",
+            "tcg",
+            "-cpu",
+            "qemu64,+pdpe1gb",
+            "-m",
+            "256M",
+            "-display",
+            "none",
+            "-chardev",
+            "socket,id=ser0,path=$WORK/sock/measurement-serial.sock,server=on,wait=off",
+            "-serial",
+            "chardev:ser0",
+            "-qmp",
+            "unix:$WORK/sock/measurement-qmp.sock,server=on,wait=off",
+            "-monitor",
+            "none",
+            "-drive",
+            "file=/tmp/cellbox-s10-7/measure/cand-headless/vicell-x86-test-hooks.iso,media=cdrom,readonly=on,format=raw",
+            "-boot",
+            "d",
+            "-no-reboot",
+            "-netdev",
+            "user,id=net0,restrict=on",
+            "-device",
+            "e1000,netdev=net0",
+            "-drive",
+            "file=$WORK/disk.img,if=none,format=raw,id=p10fx",
+            "-device",
+            "nvme,drive=p10fx,serial=cellosp10",
+            "-chardev",
+            "socket,path=$WORK/sock/gdb.sock,server=on,wait=off,id=gdb0",
+            "-gdb",
+            "chardev:gdb0",
+            "-S",
+            "-D",
+            "$WORK/evidence/qemu-trace.log",
+            "-msg",
+            "timestamp=on"
+          ]
+        }
+      },
+      "inputs": {
+        "ok": true,
+        "detail": {
+          "candidate_files_checked": 25,
+          "fixture_disk": {
+            "path": "/tmp/cellbox-s10-7/measure/cand-headless/run-inputs/disk-main/disk.img",
+            "exists": true,
+            "sha256": "3b98e006db94c437bc56fd96474e0d985d7d4d57be254583467a20ab4f017e13"
+          },
+          "heap_arena": [
+            2785376,
+            6291456
+          ]
+        }
+      }
+    }
+  },
+  "go_by_set": {
+    "cand-headless": true
+  },
+  "informational": {
+    "foreign_qemu_pids_present": [],
+    "policy": "never signalled; a run kills only machine.proc.pid it started"
+  },
+  "not_run_sets": {
+    "b2-headless": "class B COMPLETE in S10-7.4; not rerun (D8-2)",
+    "b2-desktop": "stays null (D8-4): image defect, no repair authorized"
+  },
+  "go": true
+}
