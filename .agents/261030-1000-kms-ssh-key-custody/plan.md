@@ -1,6 +1,6 @@
 ---
 title: "KMS SSH key custody (KSSH): ed25519 keys in KMS for outbound Cellbox SSH publickey auth"
-status: k1-cp1-approved-k2-decisions-approved-no-code
+status: k2-cp1-law1-confirmation-1-approved-no-code
 priority: P2
 created: 2026-10-30
 origin: "Cellbox Phase 09 S9-5 (deferred by D79-14, 2026-10-25); Phase 10 S10-10 decision D10-2 = E (user, 2026-10-30)"
@@ -74,3 +74,4 @@ After K0 approval: CP1 for K2 (KMS ABI design, decides D-K5) and, separately, CP
 ## Decisions log (2026-10-30)
 - **K1 CP1 APPROVED by the user:** D-K4 = own parser + allowlist; dependency admission is a decision plus the pre-reviewed 3-package lock diff (`bcrypt-pbkdf 0.11.0`, `blowfish 0.10.0`, `pbkdf2 0.13.0`), applied only together with K5; acceptance = no new `cargo deny` diagnostics versus the red baseline. The unauthorized `github.com/rafalh/rust-fatfs` read-only fetch (existing workspace git dependency, scratch `CARGO_HOME`) is acknowledged. Nothing in the repo was edited.
 - **K2 CP1 decisions APPROVED by the user (not the implementation):** D-K5 = per-login unlock; O-1 key selected by public key within the SSH class with liveness by kernel attestation; O-10 = B (K2 CP2 lands `SshKeyUnavailable` arms so the KMS build is not broken; real handling in K5); O-14 KEY_ID = admin-chosen name (1..64). Still required before any K2 code: digest-bound CP1 approval record (`k2-cp1-approval.md`), Law-1 confirmation 1 on the final text, lock handoff for `cells/services/kms/**` and `libs/types/src/kms/**`. Other O-items in `k2-cp1-draft.md` stay open.
+- **K2 CP1 Law-1 confirmation 1 APPROVED by the user 2026-10-30** for `k2-cp1.md` (digest-bound in `k2-cp1-approval.md`): LR-1 = option Y (exactly one SSH identity per KMS store; the caller selects nothing, the request's public key is an expected-key confirmation), LR-2 = option P (kernel attestation instead of a registered service TID), §9.3 values, D-K5 per-login unlock, O-10 = B, O-14 admin-chosen KEY_ID. Design only: no code, key, network, `Cargo.lock`, lock release or image change. Next: lock handoff for `libs/types/src/kms/**` and `cells/services/kms/**`, then K2 CP2 implementation (and confirmation 2 on the exact ABI delta). `k2-cp1-draft.md` is superseded by `k2-cp1.md`.
