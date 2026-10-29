@@ -28,10 +28,10 @@ Update the affected image/package/signing recipes, command/app-development docs 
 
 ## Success criteria
 
-- [ ] CBX-01..29 have actual evidence with no silent exclusions or placeholders. **Unmet:** CBX-23/24/25 partial (Tier-3 guest, publickey/KMS) and **CBX-27 unmet** (S10-4 closed partial).
+- [ ] CBX-01..29 have actual evidence with no silent exclusions or placeholders. **Unmet:** CBX-23/24/25 partial (Tier-3 guest, publickey/KMS). CBX-27 is **met at its stated ceiling** by the user's disposition (S10-9 CP2, 2026-10-30), see criterion 4.
 - [x] Real keyboard/screen/state and network/file effects prove selected behavior, not source assertions or fixed mock output. **Met at the candidate/promoted ceilings (S10-5 CP2 granted 2026-10-29):** L0/L4/L6 real serial/GUI/network/file effects on QEMU/TCG; guest SSH excluded.
 - [x] One suite artifact and all retained independent apps/services package correctly; no broad ambient authority or hidden legacy fallback. **Met on the promoted dev-posture x86 bytes (S10-5 CP2 granted 2026-10-29):** S10-5 V1–V7.
-- [ ] Measurements compare equivalent feature sets and distinguish host/QEMU/physical ceilings. **Unmet:** S10-4 closed partial; no RSS, exact/kernel stack, matched historical runtime or full-workload peaks.
+- [x] Measurements compare equivalent feature sets and distinguish host/QEMU/physical ceilings. **Checked at the stated ceiling by explicit user disposition (S10-9 CP2, 2026-10-30), NOT as a feature-equivalent comparison:** the B1/B2 baseline lacks rg/edit/ssh/top/typed pipelines/finite stream/real cat (the B2 GUI terminal is a fixed builtin interpreter), so comparison covers only the shared subset; memory is guest-resident (mapped-backed under eager SAS) on test-hooks measurement kernels with lower-bound sentinel stack depths; no allocator comparison for B2, no RSS beyond mapped-backed, no promoted-kernel timing, other cells' stacks boot-phase only; the 10 s recovery criterion was NOT EVALUATED. All numbers QEMU/TCG; no physical/production claim.
 - [x] Public docs, notices, command help, caller routes and portfolio match the delivered implementation; no IDE/build environment is scheduled or implied. **Met after the S10-5 record updates (S10-5 CP2 granted 2026-10-29).**
 
 ## Verification
