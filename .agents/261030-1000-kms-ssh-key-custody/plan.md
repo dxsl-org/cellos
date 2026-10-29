@@ -1,6 +1,6 @@
 ---
 title: "KMS SSH key custody (KSSH): ed25519 keys in KMS for outbound Cellbox SSH publickey auth"
-status: k0-approved-docs-only
+status: k1-cp1-approved-k2-decisions-approved-no-code
 priority: P2
 created: 2026-10-30
 origin: "Cellbox Phase 09 S9-5 (deferred by D79-14, 2026-10-25); Phase 10 S10-10 decision D10-2 = E (user, 2026-10-30)"
@@ -31,8 +31,8 @@ T0/T1 are labelled `DEV_POSTURE` and are never reported as `ProductionQualified`
 | D-K1 | Posture ceiling: deliver T0 then T1 labelled `DEV_POSTURE`; T2 stays a separate program | decided |
 | D-K2 | CellosFS crash safety (`261025-cellosfs-crash-safety`) is a soft dependency for T0/T1 and a hard dependency for T2 and any "survives power loss" claim | decided |
 | D-K3 | Key import is a non-CLI credential-owner path (supervisor-authorised op or dedicated admin cell); the contract delta against `command-contracts.md:142` and the S9-5 proposal line 108 (`cellbox ssh-key import`) is recorded in K0 before any implementation | decided |
-| D-K4 | Parser choice (`ssh-key` with `encryption` vs own parser with an AES-256-CTR-only allowlist before the KDF): **not decided here**; the probe gave no recommendation; decided in K1's CP1 with the license/dependency evidence | deferred to K1 CP1 |
-| D-K5 | Decrypt once and re-seal under the KMS root vs keep passphrase-wrapped and unlock per session (contract §4.1 says "unlock"; the S9-5 proposal implied the former): **not decided here**; decided in K2's design CP1 | deferred to K2 CP1 |
+| D-K4 | Parser choice: **own minimal OpenSSH-v1 parser with a structural pre-KDF allowlist** (bcrypt-pbkdf 0.11.0 + blowfish(zeroize) + aes + ctr + zeroize); `ssh-key` only as a dev-dependency differential test; Cargo.lock/manifest applied together with K5 | decided at K1 CP1 (user, 2026-10-30) |
+| D-K5 | Per-login unlock bounded to one signature (keys stay passphrase-wrapped; contract line 142 unchanged); decrypt-once rejected | decided at K2 CP1 (user, 2026-10-30) |
 | D-K6 | Caller right is a new kernel-attested flag (the only precedent that works); a registration handshake is not available for an unregistered client | decided |
 | D-K7 | T1 uses a new x86 development provider, not the AArch64 Silo | decided |
 
@@ -70,3 +70,7 @@ After K0 approval: CP1 for K2 (KMS ABI design, decides D-K5) and, separately, CP
 
 ## Authorizations log
 - 2026-10-30 (user): "đồng ý tiếp tục, cho phép mạng". Interpreted narrowly: (1) proceed to the K2 CP1 draft (document only); (2) network use is permitted **only for read-only dependency evidence gathering for K1** (crates.io download of `bcrypt-pbkdf` and the `ssh-key` encryption feature graph into a scratch directory outside the repo, plus advisory/license checks). It does **not** authorize editing `Cargo.lock`, `Cargo.toml`, `deny.toml`, `vendor/`, any source, keys, server exposure or inbound connections; those wait for the K1 CP1 (which carries the D-K4 decision and the exact lock diff).
+
+## Decisions log (2026-10-30)
+- **K1 CP1 APPROVED by the user:** D-K4 = own parser + allowlist; dependency admission is a decision plus the pre-reviewed 3-package lock diff (`bcrypt-pbkdf 0.11.0`, `blowfish 0.10.0`, `pbkdf2 0.13.0`), applied only together with K5; acceptance = no new `cargo deny` diagnostics versus the red baseline. The unauthorized `github.com/rafalh/rust-fatfs` read-only fetch (existing workspace git dependency, scratch `CARGO_HOME`) is acknowledged. Nothing in the repo was edited.
+- **K2 CP1 decisions APPROVED by the user (not the implementation):** D-K5 = per-login unlock; O-1 key selected by public key within the SSH class with liveness by kernel attestation; O-10 = B (K2 CP2 lands `SshKeyUnavailable` arms so the KMS build is not broken; real handling in K5); O-14 KEY_ID = admin-chosen name (1..64). Still required before any K2 code: digest-bound CP1 approval record (`k2-cp1-approval.md`), Law-1 confirmation 1 on the final text, lock handoff for `cells/services/kms/**` and `libs/types/src/kms/**`. Other O-items in `k2-cp1-draft.md` stay open.
