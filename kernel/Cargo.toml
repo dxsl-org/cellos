@@ -148,6 +148,18 @@ test-hooks = ["dep:qemu-exit", "hal/test-hooks"]
 x86-idt-cpl3-test = ["test-hooks", "hal/x86-idt-cpl3-test"]
 # Isolated x86 SVM NPF/MMIO decode fixture; does not enable the global test suite.
 x86-mmio-smoke = []
+# Private Phase02 session fixture routes and caller-selected disposable trust key.
+phase02-terminal-profile = []
+# Private Phase03 stdin-filter fixture: one `cellbox -> /bin/p03-filter` launch
+# edge (empty ceiling). Never default, never in a canonical image. Signing needs
+# the private key path that `phase02-terminal-profile` provides, so enable both.
+phase03-filter-profile = []
+# Private Phase04 GUI-Terminal fixture: init may start `/bin/phase04-terminal-driver`
+# and that driver gets exactly one `-> /bin/cellbox` edge (path route, empty
+# ceiling), the same shape as the reviewed `terminal -> /bin/cellbox` row. Never
+# default, never in a canonical image; signing needs the private key path that
+# `phase02-terminal-profile` provides, so enable both.
+phase04-driver-profile = []
 # Diagnostic image: name the reason a `TrySend` admission was refused, with the
 # target's task state. A refused admission is how a bounded caller learns its
 # request never reached the service, and the state is what separates a healthy

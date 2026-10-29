@@ -305,12 +305,8 @@ pub fn remote_online_sbi_target() -> Option<(usize, usize)> {
 ///
 /// Hart zero is the active boot hart; each secondary contributes only after
 /// publishing `HART_ONLINE`, so test evidence cannot confuse configured SMP
-/// capacity with observed runtime availability.
-#[cfg(all(
-    feature = "native-domains",
-    feature = "test-hooks",
-    any(target_arch = "riscv64", target_arch = "x86_64")
-))]
+/// capacity with observed runtime availability. `TelemetrySnapshot` reports it
+/// as `online_cpus`.
 pub(crate) fn online_hart_count() -> usize {
     1 + HART_ONLINE
         .iter()

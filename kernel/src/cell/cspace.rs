@@ -9,7 +9,6 @@
 //! - **D03**: Single shared `CellAuthority` per `(CellId, generation)`; 64-byte CSpace request;
 //!   single-parent revocation hierarchy with `AdmissionCut` and quiescence tracking.
 
-use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use crate::task::cap::CapSet;
 use types::CellId;
@@ -393,6 +392,14 @@ impl CellAuthority {
             quiesced: false,
         }
     }
+    pub(crate) fn try_new(cell_id: CellId, generation: u64, ceiling: CapSet)
+        -> Result<Self, types::ViError> {
+        let mut slots = Vec::new();
+        slots.try_reserve_exact(MAX_SLOTS_PER_CELL).map_err(|_| types::ViError::OutOfMemory)?;
+        slots.resize_with(MAX_SLOTS_PER_CELL, SlotEntry::default);
+        Ok(Self { cell_id, generation, ceiling, current_rights: ceiling, slots,
+            next_ticket_counter: 1, revoking: false, quiesced: false })
+    }
 
     /// Resolve an opaque recipient-local ticket; no ticket bits encode an index.
     fn live_slot_index(&self, ticket: u64) -> Result<usize, ControlStatus> {
@@ -607,20 +614,63 @@ impl CellAuthority {
         crate::cell::cap_registry::unpark_ticket_file((self.cell_id.0, self.generation, ticket), file_box);
     }
 }
-/// Global registry of shared Cell authorities indexed by (CellId, generation).
-pub static CELL_AUTHORITIES: crate::sync::Spinlock<BTreeMap<(u64, u64), CellAuthority>> =
-    crate::sync::Spinlock::new(BTreeMap::new());
+/// Only published authorities are addressable. Preparation reserves capacity
+/// and carries the detached authority in the canonical launch reservation.
+pub struct AuthorityTable {
+    rows: Vec<((u64, u64), CellAuthority)>,
+    reservations: usize,
+}
+impl AuthorityTable {
+    pub fn get_mut(&mut self, key: &(u64, u64)) -> Option<&mut CellAuthority> {
+        self.rows.binary_search_by_key(key, |r| r.0).ok().map(|i| &mut self.rows[i].1)
+    }
+    /// (rows, capacity, outstanding reservations) for publication regression tests.
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn test_shape(&self) -> (usize, usize, usize) {
+        (self.rows.len(), self.rows.capacity(), self.reservations)
+    }
+}
+pub static CELL_AUTHORITIES: crate::sync::Spinlock<AuthorityTable> =
+    crate::sync::Spinlock::new(AuthorityTable { rows: Vec::new(), reservations: 0 });
 
-/// Register a new CellAuthority. Returns true if registered or already present;
-/// returns false if cell_id is invalid (0 or >= MAX_CELLS).
+pub(crate) struct AuthorityReservation(Option<CellAuthority>);
+impl AuthorityReservation {
+    pub(crate) fn reserve(cell: CellId, generation: u64, ceiling: CapSet)
+        -> Result<Self, types::ViError> {
+        let authority = CellAuthority::try_new(cell, generation, ceiling)?;
+        let mut table = CELL_AUTHORITIES.lock();
+        let additional = table.reservations + 1;
+        table.rows.try_reserve(additional).map_err(|_| types::ViError::OutOfMemory)?;
+        table.reservations += 1;
+        Ok(Self(Some(authority)))
+    }
+    pub(crate) fn commit(mut self) {
+        let authority = self.0.take().expect("authority reservation consumed");
+        let mut table = CELL_AUTHORITIES.lock();
+        assert!(table.reservations != 0 && table.rows.len() < table.rows.capacity());
+        table.reservations -= 1;
+        let key = (authority.cell_id.0, authority.generation);
+        // Capacity was promised in `reserve`, so this insertion never allocates;
+        // an already-published identical key keeps its existing authority.
+        if let Err(index) = table.rows.binary_search_by_key(&key, |r| r.0) {
+            table.rows.insert(index, (key, authority));
+        }
+    }
+}
+impl Drop for AuthorityReservation {
+    fn drop(&mut self) {
+        if self.0.is_some() { CELL_AUTHORITIES.lock().reservations -= 1; }
+    }
+}
 pub fn register_cell_authority(cell_id: CellId, generation: u64, ceiling: CapSet) -> bool {
     if cell_id.0 == 0 || cell_id.0 as usize >= crate::memory::cell_quota::MAX_CELLS {
         return false;
     }
-    let mut auths = CELL_AUTHORITIES.lock();
-    auths.entry((cell_id.0, generation))
-        .or_insert_with(|| CellAuthority::new(cell_id, generation, ceiling));
-    true
+    if CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, generation)).is_some() { return true; }
+    match AuthorityReservation::reserve(cell_id, generation, ceiling) {
+        Ok(reservation) => { reservation.commit(); true },
+        Err(_) => false,
+    }
 }
 
 /// Retire a CellAuthority upon cell termination.

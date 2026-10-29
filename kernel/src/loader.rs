@@ -68,7 +68,7 @@ fn legacy_path_caps(path: &str) -> crate::task::cap::CapSet {
         if path.ends_with("/bin/net") {
             c.network = true;
         }
-        if path.ends_with("/bin/shell") || path.ends_with("/bin/init") {
+        if path.ends_with("/bin/cellbox") || path.ends_with("/bin/init") {
             c.spawn = true;
         }
     }

@@ -16,7 +16,7 @@ use crate::task::cap::CapSet;
 type PrivCapCase = (&'static str, fn(&CapSet) -> bool);
 
 const SHELL: CallerLaunchState<'static> = CallerLaunchState {
-    name: "shell",
+    name: "cellbox",
     has_spawn: false,
     has_supervisor: false,
 };
@@ -36,7 +36,7 @@ pub fn run() -> bool {
     // fails all of these, which is the whole point of pinning them.
     let platform_only = CapSet {
         platform: true,
-        ..CapSet::EMPTY
+        ..CapSet::LEGACY_OBSERVE_MUTATE
     };
     let per_path = [
         (
@@ -49,13 +49,13 @@ pub fn run() -> bool {
         ),
         ("/bin/net holds spawn", !boot_ceiling("/bin/net").spawn),
         (
-            "/bin/shell holds network",
-            !boot_ceiling("/bin/shell").network,
+            "/bin/cellbox holds network",
+            !boot_ceiling("/bin/cellbox").network,
         ),
-        ("/bin/shell holds spawn", !boot_ceiling("/bin/shell").spawn),
+        ("/bin/cellbox holds spawn", !boot_ceiling("/bin/cellbox").spawn),
         (
-            "/bin/shell holds block_regions",
-            boot_ceiling("/bin/shell").block_regions == 0,
+            "/bin/cellbox holds block_regions",
+            boot_ceiling("/bin/cellbox").block_regions == 0,
         ),
         (
             "/bin/supervisor holds mmio",
@@ -149,29 +149,146 @@ pub fn run() -> bool {
             "[selftest] boot-ceiling: /bin/serial must hold serial_port only (no pcie/mmio/dma)"
         );
     }
-    // /bin/lan9514 holds NO direct hardware authority (pure IPC client to dwc2-usb).
+    // /bin/lan9514 holds NO direct hardware authority (pure IPC client to dwc2-usb);
+    // only the pre-annex S2-T/S2-W rights every reviewed row keeps.
     let lan = CapSet::EMPTY
         .with_path_caps("/bin/lan9514")
         .intersect(boot_ceiling("/bin/lan9514"));
-    if lan != CapSet::EMPTY {
+    if lan != CapSet::LEGACY_OBSERVE_MUTATE {
         ok = false;
         log::error!(
-            "[selftest] boot-ceiling: /bin/lan9514 granted {:?} — must stay EMPTY",
+            "[selftest] boot-ceiling: /bin/lan9514 granted {:?} — must hold only X/M/W",
             lan
         );
+    }
+
+    // S2-T/S2-W (D-TW1): every boot row keeps task/memory observation and VFS
+    // mutation after request ∩ ceiling; the user-app sandbox gets none.
+    for path in [
+        "/bin/init",
+        "/bin/platform",
+        "/bin/vfs",
+        "/bin/net",
+        "/bin/cellbox",
+        "/bin/supervisor",
+        "/bin/nvme",
+        "/bin/lan9514",
+        "/bin/compositor",
+        "/bin/sshd",
+    ] {
+        let g = CapSet::EMPTY
+            .with_path_caps(path)
+            .intersect(boot_ceiling(path));
+        if !(g.observe_tasks && g.observe_memory && g.vfs_mutate) {
+            ok = false;
+            log::error!("[selftest] boot-ceiling: {} lost a pre-annex X/M/W right", path);
+        }
+    }
+    for path in ["/apps/demo", "/data/bin/tool", "/home/user/app"] {
+        let g = CapSet::EMPTY
+            .with_path_caps(path)
+            .intersect(boot_ceiling(path));
+        if g != CapSet::EMPTY {
+            ok = false;
+            log::error!("[selftest] boot-ceiling: sandbox {} granted {:?}", path, g);
+        }
+    }
+
+    // Network rights (annex S2-N §5): each boot-started sender keeps exactly its
+    // grant after request ∩ ceiling, and the shell, the net service itself and
+    // silo receive none.
+    let net_cases: [(&str, (bool, bool, bool, bool)); 6] = [
+        ("/bin/sshd", (false, false, true, false)),
+        ("/bin/net-broker", (true, true, true, false)),
+        ("/bin/hypervisor", (false, false, false, true)),
+        ("/bin/cellbox", (false, false, false, false)),
+        ("/bin/net", (false, false, false, false)),
+        ("/bin/silo", (false, false, false, false)),
+    ];
+    for (path, want) in net_cases {
+        let g = CapSet::EMPTY
+            .with_path_caps(path)
+            .intersect(boot_ceiling(path));
+        if (g.net_resolve, g.net_connect, g.net_listen, g.net_l2) != want {
+            ok = false;
+            log::error!(
+                "[selftest] boot-ceiling: {} network rights {:?}, expected {:?}",
+                path,
+                (g.net_resolve, g.net_connect, g.net_listen, g.net_l2),
+                want
+            );
+        }
+    }
+
+    // Q (Phase 01 CP1, D-Q5): the boot shell keeps `config_write` after
+    // request ∩ ceiling; no other boot-started Cell receives it.
+    for (path, want) in [
+        ("/bin/cellbox", true),
+        ("/bin/config", false),
+        ("/bin/init", false),
+        ("/bin/terminal", false),
+        ("/bin/desktop", false),
+        ("/bin/net", false),
+        ("/bin/sshd", false),
+    ] {
+        let g = CapSet::EMPTY
+            .with_path_caps(path)
+            .intersect(boot_ceiling(path));
+        if g.config_write != want {
+            ok = false;
+            log::error!(
+                "[selftest] boot-ceiling: {} config_write {}, expected {}",
+                path,
+                g.config_write,
+                want
+            );
+        }
     }
 
     if authorize(SHELL, LaunchRoute::Mem, "/mem/demo").is_some() {
         ok = false;
         log::error!("[selftest] launch-profile: shell mem launch must fail closed");
     }
-    if authorize(SHELL, LaunchRoute::Path, "/bin/httpd").is_none() {
-        ok = false;
-        log::error!("[selftest] launch-profile: shell lost exact /bin/httpd launch edge");
+    // /bin/httpd's reviewed edge carries `net_listen`, so the kernel-resolved path
+    // route keeps it and the caller-owned ELF route must refuse it: arbitrary
+    // bytes labelled /bin/httpd must not borrow a network right.
+    match authorize(SHELL, LaunchRoute::Path, "/bin/httpd") {
+        Some(profile)
+            if profile.child_ceiling
+                == (CapSet {
+                    net_listen: true,
+                    ..CapSet::LEGACY_OBSERVE_MUTATE
+                }) => {}
+        _ => {
+            ok = false;
+            log::error!("[selftest] launch-profile: shell lost exact listen-only /bin/httpd edge");
+        }
     }
-    if authorize(SHELL, LaunchRoute::Elf, "/bin/httpd").is_none() {
+    if authorize(SHELL, LaunchRoute::Elf, "/bin/httpd").is_some() {
         ok = false;
-        log::error!("[selftest] launch-profile: shell lost exact /bin/httpd ELF edge");
+        log::error!(
+            "[selftest] launch-profile: caller-owned ELF borrowed /bin/httpd network right"
+        );
+    }
+    // Phase 09 D79-9: the shell's second install path of its own ELF carries exactly
+    // the outbound client pair on the kernel-resolved route and nothing on the
+    // caller-owned ELF route, while `/bin/cellbox` itself keeps none (above).
+    match authorize(SHELL, LaunchRoute::Path, "/bin/cellbox-ssh") {
+        Some(profile)
+            if profile.child_ceiling
+                == (CapSet {
+                    net_resolve: true,
+                    net_connect: true,
+                    ..CapSet::LEGACY_OBSERVE_MUTATE
+                }) => {}
+        _ => {
+            ok = false;
+            log::error!("[selftest] launch-profile: shell lost exact client-only /bin/cellbox-ssh edge");
+        }
+    }
+    if authorize(SHELL, LaunchRoute::Elf, "/bin/cellbox-ssh").is_some() {
+        ok = false;
+        log::error!("[selftest] launch-profile: caller-owned ELF borrowed /bin/cellbox-ssh network right");
     }
     if authorize(SHELL, LaunchRoute::Elf, "/bin/vfs-test").is_none() {
         ok = false;
@@ -179,7 +296,7 @@ pub fn run() -> bool {
     }
     for route in [LaunchRoute::Path, LaunchRoute::Elf] {
         match authorize(SHELL, route, "/bin/hotswap") {
-            Some(profile) if profile.child_ceiling == CapSet::EMPTY => {}
+            Some(profile) if profile.child_ceiling == CapSet::LEGACY_OBSERVE_MUTATE => {}
             Some(_) => {
                 ok = false;
                 log::error!(

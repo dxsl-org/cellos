@@ -4,6 +4,8 @@
 #![allow(clippy::result_unit_err)]
 
 pub mod cap;
+pub(crate) mod cell_session;
+pub(crate) mod child_context;
 pub mod completion;
 pub mod completion_selftest;
 pub mod completion_wait;
@@ -115,6 +117,7 @@ pub mod scheduler;
 #[cfg(cellos_g1_cpu)]
 pub(crate) mod cpu_accounting;
 pub mod stack;
+pub(crate) mod telemetry;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod stack_overflow_probe;
 #[cfg(all(
@@ -676,7 +679,7 @@ pub(crate) fn stack_pages_for(name: &str) -> usize {
         // Native, so the conservative value stays until a new watermark is
         // captured against it.
         "vfs" => STACK_PAGES,
-        "init" | "shell" | "vfs-test" | "net" | "virtio-net" | "thread" | "block" | "platform"
+        "init" | "cellbox" | "vfs-test" | "net" | "virtio-net" | "thread" | "block" | "platform"
         | "config" | "bench" | "bench-probe" => MEASURED_STACK_PAGES,
         _ => STACK_PAGES,
     }
@@ -684,7 +687,7 @@ pub(crate) fn stack_pages_for(name: &str) -> usize {
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn stack_sizing_policy_self_test() -> bool {
-    ["init", "shell", "vfs-test", "net", "virtio-net", "thread"]
+    ["init", "cellbox", "vfs-test", "net", "virtio-net", "thread"]
         .into_iter()
         .all(|name| stack_pages_for(name) == MEASURED_STACK_PAGES)
         && stack_pages_for("vfs") == STACK_PAGES
@@ -695,7 +698,7 @@ pub(crate) fn stack_sizing_policy_self_test() -> bool {
 fn stack_baseline_bit(name: &str) -> Option<u8> {
     match name {
         "init" => Some(STACK_BASELINE_INIT),
-        "shell" => Some(STACK_BASELINE_SHELL),
+        "cellbox" => Some(STACK_BASELINE_SHELL),
         "vfs" => Some(STACK_BASELINE_VFS),
         "vfs-test" => Some(STACK_BASELINE_VFS_TEST),
         "net" => Some(STACK_BASELINE_NET),
@@ -2071,6 +2074,7 @@ pub fn file_open(caller_id: usize, path: &str) -> core::result::Result<usize, ()
 
 pub fn file_read(fd: usize, buf: &mut [u8]) -> usize {
     if fd == 0 {
+        if let Some(count) = cell_session::stdio_read(current_task_id(), buf) { return count; }
         // Stdin (Keyboard)
         if buf.is_empty() {
             return 0;
@@ -2104,6 +2108,7 @@ pub fn file_read(fd: usize, buf: &mut [u8]) -> usize {
 
 pub fn file_write(fd: usize, buf: &[u8]) -> usize {
     if fd == 1 || fd == 2 {
+        if let Some(count) = cell_session::stdio_write(current_task_id(), fd, buf) { return count; }
         // Stdout/Stderr
         if let Ok(s) = core::str::from_utf8(buf) {
             crate::task::print_user_log(s, crate::task::current_task_id());

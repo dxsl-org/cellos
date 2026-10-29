@@ -78,7 +78,10 @@ pub enum AuditEvent {
     /// Operator policy narrowed a cell's spawn-time caps. Payload:
     /// `encode_u32x2(tid, dropped_flags)` (dropped_flags: bit0 block_io, bit1
     /// network, bit2 spawn, bit3 hypervisor, bit4 pcie_driver, bit5 platform,
-    /// bit6 supervisor, bit7 mmio_devices changed, bit8 block_regions changed).
+    /// bit6 supervisor, bit7 mmio_devices changed, bit8 block_regions changed,
+    /// bit9 net_resolve, bit10 net_connect, bit11 net_listen, bit12 net_l2,
+    /// bit13 observe_tasks, bit14 observe_memory, bit15 vfs_mutate,
+    /// bit16 config_write).
     CapNarrowedByPolicy = 19,
     /// Runtime revocation: a SpawnCap holder stripped capabilities from a live cell.
     /// Payload: `encode_u32x2(target_tid, cap_mask)` where `cap_mask` matches
@@ -123,6 +126,12 @@ pub enum AuditEvent {
     /// refuses to build a blob that omits one. Path via `log::warn!`, as for the
     /// other policy events.
     PolicyNoEntryStripped = 26,
+    /// A cell left policy holding coarse network rights, which the kernel exports
+    /// to service-net as attested `CALLER_FLAG_NET_*` trailer flags (Phase 04
+    /// S2-N). Payload: `encode_u32x2(tid, mask)` (bit0 net_resolve, bit1
+    /// net_connect, bit2 net_listen, bit3 net_l2). Recorded for the grant, not
+    /// only a narrowing, because `net_l2` puts raw frames on the NIC.
+    NetRightsGranted = 27,
 }
 
 struct AuditRing {

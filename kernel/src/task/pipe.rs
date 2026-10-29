@@ -426,3 +426,83 @@ pub(crate) fn on_deadline(handle: PipeHandle, tid: usize, end: PipeEnd) {
         }
     }
 }
+
+/// Session transport uses this same bounded ring owner, but never installs a
+/// legacy PipeHandle in any task's legacy table. All calls hold SCHEDULER.
+fn session_wake(sched: &mut super::scheduler::Scheduler, tid: usize) {
+    if let Some(task) = sched.tasks.get_mut(&tid) {
+        if matches!(task.state, super::tcb::TaskState::PipeRead { .. }
+            | super::tcb::TaskState::PipeWrite { .. }) {
+            task.state = super::tcb::TaskState::Ready;
+            sched.push_ready(tid);
+        }
+    }
+}
+pub(crate) fn session_read(sched: &mut super::scheduler::Scheduler, handle: PipeHandle,
+    dst: &mut [u8]) -> Option<ReadOutcome> {
+    let mut pipes = PIPES.lock();
+    let pipe = pipes.get_mut(&handle.pipe)?;
+    if !pipe.is_empty() {
+        let count = pipe.read(dst);
+        while let Some(tid) = pipe.write_waiters.pop_front() { session_wake(sched, tid); }
+        Some(ReadOutcome::Read(count))
+    } else if pipe.writers == 0 { Some(ReadOutcome::Eof) }
+    else { Some(ReadOutcome::Empty) }
+}
+pub(crate) fn session_write(sched: &mut super::scheduler::Scheduler, handle: PipeHandle,
+    src: &[u8]) -> Option<WriteOutcome> {
+    let mut pipes = PIPES.lock();
+    let pipe = pipes.get_mut(&handle.pipe)?;
+    if pipe.readers == 0 { return Some(WriteOutcome::NoReader); }
+    if pipe.is_full() { return Some(WriteOutcome::Full); }
+    let count = pipe.write(src);
+    while let Some(tid) = pipe.read_waiters.pop_front() { session_wake(sched, tid); }
+    Some(WriteOutcome::Wrote(count))
+}
+pub(crate) fn session_counts(handle: PipeHandle) -> Option<(usize, usize)> {
+    PIPES.lock().get(&handle.pipe).map(|p| (p.readers, p.writers))
+}
+/// Discard buffered bytes and wake writers blocked on a now-empty ring.
+pub(crate) fn session_flush(sched: &mut super::scheduler::Scheduler, handle: PipeHandle) -> bool {
+    let mut pipes = PIPES.lock();
+    let Some(pipe) = pipes.get_mut(&handle.pipe) else { return false; };
+    pipe.head = 0;
+    pipe.len = 0;
+    while let Some(tid) = pipe.write_waiters.pop_front() { session_wake(sched, tid); }
+    true
+}
+/// Wake every task parked on this ring so it rechecks its typed endpoint state
+/// (closed, revoked or cancelled). A revoked holder is not necessarily the last
+/// end, so end-count transitions alone cannot cover it.
+pub(crate) fn session_wake_all(sched: &mut super::scheduler::Scheduler, handle: PipeHandle) {
+    let mut pipes = PIPES.lock();
+    let Some(pipe) = pipes.get_mut(&handle.pipe) else { return; };
+    while let Some(tid) = pipe.read_waiters.pop_front() { session_wake(sched, tid); }
+    while let Some(tid) = pipe.write_waiters.pop_front() { session_wake(sched, tid); }
+}
+/// A retired Cell can no longer be refunded: its quota row is deregistered and
+/// the CellId may be reissued, so rings it created must not refund a successor.
+pub(crate) fn disown_cell(cell: usize) {
+    for pipe in PIPES.lock().values_mut() {
+        if pipe.owner_cell == cell { pipe.owner_cell = 0; }
+    }
+}
+pub(crate) fn session_close(sched: &mut super::scheduler::Scheduler, handle: PipeHandle) -> bool {
+    let mut pipes = PIPES.lock();
+    let Some(pipe) = pipes.get_mut(&handle.pipe) else { return false; };
+    match handle.end {
+        PipeEnd::Read => { assert!(pipe.readers != 0); pipe.readers -= 1; },
+        PipeEnd::Write => { assert!(pipe.writers != 0); pipe.writers -= 1; },
+    }
+    let final_reader = pipe.readers == 0;
+    if final_reader || pipe.writers == 0 {
+        while let Some(tid) = pipe.read_waiters.pop_front() { session_wake(sched, tid); }
+        while let Some(tid) = pipe.write_waiters.pop_front() { session_wake(sched, tid); }
+    }
+    if pipe.readers == 0 && pipe.writers == 0 {
+        let pipe = pipes.remove(&handle.pipe).expect("locked ring disappeared");
+        drop(pipes);
+        release_pipe(pipe);
+    }
+    final_reader
+}

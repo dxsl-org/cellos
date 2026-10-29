@@ -124,6 +124,10 @@ pub fn self_test() -> bool {
         let mut parent = mk_task(PARENT_TID, TEST_CELL_ID);
         parent.network_cap = Some(super::cap::NetworkCap::new());
         parent.spawn_cap = Some(super::cap::SpawnCap::new());
+        // Two of the three S2-T/S2-W rights (memory withheld), so equality below
+        // proves each one is inherited rather than defaulted.
+        parent.observe_tasks = true;
+        parent.vfs_mutate = true;
         parent.syscall_allowlist = TEST_ALLOWLIST;
         parent.pku_key = TEST_PKU_KEY;
         parent.pku_value = TEST_PKU_VALUE;

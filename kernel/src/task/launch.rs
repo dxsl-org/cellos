@@ -323,3 +323,163 @@ pub fn publish_prepared(
     sched.push_ready(tid);
     Ok((tid, load_base))
 }
+
+/// Creator-quota claim for resources a prepared child will retain or briefly
+/// occupy. It is charged to the creator's exact live Cell before preparation
+/// succeeds and refunded exactly once when the preparation is dropped; a
+/// successful commit transfers the retained portion (the historical measurement
+/// entry and its path) to the retained log owner instead of refunding it.
+struct PublicationClaim {
+    cell: usize,
+    retained: usize,
+    transient: usize,
+    armed: bool,
+}
+impl PublicationClaim {
+    fn charge(cell: usize, retained: usize, transient: usize) -> Result<Self, ViError> {
+        let total = retained.checked_add(transient).ok_or(ViError::OutOfMemory)?;
+        if !crate::memory::cell_quota::charge(cell, total) {
+            return Err(ViError::OutOfMemory);
+        }
+        Ok(Self { cell, retained, transient, armed: true })
+    }
+    /// Commit: the queue slot is consumed by the runnable task, so only that
+    /// transient part is refunded; the retained log history stays attributed.
+    fn transfer(mut self) {
+        crate::memory::cell_quota::refund(self.cell, self.transient);
+        self.armed = false;
+    }
+}
+impl Drop for PublicationClaim {
+    fn drop(&mut self) {
+        if self.armed {
+            crate::memory::cell_quota::refund(self.cell, self.retained + self.transient);
+        }
+    }
+}
+
+/// The task, quota, CSpace, measurement-log and ready-queue slots remain
+/// detached promises until the single session owner transaction commits. This
+/// is not a second live-owner table: the Cell owner slot is `Reserved`, which
+/// no resolve/watch path can observe as live.
+pub(crate) struct SessionPublication {
+    pub(crate) task: alloc::boxed::Box<super::Task>,
+    pub(crate) owner: api::cell_owner::CellOwner,
+    state: TaskLaunchState,
+    quota: crate::memory::cell_quota::QuotaReservation,
+    authority: crate::cell::cspace::AuthorityReservation,
+    measurement: crate::measurement_log::PublicationReservation,
+    ready: super::hart_local::ready::PublicationReservation,
+    claim: PublicationClaim,
+}
+impl SessionPublication {
+    /// Every fallible allocation, quota, owner-slot, log and ready-queue claim
+    /// happens here; `publish` allocates nothing and cannot fail.
+    pub(crate) fn reserve(sched: &mut super::scheduler::Scheduler,
+        prepared: super::PreparedElfTask, state: TaskLaunchState) -> Result<Self, ViError> {
+        let Some(caller) = state.caller.as_ref() else { return Err(ViError::PermissionDenied); };
+        if !authority_is_current(sched, caller) {
+            return Err(ViError::PermissionDenied);
+        }
+        let (creator, creator_generation) = sched.tasks.get(&caller.tid)
+            .map(|t| (t.cell_id.0 as usize, t.cell_generation))
+            .ok_or(ViError::PermissionDenied)?;
+        // A session child is an ordinary governed path launch: never a boot
+        // singleton, domain, hotswap replacement, or service route publisher.
+        if prepared.requested_cell_id() != CellId(0) || state.is_domain || state.platform.is_some()
+            || state.replacement.is_some() || state.routes.block_io || state.routes.input {
+            return Err(ViError::PermissionDenied);
+        }
+        #[cfg(feature = "test-hooks")]
+        if state.routes.development_silo { return Err(ViError::PermissionDenied); }
+        // Heap bookkeeping for the unpublished task is kernel memory, exactly as
+        // in `publish_prepared`; per-principal accounting is the explicit claim.
+        let _kernel_alloc = super::scheduler::KernelAllocationContext::enter();
+        let tid = sched.next_task_id;
+        let next = tid.checked_add(1).ok_or(ViError::OutOfMemory)?;
+        let quota = crate::memory::cell_quota::QuotaReservation::reserve_next(state.quota_limit)?;
+        let cell = quota.cell_id();
+        let (mut task, _) = prepared.into_task(tid, cell)?;
+        task.root_tid = tid;
+        task.syscall_allowlist = state.syscall_allowlist;
+        task.cluster_mode = state.cluster_mode;
+        task.cluster_id = state.cluster_id;
+        task.priority = state.priority;
+        task.pku_key = state.pku_key;
+        task.pku_value = state.pku_value;
+        task.is_critical = state.is_critical;
+        state.granted.apply_to(&mut task);
+        #[cfg(feature = "test-hooks")]
+        { task.development_silo_registration_cap = state.routes.development_silo
+            .then(super::cap::DevelopmentSiloRegistrationCap::new); }
+        let owner = api::cell_owner::CellOwner::new(cell.0, task.cell_generation, tid as u64);
+        let authority = crate::cell::cspace::AuthorityReservation::reserve(cell, owner.generation, state.granted)?;
+        let path_len = state.measurement.as_ref().map_or(0, |m| m.path.len());
+        let claim = PublicationClaim::charge(creator,
+            crate::measurement_log::PublicationReservation::ENTRY_BYTES + path_len,
+            super::hart_local::ready::PublicationReservation::SLOT_BYTES)?;
+        let measurement = crate::measurement_log::PublicationReservation::reserve(
+            (creator as u64, creator_generation))?;
+        let ready = super::hart_local::ready::PublicationReservation::reserve(state.priority)?;
+        sched.reserve_session_owner(owner)?;
+        sched.next_task_id = next;
+        Ok(Self { task, owner, state, quota, authority, measurement, ready, claim })
+    }
+    pub(crate) fn current(&self, sched: &super::scheduler::Scheduler) -> bool {
+        if !sched.session_owner_reserved(self.owner)
+            || self.state.caller.as_ref().is_none_or(|a| !authority_is_current(sched, a)) {
+            return false;
+        }
+        let Some(caller) = self.state.caller.as_ref().and_then(|a| sched.tasks.get(&a.tid)) else { return false; };
+        let Some(measurement) = self.state.measurement.as_ref() else { return false; };
+        let state = crate::loader::launch_profile::CallerLaunchState { name: &caller.name,
+            has_spawn: caller.spawn_cap.is_some(), has_supervisor: caller.supervisor_cap.is_some() };
+        crate::loader::launch_profile::authorize(state, crate::loader::launch_profile::LaunchRoute::Path,
+            &measurement.path).is_some_and(|profile| self.state.granted.intersect(profile.child_ceiling)
+                == self.state.granted && (!profile.requires_lifecycle_authority || caller.spawn_cap.is_some()))
+    }
+    /// Final publication. Called with every owner check already passed, under
+    /// SCHEDULER, and performs no allocation: capacity for the task row, CSpace
+    /// row, log entry and ready entry was promised in `reserve`.
+    pub(crate) fn publish(mut self, sched: &mut super::scheduler::Scheduler) {
+        let tid = self.owner.root_tid as usize;
+        #[cfg(cellos_p01_trace)]
+        {
+            crate::memory::heap::p01_owner::adopt_task(&self.task);
+            crate::memory::heap::p01_owner::task_backing(&self.task);
+        }
+        self.authority.commit();
+        sched.tasks.publish_reserved(tid, self.task);
+        sched.publish_session_owner(self.owner);
+        self.quota.commit();
+        crate::loader::commit_launch_routes(tid, CellId(self.owner.cell_id), self.state.routes);
+        #[cfg(cellos_p01_trace)]
+        {
+            let task = sched.tasks.get_mut(&tid).expect("committed publication");
+            let diagnostic_owner = crate::p01_measurement::Owner::of(task);
+            if let Some(measurement) = self.state.measurement.as_ref() {
+                if self.state.bootstrap_init {
+                    crate::p01_measurement::arm(diagnostic_owner, measurement.digest);
+                } else {
+                    crate::p01_measurement::publication(diagnostic_owner, self.state.trace, measurement.digest);
+                }
+            }
+            crate::memory::heap::p01_owner::bind(self.state.trace, diagnostic_owner);
+            crate::p01_resources::published(task);
+        }
+        if let Some(measurement) = self.state.measurement.take() {
+            self.measurement.commit(tid, measurement.path, measurement.digest);
+        }
+        crate::audit::log_event(
+            crate::audit::AuditEvent::CellSpawn,
+            &crate::audit::encode_u32x2(tid as u32, 0),
+        );
+        crate::loader::observe_pre_ready(sched, tid);
+        // The notification follows the reservation's pinned destination, not
+        // whichever hart happens to commit or whatever RT hart is online now.
+        let (hart, priority) = self.ready.destination();
+        self.ready.commit(tid);
+        self.claim.transfer();
+        sched.pend_preempt_on_hart(hart, priority);
+    }
+}

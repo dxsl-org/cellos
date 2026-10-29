@@ -19,7 +19,7 @@ pub struct NetworkCap(());
 
 /// Permits lifecycle operations such as restart supervision, hot-swap, and
 /// unrestricted spawn-family syscalls.
-/// Granted to `/bin/init` and other reviewed supervisors, never to `/bin/shell`.
+/// Granted to `/bin/init` and other reviewed supervisors, never to `/bin/cellbox`.
 #[derive(Copy, Clone, Debug)]
 pub struct SpawnCap(());
 
@@ -233,6 +233,38 @@ pub struct CapSet {
     /// kernel itself probed. No DMA and no MMIO — it reaches only the declared
     /// ports, which is why it is its own cap rather than a reuse of `pcie_driver`.
     pub serial_port: bool,
+    // Coarse per-Cell network rights (Phase 04 S2-N). Enforced by service-net,
+    // not by any kernel syscall: the kernel only carries them from the bounded
+    // spawn grant into the attested caller trailer (`CALLER_FLAG_NET_*`). Like
+    // the P-TRUST fields they have no manifest bit — the install path is the
+    // request (`with_path_caps`) and the reviewed ceiling bounds it — but they
+    // are NOT P-TRUST: `without_ptrust` keeps them.
+    /// `NetRequest::Resolve`.
+    pub net_resolve: bool,
+    /// Outbound sockets: `TcpConnect`, `UdpCreate`, `UdpSend`.
+    pub net_connect: bool,
+    /// Inbound sockets: `TcpListen`, `UdpBind`, `MulticastJoin`.
+    pub net_listen: bool,
+    /// Raw Ethernet frames: `L2Send`, `L2Recv`.
+    pub net_l2: bool,
+    // Edge-bounded telemetry and VFS-mutation rights (Phase 04 S2-T/S2-W annex).
+    // Kernel-only: no manifest bit; the install path is the request
+    // (`with_path_caps`: every path except the `/apps/`, `/data/bin/`, `/home/`
+    // sandbox) and the reviewed ceiling and operator policy bound it. Not P-TRUST.
+    /// X: `GetProcs` / `GetProcs2` are refused at dispatch without it.
+    pub observe_tasks: bool,
+    /// M: `MemInfo` is refused at dispatch without it.
+    pub observe_memory: bool,
+    /// W: without it the kernel never attests `CALLER_FLAG_VFS_MUTATE`, even when
+    /// allowlist bit 63 is declared, so the VFS refuses every classified mutation.
+    pub vfs_mutate: bool,
+    /// Q (Phase 01 CP1, 2026-10-25): write the shell key namespace of
+    /// service-config (`ConfigRequest::Set` / `Delete`). Enforced by
+    /// service-config, not by any kernel syscall: the kernel only carries it from
+    /// the bounded spawn grant into the attested caller trailer
+    /// (`CALLER_FLAG_CONFIG_WRITE`). No manifest bit; `/bin/cellbox` is the only
+    /// install path that requests it (`with_path_config_rights`). Not P-TRUST.
+    pub config_write: bool,
 }
 
 impl CapSet {
@@ -249,6 +281,25 @@ impl CapSet {
         supervisor: false,
         usb_driver: false,
         serial_port: false,
+        net_resolve: false,
+        net_connect: false,
+        net_listen: false,
+        net_l2: false,
+        observe_tasks: false,
+        observe_memory: false,
+        vfs_mutate: false,
+        config_write: false,
+    };
+
+    /// The three S2-T/S2-W rights (task observation, system memory, VFS
+    /// mutation) and nothing else. They were ambient before the annex, so every
+    /// pre-existing non-sandbox reviewed row ORs this in to keep image behavior;
+    /// the sandbox default arm and future restricted rows leave it out.
+    pub const LEGACY_OBSERVE_MUTATE: CapSet = CapSet {
+        observe_tasks: true,
+        observe_memory: true,
+        vfs_mutate: true,
+        ..CapSet::EMPTY
     };
 
     /// Every cap this kernel can express — a **reference upper bound for
@@ -278,6 +329,14 @@ impl CapSet {
         supervisor: true,
         usb_driver: true,
         serial_port: true,
+        net_resolve: true,
+        net_connect: true,
+        net_listen: true,
+        net_l2: true,
+        observe_tasks: true,
+        observe_memory: true,
+        vfs_mutate: true,
+        config_write: true,
     };
 
     /// Snapshot a (running) Task's current capabilities.
@@ -294,6 +353,14 @@ impl CapSet {
             supervisor: t.supervisor_cap.is_some(),
             usb_driver: t.usb_driver_cap.is_some(),
             serial_port: t.serial_port_cap.is_some(),
+            net_resolve: t.net_resolve,
+            net_connect: t.net_connect,
+            net_listen: t.net_listen,
+            net_l2: t.net_l2,
+            observe_tasks: t.observe_tasks,
+            observe_memory: t.observe_memory,
+            vfs_mutate: t.vfs_mutate,
+            config_write: t.config_write,
         }
     }
 
@@ -342,6 +409,17 @@ impl CapSet {
             supervisor: false,
             usb_driver: false,
             serial_port: false,
+            // Network rights have no manifest bit either; `with_path_caps`
+            // requests them from the install path.
+            net_resolve: false,
+            net_connect: false,
+            net_listen: false,
+            net_l2: false,
+            // Nor do the S2-T/S2-W rights; `with_path_caps` requests them.
+            observe_tasks: false,
+            observe_memory: false,
+            vfs_mutate: false,
+            config_write: false,
         }
     }
 
@@ -401,6 +479,66 @@ impl CapSet {
         if path == "/bin/supervisor" {
             self.supervisor = true;
         }
+        self.with_path_net_rights(path)
+            .with_path_observe_mutate_rights(path)
+            .with_path_config_rights(path)
+    }
+
+    /// Request the coarse network rights of the reviewed grant table (Phase 04
+    /// S2-N annex §5) for `path`. Any path not listed requests none — that
+    /// includes the shell, `/bin/lua`, `/bin/python` and the `/apps`, `/data/bin`,
+    /// `/home` sandbox. The request is still bounded by the launch/boot ceiling
+    /// and the operator policy like every other field.
+    ///
+    /// Kept out of `with_path_caps`' own body on purpose: `scripts/sign-policy.py`
+    /// reads that body as the list of P-TRUST-minting paths, and these rights are
+    /// not P-TRUST.
+    fn with_path_net_rights(mut self, path: &str) -> CapSet {
+        let (resolve, connect, listen, l2) = match path {
+            "/bin/curl" | "/bin/wget" | "/bin/mqtt" | "/bin/ocel" | "/bin/llm-gateway"
+            | "/bin/https-demo" | "/bin/robot-demo" | "/bin/cellbox-ssh" => (true, true, false, false),
+            "/bin/nc" | "/bin/net-broker" => (true, true, true, false),
+            "/bin/httpd" | "/bin/sshd" => (false, false, true, false),
+            "/bin/hypervisor" => (false, false, false, true),
+            _ => (false, false, false, false),
+        };
+        self.net_resolve |= resolve;
+        self.net_connect |= connect;
+        self.net_listen |= listen;
+        self.net_l2 |= l2;
+        self
+    }
+
+    /// Request the S2-T/S2-W rights (annex §3, decision D-TW1) for `path`: every
+    /// path requests all three **except** the user-app sandbox prefixes, which
+    /// request none. The request is bounded by the launch/boot ceiling and the
+    /// operator policy like every other field, so a restricted row can still
+    /// withhold them. Kept out of `with_path_caps`' body for the same reason as
+    /// the network rights: `scripts/sign-policy.py` reads that body as the
+    /// P-TRUST path list.
+    fn with_path_observe_mutate_rights(mut self, path: &str) -> CapSet {
+        let sandbox = path.starts_with("/apps/")
+            || path.starts_with("/data/bin/")
+            || path.starts_with("/home/");
+        if !sandbox {
+            self.observe_tasks = true;
+            self.observe_memory = true;
+            self.vfs_mutate = true;
+        }
+        self
+    }
+
+    /// Request the Q right (Phase 01 CP1, decision D-Q5) for `path`: only the
+    /// shell, `/bin/cellbox`, asks for it. Its second install path
+    /// `/bin/cellbox-ssh`, every reviewed child row and the sandbox ask for
+    /// nothing. The request is bounded by the launch/boot ceiling and operator
+    /// policy like every other field. Kept out of `with_path_caps`' body for the
+    /// same reason as the network rights: `scripts/sign-policy.py` reads that
+    /// body as the P-TRUST path list.
+    fn with_path_config_rights(mut self, path: &str) -> CapSet {
+        if path == "/bin/cellbox" {
+            self.config_write = true;
+        }
         self
     }
 
@@ -438,6 +576,20 @@ impl CapSet {
         }
     }
 
+    /// Drop the three S2-T/S2-W rights, keeping everything else.
+    ///
+    /// The caller-owned-ELF launch gate uses it: those rights were ambient
+    /// before the annex, so a row that carries only them still counts as
+    /// carrying no authority for that route (D-TW1, behavior-preserving).
+    pub fn without_observe_mutate(self) -> CapSet {
+        CapSet {
+            observe_tasks: false,
+            observe_memory: false,
+            vfs_mutate: false,
+            ..self
+        }
+    }
+
     /// Field-wise minimum (bool AND, bitmask AND). The monotonic-downgrade core.
     pub fn intersect(self, o: CapSet) -> CapSet {
         CapSet {
@@ -452,6 +604,43 @@ impl CapSet {
             supervisor: self.supervisor && o.supervisor,
             usb_driver: self.usb_driver && o.usb_driver,
             serial_port: self.serial_port && o.serial_port,
+            net_resolve: self.net_resolve && o.net_resolve,
+            net_connect: self.net_connect && o.net_connect,
+            net_listen: self.net_listen && o.net_listen,
+            net_l2: self.net_l2 && o.net_l2,
+            observe_tasks: self.observe_tasks && o.observe_tasks,
+            observe_memory: self.observe_memory && o.observe_memory,
+            vfs_mutate: self.vfs_mutate && o.vfs_mutate,
+            config_write: self.config_write && o.config_write,
+        }
+    }
+
+    /// The attested caller-trailer flags for this Cell's network rights
+    /// (`api::caller_identity::CALLER_FLAG_NET_*`). Only these four bits; the
+    /// caller ORs in any other flag it owns.
+    pub fn net_caller_flags(&self) -> u32 {
+        use api::caller_identity::{
+            CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN,
+            CALLER_FLAG_NET_RESOLVE,
+        };
+        [
+            (self.net_resolve, CALLER_FLAG_NET_RESOLVE),
+            (self.net_connect, CALLER_FLAG_NET_CONNECT),
+            (self.net_listen, CALLER_FLAG_NET_LISTEN),
+            (self.net_l2, CALLER_FLAG_NET_L2),
+        ]
+        .iter()
+        .filter(|(held, _)| *held)
+        .fold(0, |flags, (_, flag)| flags | flag)
+    }
+
+    /// The attested caller-trailer flag for this Cell's Q right
+    /// (`api::caller_identity::CALLER_FLAG_CONFIG_WRITE`), or 0.
+    pub fn config_caller_flags(&self) -> u32 {
+        if self.config_write {
+            api::caller_identity::CALLER_FLAG_CONFIG_WRITE
+        } else {
+            0
         }
     }
 
@@ -469,6 +658,14 @@ impl CapSet {
         t.supervisor_cap = self.supervisor.then(SupervisorCap::new);
         t.usb_driver_cap = self.usb_driver.then(UsbDriverCap::new);
         t.serial_port_cap = self.serial_port.then(SerialPortCap::new);
+        t.net_resolve = self.net_resolve;
+        t.net_connect = self.net_connect;
+        t.net_listen = self.net_listen;
+        t.net_l2 = self.net_l2;
+        t.observe_tasks = self.observe_tasks;
+        t.observe_memory = self.observe_memory;
+        t.vfs_mutate = self.vfs_mutate;
+        t.config_write = self.config_write;
         // `platform_cap` is transferred only from `PlatformCapReservation`.
         // Applying a plain capability snapshot must never bypass the singleton.
     }
@@ -487,6 +684,14 @@ impl CapSet {
             supervisor: t.supervisor_cap.is_some(),
             usb_driver: t.usb_driver_cap.is_some(),
             serial_port: t.serial_port_cap.is_some(),
+            net_resolve: t.net_resolve,
+            net_connect: t.net_connect,
+            net_listen: t.net_listen,
+            net_l2: t.net_l2,
+            observe_tasks: t.observe_tasks,
+            observe_memory: t.observe_memory,
+            vfs_mutate: t.vfs_mutate,
+            config_write: t.config_write,
         }
     }
 }
@@ -673,6 +878,303 @@ mod tests {
         );
     }
 
+    const NET_ALL: CapSet = CapSet {
+        net_resolve: true,
+        net_connect: true,
+        net_listen: true,
+        net_l2: true,
+        ..CapSet::EMPTY
+    };
+
+    fn net_rights(c: CapSet) -> (bool, bool, bool, bool) {
+        (c.net_resolve, c.net_connect, c.net_listen, c.net_l2)
+    }
+
+    #[test]
+    fn manifest_never_requests_network_rights() {
+        // Every manifest flag set: still no net right, because the install path —
+        // not the manifest — is the request signal.
+        let all = api::manifest::CellManifest::with_all(
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            api::manifest::TIER_LEGACY,
+        );
+        let caps = CapSet::from_manifest(&all);
+        assert!(caps.network, "fixture must be a fully-flagged manifest");
+        assert_eq!(net_rights(caps), (false, false, false, false));
+    }
+
+    #[test]
+    fn intersect_ands_each_network_right() {
+        let request = CapSet {
+            net_resolve: true,
+            net_connect: true,
+            net_listen: false,
+            net_l2: true,
+            ..CapSet::EMPTY
+        };
+        let ceiling = CapSet {
+            net_resolve: true,
+            net_connect: false,
+            net_listen: true,
+            net_l2: true,
+            ..CapSet::EMPTY
+        };
+        assert_eq!(
+            net_rights(request.intersect(ceiling)),
+            (true, false, false, true)
+        );
+        assert_eq!(
+            net_rights(NET_ALL.intersect(CapSet::EMPTY)),
+            (false, false, false, false)
+        );
+        assert_eq!(NET_ALL.intersect(CapSet::ALL), NET_ALL);
+    }
+
+    #[test]
+    fn path_requests_follow_the_reviewed_grant_table() {
+        let rc = (true, true, false, false);
+        for path in [
+            "/bin/curl",
+            "/bin/wget",
+            "/bin/mqtt",
+            "/bin/ocel",
+            "/bin/llm-gateway",
+            "/bin/https-demo",
+            "/bin/robot-demo",
+        ] {
+            assert_eq!(net_rights(CapSet::EMPTY.with_path_caps(path)), rc, "{path}");
+        }
+        for path in ["/bin/nc", "/bin/net-broker"] {
+            assert_eq!(
+                net_rights(CapSet::EMPTY.with_path_caps(path)),
+                (true, true, true, false),
+                "{path}"
+            );
+        }
+        for path in ["/bin/httpd", "/bin/sshd"] {
+            assert_eq!(
+                net_rights(CapSet::EMPTY.with_path_caps(path)),
+                (false, false, true, false),
+                "{path}"
+            );
+        }
+        assert_eq!(
+            net_rights(CapSet::EMPTY.with_path_caps("/bin/hypervisor")),
+            (false, false, false, true)
+        );
+        // D-N2/D-N3 and the census: everything else requests nothing.
+        for path in [
+            "/bin/cellbox",
+            "/bin/lua",
+            "/bin/python",
+            "/bin/net",
+            "/bin/e1000",
+            "/bin/ocel-js",
+            "/bin/ocel-quickjs",
+            "/bin/async-echo",
+            "/bin/tokio-smoke",
+            "/bin/p03-filter",
+            "/apps/demo",
+            "/data/bin/tool",
+            "/home/user/app",
+        ] {
+            assert_eq!(
+                net_rights(CapSet::EMPTY.with_path_caps(path)),
+                (false, false, false, false),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn network_rights_are_not_ptrust() {
+        assert!(!CapSet::path_mints_ptrust("/bin/curl"));
+        assert!(!CapSet::path_mints_ptrust("/bin/sshd"));
+        assert_eq!(NET_ALL.without_ptrust(), NET_ALL);
+        // The hypervisor's own request keeps both its L2 right and its manifest cap.
+        let hv = CapSet {
+            hypervisor: true,
+            ..CapSet::EMPTY
+        }
+        .with_path_caps("/bin/hypervisor");
+        assert!(hv.hypervisor && hv.net_l2);
+    }
+
+    #[test]
+    fn network_rights_map_to_exact_trailer_flags() {
+        use api::caller_identity::{
+            CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN,
+            CALLER_FLAG_NET_RESOLVE, CALLER_FLAG_NET_RIGHTS_MASK,
+        };
+        assert_eq!(CapSet::EMPTY.net_caller_flags(), 0);
+        assert_eq!(NET_ALL.net_caller_flags(), CALLER_FLAG_NET_RIGHTS_MASK);
+        // Non-network caps never leak into the trailer.
+        let everything_but_net = CapSet {
+            net_resolve: false,
+            net_connect: false,
+            net_listen: false,
+            net_l2: false,
+            ..CapSet::ALL
+        };
+        assert_eq!(everything_but_net.net_caller_flags(), 0);
+        for (caps, flag) in [
+            (
+                CapSet {
+                    net_resolve: true,
+                    ..CapSet::EMPTY
+                },
+                CALLER_FLAG_NET_RESOLVE,
+            ),
+            (
+                CapSet {
+                    net_connect: true,
+                    ..CapSet::EMPTY
+                },
+                CALLER_FLAG_NET_CONNECT,
+            ),
+            (
+                CapSet {
+                    net_listen: true,
+                    ..CapSet::EMPTY
+                },
+                CALLER_FLAG_NET_LISTEN,
+            ),
+            (
+                CapSet {
+                    net_l2: true,
+                    ..CapSet::EMPTY
+                },
+                CALLER_FLAG_NET_L2,
+            ),
+        ] {
+            assert_eq!(caps.net_caller_flags(), flag);
+        }
+    }
+
+    fn observe_mutate(c: CapSet) -> (bool, bool, bool) {
+        (c.observe_tasks, c.observe_memory, c.vfs_mutate)
+    }
+
+    #[test]
+    fn manifest_never_requests_observe_mutate_rights() {
+        let all = api::manifest::CellManifest::with_all(
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            api::manifest::TIER_LEGACY,
+        );
+        assert_eq!(
+            observe_mutate(CapSet::from_manifest(&all)),
+            (false, false, false)
+        );
+    }
+
+    #[test]
+    fn intersect_ands_each_observe_mutate_right() {
+        let request = CapSet {
+            observe_tasks: true,
+            observe_memory: false,
+            vfs_mutate: true,
+            ..CapSet::EMPTY
+        };
+        let ceiling = CapSet {
+            observe_tasks: true,
+            observe_memory: true,
+            vfs_mutate: false,
+            ..CapSet::EMPTY
+        };
+        assert_eq!(
+            observe_mutate(request.intersect(ceiling)),
+            (true, false, false)
+        );
+        let legacy = CapSet::LEGACY_OBSERVE_MUTATE;
+        assert_eq!(observe_mutate(legacy), (true, true, true));
+        assert_eq!(legacy.intersect(CapSet::EMPTY), CapSet::EMPTY);
+        assert_eq!(legacy.intersect(CapSet::ALL), legacy);
+        // The constant carries the three rights and nothing else.
+        assert_eq!(legacy.without_observe_mutate(), CapSet::EMPTY);
+    }
+
+    /// Annex S2-T/S2-W §3 (D-TW1): every path requests X/M/W except the
+    /// user-app sandbox prefixes, which request none.
+    #[test]
+    fn path_requests_observe_mutate_except_sandbox() {
+        for path in [
+            "/bin/x",
+            "/bin/cellbox",
+            "/bin/vfs",
+            "/bin/curl",
+            "/bin/nvme",
+            "/bin/s2tw-probe",
+        ] {
+            assert_eq!(
+                observe_mutate(CapSet::EMPTY.with_path_caps(path)),
+                (true, true, true),
+                "{path}"
+            );
+        }
+        for path in [
+            "/apps/demo",
+            "/data/bin/tool",
+            "/data/bin/s2tw-probe",
+            "/home/user/app",
+        ] {
+            assert_eq!(
+                observe_mutate(CapSet::EMPTY.with_path_caps(path)),
+                (false, false, false),
+                "{path}"
+            );
+        }
+        // The request is still bounded: an EMPTY ceiling (the sandbox arm) or a
+        // ceiling without them drops all three.
+        assert_eq!(
+            observe_mutate(CapSet::EMPTY.with_path_caps("/bin/x").intersect(CapSet::EMPTY)),
+            (false, false, false)
+        );
+    }
+
+    #[test]
+    fn observe_mutate_rights_are_not_ptrust() {
+        assert!(!CapSet::path_mints_ptrust("/bin/x"));
+        assert_eq!(
+            CapSet::LEGACY_OBSERVE_MUTATE.without_ptrust(),
+            CapSet::LEGACY_OBSERVE_MUTATE
+        );
+        assert_eq!(CapSet::LEGACY_OBSERVE_MUTATE.net_caller_flags(), 0);
+        // Dropping them leaves every other field untouched.
+        let all = CapSet::ALL.without_observe_mutate();
+        assert_eq!(observe_mutate(all), (false, false, false));
+        assert_eq!(
+            CapSet {
+                observe_tasks: true,
+                observe_memory: true,
+                vfs_mutate: true,
+                ..all
+            },
+            CapSet::ALL
+        );
+    }
+
     #[test]
     fn granted_protection_class_matches_legacy_tier_semantics() {
         let untrusted_caps = CapSet::EMPTY;
@@ -698,6 +1200,63 @@ mod tests {
         assert_eq!(
             granted_protection_class(&trusted_caps, api::manifest::PROTECTION_CLASS_LEGACY),
             api::manifest::PROTECTION_CLASS_TRUSTED_CORE
+        );
+    }
+
+    /// Phase 01 CP1 (Q, D-Q5): only `/bin/cellbox` requests `config_write`; the
+    /// manifest never does; the ceiling bounds it; it is not P-TRUST and maps to
+    /// exactly `CALLER_FLAG_CONFIG_WRITE`.
+    #[test]
+    fn config_write_is_requested_by_the_shell_path_only() {
+        use api::caller_identity::CALLER_FLAG_CONFIG_WRITE;
+        let all = api::manifest::CellManifest::with_all(
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            api::manifest::TIER_LEGACY,
+        );
+        assert!(!CapSet::from_manifest(&all).config_write);
+        assert!(CapSet::EMPTY.with_path_caps("/bin/cellbox").config_write);
+        for path in [
+            "/bin/cellbox-ssh",
+            "/bin/config",
+            "/bin/init",
+            "/bin/lua",
+            "/bin/python",
+            "/bin/terminal",
+            "/bin/curl",
+            "/bin/x",
+            "/apps/cellbox",
+            "/data/bin/cellbox",
+            "/home/user/cellbox",
+        ] {
+            assert!(!CapSet::EMPTY.with_path_caps(path).config_write, "{path}");
+        }
+        let request = CapSet::EMPTY.with_path_caps("/bin/cellbox");
+        assert!(!request.intersect(CapSet::LEGACY_OBSERVE_MUTATE).config_write);
+        assert!(request.intersect(CapSet::ALL).config_write);
+        assert!(!CapSet::path_mints_ptrust("/bin/cellbox"));
+        assert!(request.without_ptrust().config_write);
+        assert!(request.without_observe_mutate().config_write);
+        assert_eq!(request.net_caller_flags(), 0);
+        assert_eq!(request.config_caller_flags(), CALLER_FLAG_CONFIG_WRITE);
+        assert_eq!(CapSet::EMPTY.config_caller_flags(), 0);
+        assert_eq!(
+            CapSet {
+                config_write: false,
+                ..CapSet::ALL
+            }
+            .config_caller_flags(),
+            0
         );
     }
 }

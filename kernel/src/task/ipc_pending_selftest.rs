@@ -798,10 +798,12 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
                 sender_tid: SENDER as u64,
             });
 
-    // Case 3: only the explicit combination attests VfsMutate.
+    // Case 3: only the explicit combination, held with the S2-W `vfs_mutate`
+    // right, attests VfsMutate.
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&SENDER) {
             task.syscall_allowlist = (1u64 << 62) | (1u64 << 63);
+            task.vfs_mutate = true;
         }
         if let Some(receiver) = sched.tasks.get_mut(&RECEIVER) {
             receiver
@@ -839,9 +841,51 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
                 sender_tid: SENDER as u64,
             });
 
+    // Case 4: the same declaration without the `vfs_mutate` right (a sandbox
+    // edge) attests nothing.
+    if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        if let Some(task) = sched.tasks.get_mut(&SENDER) {
+            task.vfs_mutate = false;
+        }
+        if let Some(receiver) = sched.tasks.get_mut(&RECEIVER) {
+            receiver
+                .pending_msgs
+                .try_push(super::tcb::PendingMsg {
+                    sender_tid: SENDER,
+                    data: super::pending_mailbox::PendingMsgData::try_copy(
+                        payload,
+                        TEST_CELL as usize,
+                    )
+                    .expect("inline payload copy must fit"),
+                    wire: None,
+                    enqueued_tick: 0,
+                })
+                .expect("pending mailbox has room");
+        }
+    }
+    recv_buf.fill(0);
+    let withheld_delivered = super::syscall::handle_syscall(
+        RECEIVER,
+        super::syscall::Syscall::TryRecv {
+            mask: SENDER,
+            buf_ptr: recv_buf.as_mut_ptr() as usize,
+            buf_len: recv_buf.len(),
+            attest_caller: true,
+        },
+    );
+    let withheld_identity = api::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
+    let withheld_ok = matches!(withheld_delivered, Ok(id) if id == SENDER)
+        && withheld_identity
+            == Some(api::caller_identity::CallerIdentity {
+                flags: 0,
+                cell_id: TEST_CELL,
+                generation: sender_generation,
+                sender_tid: SENDER as u64,
+            });
+
     reset();
-    (attested_ok && rename_only_ok && mutate_ok)
-        || fail("try_recv did not preserve Rename/VfsMutate gate separation")
+    (attested_ok && rename_only_ok && mutate_ok && withheld_ok)
+        || fail("try_recv did not preserve Rename/VfsMutate/vfs_mutate gate separation")
 }
 
 /// Returns true iff IPC publication is receiver-owned, bounded and wake-safe.

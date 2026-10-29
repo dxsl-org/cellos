@@ -29,7 +29,7 @@ static PAYLOAD_SCRATCH: crate::sync::Spinlock<Vec<u8>> = crate::sync::Spinlock::
 
 /// Dev Ed25519 **public** key — derived from the fixed dev seed in
 /// `scripts/sign-cell.py` (seed `[0x43]*32`, reproducible; never shipped in release).
-#[cfg(feature = "dev-signing-key")]
+#[cfg(all(feature = "dev-signing-key", not(feature = "phase02-terminal-profile")))]
 const DEV_CELL_SIGNER_PUBKEY: [u8; 32] = [
     0x22, 0xfc, 0x29, 0x77, 0x92, 0xf0, 0xb6, 0xff, 0xc0, 0xbf, 0xcf, 0xdb, 0x7e, 0xdb, 0x0c, 0x0a,
     0xa1, 0x4e, 0x02, 0x5a, 0x36, 0x5e, 0xc0, 0xe3, 0x42, 0xe8, 0x6e, 0x38, 0x29, 0xcb, 0x74, 0xb6,
@@ -38,11 +38,15 @@ const DEV_CELL_SIGNER_PUBKEY: [u8; 32] = [
 /// Fleet cell-signing trust anchor.
 /// `dev-signing-key` → the reproducible dev key above (matching `scripts/sign-cell.py --seed 0x43*32`).
 /// Otherwise → a zero placeholder that fails every verify (fail-closed until prod key is provisioned).
-#[cfg(feature = "dev-signing-key")]
+#[cfg(all(feature = "dev-signing-key", not(feature = "phase02-terminal-profile")))]
 const CELL_SIGNER_PUBKEY: [u8; 32] = DEV_CELL_SIGNER_PUBKEY;
 
-#[cfg(not(feature = "dev-signing-key"))]
+#[cfg(all(not(feature = "dev-signing-key"), not(feature = "phase02-terminal-profile")))]
 const CELL_SIGNER_PUBKEY: [u8; 32] = [0u8; 32]; // TODO(prod): provisioned fleet key
+
+#[cfg(feature = "phase02-terminal-profile")]
+const CELL_SIGNER_PUBKEY: [u8; 32] =
+    *include_bytes!(concat!(env!("OUT_DIR"), "/phase02-cell-signing.pub"));
 
 /// Returns `true` when the `signing-required` build feature is set (CI/prod posture).
 /// In dev mode (default) an absent signature is permitted; with `signing-required`

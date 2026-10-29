@@ -33,11 +33,11 @@ fn cluster(elf: &[u8]) -> (u8, u64) {
         .unwrap_or((0, 0))
 }
 
-pub(super) fn spawn_gated(
+fn prepare_gated(
     elf: &[u8],
     path: &str,
     mut request: super::SpawnRequest,
-) -> ViResult<usize> {
+) -> ViResult<(crate::task::PreparedElfTask, crate::task::TaskLaunchState)> {
     use crate::task::cap::{CapSet, Spawner};
     let aligned = super::aligned_elf::bytes(elf)?;
     let elf = aligned.as_ref();
@@ -225,7 +225,26 @@ pub(super) fn spawn_gated(
     );
     #[cfg(cellos_p01_trace)]
     let state = { let mut state = state; state.trace = request.trace; state };
+    Ok((prepared, state))
+}
+
+pub(super) fn spawn_gated(elf: &[u8], path: &str, request: super::SpawnRequest) -> ViResult<usize> {
+    let (prepared, state) = prepare_gated(elf, path, request)?;
     crate::task::publish_prepared(prepared, state).map(|(tid, _)| tid)
+}
+
+impl super::SpawnRequest {
+    /// Admit the exact artifact bytes once: the prepared image, digest and
+    /// staged measurement all derive from this single read, so commit never
+    /// rereads a replaceable path. Nothing is published: no owner, task,
+    /// route, measurement, CSpace, or runnable queue entry.
+    pub(crate) fn prepare_session_path(self, path: &str)
+        -> ViResult<(crate::task::PreparedElfTask, crate::task::TaskLaunchState)> {
+        if path.is_empty() || !path.starts_with('/') || path.len() > 4096
+            || path.as_bytes().contains(&0) { return Err(ViError::InvalidInput); }
+        let bytes = super::early::EarlyLoader::read_file(path)?;
+        prepare_gated(&bytes, path, self)
+    }
 }
 
 pub(super) fn spawn_trusted_init(elf: &[u8]) -> ViResult<usize> {

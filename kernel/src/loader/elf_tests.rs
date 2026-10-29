@@ -209,7 +209,7 @@ fn test_mem_label_grants_no_path_caps() {
     for forged in [
         "/bin/vfs",
         "/bin/net",
-        "/bin/shell",
+        "/bin/cellbox",
         "/bin/init",
         "/bin/nvme",
         "/bin/e1000",
@@ -226,9 +226,12 @@ fn test_mem_label_grants_no_path_caps() {
             label,
             forged
         );
+        // A `/mem/` label is an ordinary non-sandbox path: it requests only the
+        // pre-annex S2-T/S2-W rights, never a privileged path cap, and the
+        // spawner's ceiling still bounds even those.
         assert_eq!(
             CapSet::EMPTY.with_path_caps(&label),
-            CapSet::EMPTY,
+            CapSet::LEGACY_OBSERVE_MUTATE,
             "privileged path caps must be empty for {} (from {:?})",
             label,
             forged

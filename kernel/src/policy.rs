@@ -41,12 +41,23 @@ const VERSION_V2: u8 = 2;
 const VERSION_V3: u8 = 3;
 /// v4 appends `serial_port` (bit 10) — the x86 16550 port authority.
 const VERSION_V4: u8 = 4;
+/// v5 appends the four coarse network rights (Phase 04 S2-N): `net_resolve`,
+/// `net_connect`, `net_listen`, `net_l2`, each a literal 0|1 byte.
+const VERSION_V5: u8 = 5;
+/// v6 appends the three S2-T/S2-W rights (Phase 04 annex): `observe_tasks`,
+/// `observe_memory`, `vfs_mutate`, each a literal 0|1 byte.
+const VERSION_V6: u8 = 6;
+/// v7 appends the Q right (Phase 01 CP1): `config_write`, a literal 0|1 byte.
+const VERSION_V7: u8 = 7;
 const SIG_LEN: usize = 64;
 const HEADER_LEN: usize = 8; // magic(4) + version(1) + flags(1) + entry_count(2)
 const CAP_BYTES_V1: usize = 6; // block_io, network, spawn, hyp, mmio_devices, block_regions
 const CAP_BYTES_V2: usize = 9; // + pcie_driver, platform, supervisor
 const CAP_BYTES_V3: usize = 10; // + usb_driver
 const CAP_BYTES_V4: usize = 11; // + serial_port
+const CAP_BYTES_V5: usize = 15; // + net_resolve, net_connect, net_listen, net_l2
+const CAP_BYTES_V6: usize = 18; // + observe_tasks, observe_memory, vfs_mutate
+const CAP_BYTES_V7: usize = 19; // + config_write
 /// 8.3-safe, root-level path (VIFS1 uppercases + is FAT16 8.3).
 const POLICY_PATH: &str = "/POLICY.BIN";
 
@@ -62,6 +73,9 @@ const fn cap_bytes_for(version: u8) -> Option<usize> {
         VERSION_V2 => Some(CAP_BYTES_V2),
         VERSION_V3 => Some(CAP_BYTES_V3),
         VERSION_V4 => Some(CAP_BYTES_V4),
+        VERSION_V5 => Some(CAP_BYTES_V5),
+        VERSION_V6 => Some(CAP_BYTES_V6),
+        VERSION_V7 => Some(CAP_BYTES_V7),
         _ => None,
     }
 }
@@ -264,7 +278,7 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
         let path_bytes = body.get(off..off.checked_add(path_len)?)?;
         let path = core::str::from_utf8(path_bytes).ok()?;
         off += path_len;
-        // cap bytes (6 in v1, 9 in v2)
+        // cap bytes: per-version stride from `cap_bytes_for` (6/9/10/11/15/18/19)
         let caps_raw = body.get(off..off.checked_add(cap_bytes)?)?;
         off += cap_bytes;
 
@@ -314,6 +328,52 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
             } else {
                 (false, false, false, false, false)
             };
+        // v5 network rights. Literal 0|1 like the privileged bytes: these decide
+        // who may put frames on the NIC, so a stray value is a malformed blob.
+        //
+        // Compatibility rule (annex S2-N E1), deliberately the OPPOSITE of the
+        // privileged fields: a v1–v4 entry predates the rights, which were
+        // ambient until this slice, so its Permit must not narrow them. They
+        // decode as `true`, leaving request ∩ reviewed ceiling as the bound —
+        // that never widens past the edge, and `false` here would silently strip
+        // every legacy-listed network client.
+        let (net_resolve, net_connect, net_listen, net_l2) = if cap_bytes >= CAP_BYTES_V5 {
+            let net = &caps_raw[CAP_BYTES_V4..CAP_BYTES_V5];
+            if net.iter().any(|&b| b > 1) {
+                return None;
+            }
+            (net[0] == 1, net[1] == 1, net[2] == 1, net[3] == 1)
+        } else {
+            (true, true, true, true)
+        };
+        // v6 S2-T/S2-W rights: literal 0|1 like the network rights. Same
+        // compatibility rule as S2-N E1 (annex §4): these rights were ambient
+        // until this slice, so a v1–v5 entry decodes them as `true` and its
+        // Permit leaves request ∩ reviewed ceiling as the bound; `false` would
+        // strip `ps`/`free`/file writes from every legacy-listed path.
+        let (observe_tasks, observe_memory, vfs_mutate) = if cap_bytes >= CAP_BYTES_V6 {
+            let rights = &caps_raw[CAP_BYTES_V5..CAP_BYTES_V6];
+            if rights.iter().any(|&b| b > 1) {
+                return None;
+            }
+            (rights[0] == 1, rights[1] == 1, rights[2] == 1)
+        } else {
+            (true, true, true)
+        };
+        // v7 Q right (Phase 01 CP1, D-Q6): literal 0|1 like the rights above,
+        // and the same compatibility rule as S2-N E1 and S2-T/S2-W: Config writes
+        // were ambient to every Cell until this slice, so a v1–v6 entry decodes
+        // it as `true` and its Permit leaves request ∩ reviewed ceiling (only
+        // the shell edges carry Q) as the bound.
+        let config_write = if cap_bytes >= CAP_BYTES_V7 {
+            match caps_raw[CAP_BYTES_V6] {
+                0 => false,
+                1 => true,
+                _ => return None,
+            }
+        } else {
+            true
+        };
         entries.push(PolicyEntry {
             path: String::from(path),
             caps: CapSet {
@@ -328,6 +388,14 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
                 platform,
                 supervisor,
                 usb_driver,
+                net_resolve,
+                net_connect,
+                net_listen,
+                net_l2,
+                observe_tasks,
+                observe_memory,
+                vfs_mutate,
+                config_write,
             },
         });
     }
@@ -384,6 +452,15 @@ pub fn self_test() -> bool {
         return false;
     }
     if !v3_parse_cases() {
+        return false;
+    }
+    if !v5_parse_cases() {
+        return false;
+    }
+    if !v6_parse_cases() {
+        return false;
+    }
+    if !v7_parse_cases() {
         return false;
     }
     // 2. Tampered blob: a flipped body byte must FAIL verification.
@@ -594,6 +671,205 @@ fn v3_parse_cases() -> bool {
     true
 }
 
+/// magic | version=5 | flags=0 | count=1 | len=9 "/bin/curl" | 15 cap bytes:
+/// network=1, every privileged byte 0, then resolve=1 connect=1 listen=0 l2=0.
+const V5_CURL: [u8; 33] = [
+    0x56, 0x50, 0x4f, 0x4c, 0x05, 0x00, 0x01, 0x00, 0x09, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x63, 0x75,
+    0x72, 0x6c, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00,
+    0x00,
+];
+/// Offset of the first network-right byte in `V5_CURL`.
+const V5_CURL_NET: usize = 29;
+/// The same `/bin/curl` entry in v4 (11 cap bytes: no network-right bytes).
+const V4_CURL: [u8; 29] = [
+    0x56, 0x50, 0x4f, 0x4c, 0x04, 0x00, 0x01, 0x00, 0x09, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x63, 0x75,
+    0x72, 0x6c, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
+
+/// v5 layout coverage for `self_test`: the 15-byte stride arrives with the four
+/// network rights, a Permit narrows them, every non-0|1 network byte rejects the
+/// blob, and a v4 entry (compat rule E1) leaves them unnarrowed.
+fn v5_parse_cases() -> bool {
+    let Some(p) = parse(&V5_CURL) else {
+        return false;
+    };
+    if p.flags != 0 || p.entries.len() != 1 || p.entries[0].path != "/bin/curl" {
+        return false;
+    }
+    let c = p.entries[0].caps;
+    if !(c.network && c.net_resolve && c.net_connect) || c.net_listen || c.net_l2 {
+        return false;
+    }
+    if c.pcie_driver || c.platform || c.supervisor || c.usb_driver || c.serial_port {
+        return false;
+    }
+    // A v5 Permit narrows: a request carrying every right keeps only D + N.
+    let all_net = CapSet {
+        net_resolve: true,
+        net_connect: true,
+        net_listen: true,
+        net_l2: true,
+        ..CapSet::EMPTY
+    };
+    let narrowed = decision_to_caps("/bin/curl", all_net, PolicyDecision::Permit(c));
+    if !(narrowed.net_resolve && narrowed.net_connect) || narrowed.net_listen || narrowed.net_l2 {
+        return false;
+    }
+    // Each network byte outside {0,1} makes the whole blob malformed.
+    for i in V5_CURL_NET..V5_CURL.len() {
+        let mut bad = V5_CURL;
+        bad[i] = 2;
+        if parse(&bad).is_some() {
+            return false;
+        }
+    }
+    // Truncated v5 entry → None, not a panic.
+    if parse(&V5_CURL[..V5_CURL.len() - 1]).is_some() {
+        return false;
+    }
+    // A v5 body relabelled v6 no longer fits the 18-byte stride → Invalid.
+    let mut bad_ver = V5_CURL;
+    bad_ver[4] = VERSION_V6;
+    if parse(&bad_ver).is_some() {
+        return false;
+    }
+    // Compatibility rule (E1): a v4 entry decodes all four rights as true, so its
+    // Permit leaves the request ∩ ceiling unnarrowed.
+    let Some(v4) = parse(&V4_CURL) else {
+        return false;
+    };
+    let legacy = v4.entries[0].caps;
+    if !(legacy.net_resolve && legacy.net_connect && legacy.net_listen && legacy.net_l2) {
+        return false;
+    }
+    decision_to_caps("/bin/curl", all_net, PolicyDecision::Permit(legacy)) == all_net
+}
+
+/// magic | version=6 | flags=0 | count=1 | len=9 "/bin/curl" | 18 cap bytes:
+/// the `V5_CURL` entry, then observe_tasks=1 observe_memory=0 vfs_mutate=1.
+const V6_CURL: [u8; 36] = [
+    0x56, 0x50, 0x4f, 0x4c, 0x06, 0x00, 0x01, 0x00, 0x09, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x63, 0x75,
+    0x72, 0x6c, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00,
+    0x00, 0x01, 0x00, 0x01,
+];
+/// Offset of the first S2-T/S2-W byte (`observe_tasks`) in `V6_CURL`.
+const V6_CURL_RIGHTS: usize = 33;
+
+/// v6 layout coverage for `self_test`: the 18-byte stride arrives with the three
+/// S2-T/S2-W rights, a Permit narrows them, every non-0|1 byte rejects the blob,
+/// an unknown version rejects, and a v5 entry (annex §4) leaves them unnarrowed.
+fn v6_parse_cases() -> bool {
+    let Some(p) = parse(&V6_CURL) else {
+        return false;
+    };
+    if p.flags != 0 || p.entries.len() != 1 || p.entries[0].path != "/bin/curl" {
+        return false;
+    }
+    let c = p.entries[0].caps;
+    if !(c.observe_tasks && !c.observe_memory && c.vfs_mutate) {
+        return false;
+    }
+    // The v5 prefix of the entry is read exactly as before.
+    if !(c.network && c.net_resolve && c.net_connect) || c.net_listen || c.net_l2 {
+        return false;
+    }
+    // A v6 Permit narrows: the request's M is dropped, X and W survive.
+    let request = CapSet::LEGACY_OBSERVE_MUTATE;
+    let narrowed = decision_to_caps("/bin/curl", request, PolicyDecision::Permit(c));
+    if !(narrowed.observe_tasks && !narrowed.observe_memory && narrowed.vfs_mutate) {
+        return false;
+    }
+    for i in V6_CURL_RIGHTS..V6_CURL.len() {
+        let mut bad = V6_CURL;
+        bad[i] = 2;
+        if parse(&bad).is_some() {
+            return false;
+        }
+    }
+    if parse(&V6_CURL[..V6_CURL.len() - 1]).is_some() {
+        return false;
+    }
+    // A v6 body relabelled v7 no longer fits the 19-byte stride → Invalid.
+    let mut bad_ver = V6_CURL;
+    bad_ver[4] = VERSION_V7;
+    if parse(&bad_ver).is_some() {
+        return false;
+    }
+    // Compatibility rule (annex §4): a v5 entry decodes all three as true, so
+    // its Permit leaves the request ∩ ceiling unnarrowed.
+    let Some(v5) = parse(&V5_CURL) else {
+        return false;
+    };
+    let legacy = v5.entries[0].caps;
+    if !(legacy.observe_tasks && legacy.observe_memory && legacy.vfs_mutate) {
+        return false;
+    }
+    decision_to_caps("/bin/curl", request, PolicyDecision::Permit(legacy)) == request
+}
+
+/// magic | version=7 | flags=0 | count=1 | len=9 "/bin/curl" | 19 cap bytes:
+/// the `V6_CURL` entry, then config_write=0 (curl requests no Q).
+const V7_CURL: [u8; 37] = [
+    0x56, 0x50, 0x4f, 0x4c, 0x07, 0x00, 0x01, 0x00, 0x09, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x63, 0x75,
+    0x72, 0x6c, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00,
+    0x00, 0x01, 0x00, 0x01, 0x00,
+];
+/// Offset of the Q byte (`config_write`) in `V7_CURL`.
+const V7_CURL_Q: usize = 36;
+
+/// v7 layout coverage for `self_test` (Phase 01 CP1): the 19-byte stride arrives
+/// with `config_write`, a v7 Permit narrows it, a non-0|1 byte rejects the blob,
+/// an unknown version rejects, and a v6 entry (D-Q6) leaves it unnarrowed.
+fn v7_parse_cases() -> bool {
+    let Some(p) = parse(&V7_CURL) else {
+        return false;
+    };
+    if p.flags != 0 || p.entries.len() != 1 || p.entries[0].path != "/bin/curl" {
+        return false;
+    }
+    let c = p.entries[0].caps;
+    // The v6 prefix of the entry is read exactly as before.
+    if c.config_write || !(c.observe_tasks && !c.observe_memory && c.vfs_mutate) {
+        return false;
+    }
+    let shell_request = CapSet {
+        config_write: true,
+        ..CapSet::LEGACY_OBSERVE_MUTATE
+    };
+    if decision_to_caps("/bin/curl", shell_request, PolicyDecision::Permit(c)).config_write {
+        return false;
+    }
+    let mut granted = V7_CURL;
+    granted[V7_CURL_Q] = 1;
+    match parse(&granted) {
+        Some(g) if g.entries[0].caps.config_write => {}
+        _ => return false,
+    }
+    let mut bad = V7_CURL;
+    bad[V7_CURL_Q] = 2;
+    if parse(&bad).is_some() {
+        return false;
+    }
+    if parse(&V7_CURL[..V7_CURL.len() - 1]).is_some() {
+        return false;
+    }
+    // Version 8 is unknown → Invalid.
+    let mut bad_ver = V7_CURL;
+    bad_ver[4] = 8;
+    if parse(&bad_ver).is_some() {
+        return false;
+    }
+    // Compatibility rule (D-Q6): a v6 entry decodes Q as true, so its Permit
+    // leaves the request ∩ ceiling unnarrowed.
+    let Some(v6) = parse(&V6_CURL) else {
+        return false;
+    };
+    let legacy = v6.entries[0].caps;
+    legacy.config_write
+        && decision_to_caps("/bin/cellbox", shell_request, PolicyDecision::Permit(legacy))
+            .config_write
+}
+
 /// Policy decision for a cell path. See `PolicyDecision`; the caller (Phase 04)
 /// applies the dev-permissive vs `policy-required` fail-safe rule to `NoEntry`.
 pub fn lookup(path: &str) -> PolicyDecision {
@@ -634,7 +910,7 @@ pub fn lookup(path: &str) -> PolicyDecision {
 fn is_trusted_core(path: &str) -> bool {
     matches!(
         path,
-        "/bin/vfs" | "/bin/shell" | "/bin/net" | "/bin/platform"
+        "/bin/vfs" | "/bin/cellbox" | "/bin/net" | "/bin/platform"
     )
 }
 
@@ -744,7 +1020,15 @@ pub fn apply(path: &str, tid: usize, caps: CapSet) -> CapSet {
             | (((caps.platform && !narrowed.platform) as u32) << 5)
             | (((caps.supervisor && !narrowed.supervisor) as u32) << 6)
             | (((caps.mmio_devices != narrowed.mmio_devices) as u32) << 7)
-            | (((caps.block_regions != narrowed.block_regions) as u32) << 8);
+            | (((caps.block_regions != narrowed.block_regions) as u32) << 8)
+            | (((caps.net_resolve && !narrowed.net_resolve) as u32) << 9)
+            | (((caps.net_connect && !narrowed.net_connect) as u32) << 10)
+            | (((caps.net_listen && !narrowed.net_listen) as u32) << 11)
+            | (((caps.net_l2 && !narrowed.net_l2) as u32) << 12)
+            | (((caps.observe_tasks && !narrowed.observe_tasks) as u32) << 13)
+            | (((caps.observe_memory && !narrowed.observe_memory) as u32) << 14)
+            | (((caps.vfs_mutate && !narrowed.vfs_mutate) as u32) << 15)
+            | (((caps.config_write && !narrowed.config_write) as u32) << 16);
         crate::audit::log_event(
             crate::audit::AuditEvent::CapNarrowedByPolicy,
             &crate::audit::encode_u32x2(tid as u32, dropped),
@@ -754,8 +1038,8 @@ pub fn apply(path: &str, tid: usize, caps: CapSet) -> CapSet {
         // policy strips the caps a boot cell needed — leaving the serial log as the
         // only evidence a reader has.
         log::warn!(
-            "[policy] narrowed {:?} (tid {}): dropped {:#011b} \
-             [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]",
+            "[policy] narrowed {:?} (tid {}): dropped {:#019b} \
+             [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]",
             path,
             tid,
             dropped
@@ -774,6 +1058,18 @@ pub fn apply(path: &str, tid: usize, caps: CapSet) -> CapSet {
             &crate::audit::encode_u32x2(tid as u32, granted),
         );
     }
+    // The network rights are exported to service-net as attested trailer flags;
+    // record which ones this Cell leaves spawn holding.
+    let net = narrowed.net_resolve as u32
+        | ((narrowed.net_connect as u32) << 1)
+        | ((narrowed.net_listen as u32) << 2)
+        | ((narrowed.net_l2 as u32) << 3);
+    if net != 0 {
+        crate::audit::log_event(
+            crate::audit::AuditEvent::NetRightsGranted,
+            &crate::audit::encode_u32x2(tid as u32, net),
+        );
+    }
     narrowed
 }
 
@@ -785,4 +1081,267 @@ fn maintenance_permitted() -> bool {
         POLICY.lock().as_ref(),
         Some(PolicyState::Loaded(p)) if p.flags & FLAG_MAINTENANCE_PERMITTED != 0
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn net_rights(c: CapSet) -> (bool, bool, bool, bool) {
+        (c.net_resolve, c.net_connect, c.net_listen, c.net_l2)
+    }
+
+    fn observe_mutate(c: CapSet) -> (bool, bool, bool) {
+        (c.observe_tasks, c.observe_memory, c.vfs_mutate)
+    }
+
+    #[test]
+    fn boot_self_test_holds_on_host() {
+        assert!(v2_parse_cases());
+        assert!(v3_parse_cases());
+        assert!(v5_parse_cases());
+        assert!(v6_parse_cases());
+        assert!(v7_parse_cases());
+        assert!(self_test());
+    }
+
+    #[test]
+    fn v7_entry_round_trips_config_write_and_rejects_malformed_bytes() {
+        for q in [0u8, 1] {
+            let mut body = V7_CURL;
+            body[V7_CURL_Q] = q;
+            let c = parse(&body).expect("v7 body with a literal 0|1 Q byte parses").entries[0].caps;
+            assert_eq!(c.config_write, q == 1);
+            // The v6 prefix is unaffected by the appended byte.
+            assert_eq!(net_rights(c), (true, true, false, false));
+            assert_eq!(observe_mutate(c), (true, false, true));
+        }
+        for value in [2u8, 0x80, 0xFF] {
+            let mut bad = V7_CURL;
+            bad[V7_CURL_Q] = value;
+            assert!(parse(&bad).is_none(), "Q byte {value:#04x} must reject");
+        }
+        assert!(parse(&V7_CURL[..V7_CURL.len() - 1]).is_none());
+        let mut bad_ver = V7_CURL;
+        bad_ver[4] = 8;
+        assert!(parse(&bad_ver).is_none());
+    }
+
+    /// D-Q6: an entry that predates v7 decodes Q as granted, so its Permit
+    /// neither strips the shell's Q nor widens past the request ∩ ceiling.
+    #[test]
+    fn pre_v7_permit_leaves_config_write_unnarrowed() {
+        let shell = CapSet::EMPTY.with_path_caps("/bin/cellbox");
+        assert!(shell.config_write);
+        for body in [&V6_CURL[..], &V5_CURL[..], &V4_CURL[..]] {
+            let legacy = parse(body).expect("legacy body parses").entries[0].caps;
+            assert!(legacy.config_write);
+            assert!(
+                decision_to_caps("/bin/cellbox", shell, PolicyDecision::Permit(legacy)).config_write,
+                "a pre-v7 Permit must not strip Q from the shell"
+            );
+            let curl = CapSet::EMPTY.with_path_caps("/bin/curl");
+            assert!(!decision_to_caps("/bin/curl", curl, PolicyDecision::Permit(legacy)).config_write);
+        }
+        // A v7 Permit with Q=0 does strip it.
+        let v7 = parse(&V7_CURL).expect("v7 body parses").entries[0].caps;
+        assert!(!decision_to_caps("/bin/cellbox", shell, PolicyDecision::Permit(v7)).config_write);
+    }
+
+    #[test]
+    fn v6_entry_round_trips_every_observe_mutate_right() {
+        for mask in 0u8..8 {
+            let mut body = V6_CURL;
+            for bit in 0..3 {
+                body[V6_CURL_RIGHTS + bit] = (mask >> bit) & 1;
+            }
+            let p = parse(&body).expect("v6 body with literal 0|1 bytes parses");
+            let c = p.entries[0].caps;
+            assert_eq!(
+                observe_mutate(c),
+                (mask & 1 != 0, mask & 2 != 0, mask & 4 != 0),
+                "mask {mask:#05b}"
+            );
+            // The v5 prefix is unaffected by the appended bytes.
+            assert_eq!(net_rights(c), (true, true, false, false));
+            assert!(c.network && !c.block_io && !c.spawn && !c.serial_port);
+            // A Permit narrows the reviewed request to exactly these rights.
+            assert_eq!(
+                observe_mutate(decision_to_caps(
+                    "/bin/curl",
+                    CapSet::LEGACY_OBSERVE_MUTATE,
+                    PolicyDecision::Permit(c)
+                )),
+                observe_mutate(c)
+            );
+        }
+    }
+
+    #[test]
+    fn pre_v6_permit_leaves_observe_mutate_unnarrowed() {
+        for body in [&V5_CURL[..], &V4_CURL[..]] {
+            let legacy = parse(body).expect("legacy body parses").entries[0].caps;
+            assert_eq!(observe_mutate(legacy), (true, true, true));
+            let request = CapSet {
+                network: true,
+                ..CapSet::EMPTY
+            }
+            .with_path_caps("/bin/curl");
+            assert_eq!(observe_mutate(request), (true, true, true));
+            assert_eq!(
+                decision_to_caps("/bin/curl", request, PolicyDecision::Permit(legacy)),
+                request,
+                "a pre-v6 Permit must not strip an S2-T/S2-W right"
+            );
+            // …and it cannot widen past a sandbox request ∩ ceiling.
+            let sandbox = CapSet::EMPTY.with_path_caps("/data/bin/tool");
+            assert_eq!(
+                decision_to_caps("/data/bin/tool", sandbox, PolicyDecision::Permit(legacy)),
+                CapSet::EMPTY
+            );
+        }
+    }
+
+    #[test]
+    fn malformed_observe_mutate_byte_rejects_the_policy() {
+        for i in V6_CURL_RIGHTS..V6_CURL.len() {
+            for value in [2u8, 0x80, 0xFF] {
+                let mut bad = V6_CURL;
+                bad[i] = value;
+                assert!(parse(&bad).is_none(), "byte {i} = {value:#04x} must reject");
+            }
+        }
+        assert!(parse(&V6_CURL[..V6_CURL.len() - 1]).is_none());
+        let mut bad_ver = V6_CURL;
+        bad_ver[4] = 8;
+        assert!(parse(&bad_ver).is_none());
+    }
+
+    #[test]
+    fn v5_entry_round_trips_every_network_right() {
+        for mask in 0u8..16 {
+            let mut body = V5_CURL;
+            for bit in 0..4 {
+                body[V5_CURL_NET + bit] = (mask >> bit) & 1;
+            }
+            let p = parse(&body).expect("v5 body with literal 0|1 net bytes parses");
+            let c = p.entries[0].caps;
+            assert_eq!(
+                net_rights(c),
+                (mask & 1 != 0, mask & 2 != 0, mask & 4 != 0, mask & 8 != 0),
+                "mask {mask:#06b}"
+            );
+            // The rest of the entry is unaffected by the appended bytes.
+            assert!(c.network && !c.block_io && !c.spawn && !c.serial_port);
+        }
+    }
+
+    #[test]
+    fn v4_permit_leaves_network_rights_unnarrowed() {
+        let legacy = parse(&V4_CURL).expect("v4 body parses").entries[0].caps;
+        assert_eq!(net_rights(legacy), (true, true, true, true));
+        // P-TRUST fields keep their opposite rule: absent → false.
+        assert!(!legacy.serial_port && !legacy.pcie_driver);
+        let request = CapSet {
+            network: true,
+            ..CapSet::EMPTY
+        }
+        .with_path_caps("/bin/curl");
+        assert_eq!(
+            decision_to_caps("/bin/curl", request, PolicyDecision::Permit(legacy)),
+            request,
+            "a v4 Permit must not strip a reviewed network right"
+        );
+        // …and it cannot widen past the request ∩ ceiling it is applied to.
+        assert_eq!(
+            decision_to_caps("/bin/curl", CapSet::EMPTY, PolicyDecision::Permit(legacy)),
+            CapSet::EMPTY
+        );
+    }
+
+    #[test]
+    fn malformed_network_byte_rejects_the_policy() {
+        for i in V5_CURL_NET..V5_CURL.len() {
+            for value in [2u8, 0x80, 0xFF] {
+                let mut bad = V5_CURL;
+                bad[i] = value;
+                assert!(parse(&bad).is_none(), "byte {i} = {value:#04x} must reject");
+            }
+        }
+        assert!(parse(&V5_CURL[..V5_CURL.len() - 1]).is_none());
+    }
+
+    /// `scripts/sign-policy.py` output verifies under the dev key and decodes with
+    /// the kernel's own parser, and every listed path's network, S2-T/S2-W and Q
+    /// rights equal what the kernel's `with_path_caps` requests — so the shipped
+    /// v7 Permit neither strips a granted right nor names one the kernel never
+    /// requests.
+    #[test]
+    fn signer_v7_output_decodes_with_kernel_rule() {
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let out = std::env::temp_dir().join(format!("cellos-policy-v7-{}.bin", std::process::id()));
+        let status = std::process::Command::new("python3")
+            .arg(repo.join("scripts/sign-policy.py"))
+            .arg("--out")
+            .arg(&out)
+            .stdout(std::process::Stdio::null())
+            .status()
+            .expect("python3 must be available to run the signer");
+        assert!(
+            status.success(),
+            "sign-policy.py failed (needs `cryptography`)"
+        );
+        let blob = std::fs::read(&out).expect("signer wrote the blob");
+        let _ = std::fs::remove_file(&out);
+
+        let (body, sig) = blob.split_at(blob.len() - SIG_LEN);
+        let mut sig64 = [0u8; SIG_LEN];
+        sig64.copy_from_slice(sig);
+        assert!(crate::ed25519::verify(&DEV_FLEET_PUBKEY, body, &sig64));
+        assert_eq!(body[4], VERSION_V7, "the signer must emit v7");
+        let policy = parse(body).expect("kernel parser accepts the signed v7 body");
+        assert!(!policy.entries.is_empty());
+        for e in &policy.entries {
+            let requested = CapSet::EMPTY.with_path_caps(&e.path);
+            assert_eq!(
+                net_rights(e.caps),
+                net_rights(requested),
+                "{}: policy network rights drift from the kernel grant table",
+                e.path
+            );
+            assert_eq!(
+                observe_mutate(e.caps),
+                observe_mutate(requested),
+                "{}: policy S2-T/S2-W rights drift from the kernel request rule",
+                e.path
+            );
+            assert_eq!(
+                e.caps.config_write,
+                requested.config_write,
+                "{}: policy Q right drifts from the kernel request rule",
+                e.path
+            );
+        }
+        let curl = policy
+            .entries
+            .iter()
+            .find(|e| e.path == "/bin/curl")
+            .expect("curl row");
+        assert_eq!(net_rights(curl.caps), (true, true, false, false));
+        assert!(!curl.caps.config_write);
+        let shell = policy
+            .entries
+            .iter()
+            .find(|e| e.path == "/bin/cellbox")
+            .expect("shell row");
+        assert_eq!(net_rights(shell.caps), (false, false, false, false));
+        assert_eq!(observe_mutate(shell.caps), (true, true, true));
+        assert!(shell.caps.config_write);
+        let ssh = policy
+            .entries
+            .iter()
+            .find(|e| e.path == "/bin/cellbox-ssh")
+            .expect("cellbox-ssh row");
+        assert!(!ssh.caps.config_write);
+    }
 }

@@ -65,6 +65,30 @@ fn main() {
     }
 
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    println!("cargo:rerun-if-env-changed=CELLOS_PHASE02_CELL_PUBLIC_KEY");
+    let phase02_profile =
+        std::env::var_os("CARGO_FEATURE_PHASE02_TERMINAL_PROFILE").is_some();
+    if phase02_profile {
+        assert_eq!(target_arch, "x86_64", "Phase02 fixture requires x86_64");
+        assert!(
+            std::env::var_os("CARGO_FEATURE_SIGNING_REQUIRED").is_some(),
+            "Phase02 fixture requires signing-required"
+        );
+        let key_path = std::env::var_os("CELLOS_PHASE02_CELL_PUBLIC_KEY")
+            .map(PathBuf::from)
+            .expect("Phase02 fixture requires a private public-key file");
+        println!("cargo:rerun-if-changed={}", key_path.display());
+        let key = fs::read(&key_path).expect("read Phase02 public key");
+        assert_eq!(key.len(), 32, "Phase02 public key must be 32 raw bytes");
+        assert!(key.iter().any(|byte| *byte != 0), "zero Phase02 key refused");
+        fs::write(out_dir.join("phase02-cell-signing.pub"), key)
+            .expect("copy private Phase02 public key");
+    } else {
+        assert!(
+            std::env::var_os("CELLOS_PHASE02_CELL_PUBLIC_KEY").is_none(),
+            "private Phase02 key requires phase02-terminal-profile"
+        );
+    }
     let embedded_out = out_dir.join("embedded");
     if embedded_out.exists() {
         fs::remove_dir_all(&embedded_out).expect("clear stale embedded OUT_DIR");
@@ -101,6 +125,29 @@ fn main() {
     } else {
         PathBuf::from("src/embedded")
     };
+    if phase02_profile {
+        assert!(
+            std::env::var_os("EMBEDDED_OVERRIDE").is_some(),
+            "Phase02 requires an explicit private embedded directory"
+        );
+        let private = fs::canonicalize(&embedded_src)
+            .expect("resolve private Phase02 embedded directory");
+        let canonical = fs::canonicalize("src/embedded-x86_64")
+            .expect("resolve canonical embedded directory");
+        assert_ne!(private, canonical, "canonical Phase02 embedding refused");
+        for artifact in ["init", "kernel_fs.img"] {
+            let source = fs::canonicalize(private.join(artifact))
+                .expect("Phase02 embedded input missing");
+            assert!(
+                !source.starts_with(&canonical),
+                "canonical Phase02 embedded input refused"
+            );
+            assert!(
+                fs::metadata(&source).expect("stat Phase02 input").len() != 0,
+                "empty Phase02 embedded input refused"
+            );
+        }
+    }
     if p01 {
         let src = embedded_src.join("p01_manifest.bin");
         println!("cargo:rerun-if-changed={}", src.display());

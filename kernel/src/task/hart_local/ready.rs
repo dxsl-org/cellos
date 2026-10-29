@@ -6,6 +6,8 @@
 //! RT tasks (priority ≥ RealTime) are never stolen; Phase 04 will hart-pin them.
 
 use super::{HART_LOCALS, MAX_HARTS};
+use alloc::collections::{BTreeMap, VecDeque};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering as PromiseOrdering};
 
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -83,6 +85,226 @@ fn test_dispatch_reserved_by_another_hart(_thief: usize, _task_id: usize) -> boo
 }
 
 const RT_PRIO: u8 = api::TaskPriority::RealTime as u8;
+
+/// Capacity claims against one `(hart, priority)` bucket.
+///
+/// Every field is read and written only while that hart's `ready` leaf lock is
+/// held, so Relaxed atomics merely provide static storage. Invariant per
+/// non-empty claim set: `queue.capacity() >= queue.len() + publication +
+/// rollback`. Ordinary enqueue, steal destination and selection rollback all
+/// honor it; none can consume a claim or move it to another hart.
+struct BucketClaims {
+    /// Slots promised to prepared, unpublished children.
+    publication: AtomicU32,
+    /// Slots vacated by a selection that may still roll back.
+    rollback: AtomicU32,
+    /// The bucket key exists only because a publication claim created it.
+    created: AtomicBool,
+    /// While `rollback != 0`: how many queued entries still precede the slot the
+    /// pending selection vacated. Every removal from the bucket that takes an
+    /// entry ahead of that slot (steal, `remove_from_all`) lowers it, so the
+    /// rollback reinserts at the exact FIFO position, not a stale index.
+    rollback_ahead: core::sync::atomic::AtomicUsize,
+}
+#[allow(clippy::declare_interior_mutable_const)]
+const NO_CLAIMS: BucketClaims = BucketClaims {
+    publication: AtomicU32::new(0),
+    rollback: AtomicU32::new(0),
+    created: AtomicBool::new(false),
+    rollback_ahead: core::sync::atomic::AtomicUsize::new(0),
+};
+static CLAIMS: [[BucketClaims; 256]; MAX_HARTS] = [const { [NO_CLAIMS; 256] }; MAX_HARTS];
+
+fn claims(hart: usize, priority: u8) -> &'static BucketClaims {
+    &CLAIMS[hart][priority as usize]
+}
+/// Slots that ordinary traffic must leave free. Caller holds `hart`'s lock.
+fn promised(hart: usize, priority: u8) -> usize {
+    let claims = claims(hart, priority);
+    claims.publication.load(PromiseOrdering::Relaxed) as usize
+        + claims.rollback.load(PromiseOrdering::Relaxed) as usize
+}
+/// Remove `queue[index]` for a selection that may still roll back: the vacated
+/// slot becomes a rollback promise and the number of entries ahead of it is
+/// recorded. Caller holds the hart's ready lock.
+#[cfg_attr(not(any(cellos_g1_cpu, feature = "test-hooks")), allow(dead_code))]
+fn vacate(queue: &mut VecDeque<usize>, claims: &BucketClaims, index: usize) -> Option<usize> {
+    debug_assert!(claims.rollback.load(PromiseOrdering::Relaxed) == 0,
+        "one pending selection per hart bucket");
+    claims.rollback.store(claims.rollback.load(PromiseOrdering::Relaxed) + 1, PromiseOrdering::Relaxed);
+    claims.rollback_ahead.store(index, PromiseOrdering::Relaxed);
+    queue.remove(index)
+}
+/// Put a vacated selection back at its exact FIFO position: after the entries
+/// that preceded it and are still queued, before the ones that followed it.
+#[cfg_attr(not(any(cellos_g1_cpu, feature = "test-hooks")), allow(dead_code))]
+fn reinsert(queue: &mut VecDeque<usize>, claims: &BucketClaims, tid: usize) {
+    let rollback = claims.rollback.load(PromiseOrdering::Relaxed);
+    assert!(
+        rollback != 0 && queue.len() < queue.capacity(),
+        "selection rollback promise lost its reserved slot"
+    );
+    claims.rollback.store(rollback - 1, PromiseOrdering::Relaxed);
+    let ahead = claims.rollback_ahead.load(PromiseOrdering::Relaxed);
+    debug_assert!(ahead <= queue.len());
+    queue.insert(ahead.min(queue.len()), tid);
+}
+/// Account for the removal of `queue[index]` against a pending rollback.
+fn note_removed(claims: &BucketClaims, index: usize) {
+    if claims.rollback.load(PromiseOrdering::Relaxed) != 0 {
+        let ahead = claims.rollback_ahead.load(PromiseOrdering::Relaxed);
+        if index < ahead {
+            claims.rollback_ahead.store(ahead - 1, PromiseOrdering::Relaxed);
+        }
+    }
+}
+/// `queue.remove(index)` that keeps a pending rollback cursor exact.
+fn remove_tracked(queue: &mut VecDeque<usize>, claims: &BucketClaims, index: usize) -> Option<usize> {
+    note_removed(claims, index);
+    queue.remove(index)
+}
+/// Drop every queued copy of `id`, keeping a pending rollback cursor exact.
+fn forget_tracked(queue: &mut VecDeque<usize>, claims: &BucketClaims, id: usize) {
+    let pending = claims.rollback.load(PromiseOrdering::Relaxed) != 0;
+    let ahead = claims.rollback_ahead.load(PromiseOrdering::Relaxed);
+    let (mut position, mut removed_ahead) = (0usize, 0usize);
+    queue.retain(|&queued| {
+        let keep = queued != id;
+        if !keep && position < ahead { removed_ahead += 1; }
+        position += 1;
+        keep
+    });
+    if pending {
+        claims.rollback_ahead.store(ahead - removed_ahead, PromiseOrdering::Relaxed);
+    }
+}
+/// Remove a key that exists only to hold a now-released publication claim.
+fn drop_unused_bucket(ready: &mut BTreeMap<u8, VecDeque<usize>>, hart: usize, priority: u8) {
+    let claims = claims(hart, priority);
+    if claims.publication.load(PromiseOrdering::Relaxed) == 0
+        && claims.rollback.load(PromiseOrdering::Relaxed) == 0
+        && claims.created.load(PromiseOrdering::Relaxed)
+        && ready.get(&priority).is_some_and(|queue| queue.is_empty())
+    {
+        ready.remove(&priority);
+        claims.created.store(false, PromiseOrdering::Relaxed);
+    }
+}
+
+/// Hart selected for a newly runnable task of `priority` (RealTime goes to the
+/// dedicated hart when online, otherwise the calling hart).
+pub(crate) fn destination_hart(priority: u8) -> usize {
+    if priority >= RT_PRIO && crate::task::smp::is_rt_hart_online() {
+        crate::task::smp::HART_RT
+    } else {
+        super::current_hart_id()
+    }
+}
+
+/// Canonical queue slot promised to a prepared child, pinned to the hart that
+/// was selected when it was reserved.
+///
+/// `commit` appends the task without allocating or failing; `Drop` releases the
+/// promise. Other pushes, steals and selection rollbacks keep the slot free,
+/// and it never migrates to another hart even if an RT hart comes online
+/// between reserve and commit.
+pub(crate) struct PublicationReservation {
+    hart: usize,
+    priority: u8,
+    armed: bool,
+}
+impl PublicationReservation {
+    /// Bytes of queue storage one promised slot represents.
+    pub(crate) const SLOT_BYTES: usize = core::mem::size_of::<usize>();
+
+    pub(crate) fn reserve(priority: u8) -> Result<Self, types::ViError> {
+        let hart = destination_hart(priority);
+        if hart >= MAX_HARTS {
+            return Err(types::ViError::InvalidInput);
+        }
+        let mut ready = HART_LOCALS[hart].ready.lock();
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        let claims = claims(hart, priority);
+        let publication = claims.publication.load(PromiseOrdering::Relaxed);
+        let wanted = promised(hart, priority) + 1;
+        let existed = ready.contains_key(&priority);
+        let refused = {
+            let queue = ready.entry(priority).or_default();
+            queue.capacity() < queue.len() + wanted && queue.try_reserve(wanted).is_err()
+        };
+        if refused || publication == u32::MAX {
+            drop_unused_bucket_if_new(&mut ready, hart, priority, existed);
+            return Err(types::ViError::OutOfMemory);
+        }
+        if !existed {
+            claims.created.store(true, PromiseOrdering::Relaxed);
+        }
+        claims.publication.store(publication + 1, PromiseOrdering::Relaxed);
+        Ok(Self { hart, priority, armed: true })
+    }
+
+    /// The hart and priority the promise is pinned to; the integrating
+    /// scheduler sends its preemption notification to exactly this hart.
+    pub(crate) fn destination(&self) -> (usize, u8) {
+        (self.hart, self.priority)
+    }
+
+    pub(crate) fn commit(mut self, tid: usize) {
+        {
+            let mut ready = HART_LOCALS[self.hart].ready.lock();
+            let claims = claims(self.hart, self.priority);
+            let publication = claims.publication.load(PromiseOrdering::Relaxed);
+            let queue = ready.get_mut(&self.priority).expect("promised ready bucket");
+            assert!(
+                publication != 0 && queue.len() < queue.capacity(),
+                "ready publication promise lost its reserved slot"
+            );
+            claims.publication.store(publication - 1, PromiseOrdering::Relaxed);
+            claims.created.store(false, PromiseOrdering::Relaxed);
+            queue.push_back(tid);
+        }
+        self.armed = false;
+    }
+}
+impl Drop for PublicationReservation {
+    fn drop(&mut self) {
+        if self.armed {
+            let mut ready = HART_LOCALS[self.hart].ready.lock();
+            let claims = claims(self.hart, self.priority);
+            let publication = claims.publication.load(PromiseOrdering::Relaxed);
+            claims.publication.store(publication.saturating_sub(1), PromiseOrdering::Relaxed);
+            drop_unused_bucket(&mut ready, self.hart, self.priority);
+        }
+    }
+}
+/// Undo a bucket key created by a refused reservation or steal destination.
+fn drop_unused_bucket_if_new(
+    ready: &mut BTreeMap<u8, VecDeque<usize>>,
+    hart: usize,
+    priority: u8,
+    existed: bool,
+) {
+    if !existed
+        && promised(hart, priority) == 0
+        && ready.get(&priority).is_some_and(|queue| queue.is_empty())
+    {
+        ready.remove(&priority);
+    }
+}
+
+/// (queued, capacity, publication promises, rollback promises) of one bucket;
+/// regression tests use it to prove capacity always covers every promise.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_shape(hart: usize, priority: u8) -> (usize, usize, usize, usize) {
+    let ready = HART_LOCALS[hart].ready.lock();
+    let claims = claims(hart, priority);
+    let (len, capacity) = ready.get(&priority).map_or((0, 0), |q| (q.len(), q.capacity()));
+    (len, capacity,
+        claims.publication.load(PromiseOrdering::Relaxed) as usize,
+        claims.rollback.load(PromiseOrdering::Relaxed) as usize)
+}
 /// Whether this target invokes `vi_context_switch_complete` from the incoming
 /// stack of every raw context switch.
 ///
@@ -127,7 +349,16 @@ pub fn push_on_hart(hart_id: usize, id: usize, priority: u8) {
         #[cfg(cellos_p01_trace)]
         let _semantic = crate::memory::heap::p01_owner::creation(None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED);
-        ready.entry(priority).or_default().push_back(id);
+        // A wake/requeue is infallible and never consumes a promise: keep the
+        // outstanding publication/rollback slots free beside the new entry.
+        // Growth here is the pre-existing infallible ready-queue growth and
+        // happens before the entry is linked, so it cannot hide a dropped wake.
+        let keep = promised(hart_id, priority) + 1;
+        let queue = ready.entry(priority).or_default();
+        if queue.capacity() < queue.len() + keep {
+            queue.reserve(keep);
+        }
+        queue.push_back(id);
     }
 }
 
@@ -157,16 +388,31 @@ pub fn owned_by_another_hart(hart_id: usize, task_id: usize) -> bool {
 
 #[cfg(cellos_g1_cpu)]
 pub(crate) struct SelectionReservation {
-    hart: usize, priority: u8, index: usize, tid: usize,
+    hart: usize, priority: u8, tid: usize, armed: bool,
+}
+#[cfg(cellos_g1_cpu)]
+impl Drop for SelectionReservation {
+    /// Successful selection (or abandoned rollback) releases the vacated slot.
+    fn drop(&mut self) {
+        if self.armed {
+            let _ready = HART_LOCALS[self.hart].ready.lock();
+            let claims = claims(self.hart, self.priority);
+            let rollback = claims.rollback.load(PromiseOrdering::Relaxed);
+            claims.rollback.store(rollback.saturating_sub(1), PromiseOrdering::Relaxed);
+        }
+    }
 }
 
 #[cfg(cellos_g1_cpu)]
-pub(crate) fn restore_selection(reservation: SelectionReservation) {
-    // SCHEDULER remains held from removal through rollback. The queue retains
-    // its allocation and no publisher can consume the vacated capacity.
+pub(crate) fn restore_selection(mut reservation: SelectionReservation) {
+    // Stealing does not hold SCHEDULER, so the vacated slot is protected by
+    // the rollback promise taken at removal, not by lock ownership. Steals that
+    // took entries ahead of it adjusted the recorded position meanwhile.
     let mut ready = HART_LOCALS[reservation.hart].ready.lock();
+    let claims = claims(reservation.hart, reservation.priority);
     let queue = ready.get_mut(&reservation.priority).expect("reserved ready queue");
-    queue.insert(reservation.index, reservation.tid);
+    reinsert(queue, claims, reservation.tid);
+    reservation.armed = false;
 }
 /// Pop the highest-priority task whose Context is not owned by another hart.
 ///
@@ -198,7 +444,16 @@ pub(crate) fn pick_local_eligible_with(hart_id: usize,
                 })
         {
             #[cfg(cellos_g1_cpu)]
-            { *reservation = Some(SelectionReservation { hart: hart_id, priority: _priority, index, tid: queue[index] }); }
+            {
+                // The removed slot stays promised to this selection until it is
+                // consumed (success drops the reservation) or reinserted.
+                let tid = queue[index];
+                let removed = vacate(queue, claims(hart_id, _priority), index);
+                *reservation = Some(SelectionReservation {
+                    hart: hart_id, priority: _priority, tid, armed: true });
+                return removed;
+            }
+            #[cfg(not(cellos_g1_cpu))]
             return queue.remove(index);
         }
     }
@@ -208,10 +463,10 @@ pub(crate) fn pick_local_eligible_with(hart_id: usize,
 /// Remove task `id` from every hart's ready queue.
 /// Call while holding SCHEDULER (lock order: SCHEDULER → ready).
 pub fn remove_from_all(id: usize) {
-    for local in HART_LOCALS.iter() {
+    for (hart, local) in HART_LOCALS.iter().enumerate() {
         let mut rq = local.ready.lock();
-        for queue in rq.values_mut() {
-            queue.retain(|&x| x != id);
+        for (&priority, queue) in rq.iter_mut() {
+            forget_tracked(queue, claims(hart, priority), id);
         }
     }
 }
@@ -420,102 +675,127 @@ pub(crate) fn steal_from_busiest_with(thief: usize,
     #[cfg(cellos_p01_trace)]
     let _semantic = crate::memory::heap::p01_owner::creation(None,
         crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+    let (victim_map, thief_map) = if victim == 0 {
+        (&mut *g0, &mut *g1)
+    } else {
+        (&mut *g1, &mut *g0)
+    };
 
     // Count only tasks whose Context is not owned by another hart and which
     // are not reserved by test-only controlled dispatch setup. The ownership
     // snapshot includes current, selected, executing, and outgoing save
     // windows; a stale ownership value merely defers work until the next pick
     // and can never permit simultaneous execution.
-    let stealable: usize = if victim == 0 {
-        g0.iter()
-            .filter(|(&p, _)| p < RT_PRIO)
-            .map(|(_, q)| {
-                q.iter()
-                    .filter(|&&id| {
-                        !owned_by_another_hart(thief, id)
-                            && !test_dispatch_reserved_by_another_hart(thief, id)
-                            && {
-                                #[cfg(cellos_g1_cpu)] { eligible(id) }
-                                #[cfg(not(cellos_g1_cpu))] { true }
-                            }
-                    })
-                    .count()
-            })
-            .sum()
-    } else {
-        g1.iter()
-            .filter(|(&p, _)| p < RT_PRIO)
-            .map(|(_, q)| {
-                q.iter()
-                    .filter(|&&id| {
-                        !owned_by_another_hart(thief, id)
-                            && !test_dispatch_reserved_by_another_hart(thief, id)
-                            && {
-                                #[cfg(cellos_g1_cpu)] { eligible(id) }
-                                #[cfg(not(cellos_g1_cpu))] { true }
-                            }
-                    })
-                    .count()
-            })
-            .sum()
+    let permits = |id: usize| -> bool {
+        !owned_by_another_hart(thief, id)
+            && !test_dispatch_reserved_by_another_hart(thief, id)
+            && {
+                #[cfg(cellos_g1_cpu)] { eligible(id) }
+                #[cfg(not(cellos_g1_cpu))] { true }
+            }
     };
+    let stealable: usize = victim_map
+        .iter()
+        .filter(|(&p, _)| p < RT_PRIO)
+        .map(|(_, q)| q.iter().filter(|&&id| permits(id)).count())
+        .sum();
     if stealable == 0 {
         return;
     }
     let to_steal = (stealable / 2).max(1);
 
-    // Move tasks, highest-priority first (Normal before Background).
+    // Move tasks, highest-priority first (Normal before Background). The
+    // destination bucket must have headroom for the entry *and* every outstanding
+    // promise before the victim entry is removed; on refusal the victim stays
+    // queued and stealing stops.
     let mut stolen = 0;
-    for p in (0..RT_PRIO).rev() {
+    'priorities: for p in (0..RT_PRIO).rev() {
+        while stolen < to_steal {
+            let Some(index) = victim_map
+                .get(&p)
+                .and_then(|queue| queue.iter().position(|&id| permits(id)))
+            else {
+                break;
+            };
+            let existed = thief_map.contains_key(&p);
+            let keep = promised(thief, p) + 1;
+            let refused = {
+                let dest = thief_map.entry(p).or_default();
+                dest.capacity() < dest.len() + keep && dest.try_reserve(keep).is_err()
+            };
+            if refused {
+                drop_unused_bucket_if_new(thief_map, thief, p, existed);
+                break 'priorities;
+            }
+            let id = victim_map
+                .get_mut(&p)
+                .and_then(|queue| remove_tracked(queue, claims(victim, p), index))
+                .expect("position returned an in-bounds ready task");
+            thief_map
+                .get_mut(&p)
+                .expect("destination bucket reserved before removal")
+                .push_back(id);
+            stolen += 1;
+        }
         if stolen >= to_steal {
             break;
         }
-        if thief == 0 {
-            // victim=1(g1) → thief=0(g0)
-            if let Some(vq) = g1.get_mut(&p) {
-                while stolen < to_steal {
-                    match vq.iter().position(|&id| {
-                        !owned_by_another_hart(thief, id)
-                            && !test_dispatch_reserved_by_another_hart(thief, id)
-                            && {
-                                #[cfg(cellos_g1_cpu)] { eligible(id) }
-                                #[cfg(not(cellos_g1_cpu))] { true }
-                            }
-                    }) {
-                        Some(index) => {
-                            let id = vq
-                                .remove(index)
-                                .expect("position returned an in-bounds ready task");
-                            g0.entry(p).or_default().push_back(id);
-                            stolen += 1;
-                        }
-                        None => break,
-                    }
-                }
-            }
-        } else {
-            // victim=0(g0) → thief=1(g1)
-            if let Some(vq) = g0.get_mut(&p) {
-                while stolen < to_steal {
-                    match vq.iter().position(|&id| {
-                        !owned_by_another_hart(thief, id)
-                            && !test_dispatch_reserved_by_another_hart(thief, id)
-                            && {
-                                #[cfg(cellos_g1_cpu)] { eligible(id) }
-                                #[cfg(not(cellos_g1_cpu))] { true }
-                            }
-                    }) {
-                        Some(index) => {
-                            let id = vq
-                                .remove(index)
-                                .expect("position returned an in-bounds ready task");
-                            g1.entry(p).or_default().push_back(id);
-                            stolen += 1;
-                        }
-                        None => break,
-                    }
-                }
-            }
-        }
     }
+}
+
+/// Regression probe for selection rollback ordering, run by the publication
+/// tests on every hook build (the `cellos_g1_cpu` caller uses the same
+/// `vacate`/`reinsert`/`remove_tracked`/`forget_tracked` primitives): a vacated
+/// selection returns to its exact FIFO position even after entries ahead of it
+/// were stolen or forgotten. `base` is a tid range the caller owns.
+#[cfg(feature = "test-hooks")]
+#[allow(clippy::declare_interior_mutable_const)]
+pub(crate) fn test_rollback_keeps_fifo_position(base: usize) -> bool {
+    // Pure queue logic: steals ahead of and behind the vacated slot.
+    let local = NO_CLAIMS;
+    let mut queue: VecDeque<usize> = (1..=6).collect();
+    queue.reserve(2);
+    let tid = queue[2];
+    if vacate(&mut queue, &local, 2) != Some(tid) { return false; }
+    remove_tracked(&mut queue, &local, 0);
+    remove_tracked(&mut queue, &local, 2);
+    reinsert(&mut queue, &local, tid);
+    if queue != [2, 3, 4, 6] || local.rollback.load(PromiseOrdering::Relaxed) != 0 { return false; }
+    let local = NO_CLAIMS;
+    let mut queue: VecDeque<usize> = (1..=6).collect();
+    queue.reserve(2);
+    let tid = queue[3];
+    if vacate(&mut queue, &local, 3) != Some(tid) { return false; }
+    forget_tracked(&mut queue, &local, 2);
+    forget_tracked(&mut queue, &local, 6);
+    reinsert(&mut queue, &local, tid);
+    if queue != [1, 3, 4, 5] { return false; }
+    // Real buckets: the production steal runs while the selection is vacated.
+    if super::super::smp::is_rt_hart_online() || total_ready_count() != 0 { return true; }
+    let hart = super::current_hart_id();
+    if hart >= MAX_HARTS || MAX_HARTS < 2 { return true; }
+    let victim = 1 - hart;
+    let priority = api::TaskPriority::Normal as u8;
+    let tids: [usize; 6] = core::array::from_fn(|n| base + n);
+    for tid in tids { push_on_hart(victim, tid, priority); }
+    let selected = {
+        let mut ready = HART_LOCALS[victim].ready.lock();
+        let Some(queue) = ready.get_mut(&priority) else { return false };
+        vacate(queue, claims(victim, priority), 2)
+    };
+    steal_from_busiest(hart);
+    let order: alloc::vec::Vec<usize> = {
+        let mut ready = HART_LOCALS[victim].ready.lock();
+        let Some(queue) = ready.get_mut(&priority) else { return false };
+        reinsert(queue, claims(victim, priority), tids[2]);
+        queue.iter().copied().collect()
+    };
+    let stolen: alloc::vec::Vec<usize> = HART_LOCALS[hart].ready.lock().get(&priority)
+        .map(|queue| queue.iter().copied().collect()).unwrap_or_default();
+    for tid in tids { remove_from_all(tid); }
+    selected == Some(tids[2])
+        && stolen == [tids[0], tids[1]]
+        && order == [tids[2], tids[3], tids[4], tids[5]]
+        && test_shape(victim, priority).3 == 0
+        && total_ready_count() == 0
 }

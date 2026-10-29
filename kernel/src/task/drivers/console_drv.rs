@@ -65,20 +65,23 @@ impl viConsole {
 
         // Serial is text-only EV_ASCII; physical PS/2 keys use EV_KEY below.
         // With no input service, retain the buffered sys_read(fd=0) fallback.
+        // `$ring` marks bytes drained from the UART RX ring, which stores them raw.
         macro_rules! route_byte {
-            ($c:expr) => {
-                let c = $c;
-                if input_tid != 0 {
-                    if !relay_ascii_to_input(input_tid, c) {
-                        *PENDING_ASCII.lock() = Some(c);
-                        return true; // stop draining; order preserved via backlog
+            ($c:expr, $ring:expr) => {
+                match route_for(input_tid != 0, $c, $ring) {
+                    Route::Relay(c) => {
+                        if !relay_ascii_to_input(input_tid, c) {
+                            *PENDING_ASCII.lock() = Some(c);
+                            return true; // stop draining; order preserved via backlog
+                        }
                     }
-                } else {
-                    if self.buffer.len() < Self::MAX_BUFFERED {
-                        #[cfg(cellos_p01_trace)]
-                        let _semantic = crate::memory::heap::p01_owner::creation(None,
-                            crate::memory::heap::p01_owner::DRIVER_SHARED);
-                        self.buffer.push_back(c);
+                    Route::Buffer(c) => {
+                        if self.buffer.len() < Self::MAX_BUFFERED {
+                            #[cfg(cellos_p01_trace)]
+                            let _semantic = crate::memory::heap::p01_owner::creation(None,
+                                crate::memory::heap::p01_owner::DRIVER_SHARED);
+                            self.buffer.push_back(c);
+                        }
                     }
                 }
                 received = true;
@@ -94,7 +97,7 @@ impl viConsole {
             let Some(c) = crate::task::drivers::uart::poll_rhr() else {
                 break;
             };
-            route_byte!(c);
+            route_byte!(c, false);
         }
 
         // 1b. Drain any chars the UART IRQ handler buffered (when IRQs reach S-mode).
@@ -105,7 +108,7 @@ impl viConsole {
             let Some(c) = crate::task::drivers::uart::getchar() else {
                 break;
             };
-            route_byte!(c);
+            route_byte!(c, true);
         }
 
         // 1c. Poll the board-selected AArch64 UART RX backend.
@@ -114,7 +117,7 @@ impl viConsole {
             let Some(c) = crate::task::drivers::uart::getchar() else {
                 break;
             };
-            route_byte!(c);
+            route_byte!(c, true);
         }
 
         // Keep direct polling as a fallback for early boot and lost IRQ routing.
@@ -123,7 +126,7 @@ impl viConsole {
             let Some(c) = crate::hal::uart_bcm_mini::poll_rx() else {
                 break;
             };
-            route_byte!(c);
+            route_byte!(c, false);
         }
 
         // QEMU virt maps PL011 at 0x0900_0000; `-serial tcp:...` connects its
@@ -133,7 +136,7 @@ impl viConsole {
             let Some(c) = crate::hal::uart_pl011::poll_rx() else {
                 break;
             };
-            route_byte!(c);
+            route_byte!(c, false);
         }
 
         // 1d. Drain IRQ-filled RX buffer on x86_64.
@@ -145,7 +148,7 @@ impl viConsole {
             let Some(c) = crate::task::drivers::uart::getchar() else {
                 break;
             };
-            route_byte!(c);
+            route_byte!(c, true);
         }
         // 1e. A single PS/2 reader demultiplexes keyboard and AUX bytes. Never
         // translate physical keys into ASCII while service-input owns input.
@@ -167,7 +170,7 @@ impl viConsole {
                 let Some(c) = crate::task::drivers::ps2_keyboard::poll() else {
                     break;
                 };
-                route_byte!(c);
+                route_byte!(c, false);
             }
         }
 
@@ -191,6 +194,29 @@ impl viConsole {
     /// Read a byte from buffer (Non-blocking)
     pub fn read_byte(&mut self) -> Option<u8> {
         self.buffer.pop_front()
+    }
+}
+
+/// Where one received serial byte goes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Route {
+    /// Relayed to the input service exactly as received.
+    Relay(u8),
+    /// Queued for the legacy `sys_read(fd=0)` fallback.
+    Buffer(u8),
+}
+
+/// Pure routing rule. The UART RX ring stores bytes unchanged (Enter is CR, Ctrl-J is
+/// LF), so the input service sees raw bytes; only the legacy fallback, which runs when
+/// no input service is registered, turns ring-sourced CR into LF as `sys_read` readers
+/// have always seen it. Bytes that did not pass through the ring are never rewritten.
+pub(crate) fn route_for(input_online: bool, byte: u8, from_rx_ring: bool) -> Route {
+    if input_online {
+        Route::Relay(byte)
+    } else if from_rx_ring && byte == b'\r' {
+        Route::Buffer(b'\n')
+    } else {
+        Route::Buffer(byte)
     }
 }
 

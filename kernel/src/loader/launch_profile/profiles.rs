@@ -2,22 +2,29 @@ use crate::resource_registry::{DEV_GPIO, DEV_I2C, DEV_SPI, DEV_UART};
 use crate::task::cap::CapSet;
 
 use super::super::boot_ceiling;
-use super::targets::reviewed_user_target_ceiling;
+use super::targets::{reviewed_user_target_ceiling, NET_CLIENT};
 use super::{LaunchProfile, LaunchRoute};
 
 const CONSOLE_MMIO: u8 = DEV_GPIO | DEV_UART;
 const GPIO_ONLY_MMIO: u8 = DEV_GPIO;
 const SENSOR_MMIO: u8 = DEV_GPIO | DEV_I2C;
 const SPI_DEMO_MMIO: u8 = DEV_GPIO | DEV_SPI;
+/// The pre-annex X/M/W rights every reviewed non-sandbox edge keeps (annex
+/// S2-T/S2-W §3, D-TW1); "capability-free" below means nothing beyond them.
+const LEGACY: CapSet = CapSet::LEGACY_OBSERVE_MUTATE;
 
 pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    #[cfg(feature = "phase04-driver-profile")]
+    if target == "/bin/phase04-terminal-driver" {
+        return phase04_driver_init_profile(route, target);
+    }
     if matches!(route, LaunchRoute::Mem | LaunchRoute::Pinned) {
         return None;
     }
     match target {
         "/bin/ai" | "/bin/ahci" | "/bin/xhci" | "/bin/bcm-display" | "/bin/block" | "/bin/compositor" | "/bin/config"
         | "/bin/dwc2-usb" | "/bin/e1000" | "/bin/igb" | "/bin/fb-console" | "/bin/hypervisor" | "/bin/input"
-        | "/bin/kms" | "/bin/net" | "/bin/net-broker" | "/bin/nvme" | "/bin/serial" | "/bin/shell"
+        | "/bin/kms" | "/bin/net" | "/bin/net-broker" | "/bin/nvme" | "/bin/serial" | "/bin/cellbox"
         | "/bin/silo" | "/bin/ai-test" | "/bin/silo-test" | "/bin/srv-test" | "/bin/supervisor"
         | "/bin/vfs" | "/bin/vfs-test" | "/bin/virtio-gpu" | "/bin/virtio-net"
         | "/bin/std-smoke" | "/bin/desktop" | "/bin/sshd" | "/bin/chrome" | "/bin/vm-runner" | "/bin/files" | "/bin/terminal"
@@ -53,13 +60,23 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
     }
 }
 
-pub(super) fn shell_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+pub(super) fn cellbox_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
     let ceiling = match route {
-        LaunchRoute::Path | LaunchRoute::Elf if target == "/bin/hotswap" => CapSet::EMPTY,
+        LaunchRoute::Path | LaunchRoute::Elf if target == "/bin/hotswap" => LEGACY,
+        // Retained power-off worker: the only caller of raw opcode 502 (see
+        // `RAW_SHUTDOWN_CALLERS` in the syscall layer). Path route only; the
+        // child holds no capability, the syscall gate is name-keyed.
+        LaunchRoute::Path if target == "/bin/shutdown" => LEGACY,
+        // Phase 09 D79-9: the cellbox ELF installed a second time for `cellbox ssh`.
+        // Only the shell may start it, only by the kernel-resolved path, and only it
+        // carries the outbound client rights; `/bin/cellbox` itself holds none. It is
+        // not in the generic reviewed table, so init autoload and the desktop cannot
+        // launch it, and its caller-owned ELF route stays denied below.
+        LaunchRoute::Path if target == "/bin/cellbox-ssh" => NET_CLIENT,
         LaunchRoute::Path | LaunchRoute::Elf => reviewed_user_target_ceiling(target)?,
         LaunchRoute::Mem | LaunchRoute::Pinned => return None,
     };
-    Some(LaunchProfile::new(ceiling, "shell-launch-edge", false))
+    Some(LaunchProfile::new(ceiling, "cellbox-launch-edge", false))
 }
 pub(super) fn desktop_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
     let ceiling = match route {
@@ -74,11 +91,13 @@ pub(super) fn hypha_profile(route: LaunchRoute, target: &str) -> Option<LaunchPr
         return None;
     }
     let ceiling = match target {
-        "/bin/llm-gateway" => CapSet::EMPTY,
-        "/bin/tool-fs" | "/bin/tool-sys" => CapSet::EMPTY,
+        // The gateway's reviewed ceiling carries its network-client rights; the
+        // edge reuses that row rather than restating it.
+        "/bin/llm-gateway" => reviewed_user_target_ceiling(target)?,
+        "/bin/tool-fs" | "/bin/tool-sys" => LEGACY,
         "/bin/tool-spawn" => CapSet {
             spawn: true,
-            ..CapSet::EMPTY
+            ..LEGACY
         },
         _ => return None,
     };
@@ -105,7 +124,7 @@ pub(super) fn dwc2_function_worker_profile(
         return None;
     }
     Some(LaunchProfile::new(
-        CapSet::EMPTY,
+        LEGACY,
         "dwc2-function-worker-edge",
         true,
     ))
@@ -120,8 +139,101 @@ pub(super) fn pipe_test_profile(route: LaunchRoute, target: &str) -> Option<Laun
         return None;
     }
     Some(LaunchProfile::new(
-        CapSet::EMPTY,
+        LEGACY,
         "pipe-test-peer-edge",
+        false,
+    ))
+}
+
+/// GUI Terminal (`terminal`) may run exactly one program: the multicall shell
+/// `/bin/cellbox`, on the kernel-resolved path route. The child ceiling is
+/// [`SHELL_EDGE`]: the pre-annex X/M/W rights (`LEGACY`) plus the Q Config-write
+/// right (Phase 01 CP1, D-Q5), and no other capability. The shell it hosts is
+/// the real `cellbox sh` over a session context.
+pub(super) fn terminal_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    if route != LaunchRoute::Path || target != "/bin/cellbox" {
+        return None;
+    }
+    Some(LaunchProfile::new(SHELL_EDGE, "terminal-shell-edge", false))
+}
+
+/// The child ceiling of every reviewed edge that hosts the interactive shell
+/// `/bin/cellbox`: `LEGACY` plus `config_write`, which service-config bounds to
+/// the shell key namespace (Phase 01 CP1, D-Q5). Must equal the init boot row
+/// `boot_ceiling("/bin/cellbox")`.
+pub(super) const SHELL_EDGE: CapSet = CapSet {
+    config_write: true,
+    ..LEGACY
+};
+
+/// Private Phase04 fixture driver: shell hosting (the same ceiling as the GUI
+/// Terminal's shell edge, so the lane proves the production Q grant) plus the
+/// stock echo negative-output-grant probe on a capability-free edge. Neither
+/// edge exists in ordinary images.
+#[cfg(feature = "phase04-driver-profile")]
+pub(super) fn phase04_driver_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    if route != LaunchRoute::Path {
+        return None;
+    }
+    let (ceiling, label) = match target {
+        "/bin/cellbox" => (SHELL_EDGE, "phase04-driver-shell-edge"),
+        "/bin/echo" => (LEGACY, "phase04-driver-output-probe-edge"),
+        _ => return None,
+    };
+    Some(LaunchProfile::new(ceiling, label, false))
+}
+
+/// Init may start the private Phase04 driver from the generated autoload plan. Init
+/// tries the caller-supplied-ELF route first and falls back to the path route, like
+/// every other autoload entry; the child ceiling is empty either way and lifecycle
+/// authority is required like every init autoload edge. Compiled only under
+/// `phase04-driver-profile`.
+#[cfg(feature = "phase04-driver-profile")]
+pub(super) fn phase04_driver_init_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || target != "/bin/phase04-terminal-driver" {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        LEGACY,
+        "phase04-driver-init-edge",
+        true,
+    ))
+}
+
+#[cfg(feature = "phase02-terminal-profile")]
+pub(super) fn phase02_session_profile(
+    caller: &str,
+    route: LaunchRoute,
+    target: &str,
+) -> Option<LaunchProfile> {
+    let approved = match caller {
+        "cellbox" => target == "/bin/phase02-session-parent",
+        "phase02-session-parent" | "phase02-session-child" => {
+            target == "/bin/phase02-session-child"
+        }
+        _ => false,
+    };
+    if !approved || route != LaunchRoute::Path {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        LEGACY,
+        "phase02-session-fixture-edge",
+        false,
+    ))
+}
+
+/// Private Phase03 stdin-filter fixture: exactly one capability-free
+/// `cellbox -> /bin/p03-filter` edge on the kernel-resolved path route. Compiled
+/// only under `phase03-filter-profile`; no ordinary image carries this row.
+#[cfg(feature = "phase03-filter-profile")]
+pub(super) fn phase03_filter_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    if route != LaunchRoute::Path || target != "/bin/p03-filter" {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        LEGACY,
+        "phase03-filter-fixture-edge",
         false,
     ))
 }
@@ -138,7 +250,7 @@ pub(super) fn c_spawn_profile(route: LaunchRoute, target: &str) -> Option<Launch
         return None;
     }
     Some(LaunchProfile::new(
-        CapSet::EMPTY,
+        LEGACY,
         "c-spawn-child-edge",
         false,
     ))
@@ -159,7 +271,7 @@ pub(super) fn backend_supervisor_profile(
         return None;
     }
     Some(LaunchProfile::new(
-        CapSet::EMPTY,
+        LEGACY,
         "backend-supervisor-worker-edge",
         true,
     ))
@@ -174,7 +286,7 @@ pub(super) fn render_worker_profile(route: LaunchRoute, target: &str) -> Option<
         return None;
     }
     Some(LaunchProfile::new(
-        CapSet::EMPTY,
+        LEGACY,
         "c2c-render-worker-edge",
         true,
     ))
@@ -201,11 +313,11 @@ pub(super) fn pinned_profile(
         return None;
     }
     let ceiling = match (caller_name, target) {
-        ("bench", "/bin/bench-probe") | ("capacity-probe", "/bin/bench-probe") => CapSet::EMPTY,
-        ("capacity-probe", "/bin/heavy-probe") => CapSet::EMPTY,
+        ("bench", "/bin/bench-probe") | ("capacity-probe", "/bin/bench-probe") => LEGACY,
+        ("capacity-probe", "/bin/heavy-probe") => LEGACY,
         ("periph-demo", "/bin/periph-demo") => CapSet {
             mmio_devices: CONSOLE_MMIO,
-            ..CapSet::EMPTY
+            ..LEGACY
         },
         _ => return None,
     };
@@ -215,27 +327,27 @@ pub(super) fn pinned_profile(
 pub(super) const fn console_mmio_capset() -> CapSet {
     CapSet {
         mmio_devices: CONSOLE_MMIO,
-        ..CapSet::EMPTY
+        ..LEGACY
     }
 }
 
 pub(super) const fn gpio_mmio_capset() -> CapSet {
     CapSet {
         mmio_devices: GPIO_ONLY_MMIO,
-        ..CapSet::EMPTY
+        ..LEGACY
     }
 }
 
 pub(super) const fn sensor_mmio_capset() -> CapSet {
     CapSet {
         mmio_devices: SENSOR_MMIO,
-        ..CapSet::EMPTY
+        ..LEGACY
     }
 }
 
 pub(super) const fn spi_demo_mmio_capset() -> CapSet {
     CapSet {
         mmio_devices: SPI_DEMO_MMIO,
-        ..CapSet::EMPTY
+        ..LEGACY
     }
 }

@@ -37,7 +37,7 @@ pub const BOOTSTRAP_CELLS: &[&str] = &[
     "/bin/block",
     "/bin/vfs",
     "/bin/config",
-    "/bin/shell",
+    "/bin/cellbox",
 ];
 
 /// Cells that intentionally track the kernel's embedded development payload.

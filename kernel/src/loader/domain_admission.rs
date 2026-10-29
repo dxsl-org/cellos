@@ -208,17 +208,21 @@ pub(crate) fn unenforceable_authority(caps: CapSet, requests_dma: bool) -> bool 
 /// The browser profile is a two-factor opt-in: the image selects the feature,
 /// and a verified operator policy explicitly lists the capability-free engine.
 /// Missing, invalid or unresolved policy never authorizes this profile.
+/// "Capability-free" disregards the S2-T/S2-W rights, which every reviewed
+/// non-sandbox row keeps from before that annex (D-TW1).
 #[cfg(all(feature = "browser-engine-profile", target_arch = "x86_64"))]
 pub(crate) fn browser_engine_policy_permitted() -> bool {
     matches!(
         crate::policy::lookup("/bin/ocel-quickjs"),
-        crate::policy::PolicyDecision::Permit(caps) if caps == CapSet::EMPTY
+        crate::policy::PolicyDecision::Permit(caps) if caps.without_observe_mutate() == CapSet::EMPTY
     )
 }
 
 fn artifact_eligible(path: &str, granted: CapSet) -> bool {
     if cfg!(feature = "browser-engine-profile") {
-        cfg!(target_arch = "x86_64") && path == "/bin/ocel-quickjs" && granted == CapSet::EMPTY
+        cfg!(target_arch = "x86_64")
+            && path == "/bin/ocel-quickjs"
+            && granted.without_observe_mutate() == CapSet::EMPTY
     } else {
         // The ordinary development profile retains its existing class gate.
         true
@@ -626,6 +630,12 @@ mod browser_profile_tests {
         let covered = cfg!(target_arch = "x86_64");
         let profile = cfg!(feature = "browser-engine-profile");
         assert_eq!(artifact_eligible("/bin/ocel-quickjs", CapSet::EMPTY), !profile || covered);
+        // The engine's reviewed row keeps the pre-annex S2-T/S2-W rights; they
+        // are not authority this gate counts.
+        assert_eq!(
+            artifact_eligible("/bin/ocel-quickjs", CapSet::LEGACY_OBSERVE_MUTATE),
+            !profile || covered
+        );
         for path in ["", "/bin/ocel-js", "/bin/ocel-pdf", "/bin/tier2-smoke",
             "/bin/tier2-exploit", "/bin/OCEL-QUICKJS", "/mem/ocel-quickjs"] {
             assert_eq!(artifact_eligible(path, CapSet::EMPTY), !profile, "{path}");

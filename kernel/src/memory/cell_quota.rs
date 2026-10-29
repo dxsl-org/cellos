@@ -290,6 +290,16 @@ pub fn refund(cell_id_raw: usize, size: usize) {
     });
 }
 
+/// The registered byte limit of a Cell slot, or `None` when it has none.
+///
+/// Lock order: takes `QUOTA_LIMITS` briefly and allocates nothing. It is safe
+/// under `SCHEDULER` — the same `SCHEDULER → QUOTA_LIMITS` order `charge` already
+/// takes whenever a kernel-heap allocation happens under the scheduler lock — and
+/// nothing holding `QUOTA_LIMITS` ever takes `SCHEDULER`.
+pub fn limit(cell_id_raw: usize) -> Option<usize> {
+    QUOTA_LIMITS.lock().get(&cell_id_raw).copied()
+}
+
 /// Current byte usage for a Cell (for diagnostics).
 pub fn in_use(cell_id: CellId) -> usize {
     let id = cell_id.0 as usize;

@@ -58,7 +58,27 @@ pub fn authorize(
 ) -> Option<LaunchProfile> {
     let profile = match caller.name {
         "init" if caller.has_spawn => profiles::init_profile(route, target),
-        "shell" => profiles::shell_profile(route, target),
+        #[cfg(feature = "phase02-terminal-profile")]
+        "phase02-session-parent" | "phase02-session-child" => {
+            profiles::phase02_session_profile(caller.name, route, target)
+        }
+        "cellbox" => {
+            #[cfg(feature = "phase02-terminal-profile")]
+            if target == "/bin/phase02-session-parent" {
+                return profiles::phase02_session_profile(caller.name, route, target);
+            }
+            #[cfg(feature = "phase03-filter-profile")]
+            if target == "/bin/p03-filter" {
+                return profiles::phase03_filter_profile(route, target);
+            }
+            profiles::cellbox_profile(route, target)
+        }
+        // Reviewed GUI Terminal edge (Phase 04 S3): the only row `terminal` owns.
+        "terminal" => profiles::terminal_profile(route, target),
+        // Private Phase04 fixture: the same one edge for the test driver that links
+        // the Terminal's SDK host. Never compiled into an ordinary image.
+        #[cfg(feature = "phase04-driver-profile")]
+        "phase04-terminal-driver" => profiles::phase04_driver_profile(route, target),
         "desktop" => profiles::desktop_profile(route, target),
         "pipe-test" => profiles::pipe_test_profile(route, target),
         "c-spawn" => profiles::c_spawn_profile(route, target),
@@ -82,9 +102,11 @@ pub fn authorize(
     // SpawnFromElf carries caller-owned bytes and only an advisory path. Until
     // VFS can attest grant provenance, arbitrary bytes must not borrow a launch
     // profile that carries authority. Service-IPC tools use an empty ceiling;
-    // capability-bearing ELF routes remain lifecycle-only.
+    // capability-bearing ELF routes remain lifecycle-only. The S2-T/S2-W rights
+    // do not count here: they were ambient to every ELF before that annex, so a
+    // row holding only them stays reachable on this route (D-TW1).
     if matches!(route, LaunchRoute::Elf)
-        && profile.child_ceiling != CapSet::EMPTY
+        && profile.child_ceiling.without_observe_mutate() != CapSet::EMPTY
         && !profile.requires_lifecycle_authority
     {
         return None;

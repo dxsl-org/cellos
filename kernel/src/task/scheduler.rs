@@ -116,6 +116,89 @@ impl Drop for KernelAllocationContext {
     }
 }
 
+/// Indirect sorted task storage. Reserved publications hold capacity rather
+/// than inserting a hidden task into the live scheduler namespace.
+pub struct TaskTable {
+    rows: Vec<(usize, Box<Task>)>,
+    reservations: usize,
+}
+impl TaskTable {
+    fn new() -> Self { Self { rows: Vec::new(), reservations: 0 } }
+    pub fn get(&self, id: &usize) -> Option<&Box<Task>> {
+        self.rows.binary_search_by_key(id, |r| r.0).ok().map(|i| &self.rows[i].1)
+    }
+    pub fn get_mut(&mut self, id: &usize) -> Option<&mut Box<Task>> {
+        self.rows.binary_search_by_key(id, |r| r.0).ok().map(|i| &mut self.rows[i].1)
+    }
+    pub fn contains_key(&self, id: &usize) -> bool { self.get(id).is_some() }
+    pub fn len(&self) -> usize { self.rows.len() }
+    pub fn is_empty(&self) -> bool { self.rows.is_empty() }
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&usize, &Box<Task>)> {
+        self.rows.iter().map(|(id, task)| (id, task))
+    }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&usize, &mut Box<Task>)> {
+        self.rows.iter_mut().map(|(id, task)| (&*id, task))
+    }
+    pub fn values(&self) -> impl DoubleEndedIterator<Item = &Box<Task>> {
+        self.rows.iter().map(|r| &r.1)
+    }
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut Box<Task>> {
+        self.rows.iter_mut().map(|r| &mut r.1)
+    }
+    pub fn keys(&self) -> impl Iterator<Item = &usize> { self.rows.iter().map(|r| &r.0) }
+    pub fn range<R: core::ops::RangeBounds<usize>>(&self, range: R)
+        -> core::iter::Map<core::slice::Iter<'_, (usize, Box<Task>)>, fn(&(usize, Box<Task>)) -> (&usize, &Box<Task>)> {
+        use core::ops::Bound;
+        let start = match range.start_bound() {
+            Bound::Included(first) => self.rows.partition_point(|row| row.0 < *first),
+            Bound::Excluded(first) => self.rows.partition_point(|row| row.0 <= *first),
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            Bound::Included(last) => self.rows.partition_point(|row| row.0 <= *last),
+            Bound::Excluded(last) => self.rows.partition_point(|row| row.0 < *last),
+            Bound::Unbounded => self.rows.len(),
+        }
+        .max(start);
+        fn pair(row: &(usize, Box<Task>)) -> (&usize, &Box<Task>) { (&row.0, &row.1) }
+        self.rows[start..end].iter().map(pair as fn(&(usize, Box<Task>)) -> (&usize, &Box<Task>))
+    }
+    pub fn remove(&mut self, id: &usize) -> Option<Box<Task>> {
+        self.rows.binary_search_by_key(id, |r| r.0).ok().map(|i| self.rows.remove(i).1)
+    }
+    pub fn insert(&mut self, id: usize, task: Box<Task>) -> Option<Box<Task>> {
+        match self.rows.binary_search_by_key(&id, |r| r.0) {
+            Ok(i) => Some(core::mem::replace(&mut self.rows[i].1, task)),
+            Err(i) => {
+                self.rows.reserve(self.reservations + 1);
+                self.rows.insert(i, (id, task));
+                None
+            }
+        }
+    }
+    pub(crate) fn reserve_publication(&mut self) -> Result<(), types::ViError> {
+        self.rows.try_reserve(self.reservations + 1).map_err(|_| types::ViError::OutOfMemory)?;
+        self.reservations += 1;
+        Ok(())
+    }
+    pub(crate) fn abort_publication(&mut self) { self.reservations -= 1; }
+    /// (rows, capacity, outstanding reservations) for publication regression tests.
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn test_shape(&self) -> (usize, usize, usize) {
+        (self.rows.len(), self.rows.capacity(), self.reservations)
+    }
+    pub(crate) fn publish_reserved(&mut self, id: usize, task: Box<Task>) {
+        let i = self.rows.binary_search_by_key(&id, |r| r.0).expect_err("reserved task already live");
+        assert!(self.reservations != 0 && self.rows.len() < self.rows.capacity());
+        self.reservations -= 1;
+        self.rows.insert(i, (id, task));
+    }
+}
+impl core::ops::Index<&usize> for TaskTable {
+    type Output = Box<Task>;
+    fn index(&self, id: &usize) -> &Self::Output { self.get(id).expect("unknown task") }
+}
+
 /// Scheduler-owned lifetime record for a bounded reusable CellId slot.
 ///
 /// This is intentionally an array, not a task-table lookup: CellIds are quota
@@ -123,6 +206,7 @@ impl Drop for KernelAllocationContext {
 #[derive(Clone, Copy)]
 enum CellOwnerSlot {
     Empty,
+    Reserved(api::cell_owner::CellOwner),
     Live(api::cell_owner::CellOwner),
     Retiring(api::cell_owner::CellOwner),
 }
@@ -287,7 +371,7 @@ pub(crate) fn death_subscription_quota_self_test() -> bool {
 /// shared state that requires the global SCHEDULER lock: the task table itself,
 /// the zombie list, and the next-id counter.
 pub struct Scheduler {
-    pub tasks: BTreeMap<usize, Box<Task>>,
+    pub tasks: TaskTable,
     pub zombies: Vec<Box<Task>>,
     /// Fixed CellId/generation → root-TID authority. A slot leaves `Live`
     /// before any root resources are released or its CellId is reusable.
@@ -303,6 +387,7 @@ pub struct Scheduler {
     cell_owner_watches: BTreeMap<u64, CellOwnerWatch>,
     next_cell_owner_watch: u64,
     pub next_task_id: usize,
+    pub(crate) cell_session: super::cell_session::State,
     /// Task IDs whose grant pages must be reaped outside the SCHEDULER lock.
     ///
     /// Watchdog kill paths push here instead of calling reap_grants_for_task directly,
@@ -329,6 +414,9 @@ pub struct Scheduler {
         super::completion::SlotId,
     )>,
     pub last_global_sweep_tick: usize,
+    /// S6-1 exact on-CPU accounting: per-hart pass stamps and the per-Cell
+    /// incarnation CPU of members that already left the task table.
+    pub(crate) cpu_telemetry: super::telemetry::CpuLedger,
 }
 
 impl Default for Scheduler {
@@ -345,19 +433,43 @@ impl Scheduler {
         let _semantic = crate::memory::heap::p01_owner::creation(None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED);
         Self {
-            tasks: BTreeMap::new(),
+            tasks: TaskTable::new(),
             zombies: Vec::new(),
             cell_owners: alloc::vec![CellOwnerSlot::Empty; crate::memory::cell_quota::MAX_CELLS],
             cell_owner_watches: BTreeMap::new(),
             next_cell_owner_watch: 1,
             next_task_id: 1,
+            cell_session: super::cell_session::State::new(),
             pending_grant_reap: Vec::new(),
             pending_root_retirements: Vec::new(),
             pending_vfs_holder_release: Vec::new(),
             pending_vfs_context_release: Vec::new(),
             pending_completion_release: Vec::new(),
             last_global_sweep_tick: 0,
+            cpu_telemetry: super::telemetry::CpuLedger::new(),
         }
+    }
+    pub(crate) fn reserve_session_owner(&mut self, owner: api::cell_owner::CellOwner)
+        -> Result<(), types::ViError> {
+        let slot = self.cell_owners.get_mut(owner.cell_id as usize).ok_or(types::ViError::InvalidInput)?;
+        if !matches!(slot, CellOwnerSlot::Empty) { return Err(types::ViError::AlreadyExists); }
+        self.tasks.reserve_publication()?;
+        *slot = CellOwnerSlot::Reserved(owner);
+        Ok(())
+    }
+    pub(crate) fn session_owner_reserved(&self, owner: api::cell_owner::CellOwner) -> bool {
+        matches!(self.cell_owners.get(owner.cell_id as usize),
+            Some(CellOwnerSlot::Reserved(current)) if *current == owner)
+    }
+    pub(crate) fn abort_session_owner(&mut self, owner: api::cell_owner::CellOwner) {
+        if self.session_owner_reserved(owner) {
+            self.cell_owners[owner.cell_id as usize] = CellOwnerSlot::Empty;
+            self.tasks.abort_publication();
+        }
+    }
+    pub(crate) fn publish_session_owner(&mut self, owner: api::cell_owner::CellOwner) {
+        assert!(self.session_owner_reserved(owner));
+        self.cell_owners[owner.cell_id as usize] = CellOwnerSlot::Live(owner);
     }
 
     /// Return the root endpoint only while this exact Cell generation is live.
@@ -462,6 +574,7 @@ impl Scheduler {
         if matches!(slot, CellOwnerSlot::Retiring(current) if *current == owner) {
             *slot = CellOwnerSlot::Empty;
             crate::cell::cspace::retire_cell_authority(CellId(owner.cell_id), owner.generation);
+            super::cell_session::retired(self, owner);
             true
         } else {
             false
@@ -473,6 +586,36 @@ impl Scheduler {
             if matches!(slot, CellOwnerSlot::Live(current) if *current == owner) {
                 *slot = CellOwnerSlot::Empty;
             }
+        }
+    }
+
+    /// Every Live or Retiring Cell incarnation in CellId order, for telemetry.
+    /// The flag is `true` for Retiring. Reserved (unpublished) slots are not Cells yet.
+    pub(crate) fn telemetry_cell_owners(
+        &self,
+    ) -> impl Iterator<Item = (api::cell_owner::CellOwner, bool)> + '_ {
+        self.cell_owners.iter().filter_map(|slot| match slot {
+            CellOwnerSlot::Live(owner) => Some((*owner, false)),
+            CellOwnerSlot::Retiring(owner) => Some((*owner, true)),
+            CellOwnerSlot::Empty | CellOwnerSlot::Reserved(_) => None,
+        })
+    }
+
+    /// S6-1 K1: charge `hart_id`'s current task the on-CPU interval since that
+    /// hart's previous pass and restamp the hart. A zombie still on the hart is
+    /// charged too, and its Cell incarnation retains the interval with it.
+    pub(crate) fn charge_cpu(&mut self, hart_id: usize, now: Option<u64>) {
+        let delta = self.cpu_telemetry.pass(hart_id, now);
+        let tid = super::hart_local::ready::current_task_id_for(hart_id);
+        if delta == 0 || tid == 0 {
+            return;
+        }
+        if let Some(task) = self.tasks.get_mut(&tid) {
+            task.cpu_ns = task.cpu_ns.saturating_add(delta);
+        } else if let Some(zombie) = self.zombies.iter_mut().find(|task| task.id == tid) {
+            zombie.cpu_ns = zombie.cpu_ns.saturating_add(delta);
+            let (cell_id, generation) = (zombie.cell_id.0, zombie.cell_generation);
+            self.cpu_telemetry.retain_exited(cell_id, generation, delta);
         }
     }
 
@@ -598,15 +741,18 @@ impl Scheduler {
     /// `sstatus.SIE` is restored by hardware.
     #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     pub fn pend_preempt_if_needed(&self, new_priority: u8) {
-        let hart_id = super::hart_local::current_hart_id();
         // RT tasks land on HART_RT when online; fall back to current hart on single-hart systems.
-        let target_hart = if new_priority >= api::TaskPriority::RealTime as u8
-            && crate::task::smp::is_rt_hart_online()
-        {
-            crate::task::smp::HART_RT
-        } else {
-            hart_id
-        };
+        let target_hart = super::hart_local::ready::destination_hart(new_priority);
+        self.pend_preempt_on_hart(target_hart, new_priority);
+    }
+
+    /// Preemption notification for a destination chosen earlier (a publication
+    /// reservation pins its enqueue hart; the notification must follow it even
+    /// if an RT hart came online or the committing hart differs).
+    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
+    pub fn pend_preempt_on_hart(&self, target_hart: usize, new_priority: u8) {
+        #[cfg(target_arch = "riscv64")]
+        let hart_id = super::hart_local::current_hart_id();
         let target_tid = super::hart_local::ready::current_task_id_for(target_hart);
         let target_priority = if target_tid > 0 {
             self.tasks.get(&target_tid).map(|t| t.priority).unwrap_or(0)
@@ -635,6 +781,11 @@ impl Scheduler {
 
     #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
     pub fn pend_preempt_if_needed(&self, _new_priority: u8) {
+        // These targets keep timer-driven selection.
+    }
+
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
+    pub fn pend_preempt_on_hart(&self, _target_hart: usize, _new_priority: u8) {
         // These targets keep timer-driven selection.
     }
 
@@ -1195,6 +1346,7 @@ impl Scheduler {
         // before selecting members so neither thread creation nor owner
         // attestation can race the teardown.
         self.begin_root_retirement(owner);
+        super::cell_session::retiring(self, owner, exit_reason);
         let live_members: Vec<usize> = self
             .tasks
             .iter()
@@ -1411,6 +1563,7 @@ impl Scheduler {
                 #[cfg(cellos_p01_trace)]
                 let _semantic = crate::memory::heap::p01_owner::creation(None,
                     crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+                self.cpu_telemetry.retain_exited(task.cell_id.0, task.cell_generation, task.cpu_ns);
                 self.zombies.push(task);
             }
         }
@@ -1704,6 +1857,8 @@ impl Scheduler {
                 let mut retirement_zombies = Vec::new();
                 for member_tid in &retirement.member_tids {
                     if let Some(mut task) = self.tasks.remove(member_tid) {
+                        self.cpu_telemetry
+                            .retain_exited(task.cell_id.0, task.cell_generation, task.cpu_ns);
                         retirement
                             .waiter_wakes
                             .extend(Self::take_waiters_after_quiescence(&mut task));
@@ -1805,6 +1960,9 @@ impl Scheduler {
         *const crate::hal::arch::Context,
     )> {
         let now = crate::task::system_ticks();
+        // S6-1 K1: charge before any selection or watchdog decision, so every
+        // pass — timer or voluntary — closes the outgoing interval exactly once.
+        self.charge_cpu(hart_id, super::telemetry::monotonic_ns());
         // Global sweep (timer wakes, heartbeat, async-poll, watchdog) runs on hart 0 only
         // to prevent double-wake races on multihart setups.
         if hart_id != 0 {
@@ -1856,6 +2014,7 @@ impl Scheduler {
             }
 
             super::async_ipc::expire(self, now as u64);
+            super::cell_session::sweep(self);
             // 1. Wake tasks whose deadline elapsed: Sleeping (timer) and RecvTimeout
             //    (a Recv with a deadline). Without the RecvTimeout sweep a cell that
             //    RecvTimeout's a peer that never replies would block forever — the

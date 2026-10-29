@@ -1622,7 +1622,9 @@ fn encode_syscall_result(
     }
 }
 
-fn supports_typed_spawn_oom(syscall: &Syscall) -> bool {
+/// Syscalls whose callers decode the typed out-of-memory sentinel
+/// (`error_sentinel - 1`); every other syscall keeps the single generic error.
+fn supports_typed_oom(syscall: &Syscall) -> bool {
     matches!(
         syscall,
         Syscall::SpawnFromMem { .. }
@@ -1630,6 +1632,7 @@ fn supports_typed_spawn_oom(syscall: &Syscall) -> bool {
             | Syscall::SpawnFromElf { .. }
             | Syscall::SpawnReplacement { .. }
             | Syscall::SpawnPinned { .. }
+            | Syscall::TelemetrySnapshot { .. }
     )
 }
 
@@ -1849,6 +1852,39 @@ fn caller_launch_state(caller_id: usize) -> Option<(String, bool, bool)> {
         })
 }
 
+/// Reviewed task names allowed to execute raw opcode 502 (platform power-off).
+/// Same name-keyed mechanism as the launch rows; the set is fixed and has one
+/// member, the retained `/bin/shutdown` worker.
+const RAW_SHUTDOWN_CALLERS: &[&str] = &["shutdown"];
+
+fn raw_shutdown_permitted(name: &str) -> bool {
+    RAW_SHUTDOWN_CALLERS.contains(&name)
+}
+
+/// Gate for raw opcode 502. Runs before any platform shutdown code.
+fn authorize_raw_shutdown(caller_id: usize) -> Result<(), SyscallError> {
+    let (name, _, _) =
+        caller_launch_state(caller_id).unwrap_or((String::from("<unknown>"), false, false));
+    if raw_shutdown_permitted(&name) {
+        return Ok(());
+    }
+    log::warn!("[kernel] raw opcode 502 denied for {}", name);
+    Err(SyscallError::PermissionDenied)
+}
+
+/// AP-PZ: allow/deny decision for raw opcode 502 over the reviewed names and
+/// the live-task lookup (an unknown caller is denied without side effects).
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_raw_shutdown_gate() -> bool {
+    raw_shutdown_permitted("shutdown")
+        && !raw_shutdown_permitted("cellbox")
+        && !raw_shutdown_permitted("init")
+        && !raw_shutdown_permitted("supervisor")
+        && !raw_shutdown_permitted("")
+        && !raw_shutdown_permitted("shutdown2")
+        && authorize_raw_shutdown(usize::MAX) == Err(SyscallError::PermissionDenied)
+}
+
 fn authorize_launch_edge(
     caller_id: usize,
     route: crate::loader::launch_profile::LaunchRoute,
@@ -1884,6 +1920,24 @@ fn authorize_launch_edge(
         return Err(SyscallError::PermissionDenied);
     }
     Ok(profile)
+}
+
+pub(super) fn session_launch_request(caller: usize, path: &str)
+    -> Result<crate::loader::SpawnRequest, SyscallError> {
+    let profile = authorize_launch_edge(caller, crate::loader::launch_profile::LaunchRoute::Path, path)?;
+    let guard = super::SCHEDULER.lock();
+    let task = guard.as_ref().and_then(|s| s.tasks.get(&caller)).ok_or(SyscallError::PermissionDenied)?;
+    // The CellSessionV1 transport itself carries no allowlist bit, so the
+    // launch it performs must hold the same SpawnFromPath bit as the syscall.
+    if let Some(bit) = ViSyscall::SpawnFromPath.allowlist_bit() {
+        if (task.syscall_allowlist >> bit) & 1 == 0 {
+            log::warn!("[kernel] session launch denied for tid {}: SpawnFromPath bit {} not allowed", caller, bit);
+            return Err(SyscallError::PermissionDenied);
+        }
+    }
+    let ceiling = super::cap::CapSet::of_task(task);
+    Ok(crate::loader::SpawnRequest::governed_caller(caller, task.cell_generation, ceiling,
+        profile.child_ceiling, api::TaskPriority::Normal as u8, None))
 }
 
 fn caller_has_supervisor(caller_id: usize) -> bool {
@@ -2354,6 +2408,34 @@ fn preflight_user_output(caller_id: usize, ptr: usize, len: usize) -> Result<(),
         .map_err(|_| SyscallError::InvalidInput)
 }
 
+/// A copied request needs no long-lived lease; the reply span must stay backed
+/// until after the owner mutation and final write, including parked stream IO.
+struct SessionOutputPin { span: Option<(usize, usize, usize)> }
+impl SessionOutputPin {
+    fn reserve(caller: usize, ptr: usize, len: usize, view: &TaskCopyView) -> Result<Self, SyscallError> {
+        if !view.is_sas() { return Ok(Self { span: None }); }
+        let page_grants = grant_table_lock().lock();
+        let registered = reg_grant_table_lock().lock();
+        let guard = super::SCHEDULER.lock();
+        let sched = guard.as_ref().ok_or(SyscallError::InvalidInput)?;
+        if !sas_caller_owned_span(sched, page_grants.as_ref(), registered.as_ref(), caller, ptr, len) {
+            return Err(SyscallError::InvalidInput);
+        }
+        view.validate_writable(ptr, len).map_err(|_| SyscallError::InvalidInput)?;
+        crate::memory::pin::pin(ptr, len, caller).map_err(|_| SyscallError::OutOfMemory)?;
+        Ok(Self { span: Some((ptr, len, caller)) })
+    }
+}
+impl Drop for SessionOutputPin {
+    fn drop(&mut self) {
+        if let Some((ptr, len, caller)) = self.span {
+            // A killed parked syscall never resumes: the canonical quiescent
+            // DMA/grant retirement funnel acknowledges its ordinary pin.
+            crate::memory::pin::rollback_pin(ptr, len, caller);
+        }
+    }
+}
+
 /// Arm the final-write/unregister serialization fixture for one caller.
 #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 pub(crate) fn test_arm_getrandom_revoke_race(caller_id: usize) {
@@ -2809,12 +2891,18 @@ pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::C
     let sched = sched_guard.as_ref()?;
     let task = sched.tasks.get(&sender_tid)?;
     let owner = sched.resolve_live_cell_owner(task.cell_id, task.cell_generation)?;
-    let flags =
-        if task.syscall_allowlist != u64::MAX && (task.syscall_allowlist & (1u64 << 63)) != 0 {
-            api::caller_identity::CALLER_FLAG_VFS_MUTATE
-        } else {
-            0
-        };
+    let mut flags = vfs_mutate_caller_flag(task.syscall_allowlist, task.vfs_mutate);
+    // Network rights are a property of the Cell: read them from the Cell's root
+    // task, whose CapSet is the one spawn bounded by request ∩ ceiling ∩ policy.
+    // `resolve_live_cell_owner` has already proven that root is live and is this
+    // exact Cell generation, so a thread can neither claim more nor less than its
+    // Cell holds.
+    let root = sched.tasks.get(&(owner.root_tid as usize))?;
+    let root_caps = super::cap::CapSet::of_task(root);
+    flags |= root_caps.net_caller_flags();
+    // Q (Phase 01 CP1) is a Cell right exactly like the network rights: read
+    // from the same root CapSet, so a thread cannot hold more or less of it.
+    flags |= root_caps.config_caller_flags();
     (owner.cell_id == task.cell_id.0 && owner.generation == task.cell_generation).then_some(
         api::caller_identity::CallerIdentity {
             flags,
@@ -2823,6 +2911,19 @@ pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::C
             sender_tid: sender_tid as u64,
         },
     )
+}
+
+/// The attested `CALLER_FLAG_VFS_MUTATE` bit: an explicit (non-permit-all)
+/// allowlist declaring bit 63 AND the granted `vfs_mutate` right (annex
+/// S2-T/S2-W §3). The declaration alone no longer attests anything, so a Cell
+/// whose edge withholds W (the `/apps/`, `/data/bin/`, `/home/` sandbox) is
+/// refused every classified VFS mutation whatever its ELF declares.
+fn vfs_mutate_caller_flag(allowlist: u64, vfs_mutate: bool) -> u32 {
+    if vfs_mutate && allowlist != u64::MAX && (allowlist & (1u64 << 63)) != 0 {
+        api::caller_identity::CALLER_FLAG_VFS_MUTATE
+    } else {
+        0
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -3304,7 +3405,7 @@ fn may_query_dir_handles(caller_id: usize, target_cell: u64) -> bool {
         .is_some_and(|vfs| vfs.cell_id.0 == caller_cell)
 }
 
-fn encode_task_state(state: &TaskState) -> u32 {
+pub(super) fn encode_task_state(state: &TaskState) -> u32 {
     match state {
         TaskState::Ready => 0,
         TaskState::Running => 1,
@@ -3617,6 +3718,9 @@ pub enum Syscall {
     GetProcs2 { buf_ptr: usize, buf_len: usize },
     /// 243: MemInfo
     MemInfo { out_ptr: usize, out_len: usize },
+    /// 430: TelemetrySnapshot (Phase 06 S6-1)
+    TelemetrySnapshot { out_ptr: usize, out_len: usize, flags: usize, reserved: usize },
+    CellSessionV1 { request_ptr: usize, request_len: usize, result_ptr: usize, result_capacity: usize },
 
     // --- Legacy / Compatibility Layer ---
     /// 100: Service Lookup (Find driver ID by name)
@@ -3996,6 +4100,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::PipeWrite { .. } => V::PipeWrite,
         Syscall::PipeClose { .. } => V::PipeClose,
         Syscall::PipeShare { .. } => V::PipeShare,
+        Syscall::CellSessionV1 { .. } => return None,
         Syscall::Log { .. } => V::Log,
         Syscall::SetTimer { .. } => V::SetTimer,
         Syscall::ShmAlloc { .. } => V::ShmAlloc,
@@ -4003,6 +4108,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::GetProcs { .. } => V::GetProcs,
         Syscall::GetProcs2 { .. } => V::GetProcs2,
         Syscall::MemInfo { .. } => V::MemInfo,
+        Syscall::TelemetrySnapshot { .. } => V::TelemetrySnapshot,
         Syscall::OpenCap { .. } => V::OpenCap,
         Syscall::ReadCap { .. } => V::ReadCap,
         Syscall::CloseCap { .. } => V::CloseCap,
@@ -4288,6 +4394,41 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
     }
 
     match syscall {
+        Syscall::CellSessionV1 { request_ptr, request_len, result_ptr, result_capacity } => {
+            const MAX: usize = api::cell_session::MAX_REQUEST_LEN;
+            if request_len < api::cell_session::HEADER_LEN || request_len > MAX
+                || result_capacity < api::cell_session::HEADER_LEN {
+                return Err(SyscallError::InvalidInput);
+            }
+            let request_end = request_ptr.checked_add(request_len).ok_or(SyscallError::InvalidInput)?;
+            let result_end = result_ptr.checked_add(result_capacity).ok_or(SyscallError::InvalidInput)?;
+            if request_ptr < result_end && result_ptr < request_end { return Err(SyscallError::InvalidInput); }
+            validate_user_buf(request_ptr, request_len, MAX)?;
+            validate_user_buf(result_ptr, result_capacity, MAX_USER_BUF)?;
+            preflight_user_output(caller_id, result_ptr, result_capacity)?;
+            let view = caller_copy_view(caller_id)?;
+            let mut request = [0u8; MAX];
+            let _reply_pin = SessionOutputPin::reserve(caller_id, result_ptr, result_capacity, &view)?;
+            view.read_into(request_ptr, &mut request[..request_len]).map_err(|_| SyscallError::InvalidInput)?;
+            let header = api::cell_session::RequestHeaderV1::decode(&request[..request_len]);
+            let mut result = [0u8; 1536];
+            if let Ok(header) = header {
+                let required = super::cell_session::required_result(header.selector,
+                    &request[api::cell_session::HEADER_LEN..request_len]);
+                if result_capacity < required {
+                    api::cell_session::ResultHeaderV1 { selector: header.selector,
+                        status: api::cell_session::Status::BufferTooSmall, total_len: required as u32,
+                        request_id: header.request_id }.encode(&mut result).map_err(|_| SyscallError::InvalidInput)?;
+                    view.write_bytes(result_ptr, &result[..api::cell_session::HEADER_LEN]).map_err(|_| SyscallError::InvalidInput)?;
+                    return Ok(0);
+                }
+            }
+            let len = super::cell_session::dispatch(caller_id, &request[..request_len], &mut result);
+            view.write_bytes(result_ptr, &result[..len]).map_err(|_| SyscallError::InvalidInput)?;
+            // Only a reply that reached the caller may be acknowledged.
+            super::cell_session::delivered(caller_id, &request[..request_len]);
+            Ok(0)
+        }
         // --- Hubris ABI Implementation ---
         Syscall::IpcSubmit { target, ptr, len } =>
             super::async_ipc::submit(caller_id, target, ptr, len).map_err(ipc_error),
@@ -5945,6 +6086,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
             let read_bytes = super::file_read(fd, &mut kbuf);
+            // A committed child's endpoint failure is explicit, never a short count.
+            if read_bytes == usize::MAX { return Err(SyscallError::PermissionDenied); }
             if read_bytes > 0 {
                 write_user_slice(caller_id, buf_ptr, &kbuf[..read_bytes], MAX_USER_BUF)?;
             }
@@ -6061,6 +6204,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
         } => {
             let bytes = read_user_slice(caller_id, buf_ptr, buf_len, MAX_USER_BUF)?;
             let written = super::file_write(fd, &bytes);
+            if written == usize::MAX { return Err(SyscallError::PermissionDenied); }
             Ok(written)
         }
         Syscall::MkDir { path_ptr, path_len } => {
@@ -6923,6 +7067,53 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             Ok(len)
         }
 
+        Syscall::TelemetrySnapshot { out_ptr, out_len, flags, reserved } => {
+            use api::telemetry::request;
+            // The dispatch gate already required `observe_tasks` (X). Arguments
+            // are refused before anything is sampled.
+            if !super::telemetry::request_is_valid(out_ptr, out_len, flags, reserved) {
+                return Err(SyscallError::InvalidInput);
+            }
+            validate_user_buf(out_ptr, out_len, MAX_USER_BUF)?;
+            let memory_allowed = flags & request::SYSTEM_MEMORY != 0
+                && caller_has_cap(caller_id, |task| task.observe_memory);
+            let epoch = super::telemetry::provider_epoch();
+            // Identity, membership and CPU in one SCHEDULER hold. The transient
+            // rows are allocated there, charged to the caller like GetProcs2.
+            let capture = {
+                let mut guard = super::SCHEDULER.lock();
+                let sched = guard.as_mut().ok_or(SyscallError::Unknown)?;
+                super::telemetry::capture(
+                    sched,
+                    epoch,
+                    super::telemetry::monotonic_ns(),
+                    out_len,
+                    flags & request::TASKS != 0,
+                )
+                .map_err(|_| SyscallError::OutOfMemory)?
+            };
+            // Frames are read under FRAME_ALLOCATOR only after SCHEDULER is released.
+            let memory = if flags & request::SYSTEM_MEMORY == 0 {
+                super::telemetry::SystemMemory::NotRequested
+            } else if !memory_allowed {
+                super::telemetry::SystemMemory::Denied
+            } else {
+                let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
+                match guard.as_ref() {
+                    Some(allocator) => super::telemetry::SystemMemory::Present(api::syscall::ViMemInfoV1 {
+                        total_frames: allocator.total_frames() as u64,
+                        used_frames: allocator.used_frames() as u64,
+                        free_frames: allocator.free_frames() as u64,
+                        page_size: allocator.page_size() as u64,
+                    }),
+                    None => super::telemetry::SystemMemory::Unavailable,
+                }
+            };
+            let bytes = capture.finish(memory, super::telemetry::monotonic_ns());
+            write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
+            Ok(bytes.len())
+        }
+
         Syscall::Seek { fd, offset, whence } => {
             super::file_seek(fd, offset, whence).map_err(|_| SyscallError::Unknown)
         }
@@ -7219,7 +7410,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
         } => {
             let raw_key = key as u64;
             let is_shell =
-                caller_launch_state(caller_id).is_some_and(|(name, _, _)| name.as_str() == "shell");
+                caller_launch_state(caller_id).is_some_and(|(name, _, _)| name.as_str() == "cellbox");
             if is_shell
                 && (raw_key != SPAWN_ARGV_KEY
                     || buf_len > crate::cell::state_stash::MAX_SPAWN_ARGV_LEN)
@@ -7733,6 +7924,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             }
         }
         Syscall::Shutdown => {
+            authorize_raw_shutdown(caller_id)?;
             #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
             crate::qemu_exit(true);
 
@@ -8853,6 +9045,9 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             buf_len: a2,
             deadline: (super::system_ticks() as u64).wrapping_add(a3 as u64),
         },
+        ViSyscall::CellSessionV1 => Syscall::CellSessionV1 {
+            request_ptr: a0, request_len: a1, result_ptr: a2, result_capacity: a3,
+        },
         ViSyscall::Reply => Syscall::Reply {
             caller: a0,
             result: a1,
@@ -9015,6 +9210,12 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::MemInfo => Syscall::MemInfo {
             out_ptr: a0,
             out_len: a1,
+        },
+        ViSyscall::TelemetrySnapshot => Syscall::TelemetrySnapshot {
+            out_ptr: a0,
+            out_len: a1,
+            flags: a2,
+            reserved: a3,
         },
         ViSyscall::Open => Syscall::Open {
             path_ptr: a0,
@@ -9367,7 +9568,9 @@ pub(crate) fn dispatch_raw_for_test(
 /// Per-cell syscall allowlist gate.
 ///
 /// Reads the caller's `syscall_allowlist` bitmask and returns
-/// `Err(SyscallError::PermissionDenied)` if the opcode's bit is not set.
+/// `Err(SyscallError::PermissionDenied)` if the opcode's bit is not set, or if
+/// the opcode is one of the S2-T telemetry calls and the caller's CapSet lacks
+/// the matching right (`observe_right_held`).
 /// The SCHEDULER lock is acquired and released here — callers must NOT hold it.
 fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallError> {
     let sc = ViSyscall::from(syscall_id);
@@ -9440,7 +9643,38 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
             return Err(SyscallError::PermissionDenied);
         }
     }
+    if !observe_right_held(sc, caller_id) {
+        log::warn!(
+            "[kernel] syscall {:?} denied for tid {}: edge withholds the S2-T observation right",
+            sc,
+            caller_id
+        );
+        return Err(SyscallError::PermissionDenied);
+    }
     Ok(())
+}
+
+/// Annex S2-T/S2-W §3: `GetProcs` and `GetProcs2` additionally need the
+/// caller's `observe_tasks` right and `MemInfo` its `observe_memory` right, on
+/// top of the allowlist bit (and whatever a permit-all allowlist says). Every
+/// other opcode needs none, and neither does the kernel-context sentinel (tid 0),
+/// which has no task. A missing or terminal task is denied.
+fn observe_right_held(sc: ViSyscall, caller_id: usize) -> bool {
+    let held: fn(&super::Task) -> bool = match sc {
+        ViSyscall::GetProcs | ViSyscall::GetProcs2 | ViSyscall::TelemetrySnapshot => {
+            |task| task.observe_tasks
+        }
+        ViSyscall::MemInfo => |task| task.observe_memory,
+        _ => return true,
+    };
+    if caller_id == 0 {
+        return true;
+    }
+    super::SCHEDULER
+        .lock()
+        .as_ref()
+        .and_then(|scheduler| scheduler.tasks.get(&caller_id))
+        .is_some_and(|task| held(task))
 }
 
 #[cfg(not(target_arch = "riscv32"))]
@@ -9495,7 +9729,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize);
     }
 
-    let supports_typed_oom = supports_typed_spawn_oom(&syscall);
+    let supports_typed_oom = supports_typed_oom(&syscall);
     let typed_ipc = is_ipc_operation(&syscall);
     let result = handle_syscall(caller_id, syscall);
 
@@ -9555,7 +9789,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
         core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize);
     }
 
-    let supports_typed_oom = supports_typed_spawn_oom(&syscall);
+    let supports_typed_oom = supports_typed_oom(&syscall);
     let typed_ipc = is_ipc_operation(&syscall);
     let result = handle_syscall(caller_id, syscall);
 
@@ -9575,14 +9809,24 @@ mod tests {
     use super::{
         check_allowlist, consumes_staged_spawn_argv, encode_syscall_result, map_syscall,
         page_grant_authorizes_dma, reg_grant_authorizes_dma, staged_spawn_argv_cleanup,
-        supports_typed_spawn_oom, syscall_to_vi, withhold_or_free, PageGrant, RegGrant, Syscall,
+        supports_typed_oom, syscall_to_vi, withhold_or_free, PageGrant, RegGrant, Syscall,
         SyscallError,
     };
     use crate::task::{scheduler::Scheduler, tcb::Task, SCHEDULER};
     use api::syscall::ViSyscall;
     use types::CellId;
+    use crate::task::cap::CapSet;
 
+    /// One live task holding the pre-annex rights (`LEGACY_OBSERVE_MUTATE`), so
+    /// the allowlist cases below test the allowlist bit alone.
     fn with_scheduler_task<F>(allowlist: u64, f: F)
+    where
+        F: FnOnce(usize),
+    {
+        with_scheduler_task_caps(allowlist, CapSet::LEGACY_OBSERVE_MUTATE, f)
+    }
+
+    fn with_scheduler_task_caps<F>(allowlist: u64, caps: CapSet, f: F)
     where
         F: FnOnce(usize),
     {
@@ -9598,11 +9842,214 @@ mod tests {
             alloc::vec::Vec::new(),
         ));
         task.syscall_allowlist = allowlist;
+        caps.apply_to(&mut task);
         scheduler.tasks.insert(tid, task);
         *previous = Some(scheduler);
         drop(previous);
 
         f(tid);
+
+        let mut restore = SCHEDULER.lock();
+        *restore = saved;
+    }
+
+    /// Annex S2-T/S2-W §6: the allowlist bit is necessary but no longer
+    /// sufficient — a task that declares GetProcs (14), GetProcs2 (55) and
+    /// MemInfo (56), even permit-all, is refused when its edge withheld X/M.
+    /// Phase 06 S6-1: `TelemetrySnapshot` (bit 55) is gated by X exactly like
+    /// `GetProcs2`; M alone never admits it.
+    #[test]
+    fn telemetry_syscalls_need_the_observe_rights_beyond_the_allowlist_bit() {
+        let declared = (1u64 << 14) | (1u64 << 55) | (1u64 << 56);
+        let tasks = [ViSyscall::GetProcs, ViSyscall::GetProcs2, ViSyscall::TelemetrySnapshot];
+        for allowlist in [declared, u64::MAX] {
+            with_scheduler_task_caps(allowlist, CapSet::EMPTY, |tid| {
+                for sc in tasks.into_iter().chain([ViSyscall::MemInfo]) {
+                    assert_eq!(
+                        check_allowlist(sc as usize, tid),
+                        Err(SyscallError::PermissionDenied),
+                        "{sc:?} with allowlist {allowlist:#x}"
+                    );
+                }
+                // Unrelated opcodes are not gated by the rights.
+                assert_eq!(check_allowlist(ViSyscall::Yield as usize, tid), Ok(()));
+            });
+            // X alone admits exactly the task-observation pair.
+            let x_only = CapSet {
+                observe_tasks: true,
+                ..CapSet::EMPTY
+            };
+            with_scheduler_task_caps(allowlist, x_only, |tid| {
+                for sc in tasks {
+                    assert_eq!(check_allowlist(sc as usize, tid), Ok(()), "{sc:?}");
+                }
+                assert_eq!(
+                    check_allowlist(ViSyscall::MemInfo as usize, tid),
+                    Err(SyscallError::PermissionDenied)
+                );
+            });
+            // M alone admits exactly MemInfo.
+            let m_only = CapSet {
+                observe_memory: true,
+                ..CapSet::EMPTY
+            };
+            with_scheduler_task_caps(allowlist, m_only, |tid| {
+                for sc in tasks {
+                    assert_eq!(
+                        check_allowlist(sc as usize, tid),
+                        Err(SyscallError::PermissionDenied),
+                        "{sc:?}"
+                    );
+                }
+                assert_eq!(check_allowlist(ViSyscall::MemInfo as usize, tid), Ok(()));
+            });
+        }
+        // The right never stands in for an undeclared bit.
+        with_scheduler_task(0, |tid| {
+            for sc in tasks.into_iter().chain([ViSyscall::MemInfo]) {
+                assert_eq!(
+                    check_allowlist(sc as usize, tid),
+                    Err(SyscallError::PermissionDenied),
+                    "{sc:?}"
+                );
+            }
+        });
+        // Kernel context (tid 0) has no task and is not gated.
+        for sc in tasks.into_iter().chain([ViSyscall::MemInfo]) {
+            let _guard = crate::TEST_STATE_LOCK.lock();
+            assert_eq!(check_allowlist(sc as usize, 0), Ok(()), "{sc:?}");
+        }
+    }
+
+    /// Annex S2-T/S2-W §6: the attested `CALLER_FLAG_VFS_MUTATE` needs bit 63
+    /// in an explicit allowlist AND the `vfs_mutate` right.
+    #[test]
+    fn vfs_mutate_attestation_needs_the_right_and_the_declaration() {
+        use api::caller_identity::CALLER_FLAG_VFS_MUTATE;
+        let declared = (1u64 << 62) | (1u64 << 63);
+        let w_only = CapSet {
+            vfs_mutate: true,
+            ..CapSet::EMPTY
+        };
+        for (allowlist, caps, want) in [
+            (declared, CapSet::LEGACY_OBSERVE_MUTATE, CALLER_FLAG_VFS_MUTATE),
+            (declared, w_only, CALLER_FLAG_VFS_MUTATE),
+            (declared, CapSet::LEGACY_OBSERVE_MUTATE.without_observe_mutate(), 0),
+            (
+                declared,
+                CapSet {
+                    vfs_mutate: false,
+                    ..CapSet::LEGACY_OBSERVE_MUTATE
+                },
+                0,
+            ),
+            (1u64 << 62, CapSet::LEGACY_OBSERVE_MUTATE, 0),
+            (u64::MAX, CapSet::LEGACY_OBSERVE_MUTATE, 0),
+        ] {
+            with_scheduler_task_caps(allowlist, caps, |tid| {
+                {
+                    let mut guard = SCHEDULER.lock();
+                    let sched = guard.as_mut().expect("test scheduler installed");
+                    let task = sched.tasks.get_mut(&tid).expect("test task");
+                    task.cell_generation = 1;
+                    task.root_tid = tid;
+                    assert!(sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
+                        7, 1, tid as u64
+                    )));
+                }
+                let identity =
+                    super::attested_identity_of(tid).expect("live task has an identity");
+                assert_eq!(
+                    identity.flags & CALLER_FLAG_VFS_MUTATE,
+                    want,
+                    "allowlist {allowlist:#x}, caps {caps:?}"
+                );
+            });
+        }
+    }
+
+    /// Phase 01 CP1 (Q): `CALLER_FLAG_CONFIG_WRITE` is attested exactly when the
+    /// Cell's root holds `config_write`, independent of the allowlist, and it
+    /// never appears for a Cell without the right.
+    #[test]
+    fn config_write_attestation_follows_the_cell_right_only() {
+        use api::caller_identity::{CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_NET_RIGHTS_MASK};
+        let q_only = CapSet {
+            config_write: true,
+            ..CapSet::EMPTY
+        };
+        let shell = CapSet {
+            config_write: true,
+            ..CapSet::LEGACY_OBSERVE_MUTATE
+        };
+        for (allowlist, caps, want) in [
+            (1u64 << 62, q_only, CALLER_FLAG_CONFIG_WRITE),
+            (u64::MAX, shell, CALLER_FLAG_CONFIG_WRITE),
+            (1u64 << 62, CapSet::LEGACY_OBSERVE_MUTATE, 0),
+            (
+                u64::MAX,
+                CapSet {
+                    net_resolve: true,
+                    net_connect: true,
+                    net_listen: true,
+                    net_l2: true,
+                    ..CapSet::LEGACY_OBSERVE_MUTATE
+                },
+                0,
+            ),
+        ] {
+            with_scheduler_task_caps(allowlist, caps, |tid| {
+                {
+                    let mut guard = SCHEDULER.lock();
+                    let sched = guard.as_mut().expect("test scheduler installed");
+                    let task = sched.tasks.get_mut(&tid).expect("test task");
+                    task.cell_generation = 1;
+                    task.root_tid = tid;
+                    assert!(sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
+                        7, 1, tid as u64
+                    )));
+                }
+                let identity =
+                    super::attested_identity_of(tid).expect("live task has an identity");
+                assert_eq!(identity.flags & CALLER_FLAG_CONFIG_WRITE, want, "caps {caps:?}");
+                // Q never leaks into or out of the network flags.
+                assert_eq!(
+                    identity.flags & CALLER_FLAG_NET_RIGHTS_MASK,
+                    caps.net_caller_flags(),
+                    "caps {caps:?}"
+                );
+            });
+        }
+    }
+
+    /// Raw opcode 502 (power-off) is accepted only from the reviewed task name
+    /// `shutdown`; every other caller is denied before any platform code runs.
+    #[test]
+    fn raw_shutdown_is_accepted_only_for_the_reviewed_task_name() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut previous = SCHEDULER.lock();
+        let saved = previous.take();
+        let mut scheduler = Scheduler::new();
+        for (tid, name) in [(1usize, "shutdown"), (2, "cellbox"), (3, "init"), (4, "supervisor")] {
+            scheduler.tasks.insert(
+                tid,
+                alloc::boxed::Box::new(Task::new(tid, CellId(7), name, alloc::vec::Vec::new())),
+            );
+        }
+        *previous = Some(scheduler);
+        drop(previous);
+
+        assert_eq!(super::authorize_raw_shutdown(1), Ok(()));
+        for tid in [2usize, 3, 4, 99] {
+            assert_eq!(super::authorize_raw_shutdown(tid), Err(SyscallError::PermissionDenied));
+        }
+        // The dispatcher refuses the denied callers itself, before any platform code.
+        for tid in [2usize, 3, 4] {
+            assert_eq!(
+                super::handle_syscall(tid, Syscall::Shutdown),
+                Err(SyscallError::PermissionDenied)
+            );
+        }
 
         let mut restore = SCHEDULER.lock();
         *restore = saved;
@@ -9656,6 +10103,34 @@ mod tests {
     }
 
     #[test]
+    fn telemetry_snapshot_maps_all_four_args_and_validates_them() {
+        use crate::task::telemetry::request_is_valid;
+        use api::telemetry::{request, HEADER_LEN};
+        let syscall = map_syscall(ViSyscall::TelemetrySnapshot as usize, 0x3000, 4096, 3, 0)
+            .expect("TelemetrySnapshot must decode");
+        match syscall {
+            Syscall::TelemetrySnapshot { out_ptr, out_len, flags, reserved } => {
+                assert_eq!((out_ptr, out_len, flags, reserved), (0x3000, 4096, 3, 0));
+            }
+            other => panic!("decoded wrong syscall variant: {other:?}"),
+        }
+        assert_eq!(syscall_to_vi(&syscall), Some(ViSyscall::TelemetrySnapshot));
+        // A transient allocation failure reaches the caller as the typed OOM code.
+        assert!(supports_typed_oom(&syscall));
+        assert!(request_is_valid(0x3000, HEADER_LEN, request::ALL, 0));
+        assert!(!request_is_valid(0x3000, HEADER_LEN - 1, 0, 0), "short buffer");
+        assert!(!request_is_valid(0x3004, 4096, 0, 0), "misaligned buffer");
+        assert!(!request_is_valid(0x3000, 4096, 1 << 2, 0), "unknown flag");
+        assert!(!request_is_valid(0x3000, 4096, 0, 1), "nonzero a3");
+        with_scheduler_task(0, |tid| {
+            assert_eq!(
+                check_allowlist(ViSyscall::TelemetrySnapshot as usize, tid),
+                Err(SyscallError::PermissionDenied)
+            );
+        });
+    }
+
+    #[test]
     fn get_procs2_maps_args_and_dispatch_variant() {
         let syscall = map_syscall(ViSyscall::GetProcs2 as usize, 0x1000, 7, 0, 0)
             .expect("GetProcs2 must decode");
@@ -9705,11 +10180,11 @@ mod tests {
             encode_syscall_result(Err(SyscallError::OutOfMemory), usize::MAX, false),
             usize::MAX
         );
-        assert!(supports_typed_spawn_oom(&Syscall::SpawnFromPath {
+        assert!(supports_typed_oom(&Syscall::SpawnFromPath {
             path_ptr: 0,
             path_len: 0,
         }));
-        assert!(!supports_typed_spawn_oom(&Syscall::MemInfo {
+        assert!(!supports_typed_oom(&Syscall::MemInfo {
             out_ptr: 0,
             out_len: 0,
         }));
