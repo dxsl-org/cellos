@@ -170,3 +170,36 @@ cells/apps/vove/
 
 # Real-weight AI validation checkpoints (scripts/fetch-ai-test-model.sh)
 .ai-models/
+
+# Generated ISO staging/extraction trees and prebuilt initramfs: rebuilt by
+# scripts/x86/make-iso-ci.sh and scripts/prepare-tier3-hostile-initramfs-*.sh.
+/build/x86-iso-root/
+/build/x86-iso-extracted/
+/build/desktop-fixture-isoroot/
+/build/cellos-kernel-desktop-fixture
+/build/tier3-hostile-initramfs-*.cpio.gz
+
+# Guest disk images (scripts/build-chrome-app.sh, build-linux-base-image.sh) and
+# the Chrome VM payload under apps/chrome; far too large for git.
+*.ext4
+/apps/chrome/*.ext4
+*.qcow2
+
+# QEMU framebuffer screenshots / screendumps
+/build/*.ppm
+/build/*.png
+
+# Oversized Cellbox runtime evidence: raw dumps, framebuffer screenshots, traces and
+# multi-MB JSON/JSONL captures. Scoped to the cellbox report tree so the small,
+# already-committed evidence there stays tracked (ignore rules never affect tracked files).
+/.agents/261020-1750-cellbox-cli/reports/**/*.png
+/.agents/261020-1750-cellbox-cli/reports/**/*.bin
+/.agents/261020-1750-cellbox-cli/reports/**/*.jsonl
+/.agents/261020-1750-cellbox-cli/reports/**/*.trace
+/.agents/261020-1750-cellbox-cli/reports/**/*.elf
+/.agents/261020-1750-cellbox-cli/reports/**/*.xz
+/.agents/261020-1750-cellbox-cli/reports/**/*.pyc
+/.agents/261020-1750-cellbox-cli/reports/**/__pycache__/
+/.agents/261020-1750-cellbox-cli/reports/**/mapping-*.json
+/.agents/261020-1750-cellbox-cli/reports/**/serial-receipts.json
+/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/logs-lock/metadata.json
