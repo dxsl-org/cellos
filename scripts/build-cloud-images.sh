@@ -16,6 +16,12 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Cloud images stay out of the promoted release (Phase 10 D10-9 A, S10-2b): reopening the default
+# kernel path for the qualified kernel must not let this script build qcow2/vmdk/KubeVirt images, and
+# step 1 rewrites the canonical ramdisk in place. Distribution formats need their own decision.
+echo "ROLLOUT BLOCKED: cloud images are outside the Phase 10 release (D10-9 A); see .agents/261020-1750-cellbox-cli/reports/rollout-containment.md" >&2
+exit 1
+
 BUILD_CONTAINER=0
 CONTAINER_TAG="cellos-containerdisk:latest"
 KERNEL_FEATURES="policy-required"

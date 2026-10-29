@@ -6,7 +6,7 @@ Thin on purpose: it only puts `scripts/` on the import path so the
 then hands off. All behaviour — and the threat model — lives in the package.
 
     scripts/cellos-sign --check
-    scripts/cellos-sign --sign target/…/app-shell --objcopy riscv64-unknown-elf-objcopy
+    scripts/cellos-sign --sign target/…/cellbox --objcopy riscv64-unknown-elf-objcopy
 """
 
 import sys

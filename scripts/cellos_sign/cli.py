@@ -105,6 +105,35 @@ def run_sign(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def sign_route(repo: Path, route: str, candidate_root: Path, targets: list[Path],
+               objcopy: str) -> int:
+    """Check, then dev-key sign a batch on a named candidate route (Phase 10 S10-2a).
+
+    Python API only: the command line has no route option, so the CLI cannot reach
+    a route. The same strict F1/F5 check as `run_sign` runs first; the route itself
+    is authenticated by `signing.route_admits` (table, recipe binding, pin, root).
+    """
+    args = argparse.Namespace(repo=repo, allowlist=allowlist_mod.DEFAULT_PATH, quiet=True,
+                              strict=True)
+    check_code = run_check(args)
+    if check_code != EXIT_OK:
+        sys.stdout.flush()
+        print("REFUSED: not signing — the F1/F5 check above did not pass.", file=sys.stderr)
+        return check_code
+    try:
+        signing.sign_and_verify(repo, [Path(t) for t in targets], objcopy, None,
+                                route=signing.Route(route, Path(candidate_root)))
+    except signing.SigningRefused as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return EXIT_SIGNING
+    except (OSError, AssertionError) as exc:
+        print(f"FAIL: signing failed — {exc}", file=sys.stderr)
+        return EXIT_SIGNING
+    print(f"OK:   signed {len(targets)} cell(s) with the dev key on route {route} "
+          "after a passing F1/F5 check")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     from . import __doc__ as package_doc
 

@@ -2,16 +2,24 @@
 """Build + Ed25519-sign a Cellos operator policy blob (roadmap §G.2 P5b).
 
 Blob format (little-endian) — MUST match kernel/src/policy.rs::parse:
-    magic u32 "VPOL" | version u8=2 | flags u8 | entry_count u16
+    magic u32 "VPOL" | version u8=7 | flags u8 | entry_count u16
     per entry: path_len u8, path bytes,
                block_io u8, network u8, spawn u8, hyp u8, mmio_devices u8, block_regions u8,
-               pcie_driver u8, platform u8, supervisor u8      <-- v2 only
+               pcie_driver u8, platform u8, supervisor u8,          <-- v2+
+               usb_driver u8                                        <-- v3+
+               serial_port u8                                       <-- v4+
+               net_resolve u8, net_connect u8, net_listen u8, net_l2 u8   <-- v5+
+               observe_tasks u8, observe_memory u8, vfs_mutate u8          <-- v6+
+               config_write u8                                             <-- v7
     + Ed25519 signature [u8;64] over all preceding bytes
 
-v1 (6 cap bytes) is still accepted by the kernel parser. Do not emit it: under v1
-the three privileged bytes read as 0, and because a `Permit` INTERSECTS, a v1
-entry strips pcie_driver/platform/supervisor from every cell it names — so a v1
-blob listing /bin/block would kill the block driver.
+Older versions (6/9/10/11/15/18 cap bytes) are still accepted by the kernel parser.
+Do not emit them. Under v1–v4 the privileged bytes they lack read as 0, and because
+a `Permit` INTERSECTS, such an entry strips those caps from every cell it names.
+The network rights (annex S2-N, compatibility rule E1), the S2-T/S2-W rights
+(annex §4) and the Q right (Phase 01 CP1, D-Q6) are the opposite: an entry that
+predates them decodes them as 1, so it leaves them to the reviewed launch ceiling.
+A v7 row states them explicitly, so a path that needs one must say so here.
 
 flags bit 0 = MAINTENANCE_PERMITTED. The kernel's `maintenance-mode` build feature
 no longer bypasses policy on its own; it also needs this signed bit. Emit it only
@@ -39,7 +47,9 @@ except ImportError:
     sys.exit("error: pip install cryptography")
 
 MAGIC = b"VPOL"
-VERSION = 4
+VERSION = 7
+# Cap-byte stride per blob version; mirrors `cap_bytes_for` in kernel/src/policy.rs.
+CAP_BYTES = {1: 6, 2: 9, 3: 10, 4: 11, 5: 15, 6: 18, 7: 19}
 DEV_SEED = bytes([0x42] * 32)  # fixed dev seed → deterministic dev keypair
 
 FLAG_MAINTENANCE_PERMITTED = 1 << 0
@@ -76,7 +86,31 @@ REGION_MASK = 0b1111   # P1=1 | P4=2 | SRV=4 | /bin/vfs cell-store=8
 # strips those caps, so the driver cell comes up inert. `assert_ptrust_covered`
 # makes that a bake failure instead, checked against the kernel's own table.
 #
-# (path, block_io, network, spawn, hyp, mmio, regions, pcie_driver, platform, supervisor)
+# (path, block_io, network, spawn, hyp, mmio, regions, pcie_driver, platform, supervisor
+#  [, usb_driver [, serial_port [, net_resolve, net_connect, net_listen, net_l2
+#  [, observe_tasks, observe_memory, vfs_mutate [, config_write]]]]])
+#
+# Omitted trailing cap columns are 0, EXCEPT the three S2-T/S2-W rights (task
+# observation, system memory, VFS mutation) and the Q right (Config write): a row
+# that omits them gets exactly what the kernel's `CapSet::with_path_caps`
+# requests for the path. For S2-T/S2-W that is all three unless the path is under
+# a user-app sandbox prefix (annex S2-T/S2-W §3, D-TW1); for Q it is 1 for
+# `/bin/cellbox` only (Phase 01 CP1, D-Q5). They were ambient before their
+# slices, so a 0 default would strip `ps`/`free`, file writes and `export` from
+# every listed cell. A restricted row states them.
+#
+# The four network rights (annex S2-N §5) must match the kernel's
+# `CapSet::with_path_net_rights` grant table: a Permit intersects, so a 0 here
+# strips a right the reviewed launch edge would allow.
+NET_CLIENT = (1, 1, 0, 0)    # resolve + connect
+NET_PEER = (1, 1, 1, 0)      # resolve + connect + listen
+NET_LISTENER = (0, 0, 1, 0)  # listen only
+NET_L2 = (0, 0, 0, 1)        # raw frames only
+OBSERVE_MUTATE = (1, 1, 1)   # CapSet::LEGACY_OBSERVE_MUTATE
+# Mirrors `CapSet::with_path_observe_mutate_rights` in kernel/src/task/cap.rs.
+SANDBOX_PREFIXES = ("/apps/", "/data/bin/", "/home/")
+# Mirrors `CapSet::with_path_config_rights` in kernel/src/task/cap.rs.
+CONFIG_WRITE_PATHS = ("/bin/cellbox",)
 DEV_POLICY = [
     # ── root authority ────────────────────────────────────────────────────────
     # init is Spawner::Root and exempt in-kernel, so this entry is informational
@@ -89,12 +123,15 @@ DEV_POLICY = [
     # ── core services ─────────────────────────────────────────────────────────
     ("/bin/vfs",         1, 0, 0, 0, 0, 0b1111, 0, 0, 0),
     ("/bin/net",         0, 1, 0, 0, 0, 0,     0, 0, 0),
-    ("/bin/net-broker",  0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/net-broker",  0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_PEER),
     ("/bin/supervisor",  0, 0, 1, 0, 0, 0,     0, 0, 1),
-    ("/bin/hypervisor",  0, 0, 0, 1, 0, 0,     0, 0, 0),
+    ("/bin/hypervisor",  0, 0, 0, 1, 0, 0,     0, 0, 0, 0, 0, *NET_L2),
     # Shell holds no ambient lifecycle authority; exact child launch ceilings
     # are reviewed in kernel/src/loader/launch_profile.rs.
-    ("/bin/shell",       0, 0, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/cellbox",     0, 0, 0, 0, 0, 0,     0, 0, 0),
+    # Phase 09 D79-9: the same cellbox ELF at its ssh install path; outbound
+    # client rights only, no direct NIC access.
+    ("/bin/cellbox-ssh", 0, 0, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
     # ── driver cells (pcie_driver comes from CapSet::with_path_caps) ───────────
     ("/bin/block",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/nvme",        0, 0, 0, 0, 0, 0,     1, 0, 0),
@@ -117,7 +154,7 @@ DEV_POLICY = [
     ("/bin/lan9514",     0, 0, 0, 0, 0, 0,     0, 0, 0, 0),
     ("/bin/periph-demo", 0, 0, 0, 0, 3, 0,     0, 0, 0),
     ("/bin/periph-test", 0, 0, 0, 0, 3, 0,     0, 0, 0),
-    ("/bin/robot-demo",  0, 1, 0, 0, 2, 0,     0, 0, 0),
+    ("/bin/robot-demo",  0, 1, 0, 0, 2, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/sensor-demo", 0, 0, 0, 0, DEV_GPIO | DEV_I2C, 0,    0, 0, 0),
     ("/bin/spi-demo",    0, 0, 0, 0, DEV_GPIO | DEV_SPI, 0,    0, 0, 0),
     ("/bin/pwm-demo",    0, 0, 0, 0, 2, 0,     0, 0, 0),
@@ -130,22 +167,22 @@ DEV_POLICY = [
     ("/bin/hotswap-demo-v1", 0, 0, 1, 0, 0, 0, 0, 0, 0),
     ("/bin/hotswap-demo-v2", 0, 0, 1, 0, 0, 0, 0, 0, 0),
     ("/bin/hypha",       0, 0, 1, 0, 0, 0,     0, 0, 0),
-    ("/bin/llm-gateway", 0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/llm-gateway", 0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/tool-spawn",  0, 0, 1, 0, 0, 0,     0, 0, 0),
-    ("/bin/nc",          0, 1, 0, 0, 0, 0,     0, 0, 0),
-    ("/bin/curl",        0, 1, 0, 0, 0, 0,     0, 0, 0),
-    ("/bin/wget",        0, 1, 0, 0, 0, 0,     0, 0, 0),
-    ("/bin/httpd",       0, 1, 0, 0, 0, 0,     0, 0, 0),
-    ("/bin/mqtt",        0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/nc",          0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_PEER),
+    ("/bin/curl",        0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
+    ("/bin/wget",        0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
+    ("/bin/httpd",       0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_LISTENER),
+    ("/bin/mqtt",        0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/posix-shim-test", 0, 1, 0, 0, 0, 0, 0, 0, 0),
-    ("/bin/https-demo",  0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/https-demo",  0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/http-smoke",  0, 1, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/std-smoke",   0, 0, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/desktop",     0, 0, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/compositor",  0, 0, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/fb-console",  0, 0, 0, 0, 0, 0,     0, 0, 0),
-    ("/bin/sshd",        0, 0, 0, 0, 0, 0,     0, 0, 0),
-    ("/bin/ocel",        0, 0, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/sshd",        0, 0, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_LISTENER),
+    ("/bin/ocel",        0, 0, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/ocel-js",     0, 0, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/ocel-quickjs", 0, 0, 0, 0, 0, 0,    0, 0, 0),
     ("/bin/ocel-pdf",     0, 0, 0, 0, 0, 0,    0, 0, 0),
@@ -154,34 +191,50 @@ DEV_POLICY = [
 ]
 
 
+ROW_FIELDS = 20  # path + 19 cap columns (the v7 entry)
+OM_ROW_FIELDS = 19  # path + 18 cap columns (through the S2-T/S2-W rights)
+NET_ROW_FIELDS = 16  # path + 15 cap columns (through the network rights)
+
+
+def observe_mutate_request(path):
+    """The S2-T/S2-W rights the kernel's `with_path_caps` requests for `path`."""
+    return (0, 0, 0) if path.startswith(SANDBOX_PREFIXES) else OBSERVE_MUTATE
+
+
+def config_write_request(path):
+    """The Q right the kernel's `with_path_caps` requests for `path`."""
+    return (1,) if path in CONFIG_WRITE_PATHS else (0,)
+
+
+def full_row(row):
+    """Pad a DEV_POLICY row to every v7 column.
+
+    Omitted cap columns are 0 except the trailing S2-T/S2-W three and the Q
+    column, which default to the kernel's own request for the path (see the
+    DEV_POLICY comment).
+    """
+    n = len(row)
+    if n == ROW_FIELDS:
+        return tuple(row)
+    if n == OM_ROW_FIELDS:
+        return tuple(row) + config_write_request(row[0])
+    if not 10 <= n <= NET_ROW_FIELDS or n in (13, 14, 15):
+        sys.exit(
+            f"{row[0]}: row has {n} fields — network rights take all four columns "
+            "and S2-T/S2-W rights all three"
+        )
+    return (tuple(row) + (0,) * (NET_ROW_FIELDS - n) + observe_mutate_request(row[0])
+            + config_write_request(row[0]))
+
+
 def build_body(entries, flags=0):
     out = bytearray()
     out += MAGIC
     out += struct.pack("<BBH", VERSION, flags, len(entries))
     seen = set()
     for row in entries:
-        if len(row) == 10:
-            (path, bio, net, spawn, hyp, mmio, regions, pcie, plat, sup) = row
-            usb = 0
-            serial = 0
-        elif len(row) == 11:
-            (path, bio, net, spawn, hyp, mmio, regions, pcie, plat, sup, usb) = row
-            serial = 0
-        else:
-            (
-                path,
-                bio,
-                net,
-                spawn,
-                hyp,
-                mmio,
-                regions,
-                pcie,
-                plat,
-                sup,
-                usb,
-                serial,
-            ) = row
+        (path, bio, net, spawn, hyp, mmio, regions, pcie, plat, sup, usb, serial,
+         n_resolve, n_connect, n_listen, n_l2, o_tasks, o_memory, vfs_mut, cfg_w) = full_row(row)
         pb = path.encode("ascii")
         if len(pb) > 255:
             sys.exit(f"path too long: {path}")
@@ -201,19 +254,22 @@ def build_body(entries, flags=0):
             ("supervisor", sup),
             ("usb_driver", usb),
             ("serial_port", serial),
+            ("net_resolve", n_resolve),
+            ("net_connect", n_connect),
+            ("net_listen", n_listen),
+            ("net_l2", n_l2),
+            ("observe_tasks", o_tasks),
+            ("observe_memory", o_memory),
+            ("vfs_mutate", vfs_mut),
+            ("config_write", cfg_w),
         ):
             if v not in (0, 1):
                 sys.exit(f"{path}: {name} must be 0 or 1, got {v} — blob would be Invalid")
         out.append(len(pb))
         out += pb
-        if VERSION == 4:
-            out += bytes([bio, net, spawn, hyp, mmio, regions, pcie, plat, sup, usb, serial])
-        elif VERSION == 3:
-            out += bytes([bio, net, spawn, hyp, mmio, regions, pcie, plat, sup, usb])
-        elif VERSION == 2:
-            out += bytes([bio, net, spawn, hyp, mmio, regions, pcie, plat, sup])
-        else:
-            out += bytes([bio, net, spawn, hyp, mmio, regions])
+        caps = [bio, net, spawn, hyp, mmio, regions, pcie, plat, sup, usb, serial,
+                n_resolve, n_connect, n_listen, n_l2, o_tasks, o_memory, vfs_mut, cfg_w]
+        out += bytes(caps[:CAP_BYTES[VERSION]])
     return bytes(out)
 
 
@@ -234,7 +290,7 @@ def decode_body(body):
     if body[:4] != MAGIC:
         raise ValueError("bad magic")
     version = body[4]
-    cap_bytes = {1: 6, 2: 9, 3: 10, 4: 11}.get(version)
+    cap_bytes = {1: 6, 2: 9, 3: 10, 4: 11, 5: 15, 6: 18, 7: 19}.get(version)
     if cap_bytes is None:
         raise ValueError(f"unknown version {version}")
     flags = body[5]
@@ -260,7 +316,7 @@ def decode_body(body):
             raise ValueError(f"{path}: mmio {caps[4]:#b} out of domain")
         if caps[5] & ~REGION_MASK:
             raise ValueError(f"{path}: block_regions {caps[5]:#b} out of domain")
-        if cap_bytes == 11:
+        if cap_bytes >= 11:
             for name, v in (
                 ("pcie_driver", caps[6]),
                 ("platform", caps[7]),
@@ -283,7 +339,31 @@ def decode_body(body):
             priv = (caps[6], caps[7], caps[8], 0, 0)
         else:
             priv = (0, 0, 0, 0, 0)
-        out.append((path, caps[0], caps[1], caps[2], caps[3], caps[4], caps[5], *priv))
+        if cap_bytes >= 15:
+            for name, v in zip(("net_resolve", "net_connect", "net_listen", "net_l2"), caps[11:15]):
+                if v > 1:
+                    raise ValueError(f"{path}: {name}={v} out of domain")
+            net_rights = tuple(caps[11:15])
+        else:
+            # Compatibility rule E1: a pre-v5 entry does not narrow network rights.
+            net_rights = (1, 1, 1, 1)
+        if cap_bytes >= 18:
+            for name, v in zip(("observe_tasks", "observe_memory", "vfs_mutate"), caps[15:18]):
+                if v > 1:
+                    raise ValueError(f"{path}: {name}={v} out of domain")
+            observe_mutate = tuple(caps[15:18])
+        else:
+            # Annex S2-T/S2-W §4: a pre-v6 entry does not narrow these rights.
+            observe_mutate = (1, 1, 1)
+        if cap_bytes >= 19:
+            if caps[18] > 1:
+                raise ValueError(f"{path}: config_write={caps[18]} out of domain")
+            config_write = caps[18]
+        else:
+            # Phase 01 CP1 D-Q6: a pre-v7 entry does not narrow the Q right.
+            config_write = 1
+        out.append((path, caps[0], caps[1], caps[2], caps[3], caps[4], caps[5], *priv,
+                    *net_rights, *observe_mutate, config_write))
     if off != len(body):
         raise ValueError(f"{len(body) - off} trailing bytes after {count} entries")
     return flags, out
@@ -297,10 +377,11 @@ def assert_round_trip(body, entries, flags):
     checked contained no cells at all.
     """
     got_flags, got = decode_body(body)
-    # Rows may omit trailing cap bytes (a 10-field row declares no usb_driver or
-    # serial_port), so pad both sides to the full 12-field tuple before comparing.
-    want = [tuple(e) + (0,) * (12 - len(e)) for e in entries]
-    got = [tuple(g) + (0,) * (12 - len(g)) for g in got]
+    # Rows may omit trailing cap columns (a 10-field row declares no usb_driver,
+    # serial_port or network right, and takes the path's default S2-T/S2-W and Q
+    # rights), so pad the table to the full v7 row first.
+    want = [full_row(e) for e in entries]
+    got = [tuple(g) for g in got]
     if got_flags != flags:
         sys.exit(f"round-trip: flags {got_flags:#04x} != {flags:#04x}")
     if got != want:

@@ -22,6 +22,19 @@ LIMINE="limine/limine-8.7.0/bin"
 KERNEL="${X86_KERNEL:-target/x86_64-unknown-none/release/cellos-kernel}"
 LIMINE_CONF="scripts/x86/limine.conf"
 
+# The default kernel path is the rollout route (S10-2b). It is admitted only when that
+# kernel really embeds the clean canonical ramdisk and `init` of kernel/src/embedded-x86_64
+# (check_default_kernel.py: no quarantined hash, no /bin/shell or /bin/sshd, the
+# /bin/cellbox-ssh alias, and the exact image bytes inside the ELF). An explicitly selected
+# X86_KERNEL elsewhere (fixture, lane and candidate kernels) is not checked, as before.
+DEFAULT_KERNEL="$REPO_ROOT/target/x86_64-unknown-none/release/cellos-kernel"
+if [[ "$(realpath -ms -- "$KERNEL")" == "$DEFAULT_KERNEL" ||
+      "$(realpath -m -- "$KERNEL")" == "$(realpath -m -- "$DEFAULT_KERNEL")" ]]; then
+    if [[ -f "$KERNEL" ]]; then
+        python3 "$SCRIPT_DIR/check_default_kernel.py" "$KERNEL" "$REPO_ROOT/kernel/src/embedded-x86_64" || exit 1
+    fi
+fi
+
 if [[ -n "${XORRISO:-}" ]]; then
     XORRISO_BIN="$XORRISO"
 elif command -v xorriso >/dev/null 2>&1; then

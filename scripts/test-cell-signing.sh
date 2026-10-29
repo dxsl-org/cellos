@@ -6,7 +6,7 @@
 # Requires:
 #   - python3 with `cryptography` package installed
 #   - riscv64-unknown-elf-objcopy (or $OBJCOPY override) in PATH
-#   - A pre-built app-shell or app-init ELF in the release dir
+#   - A pre-built cellbox or app-init ELF in the release dir
 #
 # Usage:
 #   bash scripts/test-cell-signing.sh
@@ -19,9 +19,9 @@ SIGN="$SCRIPT_DIR/sign-cell.py"
 OBJCOPY="${OBJCOPY:-riscv64-unknown-elf-objcopy}"
 
 REL_DIR="$REPO_ROOT/target/riscv64gc-unknown-none-elf/release"
-# Prefer app-shell; fall back to app-init; skip if neither is built.
+# Prefer cellbox; fall back to app-init; skip if neither is built.
 ELF=""
-for candidate in "$REL_DIR/app-shell" "$REL_DIR/app-init"; do
+for candidate in "$REL_DIR/cellbox" "$REL_DIR/app-init"; do
     if [ -f "$candidate" ]; then
         ELF="$candidate"
         break
@@ -30,7 +30,7 @@ done
 
 if [ -z "$ELF" ]; then
     echo "SKIP: no release cell found in $REL_DIR"
-    echo "      Run: cargo build --release -p app-shell"
+    echo "      Run: cargo build --release -p app-cellbox"
     exit 0
 fi
 
