@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Typed native pipelines and explicit external conversions"
-status: pending
+status: completed
 priority: P1
 tier: thinking
 dependencies: [1, 2]
@@ -28,10 +28,10 @@ Modify `cells/tools/shell/src/{parser,executor,shell_state}.rs` and appropriate 
 
 ## Success criteria
 
-- [ ] Numeric filtering/sorting yields correct values without parsing display units; `null` remains distinct from zero.
-- [ ] JSON/JSONL/bytes preserve boundaries and values; bad types/encodings fail truthfully and do not trigger unintended mutation.
-- [ ] Byte payloads and stderr are not injected into success records; status and cancellation propagate under the declared policy.
-- [ ] Continuous frames begin promptly, stay bounded and stop when the consumer closes; global sort never waits on an infinite history.
+- [x] Numeric filtering/sorting yields correct values without parsing display units; `null` remains distinct from zero.
+- [x] JSON/JSONL/bytes preserve boundaries and values; bad types/encodings fail truthfully and do not trigger unintended mutation.
+- [x] Byte payloads and stderr are not injected into success records; status and cancellation propagate under the declared policy.
+- [x] Continuous frames begin promptly, stay bounded and stop when the consumer closes; global sort never waits on an infinite history.
 
 ## Verification
 
@@ -47,4 +47,10 @@ Untrusted records cannot instantiate handles or select privilege. Bound nesting,
 
 ## Deviation log
 
-None; implementation pending. Append reason/impact/revert for decisions, deviations and surprises at occurrence.
+2026-10-20 — **Completion withdrawn; incomplete/blocked.** Pipeline model/validation/conversion source was added in `libs/text-engine::pipeline`; the historical 42-host-test snapshot is preserved as unit evidence only. It is not end-to-end proof of the real shell parser/executor, mixed external/native jobs, incremental bounded producers or cancellation/status propagation. Review found no-op transform paths in cellbox and an exiting shell; no actual signed-image pipeline proof establishes CBX-06..08. Design consent remains recorded, full source-admission inputs are incomplete, and CP2 is pending/not eligible. All criteria remain unchecked; rollout is blocked under [reports/rollout-containment.md](reports/rollout-containment.md).
+
+2026-10-21 — Admitted after Phase 02 CP2. Implemented typed engine, shell typed runtime, native producers and cellbox transforms; private image 15/15, host 74+44. **Incomplete:** external byte adapters, mixed jobs, in-VM scenarios, cellbox image execution. Success criteria stay unchecked until those are closed. See [evidence](reports/phase-03-runtime-evidence.md).
+
+2026-10-21 — A3 (external byte stages) and A4 (preparer-queryable child status, private filter fixture) implemented; private image 39/39. Criteria checked on private-image evidence only. Pending: Phase 03 CP2, in-VM `shell_test`, cellbox standalone execution; rollout stays quarantined.
+
+2026-10-21 — **CP2 approved by the user (“Duyệt CP2 Phase 03 để mở Phase 04”)** as the Phase 03 implementation baseline (private-image evidence, A3+A4 closures). Does not lift the rollout quarantine, canonical packaging/signing, or approve Phase 04 source/launch-profile/image edits.

@@ -110,6 +110,8 @@ The dependency direction is **legacy unfinished scope -> controlling plan**. Com
 
 For every row: prior status/progress is retained; current scheduling is **BLOCKED within the listed scope**. Existing blockers remain in force. P01 rebase plus explicit owner handoff and the phase-local approvals are required before any selected slice is released.
 
+**Bounded adopted slice — Cellbox Phase02:** the user selected “Giao slice Phase 02”, then **“Duyệt CP1 và fixture riêng”** for [annex](261020-1750-cellbox-cli/phase-02-source-admission.md) SHA-256 `73bc7483ae6d05d6435c27f12a1c2890e3b550e63666b4339ed75f9b8371ae67`. [Exact authorization](261020-1750-cellbox-cli/phase-02-cp1-approval.md) permits its78 enumerated files/purposes through the current single integrating owner only: P01 exact allocation/adoption, P04 stream waits/cleanup, P05 owner/delegation/cwd binding and P06/P07 publication/private-runtime prerequisites. This is a file-bounded exception for that **new controlling slice**, not execution of any predecessor row below. All38 legacy scoped relations, their unrelated surfaces and historical statuses remain locked. No GUI/SSH bridge, admin lifecycle, D03/D04, canonical artifact rollout or CP2 is approved; the earlier G1/G2 exception is not widened.
+
 | Existing plan | Prior status / progress (preserved) | Blocked scope | Replacement area / rebase gate |
 |---|---|---|---|
 | [260528-2016-vicell-full-implementation](260528-2016-vicell-full-implementation/plan.md) | pending | Only unfinished kernel, Cell, authority, runtime and lifecycle contract slices of the legacy umbrella; unrelated historic product scope stays parked. | P01 then P02/P03/P05/P06; explicit per-slice handoff |

@@ -90,3 +90,11 @@ No old plan resumes automatically when these documents exist or a phase is compl
 - [Linux capabilities](https://man7.org/linux/man-pages/man7/capabilities.7.html), [user namespaces](https://man7.org/linux/man-pages/man7/user_namespaces.7.html), [Landlock](https://docs.kernel.org/userspace-api/landlock.html).
 - [io_uring](https://github.com/axboe/liburing/blob/master/man/io_uring.7), [cancellation](https://github.com/axboe/liburing/blob/master/man/io_uring_cancelation.7).
 - [Plan 9 from Bell Labs](https://9p.io/sys/doc/9.html): private namespaces and substitutable service interfaces, not an obligation to encode all Cell methods as files.
+
+## Related CLI consumer
+
+[ADR-0028](0028-cellbox-cli-first-structured-pipelines-and-tui.md) and the
+[Cellbox design](../cellbox-cli.md) consume this authority model for command
+launch, streams and Cell telemetry. Their architecture/planning approval does
+not ratify concrete deltas or release any lock; argv/subcommand selection is
+never an authority credential.

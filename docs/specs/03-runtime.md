@@ -39,7 +39,7 @@ Cellos hỗ trợ nâng cấp phần mềm mà không cần ngừng hệ thống
 > **Trạng thái (2026-09-28)**: warm boot qua snapshot **chưa được bật trên bất kỳ ảnh nào**.
 > Cổng qualify là một feature build, `QUALIFICATION_ENABLED = cfg!(feature = "snapshot-qualified")`,
 > mặc định tắt trong mọi ảnh shipping: capture và restore đều từ chối trước khi chạm đĩa hoặc
-> RAM, và hợp đồng shell/Supervisor giữ nguyên (`snapshot: unavailable on this platform`).
+> RAM, và builtin `snapshot` của shell từ chối trước khi chạm Supervisor (`snapshot: not available from the suite shell, requires a lifecycle owner`).
 > **Chưa có phép đo warm-boot nào và chưa có witness trên board** — con số `<100 ms` trước đây
 > không có witness đứng sau. Định dạng v2 ở §4.3 là hợp đồng **nội bộ** đã có code + unit test
 > (nửa thiết bị-độc-lập của phase 07), không phải một tuyên bố sẵn sàng.

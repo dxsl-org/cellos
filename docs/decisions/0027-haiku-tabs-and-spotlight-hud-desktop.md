@@ -111,6 +111,16 @@ Files is a standalone application, not a feature of Ocel. Terminal is a separate
 
 
 
+## CLI and terminal follow-on boundary
+
+[ADR-0028](0028-cellbox-cli-first-structured-pipelines-and-tui.md) selects CLI as
+the full selected operational surface and desktop as a simpler presentation over
+the same backend. Its [Cellbox design](../cellbox-cli.md) keeps Ratatui/Terminal
+SDK outside viUI; GUI Terminal hosts a real shell/session through an ANSI/VT
+emulator instead of maintaining its own command implementations.
+This clarifies the utility-application boundary without reopening the native
+session/tab/theme decisions above or upgrading historical implementation evidence.
+
 ## Alternatives not selected
 
 1. **Decorative compact title tabs plus separate native session tabs:** duplicates navigation and actions; native apps use the shared session contract.

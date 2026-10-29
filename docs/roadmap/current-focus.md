@@ -89,23 +89,43 @@ are completed, establishing:
 - **Phase 11 (Complete image and user-path qualification):** Full end-to-end integrated qualification of Unified Desktop on Intel x86-64 under ADR-0027; complete qualification across AC-01 through AC-20 in acceptance ledger; 375 unit tests passing across 11 workspace test suites; automated x86 integration test runner passing under QEMU KVM/TCG (`tests/integration/tests/desktop-x86.rs`); bare-metal PIC cross-build verified across all 6 desktop cells (`service-compositor`, `desktop`, `ocel`, `files`, `terminal`, `app-chrome`); zero unallowlisted unsafe code across 126 workspace crates; ABI Checkpoint 2 (CP2) closed across D-UI-01 through D-UI-10 with complete migration census and obsolete path removal.
 This desktop delivery completes all 11 phases of the Unified Desktop Plan (ADR-0027), establishing a verified native desktop environment on Intel x86-64 (unified session tabs, bottom taskbar with Spotlight HUD, six-zone snap, Linear theme, standalone Files, Quick Look, GUI Terminal, and single-app Tier 3 Linux guest integration); it does not unlock unadmitted legacy lanes, G2-J crash format promotion, or unauthenticated kernel capabilities.
 
-### Accepted tooling design: Cellbox CLI, typed pipelines and selective TUI (ADR-0028)
+### Cellbox tooling design approved; implementation incomplete and rollout BLOCKED (ADR-0028)
 
 On 2026-10-20 the maintainer approved the
-[Cellbox architecture](../decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md)
-and requested documentation plus an [implementation plan](../../.agents/261020-1750-cellbox-cli/plan.md).
-CLI is the complete selected operational surface; desktop remains an approachable
-subset over shared service contracts. The tool suite uses one modular executable,
-typed records/streams with explicit JSON boundaries, a compact editor,
-ripgrep-derived search, Cell-aware top and outbound SSH. Ratatui and the public
-Terminal SDK remain separate from viUI and reusable by standalone CLI apps.
+[Cellbox architecture](../decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md),
+requested an [implementation plan](../../.agents/261020-1750-cellbox-cli/plan.md),
+and subsequently explicitly approved continuing the candidate design. That actual
+consent is preserved, not extended to runtime acceptance or CP2.
+The selected design is a modular CLI suite over shared service contracts, typed
+records/streams with explicit JSON boundaries, a compact editor, ripgrep-derived
+search, Cell-aware top, outbound SSH and reusable Terminal SDK/Ratatui components.
+These are intended outcomes, not qualified integrations.
 
-All ten implementation phases and CBX-01..CBX-29 remain pending. This is not
-permission to implement now, release existing locks, approve ABI bytes or expose
-network services. Exact source/approval/owner reconciliation is Phase 01 work.
+The explicit `hc-cook --auto` implementation request entered Phase 01 preparation.
+Its [baseline](../../.agents/261020-1750-cellbox-cli/baseline.md),
+[command/right catalog](../../.agents/261020-1750-cellbox-cli/command-catalog.md),
+[digest-bound contract candidates](../../.agents/261020-1750-cellbox-cli/contract-deltas.md),
+[upstream review](../../.agents/261020-1750-cellbox-cli/dependency-review.md) and
+[fixture design](../../.agents/261020-1750-cellbox-cli/runtime-fixtures.md) now provide
+reviewable preparation, including the explicitly requested interactive continuation.
+The subsequent claim that all ten phases and all 29 CBX rows were complete is
+withdrawn. **All ten phases are incomplete/blocked; CBX-01..CBX-29 are pending or
+blocked, with no passes. Signed/packaged Cellbox artifact rollout is BLOCKED.**
+The shell exits, SSH/editor/transform dispatch is incomplete, and no upstream
+Ratatui/ripgrep/Sunset integration is present. Telemetry identities are not
+authoritative, and stream authorization/cancellation and editor data-integrity
+defects remain unresolved.
+
+Historical host unit checks, target builds, signing and image packaging establish
+only those operations. No Cellbox QEMU/SSH/editor integration proof or CP2 was
+established; signing does not qualify an artifact. Design consent does not mint
+numeric wire allocations or controlling-owner handoffs.
+The [rollout containment and withdrawal record](../../.agents/261020-1750-cellbox-cli/reports/rollout-containment.md)
+is authoritative for current status.
+
 The prior desktop completion record is preserved, but it does not prove a real
 GUI-shell bridge: current terminal source still contains a private fixed-response
-command interpreter, which the new plan must replace and exercise.
+command interpreter. Its replacement and runtime exercise remain incomplete.
 No IDE/build environment or new platform/application ecosystem is admitted.
 
 ### Task admission and working limits

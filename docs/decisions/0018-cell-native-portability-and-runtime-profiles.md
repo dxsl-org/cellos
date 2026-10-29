@@ -185,3 +185,4 @@ data under load, which is strictly worse than a clean refusal.
 | Runtime/language research and verdicts | `docs/research/ecosystem.md` |
 | IPC wire contract (what cannot cross a domain boundary) | `docs/specs/17-ipc-wire-contract.md` |
 | Implementation plan | `.agents/260922-1549-cell-native-portability-program/plan.md` |
+| CLI/terminal consumer of runtime profiles | [ADR-0028](0028-cellbox-cli-first-structured-pipelines-and-tui.md), [Cellbox design](../cellbox-cli.md); accepted target, no new runtime/ABI admission |

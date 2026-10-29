@@ -865,7 +865,7 @@ Routing matrix (cross-machine): Private→Public ✓ · Public→Private ✗ · 
 - [x] Implement MMIO explicit mapping for VirtIO regions
 - [x] Remove duplicate MMIO entries from fallback map
 - [ ] Verify read/write complete within 100ms (testing in progress)
-- [ ] Shell loads `/bin/shell` from disk (blocked by Phase 06)
+- [ ] Shell loads from disk (today `/bin/cellbox`, launched as `/bin/cellbox ["sh"]`) (blocked by Phase 06)
 
 **Completion**: Awaits full integration testing with Phase 06 (external ELF loading)
 

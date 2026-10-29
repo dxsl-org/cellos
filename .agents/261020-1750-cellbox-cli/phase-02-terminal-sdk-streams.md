@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Public Terminal SDK and real child/session streams"
-status: pending
+status: completed-private-evidence
 priority: P1
 tier: thinking
 dependencies: [1]
@@ -28,11 +28,11 @@ Create proposed `libs/terminal` with data-path/session APIs independent of viUI/
 
 ## Success criteria
 
-- [ ] No cross-session input/output or stranded focus on exit, timeout, interrupt or death.
-- [ ] Empty/space-containing arguments, cwd/environment and non-UTF-8 payload reach the child unchanged or fail with an explicit documented limit before launch.
-- [ ] Backpressure/EOF/close/partial-write behavior is observed at target runtime; no log-only stdout fallback.
-- [ ] Retained/duplicated/descendant holders obey last-writer EOF and operation-scoped revocation; blocked holders wake and stale endpoint generations fail.
-- [ ] No GUI/compositor/font dependency is introduced into Terminal SDK or headless shell.
+- [x] No cross-session input/output or stranded focus on exit, timeout, interrupt or death. — evidence: [runtime evidence](reports/phase-02-runtime-evidence.md) (private signed-x86 fixture, 48 observations; kernel AP lane 28/28).
+- [x] Empty/space-containing arguments, cwd/environment and non-UTF-8 payload reach the child unchanged or fail with an explicit documented limit before launch. — evidence: [runtime evidence](reports/phase-02-runtime-evidence.md) (private signed-x86 fixture, 48 observations; kernel AP lane 28/28).
+- [x] Backpressure/EOF/close/partial-write behavior is observed at target runtime; no log-only stdout fallback. — evidence: [runtime evidence](reports/phase-02-runtime-evidence.md) (private signed-x86 fixture, 48 observations; kernel AP lane 28/28).
+- [x] Retained/duplicated/descendant holders obey last-writer EOF and operation-scoped revocation; blocked holders wake and stale endpoint generations fail. — evidence: [runtime evidence](reports/phase-02-runtime-evidence.md) (private signed-x86 fixture, 48 observations; kernel AP lane 28/28).
+- [x] No GUI/compositor/font dependency is introduced into Terminal SDK or headless shell. — `libs/terminal` depends only on `types`/`api`/`ostd`; the serial shell adds no viUI/Ratatui/font dependency (its pre-existing GUI branch is unchanged).
 
 ## Verification
 
@@ -48,4 +48,21 @@ Secret entry must not enter logs, history or scrollback. New session labels/stre
 
 ## Deviation log
 
-None; implementation pending. Log future decisions/deviations/surprises with reason, impact and revert before proceeding.
+2026-10-20 — **Completion and automatic source-admission claims withdrawn; incomplete/blocked.** User candidate-design consent is recorded, but the allocated/owner-handoff dossier is incomplete and CP2 remains pending/not eligible. `terminal-sdk` source was added at `libs/terminal`; historical observations record 14 host unit tests and bare-metal PIC compilation for `x86_64-unknown-none`. Those results are retained only as unit/build evidence, not authenticated session integration or proof of subtree cancellation, lifetime/EOF, argv/cwd/environment handoff or target wakeup/restoration. Review identified stream authentication/cancellation flaws; no signed-image child/descendant or two-session runtime proof closes CBX-03..05. All criteria remain unchecked and rollout is blocked. See [reports/rollout-containment.md](reports/rollout-containment.md).
+
+Subsequent continuation — the user explicitly selected **“Giao slice Phase 02”** for the current integrating owner. The [scoped allocation/source/private-fixture annex](phase-02-source-admission.md) is being reconciled against the canonical publication/input/VFS owners and independently reviewed. This accepts the bounded handoff, not numeric allocation or source/execution admission. Protected source edits await exact CP1 approval; all criteria remain unchecked, CBX-03..05 pending, rollout blocked and CP2 not eligible.
+
+The exact [annex](phase-02-source-admission.md) is now independently reviewed and ready to request CP1, SHA-256 `73bc7483ae6d05d6435c27f12a1c2890e3b550e63666b4339ed75f9b8371ae67`; [review evidence](reports/phase-02-admission-review.md) records proposal corrections and read-only integrity checks only. No protected source changes, Build-entry test baseline, signed-image execution or new acceptance evidence have occurred in this admission continuation.
+
+
+2026-10-21 — **Implemented under the exact CP1 approval; private-fixture evidence recorded; CP2 and canonical rollout remain blocked.** The user approved annex `73bc7483…` (“Duyệt CP1 và fixture riêng”) and amendment A1 `ae6be1c3…` (“Duyệt bổ sung 3 file”) — see [phase-02-cp1-approval.md](phase-02-cp1-approval.md). The SDK, kernel D01/D02 owner (29 selectors, allocation-free publication reservations), input SessionV1, VFS prepared-cwd binder and serial shell consumer now run on a freshly built, privately signed x86 image: [runtime evidence](reports/phase-02-runtime-evidence.md). Two independent implementation reviews found 27 defects; confirmed ones were fixed and the fixtures re-run. A follow-up pass fixed the in-closure limitations (cancel complexity, measurement-log share, cancel granularity, reclamation, FIFO restore, secret scrubbing, KVM/40-command/stray-escape runs); the rest (UART CR→LF/echo, legacy builtin output, issuer death on image, wall-clock race) is listed in the report and carried into CP2 review / needs an amendment. Criterion checkboxes record attributable private-fixture observations, **not** independent acceptance; CBX-03..05 stay pending until that review.
+
+2026-10-25 — **CP2 approved by the user** ("duyệt CP2 phase 02"). Phase 02 is `completed-private-evidence`. Every criterion is checked on private signed-x86 evidence. Since then, every later phase lane has exercised the SDK: P02 48, P04 459, GUI 290 and the kernel lane 39/39 (latest 2026-10-25). Rollout stays blocked; canonical image packaging belongs to Phase 04 criterion 4.
+
+2026-10-26 — **Amendment A2 item 1 superseded by Phase 10 S10-3a** (user decision (e), relayed by Main; [S0 record](phase-10-s0-proposal.md) S10-3a and the S10-3 decisions):
+- The decoder grammar is unchanged: UART CR is Enter, and a lone LF is still decoded as Control+J (`libs/api/src/services/session.rs:245-249`).
+- Cellbox's canonical line readers (command line, `read -s`, prompts, ssh password) now treat Control+J as accept-line, so a lone LF submits a line.
+- The A2 image check `ctrl_j_not_enter` is replaced by `ctrl_j_submits` (`scripts/qemu-phase02-session-test.sh`). It sends LF-terminated commands one at a time, because input typed ahead while a command runs is not kept (S10-3b finding F-TA).
+- P02 rerun in import mode on the fleet candidate: 48 passes plus `ctrl_j_submits` (`reports/s10-3-evidence/rerun-fleet/lanes/L1-p02-session-after-e-v2/`).
+
+A2 items 2–5 are unchanged.

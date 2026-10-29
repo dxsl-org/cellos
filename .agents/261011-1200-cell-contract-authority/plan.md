@@ -122,6 +122,12 @@ P01 writes the exact affected-symbol inventory in this directory before coding: 
 
 Feature flags may isolate unqualified test images but must not create dual authority truths or a permanent compatibility alias. Frozen public identifiers stay reserved where removal rules require it; preserving a reserved slot is not retaining an executable obsolete path.
 
+**New bounded handoff — Cellbox Phase02 preparation:** the user selected “Giao slice Phase 02”, assigning the current assistant integrating owner for D01 child context/publication and D02 kernel/API/ostd/input/headless-shell integration. The [digest-bound allocation/source/private-fixture proposal](../261020-1750-cellbox-cli/phase-02-source-admission.md) is being reviewed and is **not yet approved**. It proposes a separate narrow VFS cwd binder admission; it does not allocate a namespace, authorize protected edits/build/sign/image effects, complete P01/Phase02, approve CP2 or release any other lock. Exact dossier approval must be recorded here before coding; older G1/G2 grants are not widened.
+
+The Phase02 annex is now ready to **request** exact approval, digest `73bc7483ae6d05d6435c27f12a1c2890e3b550e63666b4339ed75f9b8371ae67`; [independent review and read-only integrity evidence](../261020-1750-cellbox-cli/reports/phase-02-admission-review.md) bind source snapshot `2aaa62972b778ff84f3cdd2a9ea76f86ef75258fee265b21ae93184372027e3b`. This records readiness, not CP1 approval or changed lock relations.
+
+**Subsequent exact user approval — Phase02:** user selected **“Duyệt CP1 và fixture riêng”** for the digest above. [The authorization record](../261020-1750-cellbox-cli/phase-02-cp1-approval.md) admits only that78-path D01 child-context/D02 stream/session closure, narrow VFS binder and private local execution. This is the single current controlling implementation slice; kernel publication/owner edits have one serialization owner. The prior pending wording is historical; CP2 and canonical rollout remain blocked. No other delta/legacy lock is approved or reopened.
+
 ## Verification protocol
 
 Tests establish invariants; a separate actual runtime scenario establishes the changed path. Each phase records source revision, artifact SHA-256, features/configuration, runner command, full serial logs, negative controls, expected versus observed outcome, and ceiling (host / x86 QEMU / exact physical Intel / production). Every persistent result remains pending until observed. A skipped test or absent runner never counts as pass.

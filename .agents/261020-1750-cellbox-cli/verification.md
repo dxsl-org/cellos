@@ -1,6 +1,12 @@
 # Cellbox verification protocol
 
-## Current delivery: documents only
+## Current disposition: dev-posture x86 qualified and promoted (2026-10-29, S10-5 CP2 granted by the user); CBX-27 unmet; production/physical gates blocked
+
+The original 2026-10-20 withdrawal is historical. Phase 10 qualified a dev-posture Intel x86 QEMU/TCG candidate (`4fae8b20…`, S10-3.14, user CP2 2026-10-28), S10-4 closed partial, and S10-5 copied the candidate's desktop bytes into the canonical paths (hash-verified, V1–V7 PASS; [S10-5.13](phase-10-s0-proposal.md); user CP2 granted 2026-10-29). Per-row state is in [acceptance.md](acceptance.md): CBX-23/24/25 are partial, **CBX-27 is unmet**, and no physical Intel, VMX, production, remote or crash-durability claim exists; cloud formats are not built and non-Intel recipes stay refused. See [rollout containment](reports/rollout-containment.md) for the quarantine, the lifted and kept guards and the rollback limits.
+
+The commands and live scenarios below remain the verification requirements, not authorization to boot or distribute the **quarantined** artifacts (they stay in the archive, not a safe boot set). The default desktop packager and the default-kernel ISO route are reopened only by their content rules (S10-2b); the quarantined-hash guard is permanent: do not remove it to run these examples. Fixture lanes must keep using their own scratch kernels and images, never the canonical paths.
+
+## Historical initial delivery: documents only
 
 This session records accepted decisions and plans future implementation. Do not run target builds, tests, QEMU, downloads, key generation or network services merely to validate Markdown. The documentation smoke check reads the saved artifacts and verifies relative links, D01–D11 coverage, CBX-01..CBX-29 ownership, phase dependencies/acyclicity, pending states and absence of the excluded application example. Review findings/dispositions belong in [review.md](review.md).
 
@@ -35,6 +41,30 @@ No new permanent test is required merely for wiring/help strings. Keep meaningfu
 3. Avoid unattended `run-desktop.sh`: current source kills image users and opens a host-forward to inbound port 22. Use the integration helper or a dedicated bounded runner with no inbound SSH exposure and reviewed network settings.
 4. Use controlled outbound SSH servers, not current Cellos sshd. Pin host identities and authorize any temporary credentials/trust writes. No production endpoints, private user files or unsolicited network service startup.
 5. Capture serial output, actual TUI/GUI state and relevant stored/remote results without secrets. Mark TCG/KVM, guest architecture and host/server versions accurately; no physical Intel/VMX/C2C/production promotion from emulator output.
+
+## Phase 10 L0 — canonical candidate runner (S10-3.2)
+
+`scripts/qemu-phase10-canonical-test.sh` boots the exact bytes recorded in an S10-3.1 `candidate.json`. It uses no fixture kernel, no rebuilt Cell and no lane key. Before anything boots, it checks the profile's ISO, kernel, `kernel_fs.img`, `init`, `manifest.json` and boot-config files against that record and refuses on any mismatch. It also refuses work directories that alias `kernel/src/`, `target/` or `build/`. The driver is `scripts/phase10_canonical_drive.py`; its GUI oracle is imported from `scripts/phase04_gui_drive.py`.
+
+```sh
+W=$(mktemp -d /tmp/cellbox-phase10-XXXX)
+bash scripts/qemu-phase10-canonical-test.sh --candidate CANDIDATE.json --profile headless --work "$W"
+W=$(mktemp -d /tmp/cellbox-phase10-XXXX)
+bash scripts/qemu-phase10-canonical-test.sh --candidate CANDIDATE.json --profile desktop --work "$W"
+```
+
+- **Headless** (`P10C-*` plus `P10C-lf-submit`): typed bytes on the serial `cellbox sh`, judged from the UART log.
+- **Desktop** (`P10G-*`): QMP input and `screendump` only. UART bytes reach the focused GUI Terminal (decision (c)), so the desktop serial shell is never scripted.
+- **Data**: two disposable NVMe disks built in `$W`.
+  - `phase07_rg_fixture.py`, plus the cat/edit/VT data tree copied onto the same P1 `/mnt/sd`.
+  - `phase09_trust_disk.py`.
+  - Both carry the profile's own boot config on P1.
+- **Boots**: each run is two sequential boots, one QEMU at a time, with private serial and QMP sockets and the ISO read-only.
+  - `main`: `-netdev user,restrict=on`.
+  - `ssh`: the D79-1 Docker fixture via `10.0.2.2`, `-cpu qemu64,+rdrand,+rdseed`.
+  - Neither boot uses hostfwd or guestfwd.
+- **Output** (`$W/evidence`): `verdict.json` (one record per marker, written by the driver), per-boot serial logs, frames, `provenance.json`, `no-secret.json` and `evidence.sha256`.
+- **TCG** is the qualifying accelerator; a `--accel kvm` run is marked non-qualifying. The exit status is 0 only if every marker passes.
 
 ## Required live scenarios
 

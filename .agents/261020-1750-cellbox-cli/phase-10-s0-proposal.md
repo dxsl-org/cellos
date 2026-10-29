@@ -2,6 +2,8 @@
 
 Status: **S10-3a/b/c/d and S10-3 CP2 APPROVED2026-10-28**, qualified read-only dev-posture Intel x86 QEMU/TCG candidate **`4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821`**; S10-0/1/2a approvals retained. **S10-4 limited-result CP2 approved2026-10-28** covers S10-4.8's actual partial measurements/deviations only. Later separately approved host-observer CP1 slices preserve those historical verdicts. **Latest S10-4.15 executed2026-10-29, partial-result CP2 pending:**191distinct offlinePASSaggregate(retained144once+current47new, failed iterations disclosed); ONEdesktop realGUI/idle/typedexact/originalEnter and healthy transport/proof recovery, then conservative temporal oracle STOP on missing physical-row coverage at20th exact sample, ~31.15s within original120s. Lastfb/read/epoch retained; no finite two-frame/newprompt/status0/fullschedule proof. No historical runtime comparator/full-memory peak/RSS/exactstack or CBX27/criterion4 closure. Further complete-output route needs separate explicit CP1; no rerun authorized. Candidate/canonical/userVMX unchanged; S10-5/canonical promotion/containment remain blocked.
 
+
+**S10-5 CP2 GRANTED by the user 2026-10-29** (relayed by Main): accepts S10-5.13 (P0–P9, V1–V7, deviations 1–8) and acknowledges the new `command-catalog.md` digest `f06f38ce7447758f7b49e58d6e98dc8309b583515bf1ffd3608e665011a5fd0f`. The qualified candidate's desktop bytes are promoted to the canonical x86 paths at the dev-posture Intel x86 QEMU/TCG ceiling; Phase 04 criterion 4 is checked (`completed-private-evidence`) and Phase 10 is `closed-partial-private-evidence`. **Unchanged and not approved:** CBX-27 unmet, CBX-23/24/25 partial, Phase 10 criteria 1 and 4 open, no physical/VMX/production/remote claim, no cloud formats, non-Intel recipes refused, all 38 lock relations. Commit is a separate step.
 **Latest, S10-4.17 EXECUTED 2026-10-29 (CP1 approved as written): Class B `SUCCESS_METRIC_ONLY`; limited-result CP2 APPROVED by user 2026-10-29; S10-4 CLOSED PARTIAL (closed-partial).** Frontend-consumed `ByteSink::feed` ledger proved, in ONE desktop run, two complete JSON frames, fresh prompt, then the separate original `echo st=$?` epoch `st=0` and new prompt, each cross-checked to the exact final GUI screen. The retained original schedule then STOPped at a latent `Surface.status()` check (two `st=` rows visible after the collected-cat cancel; left unfixed), so the full workload and full memory peaks remain unobserved. Accepted at stated ceilings: static footprint, six untraced timing runs, headless controls, observed partial memory bounds, S10-4.9..S10-4.17 diagnostic findings, offline iterations and deviations 1-4. **Not approved/unchanged:** full-workload peaks, RSS, exactstack, kernel stack, matched historical runtime, remaining observed phases. **CBX-27/criterion 4 stay UNMET**; S10-5/canonical promotion/containment stay blocked and need their own CP1. No rerun.
 
 **Approval boundary (2026-10-28).** User CP2 covers the implementation/evidence ceilings and recorded deviations of S10-3a/b/c/d plus the complete S10-3 battery, including SC6's explicitly authorized document-audit-only correction with both verdicts retained. It does not waive known COMPLETION-QUEUE/xHCI failures, warnings, D60-3/Delete, incidental DMA-free/DSTRD gaps, SSH guest/publickey gaps or the “synced, not crash-proof” ceiling. Acceptance rows now reflect S10-3.14; CBX-23/24/25 remain partial, CBX-27/28 await S10-4/S10-5. No canonical byte or guard is changed by this approval.
@@ -2721,30 +2723,260 @@ CBX-27 and Phase 10 criterion 4 remain **unmet** unless every missing element, i
 **CP2 requested:** accept Class B and the exercised bounds only. **CBX-27 and Phase 10 criterion 4 stay unmet; S10-4 closes partial; S10-5, canonical promotion and containment stay blocked.**
 
 
-### S10-5 — release record and promotion (includes S10-2b)
+### S10-5 — release record and promotion (includes S10-2b) — **CP1 APPROVED by the user 2026-10-29 (DS5-1..DS5-4 as recommended, including the G3 ELF binding check and the 11 non-desktop L6 consumers on the desktop ISO); EXECUTED 2026-10-29: P0–P9 and V1–V7 all PASS, results in S10-5.13; CP2 GRANTED by the user 2026-10-29 (deviations 1–8 and the catalog digest `f06f38ce…` accepted)**
 
-**Change**
+This section is a design only. It was prepared by reading the repository, the retained candidate and the recorded evidence, plus read-only `sha256` and byte-offset checks (S10-5.1). No source, canonical file, guard, build or VM was touched. Claims marked `[INFERENCE]` were not executed.
 
-1. Archive the current canonical files (`kernel_fs.img` `447d0348`, `init`, `target/…/cellos-kernel`) to a quarantine directory outside the canonical paths, with hashes. Containment said "not deleted".
-2. Copy the qualified candidate bytes into `kernel/src/embedded-x86_64/{kernel_fs.img,init}` and verify they are hash-identical to the S10-3 record. Rebuild or copy the kernel, and land S10-2b.
-3. Build the CI ISO through the reopened G3 and run L6 once.
-4. Update the records:
-   - `acceptance.md`, row by row with provenance;
-   - Phase 04 criterion 4 checked, status completed-private-evidence or completed;
-   - Phase 10 criteria;
-   - `plan.md`;
-   - `plan-portfolio.md`, restating that the 38 locks remain;
-   - `rollout-containment.md`: a new section recording the lifted routes, G2b kept forever, the overwritten "in-place" bytes (§1.2) and the archived image;
-   - the stale headers in `verification.md`;
-   - catalog §6 as-built;
-   - `CHANGELOG.md` and `docs/cellbox-cli.md`.
-5. Release notes: Phase 09 partial (D10-8), known defects (D60-3 clock units, the Delete key), dev posture (D10-1) and limitations (TCG/KVM only; no physical, VMX, production or remote claims).
+**Gates that this CP1 does not waive.** S10-4 is closed partial, so **CBX-27 and Phase 10 criterion 4 (measurement) stay unmet**. S10-5 needs its own explicit approval (§5, last bullet). Promotion is the first canonical write since containment: it may copy only bytes that were already qualified and recorded (§2). A copy is **not** a new qualification. All 38 CELL-CONTRACT-0024 lock relations remain. No production, physical Intel, VMX/EPT or remote claim follows.
 
-**Risks:** promotion is the first canonical write since containment. It must copy only bytes that are already qualified.
+#### S10-5.1 What is promoted (inputs, read-only checks on 2026-10-29)
 
-**Rollback:** revert S10-2b to re-close G1/G3, and restore the archived files. These are quarantined and **not a safe boot set**: containment §Recovery says no known-safe matched set exists. Code rollback cannot undo trust writes or remote effects from lanes.
+Candidate `4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821` = `/tmp/cellbox-s10-3d-resume/cand/candidate.json` (read-only; built from HEAD `3471028bc` with 2490 dirty files, digest `6b713f3e…`; dev key, route `x86-candidate-<profile>`; kernel features `default,policy-required`, PC adds `board-x86-pc`; no failures recorded).
 
-**Acceptance:** CBX-28; Phase 10 criteria 1–5, with criterion 1 open while the CBX-23/24/25 blocked parts remain, so Phase 10 would close **closed-partial**, like 09; Phase 04 criterion 4.
+| Artifact | SHA-256 | Bytes |
+|---|---|---:|
+| headless `kernel_fs.img` | `384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3` | 12,582,912 |
+| headless `init` | `fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab` | 406,976 |
+| headless kernel / ISO | `7efb030f…efb74` / `49b32f34…a753a` | 15,599,680 / 19,472,384 |
+| **desktop `kernel_fs.img`** | `3848cefb25f0e7c4abc67feccf3d8886292e25da60a88b4633552651292479ec` | 25,165,824 |
+| **desktop `init`** | `c0bd14580fda0d697a2edd66b19168107fa6877a190bc06c1a8a482b467b23f3` | 406,976 |
+| **desktop kernel** | `dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a` | 28,182,592 |
+| desktop ISO | `d207031983d53460fed88a8578975b13517dd4c412e4544c0b833ce06afe7334` | 32,055,296 |
+| PC kernel / ISO (headless image + `board-x86-pc`) | `3253bc70…e9da6` / `3cdf536a…d8a8a` | 15,599,672 / 19,472,384 |
+| manifests | headless `4066a0e2…ef5c`, desktop `af55e602…e8d` | 6,444 (headless) |
+
+Observed now, read-only: every hash above equals `candidate.json`; each kernel contains its profile's `kernel_fs.img` at ELF offset 2,064,272 and `init` at 1,655,200 as exact byte runs; the 469 canonical paths of `s10-3d-resume/canonical/before.json` re-hash with **0 differences**; `kernel/src/main.rs` = `a9636fee…` (the user's VMX edit, unchanged, status `M`); the repository's `assemble-x86-image.py` (`6ea17736…`), `signing.py` (`a1d25650…`), `cli.py` (`ed92c59a…`) and `make-iso-ci.sh` (`0e62af27…`) equal the candidate's `recipes_sha256`; `build/vicell-x86.iso` = `eb1cb813…` (the S10-3 L6 before-baseline); `xorriso` and `qemu-system-x86_64` are installed; git HEAD is `bfd05ec02`, `git status --short` lists 732 paths.
+
+**The candidate lives in `/tmp` and is volatile** (D3-3 A asked for `$HOME/.cache/cellos-candidates/<sha>/`; that move never happened, S10-3.10 deviation 4). Step P0 makes a durable, read-only, hash-verified copy before anything else.
+
+**Canonical paths today** (§1.2/§1.3, unchanged): `kernel/src/embedded-x86_64/{kernel_fs.img (447d0348…298e2c, 16,777,216 B, tracked, modified vs HEAD), init (0c2f607b…04104, 393,152 B, tracked, clean), boot-config/{autoload,services,system}.toml (gitignored, stale, still start sshd)}` and `target/x86_64-unknown-none/release/cellos-kernel` (`12cb0bac…ac67`, 19,769,472 B, embeds `447d0348`). `manifest.json` does not exist there. HEAD's committed blob is `a4cba963…ef5f3` (12,582,912 B, 33 files: `/bin/shell`, `/bin/sshd`, `ocel`, `ocel-quickjs`, `welcome.md`; no `/bin/cellbox`), so the tracked canonical image has always been a desktop-class ramdisk (`make-iso-ci.sh:25` also calls it "the canonical desktop ramdisk").
+
+#### S10-5.2 Which profile becomes canonical (D10-3) and how the bytes map to the single canonical paths
+
+The repository has **one** embedded directory. The candidate has **two profiles whose bytes are disjoint**: of the 25 paths both images carry, only `/POLICY.BIN` and `/etc/cellos/system.toml` are byte-identical. All 21 shared binaries (`cellbox` 3,093,952 B vs 3,094,016 B, `ls`, `net`, `vfs`…) and both boot-config files differ, and `init` differs (`fc1e6559…` vs `c0bd1458…`, signed payloads differ). Headless-only lanes therefore qualify the headless bytes; the desktop bytes are qualified by different lanes (S10-5.6).
+
+| Path in the repository | Receives (recommended, **desktop**) | Source in the candidate |
+|---|---|---|
+| `kernel/src/embedded-x86_64/kernel_fs.img` | desktop image, 25,165,824 B, `3848cefb…479ec` | `cand/desktop/kernel_fs.img` |
+| `kernel/src/embedded-x86_64/init` | desktop `init`, 406,976 B, `c0bd1458…23f3` | `cand/desktop/init` |
+| `kernel/src/embedded-x86_64/boot-config/` | the 3 desktop template-generated files (replaces the stale ones) | `cand/desktop/boot-config/` |
+| `kernel/src/embedded-x86_64/manifest.json` (new, untracked; the CI step and `build-x86_64-cells.ps1:67-68` read `kernel_features` from it) | desktop manifest, `af55e602…` | `cand/desktop/manifest.json` |
+| `target/x86_64-unknown-none/release/cellos-kernel` (gitignored default kernel path that G3 gates) | desktop kernel, `dfbe8c55…dc1a` | `cand/desktop.kernel.elf` |
+
+Why desktop: D10-3 A is the recorded user decision (the GUI Terminal ships in the canonical desktop profile); L4 6/6 and L0 desktop 6/6 both passed on payload-matched bytes, the precondition D10-3 set; the tracked path and the G3 comment already mean "desktop". The desktop image is a superset of the headless one: the same `cellbox sh` autoload runs on the serial UART as well.
+
+What this means, stated plainly:
+- The **headless qualified bytes are not committed anywhere**. They stay in the retained candidate (durable copy, hash record) and in the release record. The CI x86 job assembles a *fresh* headless image into the same path inside its own checkout (`ci.yml:936`); that is a different byte set from the qualified headless bytes (also, `init` is not reproducible across `CARGO_TARGET_DIR` copies, O-1 in S10-3.12: only `.strtab` and `.init_array` differ). CI results are regression signals for the recipe, **not** qualified-byte evidence.
+- The desktop `init` (`c0bd1458…`) is not the headless `init` (`fc1e6559…`) and neither equals the tracked `init` (`0c2f607b…`); the tracked `init` changes in the working tree at promotion.
+- Copying `kernel_fs.img` and `init` is two file replacements, not an atomic pair. Consistency is by order, a compare-and-swap on the expected old hashes, and the final binding check (S10-5.5 P3, S10-5.6 V2).
+
+#### S10-5.3 Kernel and ISO treatment
+
+What the candidate binds:
+- Each candidate kernel embeds its profile's `kernel_fs.img` and `init` byte for byte (verified above). The embedded bytes are the signed cells that the kernel's dev-policy admits; the kernel features are `default,policy-required`, so Tier 2 admission is disabled and `dev-weak-rng` is on (D10-12 A).
+- Each candidate ISO is `make-iso-ci.sh` over that kernel, `scripts/x86/limine.conf` and the Limine 8.7.0 files. It carries `boot/kernel.elf` by value. ISO bytes also carry volume timestamps, so **a rebuilt ISO will not match `d2070319…` byte for byte** `[INFERENCE: the script sets no SOURCE_DATE_EPOCH]`. Equality is therefore judged on the ISO tree (S10-5.6 V5), not on the ISO file hash.
+
+| Treatment | Preserves the qualified hash | Verdict |
+|---|---|---|
+| **Copy** `desktop.kernel.elf` to the default kernel path, hash-verified | Yes: `dfbe8c55…` is the exact qualified kernel | **Chosen** (recommended; the only option that promotes bytes already qualified) |
+| Rebuild the kernel from the promoted embedded directory (CI command, `--features policy-required`) | **No.** The ELF would embed the same image and `init`, but differs in toolchain/target-path strings (`CARGO_TARGET_DIR`, `OUT_DIR`) `[INFERENCE]`, in every working-tree change since the candidate (2490 dirty paths then, 732 now) and in any change to the user's uncommitted VMX `kernel/src/main.rs`. Dirty state would contaminate it, and it would need a new L0/L4/L6 battery, which S10-5 does not authorise. | Rejected for S10-5 |
+| Rebuild the ISO through the reopened G3 from the copied kernel | The ISO's `boot/kernel.elf` stays `dfbe8c55…`; only timestamps differ | Used for the P5 ISO (written to a scratch path, never to `build/`) and for the L6 run |
+
+The headless and PC kernels/ISOs stay candidate artifacts. The PC ISO for the `iommu-dmar-x86` consumer is the **candidate** `pc.iso` (`3cdf536a…`, hash-checked), not a rebuild; it embeds the headless image, not the promoted one. Any later `cargo build -p cellos-kernel` at the default target path replaces the copied kernel; G3 then checks the binding (S10-5.4) and the qualification record covers only the recorded hash.
+
+#### S10-5.4 S10-2b: which guards re-open, which never do (exact files, current line numbers)
+
+| Guard | Decision | File and lines |
+|---|---|---|
+| **G2b** quarantined hashes `64eb28f3…`, `636497ac…` | **Kept forever, unchanged.** Stays first and unconditional in every route | `scripts/cellos_sign/signing.py:38-41` (set), `:206-214`, `:226`, `:261`; `test_cellos_sign.py` set test (`:636-640`) and `:564`, `:760` |
+| **G2a** fixture names need a private seed | Unchanged for every non-route caller (the CLI, env, other recipes) | `signing.py:217-236` |
+| **G2c, G2d, G4, G5, T** | Unchanged (G4 `kernel/build.rs:128-150`, lane alias guards stay) | — |
+| **G1** unconditional exit in the desktop packager | **Re-opens**: delete the `sys.exit("ROLLOUT BLOCKED …")` block. No new precondition code: the packager only `exec`s the assembler as its own process, which already assembles fresh (never overlays), requires `/bin/cellbox-ssh` byte-equal to `/bin/cellbox`, forbids `/bin/shell`, `/bin/sshd`, a started `config`/`sshd` row and any blocked hash (`assemble-x86-image.py:203-255`). This replaces the S10-2b text "positive preconditions" by delegation | `scripts/package-desktop-x86.py:18-25` |
+| **G3** default kernel refused | **Re-opens by content, not by name.** Replace the unconditional refusal with `scripts/x86/check_default_kernel.py <kernel> kernel/src/embedded-x86_64`, which exits non-zero with `ROLLOUT BLOCKED …` unless: (a) the image read with `generate-boot-config.py image_files()` has no file whose hash is in `signing.BLOCKED_ARTIFACT_SHA256` (imported, never copied), no `/bin/shell` or `/bin/sshd`, and `/bin/cellbox` equals `/bin/cellbox-ssh`; and (b) **the kernel ELF contains the exact `kernel_fs.img` and `init` bytes** (mmap search, ~55 MB). Part (b) is a **change to the approved S10-2b wording** ("it does not scan the ELF"): with a copied kernel there is no "image the kernel was built from", so without (b) a kernel embedding something else would pass on the strength of a clean file on disk. An explicit non-default `X86_KERNEL` stays admitted without the check (the lane route, unchanged) | `scripts/x86/make-iso-ci.sh:25-33` (comment `:25-27`); new `scripts/x86/check_default_kernel.py` |
+| **Canonical assembler route** (CI x86 step, `build-x86_64-cells.ps1`, `package-desktop-x86.py`) | **Re-opens** as two new route-table entries (`x86-canonical-headless`, `x86-canonical-desktop`). Admitted only when `candidate_root` resolves **exactly** to `<repo>/kernel/src/embedded-x86_64` (candidate routes keep "outside the repository"), the cargo target dir is `<repo>/target` or outside the repo, the key is the dev key, and the pin matches. Every other in-repository root (`kernel/src/` siblings, `target/`, `build/`, symlinks into them) stays refused. The pin is re-recorded because the assembler changes | `signing.py:62-82` (route table, `:66` pin) and `:182-186` (root rule); `assemble-x86-image.py:298-300` (`route_name`) and `:414-424` (`check_isolation`, message "admitted only by S10-2b") |
+| **Cloud images** (D10-9 A) | **Stay out.** G3 reopening would otherwise let `build-cloud-images.sh` build `qcow2`/`vmdk` from the default kernel. Add an explicit refusal at its top, and note that `:99` rewrites the canonical image in place (`package-ocel-profile.py`) | `scripts/build-cloud-images.sh:99,109` |
+| **Non-Intel recipes** (D10-10 A) | **Stay refused**; their CI jobs stay red and are recorded | `gen-disk-ci.sh`, `build-aarch64-cells.ps1`, `make-hypervisor-fs*.sh`, `ci.yml` aarch64/RV64 jobs |
+| Other default-path ISO callers | Re-evaluated by the helper: any kernel that does not embed the canonical image stays refused. In particular the x86 hypervisor job (`ci.yml:1097-1106`, `EMBEDDED_OVERRIDE=embedded-hv-x86` at the default path) stays refused | `ci.yml:1106`, `build-image.sh:225` |
+
+Also edited: the stale CI comment (`ci.yml:922-930`, "Until S10-2b admits this canonical route …"), `signing.py:34-35` comment. **Tests:** `scripts/test_cellos_sign.py` (G1 test `:391-402` becomes "the packager only runs the assembler"; G3 tests `:403-440` become helper-driven; `:642-656` pin test; new canonical-route cases: exact root admitted, sibling/`target/`/`build/`/symlink roots refused, candidate route still refused in-repo, G2b refuses on every route and environment); `scripts/test_assemble_x86_image.py:431-455` isolation tests; new `scripts/test_check_default_kernel.py` (clean image admitted; `/bin/shell`, `/bin/sshd`, each blocked hash, missing alias, image bytes not in the ELF, truncated image: refused).
+
+**Order inside S10-5 (see P2):** S10-2b lands before the bytes move, because the helper must be proven against the **real quarantined kernel** (`12cb0bac…`, must be refused) before it is allowed to admit anything. The helper reopens G3 only for kernels that really embed clean bytes, so landing it first admits nothing that is quarantined.
+**Risk:** reopening G3 reopens the 12 CI consumers (L6) and the canonical recipe route lets any dev-key re-assembly overwrite the promoted bytes with unqualified ones (the recorded qualification then covers only the recorded hashes). **Rollback:** restore the files from the recorded pre-S10-2b copies (S10-5.8).
+
+#### S10-5.5 Ordered procedure
+
+Every step stops the slice on any mismatch. Evidence goes to `reports/s10-5-evidence/` and is generated by retained harness code (`harness/`), never edited by hand. No commit or push is part of S10-5.
+
+| # | Step | Detail |
+|---|---|---|
+| P0 | Pre-flight (read-only) | Run the S10-5.10 checklist. Make the durable candidate copy `$HOME/.cache/cellos-candidates/4fae8b20…/` (mode 0700, files 0444/0555), `cmp`-verify against `/tmp/cellbox-s10-3d-resume/cand`, and re-verify every `candidate.json` entry from the copy. |
+| P1 | Quarantine archive (D10-14 A), nothing deleted | `$HOME/.cache/cellos-quarantine/cellbox-s10-5-<UTC>/` outside the repository (mode 0700, files 0400) with `MANIFEST.sha256` and `QUARANTINE.txt` ("quarantined, not a safe boot set, never boot, sign or distribute; contains `64eb28f3…`, `636497ac…`, `sshd` autostart"). Contents: `kernel_fs.img` (`447d0348…`), `init` (`0c2f607b…`), the three old `boot-config/*.toml`, the target kernel `12cb0bac…`, plus a copy of every file S10-2b will edit (their pre-edit hashes). `build/vicell-x86.iso` (`eb1cb813…`, not quarantined, the L6 before-baseline) is only hash-recorded: S10-5 does not write it. Re-hash the archive; `cmp` against the originals. The containment sentence "do not boot, copy or distribute these quarantined candidates as a release" is about release; this retention copy is the D10-14 A archive. |
+| P2 | S10-2b source change and tests (no canonical byte yet) | Apply S10-5.4. Run the signing, assembler and helper unit tests once. **Real negative controls**, each leaving outputs unchanged: `check_default_kernel.py` on the real quarantined kernel `12cb0bac…` and canonical image `447d0348…` → refused; `make-iso-ci.sh` with the default kernel → refused before xorriso; the G2b batch tests on both hashes through every route. The packager and the canonical route are tested only with the fake assembler or a temp repository copy; **the real packager is never run** (it would rebuild and overwrite). |
+| P3 | Promote bytes (copy only) | Harness, compare-and-swap: refuse unless the destination hashes are the recorded pre-promotion hashes (or already the promoted ones, so a rerun is idempotent). Write each file to a temp name in the same directory, `fsync`, verify its hash, then `os.replace`: (1) `init`, (2) `kernel_fs.img`, (3) `boot-config/` (old directory removed after P1), (4) `manifest.json` last (the assembler's completion convention), (5) the kernel ELF to `target/x86_64-unknown-none/release/cellos-kernel` (mode 0755), (6) `promotion.json` (source `candidate.json` hash, every promoted path with sha256 and size, UTC time, archive path). Between (2) and (5) the old kernel coexists with the new image; the reopened G3 refuses that pair. |
+| P4 | Verify the copy | V1–V3 of S10-5.6 (hashes, kernel binding, 469-path delta). |
+| P5 | CI ISO through the reopened G3 | `X86_ISO_ROOT=$S/iso-root bash scripts/x86/make-iso-ci.sh $S/vicell-x86.iso` with the **default** kernel path (the helper must admit it), `$S` a scratch directory outside the repository. `build/vicell-x86.iso` and the tracked `build/x86-iso-root` are in the protected set and are not written. Then V5. |
+| P6 | One P04 terminal run | V6. |
+| P7 | L6 once | V7, 12 consumers and the CI boot check. |
+| P8 | Records | S10-5.7, including `evidence.sha256` and the final re-hash of the 469 paths (only the intended paths changed, S10-5.6 V3). |
+| P9 | CP2 request | Present results and every deviation. No commit or push without separate authorisation. |
+
+If P2 fails, no canonical byte has moved: revert S10-2b and stop. If P3 or P4 fails, stop; the retained candidate is untouched, so P3 may be repeated after the cause is fixed; going back is S10-5.8.
+
+#### S10-5.6 Verification after the copy, and which lanes may be cited
+
+| # | Check | Pass rule |
+|---|---|---|
+| V1 | Byte identity | `kernel_fs.img` = `3848cefb…`, `init` = `c0bd1458…`, `manifest.json` = `af55e602…`, the three `boot-config` files equal `cand/desktop/boot-config/`; `cmp` and sha256. The image read with `image_files()` has the 32 manifest paths, every file's sha256 equal to `candidate.json`, no `/bin/shell`/`/bin/sshd`, no blocked hash, `/bin/cellbox` = `/bin/cellbox-ssh`, autoload starts exactly one `/bin/cellbox` `["sh"]`. |
+| V2 | Kernel binding | `cellos-kernel` = `dfbe8c55…`; its bytes contain the promoted `kernel_fs.img` at offset 2,064,272 and `init` at 1,655,200; `check_default_kernel.py` admits it. |
+| V3 | No collateral change | Re-hash the 469 canonical paths: the only differences are the intended ones (`init`, `kernel_fs.img`, three `boot-config` files, `cellos-kernel`; `manifest.json` added). The candidate directory, the durable copy, the archive and `kernel/src/main.rs` (`a9636fee…`) are unchanged. |
+| V5 | CI ISO | `$S/vicell-x86.iso` built by P5. Extracted `boot/kernel.elf` = `dfbe8c55…`; the other tree files equal those of `cand/desktop.iso`; ISO file hash recorded (expected to differ, timestamps). |
+| V6 | **One P04 terminal run** | `qemu-phase04-terminal-test.sh` in its unchanged **default mode** (no `--candidate`), TCG, once, expected 494/494. It builds its own fixture image and kernel in a scratch directory. It proves that the lane still passes with the promoted tree present and that the lane (G5 alias guard) leaves the promoted files byte-identical (V1 hashes re-checked after). It is **not** qualification of the promoted bytes. |
+| V7 | **L6 once** | The 12 consumers and the CI boot check (`qemu-x86_64-test.sh`) on `$S/vicell-x86.iso` through the existing overrides (`VICELL_AHCI_ISO`, `VICELL_XHCI_ISO`, `VICELL_SERIAL_ISO`, `VICELL_NIC_ISO`, `VICELL_IGB_ISO`, `VICELL_IGB_VTD_ISO`, `VICELL_IOMMU_ISO`, and `VICELL_X86_ISO` for the five hard-coded consumers); `VICELL_PC_ISO` = candidate `pc.iso`; `desktop-x86` with `CELLOS_DESKTOP_ISO=$S/vicell-x86.iso` and `CELLOS_DESKTOP_ACCEL=tcg`; same harness and classification as S10-3.14 L6 (before-baseline = the recorded S10-3.14 results on `eb1cb813…`). Expected: 39 pass→pass, 1 fail→fail (xHCI injected-key decode, pre-existing), 4 skip, 1 ignored. A pass→fail is a stop. **New configuration:** the 11 non-desktop consumers ran on the headless ISO in S10-3.14 and now boot the desktop ISO. Their results are recorded as new evidence for this ISO; a failure is not waived by the headless result. |
+
+**May be cited as covering the promoted desktop bytes** (identical hashes): L0 desktop 6/6 (9/9 runner markers); L4 6/6 at 290 checks on its 14 payload-equal imported cells (the exact set is each run's `payload-match.json`; cells outside it, such as `chrome`, `ocel`, `ahci`, `igb`, `xhci`, `serial`, `tier2-*`, have no payload-matched lane); the S10-3.14 L6 `desktop-x86` result on `desktop.iso` (same kernel and image as promoted); V1–V3 and V5–V7 of this slice.
+**May not be cited as covering the promoted bytes** (headless or fixture bytes, same source, different binaries): L0 headless 6/6 (16 `P10C` markers), L1 (48 + 39), L2 (67), L3 (494), L5 (34), L5f (103, lane-only by definition), the headless and PC L6 ISOs, and every fixture-kernel edge. They stay cited **only for the headless profile**, with the profile named in each acceptance row (S10-3.3 rule: a row that cites a lane names its profile). `chrome`, `ocel`, `ahci`, `igb`, `xhci`, `serial` and `tier2-*` in the desktop image have no payload-matched lane; they rest on L0 desktop boot, `P10G-apps` smoke and L6.
+**Not covered by anything:** KVM-only behaviour, hardware, production, crash durability, the Tier-3 guest, publickey/KMS.
+
+#### S10-5.7 Records, release notes and wording
+
+Update only to the exercised state; keep history at its ceiling.
+
+| Record | Change |
+|---|---|
+| `acceptance.md` | Row by row with provenance (candidate hash, profile, lane, promotion hashes). CBX-10/14/26 gain "promoted dev-posture canonical bytes, QEMU/TCG" only if V1–V7 pass. **CBX-28 met** only when every record below is consistent with delivered evidence. CBX-23/24/25 stay partial; **CBX-27 stays unmet**. |
+| Phase 04 file and `phase-04-closure-review.md` §1 row 4, §4 | Criterion 4 ("one suite executable packaged; no obsolete fallback; independent apps/services still work") checked as **x86 dev-posture canonical bytes, QEMU/TCG only, non-Intel recipes not covered (D10-10)**; Phase 04 `completed-private-evidence`. |
+| `phase-10-qualification.md`, `plan.md` (frontmatter `executionGate`, rows 04 and 10) | Criteria and status per S10-5.9. |
+| `.agents/plan-portfolio.md` (`:67`, `:135`) | Restate "38 locks remain"; no lock text edited. |
+| `reports/rollout-containment.md` | New section "Update <date>: promotion (S10-5)": routes lifted (G1, G3 by content, canonical route), **G2b kept forever**, the 2026-10-21 hash update corrected (§1.2: `447d0348` was the hash all along), the "quarantined in place" bytes that were already overwritten (`target/.../cellbox` `006b8504`, `terminal` `018db0cc`; old bytes survive only inside images), the archive path and hashes, the rollback caveat of S10-5.8, and the fixture `build/*.iso`/`qcow2` that still contain the quarantined bytes (§1.2) and stay untouched. |
+| `verification.md` `:3-8` | Replace the "acceptance withdrawn; rollout blocked" header (stale since S10-3) with the exercised disposition and the remaining gates. |
+| `command-catalog.md` §6 (`:409`) | As-built: promoted hashes, desktop profile at the canonical path, headless by CI recipe, the stale "canonical image, ISO kernel and rollout are unchanged and blocked" bullet replaced. |
+| `CHANGELOG.md`, `docs/cellbox-cli.md` (top status, containment bullets) | Release notes below; the doc's "implementation pending" header and the "`package-desktop-x86.py` exits before signing" bullets are replaced with the promoted state. |
+| Proposal §1.1 guard table, §5, status line | As-built after S10-2b. |
+
+**Release notes content (no new file; in `CHANGELOG.md` and `docs/cellbox-cli.md`):**
+- What shipped: a **dev-posture** (D10-1) canonical x86 desktop image with one signed `cellbox` suite (`/bin/cellbox` and the second copy `/bin/cellbox-ssh`), the GUI Terminal, `cellbox sh` as autoload, the ps1 worker set; no `/bin/shell`, no `/bin/sshd`, `/bin/config` not started (D10-4 A, `export` → `config unavailable`, status 1). Dev cell/policy/signing keys; `dev-weak-rng` kept (D10-12 A: SSH needs RDSEED/RDRAND).
+- Qualification scope: Intel x86 **QEMU/TCG only**, the retained candidate `4fae8b20…` and the hashes of S10-5.2. Headless profile qualified separately and not committed.
+- Phase 09 partial (D10-8 A): `ssh` with password, known host and confirmation to another host; `--auth publickey` refused; CBX-23/24/25 partial (Tier-3 guest endpoint blocked by `tier3b-x86-vtx`, `tier3b-vm-hardening-compat`, `tier3b-finish-g5-lite`; publickey/KMS S9-5 behind `kms-silo-production-root`, `phase4-dev-reference-authority`).
+- Known defects, listed not fixed: D60-3 clock units; GUI Delete key; `COMPLETION-QUEUE: FAIL` self-test line (D3-5); xHCI injected-key decode failure (pre-existing at L6); x86-32 handoff skips and virtio block-init ignore; the incidental DMA-free/DSTRD gaps of the S10-3 disclosures; latent `Surface.status()` st=N check in the S10-4 desktop schedule; "synced, not crash-proof" storage.
+- **CBX-27 unmet**: footprint measurement is partial (S10-4 closed partial: no RSS, exact stack, kernel stack, matched historical runtime or full-workload peaks). The file footprint grew: desktop six qualified binaries 3,261,680 B (+2,267,616 B against the B2 unsigned comparator, across different features) and the canonical image 16,777,216 B → 25,165,824 B. No optimisation claim.
+- Not claimed: physical Intel, VMX/EPT, production posture or key, remote C2C, cloud images (D10-9 A), non-Intel images (D10-10 A, CI jobs stay red), KVM qualification, crash durability, CI results (not run by this slice), publishing or tagging.
+
+#### S10-5.8 Rollback, stated honestly
+
+- **Code:** restore the files S10-2b edited from their recorded pre-edit copies (P1 archive). That re-closes G1, G3 and the canonical route exactly as before; G2b never opened.
+- **Bytes:** restore the archived `kernel_fs.img`, `init`, `boot-config/` and kernel from the quarantine archive. This only returns the tree to its **previous, quarantined state**. Containment §Recovery says no matched known-safe source/kernel/init/Cell/policy/image set exists; `447d0348…` is **not** one (it contains the quarantined `cellbox` and `terminal` and starts `sshd`), and neither is HEAD's `a4cba963…` (it contains `/bin/shell` and `/bin/sshd`). Restoring them is a containment-state restore, not a safe boot set, and they must not be booted or distributed as a release.
+- The only known-qualified set is the retained candidate; the practical "rollback" of a bad promotion is therefore a forward correction from that candidate (P3 again), not a return to the quarantined bytes.
+- Not undone by any rollback: trust-store or file writes and remote effects made by lanes, bytes already copied elsewhere (cached ISOs, artifacts), lane evidence, CI runs and anything a later `run-desktop.sh --rebuild` did. Note that `run-desktop.sh:20-36` temporarily rewrites the canonical image and restores it by trap; do not run it during S10-5.
+
+#### S10-5.9 Closing status (proposed; decided at CP2, no overclaim)
+
+| Item | Proposed | Why |
+|---|---|---|
+| Phase 04 criterion 4 | **checked**, qualified "dev-posture x86 canonical bytes, QEMU/TCG; non-Intel recipes not covered" | It is a packaging criterion; it does not depend on CBX-27. It stays unchecked if any of V1–V7 fails. |
+| Phase 04 status | `completed-private-evidence` | All six criteria checked on that ceiling. |
+| Phase 10 criterion 1 (CBX-01..29 actual evidence, no silent exclusions) | **unmet** | CBX-23/24/25 partial, CBX-27 unmet. |
+| Phase 10 criterion 2 (real effects) | checked at the candidate/promoted ceilings (user judgement at CP2) | L0/L4/L6; guest SSH excluded. |
+| Phase 10 criterion 3 (one suite artifact, apps/services package) | checked after V1–V7 | |
+| Phase 10 criterion 4 (equivalent measurement) | **unmet** | S10-4 closed partial. |
+| Phase 10 criterion 5 (docs, notices, help, routes, portfolio) | checked after S10-5.7 | |
+| Phase 10 status | **`closed-partial-private-evidence`** (criteria 1 and 4 open), like Phase 09 | Not `completed`. |
+| `plan.md` status | follows Phase 10; `executionGate` rewritten to the remaining gates | Locks and production/physical gates remain. |
+
+#### S10-5.10 Pre-promotion checklist (re-verify the facts; stop on any difference)
+
+1. User CP1 for S10-5 recorded, with the answers to S10-5.11.
+2. Candidate: `sha256(candidate.json)` = `4fae8b20…`; every candidate file in S10-5.1 re-hashed; durable copy verified.
+3. **469 canonical paths** re-hashed against `canonical/before.json`: 0 differences (done once on 2026-10-29; repeat immediately before P3). Expected current values: `kernel_fs.img` `447d0348…`, `init` `0c2f607b…`, kernel `12cb0bac…`, `boot-config/*` `07849a42…`, `5c97bad0…`, `74ecea5c…`.
+4. `kernel/src/main.rs` = `a9636fee…` and still `M`; it is never edited, staged or reverted by S10-5.
+5. Working tree: record `git rev-parse HEAD` (`bfd05ec02…`), the `git status --short` count (732 on 2026-10-29) and the list of modified paths under `kernel/`, `cells/`, `scripts/` and `.github/`. Because promotion copies bytes and never rebuilds, this dirtiness cannot enter the promoted bytes; it **would** enter any rebuilt kernel or image (including the user's VMX edit), which is why a rebuild is rejected. The S10-2b files are already modified by S10-2a; record each file's hash before editing so the S10-2b diff is attributable.
+6. `assemble-x86-image.py` `6ea17736…`, `signing.py` `a1d25650…`, `cli.py` `ed92c59a…`, `make-iso-ci.sh` `0e62af27…` unchanged since the candidate; any difference is explained before P2.
+7. No running QEMU or cargo/pytest process in the repository; free disk for the archive (~60 MB), the durable candidate copy (~125 MB) and the P5–P7 scratch.
+8. `xorriso`, `qemu-system-x86_64` (TCG) and `limine/limine-8.7.0/bin` present; Docker/OpenSSH fixtures are not needed (P7 does not run L5).
+9. `build/vicell-x86.iso` = `eb1cb813…` (the L6 before-baseline); S10-5 does not write it.
+
+#### S10-5.11 Decisions for CP1 (only those that change what is done; recommendations in bold)
+
+| ID | Question | Options | Recommendation |
+|---|---|---|---|
+| DS5-1 | May S10-5 promote while **CBX-27 / Phase 10 criterion 4 stay unmet**? | **A** yes; ship with CBX-27 unmet, the measured file-footprint growth disclosed and Phase 10 closing `closed-partial-private-evidence`; **B** hold S10-5 until a separately approved CBX-27 disposition | **A.** Phase 04 criterion 4 and CBX-28 do not depend on measurement; B would keep the stale quarantined bytes canonical indefinitely. The user may still choose B on footprint grounds. |
+| DS5-2 | Which profile occupies the single canonical paths? | **A** desktop (D10-3 A); headless stays candidate/CI-built; **B** headless (matches CI, L1–L5 payload coverage and the 11 non-desktop L6 consumers, but withholds the canonical Terminal, i.e. D10-3 B) | **A**, accepting that L1/L2/L3/L5 and L0 headless do not cover the desktop bytes (S10-5.6). The disjointness of the profiles was not visible when D10-3 was decided. |
+| DS5-3 | Kernel at the default path | **A** copy the qualified desktop kernel; G3 admits by content plus ELF binding (the S10-2b wording change); **B** rebuild the kernel from the promoted directory (no hash claim; needs a new L0/L4/L6 battery, outside S10-5) | **A.** |
+| DS5-4 | S10-2b scope | **A** G1, G3 (content rule) and the canonical assembler route, as in the approved S10-2b text; **B** G1 and G3 only, canonical route stays closed (CI x86 step stays red) | **A.** B leaves the recipes cut over in S10-1 unusable in their canonical route. |
+
+Defaults (no decision requested): archive and candidate-copy paths as in P0/P1; no commit, push, tag or release publication (the new untracked `kernel/src/embedded-x86_64/manifest.json`, the replaced tracked `init`/`kernel_fs.img` blob of 25,165,824 B and the S10-2b source edits are left for the user to stage); no run of the real packager or any rebuild; the other records edited by this draft (`plan.md`, `phase-10-qualification.md`, `CHANGELOG.md`) carry only the "CP1 proposed" line.
+
+#### S10-5.12 Risks
+
+- The desktop profile at the canonical path is covered by fewer lanes than the headless one (S10-5.6); the release notes say so.
+- The 11 non-desktop L6 consumers run on the desktop ISO for the first time; a failure stops the slice.
+- The helper's ELF-binding rule is a design change to approved S10-2b text and needs this CP1's approval.
+- Reopening the canonical route lets any dev-key re-assembly replace the promoted bytes; the record then covers the recorded hashes only. CI and `build-x86_64-cells.ps1` produce a headless image that is *not* the qualified headless bytes.
+- Two-file replacement is not atomic; the order, compare-and-swap and the V2 binding check bound a crash window, they do not eliminate it.
+- Promotion is the first canonical write since containment. **Acceptance of this slice:** CBX-28; Phase 04 criterion 4; Phase 10 criteria 2, 3, 5 and the honest closure of 1 and 4 as unmet.
+
+#### S10-5.13 Execution results (2026-10-29; user CP1 approved; **CP2 GRANTED 2026-10-29**)
+
+Executed exactly as S10-5.5 (P0–P9 then V1–V7), no stop condition hit. Evidence: **`reports/s10-5-evidence/`** (`p0-preflight.json`, `p1-archive.json`, `promotion.json`, `p4-verify-*.json`, `v5-iso/`, `l6/`, `logs/`, `harness/`, `evidence.sha256` generated by code). Scratch/outputs: `/tmp/cellbox-s10-5-scratch` (ISO, extracted trees, L6 cargo target); the protected `build/` was not written. Nothing staged, committed, pushed or tagged. `kernel/src/main.rs` (`a9636fee…`, the user's VMX edit) untouched.
+
+**Pre-flight (P0), before any canonical write:** candidate `candidate.json` = `4fae8b20…`; 67 candidate files re-hashed = `candidate.json`; 469 canonical paths re-hashed: 0 differences (re-checked again immediately before P3); expected old hashes (`kernel_fs.img` `447d0348…`, `init` `0c2f607b…`, kernel `12cb0bac…`, boot-config `07849a42…`/`5c97bad0…`/`74ecea5c…`) all present; git HEAD `bfd05ec02`, 736 modified/untracked paths (kernel/cells/scripts/.github lists in `p0-preflight.json`); no QEMU/cargo/pytest process; `xorriso`, `qemu-system-x86_64`, Limine 8.7.0 present. **Durable candidate copy** `~/.cache/cellos-candidates/4fae8b20…/` (76 files, 195,646,631 B, mode 0500/0444/0555), byte-compared against `/tmp/cellbox-s10-3d-resume/cand`.
+
+**P1 quarantine archive:** `~/.cache/cellos-quarantine/cellbox-s10-5-20261029T041842Z/` (0700/0400, `QUARANTINE.txt`, `MANIFEST.sha256`): `kernel_fs.img` `447d0348…`, `init` `0c2f607b…`, the three old `boot-config` files, kernel `12cb0bac…`, plus the pre-edit copies of the nine S10-2b files (`pre-s10-2b/`). Each copy hash- and `cmp`-verified; nothing deleted. `build/vicell-x86.iso` (`eb1cb813…`) only hash-recorded (not written).
+
+**P2 S10-2b (edit tool only; files and new hashes):**
+
+| File | After (sha256) | Change |
+|---|---|---|
+| `scripts/package-desktop-x86.py` | `d80517a8…` | G1: unconditional exit removed (thin caller of the assembler only) |
+| `scripts/x86/make-iso-ci.sh` | `8f5bef77…` | G3: default kernel admitted by `check_default_kernel.py` content rule; explicit `X86_KERNEL` unchecked, as before |
+| `scripts/x86/check_default_kernel.py` (new) | `150f40a8…` | image content rule plus ELF binding (the approved change from the S10-2b text) |
+| `scripts/cellos_sign/signing.py` | `ba971293…` | `QualifiedRoute.in_repo_root`, `X86_CANONICAL_ROOT`, routes `x86-canonical-headless/desktop`, root rule, pin re-recorded `b74cc997…`; **G2b untouched** |
+| `scripts/assemble-x86-image.py` | `b74cc997…` (was `6ea17736…`) | `is_canonical_out_dir`, `route_name`, `check_isolation` (canonical route only for `kernel/src/embedded-x86_64` with target dir `<repo>/target` or outside) |
+| `scripts/build-cloud-images.sh` | `ee4885b9…` | explicit refusal (D10-9 A); the script still rewrites the canonical image in place otherwise |
+| `.github/workflows/ci.yml` | `0d77f752…` | stale comment `:928-930` only |
+| `scripts/test_cellos_sign.py`, `scripts/test_assemble_x86_image.py`, `scripts/test_check_default_kernel.py` (new) | `a08c603b…`, `d78b4eeb…`, `eff3ddc7…` | G1/G3 tests, canonical-route tests, helper tests |
+
+Host tests, run once at the end (`logs/p2-*.log`): `test_cellos_sign.py` **71 OK**, `test_assemble_x86_image.py` **40 OK**, `test_check_default_kernel.py` **8 OK**. **Real negative controls (before P3, the real quarantined bytes):** `check_default_kernel.py` on kernel `12cb0bac…` + image `447d0348…` → exit 1 `quarantined bytes in the image: /bin/cellbox`; default-path `make-iso-ci.sh` → exit 1 before xorriso, no ISO or ISO root written; `build-cloud-images.sh` → exit 1 `ROLLOUT BLOCKED`. The helper control is re-recorded on the archived quarantined files in `logs/p2-controls.log`. The real packager and the canonical route were never run.
+
+**P3 promotion** (`harness/p3_promote.py`, order init, `kernel_fs.img`, `boot-config/`, `manifest.json`, kernel; compare-and-swap; every copy verified against `candidate.json`; old `boot-config` moved to the scratch directory, not deleted):
+
+| Path | Before | After |
+|---|---|---|
+| `kernel/src/embedded-x86_64/init` | `0c2f607b…` (393,152 B) | `c0bd1458…` (406,976 B) |
+| `kernel/src/embedded-x86_64/kernel_fs.img` | `447d0348…` (16,777,216 B) | `3848cefb…` (25,165,824 B) |
+| `kernel/src/embedded-x86_64/boot-config/autoload.toml` | `07849a42…` | `db435065…` (358 B) |
+| `kernel/src/embedded-x86_64/boot-config/services.toml` | `5c97bad0…` | `eff37d25…` (897 B) |
+| `kernel/src/embedded-x86_64/boot-config/system.toml` | `74ecea5c…` | `74ecea5c…` (identical; replaced, unchanged) |
+| `kernel/src/embedded-x86_64/manifest.json` | absent | `af55e602…` (7,956 B, untracked) |
+| `target/x86_64-unknown-none/release/cellos-kernel` | `12cb0bac…` (19,769,472 B) | `dfbe8c55…` (28,182,592 B) |
+
+**Verification:**
+
+| V | Result |
+|---|---|
+| V1 byte identity | PASS (`p4-verify-v1-v3.json`, 30 checks): `cmp` and sha256 of `init`, `kernel_fs.img`, `manifest.json`, the three `boot-config` files equal the candidate; the image has the 32 manifest paths, each file's sha256 equals `candidate.json`; no `/bin/shell`, `/bin/sshd` or quarantined hash; `/bin/cellbox` = `/bin/cellbox-ssh`; autoload starts one `/bin/cellbox` `["sh"]`; no `sshd`/`shell`/`config` service row |
+| V2 kernel binding | PASS: kernel `dfbe8c55…` embeds `kernel_fs.img` at 2,064,272 and `init` at 1,655,200; `check_default_kernel.py` admits it |
+| V3 no collateral change | PASS: 469-path delta is exactly **five** changed paths (`init`, `kernel_fs.img`, `boot-config/autoload.toml`, `boot-config/services.toml`, `cellos-kernel`); `manifest.json` added; `system.toml` identical (**deviation 1**); candidate (`/tmp` and durable), archive, `build/vicell-x86.iso`, `kernel/src/main.rs` unchanged. Re-run after V6 (`after-v6`) and after V7 (`after-v7`): ALL OK |
+| V5 CI ISO | PASS: `X86_ISO_ROOT=$S/iso-root make-iso-ci.sh $S/vicell-x86.iso` with the **default kernel** (helper admitted it). ISO `a22e99f7…` (32,055,296 B, differs from `d2070319…` only by timestamps); the extracted trees of both ISOs are **file-for-file equal** (`boot/kernel.elf` `dfbe8c55…`, `limine.conf` `362a5a50…`, Limine files) |
+| V6 one P04 terminal run | PASS: `qemu-phase04-terminal-test.sh` default mode, TCG, once (1843 s): **494 checks, 202 driver markers**, exit 0; promoted files byte-identical afterwards (`after-v6`). Not qualification of the promoted bytes (fixture kernel) |
+| V7 L6 once | PASS: `p7_l6.py` on `$S/vicell-x86.iso` (11 non-desktop consumers on the desktop ISO, `desktop-x86` on it with TCG, `iommu-dmar` PC lane on candidate `pc.iso` `3cdf536a…`) and the CI boot check, classified against the S10-3.14 before-baseline: **39 pass→pass, 1 pre-existing fail→fail (`xhci_injected_key_decodes_in_cell_x86`), 4 skip (x86-32 handoff), 1 ignored (virtio block init), 0 regressions**; CI boot check passes on the desktop ISO. The new configuration (non-desktop consumers on the desktop ISO) changed no result |
+
+**Lanes run:** V6 (P04 terminal default mode) and V7 (L6: `x86_64-boot`, `nvme-x86`, `virtio-x86`, `pcie-multibus-x86`, `handoff`, `ahci-x86`, `xhci-x86`, `serial-x86`, `nic-x86`, `igb-x86`, `iommu-dmar-x86`, `desktop-x86`, `qemu-x86_64-test.sh`). No L0/L1–L5 lane was rerun. **Citable as covering the promoted desktop bytes** (identical hashes): L0 desktop 6/6, L4 6/6 at 290 (14 payload-matched cells), the S10-3.14 desktop L6, V1–V3/V5–V7. **Not citable:** L0 headless, L1, L2, L3, L5/L5f, headless/PC L6 ISOs, fixture-kernel edges (headless bytes; no shared binary is byte-identical across the profiles).
+
+**Deviations for CP2:**
+1. The V3 expectation in the harness was first written as six changed paths; `boot-config/system.toml` is byte-identical in the old and promoted sets (`74ecea5c…`), so five paths change. The first `p4_verify.py` run therefore reported a harness-expectation failure, which was corrected in the harness (not in the product bytes) and rerun; both outputs are described here, the corrected one is `p4-verify-v1-v3.json`. No product state changed between the two runs.
+2. `promotion.json` is kept in `reports/s10-5-evidence/`, not in the embedded directory (it would add an untracked file beside the kernel inputs).
+3. P5 and L6 write only to `/tmp/cellbox-s10-5-scratch`; `build/vicell-x86.iso` and `build/x86-iso-root` (protected, tracked or in the 469 set) were not written, so the CI ISO is a scratch path, not `build/vicell-x86.iso`.
+4. The durable candidate copy is 195.6 MB (S10-5.10 estimated ~125 MB), because it keeps the whole candidate directory.
+5. The negative control "`make-iso-ci.sh` default path refuses the real quarantined kernel" was captured from the live run before P3 (transcript above), not in a saved log; the helper control is re-recorded on the archived files.
+6. The P04 terminal run used a fresh `mktemp /tmp/cellbox-phase04-*` work directory and a sanitised environment (no fixture-signing or prod-key-override variables), as the S10-3 default-mode runs did.
+7. S10-2b design points differing from the approved text were those approved at CP1: the helper's ELF binding (S10-5.4) and L6 on the desktop ISO (S10-5.6 V7). The packager's G1 reopening has no new precondition code (delegation to the assembler), as proposed.
+8. The kernel `target/…/cellos-kernel` is a copy, so any later `cargo build -p cellos-kernel` or `run-desktop.sh --rebuild` replaces it; the qualification record covers only the recorded hash.
+9. The records edit changed the document digests the S10-3 CBX-01/02 audit pins: `command-catalog.md` (§6 only; ledger block, §3 and contracts untouched) is now `f06f38ce7447758f7b49e58d6e98dc8309b583515bf1ffd3608e665011a5fd0f` (the S10-0 and Phase 04 closure digests quoted in older records are historical). **Acknowledged by the user at the S10-5 CP2 (2026-10-29)** and recorded in `contract-deltas.md`. `acceptance.md`, `plan.md`, `phase-04`, `phase-10`, `plan-portfolio.md`, `rollout-containment.md`, `verification.md`, `docs/cellbox-cli.md` and `CHANGELOG.md` were edited with the edit tool only.
+10. The plan, Phase 04 and Phase 10 frontmatter statuses (`completed-private-evidence`, `closed-partial-private-evidence`) were set as S10-5.9 proposes before CP2; **CP2 is granted, so they stand** (no revert).
+
+**CP2 record (user, 2026-10-29, relayed by Main): APPROVED S10-5**, including deviations 1–8 above and the acknowledgement of the catalog digest `f06f38ce…`. Documentation-only recording: no VM, build, source or canonical change. Not approved / unchanged: CBX-27 (unmet), CBX-23/24/25 (partial), Phase 10 criteria 1 and 4 (open), physical Intel, VMX/EPT, production, remote, KVM or crash-durability claims, cloud formats, non-Intel recipes (refused), the 38 CELL-CONTRACT-0024 lock relations. Commit is a separate step; nothing was staged or committed.
+
+**Not done / not claimed:** no measurement, no CBX-27 closure; no CI run; no non-Intel, cloud, KVM, physical, VMX, production or remote claim; no commit, stage, push or tag. §1.1 above is the historical pre-S10-2b guard table; the as-built state is the P2 table here.
 
 ---
 
@@ -2822,4 +3054,6 @@ CBX-27 and Phase 10 criterion 4 remain **unmet** unless every missing element, i
 - **S10-4 limited-result CP2 granted by the user 2026-10-28:** accepts S10-4.8's actual static/scoped-signing/six untraced measurements/headless controlled streams, partial headless memory and recorded deviations, including the retained unsupported-observer stop. It does not approve unrun desktop observation, complete workload peaks, unavailable historical runtime equivalence or extra debugger control. **CBX27/criterion4 remain unmet**; independently demonstrated safe observer semantics or a separately approved disposition is still required.
 - **S10-4.15 actual partial-result CP2 requested:** accept191distinctofflinePASSaggregate with all failed iterations disclosed, ONEdesktop's actual GUI/idle/typedexact/Entercommit/transport/recovery and retained finalscreen **observability STOP**, plus partial bounds only. Full two-frame/newprompt/status0/fullschedule and complete memory remain unproved. Next complete-output-route feasibility is **proposed only**, requiring separate CP1; no automatic new candidate run, hiddenroute, proxy, guarddrop or deadline increase. See S10-4.15 and `runtime/observer-gui-temporal/next-protocol.json`.
 - **S10-4.17 limited-result CP2 GRANTED by the user 2026-10-29 and S10-4 CLOSED PARTIAL:** accepts Class B `SUCCESS_METRIC_ONLY` (269-test single clean gate; ONE desktop run proved two frames/prompt/`st=0` from the Terminal `feed` ledger; retained schedule then stopped at the latent `Surface.status()` st=N check, left unfixed) and all exercised partial memory bounds, diagnostic findings S10-4.9..S10-4.17, offline iterations and deviations 1-4 at their stated ceilings. Not approved/unchanged: full-workload peaks, RSS, exactstack, kernel stack, matched historical runtime, remaining observed phases. **CBX27/criterion4 remain unmet**; S10-5/canonical promotion/containment need their own CP1. See S10-4.17 section 10.
-- **S10-5 remains blocked** despite the limited-result CP2: CBX27/criterion4 are unmet and its own explicit promotion approval has not been given. No canonical artifact or containment guard changes follow from this approval.
+- *(Historical, superseded by the S10-5 CP1/CP2 below.)* **S10-5 remained blocked** after the limited-result CP2: CBX27/criterion4 were unmet and its own explicit promotion approval had not been given.
+- **S10-5 CP1 APPROVED by the user 2026-10-29 (relayed by Main): DS5-1 (promote while CBX-27/Phase 10 criterion 4 stay unmet), DS5-2 (desktop profile), DS5-3 (copy the qualified desktop kernel; G3 by content plus ELF binding), DS5-4 (S10-2b scope A), all as recommended.** Execution was authorised exactly as written in S10-5.5 (P0–P9, then V1–V7), stopping on any hash mismatch, lane/L6 failure or unexpected guard behaviour. No stage, commit, push or tag; the user's `kernel/src/main.rs` VMX edit and the protected `build/` stayed untouched. **CBX-27/criterion 4 stay unmet.**
+- **S10-5 CP2 GRANTED by the user 2026-10-29 (relayed by Main):** accepts S10-5.13 including deviations 1–8 and acknowledges the new `command-catalog.md` digest `f06f38ce…`. Nothing further is requested for S10-5. Unchanged/not approved: CBX-27 unmet, CBX-23/24/25 partial, Phase 10 criteria 1 and 4 open, no physical/VMX/production/remote claim, no cloud formats, non-Intel recipes refused. Commit is a separate step.

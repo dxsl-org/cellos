@@ -314,6 +314,14 @@ foo/
 | **Functions** | snake_case | `init_paging`, `handle_interrupt` |
 | **Constants** | UPPER_SNAKE | `MAX_CELLS`, `KERNEL_HEAP_SIZE` |
 | **Type Params** | PascalCase | `T`, `E`, `CellState` |
+| **Library crates (new)** | `vi` prefix, lowercase, one word where possible; module paths for parts | `viui`, `vitui` (`vitui::backend`, `vitui::session`, `vitui::event`, `vitui::theme`), `vimio`, `vipolling` |
+
+**Library naming rule (decided 2026-10-23):**
+- Cellos library crates use the `vi` prefix, in the same family as `viui`.
+- The `*-cellos` suffix (e.g. the former `tui-cellos`, `mio-cellos`, `polling-cellos`) is **retired**. Adapters of upstream crates are also named `vi*` (`vimio` adapts the mio API, `vipolling` the polling API, `vitui` Ratatui).
+- **Do not repeat** `cellos` or `vi` inside a name: no `vitui-cellos`, `cellos-vitui` or `vi-vi*`.
+- A framework's parts are **modules of one crate** (`vitui::session`), not sibling crates, unless a dependency boundary requires a split. Example: a part that must not pull Ratatui into consumers that don't need it.
+- Existing non-`vi` crates (`api`, `ostd`, `types`, `terminal-sdk`, `cellos-fs`, `cellos-boot-config`, …) keep their names until renamed by an explicit decision. New crates must follow this rule.
 
 ### Law 7: Trait Objects for Polymorphism
 

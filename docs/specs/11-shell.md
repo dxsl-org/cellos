@@ -1,7 +1,11 @@
 # Incremental Native Shell (Shell bản địa tăng trưởng)
 
-**Status**: Historical / superseded by Spec 09 and the shipped shell implementation. This
-document is retained as a design sketch, not a normative specification.
+**Status**: Historical design sketch, not a normative specification. Current-source
+behavior and [Spec 09](09-vfs.md) remain relevant to existing code. The accepted
+next shell/tooling direction is [ADR-0028](../decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md)
+and the [Cellbox CLI design](../cellbox-cli.md); its
+[implementation plan](../../.agents/261020-1750-cellbox-cli/plan.md) is pending.
+The old tiny-shell recommendations below do not override that accepted design.
 
 
 ### 1. Giai đoạn 1: Built-in Commands (Tier 1 Cell)

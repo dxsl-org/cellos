@@ -210,7 +210,7 @@ production qualification remains per architecture and board.
 **Requirement**: Load Cell binaries from `/bin/` filesystem.
 
 **Implemented**:
-- [x] `syscall::spawn_from_path("/bin/shell")` working
+- [x] `syscall::spawn_from_path("/bin/cellbox")` working (the shell, launched as `/bin/cellbox ["sh"]`)
 - [x] Config, VFS, Shell loaded from disk
 - [x] Hot-swap: Replace shell at runtime
 - [x] ELF relocation with PIE support

@@ -1,0 +1,446 @@
+{
+  "status": "read-only pre-CP1 source identity; not approved or baseline test evidence",
+  "head": "fabd6ab7e3f2d9ea90a931fe53b7d43e509888dd",
+  "scope": "only the exact source closure in phase-02-source-admission.md; dirty file bytes included, no clean-worktree claim",
+  "records": [
+    {
+      "path": "Cargo.toml",
+      "state": "existing",
+      "bytes": 8664,
+      "sha256": "228d388907b5f4f67f77f2aed22484e268284c91f038c2a9a07d6d8e600648c5"
+    },
+    {
+      "path": "cells/services/input/Cargo.toml",
+      "state": "existing",
+      "bytes": 568,
+      "sha256": "3262831baa9c6a0063bd0b3e5d2138625c533909a4d35c97f2f791858b6063d7"
+    },
+    {
+      "path": "cells/services/input/src/dispatcher.rs",
+      "state": "existing",
+      "bytes": 9191,
+      "sha256": "75c5433b9065d2ebeab31f4e013a0af6f8abfb213de52fc99dffbe30fc661bfd"
+    },
+    {
+      "path": "cells/services/input/src/main.rs",
+      "state": "existing",
+      "bytes": 23793,
+      "sha256": "3f6d44243f5caaf4d023f3b01e604666d2477889e4e6888d8e6eedb440e7016d"
+    },
+    {
+      "path": "cells/services/input/src/session.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "cells/services/vfs/Cargo.toml",
+      "state": "existing",
+      "bytes": 1554,
+      "sha256": "bcd6a6ae83737f6ed88b8d6d72aad9ea45f356aade79c45806b0054473e35ef5"
+    },
+    {
+      "path": "cells/services/vfs/src/caller.rs",
+      "state": "existing",
+      "bytes": 5151,
+      "sha256": "2e24596951ab56adeae949ba52dbce90fc73960377170d54d90fd486789827b9"
+    },
+    {
+      "path": "cells/services/vfs/src/dir_admission.rs",
+      "state": "existing",
+      "bytes": 2788,
+      "sha256": "75e2a1d47d798d630ec0dd7d28379afa091e6447c04e229d2f75e61c36758e34"
+    },
+    {
+      "path": "cells/services/vfs/src/dirs.rs",
+      "state": "existing",
+      "bytes": 8386,
+      "sha256": "8735fae8f1d6cc890ed0f2d3d53f040ba6ee230ef57e315f037c1d37bf7f307e"
+    },
+    {
+      "path": "cells/services/vfs/src/dirs/bind.rs",
+      "state": "existing",
+      "bytes": 4369,
+      "sha256": "c5d57900562894bdf99c600a2609902e55ec72d61df15f5158b2e51991bcdd7f"
+    },
+    {
+      "path": "cells/services/vfs/src/dirs/lifecycle.rs",
+      "state": "existing",
+      "bytes": 6145,
+      "sha256": "180d77137e7927501debe46b245ed452176bc78c5e128545a4851088b4132d24"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch.rs",
+      "state": "existing",
+      "bytes": 9305,
+      "sha256": "82d22e7d9a1fab4ac7430224c63fef1cae10cf7aeb5e038094604a806a48900a"
+    },
+    {
+      "path": "cells/services/vfs/src/dispatch_dirs.rs",
+      "state": "existing",
+      "bytes": 7331,
+      "sha256": "7e90c82b94204d5a72f883dabfc2c93c7548969ca8a19d47bdae34a5ca63c443"
+    },
+    {
+      "path": "cells/services/vfs/src/main.rs",
+      "state": "existing",
+      "bytes": 8029,
+      "sha256": "58883cf9699a2fd670767f05272d619d186d7669027ea6741f474065aa59e6f3"
+    },
+    {
+      "path": "cells/services/vfs/src/prepared_cwd.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "cells/tests/phase02-session-child/Cargo.toml",
+      "state": "proposed-new"
+    },
+    {
+      "path": "cells/tests/phase02-session-child/src/main.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "cells/tests/phase02-session-parent/Cargo.toml",
+      "state": "proposed-new"
+    },
+    {
+      "path": "cells/tests/phase02-session-parent/src/main.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "cells/tools/init/Cargo.toml",
+      "state": "existing",
+      "bytes": 4216,
+      "sha256": "bd00edad39ca2e5c38c6453cf75c1556bf1168ed4cdc0b1a8fc42bc31fcf1d9c"
+    },
+    {
+      "path": "cells/tools/init/src/boot.rs",
+      "state": "existing",
+      "bytes": 11543,
+      "sha256": "a33365dbe122a3388e65e4dee8e60f8be2692a77dc4f53979886a6e74817eaa4"
+    },
+    {
+      "path": "cells/tools/init/src/configuration.rs",
+      "state": "existing",
+      "bytes": 3820,
+      "sha256": "b8e0ec2c09083525cfb3a08a0a2908b32d2dd9e7441c6eb2f01add093583ea2a"
+    },
+    {
+      "path": "cells/tools/shell/Cargo.toml",
+      "state": "existing",
+      "bytes": 867,
+      "sha256": "a726aacf4419b5e9e069be10dc9f742f385c5ceeb0739cb2a49482300aca07b1"
+    },
+    {
+      "path": "cells/tools/shell/src/executor.rs",
+      "state": "existing",
+      "bytes": 46512,
+      "sha256": "122175e15e70f6f9064c8527b9933bcb2a9c73e7b3b1a5a1e9258659bbcbdad9"
+    },
+    {
+      "path": "cells/tools/shell/src/main.rs",
+      "state": "existing",
+      "bytes": 3359,
+      "sha256": "27171babfc24d4a208804c32949527ad1ee3a50013ad1e060af1978e6eb734ec"
+    },
+    {
+      "path": "kernel/Cargo.toml",
+      "state": "existing",
+      "bytes": 9327,
+      "sha256": "baf2df94cbc3f516773c75f4a4ecb81a8272a626f5add53ee5cbafde0c915704"
+    },
+    {
+      "path": "kernel/build.rs",
+      "state": "existing",
+      "bytes": 8336,
+      "sha256": "3da426bec9acba43350e3e25148abc511aff7b0c2c55a9d7eed1c96adcd5ba32"
+    },
+    {
+      "path": "kernel/src/cell/cspace.rs",
+      "state": "existing",
+      "bytes": 37063,
+      "sha256": "82dbad9359a4d2d8356965bb0a368857b327c8bbcefe7b00bf815b989a1b73c1"
+    },
+    {
+      "path": "kernel/src/loader/atomic_publication_tests/baseline.rs",
+      "state": "existing",
+      "bytes": 10044,
+      "sha256": "55b792ddce823a9e60630454877726e5395d207d74720d272d8f8d52a76fc621"
+    },
+    {
+      "path": "kernel/src/loader/atomic_publication_tests/cases.rs",
+      "state": "existing",
+      "bytes": 8805,
+      "sha256": "55837ef0e780c916e3f64207fcd34d0b1297ba929798dca6eae3b54924041fb3"
+    },
+    {
+      "path": "kernel/src/loader/atomic_publication_tests/denials.rs",
+      "state": "existing",
+      "bytes": 4281,
+      "sha256": "92fda385bf748a314b15a7f6a452aaaad1516e12d4cd6c2d35d5bc36caae2ded"
+    },
+    {
+      "path": "kernel/src/loader/atomic_publication_tests/harness.rs",
+      "state": "existing",
+      "bytes": 7993,
+      "sha256": "55628cf059fee47790e6f08e1b3eff9621f68f4aedf05dcb9d5edc93bdac1af2"
+    },
+    {
+      "path": "kernel/src/loader/atomic_publication_tests/probe.rs",
+      "state": "existing",
+      "bytes": 2742,
+      "sha256": "e780f0d3b61557d40a48487d9d76b5d0ad729c24a824af90753bcd67d8fa1374"
+    },
+    {
+      "path": "kernel/src/loader/atomic_publication_tests/snapshot.rs",
+      "state": "existing",
+      "bytes": 20240,
+      "sha256": "da5536dee2a1d954dd81b113668e6c927cf298624f84de12625871b506c9810e"
+    },
+    {
+      "path": "kernel/src/loader/atomic_publication_tests/success.rs",
+      "state": "existing",
+      "bytes": 7083,
+      "sha256": "d7c1b61b3eeeb876380741c09c466433e67b52e7828b76b58b3499e2d3d1bc5b"
+    },
+    {
+      "path": "kernel/src/loader/governed_spawn.rs",
+      "state": "existing",
+      "bytes": 10053,
+      "sha256": "9144b01b95b81d45b453e40712caf1dfe80566db57ceb5f1de878d9ae5499cbf"
+    },
+    {
+      "path": "kernel/src/loader/launch_profile/mod.rs",
+      "state": "existing",
+      "bytes": 3191,
+      "sha256": "37e66b3e3dd7c393682060562ea77d103beaa32de3ad731fa1562289fe8ea76e"
+    },
+    {
+      "path": "kernel/src/loader/launch_profile/profiles.rs",
+      "state": "existing",
+      "bytes": 10085,
+      "sha256": "2419c780480a443ccd593d868f4d1bf1b36a2cced3a001e090b666ce2391d73c"
+    },
+    {
+      "path": "kernel/src/loader/launch_profile/targets.rs",
+      "state": "existing",
+      "bytes": 4113,
+      "sha256": "8892a225c501e1c0ee9cec390a410c6cd9fb325db09f04043c6e214444ffd3f2"
+    },
+    {
+      "path": "kernel/src/loader/launch_profile/tests.rs",
+      "state": "existing",
+      "bytes": 14252,
+      "sha256": "f22aeae72bc40f65ea8b8d60f72196d303655f7a06a14c9c155e2e13b5a7a265"
+    },
+    {
+      "path": "kernel/src/memory/cell_quota.rs",
+      "state": "existing",
+      "bytes": 18649,
+      "sha256": "feab58aca5d6fbdcf2dd5c82aa70295773746473f594783f4e220568926cffdd"
+    },
+    {
+      "path": "kernel/src/signing.rs",
+      "state": "existing",
+      "bytes": 8850,
+      "sha256": "c7858c6945cbe185bf0c0338fd95f5d98b4741448c4b19a3cf99cdc671768836"
+    },
+    {
+      "path": "kernel/src/task.rs",
+      "state": "existing",
+      "bytes": 123538,
+      "sha256": "09f574dcb3b6ad23045848e592e6f8c2a6b28b038f5fe47f95b9175022c18632"
+    },
+    {
+      "path": "kernel/src/task/cell_session.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "kernel/src/task/child_context.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "kernel/src/task/dir_inherit.rs",
+      "state": "existing",
+      "bytes": 3713,
+      "sha256": "4469db2da84ec2350a91aab2ac9cfec7b977227c7b82b1204d96790215bf2fae"
+    },
+    {
+      "path": "kernel/src/task/elf_prepare.rs",
+      "state": "existing",
+      "bytes": 8181,
+      "sha256": "925a8df3564d381cb7f88ee707d44bd0fd220bc69514f405e8717dbcb89b8162"
+    },
+    {
+      "path": "kernel/src/task/launch.rs",
+      "state": "existing",
+      "bytes": 12461,
+      "sha256": "4b7231e132cfe9ad8a7a37f1ac3ea291ba65544b8b9808049286ef41e398ab5c"
+    },
+    {
+      "path": "kernel/src/task/pipe.rs",
+      "state": "existing",
+      "bytes": 14706,
+      "sha256": "18971a703216a80224b5a950c380f250d0edb72dd393041513f64309fb4003e8"
+    },
+    {
+      "path": "kernel/src/task/scheduler.rs",
+      "state": "existing",
+      "bytes": 125329,
+      "sha256": "a709e5124addff7ce7f689fac2ded9506da50dd0c4d0fbe98230801d79330aeb"
+    },
+    {
+      "path": "kernel/src/task/syscall.rs",
+      "state": "existing",
+      "bytes": 401338,
+      "sha256": "7c8819680b8f18cac27d8e79547b6192ce9e28d604217de1e24edfb9144410f6"
+    },
+    {
+      "path": "kernel/src/task/tcb.rs",
+      "state": "existing",
+      "bytes": 39301,
+      "sha256": "046677f8da00afa1f6db275cfdb28a70935dc7dcb981e7b701f0ab1a793e3181"
+    },
+    {
+      "path": "libs/api/src/abi.rs",
+      "state": "existing",
+      "bytes": 1075,
+      "sha256": "6ba9984caf39263bbf36199fe8e7a3b506ed18a1f0f6ab826c399dad51e36c51"
+    },
+    {
+      "path": "libs/api/src/abi/cell_session.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "libs/api/src/abi/syscall.rs",
+      "state": "existing",
+      "bytes": 74629,
+      "sha256": "7cb9c3ff34f9b354821014caba499b133c1a3118683154858fe0ae7593fea856"
+    },
+    {
+      "path": "libs/api/src/abi/syscall_tests.rs",
+      "state": "existing",
+      "bytes": 23016,
+      "sha256": "e4ab0e072d4b5a489a5abad87a07f9e30a35c5109b4beb01a32f8c8fa6205d6f"
+    },
+    {
+      "path": "libs/api/src/services.rs",
+      "state": "existing",
+      "bytes": 732,
+      "sha256": "6cd506df3596be68e70674f763009e1ff0298025dd51fe49f49f63ef82f6a1db"
+    },
+    {
+      "path": "libs/api/src/services/ipc.rs",
+      "state": "existing",
+      "bytes": 24083,
+      "sha256": "00d9a3e1c3497ca4e8ae06e629464423e01dc56a8d2602ac4b9b14b2454e9b57"
+    },
+    {
+      "path": "libs/api/src/services/session.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "libs/ostd/Cargo.toml",
+      "state": "existing",
+      "bytes": 1738,
+      "sha256": "9b5c64aa81400b8151ff4d133faf6a24266dc704066eb23860905d4cfde41526"
+    },
+    {
+      "path": "libs/ostd/src/child_context.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "libs/ostd/src/clients/input.rs",
+      "state": "existing",
+      "bytes": 2108,
+      "sha256": "2f4adddf5040f602ce5fff34258ded250ef43b272eb97630f829aac0e29c50d7"
+    },
+    {
+      "path": "libs/ostd/src/input.rs",
+      "state": "existing",
+      "bytes": 6718,
+      "sha256": "24d3b46e0e93eecdd7fb6da9d9b3c5ac8ce85f840e0a1f413cf684d320686e01"
+    },
+    {
+      "path": "libs/ostd/src/lib.rs",
+      "state": "existing",
+      "bytes": 6509,
+      "sha256": "8015a9a923842d5ceda0510231432746b5ee8fe47904833a9220b01435e6df84"
+    },
+    {
+      "path": "libs/ostd/src/session.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "libs/ostd/src/syscall.rs",
+      "state": "existing",
+      "bytes": 99795,
+      "sha256": "a559e70788475e6212e16c34d0d9e801cd67950bd70ba4f73256ff920d21ff8b"
+    },
+    {
+      "path": "libs/terminal/Cargo.toml",
+      "state": "existing",
+      "bytes": 543,
+      "sha256": "009996465faba64d715598044f2cc3377b15635a8c9b0162496c2ae239975444"
+    },
+    {
+      "path": "libs/terminal/src/codec.rs",
+      "state": "existing",
+      "bytes": 25381,
+      "sha256": "9773a38134a09e4b478374774015f2804e3ae27ee1e4e3d36946f139e9dea354"
+    },
+    {
+      "path": "libs/terminal/src/context.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "libs/terminal/src/controls.rs",
+      "state": "existing",
+      "bytes": 7034,
+      "sha256": "cdbdb24e5bc1a3e100ffb66ef88289018508a4b2a1c36b937730ac08b6744344"
+    },
+    {
+      "path": "libs/terminal/src/error.rs",
+      "state": "existing",
+      "bytes": 4022,
+      "sha256": "b4edc14bdc8a48c9823cf7cd3de2d14efcb9d3422439e5f691dcb0950bb5fc58"
+    },
+    {
+      "path": "libs/terminal/src/input.rs",
+      "state": "proposed-new"
+    },
+    {
+      "path": "libs/terminal/src/lib.rs",
+      "state": "existing",
+      "bytes": 958,
+      "sha256": "e6a2d2e6803c75c571bf8c36aeece7fdf1be1d38f036fe33bba2dc234102c501"
+    },
+    {
+      "path": "libs/terminal/src/mode.rs",
+      "state": "existing",
+      "bytes": 3190,
+      "sha256": "ae582a7962e1b7a3d3d09fd6481a8e9809ebaac2618329154b30c9cb6da93058"
+    },
+    {
+      "path": "libs/terminal/src/session.rs",
+      "state": "existing",
+      "bytes": 6636,
+      "sha256": "1cec5bfe4f185f7eb320297bc092c7c7eb517efdefccc1a41ff9043d2136bb4c"
+    },
+    {
+      "path": "libs/terminal/src/stream.rs",
+      "state": "existing",
+      "bytes": 12236,
+      "sha256": "19ad89da321909e7538f6184249bc4c8af6f3666514204df031ceeff554994a1"
+    },
+    {
+      "path": "libs/terminal/src/tests.rs",
+      "state": "existing",
+      "bytes": 13569,
+      "sha256": "c5df86d2dd238ed42c63b6a8f3f6e12e4ba2799427a4f7f61702395303c7eec7"
+    },
+    {
+      "path": "scripts/qemu-phase02-session-test.sh",
+      "state": "proposed-new"
+    }
+  ],
+  "cargo_lock_sha256": "27f94cb0d4741694a3d89d2f783fcba5d249190c49997f122f39995d62ca784a"
+}

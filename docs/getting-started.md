@@ -146,8 +146,9 @@ Example `autoload.toml`:
 version = 1
 
 [[cells]]
-name = "shell"
-path = "/bin/shell"
+name = "cellbox"
+path = "/bin/cellbox"
+args = ["sh"]
 restart = "on-failure"
 ```
 

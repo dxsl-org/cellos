@@ -53,7 +53,7 @@ Read and write files via Cellos's VFS service:
 
 ```lua
 -- Read entire file
-local content = vfs.read("/bin/shell")
+local content = vfs.read("/bin/cellbox")
 if content then
     print("Read " .. #content .. " bytes")
 else

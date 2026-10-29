@@ -103,24 +103,38 @@ is **completed**:
 - Reconciled ADR-0027 scope and contracts in `contracts.md`. No ambient scope widening, G2-J crash format promotion, or unadmitted capability changes authorized.
 
 
-## Accepted tooling design — Cellbox CLI and selective Ratatui TUI
+## Cellbox tooling — Phases 01–10 at private evidence; dev-posture x86 promoted (S10-5 CP2 granted 2026-10-29); production/physical gates BLOCKED
 
-**Recorded 2026-10-20:** The maintainer approved recording
-[ADR-0028](../docs/decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md)
-and the [Cellbox implementation plan](261020-1750-cellbox-cli/plan.md):
-one essential-suite executable with modular source, typed pipelines, compact
-editor, ripgrep-derived search, Cell-aware top, outbound SSH and a reusable
-Terminal SDK/Ratatui backend independent of viUI.
+**Updated 2026-10-26** (supersedes the 2026-10-20 status text of this section). The maintainer approved [ADR-0028](../docs/decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md) and the [Cellbox implementation plan](261020-1750-cellbox-cli/plan.md), and later approved continuing the candidate design; that consent is preserved. The design is one modular essential-suite executable (`/bin/cellbox`, entry `sh`), typed pipelines, a compact editor, ripgrep-derived search, a Cell-aware top, outbound SSH, and a reusable Terminal SDK/Ratatui backend that is independent of viUI.
 
-The plan has ten pending implementation phases and CBX-01..CBX-29 pending.
-This registration is documentation/planning only, not a new active WIP slice,
-ABI ratification, legacy-lock release or remote/production admission. A future
-implementation request begins with Phase 01's exact catalog/contracts,
-upstream/runtime review and file-owner handoff. Existing completed evidence is
-reused at its original ceiling; conflicting older status projections must be
-resolved per surface, not by inferring blanket permission.
-Scope supports Intel Cellos operations; no IDE/build environment, general Linux
-command inventory or independent application ecosystem is selected.
+Phase states, all on private signed QEMU/TCG images only ([plan.md](261020-1750-cellbox-cli/plan.md) phase table):
+
+- **01 catalog/contract gates:** completed-private-evidence (2026-10-26). Criteria C1–C4 are checked in the [phase file](261020-1750-cellbox-cli/phase-01-baseline-contracts.md); the [closure dossier](261020-1750-cellbox-cli/phase-01-closure-dossier.md) §7 holds the gap list.
+  - The catalog is frozen by the user at SHA-256 `f2a82fce61101f9f1dd6d62a75bece735e3eb9129a2295b187c2f49209485339` (2026-10-25).
+  - The [reconciled delta index](261020-1750-cellbox-cli/contract-deltas.md) records owners, CP1s and CP2s. The integrating owner was confirmed by the user for P03–P05, P08 and P09.
+  - The scoped `cargo deny` for the cellbox graph passes; CBX-01 and CBX-02 are met (Phase 10 still audits).
+  - The Q Config per-key write right for `export` ([proposal](261020-1750-cellbox-cli/phase-01-config-right-cp1.md), option Q1) has CP1 (2026-10-25) and CP2 (2026-10-26, deviations 1–2). The `export` denial is lane-proven (P04 466/466, 6 config markers). `/bin/config` ships only with feature `ai`; without it `export` reports `config unavailable`.
+- **02 Terminal SDK and real child/session streams:** completed-private-evidence; CP2 2026-10-25.
+- **03 typed pipelines:** completed; CP2 2026-10-21; private-image evidence.
+- **04 single artifact and caller/image cutover:** completed-private-evidence (2026-10-29, S10-5 CP2 granted by the user). Every Phase 04 delta is CP2-approved: eight slices on 2026-10-22, and S1/S2-lite/S2c-min/S3-edge on 2026-10-25 through the [mini-dossier](261020-1750-cellbox-cli/phase-04-s1-s3-cp2-dossier.md). Criterion 4, canonical one-artifact packaging (including `/bin/cellbox-ssh`), is checked on the promoted dev-posture x86 bytes only (QEMU/TCG; non-Intel recipes not covered).
+- **05 Ratatui backend and GUI-terminal emulation:** completed-private-evidence; CP2 2026-10-23.
+- **06 Cell top and telemetry:** completed-private-evidence; CP2 2026-10-24. The D60-3 clock-unit defect is open.
+- **07 ripgrep search (`libs/vigrep`, ripgrep 15.2.0):** completed-private-evidence; CP2 2026-10-24.
+- **08 compact editor with D03 conditional save:** completed-private-evidence; S8-5 CP2 2026-10-25.
+- **09 outbound SSH (vendored Sunset 0.6.0):** closed-partial-private-evidence (user, 2026-10-25). The Tier-3 guest is blocked, and S9-5 publickey/KMS custody is deferred (D79-14).
+- **10 integrated signed-image qualification and footprint:** closed-partial-private-evidence (2026-10-29, S10-5 CP2 granted by the user). Candidate `4fae8b20…` qualified (S10-3 CP2 2026-10-28), S10-4 closed partial, S10-5 promoted the candidate's desktop bytes to the canonical x86 paths (hash-identical; V1–V7 PASS). Criteria 2, 3, 5 checked; criteria 1 and 4 open: CBX-23/24/25 partial, **CBX-27 (measurement) unmet**.
+
+Latest private lanes (Config CP2 evidence, 2026-10-26): P04 terminal 466/466, GUI 290/290, P03 67, P02 48, kernel lane with 7/7 VFS self-tests, Phase 09 103/103. Rows other than those recorded as met in [acceptance.md](261020-1750-cellbox-cli/acceptance.md) remain pending until their phases and Phase 10 qualification.
+
+**Dev-posture x86 rollout is PROMOTED, not released to production (S10-5 CP2 granted by the user 2026-10-29).** The [rollout containment record](261020-1750-cellbox-cli/reports/rollout-containment.md) stays authoritative (new section "Update 2026-10-29: promotion (S10-5)"):
+
+- the canonical `kernel_fs.img`, `init`, boot-config and default kernel hold the qualified desktop bytes (`3848cefb…`, `c0bd1458…`, `dfbe8c55…`); the quarantined bytes are archived outside the repository, not deleted, and are not a safe boot set;
+- the desktop packager's exit and the default-kernel ISO refusal were replaced by content rules (S10-2b); the quarantined-hash guard (G2b) is permanent; cloud images and non-Intel recipes stay refused;
+- private-fixture signing still needs explicit opt-in, and the dev-key canonical route is admitted only for the pinned assembler into exactly `kernel/src/embedded-x86_64`.
+
+A signature proves neither qualification nor permission to deploy. Physical Intel, VMX, production and remote gates are independent and not claimed. **All 38 CELL-CONTRACT-0024 lock relations remain; S10-5 narrowed none.**
+
+Scope supports Intel Cellos operations only. No IDE/build environment, general Linux command inventory or independent application ecosystem is selected.
 
 ## Parked research — VFS, storage and agent search
 
@@ -444,6 +458,15 @@ Satisfying an old trigger alone does not reopen an independent program.
 - Standalone runtime breadth, BEAM parity expansion and general VM-platform work.
 - Manifest v2 `cap_args`, DICE adapters and other breadth without an identified
   C2C consumer remain parked; a necessary security slice still needs its own gates.
+- KMS protected persistence and SSH key custody (Cellbox D79-14, 2026-10-25). KMS runtime
+  protected-state load/persist is deliberately fail-closed (`cells/services/kms/src/storage.rs`):
+  no authenticated root, sealed state or rollback protection. A plan must establish those, then
+  add an SSH ed25519 key class, chunked import over the 128-byte frame (OpenSSH v1, unencrypted
+  or bcrypt + AES-256-CTR; `bcrypt-pbkdf` must enter the lock), session-bound userauth signing
+  through Sunset's `SignKey::AgentEd25519`/`CliEvent::AgentSign`, and caller admission for
+  `/bin/cellbox-ssh`. It depends on the CellosFS crash-safety plan
+  (`261025-cellosfs-crash-safety`). It unblocks Phase 09 S9-5 (`--auth publickey`, pipeline
+  exec, exact non-UTF-8 stdin).
 - Completed assets remain in-tree; existing cross-architecture regressions may
   protect shared changes but do not make those architectures active targets.
 

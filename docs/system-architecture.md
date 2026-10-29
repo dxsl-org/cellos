@@ -28,6 +28,7 @@ documentation completion does not release the 38 scoped lock dispositions.
 | Isolation tiers | [ADR-0015](decisions/0015-dual-mode-hybrid-architecture.md), [Spec 18](specs/18-cell-trust-tiers.md), [Spec 22 implementation gate](specs/22-native-domain-cell-implementation-gate.md) |
 | Runtime profiles and userspace POSIX translation | [ADR-0018](decisions/0018-cell-native-portability-and-runtime-profiles.md) |
 | Existing local service binding and wire behavior | [ADR-0023](decisions/0023-local-service-generation-binding.md), [Spec 17](specs/17-ipc-wire-contract.md) |
+| Essential command suite, typed pipelines and terminal/TUI boundaries | [ADR-0028](decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md), [Cellbox design](cellbox-cli.md); implementation pending |
 | Current work admission | [Current focus](roadmap/current-focus.md), [plan portfolio](../.agents/plan-portfolio.md), [controlling plan](../.agents/261011-1200-cell-contract-authority/plan.md) |
 | Recorded capability evidence | [Native SDK ledger](app-tier-acceptance-ledger.json), [review projection](app-tier-acceptance-matrix.md), [evidence directory](evidence/) |
 

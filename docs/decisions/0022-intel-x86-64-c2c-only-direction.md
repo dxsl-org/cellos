@@ -167,3 +167,10 @@ old plan trigger or obtaining a board is insufficient.
 - Revisit the direction only through an explicit owner decision based on a
   concrete funded requirement, demonstrated technical blocker or measured result;
   record the changed scope rather than silently reopening old programs.
+
+## Related operational tooling decision
+
+[ADR-0028](0028-cellbox-cli-first-structured-pipelines-and-tui.md) records the
+maintainer-approved CLI-first Cellbox design and pending implementation plan.
+It supports bounded Intel Cellos operations without changing the sole program,
+releasing legacy locks or admitting an IDE/application-development environment.

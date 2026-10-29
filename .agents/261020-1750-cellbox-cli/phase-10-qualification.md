@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Integrated signed-image qualification and measurement"
-status: blocked
+status: closed-partial-private-evidence
 priority: P1
 tier: thinking
 dependencies: [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -28,11 +28,11 @@ Update the affected image/package/signing recipes, command/app-development docs 
 
 ## Success criteria
 
-- [ ] CBX-01..29 have actual evidence with no silent exclusions or placeholders.
-- [ ] Real keyboard/screen/state and network/file effects prove selected behavior, not source assertions or fixed mock output.
-- [ ] One suite artifact and all retained independent apps/services package correctly; no broad ambient authority or hidden legacy fallback.
-- [ ] Measurements compare equivalent feature sets and distinguish host/QEMU/physical ceilings.
-- [ ] Public docs, notices, command help, caller routes and portfolio match the delivered implementation; no IDE/build environment is scheduled or implied.
+- [ ] CBX-01..29 have actual evidence with no silent exclusions or placeholders. **Unmet:** CBX-23/24/25 partial (Tier-3 guest, publickey/KMS) and **CBX-27 unmet** (S10-4 closed partial).
+- [x] Real keyboard/screen/state and network/file effects prove selected behavior, not source assertions or fixed mock output. **Met at the candidate/promoted ceilings (S10-5 CP2 granted 2026-10-29):** L0/L4/L6 real serial/GUI/network/file effects on QEMU/TCG; guest SSH excluded.
+- [x] One suite artifact and all retained independent apps/services package correctly; no broad ambient authority or hidden legacy fallback. **Met on the promoted dev-posture x86 bytes (S10-5 CP2 granted 2026-10-29):** S10-5 V1–V7.
+- [ ] Measurements compare equivalent feature sets and distinguish host/QEMU/physical ceilings. **Unmet:** S10-4 closed partial; no RSS, exact/kernel stack, matched historical runtime or full-workload peaks.
+- [x] Public docs, notices, command help, caller routes and portfolio match the delivered implementation; no IDE/build environment is scheduled or implied. **Met after the S10-5 record updates (S10-5 CP2 granted 2026-10-29).**
 
 ## Verification
 
@@ -369,3 +369,15 @@ S10-3b's root causes, fix, D3b-1..D3b-3, tests and reruns are drafted in the [S0
 2026-10-29 — **S10-4.17 limited-result CP2 APPROVED by the user (relayed by Main); S10-4 CLOSED PARTIAL (closed-partial). Documentation only: no VM, code, rerun, commit or push.**
 - Accepted at stated ceilings: static footprint (B2 scoped-signing 980,528 B / unsigned 994,064 B), six untraced timing runs, headless controlled stream/cancel, observed partial memory bounds, the S10-4.9..S10-4.17 diagnostic findings, all offline iterations (S10-4.17 `offline-iterations.json` included), deviations 1-4 and the S10-4.17 deviations (1 MiB stack sanity window, Enter echo `\n`/`\r\n`, offline-only `until_ns`, hook memory-reply errors as class C), Class B `SUCCESS_METRIC_ONLY`, and the latent retained `Surface.status()` st=N defect left unfixed.
 - **Not approved / unchanged:** full-workload allocator/stack peaks, RSS/residency, exact stack peak, kernel-stack peak, matched historical runtime comparator, and the unrun observed phases (live stream, rg, interactive top, complete snapshot). **CBX-27 and Phase 10 criterion 4 stay UNMET.** S10-5, canonical promotion and containment lift stay blocked and each needs its own CP1. No further S10-4 observer/rerun work is authorized.
+
+2026-10-29 — **S10-5 CP1 DRAFT, status AWAITING CP1 (design only; no canonical byte, guard, build, VM run, commit or push).** Detailed in [S10-5.1–S10-5.12](phase-10-s0-proposal.md): ordered procedure (durable candidate copy, hash-recorded quarantine archive, S10-2b with G2b kept forever, copy-only promotion of the qualified desktop `kernel_fs.img`/`init`/kernel, V1–V7 checks), the headless-vs-desktop mapping (the profiles' bytes are disjoint, so headless-lane evidence is not citable for the promoted desktop bytes), honest rollback (quarantined bytes are not a known-safe boot set) and a pre-promotion checklist.
+- Proposed closure if CP1/CP2 approve and every check passes: Phase 04 criterion 4 checked at the x86 dev-posture QEMU/TCG ceiling; this phase `closed-partial-private-evidence` with criteria 1 (CBX-23/24/25 partial, CBX-27 unmet) and 4 (measurement) open and criteria 2, 3, 5 checked. **CBX-27 and criterion 4 stay unmet.** Decisions requested: DS5-1 (promote with CBX-27 unmet), DS5-2 (desktop profile), DS5-3 (copy the qualified kernel), DS5-4 (S10-2b scope).
+
+2026-10-29 — **S10-5 CP1 APPROVED by the user (relayed by Main): DS5-1..DS5-4 all as recommended, including the two changes from the approved S10-2b text (G3 ELF binding check; the 11 non-desktop L6 consumers on the desktop ISO).** Execution authorised exactly as S10-5.5 P0–P9 then V1–V7; stop on any mismatch, lane/L6 failure or unexpected guard behaviour; no stage, commit, push or tag; `kernel/src/main.rs` and `build/` untouched. Results and CP2 followed (below). **CBX-27 and criterion 4 stay unmet.**
+
+2026-10-29 — **S10-5 EXECUTED: P0–P9 and V1–V7 PASS; Phase 10 `closed-partial-private-evidence` (criteria 1 and 4 open; 2, 3, 5 checked); Phase 04 criterion 4 checked.** Results in [S10-5.13](phase-10-s0-proposal.md); evidence `reports/s10-5-evidence/`.
+- Done: durable candidate copy; hash-recorded quarantine archive; S10-2b (G1, G3 by image content plus ELF binding, canonical assembler route re-opened; **G2b kept forever**; cloud images and non-Intel recipes stay refused); hash-verified copy of the candidate's desktop `kernel_fs.img` `3848cefb…`, `init` `c0bd1458…`, boot-config, `manifest.json` and kernel `dfbe8c55…`; ISO built through the reopened G3 (tree equal to the qualified desktop ISO); one P04 terminal default-mode run 494/494; L6 once 39 pass→pass, 1 pre-existing xHCI fail→fail, 4 skip, 1 ignored, 0 regressions; 469-path delta exactly the five intended paths.
+- Headless-profile lanes (L0 headless, L1, L2, L3, L5) do not cover the promoted desktop bytes (no shared binary is byte-identical across the profiles). Deviations were listed in S10-5.13. **CBX-27 and criterion 4 stay unmet; CBX-23/24/25 stay partial; no measurement, physical, VMX, production, remote or CI claim.**
+
+2026-10-29 — **S10-5 CP2 APPROVED by the user (relayed by Main), including deviations 1–8 in S10-5.13 and the acknowledgement of the new `command-catalog.md` digest `f06f38ce7447758f7b49e58d6e98dc8309b583515bf1ffd3608e665011a5fd0f` (recorded in `contract-deltas.md`).** Documentation only: no VM, build, source or canonical change; nothing staged or committed (commit is a separate step). The Phase 04 and Phase 10 frontmatter statuses stand: Phase 04 `completed-private-evidence` (criterion 4 checked), Phase 10 `closed-partial-private-evidence`.
+- **Unchanged and not approved:** CBX-27 unmet; CBX-23/24/25 partial; Phase 10 criteria 1 and 4 open; no physical Intel, VMX/EPT, production, remote, KVM or crash-durability claim; no cloud formats; non-Intel recipes refused; all 38 CELL-CONTRACT-0024 lock relations remain.
