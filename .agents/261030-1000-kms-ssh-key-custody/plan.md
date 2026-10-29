@@ -1,6 +1,6 @@
 ---
 title: "KMS SSH key custody (KSSH): ed25519 keys in KMS for outbound Cellbox SSH publickey auth"
-status: k0-documents-drafted-awaiting-approval
+status: k0-approved-docs-only
 priority: P2
 created: 2026-10-30
 origin: "Cellbox Phase 09 S9-5 (deferred by D79-14, 2026-10-25); Phase 10 S10-10 decision D10-2 = E (user, 2026-10-30)"
@@ -60,9 +60,9 @@ Critical path: K0 -> K2 CP1 -> K1 -> K3 -> K5 -> K6 -> K8. T0 can ship without K
 
 Any source edit, KMS or kernel change, key generation, network fetch (including `bcrypt-pbkdf`), image/signing change, VM run, lock release, or a production/physical/crash-durability claim. Documentation completion unlocks nothing (`cell-contract-0024-locks.md:300`).
 
-## K0 status (2026-10-30)
+## K0 status (2026-10-30): APPROVED by the user (both documents; documents only)
 
-Drafted, awaiting user approval: [contract delta](contract-delta-import-surface.md) (no CLI import command; import is a credential-owner path; unlock model left to K2) and [lock-adoption packet](lock-adoption-draft.md) with its open items resolved (CellosFS plan has no lock row; census composition; promoted image has no `/bin/kms` so T0 needs an image delta). K0 is complete only when the user approves both.
+Approved: [contract delta](contract-delta-import-surface.md) (no CLI import command; import is a credential-owner path; unlock model left to K2) and [lock-adoption packet](lock-adoption-draft.md) with its open items resolved (CellosFS plan has no lock row; census composition; promoted image has no `/bin/kms` so T0 needs an image delta). K0 is complete. Approval authorizes no code, key, network fetch, lock release or image change; the lock-adoption packet remains a record of scope and is submitted to the controlling plan only per slice (K2, K3, K4b, K5) at that slice's CP1.
 
 ## Next concrete step
 

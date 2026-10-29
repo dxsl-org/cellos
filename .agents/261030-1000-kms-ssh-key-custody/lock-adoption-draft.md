@@ -1,4 +1,4 @@
-# KSSH lock-adoption packet (DRAFT, not approved, not submitted)
+# KSSH lock-adoption packet (K0 scope record, approved 2026-10-30; no lock released)
 
 Purpose: name the locked relations and protected paths each KSSH slice would touch, in the file-bounded form of the Cellbox Phase 02 exception (`.agents/cell-contract-0024-locks.md:113`; unfreeze procedure `:293-300`). Source: [probe §4](../261020-1750-cellbox-cli/reports/s10-10-evidence/probe/kms-prerequisites.md). **No lock is released and no protected path is edited by this document.**
 
@@ -23,4 +23,4 @@ Open items for K0: state the `261025-cellosfs-crash-safety` lock owner; identify
 3. **Canonical image content:** `mdir ::/bin` of the promoted `kernel_fs.img` (3848cefb…, 25,165,824 B) lists cellbox, vfs, config, input, net, platform, the drivers, ls/cat/echo/ps/kill/shutdown and tier2 fixtures; **no `/bin/kms`** (0 matches), and `boot-config/services.toml` does not start KMS. A T0 proof therefore needs an image delta (add KMS, a net-broker if the admission list requires it, launch/policy rows) as well as source changes; this is not a drop-in on the promoted bytes.
 4. **Admission reality:** KMS admits only net, net-broker and supervisor callers; the kernel caller trailer has no path, so `/bin/cellbox-ssh` needs the new kernel-attested flag (K3). The "test-hook flag" alternative in the plan's K5 entry exists only for host/lane tests, never for the promoted image.
 
-Submission status: **DRAFT, not submitted, not approved.** No lock row is changed by this packet.
+Status: **approved by the user 2026-10-30 as K0 scope record**; per-slice submission to the controlling plan happens at each slice's CP1 (K2, K3, K4b, K5). No lock row is changed by this packet.

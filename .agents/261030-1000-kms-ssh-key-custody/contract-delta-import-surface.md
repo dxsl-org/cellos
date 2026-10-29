@@ -1,6 +1,6 @@
-# KSSH K0 contract delta: SSH key import surface and unlock model (PROPOSED, not approved, nothing edited)
+# KSSH K0 contract delta: SSH key import surface and unlock model (APPROVED by the user 2026-10-30; `command-contracts.md` itself unchanged)
 
-Scope: documents only. This proposes how the KSSH program reconciles the retained Cellbox contract and the S9-5 proposal. It edits neither `command-contracts.md` nor any proposal; approval of this delta is the K0 gate.
+Scope: documents only. This records how the KSSH program reconciles the retained Cellbox contract and the S9-5 proposal. It edits neither `command-contracts.md` nor any proposal; approval of this delta is the K0 gate.
 
 ## 1. The conflict (verified, 2026-10-30)
 
