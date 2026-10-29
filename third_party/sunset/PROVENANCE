@@ -1,0 +1,54 @@
+Sunset SSH core, vendored for Cellos Phase 09 (cellbox ssh), decision D79-3.
+
+Upstream:   https://github.com/mkj/sunset
+Commit:     62b98f3996c88cf920cac1653e1c9e15ddf0d7d0 (main, fetched 2026-10-25)
+Tree:       c37df41ee5894f16047b47d3dc59f66e5b93f79f
+Version:    sunset 0.6.0, sunset-sshwire-derive 0.3.0
+License:    0BSD (LICENSE, verbatim)
+
+Kept:       src/, sshwire-derive/, build.rs, LICENSE, README.md, changelog.md.
+Removed:    the upstream workspace and Cargo.lock, async/, stdasync/, sftp/, demo/,
+            fuzz/, testing/, docs/, rust-toolchain.toml, and the dev-dependencies of
+            sshwire-derive.
+Manifest:   Cargo.toml was rewritten: workspace dependency entries are inlined at the
+            upstream versions, and the getrandom dependency is replaced by spin.
+            Only the alloc, openssh-key and larger features remain. The cfg names of
+            the dropped features are declared so their blocks compile out without
+            warnings.
+
+PATCHES/upstream-files.sha256 lists the SHA-256 of every kept upstream file.
+PATCHES/cellos.diff is the complete source difference from upstream:
+  0001 entropy source (src/random.rs, src/lib.rs). Draws come only from a source the
+       embedding program installs once (set_entropy_source). With no source, or after
+       a failed draw, every draw fails; key generation panics, as upstream does.
+  0002 cellbox profile (src/kex.rs). KEX is curve25519-sha256 only (the libssh alias
+       is dropped), the cipher is chacha20-poly1305@openssh.com only (aes256-ctr is
+       dropped), and a peer whose initial KEXINIT lacks the strict-KEX marker is
+       refused. Rekey KEXINITs are not checked: the marker only counts in the initial
+       one, and OpenSSH leaves it out when rekeying.
+  0003 session requests and half-close (src/channel.rs, src/runner.rs). Shell, exec and
+       subsystem requests ask for a reply; the first ChannelSuccess/Failure on the
+       channel is kept and exposed as Runner::channel_request_reply. New
+       Runner::send_channel_eof sends the client's EOF once (upstream only echoed the
+       peer's EOF).
+  0004 event/payload pairing (src/runner.rs). progress() used to complete "the
+       previous event's payload" even when that event came from conn.progress() or
+       was an extra event whose payload a resume handler had already completed, which
+       discarded an unrelated packet that arrived in between (seen as a server never
+       seeing the client's ChannelOpen after Authenticated). Only an event produced
+       from the current payload now completes it.
+  0005 rekey policy (src/encrypt.rs, src/kex.rs, src/conn.rs, src/runner.rs,
+       src/lib.rs). Upstream's block-count RFC4344 thresholds are replaced by
+       RekeyLimits: payload bytes and packets per direction since the last NEWKEYS
+       (PRODUCTION 1 GiB / 2^30 packets; the embedder may lower them). Once a rekey
+       is due, write_channel_ready() offers no room, so application payload waits for
+       the KEX. A direction past twice its threshold plus in-flight room (4 maximum
+       packets / 64 packets), or a sequence number at 2^31, fails encrypt/decrypt with
+       "rekey ceiling reached" before anything can wrap. Runner gains set_rekey_limits,
+       request_rekey (the embedder's time trigger; only after the first KEX and while
+       none is active), kex_active and newkeys_count.
+  0006 channel flow control (src/config.rs, src/channel.rs). The advertised window
+       is 65536 and the maximum channel packet 16384 (upstream: 1000 placeholders).
+       A peer window adjustment past 2^32-1 is a protocol error instead of a
+       saturated credit.
+  sshwire-derive/Cargo.toml: the circular dev-dependency on sunset is removed.

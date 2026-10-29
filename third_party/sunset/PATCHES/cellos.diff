@@ -1,0 +1,593 @@
+--- a/src/channel.rs
++++ b/src/channel.rs
+@@ -216,6 +216,22 @@
+         self.get(num).is_ok_and(|c| c.have_recv_eof())
+     }
+ 
++    /// Cellos patch 0003: half-close our sending direction once.
++    pub(crate) fn send_eof(&mut self, num: ChanNum, s: &mut TrafSend) -> Result<()> {
++        let ch = self.get_mut(num)?;
++        if !ch.sent_eof {
++            s.send(packets::ChannelEof { num: ch.send_num()? })?;
++            ch.sent_eof = true;
++        }
++        Ok(())
++    }
++
++    /// Cellos patch 0003: the server's reply to the channel's shell/exec/subsystem
++    /// request: `Some(true)` success, `Some(false)` failure, `None` not yet.
++    pub(crate) fn request_reply(&self, num: ChanNum) -> Option<bool> {
++        self.get(num).ok().and_then(|c| c.request_reply)
++    }
++
+     pub(crate) fn is_closed(&self, num: ChanNum) -> bool {
+         self.get(num).is_ok_and(|c| c.is_closed())
+     }
+@@ -440,7 +456,12 @@
+             Packet::ChannelWindowAdjust(p) => {
+                 let chan = self.get_mut(ChanNum(p.num))?;
+                 let send = chan.send.as_mut().trap()?;
+-                send.window = send.window.saturating_add(p.adjust as usize);
++                // Cellos patch 0006: the peer's window is a checked u32 (RFC 4254 §5.2);
++                // an adjustment past 2^32-1 is a protocol error, not a saturated credit.
++                let Some(window) = u32::try_from(send.window).ok().and_then(|w| w.checked_add(p.adjust)) else {
++                    return error::SSHProto.fail();
++                };
++                send.window = window as usize;
+                 debug!("ch {} new window +{} = {}", p.num, p.adjust, send.window);
+                 // Wake any writers that might have been blocked.
+                 chan.wake_write(is_client);
+@@ -494,11 +515,15 @@
+                     Err(_) => debug!("Ignoring request to unknown channel: {p:#?}"),
+                 }
+             }
+-            Packet::ChannelSuccess(_p) => {
+-                trace!("channel success, TODO");
++            // Cellos patch 0003: only shell/exec/subsystem requests want a reply
++            // (see `Req::send`), so the first reply on a channel answers that request.
++            Packet::ChannelSuccess(p) => {
++                let ch = self.get_mut(ChanNum(p.num))?;
++                ch.request_reply.get_or_insert(true);
+             }
+-            Packet::ChannelFailure(_p) => {
+-                trace!("channel failure, TODO");
++            Packet::ChannelFailure(p) => {
++                let ch = self.get_mut(ChanNum(p.num))?;
++                ch.request_reply.get_or_insert(false);
+             }
+             _ => Error::bug_msg("unreachable")?,
+         };
+@@ -655,6 +680,9 @@
+ 
+ impl Req<'_> {
+     pub(crate) fn send(self, ch: &Channel, s: &mut TrafSend) -> Result<()> {
++        // Cellos patch 0003: the session's command request asks for a reply, so the
++        // client can tell an accepted command from one that may not have run.
++        let want_reply = matches!(self, Req::Shell | Req::Exec(_) | Req::Subsystem(_));
+         let t;
+         let req = match self {
+             Req::Shell => ChannelReqType::Shell,
+@@ -682,8 +710,8 @@
+ 
+         let p = ChannelRequest {
+             num: ch.send_num()?,
+-            // we aren't handling responses for anything
+-            want_reply: false,
++            // Cellos patch 0003: see `want_reply` above.
++            want_reply,
+             req,
+         };
+         let p: Packet = p.into();
+@@ -741,6 +769,8 @@
+     state: ChanState,
+     sent_eof: bool,
+     sent_close: bool,
++    /// Cellos patch 0003: reply to the shell/exec/subsystem request.
++    request_reply: Option<bool>,
+ 
+     recv: ChanDir,
+     /// populated in all states except `Opening`
+@@ -776,6 +806,7 @@
+             ty,
+             state: ChanState::Opening,
+             sent_close: false,
++            request_reply: None,
+             sent_eof: false,
+             recv: ChanDir {
+                 num: num.0,
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -1,6 +1,9 @@
+-// TODO
+-pub const DEFAULT_WINDOW: usize = 1000;
+-pub const DEFAULT_MAX_PACKET: usize = 1000;
++// Cellos patch 0006: the advertised receive window and maximum channel packet are the
++// cellbox profile's (command-contracts §4.2): 64 KiB window, 16 KiB data chunks. One
++// inbound packet stays in the 35,000-byte input scratch until the application reads
++// it, and TCP carries the rest of the window, so neither grows a local buffer.
++pub const DEFAULT_WINDOW: usize = 65536;
++pub const DEFAULT_MAX_PACKET: usize = 16384;
+ 
+ /// Maximum SSH packet size, from RFC4253.
+ ///
+--- a/src/conn.rs
++++ b/src/conn.rs
+@@ -412,6 +412,16 @@
+         self.sess_id.is_none()
+     }
+ 
++    /// Cellos patch 0005: the first KEX completed (a session id exists).
++    pub(crate) fn kex_established(&self) -> bool {
++        self.sess_id.is_some()
++    }
++
++    /// Cellos patch 0005: a key exchange is in progress.
++    pub(crate) fn kex_active(&self) -> bool {
++        !self.kex.is_idle()
++    }
++
+     /// True if KexInit has not been sent.
+     pub fn is_kex_sending(&self) -> bool {
+         self.kex.is_sending()
+--- a/src/encrypt.rs
++++ b/src/encrypt.rs
+@@ -11,7 +11,7 @@
+ 
+ use core::fmt;
+ use core::fmt::Debug;
+-use core::num::{Saturating, Wrapping};
++use core::num::Wrapping;
+ 
+ use aes::cipher::{BlockSizeUser, KeyIvInit, KeySizeUser, StreamCipher};
+ use digest::KeyInit;
+@@ -39,14 +39,35 @@
+ /// Largest is chacha. Also applies to MAC keys
+ const MAX_KEY_LEN: usize = 64;
+ 
+-// RFC4344. Ensure that rekey occurs at least every 2**31 blocks encrypted,
+-// and to avoid the 32-bit sequence counter wrapping.
+-// This is every 32GB transferred (at a 16 byte block size for AES). .
+-const REKEY_BLOCKS_OUT_LIMIT: u32 = 0x8000_0000;
+-// Receive limit is slightly higher, to avoid chance of both peers hitting the limit
+-// simultaneously, resulting in a needless (but harmless) second rekey.
+-const REKEY_BLOCKS_IN_LIMIT: u32 = 0x8100_0000;
+-const REKEY_BLOCK_SIZE: usize = 16;
++// Cellos patch 0005: the rekey policy is per direction since the last NEWKEYS, in
++// encrypted payload bytes and packets (command-contracts §4.2), replacing upstream's
++// block-only RFC4344 thresholds. The embedder may lower it (tests) and adds the time
++// trigger through `Runner::request_rekey`, since this core has no clock.
++
++/// Rekey thresholds per direction, counted since the last completed NEWKEYS.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub struct RekeyLimits {
++    /// Encrypted payload bytes.
++    pub bytes: u64,
++    /// Packets.
++    pub packets: u32,
++}
++
++impl RekeyLimits {
++    /// 1 GiB or 2^30 packets per direction, whichever comes first.
++    pub const PRODUCTION: Self = Self { bytes: 1 << 30, packets: 1 << 30 };
++
++    /// A direction past twice its threshold plus room for the packets already in flight
++    /// when the threshold was crossed (a rekey that never completed), or a sequence
++    /// number at 2^31: the connection aborts before anything can wrap.
++    fn ceiling(&self, bytes: u64, packets: u32, seq: u32) -> bool {
++        const IN_FLIGHT_BYTES: u64 = 4 * crate::config::SSH_MAX_PACKET as u64;
++        const IN_FLIGHT_PACKETS: u32 = 64;
++        bytes >= self.bytes.saturating_mul(2).saturating_add(IN_FLIGHT_BYTES)
++            || packets >= self.packets.saturating_mul(2).saturating_add(IN_FLIGHT_PACKETS)
++            || seq >= 0x8000_0000
++    }
++}
+ 
+ #[derive(Debug)]
+ pub(crate) struct KeyState {
+@@ -58,9 +79,16 @@
+     pub seq_decrypt: Wrapping<u32>,
+     strict_kex: bool,
+ 
+-    // Count of 16-byte blocks, for rekeying.
+-    rekey_blocks_out: Saturating<u32>,
+-    rekey_blocks_in: Saturating<u32>,
++    // Cellos patch 0005: payload bytes and packets per direction since NEWKEYS.
++    limits: RekeyLimits,
++    bytes_out: u64,
++    bytes_in: u64,
++    packets_out: u32,
++    packets_in: u32,
++    /// The embedder asked for a rekey (time trigger); cleared by our NEWKEYS.
++    rekey_requested: bool,
++    /// Completed NEWKEYS in the receiving direction (the first KEX counts).
++    newkeys: u32,
+ }
+ 
+ impl KeyState {
+@@ -72,8 +100,13 @@
+             seq_encrypt: Wrapping(0),
+             seq_decrypt: Wrapping(0),
+             strict_kex: false,
+-            rekey_blocks_out: Saturating(0),
+-            rekey_blocks_in: Saturating(0),
++            limits: RekeyLimits::PRODUCTION,
++            bytes_out: 0,
++            bytes_in: 0,
++            packets_out: 0,
++            packets_in: 0,
++            rekey_requested: false,
++            newkeys: 0,
+         }
+     }
+ 
+@@ -82,10 +115,25 @@
+     }
+ 
+     pub fn is_rekey_needed(&self) -> bool {
+-        self.rekey_blocks_in.0 > REKEY_BLOCKS_IN_LIMIT
+-            || self.rekey_blocks_out.0 > REKEY_BLOCKS_OUT_LIMIT
++        self.rekey_requested
++            || self.bytes_in >= self.limits.bytes
++            || self.bytes_out >= self.limits.bytes
++            || self.packets_in >= self.limits.packets
++            || self.packets_out >= self.limits.packets
++    }
++
++    pub fn set_rekey_limits(&mut self, limits: RekeyLimits) {
++        self.limits = limits;
+     }
+ 
++    pub fn request_rekey(&mut self) {
++        self.rekey_requested = true;
++    }
++
++    pub fn newkeys(&self) -> u32 {
++        self.newkeys
++    }
++
+     pub fn enable_strict_kex(&mut self) {
+         self.strict_kex = true;
+     }
+@@ -96,7 +144,9 @@
+         if self.strict_kex {
+             self.seq_encrypt = Wrapping(0);
+         }
+-        self.rekey_blocks_out = Saturating(0);
++        self.bytes_out = 0;
++        self.packets_out = 0;
++        self.rekey_requested = false;
+     }
+ 
+     /// Updates with keys for receiving.
+@@ -113,7 +163,9 @@
+         if self.strict_kex {
+             self.seq_decrypt = Wrapping(0);
+         }
+-        self.rekey_blocks_in = Saturating(0);
++        self.bytes_in = 0;
++        self.packets_in = 0;
++        self.newkeys = self.newkeys.saturating_add(1);
+     }
+ 
+     pub fn recv_seq(&self) -> u32 {
+@@ -124,6 +176,11 @@
+     ///
+     /// Returning the length.
+     pub fn decrypt_first_block(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
++        // Cellos patch 0005: a peer past the ceiling (it never completed a rekey) ends
++        // the connection before the receive sequence number could wrap.
++        if self.limits.ceiling(self.bytes_in, self.packets_in, self.seq_decrypt.0) {
++            return Err(Error::msg("rekey ceiling reached"));
++        }
+         self.dec.decrypt_first_block(buf, self.seq_decrypt.0)
+     }
+ 
+@@ -135,7 +192,8 @@
+         let e = self.dec.decrypt(buf, self.seq_decrypt.0);
+         self.seq_decrypt += 1;
+         if let Ok(payload_len) = e {
+-            self.rekey_blocks_in += payload_len.div_ceil(REKEY_BLOCK_SIZE) as u32;
++            self.bytes_in = self.bytes_in.saturating_add(payload_len as u64);
++            self.packets_in = self.packets_in.saturating_add(1);
+         }
+         e
+     }
+@@ -152,12 +210,17 @@
+         payload_len: usize,
+         buf: &mut [u8],
+     ) -> Result<usize, Error> {
++        // Cellos patch 0005: refuse to send past the ceiling (never wraps).
++        if self.limits.ceiling(self.bytes_out, self.packets_out, self.seq_encrypt.0) {
++            return Err(Error::msg("rekey ceiling reached"));
++        }
+         let e = self.enc.encrypt(payload_len, buf, self.seq_encrypt.0);
+ 
+         // NoRoom failure allows retries.
+         if !matches!(e, Err(Error::NoRoom { .. })) {
+             self.seq_encrypt += 1;
+-            self.rekey_blocks_out += buf.len().div_ceil(REKEY_BLOCK_SIZE) as u32;
++            self.bytes_out = self.bytes_out.saturating_add(payload_len as u64);
++            self.packets_out = self.packets_out.saturating_add(1);
+         }
+         e
+     }
+--- a/src/kex.rs
++++ b/src/kex.rs
+@@ -38,12 +38,13 @@
+ const MAX_SESSID: usize = 32;
+ pub type SessId = heapless::Vec<u8, MAX_SESSID>;
+ 
+-// TODO this will be configurable.
++// Cellos patch 0002 (see PROVENANCE): the algorithm lists are narrowed
++// to the cellbox ssh profile (command-contracts §4.2): `curve25519-sha256` only, and
++// `chacha20-poly1305@openssh.com` only.
+ const fixed_options_kex: &[&str] = &[
+     #[cfg(feature = "mlkem")]
+     SSH_NAME_MLKEM_X25519,
+     SSH_NAME_CURVE25519,
+-    SSH_NAME_CURVE25519_LIBSSH,
+ ];
+ 
+ /// Options that can't be negotiated
+@@ -61,7 +62,7 @@
+     SSH_NAME_RSA_SHA256,
+ ];
+ 
+-const fixed_options_cipher: &[&str] = &[SSH_NAME_CHAPOLY, SSH_NAME_AES256_CTR];
++const fixed_options_cipher: &[&str] = &[SSH_NAME_CHAPOLY];
+ const fixed_options_mac: &[&str] = &[SSH_NAME_HMAC_SHA256];
+ const fixed_options_comp: &[&str] = &[SSH_NAME_NONE];
+ 
+@@ -335,6 +336,11 @@
+         core::mem::replace(self, Kex::Taken)
+     }
+ 
++    /// Cellos patch 0005: no key exchange in progress (in either direction).
++    pub fn is_idle(&self) -> bool {
++        matches!(self, Kex::Idle)
++    }
++
+     /// Test if a KEX is in progress.
+     ///
+     /// This is from a sending perspective. Returns true after KexInit
+@@ -424,6 +430,12 @@
+             debug!("kexinit has strict kex but wasn't first packet");
+             return error::PacketWrong.fail();
+         }
++        // Cellos patch 0002: strict KEX is required, not merely used when offered. The
++        // marker is only meaningful in the initial KEXINIT (OpenSSH PROTOCOL: ignored in
++        // later ones, and OpenSSH omits it on rekey), so only the first KEX checks it.
++        if first_kex && !algos.strict_kex {
++            return Err(Error::AlgoNoMatch { algo: "strict-kex" });
++        }
+         if first_kex && algos.strict_kex {
+             // strict-kex in initial KEXINIT enables it
+             s.enable_strict_kex();
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -61,6 +61,10 @@
+ pub use packets::{PubKey, Signature};
+ pub use sign::{KeyType, OwnedSig, SignKey};
+ pub use sshnames::ChanFail;
++// Cellos patch 0001: the embedding program installs the entropy source.
++pub use random::{set_entropy_source, EntropySource};
++// Cellos patch 0005: the embedder's rekey policy.
++pub use encrypt::RekeyLimits;
+ 
+ pub use event::{CliEvent, Event, ServEvent};
+ pub use runner::ChanHandle;
+--- a/src/random.rs
++++ b/src/random.rs
+@@ -1,14 +1,76 @@
+-use rand_core::{CryptoRng, UnwrapErr};
++// Cellos patch 0001 (see PROVENANCE): upstream draws from `getrandom::SysRng`,
++// whose backend on a bare-metal target is chosen by a global `--cfg`. Sunset here draws
++// from one source the embedding program installs once. Until a source is installed, and
++// whenever it reports failure, every draw fails: there is no fallback generator.
++use core::fmt;
++
++use rand_core::{CryptoRng, TryCryptoRng, TryRng, UnwrapErr};
+ #[allow(unused_imports)]
+ use {
+     crate::error::{Error, Result, TrapBug},
+     log::{debug, error, info, log, trace, warn},
+ };
+ 
++/// Fills the whole buffer with cryptographic random bytes, or returns `false`.
++pub type EntropySource = fn(&mut [u8]) -> bool;
++
++static SOURCE: spin::Once<EntropySource> = spin::Once::new();
++
++/// Install the process entropy source. The first installation wins; later calls
++/// return `false` and change nothing.
++pub fn set_entropy_source(source: EntropySource) -> bool {
++    let mut installed = false;
++    SOURCE.call_once(|| {
++        installed = true;
++        source
++    });
++    installed
++}
++
++#[derive(Debug)]
++struct EntropyFailed;
++
++impl fmt::Display for EntropyFailed {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        f.write_str("entropy source unavailable")
++    }
++}
++
++impl core::error::Error for EntropyFailed {}
++
++struct Source;
++
++impl TryRng for Source {
++    type Error = EntropyFailed;
++
++    fn try_next_u32(&mut self) -> Result<u32, EntropyFailed> {
++        let mut b = [0u8; 4];
++        self.try_fill_bytes(&mut b)?;
++        Ok(u32::from_le_bytes(b))
++    }
++
++    fn try_next_u64(&mut self) -> Result<u64, EntropyFailed> {
++        let mut b = [0u8; 8];
++        self.try_fill_bytes(&mut b)?;
++        Ok(u64::from_le_bytes(b))
++    }
++
++    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), EntropyFailed> {
++        match SOURCE.get() {
++            Some(fill) if fill(dst) => Ok(()),
++            _ => Err(EntropyFailed),
++        }
++    }
++}
++
++impl TryCryptoRng for Source {}
++
++/// Generator for key generation inside the protocol. As upstream (`UnwrapErr`), a
++/// failed draw panics, which aborts the program instead of producing a key.
+ pub(crate) fn rng() -> impl CryptoRng {
+-    UnwrapErr(getrandom::SysRng)
++    UnwrapErr(Source)
+ }
+ 
+ pub fn fill_random(buf: &mut [u8]) -> Result<(), Error> {
+-    getrandom::fill(buf).map_err(|_| Error::msg("RNG failed"))
++    Source.try_fill_bytes(buf).map_err(|_| Error::msg("RNG failed"))
+ }
+--- a/src/runner.rs
++++ b/src/runner.rs
+@@ -51,6 +51,11 @@
+     // The Event handler can set extra_resume_event which will cause that
+     // event to be emitted on the next .progress() call.
+     extra_resume_event: DispatchEvent,
++    // Cellos patch 0004: whether `resume_event` was produced from the current input
++    // payload. An event from `conn.progress()` (for example `Authenticated` or
++    // `SessionOpened`) has none; completing "its" payload on the next `progress()`
++    // would discard an unrelated packet that arrived in between.
++    resume_from_payload: bool,
+ }
+ 
+ impl<CS: CliServ> core::fmt::Debug for Runner<'_, CS> {
+@@ -294,6 +299,7 @@
+             closed_input: false,
+             resume_event: DispatchEvent::None,
+             extra_resume_event: DispatchEvent::None,
++            resume_from_payload: false,
+         }
+     }
+ 
+@@ -314,14 +320,19 @@
+         // Another event may be pending from the same payload, emit it.
+         let ex = self.extra_resume_event.take();
+         if ex.is_some() {
++            // Cellos patch 0004: extra events are set by resume handlers, which have
++            // already completed their payload.
++            self.resume_from_payload = false;
+             self.resume_event = ex.clone();
+             return CS::dispatch_into_event(self, ex);
+         }
+ 
+-        // Previous event payload is complete
+-        if prev.is_event() {
++        // Previous event payload is complete (Cellos patch 0004: only if the event
++        // came from a payload).
++        if prev.is_event() && self.resume_from_payload {
+             self.traf_in.done_payload();
+         }
++        self.resume_from_payload = false;
+ 
+         // Try moving packets from the deferred queue to the
+         // normal output. Can't happen during kex since non-kex
+@@ -354,6 +365,7 @@
+                 }
+                 DispatchEvent::CliEvent(_) | DispatchEvent::ServEvent(_) => {
+                     // will return as an event
++                    self.resume_from_payload = true;
+                 }
+                 DispatchEvent::None => {
+                     // packets have been completed
+@@ -619,6 +631,20 @@
+         self.conn.channels.is_closed(chan.0) || self.closed_input
+     }
+ 
++    /// Cellos patch 0003: send `SSH_MSG_CHANNEL_EOF` once for our direction of
++    /// `chan` (end of the application's input); the receive direction stays open.
++    pub fn send_channel_eof(&mut self, chan: &ChanHandle) -> Result<()> {
++        let mut s = self.traf_out.sender(&mut self.keys);
++        self.conn.channels.send_eof(chan.0, &mut s)?;
++        self.wake();
++        Ok(())
++    }
++
++    /// Cellos patch 0003: the server's reply to `chan`'s shell/exec/subsystem request.
++    pub fn channel_request_reply(&self, chan: &ChanHandle) -> Option<bool> {
++        self.conn.channels.request_reply(chan.0)
++    }
++
+     /// Returns the maximum data that may be sent to a channel
+     ///
+     /// Returns `Ok(None)` on channel closed.
+@@ -645,6 +671,11 @@
+             return Ok(Some(0));
+         }
+ 
++        // Cellos patch 0005: once a rekey is due, application payload waits for it (the
++        // next progress() starts the KEX), so the thresholds hold under a busy writer.
++        if self.keys.is_rekey_needed() {
++            return Ok(Some(0));
++        }
+         // Drain only happens prior to KEX, so can be woken after KexDone.
+         if self.traf_out.is_draining() {
+             // Continual channel data could prevent drain from completing,
+@@ -877,6 +908,36 @@
+     }
+ }
+ 
++/// Cellos patch 0005: the rekey policy (command-contracts §4.2) is the embedder's.
++impl<CS: CliServ> Runner<'_, CS> {
++    /// Replace the per-direction byte/packet thresholds (default
++    /// [`RekeyLimits::PRODUCTION`](crate::RekeyLimits::PRODUCTION)).
++    pub fn set_rekey_limits(&mut self, limits: crate::RekeyLimits) {
++        self.keys.set_rekey_limits(limits);
++    }
++
++    /// Start a rekey (the embedder's time trigger). Only after the first KEX and while
++    /// none is in progress; returns whether one was requested.
++    pub fn request_rekey(&mut self) -> bool {
++        if !self.conn.kex_established() || self.conn.kex_active() {
++            return false;
++        }
++        self.keys.request_rekey();
++        self.wake();
++        true
++    }
++
++    /// A key exchange (the first or a rekey, from either side) is in progress.
++    pub fn kex_active(&self) -> bool {
++        self.conn.kex_active()
++    }
++
++    /// Completed key exchanges (the first counts).
++    pub fn newkeys_count(&self) -> u32 {
++        self.keys.newkeys()
++    }
++}
++
+ impl<'a> Runner<'a, client::Client> {
+     pub fn open_client_session(&mut self) -> Result<ChanHandle> {
+         trace!("open_client_session");
+--- a/sshwire-derive/Cargo.toml
++++ b/sshwire-derive/Cargo.toml
+@@ -11,8 +11,3 @@
+ 
+ [dependencies]
+ virtue = "=0.0.17" # Last released version
+-
+-[dev-dependencies]
+-# Not a workspace dep so it won't have a version number.
+-# Workaround for circular dev-dependencies.
+-sunset = { path = "..", features = ["std"]}
