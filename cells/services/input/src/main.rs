@@ -31,6 +31,8 @@
 extern crate alloc;
 
 mod dispatcher;
+mod session;
+mod key_repeat;
 mod layout_us_qwerty;
 mod modifier_state;
 mod mouse_state;
@@ -46,17 +48,17 @@ use modifier_state::ModifierState;
 use mouse_state::{btn_to_mouse_button, MouseState, BTN_LEFT};
 use ostd::io::{print, print_usize, println};
 use ostd::syscall::{
-    sys_get_resolution, sys_get_time, sys_heartbeat, sys_lookup_service, sys_recv_timeout,
-    sys_try_send, sys_yield, SyscallResult,
+    sys_get_resolution, sys_get_time, sys_get_time_ms, sys_heartbeat, sys_lookup_service, sys_set_timer,
+    sys_try_recv_attested, sys_try_send, sys_yield, SyscallResult,
 };
 use virtio_device::{find_and_init_inputs, InputDevice};
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 // LookupService: the dispatcher resolves the compositor TID for mouse routing.
+// SetTimer: the owner loop parks for one tick when fully idle instead of spinning.
 api::declare_syscalls![
     Send,
     TrySend,
-    Recv,
-    RecvTimeout,
+    TryRecv,
     Log,
     Heartbeat,
     GetTime,
@@ -65,6 +67,11 @@ api::declare_syscalls![
     GrantFree,
     LookupService,
     GpuGetResolution,
+    LookupServiceBound,
+    CellSessionV1,
+    IpcCurrent,
+    IpcReply,
+    SetTimer,
     Yield
 ];
 
@@ -82,10 +89,6 @@ const EV_DEVICE: u8 = 0x05;
 const EVDEV_KEY: u16 = 1;
 const EVDEV_REL: u16 = 2;
 const EVDEV_ABS: u16 = 3;
-
-/// Poll the VirtIO virtqueue once per scheduler tick (≈10 ms).
-/// Using scheduler-tick units (not mtime); see net service UNIT TRAP note.
-const POLL_SCHED_TICKS: u64 = 1;
 
 /// Watchdog interval: 5000 scheduler ticks × 10ms = 50 seconds.
 /// Must match DISPATCH_HEARTBEAT in dispatcher.rs — they share the same timeline.
@@ -135,15 +138,57 @@ pub fn main() {
 
     loop {
         sys_heartbeat(HEARTBEAT_TICKS);
+        dispatcher.sessions.maintain();
         if !dispatcher.flush_mouse() {
-            sys_yield();
+            // Compositor queue is full: retry on the next tick instead of spinning.
+            idle_wait();
             continue;
         }
+        // Set whenever this turn did any work; only a fully idle turn sleeps.
+        let mut busy = false;
 
-        // Drain every VirtIO virtqueue before blocking.  This catches events
-        // that arrived since the last iteration without waiting for the timeout.
+        // Nonblocking attested receive keeps ring backpressure, deferred polls,
+        // UART ESC deadlines and physical-device polling on the same owner loop.
+        // The kernel overwrites the caller trailer; clear it before each attempt
+        // so an empty receive can never reuse a previous principal.
+        buf[IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN..].fill(0);
+        match sys_try_recv_attested(0, &mut buf) {
+            SyscallResult::Ok(0) => {
+                // Real timeout — no IPC input.
+            }
+            SyscallResult::Ok(n) if n == isize::MAX as usize => {
+                busy = true;
+                // Kernel UART relay (sentinel sender_id = isize::MAX as usize).
+                handle_kernel_event(
+                    &buf,
+                    &mut modifiers,
+                    &mut mouse,
+                    &mut dispatcher,
+                    &mut hid_devices,
+                );
+                // The buffer carried a relayed keystroke (possibly a typed secret): wipe it before reuse.
+                ostd::session::zeroize(&mut buf[..IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN]);
+            }
+            SyscallResult::Ok(sender) => {
+                busy = true;
+                handle_message(
+                    &buf,
+                    sender,
+                    &mut modifiers,
+                    &mut mouse,
+                    &mut dispatcher,
+                    &mut sources,
+                    &mut hid_devices,
+                );
+                // SessionV1 records (typed text, raw bytes, paste chunks) must not linger in the receive buffer.
+                ostd::session::zeroize(&mut buf[..IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN]);
+            }
+            _ => {}
+        }
+        // Drain polled releases before checking repeat deadlines, including
+        // events that arrived while IPC receive was asleep.
         for dev in devices.iter_mut() {
-            drain_virtio(
+            busy |= drain_virtio(
                 dev,
                 &mut buf,
                 &mut modifiers,
@@ -155,47 +200,24 @@ pub fn main() {
                 break;
             }
         }
+        // Polled device events are staged in the head of the same buffer.
+        if !devices.is_empty() { ostd::session::zeroize(&mut buf[..16]); }
         if dispatcher.has_pending_mouse() {
             continue;
         }
 
-        // Block for at most one scheduler tick (≈10ms), or until a kernel/IPC
-        // message wakes us.
-        //
-        // Return value convention:
-        //   Ok(0)                — real timeout; buffer not modified
-        //   Ok(isize::MAX as _)  — kernel UART relay (EV_ASCII); buffer filled
-        //   Ok(n)                — typed IPC from cell n; buffer filled
-        //
-        // The sentinel is isize::MAX (not usize::MAX) because syscall() returns
-        // isize: usize::MAX == -1 as isize, which makes sys_recv_timeout return
-        // Err and the match arm never fires. isize::MAX is positive → Ok branch.
-        match sys_recv_timeout(0, &mut buf, POLL_SCHED_TICKS) {
-            SyscallResult::Ok(0) => {
-                // Real timeout — nothing from IPC; VirtIO drain already done above.
-            }
-            SyscallResult::Ok(n) if n == isize::MAX as usize => {
-                // Kernel UART relay (sentinel sender_id = isize::MAX as usize).
-                handle_kernel_event(
-                    &buf,
-                    &mut modifiers,
-                    &mut mouse,
-                    &mut dispatcher,
-                    &mut hid_devices,
-                );
-            }
-            SyscallResult::Ok(sender) => {
-                handle_message(
-                    &buf,
-                    sender,
-                    &mut modifiers,
-                    &mut mouse,
-                    &mut dispatcher,
-                    &mut sources,
-                    &mut hid_devices,
-                );
-            }
-            _ => {}
+        if let Some(code) = sys_get_time_ms().and_then(|now| dispatcher.repeat.poll(now)) {
+            busy = true;
+            let (keysym, character) = translate(code, modifiers.snapshot());
+            dispatcher.dispatch(&InputEvent::Key(KeyEvent {
+                timestamp_ticks: sys_get_time(),
+                scancode: code,
+                keysym,
+                character,
+                modifiers: modifiers.snapshot(),
+                state: KeyState::Repeated,
+                _pad: [0; 2],
+            }));
         }
 
         // Lock keys change what the keyboard's own LEDs show, and the device is
@@ -206,6 +228,14 @@ pub fn main() {
         if leds != leds_sent {
             sources.broadcast_leds(leds);
             leds_sent = leds;
+        }
+        if busy {
+            sys_yield();
+        } else {
+            // Nothing arrived: park for one scheduler tick (10 ms) rather than burn the CPU.
+            // Receives stay nonblocking and attested, so deferred polls, UART ESC deadlines,
+            // key repeat and device polling all keep their one-tick resolution.
+            idle_wait();
         }
     }
 }
@@ -315,6 +345,7 @@ impl HidDeviceStates {
     fn record_key(&mut self, id: u32, code: u32, state: KeyState) {
         let index = match self.devices.iter().position(|device| device.id == id) {
             Some(index) => index,
+            None if state == KeyState::Released => return,
             None if self.devices.len() < MAX_HID_DEVICES => {
                 self.devices.push(HidDeviceState {
                     id,
@@ -363,6 +394,7 @@ fn release_hid_device(
     dispatcher: &mut Dispatcher,
     hid_devices: &mut HidDeviceStates,
 ) {
+    dispatcher.repeat.remove_device(device);
     for code in hid_devices.take_pressed(device) {
         // A second keyboard can keep the same logical modifier held (including
         // left/right variants). Do not clear its aggregate state on this
@@ -371,14 +403,25 @@ fn release_hid_device(
             continue;
         }
         let mut release = [0u8; IPC_BUF_SIZE];
-        release[0] = EV_KEY;
-        release[1..5].copy_from_slice(&code.to_le_bytes());
-        // value remains zero: EV_KEY release.
+        release[0] = EV_DEVICE;
+        release[1..5].copy_from_slice(&device.to_le_bytes());
+        release[5] = EV_KEY;
+        release[6..10].copy_from_slice(&code.to_le_bytes());
+        // value remains zero: EV_KEY release from this device only.
         handle_kernel_event(&release, modifiers, mouse, dispatcher, hid_devices);
     }
 }
 
+/// Park the idle owner loop for one scheduler tick. If the cell's allowlist refuses the
+/// timer, fall back to a plain yield rather than stall.
+fn idle_wait() {
+    if !matches!(sys_set_timer(1), SyscallResult::Ok(_)) {
+        sys_yield();
+    }
+}
+
 /// Drain all pending events from the VirtIO virtqueue and dispatch them.
+/// Returns whether any event was dispatched.
 fn drain_virtio(
     dev: &mut InputDevice,
     buf: &mut [u8; IPC_BUF_SIZE],
@@ -386,11 +429,13 @@ fn drain_virtio(
     mouse: &mut MouseState,
     dispatcher: &mut Dispatcher,
     hid_devices: &mut HidDeviceStates,
-) {
+) -> bool {
+    let mut active = false;
     while !dispatcher.has_pending_mouse() {
         let Some(ev) = dev.try_get_event() else {
             break;
         };
+        active = true;
         // Map Linux evdev event types → the same opcode encoding the kernel uses
         // in dispatch_pending, so handle_kernel_event processes them identically.
         let opcode: u8 = match ev.event_type {
@@ -404,6 +449,7 @@ fn drain_virtio(
         buf[5..9].copy_from_slice(&ev.value.to_le_bytes());
         handle_kernel_event(buf, modifiers, mouse, dispatcher, hid_devices);
     }
+    active
 }
 
 /// Process one incoming IPC message.
@@ -488,6 +534,11 @@ fn handle_kernel_event(
                 return;
             }
             let (keysym, character) = translate(code, modifiers.snapshot());
+            if let Some(now) = sys_get_time_ms() {
+                if !dispatcher.repeat.observe(device, code, state, keysym, now) {
+                    return;
+                }
+            }
             if !dispatcher.dispatch(&InputEvent::Key(KeyEvent {
                 timestamp_ticks: sys_get_time(),
                 scancode: code,
@@ -511,6 +562,12 @@ fn handle_kernel_event(
             }
         }
         EV_ASCII => {
+            if dispatcher.sessions.physical_active() {
+                if value > 0 && code <= 255 {
+                    dispatcher.serial_byte(code as u8);
+                }
+                return;
+            }
             // UART byte relayed by the kernel console driver.
             // `code` carries the raw ASCII code point; skip scancode translation.
             // Map C0 control chars to semantic KeySyms so GUI apps get proper events
@@ -552,8 +609,20 @@ fn handle_typed_request(
     sources: &mut EventSources,
 ) {
     let mut resp_buf = [0u8; 64];
-    match api::ipc::decode::<InputRequest>(buf) {
+    let payload_end = IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN;
+    if let Ok(InputRequest::SessionV1(record)) =
+        api::ipc::decode::<InputRequest<'_>>(&buf[..payload_end])
+    {
+        let caller = api::caller_identity::CallerIdentity::from_recv_buf(buf);
+        dispatcher.sessions.request(record, caller, sender);
+        return;
+    }
+    match api::ipc::decode::<InputRequest<'_>>(&buf[..payload_end]) {
+        Ok(InputRequest::SessionV1(_)) => {}
         Ok(InputRequest::SetFocus { cell_tid: _ }) => {
+            if dispatcher.sessions.physical_active() {
+                return;
+            }
             modifiers.reset_transient();
             // Use kernel-verified sender TID instead of the cell_tid field to
             // prevent a cell from redirecting focus to an arbitrary TID.

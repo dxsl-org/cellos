@@ -41,6 +41,13 @@ pub static EXACT_RULES: &[PathRule] = &[
         allow_read_all: false,
         allow_write_all: false,
     },
+    // Phase 09: the SSH host-trust store directory. Only the VFS itself reads it
+    // (`trust::handle`); no caller lists, reads, writes or replaces anything in it.
+    PathRule {
+        prefix: "/srv/.cellos-trust",
+        allow_read_all: false,
+        allow_write_all: false,
+    },
     PathRule {
         prefix: crate::access::GUEST_DISK_PATH,
         allow_read_all: true,
@@ -84,6 +91,11 @@ pub static PREFIX_RULES: &[PathRule] = &[
     // failed before reaching the backend.
     PathRule {
         prefix: "/srv/cellos/",
+        allow_read_all: false,
+        allow_write_all: false,
+    },
+    PathRule {
+        prefix: "/srv/.cellos-trust/",
         allow_read_all: false,
         allow_write_all: false,
     },

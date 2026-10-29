@@ -16,6 +16,39 @@ pub(crate) const ERR_IO: u8 = 1;
 pub(crate) const ERR_QUOTA: u8 = 2;
 /// Stale, unknown, or not-this-caller's handle.
 pub(crate) const ERR_HANDLE: u8 = 4;
+/// `types::ViError::NotSupported`: the backend has no such operation.
+pub(crate) const ERR_UNSUPPORTED: u8 = 6;
+
+/// Whether a mutation of `mutated` may have reached the handle path `held`.
+///
+/// ASCII case is ignored because FAT resolves names that way (fatfs is built
+/// without its `unicode` feature), so `/mnt/sd/A.TXT` and `/mnt/sd/a.txt` are
+/// one file. On a case-sensitive backend this can only add a mark, never miss
+/// one.
+pub(crate) fn may_alias(held: &str, mutated: &str) -> bool {
+    held.eq_ignore_ascii_case(mutated)
+}
+
+/// [`may_alias`] for `held` at or below the removed tree `root`.
+pub(crate) fn may_alias_within(held: &str, root: &str) -> bool {
+    if root == "/" {
+        return held.starts_with('/');
+    }
+    let held = held.as_bytes();
+    held.get(..root.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(root.as_bytes()))
+        && matches!(held.get(root.len()), None | Some(b'/'))
+}
+
+/// The directory containing `path`; `None` for `/` and relative paths.
+pub(crate) fn parent_of(path: &str) -> Option<&str> {
+    let slash = path.rfind('/')?;
+    match slash {
+        0 if path.len() > 1 => Some("/"),
+        0 => None,
+        _ => Some(&path[..slash]),
+    }
+}
 
 /// Authorize, charge and perform a write to an absolute path.
 ///

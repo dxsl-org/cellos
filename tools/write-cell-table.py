@@ -8,7 +8,7 @@ Usage:
     python write-cell-table.py <disk_image> <path1>=<elf1> [<path2>=<elf2> ...]
 
 Example:
-    python write-cell-table.py disk_v3.img /bin/vfs=target/.../vfs /bin/shell=target/.../shell
+    python write-cell-table.py disk_v3.img /bin/vfs=target/.../vfs /bin/cellbox=target/.../cellbox
 """
 import struct
 import sys

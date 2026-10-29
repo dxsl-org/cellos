@@ -40,8 +40,11 @@ mod namespace;
 mod page_cache;
 mod paths;
 mod pending;
+mod prepared_cwd;
 mod quota;
+mod save;
 mod subtree;
+mod trust;
 
 use fast_handler::{vfs_fast_handler, GLOBAL_VFS};
 use manager::VfsManager;
@@ -90,6 +93,19 @@ api::declare_syscalls![
     // is the difference between a chunked read costing O(file) and O(file^2).
     SeekCap,
     CloseCap,
+    // First-trust confirmation (S9-4b): VFS calls service-input over the authenticated
+    // SessionV1 transport (`ostd::session::register_trust_challenge` /
+    // `collect_trust_decision`): the issuer binding (LookupServiceBound shares
+    // LookupService's bit), the bounded IPC exchange (IpcSubmit/IpcTake/IpcWait/IpcCancel
+    // share Send/Recv's bits), its scheduler-tick budget and the monotonic challenge
+    // deadline (GetTime). CellSessionV1 has no allowlist bit; it is listed for the record.
+    LookupServiceBound,
+    IpcSubmit,
+    IpcTake,
+    IpcWait,
+    IpcCancel,
+    GetTime,
+    CellSessionV1,
     // NOTE: deliberately NO SetTimer. VFS never calls it — a "SetTimer (bit 11)
     // denied for tid <vfs>" kernel warn on x86 is the CANARY for the known x86
     // syscall-redispatch corruption (syscall number read as user CS = 0x23 = 35
@@ -116,10 +132,14 @@ pub fn main() {
     // VfsManager::new() mounts all backends, including the FAT volume on the
     // VirtIO disk (which logs its own success/fallback status).
     let vfs = VfsManager::new();
+    // Whether the idle reconcile cadence still has kernel state to poll; see the loop.
+    let mut idle_work = prepared_cwd::idle_work(&vfs);
     #[cfg(feature = "test-hooks")]
     {
         file_handles::selftest::run();
         access::selftest::run();
+        manager::read_path_selftest::run();
+        save::selftest::run();
     }
     *GLOBAL_VFS.lock() = Some(vfs);
 
@@ -128,14 +148,29 @@ pub fn main() {
     // pointer if VFS crashes — see loader.rs fast_ipc::set_vfs_handler_cell call.
     ostd::fast_ipc::register_vfs(vfs_fast_handler);
     let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
+    // Full reconciliation runs once per this many idle turns. VFS holds no SetTimer
+    // authority (deliberately withheld, see the allowlist; GetTime is only the trust-call
+    // budget), so the cadence counts idle receive attempts instead of wall time; requests
+    // reconcile only the caller's own reservations (`dir_admission::admit`).
+    const IDLE_RECONCILE_EVERY: u32 = 128;
+    let mut idle_turns: u32 = 0;
 
     loop {
-        // `sys_recv_attested` asks the kernel to state which cell sent the
-        // message, in the tail of `buf`.  VFS cannot derive that itself: `sender`
-        // is a tid, and a thread has its own tid while belonging to its parent
-        // cell, so a cell id built from that tid named a cell that does not exist
-        // and charged its quota to a ledger row nothing owned.
-        match ostd::syscall::sys_recv_attested(0, &mut buf) {
+        // The kernel writes caller identity in the receive-buffer trailer.
+        // A sender TID is reply routing only, never a Cell principal.
+        //
+        // Only bounded preparations can change without a message (they expire, commit
+        // or end in the kernel), so the nonblocking receive and its reconcile cadence run
+        // only while `prepared_cwd::idle_work` says one is unsettled. Otherwise every
+        // change arrives as a request or an owner-death notification, and the loop
+        // parks in the blocking receive instead of yield-spinning. `idle_work` is
+        // recomputed wherever the loop changes VFS state; the fast-IPC handler only reads.
+        let received = if idle_work {
+            ostd::syscall::sys_try_recv_attested(0, &mut buf)
+        } else {
+            ostd::syscall::sys_recv_attested(0, &mut buf)
+        };
+        match received {
             ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => {
                 let operation = ostd::ipc::current();
                 let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buf)
@@ -145,6 +180,8 @@ pub fn main() {
                         .as_mut()
                         .map(|vfs| {
                             let _ = vfs.handle_unattributed_owner_death(sender);
+                            prepared_cwd::reconcile(vfs);
+                            idle_work = prepared_cwd::idle_work(vfs);
                             vfs.take_owner_watch_cancellations()
                         })
                         .unwrap_or_default();
@@ -184,12 +221,13 @@ pub fn main() {
                     let len = api::ipc::encode(&response, &mut encoded)
                         .map(|bytes| bytes.len())
                         .unwrap_or(0);
+                    idle_work = prepared_cwd::idle_work(vfs);
                     (len, vfs.take_owner_watch_cancellations())
                 };
                 for cancelled in cancellations {
                     ostd::syscall::sys_cancel_cell_owner_watch(cancelled);
                 }
-                // `GLOBAL_VFS` is unlocked for every kernel call and send.
+                // `GLOBAL_VFS` is unlocked before replying to the caller.
                 if let Some(operation) = operation {
                     let _ = ostd::ipc::reply(operation, &encoded[..encoded_len]);
                 } else {
@@ -197,7 +235,18 @@ pub fn main() {
                 }
                 buf = [0u8; api::ipc::IPC_BUF_SIZE];
             }
-            _ => ostd::task::yield_now(),
+            _ => {
+                if idle_work {
+                    idle_turns = idle_turns.wrapping_add(1);
+                    if idle_turns % IDLE_RECONCILE_EVERY == 0 {
+                        if let Some(vfs) = GLOBAL_VFS.lock().as_mut() {
+                            prepared_cwd::reconcile(vfs);
+                            idle_work = prepared_cwd::idle_work(vfs);
+                        }
+                    }
+                }
+                ostd::task::yield_now();
+            }
         }
     }
 }

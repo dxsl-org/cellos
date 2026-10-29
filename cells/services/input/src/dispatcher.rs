@@ -19,6 +19,7 @@
 use api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE};
 use api::syscall::service;
 use ostd::syscall::{sys_lookup_service, sys_try_send};
+use ostd::session::{zeroize, Scrub};
 
 /// Report every Nth dropped keyboard event, so a stalled consumer is visible
 /// without one log line per keystroke.
@@ -48,6 +49,8 @@ pub struct Dispatcher {
     pending_mouse: [Option<InputEvent>; 3],
     mouse_head: usize,
     mouse_len: usize,
+    pub(crate) repeat: crate::key_repeat::KeyRepeat,
+    pub(crate) sessions: crate::session::Sessions,
 }
 
 impl Dispatcher {
@@ -61,6 +64,8 @@ impl Dispatcher {
             pending_mouse: [None; 3],
             mouse_head: 0,
             mouse_len: 0,
+            repeat: crate::key_repeat::KeyRepeat::default(),
+            sessions: crate::session::Sessions::new(),
         }
     }
 
@@ -69,6 +74,9 @@ impl Dispatcher {
     /// Also resets transient modifiers on the modifier-state tracker so that
     /// Shift/Ctrl/Alt do not appear "stuck" after a focus change.
     pub fn set_focus(&mut self, cell_endpoint: usize) {
+        if self.focused != cell_endpoint {
+            self.repeat.clear();
+        }
         self.focused = cell_endpoint;
     }
 
@@ -76,6 +84,13 @@ impl Dispatcher {
     #[allow(dead_code)]
     pub fn focus(&self) -> usize {
         self.focused
+    }
+
+    /// SessionV1 owns physical keyboard input exclusively while attached, but never while a
+    /// compositor is registered: `Sessions::physical_active` is false then, so neither this
+    /// relay nor `dispatch` can route keys into a session and legacy focus stays authoritative.
+    pub fn serial_byte(&mut self, byte: u8) -> bool {
+        self.sessions.serial_byte(byte)
     }
 
     /// Send a translated `InputEvent` to the focused cell.
@@ -99,6 +114,11 @@ impl Dispatcher {
     /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
     /// ```
     pub fn dispatch(&mut self, event: &InputEvent) -> bool {
+        if let InputEvent::Key(key) = event {
+            if self.sessions.keyboard(key) {
+                return true;
+            }
+        }
         if self.focused == 0 {
             return true; // no focus — drop silently
         }
@@ -190,20 +210,17 @@ impl Dispatcher {
     /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
     /// ```
     fn try_send_event(target: usize, event: &InputEvent) -> Result<(), ()> {
-        let buf = Self::encode(event);
+        // A focused-cell key event can be a typed secret: both staging buffers are wiped after the send.
+        let mut payload = [0u8; INPUT_EVENT_IPC_SIZE];
+        encode_event(event, &mut payload);
+        let mut buf = Scrub::<{ INPUT_EVENT_IPC_SIZE + 1 }>::new();
+        buf[0] = INPUT_EVENT_OPCODE;
+        buf[1..].copy_from_slice(&payload);
+        zeroize(&mut payload);
         match sys_try_send(target, &buf) {
             ostd::syscall::SyscallResult::Ok(0) => Ok(()),
             _ => Err(()),
         }
-    }
-
-    fn encode(event: &InputEvent) -> [u8; INPUT_EVENT_IPC_SIZE + 1] {
-        let mut buf = [0u8; INPUT_EVENT_IPC_SIZE + 1];
-        buf[0] = INPUT_EVENT_OPCODE;
-        let mut payload = [0u8; INPUT_EVENT_IPC_SIZE];
-        encode_event(event, &mut payload);
-        buf[1..INPUT_EVENT_IPC_SIZE + 1].copy_from_slice(&payload);
-        buf
     }
 }
 

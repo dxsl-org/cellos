@@ -11,8 +11,16 @@ path = "src/main.rs"
 [dependencies]
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
 api = { path = "../../../libs/api", version = "0.1.0" }
+terminal-sdk = { path = "../../../libs/terminal", version = "0.1.0" }
 text-engine = { path = "../../../libs/text-engine", version = "0.1.0" }
 viui = { path = "../../../libs/viui", version = "0.2.0" }
+# Width policy of `cellos-vt1` (spec §4): the same pinned version Ratatui measures with.
+unicode-width = { version = "=0.2.2", default-features = false }
+
+[dev-dependencies]
+# Round-trip contract test only: S5-1 backend bytes -> this emulator vs Ratatui's Buffer
+# (Ratatui through `vitui::ratatui`).
+vitui = { path = "../../../libs/vitui", version = "0.1.0" }
 
 [build-dependencies]
 cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

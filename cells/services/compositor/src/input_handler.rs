@@ -184,7 +184,7 @@ fn find_shell_tid() -> usize {
     let mut procs = [api::syscall::ProcessInfo::default(); 32];
     if let Ok(count) = ostd::syscall::sys_get_procs(&mut procs) {
         for p in procs.iter().take(count) {
-            if &p.name[..5] == b"shell" {
+            if &p.name[..7] == b"cellbox" {
                 return p.id;
             }
         }

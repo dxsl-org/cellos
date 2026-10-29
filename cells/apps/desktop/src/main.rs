@@ -169,16 +169,6 @@ fn cell_main() {
                                     need_tb_render = true;
                                     need_sp_render = true;
                                 }
-                                SpotlightAction::Reboot => {
-                                    ostd::io::println("[desktop] Spotlight: Authorized system reboot initiated.");
-                                    sp_state.close();
-                                    sp_surf.move_to(-2000, -2000);
-                                }
-                                SpotlightAction::ShutDown => {
-                                    ostd::io::println("[desktop] Spotlight: Authorized system shutdown initiated.");
-                                    sp_state.close();
-                                    sp_surf.move_to(-2000, -2000);
-                                }
                                 SpotlightAction::TogglePin(_) => {
                                     ostd::io::println("[desktop] Spotlight: Toggled pin");
                                     need_sp_render = true;
@@ -238,7 +228,7 @@ fn cell_main() {
                         }
                     }
                 }
-                InputEvent::Key(ke) if ke.state == KeyState::Pressed => {
+                InputEvent::Key(ke) if matches!(ke.state, KeyState::Pressed | KeyState::Repeated) => {
                     let is_toggle_shortcut = ke.keysym == KeySym::F1
                         || (ke.char() == Some(' ')
                             && (ke.modifiers.contains(Modifiers::ALT)
@@ -246,6 +236,9 @@ fn cell_main() {
                                 || ke.modifiers.contains(Modifiers::META)));
 
                     if is_toggle_shortcut {
+                        if ke.state != KeyState::Pressed {
+                            continue;
+                        }
                         if sp_state.is_open {
                             sp_state.close();
                             sp_surf.move_to(-2000, -2000);
@@ -258,6 +251,12 @@ fn cell_main() {
                             need_sp_render = true;
                         }
                     } else if sp_state.is_open {
+                        // Launching, theme cycling and section changes remain one-shot.
+                        if ke.state == KeyState::Repeated
+                            && matches!(ke.keysym, KeySym::Return | KeySym::Escape | KeySym::Tab)
+                        {
+                            continue;
+                        }
                         match spotlight::handle_key(&registry, &mut sp_state, ke.keysym, ke.char())
                         {
                             SpotlightAction::LaunchApp(path) => {
@@ -276,16 +275,6 @@ fn cell_main() {
                                 ostd::io::println("[desktop] Spotlight: Theme cycle triggered.");
                                 need_tb_render = true;
                                 need_sp_render = true;
-                            }
-                            SpotlightAction::Reboot => {
-                                ostd::io::println("[desktop] Spotlight: Authorized system reboot initiated.");
-                                sp_state.close();
-                                sp_surf.move_to(-2000, -2000);
-                            }
-                            SpotlightAction::ShutDown => {
-                                ostd::io::println("[desktop] Spotlight: Authorized system shutdown initiated.");
-                                sp_state.close();
-                                sp_surf.move_to(-2000, -2000);
                             }
                             SpotlightAction::Close => {
                                 ostd::io::println("[desktop] Spotlight: Closed");

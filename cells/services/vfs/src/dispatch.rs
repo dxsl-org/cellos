@@ -34,6 +34,9 @@ pub fn handle_request<'a>(
     // name a path, and a cell that reached its first request before the second
     // answer landed would be one path-string operation ahead of the seal.
     crate::dir_admission::admit(vfs, caller);
+    if !crate::prepared_cwd::ready(vfs, caller) {
+        return api::ipc::VfsResponse::Err(ERR_IO);
+    }
 
     // Decode typed request; `take_from_bytes` tolerates trailing bytes in the
     // receive buffer — both zeros left by a previous message and the kernel's
@@ -42,6 +45,10 @@ pub fn handle_request<'a>(
         Ok(r) => r,
         Err(_) => return api::ipc::VfsResponse::Err(0xFF), // malformed request
     };
+
+    if let api::ipc::VfsRequest::PreparedChildV1(record) = req {
+        return crate::prepared_cwd::handle(vfs, caller, record, resp_buf);
+    }
 
     // Centrally deny any mutating request from a caller lacking VfsMutate authority
     // BEFORE path sealing, handle resolution, or backend work.
@@ -56,6 +63,21 @@ pub fn handle_request<'a>(
         return api::ipc::VfsResponse::Err(ERR_DENIED);
     }
 
+    // A source may not disappear between issuer sealing and kernel commit.
+    // Abort-if-uncommitted linearizes against commit before the revoke walks
+    // the existing directory lineage.
+    if let api::ipc::VfsRequest::CloseDir { dir } = req {
+        if !crate::prepared_cwd::before_revoke(vfs, caller, dir) {
+            return api::ipc::VfsResponse::Err(ERR_IO);
+        }
+    }
+
+    if let Some(resp) = crate::trust::handle(vfs, caller, &req) {
+        return resp;
+    }
+    if let Some(resp) = crate::save::handle(vfs, caller, &req) {
+        return resp;
+    }
     if let Some(resp) = crate::dispatch_paths::handle_path_request(vfs, caller, &req) {
         return resp;
     }
@@ -179,6 +201,8 @@ pub fn handle_request<'a>(
         | api::ipc::VfsRequest::WriteAt { .. }
         | api::ipc::VfsRequest::StatAt { .. }
         | api::ipc::VfsRequest::ListAt { .. }
+        | api::ipc::VfsRequest::ListAtPage { .. }
+        | api::ipc::VfsRequest::FileHandleState { .. }
         | api::ipc::VfsRequest::UnlinkAt { .. }
         | api::ipc::VfsRequest::CloseDir { .. }
         | api::ipc::VfsRequest::SealPaths

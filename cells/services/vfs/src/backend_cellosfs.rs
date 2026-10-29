@@ -1,12 +1,14 @@
 //! Native V1 filesystem backend. Observed sync is not crash-preserving acknowledgement.
-use alloc::vec::Vec;
-use cellos_fs::{CellosFs, disk::FsError};
+use alloc::{format, string::String, vec::Vec};
+use api::ipc::{save_refusal, Observation, SaveExpect, SaveOutcome};
+use cellos_fs::{CellosFs, Expect, disk::FsError};
 use ostd::prelude::Mutex;
-use crate::backend::{BackendHealth, FsBackend};
+use crate::backend::{fill_page, BackendHealth, FsBackend, ListPage};
+use api::ipc::vfs_dir_page::EntryKind;
 use crate::disk_cellosfs::CellosPartitionDisk;
 
 #[derive(Clone, Copy)]
-enum Operation { Open, List, Stat, Read, Write, WriteAt, Append, Mkdir, Rmdir, Unlink, Rename, Sync }
+enum Operation { Open, List, Stat, Read, Write, WriteAt, Append, Mkdir, Rmdir, Unlink, Rename, Sync, Stage, Publish }
 #[derive(Clone, Copy)]
 struct Failure { operation: Operation, error: FsError, path_tag: u64, sync_stage: bool }
 fn path_tag(path: &str) -> u64 {
@@ -28,7 +30,7 @@ impl CellosFsBackend {
         let opened = if total_sectors % 8 != 0 || base_lba.checked_add(total_sectors).is_none() {
             Err(FsError::PartitionOverflow)
         } else { CellosFs::open(disk) };
-        let state = match opened {
+        let state = match opened.and_then(|mut fs| clear_staging(&mut fs).map(|_| fs)) {
             Ok(fs) => {
                 ostd::io::println("[vfs] CellosFS Native mounted at existing volume");
                 NativeState::Ready(fs)
@@ -40,6 +42,31 @@ impl CellosFsBackend {
         };
         Self { prefix, fs: Mutex::new(state) }
     }
+}
+
+/// Directory, per CellosFS mount, that holds unpublished save transactions.
+const STAGING_DIR: &str = "/.cbx-save";
+
+/// Remove staging objects left by transactions that did not survive the last
+/// mount. Nothing outside [`STAGING_DIR`] is touched.
+pub(crate) fn clear_staging<D: cellos_fs::disk::BlockDevice>(fs: &mut CellosFs<D>) -> Result<(), FsError> {
+    let entries = match fs.list_dir(STAGING_DIR) {
+        Ok(entries) => entries,
+        Err(FsError::NotFound) => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    let mut removed = 0usize;
+    for (name, directory, _) in entries {
+        if !directory {
+            fs.unlink(&format!("{STAGING_DIR}/{name}"))?;
+            removed += 1;
+        }
+    }
+    if removed != 0 {
+        fs.sync()?;
+        ostd::io::println(&format!("[vfs] CellosFS staging cleanup removed {removed}"));
+    }
+    Ok(())
 }
 impl<D: cellos_fs::disk::BlockDevice> CellosFsBackend<D> {
     fn rel_path<'a>(&self, path: &'a str) -> Option<&'a str> {
@@ -85,6 +112,10 @@ impl<D: cellos_fs::disk::BlockDevice> CellosFsBackend<D> {
     fn exact(count: usize, expected: usize) -> Result<(), FsError> {
         if count == expected { Ok(()) } else { Err(FsError::Corrupted) }
     }
+    /// A staging mutation: no sync, poisoned only on a storage-level error.
+    fn stage(&self, path: &str, f: impl FnOnce(&mut CellosFs<D>) -> Result<(), FsError>) -> bool {
+        self.read(Operation::Stage, path, f).is_some()
+    }
 }
 impl<D: cellos_fs::disk::BlockDevice + Send> FsBackend for CellosFsBackend<D> {
     fn health(&self) -> BackendHealth {
@@ -110,6 +141,14 @@ impl<D: cellos_fs::disk::BlockDevice + Send> FsBackend for CellosFsBackend<D> {
             }
             Ok(written)
         }).unwrap_or(0)
+    }
+    fn list_page(&self, path: &str, start: u32, out: &mut [u8]) -> Option<ListPage> {
+        let rel = self.rel_path(path)?;
+        let entries = self.read(Operation::List, path, |fs| fs.list_dir(rel))?;
+        let entries = entries.iter().map(|(name, directory, _)| {
+            Ok((if *directory { EntryKind::Dir } else { EntryKind::File }, name.as_bytes()))
+        });
+        fill_page(entries, start, out)
     }
     fn stat(&self, path: &str) -> Option<(u64, bool)> {
         let rel = self.rel_path(path)?;
@@ -212,6 +251,83 @@ impl<D: cellos_fs::disk::BlockDevice + Send> FsBackend for CellosFsBackend<D> {
         if self.rel_path(path).is_none() { return false; }
         // mutate already executes exactly one engine sync, including both barriers.
         self.mutate(Operation::Sync, path, |_| Ok(()))
+    }
+    fn stage_path(&self, id: u32) -> Option<String> {
+        Some(format!("{}{STAGING_DIR}/{id:08x}", self.prefix))
+    }
+    fn observe(&self, path: &str) -> Option<Observation> {
+        let rel = self.rel_path(path)?;
+        self.read(Operation::Stat, path, |fs| match fs.lookup(rel) {
+            Ok(inode) => Ok(Observation::Present {
+                inode: inode.inode_num, generation: inode.generation,
+                size: inode.size, regular: inode.is_file(),
+            }),
+            Err(FsError::NotFound) => Ok(Observation::Absent),
+            Err(error) => Err(error),
+        })
+    }
+    fn stage_create(&mut self, stage: &str) -> bool {
+        let Some(rel) = self.rel_path(stage) else { return false };
+        self.stage(stage, |fs| {
+            match fs.lookup(STAGING_DIR) {
+                Ok(inode) if inode.is_dir() => {}
+                Ok(_) => return Err(FsError::NotADirectory),
+                Err(FsError::NotFound) => { fs.create_dir(STAGING_DIR)?; }
+                Err(error) => return Err(error),
+            }
+            fs.create_file(rel).map(|_| ())
+        })
+    }
+    fn stage_write(&mut self, stage: &str, offset: u64, bytes: &[u8]) -> bool {
+        let Some(rel) = self.rel_path(stage) else { return false };
+        if CellosFs::<D>::validate_write_range(offset, bytes.len()).is_err() { return false; }
+        self.stage(stage, |fs| Self::exact(fs.write_file(rel, offset, bytes)?, bytes.len()))
+    }
+    fn publish_if(&mut self, stage: &str, sealed: (u64, u64), dst: &str, expect: SaveExpect) -> SaveOutcome {
+        let refused = SaveOutcome::NotPublished(save_refusal::REFUSED);
+        let (Some(stage_rel), Some(dst_rel)) = (self.rel_path(stage), self.rel_path(dst)) else { return refused };
+        let expect = match expect {
+            SaveExpect::Absent => Expect::Absent,
+            SaveExpect::Present { inode, generation } => Expect::Present { inode_num: inode, generation },
+        };
+        let mut state = self.fs.lock();
+        let NativeState::Ready(fs) = &mut *state else { return refused };
+        // The stage check and the publication share this lock, so nothing can
+        // change the sealed bytes in between.
+        let staged = match fs.lookup(stage_rel) {
+            Ok(inode) => (inode.inode_num, inode.generation) == sealed,
+            Err(FsError::NotFound) => false,
+            Err(error) => {
+                *state = NativeState::Poisoned(Failure { operation: Operation::Publish, error, path_tag: path_tag(dst), sync_stage: false });
+                return refused;
+            }
+        };
+        if !staged { return SaveOutcome::NotPublished(save_refusal::STAGE_CHANGED); }
+        let result = match fs.rename_replace_if(stage_rel, dst_rel, expect) {
+            Ok(()) => fs.sync().map_err(|error| (error, true))
+                .and_then(|()| fs.lookup(dst_rel).map_err(|error| (error, true))),
+            Err(FsError::Conflict) => return SaveOutcome::Conflict,
+            Err(error @ (FsError::IoError | FsError::Corrupted | FsError::PartitionOverflow)) => Err((error, false)),
+            // Refused before anything was staged in the engine.
+            Err(_) => return refused,
+        };
+        match result {
+            Ok(inode) => SaveOutcome::Committed { inode: inode.inode_num, generation: inode.generation },
+            Err((error, sync_stage)) => {
+                *state = NativeState::Poisoned(Failure { operation: Operation::Publish, error, path_tag: path_tag(dst), sync_stage });
+                SaveOutcome::Indeterminate
+            }
+        }
+    }
+}
+
+/// A ready backend over a freshly formatted private device (host tests and the
+/// `test-hooks` boot self-tests only).
+#[cfg(any(test, feature = "test-hooks"))]
+impl<D: cellos_fs::disk::BlockDevice> CellosFsBackend<D> {
+    pub(crate) fn formatted_for_test(prefix: &'static str, disk: D, blocks: u64) -> Self {
+        let fs = CellosFs::format(disk, blocks).expect("format test volume");
+        Self { prefix, fs: Mutex::new(NativeState::Ready(fs)) }
     }
 }
 

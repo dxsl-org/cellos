@@ -1,15 +1,18 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
 extern crate ostd;
 
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use api::caller_identity::CallerIdentity;
 use api::hotswap::ViStateTransfer;
-use api::ipc::{ConfigRequest, ConfigResponse, IPC_BUF_SIZE};
-use ostd::io::println;
+use api::ipc::{ConfigRequest, ConfigResponse};
 use ostd::prelude::*;
+
+mod rights;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 api::declare_syscalls![
@@ -22,6 +25,10 @@ api::declare_syscalls![
     StateStash,
     StateRestore
 ];
+
+/// `ConfigResponse::Err` code for a malformed request or a reply too large to
+/// encode.
+const ERR_MALFORMED: u8 = 0xFF;
 
 // Singleton storage
 struct ConfigStore {
@@ -37,84 +44,77 @@ impl ConfigStore {
     }
 }
 
-struct ConfigService {
-    store: Mutex<ConfigStore>,
-}
-
-impl ConfigService {
-    fn new() -> Self {
-        Self {
-            store: Mutex::new(ConfigStore::new()),
+/// Answer one request into `out` and return the encoded reply.
+///
+/// `request` is `None` when the payload did not decode. `caller` is the
+/// kernel-attested identity (`None` = unknown). Admission (`rights::admit`)
+/// runs before the store is read or written, so a refused `Set`/`Delete`
+/// leaves the store untouched.
+fn handle<'o>(
+    store: &mut ConfigStore,
+    request: Option<ConfigRequest<'_>>,
+    caller: Option<&CallerIdentity>,
+    out: &'o mut [u8],
+) -> Option<&'o [u8]> {
+    let Some(request) = request else {
+        return encode(&ConfigResponse::Err(ERR_MALFORMED), out);
+    };
+    if let Err(code) = rights::admit(&request, caller) {
+        return encode(&ConfigResponse::Err(code), out);
+    }
+    let list;
+    let response = match request {
+        ConfigRequest::Get(key) => match store.map.get(key) {
+            Some(value) => ConfigResponse::Value(value.as_str()),
+            None => ConfigResponse::NotFound,
+        },
+        ConfigRequest::Set { key, value } => {
+            store.map.insert(String::from(key), String::from(value));
+            ConfigResponse::Ok
         }
+        ConfigRequest::Delete(key) => {
+            store.map.remove(key);
+            ConfigResponse::Ok
+        }
+        ConfigRequest::List => {
+            // Newline-separated key list, sent inline.
+            list = store.map.keys().map(String::as_str).collect::<Vec<_>>().join("\n");
+            ConfigResponse::Keys(list.as_str())
+        }
+    };
+    let encoded = api::ipc::encode(&response, out).ok().map(|slice| slice.len());
+    match encoded {
+        Some(len) => Some(&out[..len]),
+        None => encode(&ConfigResponse::Err(ERR_MALFORMED), out),
     }
 }
 
+fn encode<'o>(response: &ConfigResponse<'_>, out: &'o mut [u8]) -> Option<&'o [u8]> {
+    api::ipc::encode(response, out).ok().map(|slice| &*slice)
+}
+
+#[cfg(target_os = "none")]
 ostd::cell_main!(cell_main);
 
+#[cfg(target_os = "none")]
 fn cell_main() {
-    println("[config] Config Service v0.3 (typed IPC)");
+    use api::ipc::IPC_BUF_SIZE;
 
-    let service = ConfigService::new();
+    ostd::io::println("[config] Config Service v0.4 (typed IPC, attested writes)");
+
+    let mut store = ConfigStore::new();
     let mut buf = [0u8; IPC_BUF_SIZE];
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
 
     loop {
-        match ostd::syscall::sys_recv(0, &mut buf) {
+        // Attested receive: the kernel writes the sender's identity into the
+        // last `CALLER_IDENTITY_LEN` bytes of `buf` (Phase 01 CP1, Q right).
+        match ostd::syscall::sys_recv_attested(0, &mut buf) {
             ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => {
-                let response = match api::ipc::decode::<ConfigRequest>(&buf) {
-                    Ok(ConfigRequest::Get(key)) => {
-                        let store = service.store.lock();
-                        match store.map.get(key) {
-                            Some(val) => {
-                                // Encode value inline into resp_buf while holding the lock,
-                                // so the &str borrow from store does not escape.
-                                let r = ConfigResponse::Value(val.as_str());
-                                let encoded = api::ipc::encode(&r, &mut resp_buf);
-                                drop(store);
-                                if let Ok(slice) = encoded {
-                                    ostd::syscall::sys_send(sender, slice);
-                                    continue;
-                                }
-                                ConfigResponse::Err(0xFF)
-                            }
-                            None => {
-                                drop(store);
-                                ConfigResponse::NotFound
-                            }
-                        }
-                    }
-                    Ok(ConfigRequest::Set { key, value }) => {
-                        let mut store = service.store.lock();
-                        store.map.insert(String::from(key), String::from(value));
-                        ConfigResponse::Ok
-                    }
-                    Ok(ConfigRequest::Delete(key)) => {
-                        let mut store = service.store.lock();
-                        store.map.remove(key);
-                        ConfigResponse::Ok
-                    }
-                    Ok(ConfigRequest::List) => {
-                        // Build a newline-separated key list and send inline.
-                        let store = service.store.lock();
-                        let mut list = alloc::string::String::new();
-                        for k in store.map.keys() {
-                            if !list.is_empty() {
-                                list.push('\n');
-                            }
-                            list.push_str(k);
-                        }
-                        drop(store);
-                        let r = ConfigResponse::Keys(list.as_str());
-                        if let Ok(slice) = api::ipc::encode(&r, &mut resp_buf) {
-                            ostd::syscall::sys_send(sender, slice);
-                        }
-                        continue;
-                    }
-                    Err(_) => ConfigResponse::Err(0xFF),
-                };
-
-                if let Ok(slice) = api::ipc::encode(&response, &mut resp_buf) {
-                    ostd::syscall::sys_send(sender, slice);
+                let caller = CallerIdentity::from_recv_buf(&buf);
+                let request = api::ipc::decode::<ConfigRequest>(&buf).ok();
+                if let Some(reply) = handle(&mut store, request, caller.as_ref(), &mut resp_buf) {
+                    ostd::syscall::sys_send(sender, reply);
                 }
             }
             _ => {
@@ -204,5 +204,82 @@ impl ViStateTransfer for ConfigStore {
             self.map.insert(String::from(key), String::from(val));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use api::caller_identity::{CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_VFS_MUTATE};
+    use api::ipc::{CONFIG_ERR_DENIED, IPC_BUF_SIZE};
+
+    const SHELL: CallerIdentity = CallerIdentity {
+        flags: CALLER_FLAG_CONFIG_WRITE | CALLER_FLAG_VFS_MUTATE,
+        cell_id: 5,
+        generation: 1,
+        sender_tid: 5,
+    };
+    const PROBE: CallerIdentity = CallerIdentity {
+        flags: CALLER_FLAG_VFS_MUTATE,
+        cell_id: 6,
+        generation: 1,
+        sender_tid: 6,
+    };
+
+    /// Run `request` through the real handler and return the decoded reply.
+    fn call(store: &mut ConfigStore, request: ConfigRequest<'_>, caller: Option<&CallerIdentity>) -> String {
+        let mut out = [0u8; IPC_BUF_SIZE];
+        let reply = handle(store, Some(request), caller, &mut out).expect("reply encodes");
+        alloc::format!("{:?}", api::ipc::decode::<ConfigResponse>(reply).expect("reply decodes"))
+    }
+
+    fn snapshot(store: &ConfigStore) -> BTreeMap<String, String> {
+        store.map.clone()
+    }
+
+    #[test]
+    fn denied_writes_leave_the_store_unchanged() {
+        let mut store = ConfigStore::new();
+        let before = snapshot(&store);
+        let denied = alloc::format!("{:?}", ConfigResponse::Err(CONFIG_ERR_DENIED));
+        for (request, caller) in [
+            (ConfigRequest::Set { key: "P01Q_PROBE", value: "x" }, Some(&PROBE)),
+            (ConfigRequest::Set { key: "P01Q_PROBE", value: "x" }, None),
+            (ConfigRequest::Delete("OS"), Some(&PROBE)),
+            (ConfigRequest::Delete("OS"), Some(&SHELL)),
+            (ConfigRequest::Set { key: "PATH", value: "/tmp" }, Some(&SHELL)),
+            (ConfigRequest::Set { key: "a.b", value: "1" }, Some(&SHELL)),
+        ] {
+            assert_eq!(call(&mut store, request, caller), denied);
+            assert_eq!(snapshot(&store), before);
+        }
+    }
+
+    #[test]
+    fn granted_writes_mutate_and_reads_stay_open() {
+        let mut store = ConfigStore::new();
+        assert_eq!(
+            call(&mut store, ConfigRequest::Set { key: "P01Q_OK", value: "1" }, Some(&SHELL)),
+            "Ok"
+        );
+        // Reads need no identity and no right.
+        assert_eq!(call(&mut store, ConfigRequest::Get("P01Q_OK"), None), "Value(\"1\")");
+        assert_eq!(call(&mut store, ConfigRequest::Get("PATH"), Some(&PROBE)), "Value(\"/bin\")");
+        assert_eq!(call(&mut store, ConfigRequest::List, None), "Keys(\"OS\\nP01Q_OK\\nPATH\")");
+        assert_eq!(call(&mut store, ConfigRequest::Delete("P01Q_OK"), Some(&SHELL)), "Ok");
+        assert_eq!(call(&mut store, ConfigRequest::Get("P01Q_OK"), None), "NotFound");
+        // Deleting an absent namespace key stays idempotent.
+        assert_eq!(call(&mut store, ConfigRequest::Delete("P01Q_OK"), Some(&SHELL)), "Ok");
+    }
+
+    #[test]
+    fn malformed_request_is_answered_with_the_generic_error() {
+        let mut store = ConfigStore::new();
+        let mut out = [0u8; IPC_BUF_SIZE];
+        let reply = handle(&mut store, None, Some(&SHELL), &mut out).expect("reply encodes");
+        assert!(matches!(
+            api::ipc::decode::<ConfigResponse>(reply),
+            Ok(ConfigResponse::Err(ERR_MALFORMED))
+        ));
     }
 }

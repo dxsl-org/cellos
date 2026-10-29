@@ -6,6 +6,7 @@
 //! Law 4 exception: Driver Cells may use `unsafe` for MMIO register access.
 //! Every `unsafe` block is annotated with `// SAFETY:`.
 
+use crate::deadline::{self, Deadline, Spent};
 use crate::dma::AuthorizedDma;
 use core::sync::atomic::{fence, Ordering};
 use ostd::dma::DmaBuf;
@@ -47,19 +48,44 @@ const NVM_OPC_WRITE: u8 = 0x01;
 const NVM_OPC_READ: u8 = 0x02;
 const NVM_OPC_FLUSH: u8 = 0x00;
 
-/// Poll budget for a command that should complete in microseconds.
-///
-/// 1e6 was too short for what this driver actually waits on: a Flush is a host
-/// fsync, and on a loaded CI runner that can outlast a tight 1e6-iteration loop
-/// (~tens of ms). A timed-out command is not aborted - the device still posts
-/// its completion later - so giving up early wedged the queue for every command
-/// after it. The loop yields periodically so the budget is wall-clock time
-/// rather than a spin, and a late completion is now recognised by its CID.
-const POLL_WARN_ITERS: u64 = 50_000_000;
+/// How many slow completions (≥ `SLOW_COMPLETION_MS`) to log.
+static SLOW_LOG: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(8);
+static CLOCK_FALLBACK_LOGGED: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
 
-/// Yield every this many polls so a long wait does not starve the rest of the
-/// system (the driver cell shares the machine with the VFS and the guest).
-const POLL_YIELD_EVERY: u64 = 8192;
+/// Monotonic milliseconds for the wait budgets (`None`: no clock on this profile).
+fn now_ms() -> Option<u64> {
+    let now = ostd::syscall::sys_get_time_ms();
+    if now.is_none() && !CLOCK_FALLBACK_LOGGED.swap(true, Ordering::Relaxed) {
+        let _ = print_fmt(format_args!(
+            "[nvme] monotonic clock unavailable; using the 50000000-poll fallback\n"
+        ));
+    }
+    now
+}
+
+/// One more poll of a wait: at each yield point, yield and report a spent budget.
+///
+/// A timed-out command is not aborted - the device still posts its completion later - so
+/// giving up early wedged the queue for every command after it; a late completion is
+/// recognised by its CID. The budgets are time (S10-3c): a Flush is a host fsync, and a
+/// fixed poll count lasted only seconds in an idle guest.
+fn poll_spent(deadline: &mut Deadline) -> Option<Spent> {
+    if !deadline.tick() {
+        return None;
+    }
+    ostd::task::yield_now();
+    deadline.check(now_ms())
+}
+
+/// Log a completion that took at least `SLOW_COMPLETION_MS` (the first few only).
+fn note_slow(deadline: &Deadline, what: &str, opc: u8) {
+    if let Some(ms) = deadline.slow(now_ms()) {
+        if SLOW_LOG.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| left.checked_sub(1)).is_ok() {
+            let _ = print_fmt(format_args!("[nvme] slow completion {} opc={} ms={}\n", what, opc, ms));
+        }
+    }
+}
 
 /// How many expected io rejections (reads past the namespace end) to log.
 static IO_ERR_LOG: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(3);
@@ -93,6 +119,8 @@ impl NvmeController {
         };
         let dstrd = ((cap >> 32) & 0xF) as usize;
         let db_stride = 4 << dstrd;
+        let rdy_budget_ms = deadline::rdy_budget_ms(cap);
+        let _ = print_fmt(format_args!("[nvme] CAP=0x{:016x} ready budget {} ms (CAP.TO)\n", cap, rdy_budget_ms));
 
         // 2. Allocate admin queues.
         //
@@ -108,20 +136,16 @@ impl NvmeController {
 
         // 3. Reset controller: CC.EN=0, wait CSTS.RDY=0.
         Self::write32(&mmio, REG_CC, 0)?;
-        let mut spin = 0u64;
+        let mut wait = Deadline::start(rdy_budget_ms, now_ms());
         loop {
             let csts = Self::read32(&mmio, REG_CSTS)?;
             if csts & CSTS_RDY == 0 {
                 break;
             }
-            spin += 1;
-            if spin % POLL_YIELD_EVERY == 0 {
-                ostd::task::yield_now();
-            }
-            if spin > POLL_WARN_ITERS {
+            if let Some(spent) = poll_spent(&mut wait) {
                 let _ = print_fmt(format_args!(
-                    "[nvme] reset wait failed: CSTS=0x{:x} never dropped RDY in {} polls\n",
-                    csts, POLL_WARN_ITERS
+                    "[nvme] reset wait failed: CSTS=0x{:x} never dropped RDY in {}\n",
+                    csts, spent
                 ));
                 return Err(ViError::IO);
             }
@@ -150,7 +174,7 @@ impl NvmeController {
         Self::write32(&mmio, REG_CC, cc)?;
 
         // 6. Wait CSTS.RDY=1.
-        let mut spin = 0u64;
+        let mut wait = Deadline::start(rdy_budget_ms, now_ms());
         loop {
             let csts = Self::read32(&mmio, REG_CSTS)?;
             if csts & CSTS_CFS != 0 {
@@ -163,14 +187,10 @@ impl NvmeController {
             if csts & CSTS_RDY != 0 {
                 break;
             }
-            spin += 1;
-            if spin % POLL_YIELD_EVERY == 0 {
-                ostd::task::yield_now();
-            }
-            if spin > POLL_WARN_ITERS {
+            if let Some(spent) = poll_spent(&mut wait) {
                 let _ = print_fmt(format_args!(
-                    "[nvme] RDY wait failed: CSTS=0x{:x} never reached RDY in {} polls\n",
-                    csts, POLL_WARN_ITERS
+                    "[nvme] RDY wait failed: CSTS=0x{:x} never reached RDY in {}\n",
+                    csts, spent
                 ));
                 return Err(ViError::IO);
             }
@@ -313,10 +333,35 @@ impl NvmeController {
         unsafe { core::ptr::write_volatile((self.mmio.base() + db_off) as *mut u32, tail as u32) };
     }
 
-    fn ring_cq_head(&self, qid: usize, head: u16) {
-        let db_off = REG_DB_BASE + (qid * 2 + 1) * self.db_stride;
-        // SAFETY: doorbell is within the granted BAR0 MMIO region.
-        unsafe { core::ptr::write_volatile((self.mmio.base() + db_off) as *mut u32, head as u32) };
+    fn wait_command(&mut self, qid: usize, cid: u16, wait: &mut Deadline) -> Result<u16, Spent> {
+        let doorbell = self.mmio.base() + REG_DB_BASE + (qid * 2 + 1) * self.db_stride;
+        let queue = if qid == 0 { &mut self.admin } else { &mut self.io };
+        queue.wait_completion(cid, |head| {
+            // SAFETY: the CQ doorbell belongs to the controller's granted BAR0 mapping.
+            unsafe { core::ptr::write_volatile(doorbell as *mut u32, head as u32) };
+        }, || poll_spent(wait))
+    }
+
+    /// Cold failure diagnostics: actual registers and the current (not cached) CQ slot.
+    fn admin_timeout(&self, opc: u8, cid: u16, spent: Spent) -> ViResult<()> {
+        let entry = (self.admin.cq_virt() as *const crate::queue::CqEntry)
+            .wrapping_add(self.admin.cq.head as usize);
+        // SAFETY: head is in range and the queue DMA allocations remain owned here.
+        let raw = unsafe { core::ptr::read_volatile(&(*entry).phase_status) };
+        let done_cid = unsafe { core::ptr::read_volatile(&(*entry).cid) };
+        let cc = Self::read32(&self.mmio, REG_CC)?;
+        let csts = Self::read32(&self.mmio, REG_CSTS)?;
+        let aqa = Self::read32(&self.mmio, REG_AQA)?;
+        let asq = Self::read32(&self.mmio, REG_ASQ)? as u64
+            | ((Self::read32(&self.mmio, REG_ASQ + 4)? as u64) << 32);
+        let acq = Self::read32(&self.mmio, REG_ACQ)? as u64
+            | ((Self::read32(&self.mmio, REG_ACQ + 4)? as u64) << 32);
+        let _ = print_fmt(format_args!(
+            "[nvme] admin timeout opc={} cid={} after {} (cq_head={} phase={} raw_status=0x{:x} done_cid={} CC=0x{:x} CSTS=0x{:x} AQA=0x{:x} ASQ=0x{:x} ACQ=0x{:x})\n",
+            opc, cid, spent, self.admin.cq.head, self.admin.cq.phase, raw, done_cid,
+            cc, csts, aqa, asq, acq
+        ));
+        Ok(())
     }
 
     // ── Admin command submit + poll ───────────────────────────────────────────
@@ -357,57 +402,20 @@ impl NvmeController {
         fence(Ordering::Release);
         self.ring_sq_tail(0, self.admin.sq_tail);
 
-        let expected_phase = self.admin.cq_phase;
-        let cq_head = self.admin.cq_head as usize;
-        let mut iters = 0u64;
-        loop {
-            // SAFETY: cq_head < depth; cq_buf holds depth CqEntry slots.
-            let phase_status =
-                unsafe { core::ptr::read_volatile(&(*self.admin.cq_entry(cq_head)).phase_status) };
-            if (phase_status & 1 != 0) == expected_phase {
-                // Same guard as submit_io: skip a completion that belongs to a
-                // command whose submitter already timed out.
-                let done_cid =
-                    unsafe { core::ptr::read_volatile(&(*self.admin.cq_entry(cq_head)).cid) };
-                if done_cid != cid {
-                    let new_head = (cq_head + 1) % depth;
-                    if new_head == 0 {
-                        self.admin.cq_phase = !self.admin.cq_phase;
-                    }
-                    self.admin.cq_head = new_head as u16;
-                    self.ring_cq_head(0, self.admin.cq_head);
-                    continue;
-                }
-                let status = phase_status >> 1;
-                let new_head = (cq_head + 1) % depth;
-                if new_head == 0 {
-                    self.admin.cq_phase = !self.admin.cq_phase;
-                }
-                self.admin.cq_head = new_head as u16;
-                self.ring_cq_head(0, self.admin.cq_head);
-                if status != 0 {
-                    ostd::io::println(&alloc::format!(
-                        "[nvme] admin error status={} after {} polls",
-                        status,
-                        iters
-                    ));
-                    return Err(ViError::IO);
-                }
-                return Ok(());
-            }
-            iters += 1;
-            if iters % POLL_YIELD_EVERY == 0 {
-                ostd::task::yield_now();
-            }
-            if iters == POLL_WARN_ITERS {
-                ostd::io::println(&alloc::format!(
-                    "[nvme] admin timeout after {} polls",
-                    iters
-                ));
+        let mut wait = Deadline::start(deadline::ADMIN_BUDGET_MS, now_ms());
+        let status = match self.wait_command(0, cid, &mut wait) {
+            Ok(status) => status,
+            Err(spent) => {
+                self.admin_timeout(opc, cid, spent)?;
                 return Err(ViError::IO);
             }
-            fence(Ordering::Acquire);
+        };
+        note_slow(&wait, "admin", opc);
+        if status != 0 {
+            ostd::io::println(&alloc::format!("[nvme] admin error opc={} status={}", opc, status));
+            return Err(ViError::IO);
         }
+        Ok(())
     }
 
     // ── I/O command submit + poll ─────────────────────────────────────────────
@@ -431,81 +439,32 @@ impl NvmeController {
         fence(Ordering::Release);
         self.ring_sq_tail(1, self.io.sq_tail);
 
-        let expected_phase = self.io.cq_phase;
-        let cq_head = self.io.cq_head as usize;
-        let mut iters = 0u64;
-        loop {
-            // SAFETY: cq_head < depth; cq_buf holds depth CqEntry slots.
-            let phase_status =
-                unsafe { core::ptr::read_volatile(&(*self.io.cq_entry(cq_head)).phase_status) };
-            if (phase_status & 1 != 0) == expected_phase {
-                // The phase bit is written last, so a matching phase means the
-                // whole entry is visible - including the CID. A completion for a
-                // different command is one whose submitter already gave up
-                // (its own poll hit the budget); consume it so the queue keeps
-                // advancing instead of mis-attributing it to this command.
-                let done_cid =
-                    unsafe { core::ptr::read_volatile(&(*self.io.cq_entry(cq_head)).cid) };
-                if done_cid != cid {
-                    let new_head = (cq_head + 1) % depth;
-                    if new_head == 0 {
-                        self.io.cq_phase = !self.io.cq_phase;
-                    }
-                    self.io.cq_head = new_head as u16;
-                    self.ring_cq_head(1, self.io.cq_head);
-                    continue;
-                }
-                let status = phase_status >> 1;
-                let new_head = (cq_head + 1) % depth;
-                if new_head == 0 {
-                    self.io.cq_phase = !self.io.cq_phase;
-                }
-                self.io.cq_head = new_head as u16;
-                self.ring_cq_head(1, self.io.cq_head);
-                if status != 0 {
-                    // Reads past the end of the namespace are expected (volume
-                    // probes and a wandering cluster chain both produce them) and
-                    // the caller retries; log the first few so a real error is
-                    // still visible without flooding the console.
-                    if IO_ERR_LOG.fetch_sub(1, Ordering::Relaxed) > 0 {
-                        ostd::io::println(&alloc::format!(
-                            "[nvme] io error opc={} lba={} nlb={} status={}",
-                            opc,
-                            lba,
-                            nlb,
-                            status
-                        ));
-                    }
-                    return Err(ViError::IO);
-                }
-                return Ok(());
-            }
-            iters += 1;
-            if iters % POLL_YIELD_EVERY == 0 {
-                ostd::task::yield_now();
-            }
-            if iters == POLL_WARN_ITERS {
-                // Never expected: an unanswered command is always worth a line,
-                // and the queue state is what says why the completion was never
-                // seen - a stale phase bit and a full CQ (head not advanced) look
-                // identical from the outside, and the raw status word tells them
-                // apart.
-                ostd::io::println(&alloc::format!(
-                    "[nvme] io timeout opc={} lba={} cid={} after {} polls (cq_head={} sq_tail={} phase={} raw_status=0x{:x} depth={})",
-                    opc,
-                    lba,
-                    cid,
-                    iters,
-                    cq_head,
-                    tail,
-                    expected_phase,
-                    phase_status,
-                    depth
+        let mut wait = Deadline::start(deadline::IO_BUDGET_MS, now_ms());
+        let status = match self.wait_command(1, cid, &mut wait) {
+            Ok(status) => status,
+            Err(spent) => {
+                let entry = (self.io.cq_virt() as *const crate::queue::CqEntry)
+                    .wrapping_add(self.io.cq.head as usize);
+                // SAFETY: head is in range and this controller owns the live DMA queue.
+                let raw = unsafe { core::ptr::read_volatile(&(*entry).phase_status) };
+                let _ = print_fmt(format_args!(
+                    "[nvme] io timeout opc={} lba={} cid={} after {} (cq_head={} sq_tail={} phase={} raw_status=0x{:x} depth={})\n",
+                    opc, lba, cid, spent, self.io.cq.head, self.io.sq_tail, self.io.cq.phase, raw, depth
                 ));
                 return Err(ViError::IO);
             }
-            fence(Ordering::Acquire);
+        };
+        note_slow(&wait, "io", opc);
+        if status != 0 {
+            // Reads past the namespace end are expected during volume probes.
+            if IO_ERR_LOG.fetch_sub(1, Ordering::Relaxed) > 0 {
+                ostd::io::println(&alloc::format!(
+                    "[nvme] io error opc={} lba={} nlb={} status={}", opc, lba, nlb, status
+                ));
+            }
+            return Err(ViError::IO);
         }
+        Ok(())
     }
 
     /// Read one 512-byte sector into `buf` (must be DMA-capable).

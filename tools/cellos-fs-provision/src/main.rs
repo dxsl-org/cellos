@@ -6,7 +6,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 const SECTOR_SIZE: u64 = 512;
-const USAGE: &str = "cellos-fs-provision --image PATH --base LBA --sectors COUNT --intent fresh-blank|verify-existing --receipt PATH\nOffline only: stop all users of this disposable/staged image. fresh-blank refuses every nonzero selected byte; verify-existing never writes the image. P4: --base 800000 --sectors 131072; P5: --base 931072 --sectors 131072. Receipts are exclusive new outputs.";
+const USAGE: &str = "cellos-fs-provision --image PATH --base LBA --sectors COUNT --intent fresh-blank|verify-existing --receipt PATH [--seed DIR]\nOffline only: stop all users of this disposable/staged image. fresh-blank refuses every nonzero selected byte; verify-existing never writes the image. P4: --base 800000 --sectors 131072; P5: --base 931072 --sectors 131072. Receipts are exclusive new outputs. --seed (fresh-blank only) copies a host directory tree (directories and regular files, no links) into the new volume for disposable test fixtures.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Intent { FreshBlank, VerifyExisting }
@@ -15,13 +15,14 @@ impl Intent {
         match self { Self::FreshBlank => "fresh-blank", Self::VerifyExisting => "verify-existing" }
     }
 }
-struct Args { image: PathBuf, base: u64, sectors: u64, intent: Intent, receipt: PathBuf }
+struct Args { image: PathBuf, base: u64, sectors: u64, intent: Intent, receipt: PathBuf, seed: Option<PathBuf> }
 fn args() -> Result<Args, String> {
     let mut image = None;
     let mut base = None;
     let mut sectors = None;
     let mut intent = None;
     let mut receipt = None;
+    let mut seed = None;
     let mut it = std::env::args().skip(1);
     while let Some(key) = it.next() {
         let value = it.next().ok_or_else(|| format!("missing value for {key}\n{USAGE}"))?;
@@ -35,13 +36,45 @@ fn args() -> Result<Args, String> {
                 _ => return Err("intent must be fresh-blank or verify-existing".into()),
             }),
             "--receipt" if receipt.is_none() => receipt = Some(PathBuf::from(value)),
+            "--seed" if seed.is_none() => seed = Some(PathBuf::from(value)),
             _ => return Err(format!("unknown or repeated option {key}\n{USAGE}")),
         }
     }
+    let intent = intent.ok_or(USAGE)?;
+    if seed.is_some() && intent != Intent::FreshBlank {
+        return Err("--seed is only valid with fresh-blank".into());
+    }
     Ok(Args {
         image: image.ok_or(USAGE)?, base: base.ok_or(USAGE)?, sectors: sectors.ok_or(USAGE)?,
-        intent: intent.ok_or(USAGE)?, receipt: receipt.ok_or(USAGE)?,
+        intent, receipt: receipt.ok_or(USAGE)?, seed,
     })
+}
+
+/// Copy `host` (directories and regular files, children in byte order) into `fs` under
+/// `at`. Links and other kinds are refused: a fixture must not depend on host state.
+fn seed_tree<D: BlockDevice>(fs: &mut CellosFs<D>, host: &Path, at: &str) -> Result<(), String> {
+    let mut entries: Vec<_> = std::fs::read_dir(host).map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let name = entry.file_name().into_string().map_err(|_| "seed names must be UTF-8")?;
+        let path = format!("{at}/{name}");
+        let kind = entry.file_type().map_err(|e| e.to_string())?;
+        if kind.is_dir() {
+            fs.create_dir(&path).map_err(|e| format!("seed mkdir {path}: {e:?}"))?;
+            seed_tree(fs, &entry.path(), &path)?;
+        } else if kind.is_file() {
+            let data = std::fs::read(entry.path()).map_err(|e| e.to_string())?;
+            fs.create_file(&path).map_err(|e| format!("seed create {path}: {e:?}"))?;
+            let written = fs.write_file(&path, 0, &data).map_err(|e| format!("seed write {path}: {e:?}"))?;
+            if written != data.len() {
+                return Err(format!("seed write {path}: short write {written}/{}", data.len()));
+            }
+        } else {
+            return Err(format!("seed entry {path} is neither a directory nor a regular file"));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -177,8 +210,12 @@ fn run(args: Args) -> Result<(), String> {
         let disk = HostDisk { file: file.try_clone().map_err(|e| e.to_string())?, window, writable: true };
         // Any error ends mutation permanently on this disposable/staged image. No retry,
         // repair, alternate formatter or runtime fallback is permitted.
-        let fs = CellosFs::format(disk, window.blocks)
+        let mut fs = CellosFs::format(disk, window.blocks)
             .map_err(|e| format!("format failed: {e:?}; preserve for read-only observation then discard image"))?;
+        if let Some(seed) = &args.seed {
+            seed_tree(&mut fs, seed, "").map_err(|e| format!("{e}; discard image"))?;
+            fs.sync().map_err(|e| format!("seed sync failed: {e:?}; discard image"))?;
+        }
         drop(fs);
         file.sync_all().map_err(|e| format!("host sync failed: {e}; discard image after read-only observation"))?;
     }
@@ -199,6 +236,7 @@ fn run(args: Args) -> Result<(), String> {
         "base_lba": args.base, "sectors": args.sectors, "block_size": BLOCK_SIZE,
         "partition_sha256": partition_sha256, "sequence": sequence, "free_blocks": free_blocks,
         "reopen": "read-only V1 geometry and root verified",
+        "seed": args.seed.as_ref().map(|s| s.display().to_string()),
         "authority": "development preparation only; no genesis, ledger migration, durability, protected storage or production admission"
     });
     let bytes = serde_json::to_vec_pretty(&receipt).map_err(|e| e.to_string())?;

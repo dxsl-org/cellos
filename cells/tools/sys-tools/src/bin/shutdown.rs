@@ -14,6 +14,21 @@ ostd::cell_main!(cell_main);
 ///
 /// Never returns if the host accepts the shutdown request.
 fn cell_main() {
-    ostd::io::println("System shutting down...");
+    let output = ostd::io::ProcessOutput::read_own()
+        .unwrap_or_else(|_| ostd::syscall::sys_exit(1));
+    let deadline = match ostd::session::monotonic_ns()
+        .ok()
+        .and_then(|now| now.checked_add(30_000_000_000))
+    {
+        Some(deadline) if deadline != u64::MAX => deadline,
+        _ => ostd::syscall::sys_exit(1),
+    };
+    if output
+        .stdout()
+        .write_all(b"System shutting down...\n", deadline)
+        .is_err()
+    {
+        ostd::syscall::sys_exit(1);
+    }
     ostd::syscall::sys_shutdown();
 }

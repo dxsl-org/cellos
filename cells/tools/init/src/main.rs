@@ -1,5 +1,7 @@
-#![no_std]
-#![no_main]
+// Test builds only: a hosted `cargo test` gets std and libtest's entry, so init's
+// boot barriers, block-driver wait and activation decisions run as host unit tests.
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_code)]
 
 // ── Option rules ─────────────────────────────────────────────────────────────
@@ -49,8 +51,8 @@ api::declare_syscalls![
     NotifyOnExit,
     RegisterService,
     // The boot-order grant-pair launcher publishes each generation's command line
-    // (`StateStash`) and waits for that generation's terminal fault by sampling
-    // the process table (`GetProcs`).
+    // (`StateStash`). It and the x86 bootstrap Platform lifetime barrier sample
+    // the existing process table (`GetProcs`).
     StateStash,
     GetProcs,
 ];
@@ -70,6 +72,12 @@ ostd::cell_main!(extern "C" cell_main);
 
 fn cell_main() {
     println("Init: Starting Cellos Orchestrator...");
+    if let Err(error) = boot::start_after_platform(start_services) {
+        println(error.diagnostic());
+    }
+}
+
+fn start_services() {
     boot::start_block_drivers();
     let mut services = Vec::with_capacity(cellos_boot_config::MAX_CELLS + 1);
     services.push(service_table::Service::bootstrap_vfs());

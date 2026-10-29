@@ -21,9 +21,9 @@ use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 
 use crate::caller::Caller;
 use crate::dirs::DirError;
-use crate::dispatch_file_handles::{close_file, open_file, read_file};
+use crate::dispatch_file_handles::{close_file, file_state, open_file, read_file};
 use crate::dispatch_grants::{
-    list_at, read_handle_grant, stat_path, sync_handle, write_handle_grant,
+    list_at, list_at_page, read_handle_grant, stat_path, sync_handle, write_handle_grant,
 };
 use crate::manager::VfsManager;
 use crate::paths::{unlink_file, write_file, ERR_DENIED, ERR_HANDLE, ERR_IO, ERR_QUOTA};
@@ -71,6 +71,8 @@ pub fn handle<'a>(
             Err(code) => VfsResponse::Err(code),
         },
         VfsRequest::ListAt { dir } => list_at(vfs, caller, dir, resp_buf),
+        VfsRequest::ListAtPage { dir, cursor } => list_at_page(vfs, caller, dir, cursor, resp_buf),
+        VfsRequest::FileHandleState { file } => file_state(vfs, caller, file),
         VfsRequest::UnlinkAt { dir, name } => match resolve(vfs, caller, dir, name) {
             Ok(path) => unlink_file(vfs, caller, &path),
             Err(code) => VfsResponse::Err(code),

@@ -66,6 +66,7 @@ mod handlers;
 #[path = "idle-ipc-wake-oracle.rs"]
 mod idle_ipc_wake_oracle;
 mod interface;
+mod rights;
 #[path = "service-runtime.rs"]
 mod service_runtime;
 mod socket_state;

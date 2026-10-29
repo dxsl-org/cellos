@@ -53,8 +53,8 @@ ostd::cell_main!(cell_main);
 const STATIC_CTOR_SENTINEL: u32 = 0xC0FFEE11;
 const VFS_PATH: &str = "/tmp/cpp-smoke.txt";
 /// Candidates for the C-ABI file read: an embedded ELF file in the kernel file table.
-/// RV64 embeds `/BIN/INIT`; x86_64 embeds `/bin/shell`. Both start with `\x7fELF`.
-const CANDIDATES: [&[u8]; 2] = [b"/BIN/INIT\0", b"/bin/shell\0"];
+/// RV64 embeds `/BIN/INIT`; x86_64 embeds `/bin/cellbox`. Both start with `\x7fELF`.
+const CANDIDATES: [&[u8]; 2] = [b"/BIN/INIT\0", b"/bin/cellbox\0"];
 const ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
 const PAYLOAD: &[u8] = b"cpp-freestanding payload read through the VFS service";
 const HEAP_ITERATIONS: i32 = 64;

@@ -12,7 +12,8 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::backend::FsBackend;
+use crate::backend::{fill_page, FsBackend, ListPage};
+use api::ipc::vfs_dir_page::EntryKind;
 use crate::block_stream::{BlockStream, CachedBlockStream};
 use ostd::io::println;
 
@@ -98,6 +99,23 @@ impl FatBackend {
         let r = path.strip_prefix(self.prefix).unwrap_or(path);
         r.strip_prefix('/').unwrap_or(r)
     }
+
+    /// [`FsBackend::list_page`], leaving out entries for which `skip` is true
+    /// (they take no cursor index). `BinOverlay` hides cell-store names that
+    /// VIFS1 already lists this way.
+    pub(crate) fn list_page_filtered(
+        &self,
+        path: &str,
+        start: u32,
+        out: &mut [u8],
+        skip: &dyn Fn(&[u8]) -> bool,
+    ) -> Option<ListPage> {
+        let fs = self.fs.as_ref()?;
+        let rel = self.rel_allow_root(path);
+        let root = fs.root_dir();
+        let dir = if rel.is_empty() { root } else { root.open_dir(rel).ok()? };
+        page_dir(&dir, start, out, skip)
+    }
 }
 
 /// Split `"sub/dir/file"` into `("sub/dir", "file")`. `"file"` → `("", "file")`.
@@ -106,6 +124,40 @@ fn split_last(rel: &str) -> (&str, &str) {
         Some(i) => (&rel[..i], &rel[i + 1..]),
         None => ("", rel),
     }
+}
+
+/// Page one FAT directory in on-disk order. An iteration error is the whole
+/// page's error, never an early end: fatfs ends its iterator after the first
+/// error, which `list` used to report as a complete listing.
+pub(crate) fn page_dir<IO, TP, OCC>(
+    dir: &fatfs::Dir<'_, IO, TP, OCC>,
+    start: u32,
+    out: &mut [u8],
+    skip: &dyn Fn(&[u8]) -> bool,
+) -> Option<ListPage>
+where
+    IO: fatfs::ReadWriteSeek,
+    TP: fatfs::TimeProvider,
+    OCC: fatfs::OemCpConverter,
+{
+    let entries = dir.iter().filter_map(|entry| {
+        let Ok(entry) = entry else {
+            return Some(Err(()));
+        };
+        let name = entry.file_name();
+        if name == "." || name == ".." || skip(name.as_bytes()) {
+            return None;
+        }
+        let kind = if entry.is_dir() {
+            EntryKind::Dir
+        } else if entry.is_file() {
+            EntryKind::File
+        } else {
+            EntryKind::Other
+        };
+        Some(Ok((kind, name)))
+    });
+    fill_page(entries, start, out)
 }
 
 /// Walk `parts` (a '/'-separated relative dir path) from `root`, creating any
@@ -202,6 +254,10 @@ impl FsBackend for FatBackend {
             pos += entry_len;
         }
         pos
+    }
+
+    fn list_page(&self, path: &str, start: u32, out: &mut [u8]) -> Option<ListPage> {
+        self.list_page_filtered(path, start, out, &|_| false)
     }
 
     fn stat(&self, path: &str) -> Option<(u64, bool)> {

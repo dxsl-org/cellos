@@ -7,9 +7,21 @@ ostd::cell_main!(cell_main);
 
 /// env — print known environment key=value pairs from the Config Cell.
 fn cell_main() {
-    ostd::io::println("PATH=/bin");
-    ostd::io::println("SHELL=/bin/shell");
-    ostd::io::println("OS=Cellos");
-    ostd::io::println("VERSION=0.2.1");
+    let output = ostd::io::ProcessOutput::read_own()
+        .unwrap_or_else(|_| ostd::syscall::sys_exit(1));
+    let deadline = match ostd::session::monotonic_ns()
+        .ok()
+        .and_then(|now| now.checked_add(30_000_000_000))
+    {
+        Some(deadline) if deadline != u64::MAX => deadline,
+        _ => ostd::syscall::sys_exit(1),
+    };
+    if output
+        .stdout()
+        .write_all(b"PATH=/bin\nSHELL=/bin/cellbox\nOS=Cellos\nVERSION=0.2.1\n", deadline)
+        .is_err()
+    {
+        ostd::syscall::sys_exit(1);
+    }
     ostd::syscall::sys_exit(0);
 }

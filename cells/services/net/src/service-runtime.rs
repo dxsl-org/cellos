@@ -359,6 +359,53 @@ fn drain_ready_waits(
         pending.remove(&owner);
     }
 }
+
+/// Gate one attested request on the caller's network rights.
+///
+/// A denial is answered here; the caller then skips the owner watch, both
+/// intercepts and dispatch, so the request leaves no socket, DNS query, owner
+/// watch or frame behind.
+fn admit_request(buffer: &[u8], sender: usize, flags: u32) -> bool {
+    let Err(denial) = crate::rights::admit(buffer, flags) else {
+        return true;
+    };
+    let mut reply = [0u8; crate::rights::DENIAL_REPLY_LEN];
+    let _ = ostd::syscall::sys_send(sender, denial.reply(&mut reply));
+    false
+}
+
+/// Serve one admitted request: the ready-wait and resolve intercepts, then
+/// typed or raw TLS dispatch.
+#[allow(clippy::too_many_arguments)]
+fn dispatch_admitted(
+    buffer: &[u8],
+    sender: usize,
+    owner: SocketOwner,
+    iface: &mut Interface,
+    device: &mut VirtioNetDevice,
+    sockets: &mut SocketSet<'_>,
+    table: &mut SocketTable,
+    tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
+    tls_pending: &mut crate::tls_handler::TlsPending,
+    pending_ready: &mut BTreeMap<SocketOwner, PendingReady>,
+    pending_dns: &mut heapless::Vec<PendingDns, DNS_QUERY_LIMIT>,
+    resolver: &Resolver,
+    local_ip: &[u8; 4],
+) {
+    // A ready wait is registered only after a network progress
+    // pass. The retained interest batch is rechecked before idle
+    // sleep and on every NET_RX / maintenance wake.
+    iface.poll(now_instant(), device, sockets);
+    if !handle_ready_wait(buffer, sender, owner, sockets, table, pending_ready)
+        && !handle_resolve(buffer, sender, owner, iface, sockets, resolver, pending_dns)
+    {
+        handlers::handle_request(
+            buffer, sender, owner, iface, device, sockets, table, tls_table, tls_pending,
+            resolver, local_ip,
+        );
+    }
+}
+
 fn release_owner(
     owner: SocketOwner,
     sockets: &mut SocketSet<'_>,
@@ -563,6 +610,17 @@ pub(crate) fn run() {
                     idle_ipc_wake_oracle.record_ipc_miss();
                     continue;
                 }
+                // Admission precedes every effect of the request, the owner
+                // watch included: a denied caller leaves no state behind.
+                if !admit_request(&buffer, sender, identity.flags) {
+                    #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+                    idle_ipc_wake_oracle.record_ipc_drain(sys_get_time(), sender);
+                    #[cfg(not(feature = "hypervisor-bridge"))]
+                    {
+                        ipc_burst_grace = IPC_BURST_GRACE_YIELDS;
+                    }
+                    continue;
+                }
                 let owner = SocketOwner {
                     cell_id: identity.cell_id,
                     generation: identity.generation,
@@ -587,19 +645,11 @@ pub(crate) fn run() {
                 }
                 #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
                 idle_ipc_wake_oracle.record_ipc_drain(sys_get_time(), sender);
-                // A ready wait is registered only after a network progress
-                // pass. The retained interest batch is rechecked before idle
-                // sleep and on every NET_RX / maintenance wake.
-                iface.poll(now_instant(), &mut device, &mut sockets);
-                if !handle_ready_wait(&buffer, sender, owner, &mut sockets, &table, &mut pending_ready)
-                    && !handle_resolve(&buffer, sender, owner, &mut iface, &mut sockets,
-                        &resolver, &mut pending_dns)
-                {
-                    handlers::handle_request(
-                        &buffer, sender, owner, &mut iface, &mut device, &mut sockets,
-                        &mut table, &mut tls_table, &mut tls_pending, &resolver, &local_ip,
-                    );
-                }
+                dispatch_admitted(
+                    &buffer, sender, owner, &mut iface, &mut device, &mut sockets, &mut table,
+                    &mut tls_table, &mut tls_pending, &mut pending_ready, &mut pending_dns,
+                    &resolver, &local_ip,
+                );
                 drain_ready_waits(&mut pending_ready, &mut sockets, &table);
                 #[cfg(not(feature = "hypervisor-bridge"))]
                 {
@@ -663,3 +713,7 @@ pub(crate) fn run() {
 #[cfg(test)]
 #[path = "service-runtime-tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "service-runtime-admission-tests.rs"]
+mod admission_tests;

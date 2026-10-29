@@ -2,7 +2,7 @@
 //! Bounded, cooperative HTTP/Gemini transport. Every IPC is an exact operation.
 extern crate alloc;
 use alloc::{format, string::{String, ToString}, vec::Vec};
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_DENIED};
 use core::task::Poll;
 use ostd::ipc::{self, IpcOpId, IpcSubmitError, IpcTakeResult, IpcTerminal};
 use ostd::syscall::{sys_get_time_ms, sys_lookup_service};
@@ -12,6 +12,8 @@ const URL_LIMIT: usize = 2048;
 const LOAD_TICKS: u64 = 45_000; // Normalized monotonic milliseconds, never CPU-loop counts.
 const CLOSE_TICKS: u64 = 3_000;
 const REDIRECT_LIMIT: usize = 5;
+/// service-net refused the request: this Cell holds no network right for it.
+const NET_DENIED_MESSAGE: &str = "Network permission denied (no network right for this Cell)";
 
 #[derive(Clone, Debug)]
 pub struct Url { pub full: String, pub scheme: String, pub host: String, pub port: u16, pub path: String, authority: String, fragment: Option<String> }
@@ -466,6 +468,7 @@ impl<T: Transport> FetchJob<T> {
                     crate::trace::stamp(&alloc::format!("dns {} -> {}.{}.{}.{}", self.url.host, addr[0], addr[1], addr[2], addr[3]));
                     addr
                 }
+                Ok(NetResponse::Err(NET_ERR_DENIED)) => return Err(NET_DENIED_MESSAGE.into()),
                 _ => return Err(format!("DNS resolution failed for {}", self.url.host)),
             };
             cache_dns(self.url.host.clone(), addr, self.io.now());
@@ -475,7 +478,7 @@ impl<T: Transport> FetchJob<T> {
             ostd::io::println(&alloc::format!("[ocel/net] Connect reply len={}", bytes.len()));
             let cap = if self.url.tls() {
                 u64::from_le_bytes(bytes.try_into().map_err(|_| "Malformed TLS connect reply")?)
-            } else { match api::ipc::decode::<NetResponse>(bytes) { Ok(NetResponse::CapId(cap)) => cap as u64, _ => return Err("TCP connect failed".into()) } };
+            } else { match api::ipc::decode::<NetResponse>(bytes) { Ok(NetResponse::CapId(cap)) => cap as u64, Ok(NetResponse::Err(NET_ERR_DENIED)) => return Err(NET_DENIED_MESSAGE.into()), _ => return Err("TCP connect failed".into()) } };
             crate::trace::stamp(&alloc::format!("connect{} cap={}", if self.url.tls() { "+tls" } else { "" }, cap));
             if cap == 0 { return Err("TLS connection failed (network/certificate/time policy)".into()); }
             self.cap = Some(cap); self.stage = if self.url.tls() { Stage::Send } else { Stage::WaitConnect }; return Ok(());

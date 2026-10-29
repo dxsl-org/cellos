@@ -13,11 +13,15 @@
 //! This cell is granted `PcieDriverCap` by `init` via direct TCB write at spawn
 //! time — NOT via a manifest flag (all 8 flag bits in v1 are occupied).
 
-#![no_std]
-#![no_main]
+// Test builds only: a hosted `cargo test` gets std and libtest's entry, so the wait
+// budgets (`deadline`) run as host unit tests (S10-3c, D3c-3 A). Every Cell target
+// (`*-unknown-none`, `*-unknown-cellos`) keeps `no_std`/`no_main`.
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 extern crate alloc;
 
 mod controller;
+mod deadline;
 mod dispatch;
 mod dma;
 mod queue;

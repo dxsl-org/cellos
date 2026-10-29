@@ -12,13 +12,9 @@
 //! nothing failing and nobody told — the quiet downgrade that makes a capability
 //! system unauditable.
 //!
-//! ## The consequence, stated rather than glossed
-//! An over-broad spawn does not fail the spawn. The child exists and its first
-//! filesystem call is refused. That is still fail-closed — the child holds no
-//! filesystem authority, not extra authority — but the failure surfaces later
-//! than its cause. Closing the gap would need the kernel to consult this service
-//! from inside a spawn syscall, which is a layering inversion and a deadlock
-//! hazard.
+//! Legacy spawn admission binds at first contact. PreparedChildV1 instead
+//! reserves unpublished entries here and installs their seal before publication
+//! can be reconciled at the first request; it never uses legacy live-child bind.
 //!
 //! ## Why a cell with an inherited set is sealed
 //! A spawner that hands a child directory handles has placed it in the
@@ -73,7 +69,7 @@ impl DirTable {
         // Nothing is inserted until the whole set has checked out.
         let mut resolved: Vec<(u64, String)> = Vec::with_capacity(named.len());
         for &raw in named {
-            match self.entries.get(&raw).filter(|e| e.owner == spawner) {
+            match self.entries.get(&raw).filter(|e| e.owner == spawner && e.published) {
                 Some(entry) => resolved.push((raw, entry.path.clone())),
                 None => return BindOutcome::Refused,
             }
@@ -95,5 +91,54 @@ impl DirTable {
             }
         }
         BindOutcome::Bound(issued.len())
+    }
+
+    /// Reserve a fresh handle in the existing lineage table without making it
+    /// usable. The child namespace is sealed before even a fast-path lookup.
+    ///
+    /// Directory ids revoked by replacing an older generation's state are appended to
+    /// `revoked` on every outcome, so the caller can revoke the file handles opened
+    /// through them even when the reservation itself is refused.
+    pub(crate) fn reserve_prepared(
+        &mut self,
+        parent: Caller,
+        child: Caller,
+        source: api::dir_handles::ViDirHandle,
+        revoked: &mut Vec<u64>,
+    ) -> Result<api::dir_handles::ViDirHandle, super::DirError> {
+        let path = self.owned(parent, source)
+            .ok_or(super::DirError::UnknownHandle)?.path.clone();
+        if self.state(child).is_some() {
+            return Err(super::DirError::UnknownHandle);
+        }
+        if let super::lifecycle::Contact::NeedsAttestation { revoked_dir_ids, .. } = self.on_contact(child) {
+            revoked.extend(revoked_dir_ids);
+        }
+        self.seal(child);
+        self.mark_attested(child);
+        match self.insert(child, path, Some(source.0)) {
+            Ok(handle) => {
+                self.entries.get_mut(&handle.0).expect("just reserved").published = false;
+                Ok(handle)
+            }
+            Err(error) => {
+                // Remove only the state this call created. A newer generation of the
+                // same cell id keeps its seal, handles and handle count.
+                if self.state(child).is_some() {
+                    self.cells.remove(&child.cell.0);
+                }
+                Err(error)
+            }
+        }
+    }
+
+    /// No validation after publication: every entry and the seal were reserved
+    /// together. A missing lineage is retirement, never an ambient cwd fallback.
+    pub(crate) fn publish_prepared(&mut self, child: Caller, handle: u64) -> bool {
+        let Some(entry) = self.entries.get_mut(&handle).filter(|e| e.owner == child) else {
+            return false;
+        };
+        entry.published = true;
+        true
     }
 }

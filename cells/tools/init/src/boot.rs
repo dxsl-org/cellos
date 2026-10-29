@@ -1,7 +1,5 @@
 use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_spawn_from_path};
-#[cfg(any(feature = "tier2-grant-pair", feature = "tier2-entry", feature = "tier2-rpc-entry"))]
-use ostd::syscall::SyscallResult;
+use ostd::syscall::{sys_lookup_service, sys_spawn_from_path, SyscallResult};
 
 // ── Phase-03 step-5 Tier-2 grant pair (opt-in `tier2-grant-pair`) ───────────
 //
@@ -55,7 +53,6 @@ fn path_task_name(path: &str) -> &str {
 }
 
 /// Has `tid` terminated? A task the listing no longer carries has.
-#[cfg(feature = "tier2-grant-pair")]
 fn task_terminated(tid: usize) -> bool {
     let mut rows = [api::syscall::ProcessInfo::default(); 64];
     match ostd::syscall::sys_get_procs(&mut rows) {
@@ -132,25 +129,364 @@ pub(crate) fn run_grant_pair() {
 }
 
 
+const PLATFORM_WAIT_MS: u64 = 60_000;
+const PLATFORM_PROCESS_ROWS: usize = 64;
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum PlatformWaitError {
+    Listing,
+    FullTable,
+    Ambiguous,
+    NoClock,
+    Deadline,
+}
+
+impl PlatformWaitError {
+    pub(crate) fn diagnostic(&self) -> &'static str {
+        match self {
+            Self::Listing => "Init: platform process listing failed — boot stopped before driver spawning.",
+            Self::FullTable => "Init: platform process table full — boot stopped before driver spawning.",
+            Self::Ambiguous => "Init: platform process lifetime ambiguous — boot stopped before driver spawning.",
+            Self::NoClock => "Init: platform live without a clock — boot stopped before driver spawning.",
+            Self::Deadline => "Init: platform still live at 60 s — boot stopped before driver spawning.",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum PlatformWait {
+    Ready,
+    Yield,
+}
+
+/// Order bootstrap lifetimes only: absence/termination is not scan-success attestation.
+fn platform_wait_step(
+    rows: &[api::syscall::ProcessInfo],
+    count: Result<usize, ()>,
+    elapsed_ms: Option<u64>,
+) -> Result<PlatformWait, PlatformWaitError> {
+    let count = count.map_err(|()| PlatformWaitError::Listing)?;
+    // GetProcs truncates at capacity; a full snapshot cannot prove absence or uniqueness.
+    if count >= rows.len() {
+        return Err(PlatformWaitError::FullTable);
+    }
+    let mut platform = None;
+    for row in &rows[..count] {
+        // The kernel exports zero-padded task names. Do not match prefixes or paths.
+        if &row.name[..8] == b"platform" && row.name[8..].iter().all(|&byte| byte == 0) {
+            if platform.is_some() || row.state > 3 {
+                return Err(PlatformWaitError::Ambiguous);
+            }
+            platform = Some(row.state);
+        }
+    }
+    if platform.is_none() || platform == Some(3) {
+        return Ok(PlatformWait::Ready);
+    }
+    match elapsed_ms {
+        None => Err(PlatformWaitError::NoClock),
+        Some(ms) if ms >= PLATFORM_WAIT_MS => Err(PlatformWaitError::Deadline),
+        Some(_) => Ok(PlatformWait::Yield),
+    }
+}
+
+/// The continuation owns every driver/VFS/configured-service spawn, so failures cannot
+/// fall through into a partial boot. Host tests inject the same flow's syscall edges.
+fn platform_boot_flow<R>(
+    x86: bool,
+    mut snapshot: impl FnMut(&mut [api::syscall::ProcessInfo]) -> Result<usize, ()>,
+    mut now_ms: impl FnMut() -> Option<u64>,
+    mut yield_now: impl FnMut(),
+    start: impl FnOnce() -> R,
+) -> Result<R, PlatformWaitError> {
+    if x86 {
+        let mut rows = [api::syscall::ProcessInfo::default(); PLATFORM_PROCESS_ROWS];
+        let started = now_ms();
+        loop {
+            let count = snapshot(&mut rows);
+            let elapsed = started.and_then(|start| now_ms().map(|now| now.saturating_sub(start)));
+            match platform_wait_step(&rows, count, elapsed)? {
+                PlatformWait::Ready => break,
+                PlatformWait::Yield => yield_now(),
+            }
+        }
+    }
+    Ok(start())
+}
+
+pub(crate) fn start_after_platform(start: impl FnOnce()) -> Result<(), PlatformWaitError> {
+    platform_boot_flow(
+        cfg!(target_arch = "x86_64"),
+        |rows| ostd::syscall::sys_get_procs(rows).map_err(|_| ()),
+        ostd::syscall::sys_get_time_ms,
+        ostd::task::yield_now,
+        start,
+    )
+}
+
+#[cfg(test)]
+mod platform_wait_tests {
+    use super::{platform_boot_flow, PlatformWaitError, PLATFORM_PROCESS_ROWS, PLATFORM_WAIT_MS};
+    use alloc::{vec, vec::Vec};
+    use api::syscall::ProcessInfo;
+    use core::cell::RefCell;
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum Event {
+        Clock,
+        Snapshot,
+        Yield,
+        Spawn(&'static str),
+    }
+
+    const SPAWNS: [Event; 4] = [
+        Event::Spawn("/bin/block"),
+        Event::Spawn("/bin/nvme"),
+        Event::Spawn("/bin/ahci"),
+        Event::Spawn("/bin/vfs"),
+    ];
+
+    fn process(name: &str, state: usize) -> ProcessInfo {
+        let mut row = ProcessInfo { id: 1, state, ..ProcessInfo::default() };
+        row.name[..name.len()].copy_from_slice(name.as_bytes());
+        row
+    }
+
+    fn run_flow(
+        x86: bool,
+        snapshots: &[Result<&[ProcessInfo], ()>],
+        clocks: &[Option<u64>],
+    ) -> (Result<(), PlatformWaitError>, Vec<Event>) {
+        let trace = RefCell::new(Vec::new());
+        let mut snapshots = snapshots.iter();
+        let mut clocks = clocks.iter();
+        let result = platform_boot_flow(
+            x86,
+            |rows| {
+                trace.borrow_mut().push(Event::Snapshot);
+                let next = (*snapshots.next().expect("unexpected process sample"))?;
+                rows[..next.len()].copy_from_slice(next);
+                Ok(next.len())
+            },
+            || {
+                trace.borrow_mut().push(Event::Clock);
+                *clocks.next().expect("unexpected clock sample")
+            },
+            || trace.borrow_mut().push(Event::Yield),
+            || trace.borrow_mut().extend(SPAWNS),
+        );
+        (result, trace.into_inner())
+    }
+
+    fn assert_stopped(
+        snapshots: &[Result<&[ProcessInfo], ()>],
+        clocks: &[Option<u64>],
+        expected: PlatformWaitError,
+    ) -> Vec<Event> {
+        let (result, trace) = run_flow(true, snapshots, clocks);
+        assert_eq!(result, Err(expected));
+        assert!(trace.iter().all(|event| !matches!(event, Event::Spawn(_))));
+        trace
+    }
+
+    #[test]
+    fn live_to_terminated_or_absent_yields_before_every_driver_and_vfs_spawn() {
+        let terminated = [process("platform", 3)];
+        for state in 0..=2 {
+            let live = [process("platform", state)];
+            for final_rows in [terminated.as_slice(), &[]] {
+                let (result, trace) = run_flow(
+                    true,
+                    &[Ok(&live), Ok(&live), Ok(final_rows)],
+                    &[Some(100), Some(100), Some(101), Some(102)],
+                );
+                assert_eq!(result, Ok(()));
+                let mut expected = vec![
+                    Event::Clock, Event::Snapshot, Event::Clock, Event::Yield,
+                    Event::Snapshot, Event::Clock, Event::Yield,
+                    Event::Snapshot, Event::Clock,
+                ];
+                expected.extend(SPAWNS);
+                assert_eq!(trace, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn absent_exited_and_other_names_pass_without_a_clock() {
+        let exited = [process("platform", 3)];
+        let other_names = [
+            process("platform-helper", 1),
+            process("platform ", 1),
+            process("/bin/platform", 1),
+            process("Platform", 1),
+            process("ahci", 1),
+        ];
+        for rows in [&[][..], exited.as_slice(), other_names.as_slice()] {
+            let (result, trace) = run_flow(true, &[Ok(rows)], &[None]);
+            assert_eq!(result, Ok(()));
+            let mut expected = vec![Event::Clock, Event::Snapshot];
+            expected.extend(SPAWNS);
+            assert_eq!(trace, expected);
+        }
+    }
+
+    #[test]
+    fn listing_full_and_ambiguous_snapshots_stop_before_every_spawn() {
+        let full = [ProcessInfo::default(); PLATFORM_PROCESS_ROWS];
+        let duplicates = [process("platform", 1), process("platform", 3)];
+        let invalid_state = [process("platform", 4)];
+        for (snapshot, error) in [
+            (Err(()), PlatformWaitError::Listing),
+            (Ok(full.as_slice()), PlatformWaitError::FullTable),
+            (Ok(duplicates.as_slice()), PlatformWaitError::Ambiguous),
+            (Ok(invalid_state.as_slice()), PlatformWaitError::Ambiguous),
+        ] {
+            assert_stopped(&[snapshot], &[Some(0), Some(0)], error);
+        }
+    }
+
+    #[test]
+    fn live_clock_loss_stops_before_every_spawn() {
+        let live = [process("platform", 1)];
+        assert_stopped(&[Ok(&live)], &[None], PlatformWaitError::NoClock);
+        let trace = assert_stopped(
+            &[Ok(&live), Ok(&live)],
+            &[Some(100), Some(100), None],
+            PlatformWaitError::NoClock,
+        );
+        assert_eq!(trace.iter().filter(|event| **event == Event::Yield).count(), 1);
+    }
+
+    #[test]
+    fn exact_deadline_stops_live_platform_without_resetting_the_budget() {
+        let live = [process("platform", 1)];
+        let trace = assert_stopped(
+            &[Ok(&live), Ok(&live)],
+            &[Some(100), Some(100 + PLATFORM_WAIT_MS - 1), Some(100 + PLATFORM_WAIT_MS)],
+            PlatformWaitError::Deadline,
+        );
+        assert_eq!(trace.iter().filter(|event| **event == Event::Yield).count(), 1);
+    }
+
+    #[test]
+    fn absence_at_the_deadline_still_orders_lifetimes_without_claiming_scan_success() {
+        let live = [process("platform", 1)];
+        let (result, trace) = run_flow(
+            true,
+            &[Ok(&live), Ok(&[])],
+            &[Some(100), Some(100 + PLATFORM_WAIT_MS - 1), Some(100 + PLATFORM_WAIT_MS)],
+        );
+        assert_eq!(result, Ok(()));
+        assert_eq!(&trace[trace.len() - SPAWNS.len()..], &SPAWNS);
+        assert_eq!(trace.iter().filter(|event| **event == Event::Yield).count(), 1);
+    }
+
+    #[test]
+    fn non_x86_runs_original_spawn_flow_without_sampling_or_yielding() {
+        let (result, trace) = run_flow(false, &[], &[]);
+        assert_eq!(result, Ok(()));
+        assert_eq!(trace, SPAWNS);
+    }
+}
+
 // Storage bootstrap is fixed; optional network/display drivers are selected by
 // the generated service configuration rather than compiled runtime choices.
 #[cfg(not(feature = "board-rpi3"))]
 const VIRTIO_BLOCK_DRIVER: &str = "/bin/block";
 
+/// How long init waits for a block driver to register (Phase 10 S10-3c, D3c-2 B): one NVMe
+/// admin budget. Before, the wait was 400 yields, after which the VFS mounted without a disk
+/// even while the NVMe Cell was still identifying its controller.
+const BLOCK_DRIVER_WAIT_MS: u64 = 60_000;
+/// The former window: used for the other drivers once the NVMe Cell is gone (no controller,
+/// or not in the image), and as the whole bound without a monotonic clock.
+const BLOCK_DRIVER_WAIT_YIELDS: usize = 400;
+
+/// What the block-driver wait does next.
+#[derive(Debug, PartialEq, Eq)]
+enum BlockWait {
+    Done,
+    /// The NVMe Cell is still initialising: wait on.
+    KeepWaiting,
+    /// Finish with the former 400-yield window.
+    Window,
+}
+
+/// One step of the block-driver wait: done once a driver registered or the time budget is
+/// spent; wait on while the NVMe Cell lives; otherwise (it exited, it was never started, or
+/// there is no clock) the former window. The AHCI Cell idles without exiting on a machine
+/// without a controller, so only the NVMe Cell's life extends the wait.
+fn block_wait_step(registered: bool, nvme_alive: bool, elapsed_ms: Option<u64>) -> BlockWait {
+    if registered {
+        return BlockWait::Done;
+    }
+    match elapsed_ms {
+        Some(ms) if ms >= BLOCK_DRIVER_WAIT_MS => BlockWait::Done,
+        Some(_) if nvme_alive => BlockWait::KeepWaiting,
+        _ => BlockWait::Window,
+    }
+}
+
 pub(crate) fn start_block_drivers() {
     #[cfg(not(feature = "board-rpi3"))]
     let _ = sys_spawn_from_path(VIRTIO_BLOCK_DRIVER);
-    let _ = sys_spawn_from_path("/bin/nvme");
+    let nvme = match sys_spawn_from_path("/bin/nvme") {
+        SyscallResult::Ok(tid) => Some(tid),
+        SyscallResult::Err(_) => None,
+    };
     // x86_64 PC lane (phase 02a): the SATA/AHCI cell. Absent from non-x86
     // images and idles when the machine has no AHCI controller, so this spawn
     // is inert everywhere else.
     #[cfg(target_arch = "x86_64")]
     let _ = sys_spawn_from_path("/bin/ahci");
-    for _ in 0..400 {
-        if sys_lookup_service(service::BLOCK_DRIVER).is_some() {
+    let registered = || sys_lookup_service(service::BLOCK_DRIVER).is_some();
+    let started = ostd::syscall::sys_get_time_ms();
+    loop {
+        let elapsed = started.and_then(|start| ostd::syscall::sys_get_time_ms().map(|now| now.saturating_sub(start)));
+        let nvme_alive = nvme.is_some_and(|tid| !task_terminated(tid));
+        match block_wait_step(registered(), nvme_alive, elapsed) {
+            BlockWait::Done => {
+                if !registered() {
+                    ostd::io::println("Init: no block driver registered within 60 s; starting the VFS without one.");
+                }
+                return;
+            }
+            BlockWait::KeepWaiting => ostd::task::yield_now(),
+            BlockWait::Window => break,
+        }
+    }
+    for _ in 0..BLOCK_DRIVER_WAIT_YIELDS {
+        if registered() {
             break;
         }
         ostd::task::yield_now();
+    }
+}
+
+#[cfg(test)]
+mod block_wait_tests {
+    use super::{block_wait_step, BlockWait, BLOCK_DRIVER_WAIT_MS};
+
+    #[test]
+    fn a_registered_driver_ends_the_wait_at_once() {
+        for (alive, elapsed) in [(true, Some(0)), (false, None), (true, Some(BLOCK_DRIVER_WAIT_MS + 1))] {
+            assert_eq!(block_wait_step(true, alive, elapsed), BlockWait::Done);
+        }
+    }
+
+    #[test]
+    fn a_live_nvme_cell_is_waited_for_up_to_the_budget() {
+        assert_eq!(block_wait_step(false, true, Some(0)), BlockWait::KeepWaiting);
+        assert_eq!(block_wait_step(false, true, Some(BLOCK_DRIVER_WAIT_MS - 1)), BlockWait::KeepWaiting);
+        assert_eq!(block_wait_step(false, true, Some(BLOCK_DRIVER_WAIT_MS)), BlockWait::Done);
+    }
+
+    #[test]
+    fn without_an_nvme_cell_or_a_clock_the_former_window_applies() {
+        assert_eq!(block_wait_step(false, false, Some(5)), BlockWait::Window);
+        assert_eq!(block_wait_step(false, true, None), BlockWait::Window);
+        assert_eq!(block_wait_step(false, false, None), BlockWait::Window);
     }
 }
 

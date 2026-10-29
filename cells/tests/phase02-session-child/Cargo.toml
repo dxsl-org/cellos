@@ -1,0 +1,18 @@
+[package]
+name = "app-phase02-session-child"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Private Phase02 child fixture: exact context, stream, descendant and cancellation observations"
+
+[[bin]]
+name = "phase02-session-child"
+path = "src/main.rs"
+
+[dependencies]
+api = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+terminal-sdk = { path = "../../../libs/terminal", version = "0.1.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

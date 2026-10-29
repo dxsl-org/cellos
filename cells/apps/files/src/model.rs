@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-//! Data models, filesystem abstraction, and two-phase operation controller for Files.
+//! View models for Files: entries as listed by the VFS, places, and paste-name conflicts.
 
 extern crate alloc;
 use alloc::format;
@@ -28,13 +28,13 @@ pub struct FileItem {
     pub name: String,
     pub path: String,
     pub is_dir: bool,
-    pub size: u64,
-    pub mtime: u64,
+    /// `Stat` size; `None` for folders and when the VFS refused the `Stat`.
+    pub size: Option<u64>,
     pub icon: &'static str,
 }
 
 impl FileItem {
-    pub fn new(name: impl Into<String>, path: impl Into<String>, is_dir: bool, size: u64) -> Self {
+    pub fn new(name: impl Into<String>, path: impl Into<String>, is_dir: bool, size: Option<u64>) -> Self {
         let name = name.into();
         let path = path.into();
         let icon = if is_dir {
@@ -56,20 +56,17 @@ impl FileItem {
             path,
             is_dir,
             size,
-            mtime: 0,
             icon,
         }
     }
 
     pub fn formatted_size(&self) -> String {
-        if self.is_dir {
-            String::from("--")
-        } else if self.size < 1024 {
-            format!("{} B", self.size)
-        } else if self.size < 1024 * 1024 {
-            format!("{} KB", self.size / 1024)
-        } else {
-            format!("{} MB", self.size / (1024 * 1024))
+        match self.size {
+            _ if self.is_dir => String::from("--"),
+            None => String::from("?"),
+            Some(size) if size < 1024 => format!("{} B", size),
+            Some(size) if size < 1024 * 1024 => format!("{} KB", size / 1024),
+            Some(size) => format!("{} MB", size / (1024 * 1024)),
         }
     }
 }
@@ -142,16 +139,19 @@ mod tests {
 
     #[test]
     fn test_file_item_icons_and_sizes() {
-        let dir = FileItem::new("docs", "/docs", true, 0);
+        let dir = FileItem::new("docs", "/docs", true, None);
         assert_eq!(dir.icon, "[D]");
         assert_eq!(dir.formatted_size(), "--");
 
-        let doc = FileItem::new("readme.md", "/readme.md", false, 2048);
+        let doc = FileItem::new("readme.md", "/readme.md", false, Some(2048));
         assert_eq!(doc.icon, "[M]");
         assert_eq!(doc.formatted_size(), "2 KB");
 
-        let pdf = FileItem::new("manual.pdf", "/manual.pdf", false, 5 * 1024 * 1024);
+        let pdf = FileItem::new("manual.pdf", "/manual.pdf", false, Some(5 * 1024 * 1024));
         assert_eq!(pdf.icon, "[P]");
         assert_eq!(pdf.formatted_size(), "5 MB");
+
+        let refused = FileItem::new("secret", "/secret", false, None);
+        assert_eq!(refused.formatted_size(), "?");
     }
 }

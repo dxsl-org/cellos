@@ -118,6 +118,25 @@ pub fn read_file<'a>(
     VfsResponse::Data(&resp_buf[..read])
 }
 
+/// `FileHandleState`: re-authorizes the handle's path like a read, then reports
+/// the current size and whether a mutation reached the path since `OpenFileAt`.
+/// A path that is no longer a regular file is `ERR_IO`.
+pub fn file_state<'a>(vfs: &VfsManager, caller: Caller, file: ViVfsFileHandle) -> VfsResponse<'a> {
+    let Some((path, modified)) = vfs.files.state_of(caller, file) else {
+        return VfsResponse::Err(ERR_HANDLE);
+    };
+    if !vfs.access.can_read(caller, path) {
+        return VfsResponse::Err(ERR_DENIED);
+    }
+    if !vfs.healthy(path) {
+        return VfsResponse::Err(ERR_IO);
+    }
+    match vfs.stat(path) {
+        Some((size, false)) => VfsResponse::FileState { size, modified },
+        _ => VfsResponse::Err(ERR_IO),
+    }
+}
+
 pub fn close_file<'a>(
     vfs: &mut VfsManager,
     caller: Caller,

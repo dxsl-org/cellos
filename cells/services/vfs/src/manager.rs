@@ -4,8 +4,15 @@
 //! Backend routing is fully encapsulated here: dispatch code calls these
 //! delegates and never inspects path prefixes itself.
 
+mod change_marks;
+mod conditional_save;
+mod listing;
 mod owned_state;
 mod state_transfer;
+#[cfg(feature = "test-hooks")]
+pub(crate) mod read_path_selftest;
+#[cfg(test)]
+mod read_path_tests;
 #[cfg(test)]
 mod tests;
 
@@ -48,6 +55,10 @@ pub struct VfsManager {
     /// see `dirs::lifecycle`, where the reasoning for that lives.
     pub dirs: DirTable,
     pub ledger: NamespaceLedger,
+    /// D03 conditional-save transactions.
+    pub(crate) saves: crate::save::SaveTable,
+    /// S9-4c first-trust challenges (`trust::first`).
+    pub(crate) trust_challenges: crate::trust::Challenges,
     watched_owners: BTreeMap<(u64, u64), WatchedOwner>,
     cancelled_owner_watch_tokens: Vec<u64>,
 }
@@ -103,6 +114,8 @@ impl VfsManager {
             files: FileHandleTable::new(),
             dirs: DirTable::new(),
             ledger: NamespaceLedger::new(),
+            saves: crate::save::SaveTable::new(),
+            trust_challenges: crate::trust::Challenges::new(),
             watched_owners: BTreeMap::new(),
             cancelled_owner_watch_tokens: Vec::new(),
         }
@@ -233,10 +246,14 @@ impl VfsManager {
     }
 
     pub fn write(&mut self, path: &str, content: &[u8]) -> bool {
-        self.mounts
+        let created = self.would_create(path);
+        let ok = self
+            .mounts
             .backend_mut(path)
             .map(|b| b.write(path, content))
-            .unwrap_or(false)
+            .unwrap_or(false);
+        self.mark_content(path, created);
+        ok
     }
 
     pub fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
@@ -250,10 +267,13 @@ impl VfsManager {
     }
 
     pub fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> bool {
-        self.mounts
+        let ok = self
+            .mounts
             .backend_mut(path)
             .map(|b| b.write_at(path, offset, content))
-            .unwrap_or(false)
+            .unwrap_or(false);
+        self.mark_content(path, false);
+        ok
     }
 
     pub fn sync(&mut self, path: &str) -> bool {
@@ -264,47 +284,70 @@ impl VfsManager {
     }
 
     pub fn append(&mut self, path: &str, content: &[u8]) -> bool {
-        self.mounts
+        let created = self.would_create(path);
+        let ok = self
+            .mounts
             .backend_mut(path)
             .map(|b| b.append(path, content))
-            .unwrap_or(false)
+            .unwrap_or(false);
+        self.mark_content(path, created);
+        ok
     }
 
     pub fn mkdir(&mut self, path: &str) -> bool {
-        self.mounts
+        let created = self.first_created_dir(path);
+        let ok = self
+            .mounts
             .backend_mut(path)
             .map(|b| b.mkdir(path))
-            .unwrap_or(false)
+            .unwrap_or(false);
+        if let Some(created) = created {
+            self.mark_binding(&created);
+        }
+        ok
     }
 
     pub fn rmdir(&mut self, path: &str) -> bool {
-        self.mounts
+        let ok = self
+            .mounts
             .backend_mut(path)
             .map(|b| b.rmdir(path))
-            .unwrap_or(false)
+            .unwrap_or(false);
+        self.mark_tree(path);
+        ok
     }
 
     pub fn unlink(&mut self, path: &str) -> bool {
-        self.mounts
+        let ok = self
+            .mounts
             .backend_mut(path)
             .map(|b| b.unlink(path))
-            .unwrap_or(false)
+            .unwrap_or(false);
+        self.mark_binding(path);
+        ok
     }
 
     pub fn rmdir_recursive(&mut self, path: &str) -> bool {
-        self.mounts
+        let ok = self
+            .mounts
             .backend_mut(path)
             .map(|b| b.rmdir_recursive(path))
-            .unwrap_or(false)
+            .unwrap_or(false);
+        self.mark_tree(path);
+        ok
     }
 
     pub fn rename_no_replace(&mut self, old: &str, new: &str) -> bool {
         let (Some(old_backend), Some(new_backend)) = (self.mounts.backend(old), self.mounts.backend(new)) else { return false; };
         if !core::ptr::eq(old_backend, new_backend) || !self.healthy(old) || !self.healthy(new) { return false; }
-        self.mounts
+        let ok = self
+            .mounts
             .backend_mut(old)
             .map(|b| b.rename_no_replace(old, new))
-            .unwrap_or(false)
+            .unwrap_or(false);
+        self.mark_binding(old);
+        self.mark_binding(new);
+        ok
     }
 
     /// Only the three public configuration paths use this source rule. Secrets

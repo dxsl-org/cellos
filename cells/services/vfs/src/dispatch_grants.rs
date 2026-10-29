@@ -2,7 +2,7 @@
 
 use alloc::string::String;
 use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsResponse, IPC_BUF_SIZE};
+use api::ipc::{vfs_dir_page, VfsResponse, IPC_BUF_SIZE};
 use api::vfs_file_handles::ViVfsFileHandle;
 
 use crate::caller::Caller;
@@ -152,6 +152,40 @@ pub(crate) fn list_at<'a>(
     VfsResponse::Data(&resp_buf[..n])
 }
 
+/// One `ListAtPage` reply. Authorization, health and directory kind are
+/// checked again on every page, so a listing cannot outlive a policy change,
+/// and only a complete walk of the cursor chain reports `COMPLETE`.
+pub(crate) fn list_at_page<'a>(
+    vfs: &VfsManager,
+    caller: Caller,
+    dir: ViDirHandle,
+    cursor: u32,
+    resp_buf: &'a mut [u8; IPC_BUF_SIZE],
+) -> VfsResponse<'a> {
+    let Some(path) = vfs.dirs.dir_path(caller, dir).map(String::from) else {
+        return VfsResponse::Err(ERR_HANDLE);
+    };
+    if !vfs.access.can_read(caller, &path) {
+        return VfsResponse::Err(ERR_DENIED);
+    }
+    if !vfs.healthy(&path) { return VfsResponse::Err(ERR_IO); }
+    if !matches!(vfs.stat(&path), Some((_, true))) { return VfsResponse::Err(ERR_IO); }
+    let Some(page) = vfs.list_page(&path, cursor, &mut resp_buf[..MAX_INLINE_PAYLOAD]) else {
+        return VfsResponse::Err(ERR_IO);
+    };
+    if !vfs.healthy(&path) { return VfsResponse::Err(ERR_IO); }
+    let changed = vfs.dirs.owned(caller, dir).is_some_and(|entry| entry.changed);
+    let mut flags = if changed { vfs_dir_page::CHANGED } else { 0 };
+    let next = match page.next {
+        Some(next) => next,
+        None => {
+            flags |= vfs_dir_page::COMPLETE;
+            0
+        }
+    };
+    VfsResponse::DirPage { next, flags, entries: &resp_buf[..page.written] }
+}
+
 #[cfg(test)]
 mod health_tests {
     use super::*;
@@ -166,6 +200,10 @@ mod health_tests {
         }
         fn get_file_ptr(&self, _: &str) -> Option<(usize, usize)> { None }
         fn list(&self, _: &str, _: &mut [u8]) -> usize { self.0.store(true, Ordering::SeqCst); 0 }
+        fn list_page(&self, _: &str, _: u32, _: &mut [u8]) -> Option<crate::backend::ListPage> {
+            self.0.store(true, Ordering::SeqCst);
+            None
+        }
         fn stat(&self, path: &str) -> Option<(u64, bool)> { Some((8, path == "/data")) }
         fn file_size(&self, _: &str) -> u64 { 8 }
         fn read_to_vec(&self, _: &str) -> Vec<u8> { self.0.store(true, Ordering::SeqCst); Vec::new() }

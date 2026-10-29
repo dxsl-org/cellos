@@ -15,8 +15,8 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::RefCell;
-
-use crate::backend::FsBackend;
+use crate::backend::{fill_page, FsBackend, ListPage};
+use api::ipc::vfs_dir_page::EntryKind;
 use ostd::syscall::{
     sys_close, sys_close_cap, sys_open, sys_open_cap, sys_read_cap, sys_readdir, sys_seek_cap,
 };
@@ -103,6 +103,46 @@ fn dir_lookup(parent: &str, name: &str) -> Option<(u64, bool)> {
     None
 }
 
+/// One VIFS1 entry name, kept in its fixed-size record.
+pub(crate) struct BootName(types::DirEntry, usize);
+
+impl AsRef<[u8]> for BootName {
+    fn as_ref(&self) -> &[u8] {
+        &self.0.name[..self.1]
+    }
+}
+
+/// Entries of an open VIFS1 directory in ReadDir order. A ReadDir failure is
+/// yielded as an error, not taken as the end of the directory.
+fn dir_entries(fd: &Fd) -> impl Iterator<Item = Result<(EntryKind, BootName), ()>> + '_ {
+    core::iter::from_fn(move || loop {
+        let entry = match sys_readdir(fd.0) {
+            Ok(Some(entry)) => entry,
+            Ok(None) => return None,
+            Err(_) => return Some(Err(())),
+        };
+        let len = entry.name.iter().position(|&b| b == 0).unwrap_or(entry.name.len());
+        let name = &entry.name[..len];
+        if len == 0 || name == b"." || name == b".." {
+            continue;
+        }
+        let kind = match entry.file_type {
+            types::FileType::File => EntryKind::File,
+            types::FileType::Directory => EntryKind::Dir,
+            types::FileType::Device | types::FileType::Unknown => EntryKind::Other,
+        };
+        return Some(Ok((kind, BootName(entry, len))));
+    })
+}
+
+impl BootFsProxy {
+    /// Every entry name of directory `path`; `None` when it cannot be read whole.
+    pub(crate) fn names(&self, path: &str) -> Option<Vec<BootName>> {
+        let fd = open(path)?;
+        dir_entries(&fd).map(|entry| entry.map(|(_, name)| name)).collect::<Result<_, _>>().ok()
+    }
+}
+
 impl FsBackend for BootFsProxy {
     fn get_file_ptr(&self, _path: &str) -> Option<(usize, usize)> {
         None // no stable user-visible pointer; callers use the ReadAsync copy path
@@ -138,6 +178,11 @@ impl FsBackend for BootFsProxy {
             pos += entry_len;
         }
         pos
+    }
+
+    fn list_page(&self, path: &str, start: u32, out: &mut [u8]) -> Option<ListPage> {
+        let fd = open(path)?;
+        fill_page(dir_entries(&fd), start, out)
     }
 
     fn stat(&self, path: &str) -> Option<(u64, bool)> {
@@ -180,17 +225,32 @@ impl FsBackend for BootFsProxy {
             Err(_) => return Vec::new(),
         };
         let size = self.file_size(path) as usize;
-        let mut result = if size > 0 {
-            Vec::with_capacity(size)
-        } else {
-            Vec::new()
-        };
-        let mut buf = [0u8; 512];
-        loop {
-            match sys_read_cap(cap, &mut buf) {
-                Ok(0) => break,
-                Ok(n) => result.extend_from_slice(&buf[..n]),
-                Err(_) => break,
+        let mut result = Vec::with_capacity(size);
+        // Read the stat'ed size straight into `result` in 64 KiB `ReadCap`s: VFS
+        // serves one request at a time, and 512-byte reads made a multi-MiB ELF
+        // (`ReadFileGrant` for init's spawns) outlast the caller's kernel deadline
+        // under TCG while every other VFS caller timed out behind it. Each call's
+        // kernel bounce buffer stays at the chunk size, not the file size.
+        const CHUNK: usize = 64 * 1024;
+        let mut filled = 0;
+        while filled < size {
+            let want = (size - filled).min(CHUNK);
+            result.resize(filled + want, 0);
+            match sys_read_cap(cap, &mut result[filled..]) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => filled += n,
+            }
+        }
+        result.truncate(filled);
+        // Past the stat'ed size (or with no size), keep reading to end of file.
+        if filled == size {
+            let mut buf = [0u8; 512];
+            loop {
+                match sys_read_cap(cap, &mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => result.extend_from_slice(&buf[..n]),
+                    Err(_) => break,
+                }
             }
         }
         sys_close_cap(cap);

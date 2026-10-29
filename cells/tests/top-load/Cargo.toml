@@ -1,0 +1,18 @@
+[package]
+name = "app-top-load"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Private Phase06 S6-5 load fixture: a multi-thread Cell whose workers spin, park and exit on typed line commands, each answered by one acknowledgement line"
+
+[[bin]]
+name = "top-load"
+path = "src/main.rs"
+
+[dependencies]
+api = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+terminal-sdk = { path = "../../../libs/terminal", version = "0.1.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

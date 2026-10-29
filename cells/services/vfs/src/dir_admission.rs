@@ -41,6 +41,12 @@ pub(crate) fn prepare_contact(vfs: &mut VfsManager, caller: Caller) -> bool {
 
 /// Settle what the kernel says about `caller`. Idempotent per cell generation.
 pub fn admit(vfs: &mut VfsManager, caller: Caller) {
+    // Receipt reconciliation is mandatory even for previously attested callers, but only
+    // for reservations this caller prepared or was prepared for: it installs the completed
+    // grant before this request can resolve a handle. A silent child's exit is settled
+    // here, on its owner's next request (`prepared_cwd::idle_work`); everything else on an
+    // owner-death notification or the service's bounded idle cadence.
+    crate::prepared_cwd::reconcile_for(vfs, caller);
     if !prepare_contact(vfs, caller) {
         return;
     }

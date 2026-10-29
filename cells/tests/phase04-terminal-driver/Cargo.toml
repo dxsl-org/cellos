@@ -1,0 +1,23 @@
+[package]
+name = "app-phase04-terminal-driver"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Private Phase04 driver: runs the real cellbox shell through FrontendHost (the GUI Terminal's SDK frontend host) and prints P04 PASS/FAIL markers"
+
+[[bin]]
+name = "phase04-terminal-driver"
+path = "src/main.rs"
+
+[dependencies]
+api = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+terminal-sdk = { path = "../../../libs/terminal", version = "0.1.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }
+
+[features]
+# Phase 09 lane only: run the `ssh` checks against the Docker fixture instead of the
+# Phase04 suite (scripts/qemu-phase09-ssh-test.sh).
+phase09-ssh = []

@@ -58,6 +58,11 @@ impl VfsManager {
         core::mem::take(&mut self.cancelled_owner_watch_tokens)
     }
 
+    /// Whether `caller`'s root death will reach the receive loop as a notification.
+    pub fn watches_owner(&self, caller: Caller) -> bool {
+        self.watched_owners.contains_key(&(caller.cell.0, caller.generation))
+    }
+
     fn purge_owned_state(&mut self, caller: Caller) -> usize {
         let dirs = self.dirs.purge_owner(caller);
         let revoked_files = self.files.revoke_by_parent_dirs(&dirs.revoked_ids);

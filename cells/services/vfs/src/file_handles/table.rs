@@ -24,6 +24,9 @@ pub struct FileEntry {
     pub parent_dir: u64,
     pub state: FileState,
     pub _lease: Option<crate::namespace::ServiceHandle>,
+    /// A content or binding mutation reached `path` after this handle was
+    /// opened. Sticky; reported by `FileHandleState`.
+    pub modified: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,6 +91,7 @@ impl FileHandleTable {
                 parent_dir,
                 state: FileState::Open,
                 _lease: lease,
+                modified: false,
             },
         );
         *self.counts.entry(key).or_insert(0) += 1;
@@ -102,6 +106,37 @@ impl FileHandleTable {
             .get(&file.0)
             .filter(|entry| entry.owner == caller && entry.state == FileState::Open)
             .map(|entry| entry.path.as_str())
+    }
+
+    /// Path and `modified` state of an open handle, for its owner only.
+    pub fn state_of(&self, caller: Caller, file: ViVfsFileHandle) -> Option<(&str, bool)> {
+        self.entries
+            .get(&file.0)
+            .filter(|entry| entry.owner == caller && entry.state == FileState::Open)
+            .map(|entry| (entry.path.as_str(), entry.modified))
+    }
+
+    /// Mark every handle opened on `path` (see `paths::may_alias`), whoever
+    /// holds it.
+    pub fn mark_modified(&mut self, path: &str) {
+        for entry in self
+            .entries
+            .values_mut()
+            .filter(|entry| crate::paths::may_alias(&entry.path, path))
+        {
+            entry.modified = true;
+        }
+    }
+
+    /// Mark every handle opened on `path` or below it.
+    pub fn mark_modified_within(&mut self, path: &str) {
+        for entry in self
+            .entries
+            .values_mut()
+            .filter(|entry| crate::paths::may_alias_within(&entry.path, path))
+        {
+            entry.modified = true;
+        }
     }
 
     pub fn begin_sync_read(

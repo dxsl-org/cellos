@@ -359,6 +359,18 @@ impl VirtioNetDevice {
         self.guest_rx_queue.len()
     }
 
+    /// Frames waiting for the NIC driver (host tests).
+    #[cfg(test)]
+    pub(crate) fn tx_queue_len(&self) -> usize {
+        self.tx_queue.len()
+    }
+
+    /// The guest MAC the L2 bridge routes to (host tests).
+    #[cfg(test)]
+    pub(crate) fn guest_mac(&self) -> Option<[u8; 6]> {
+        self.guest_mac
+    }
+
     /// L2Send returns success only after the NIC driver ACKs. A None result
     /// means the request was queued; pump_rx_split sends its eventual reply.
     pub fn send_l2(&mut self, frame: &[u8], sender: usize) -> Option<bool> {

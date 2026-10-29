@@ -9,9 +9,12 @@
 
 use alloc::vec::Vec;
 
-use crate::backend::FsBackend;
+use crate::backend::{FsBackend, ListPage};
 use crate::backend_bootfs::BootFsProxy;
 use crate::backend_fat::FatBackend;
+
+/// Cursor bit marking a position in the cell-store half of a `/bin` listing.
+const STORE_PHASE: u32 = 1 << 30;
 
 pub struct BinOverlay {
     boot: BootFsProxy,
@@ -46,6 +49,42 @@ impl FsBackend for BinOverlay {
             return n;
         }
         n + self.store.list(path, &mut out[n..])
+    }
+
+    /// VIFS1 entries, then cell-store entries whose name VIFS1 does not
+    /// already list (VIFS1 wins on a collision, as it does for reads).
+    fn list_page(&self, path: &str, start: u32, out: &mut [u8]) -> Option<ListPage> {
+        let boot_dir = matches!(self.boot.stat(path), Some((_, true)));
+        let store_dir = matches!(self.store.stat(path), Some((_, true)));
+        if !boot_dir && !store_dir {
+            return None;
+        }
+        let mut written = 0;
+        let store_start = if start & STORE_PHASE == 0 {
+            if boot_dir {
+                let page = self.boot.list_page(path, start, out)?;
+                if page.next.is_some() {
+                    return Some(page);
+                }
+                written = page.written;
+            } else if start != 0 {
+                return None;
+            }
+            0
+        } else {
+            start & !STORE_PHASE
+        };
+        if !store_dir {
+            return (store_start == 0).then_some(ListPage { written, next: None });
+        }
+        let shadowed = if boot_dir { self.boot.names(path)? } else { Vec::new() };
+        let page = self.store.list_page_filtered(path, store_start, &mut out[written..], &|name| {
+            shadowed.iter().any(|boot| boot.as_ref() == name)
+        })?;
+        Some(ListPage {
+            written: written + page.written,
+            next: page.next.map(|next| next | STORE_PHASE),
+        })
     }
 
     fn stat(&self, path: &str) -> Option<(u64, bool)> {

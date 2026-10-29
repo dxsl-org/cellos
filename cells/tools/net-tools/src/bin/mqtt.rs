@@ -10,11 +10,14 @@
 #![forbid(unsafe_code)]
 extern crate ostd;
 
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_DENIED};
 use api::syscall::service;
 use ostd::io::{print, println};
 use ostd::ipc::recv_from;
 use ostd::syscall::{sys_lookup_service, sys_send, sys_yield};
+
+/// service-net refused the request: this Cell holds no network right for it.
+const NET_DENIED: &str = "permission denied (no network right)";
 
 api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
 
@@ -71,9 +74,10 @@ fn cell_main() {
     // IPv4 literals and the SLIRP aliases are answered service-side, DNS names
     // by its A-record resolver: the tools carry no resolver of their own.
     let addr = match resolve_host(host, net_ep) {
-        Some(a) => a,
-        None => {
-            println("mqtt: cannot resolve host");
+        Ok(a) => a,
+        Err(why) => {
+            print("mqtt: ");
+            println(why);
             return;
         }
     };
@@ -88,6 +92,11 @@ fn cell_main() {
     let cap_id = match recv_from(net_ep, &mut resp_buf) {
         Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
             Ok(NetResponse::CapId(c)) => c,
+            Ok(NetResponse::Err(NET_ERR_DENIED)) => {
+                print("mqtt: connect: ");
+                println(NET_DENIED);
+                return;
+            }
             _ => {
                 println("mqtt: tcp connect failed");
                 return;
@@ -431,19 +440,22 @@ fn encode_remaining_len(mut n: usize, out: &mut [u8; 4]) -> usize {
 /// The service owns the whole resolution order — IPv4 literal, SLIRP alias
 /// (`gateway`, `host`, `dns`, `localhost`), then a UDP A-record query — so the
 /// tools never carry a second, drifting copy of it.
-fn resolve_host(host: &str, net_ep: usize) -> Option<[u8; 4]> {
+/// The error is the reason to print: a denied lookup is not a DNS failure.
+fn resolve_host(host: &str, net_ep: usize) -> Result<[u8; 4], &'static str> {
+    const UNRESOLVED: &str = "cannot resolve host";
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(&NetRequest::Resolve { hostname: host }, &mut req_buf)
-        .ok()?
+        .map_err(|_| UNRESOLVED)?
         .len();
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     match recv_from(net_ep, &mut resp_buf) {
         Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
-            Ok(NetResponse::Addr(addr)) => Some(addr),
-            _ => None,
+            Ok(NetResponse::Addr(addr)) => Ok(addr),
+            Ok(NetResponse::Err(NET_ERR_DENIED)) => Err(NET_DENIED),
+            _ => Err(UNRESOLVED),
         },
-        _ => None,
+        _ => Err(UNRESOLVED),
     }
 }
 

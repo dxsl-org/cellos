@@ -53,28 +53,25 @@ fn epoch_to_datetime(mut secs: u64) -> (u64, u8, u8, u8, u8, u8) {
     (year, month, day, hour, min, sec)
 }
 
-fn print_pad2(n: u8) {
-    if n < 10 {
-        ostd::io::print("0");
+fn decimal(mut value: u64, width: usize, buffer: &mut [u8; 20]) -> &[u8] {
+    let mut cursor = buffer.len();
+    loop {
+        cursor -= 1;
+        buffer[cursor] = b'0' + (value % 10) as u8;
+        value /= 10;
+        if value == 0 && buffer.len() - cursor >= width {
+            break;
+        }
     }
-    ostd::io::print_usize(n as usize);
-}
-
-fn print_pad4(n: u64) {
-    if n < 10 {
-        ostd::io::print("000");
-    } else if n < 100 {
-        ostd::io::print("00");
-    } else if n < 1000 {
-        ostd::io::print("0");
-    }
-    ostd::io::print_usize(n as usize);
+    &buffer[cursor..]
 }
 
 ostd::cell_main!(cell_main);
 
 /// date — print wall-clock time from hardware RTC (UTC).
 fn cell_main() {
+    let output = ostd::io::ProcessOutput::read_own()
+        .unwrap_or_else(|_| ostd::syscall::sys_exit(1));
     let epoch = ostd::syscall::sys_get_wall_secs();
     if epoch == 0 {
         // RTC absent — fall back to uptime display.
@@ -82,28 +79,62 @@ fn cell_main() {
         let secs = ticks / 10_000_000; // 10 MHz mtime
         let mins = secs / 60;
         let hrs = mins / 60;
-        ostd::io::print("Uptime: ");
-        ostd::io::print_usize(hrs as usize);
-        ostd::io::print("h ");
-        ostd::io::print_usize((mins % 60) as usize);
-        ostd::io::print("m ");
-        ostd::io::print_usize((secs % 60) as usize);
-        ostd::io::println("s  (no RTC)");
+        let mut hrs_buf = [0u8; 20];
+        let mut mins_buf = [0u8; 20];
+        let mut secs_buf = [0u8; 20];
+        emit(
+            output.stdout(),
+            &[
+                b"Uptime: ",
+                decimal(hrs, 1, &mut hrs_buf),
+                b"h ",
+                decimal(mins % 60, 1, &mut mins_buf),
+                b"m ",
+                decimal(secs % 60, 1, &mut secs_buf),
+                b"s  (no RTC)\n",
+            ],
+        );
     } else {
         let (y, mo, d, h, mi, s) = epoch_to_datetime(epoch);
         // Format: 2026-06-07 15:30:42 UTC
-        print_pad4(y);
-        ostd::io::print("-");
-        print_pad2(mo);
-        ostd::io::print("-");
-        print_pad2(d);
-        ostd::io::print(" ");
-        print_pad2(h);
-        ostd::io::print(":");
-        print_pad2(mi);
-        ostd::io::print(":");
-        print_pad2(s);
-        ostd::io::println(" UTC");
+        let mut year_buf = [0u8; 20];
+        let mut month_buf = [0u8; 20];
+        let mut day_buf = [0u8; 20];
+        let mut hour_buf = [0u8; 20];
+        let mut min_buf = [0u8; 20];
+        let mut sec_buf = [0u8; 20];
+        emit(
+            output.stdout(),
+            &[
+                decimal(y, 4, &mut year_buf),
+                b"-",
+                decimal(mo as u64, 2, &mut month_buf),
+                b"-",
+                decimal(d as u64, 2, &mut day_buf),
+                b" ",
+                decimal(h as u64, 2, &mut hour_buf),
+                b":",
+                decimal(mi as u64, 2, &mut min_buf),
+                b":",
+                decimal(s as u64, 2, &mut sec_buf),
+                b" UTC\n",
+            ],
+        );
     }
     ostd::syscall::sys_exit(0);
+}
+
+fn emit(stream: &ostd::io::OutputStream, parts: &[&[u8]]) {
+    let deadline = match ostd::session::monotonic_ns()
+        .ok()
+        .and_then(|now| now.checked_add(30_000_000_000))
+    {
+        Some(deadline) if deadline != u64::MAX => deadline,
+        _ => ostd::syscall::sys_exit(1),
+    };
+    for bytes in parts {
+        if stream.write_all(bytes, deadline).is_err() {
+            ostd::syscall::sys_exit(1);
+        }
+    }
 }

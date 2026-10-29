@@ -57,8 +57,6 @@ pub enum SpotlightAction {
     TogglePin(&'static str),
     SwitchTask(usize),
     CycleTheme,
-    Reboot,
-    ShutDown,
 }
 
 pub struct SpotlightState {
@@ -128,7 +126,7 @@ pub fn render(
             match state.section {
                 SpotlightSection::Cells => "Type cell name to filter...",
                 SpotlightSection::ActiveCells => "Browse active cells...",
-                SpotlightSection::System => "System settings & power...",
+                SpotlightSection::System => "System settings...",
             },
             FontFace::UiRegular, 14.0, theme::TEXT_MUTED, false,
         );
@@ -320,22 +318,29 @@ fn render_running_tasks(
     }
 }
 
+/// System section rows: (icon, name, description, button). Power off and reboot are not
+/// offered: no platform provider exists for either, so a button could only pretend.
+const SYSTEM_ACTIONS: &[(&str, &str, &str, &str)] = &[
+    ("[T]", "Appearance Theme", "Cycle Light / Dark / Paper", "Cycle"),
+];
+
+fn system_action(index: usize) -> SpotlightAction {
+    match index {
+        0 => SpotlightAction::CycleTheme,
+        _ => SpotlightAction::None,
+    }
+}
+
 fn render_system(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
     state: &SpotlightState,
     sw: u32,
 ) {
-    let actions: &[(&str, &str, &str, &str)] = &[
-        ("[T]", "Appearance Theme", "Cycle Light / Dark / Paper", "Cycle"),
-        ("[R]", "Reboot System", "Authorized restart after session consent", "Reboot"),
-        ("[P]", "Power Off", "Safely shut down the computer", "Shut Down"),
-    ];
-
     let name_height = (fonts.line_height(FontFace::UiSemibold, 15.0) + 1.0) as u32;
     let desc_height = (fonts.line_height(FontFace::UiRegular, 13.0) + 1.0) as u32;
 
-    for (i, &(icon, name, desc, btn_text)) in actions.iter().take(MAX_RESULTS).enumerate() {
+    for (i, &(icon, name, desc, btn_text)) in SYSTEM_ACTIONS.iter().take(MAX_RESULTS).enumerate() {
         let row_y = LIST_START_Y + i as i32 * ROW_STEP;
         let row_w = sw.saturating_sub(28);
         let is_selected = i == state.selected_index;
@@ -414,14 +419,7 @@ pub fn handle_key(
                     state.close();
                     SpotlightAction::SwitchTask(idx)
                 }
-                SpotlightSection::System => {
-                    match state.selected_index {
-                        0 => SpotlightAction::CycleTheme,
-                        1 => SpotlightAction::Reboot,
-                        2 => SpotlightAction::ShutDown,
-                        _ => SpotlightAction::None,
-                    }
-                }
+                SpotlightSection::System => system_action(state.selected_index),
             }
         }
         KeySym::Up => {
@@ -433,7 +431,8 @@ pub fn handle_key(
         KeySym::Down => {
             let max_idx = match state.section {
                 SpotlightSection::Cells => registry.filtered(&state.query).len().min(MAX_RESULTS),
-                SpotlightSection::ActiveCells | SpotlightSection::System => 3,
+                SpotlightSection::ActiveCells => 3,
+                SpotlightSection::System => SYSTEM_ACTIONS.len(),
             };
             if max_idx > 0 && state.selected_index + 1 < max_idx {
                 state.selected_index += 1;
@@ -517,16 +516,11 @@ pub fn handle_click(
             }
         }
         SpotlightSection::System => {
-            for i in 0..MAX_RESULTS {
+            for i in 0..SYSTEM_ACTIONS.len().min(MAX_RESULTS) {
                 let row_y = LIST_START_Y + i as i32 * ROW_STEP;
                 if is_inside(x, y, 14, row_y, sw - 28, ROW_HEIGHT) {
                     state.selected_index = i;
-                    return match i {
-                        0 => SpotlightAction::CycleTheme,
-                        1 => SpotlightAction::Reboot,
-                        2 => SpotlightAction::ShutDown,
-                        _ => SpotlightAction::None,
-                    };
+                    return system_action(i);
                 }
             }
         }
@@ -570,17 +564,20 @@ mod tests {
         let act_theme = handle_key(&registry, &mut state, KeySym::Return, None);
         assert_eq!(act_theme, SpotlightAction::CycleTheme);
 
-        // Move down to Reboot
+        // Theme is the only System action: Down stays on it, and no row below it acts.
         handle_key(&registry, &mut state, KeySym::Down, None);
-        assert_eq!(state.selected_index, 1);
-        let act_reboot = handle_key(&registry, &mut state, KeySym::Return, None);
-        assert_eq!(act_reboot, SpotlightAction::Reboot);
+        assert_eq!(state.selected_index, 0);
+        assert_eq!(handle_click(&mut AppRegistry::new(), &mut state, 30, LIST_START_Y + ROW_STEP + 10, SPOTLIGHT_WIDTH), SpotlightAction::None);
+        assert_eq!(handle_click(&mut AppRegistry::new(), &mut state, 30, LIST_START_Y + 2 * ROW_STEP + 10, SPOTLIGHT_WIDTH), SpotlightAction::None);
 
-        // Move down to ShutDown
-        handle_key(&registry, &mut state, KeySym::Down, None);
-        assert_eq!(state.selected_index, 2);
-        let act_shutdown = handle_key(&registry, &mut state, KeySym::Return, None);
-        assert_eq!(act_shutdown, SpotlightAction::ShutDown);
+        // Searching for power words finds no cell to launch.
+        state.open();
+        for word in ["shutdown", "reboot", "power"] {
+            state.query = String::from(word);
+            assert!(registry.filtered(&state.query).is_empty(), "{word}");
+            assert_eq!(handle_key(&registry, &mut state, KeySym::Return, None), SpotlightAction::None);
+        }
+        state.query.clear();
 
         // Escape closes
         let act_esc = handle_key(&registry, &mut state, KeySym::Escape, None);

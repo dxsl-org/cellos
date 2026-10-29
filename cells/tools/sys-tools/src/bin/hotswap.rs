@@ -30,41 +30,56 @@ const MALFORMED_REPLY: &str = "hotswap: protocol error: malformed supervisor rep
 /// The reply timeout spans the supervisor's bounded snapshot/freeze/spawn/
 /// restore/publish sequence rather than a single IPC hop.
 fn cell_main() {
+    let output = ostd::io::ProcessOutput::read_own()
+        .unwrap_or_else(|_| syscall::sys_exit(1));
     let argv = ostd::args();
     let [service_name, new_path] = argv.as_slice() else {
-        print_usage_and_exit();
+        exit_with_message(output.stderr(), USAGE);
     };
     let service_name = service_name.as_str();
     let new_path = new_path.as_str();
 
     let request = match encode_hotswap_request(service_name, new_path) {
         Ok(request) => request,
-        Err(message) => exit_with_message(message),
+        Err(message) => exit_with_message(output.stderr(), message),
     };
 
     let Some(supervisor_tid) = sys_lookup_service(service::SUPERVISOR) else {
-        exit_with_message("hotswap: supervisor unavailable");
+        exit_with_message(output.stderr(), "hotswap: supervisor unavailable");
     };
 
     if !send_request(supervisor_tid, &request) {
-        exit_with_message("hotswap: cannot send request to supervisor");
+        exit_with_message(output.stderr(), "hotswap: cannot send request to supervisor");
     }
 
     match recv_status(supervisor_tid) {
         Ok(()) => {
-            ostd::io::print("hotswap: success: supervisor swapped service '");
-            ostd::io::print(service_name);
-            ostd::io::print("' to ");
-            ostd::io::println(new_path);
+            emit(
+                output.stdout(),
+                &[
+                    b"hotswap: success: supervisor swapped service '",
+                    service_name.as_bytes(),
+                    b"' to ",
+                    new_path.as_bytes(),
+                    b"\n",
+                ],
+            );
             syscall::sys_exit(0);
         }
-        Err(StatusError::Message(message)) => exit_with_message(message),
+        Err(StatusError::Message(message)) => exit_with_message(output.stderr(), message),
         Err(StatusError::UnexpectedStatus { phase, code }) => {
-            ostd::io::print("hotswap: supervisor returned unexpected status phase=");
-            ostd::io::print_usize(phase as usize);
-            ostd::io::print(" result=");
-            ostd::io::print_usize(code as usize);
-            ostd::io::println("");
+            let mut phase_buf = [0u8; 3];
+            let mut code_buf = [0u8; 3];
+            emit(
+                output.stderr(),
+                &[
+                    b"hotswap: supervisor returned unexpected status phase=",
+                    decimal(phase, &mut phase_buf),
+                    b" result=",
+                    decimal(code, &mut code_buf),
+                    b"\n",
+                ],
+            );
             syscall::sys_exit(1);
         }
     }
@@ -182,16 +197,40 @@ fn supervisor_error_message(code: u8) -> &'static str {
     }
 }
 
-fn print_usage_and_exit() -> ! {
-    exit_with_message(USAGE)
-}
-
-fn exit_with_message(message: &str) -> ! {
-    ostd::io::println(message);
+fn exit_with_message(stream: &ostd::io::OutputStream, message: &str) -> ! {
+    emit(stream, &[message.as_bytes(), b"\n"]);
     syscall::sys_exit(1)
 }
 
 enum StatusError {
     Message(&'static str),
     UnexpectedStatus { phase: u8, code: u8 },
+}
+
+fn decimal(mut value: u8, buffer: &mut [u8; 3]) -> &[u8] {
+    let mut cursor = buffer.len();
+    loop {
+        cursor -= 1;
+        buffer[cursor] = b'0' + value % 10;
+        value /= 10;
+        if value == 0 {
+            break;
+        }
+    }
+    &buffer[cursor..]
+}
+
+fn emit(stream: &ostd::io::OutputStream, parts: &[&[u8]]) {
+    let deadline = match ostd::session::monotonic_ns()
+        .ok()
+        .and_then(|now| now.checked_add(30_000_000_000))
+    {
+        Some(deadline) if deadline != u64::MAX => deadline,
+        _ => syscall::sys_exit(1),
+    };
+    for bytes in parts {
+        if stream.write_all(bytes, deadline).is_err() {
+            syscall::sys_exit(1);
+        }
+    }
 }

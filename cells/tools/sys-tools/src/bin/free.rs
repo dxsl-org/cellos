@@ -3,16 +3,18 @@
 #![forbid(unsafe_code)]
 extern crate ostd;
 
-api::declare_syscalls![Log, MemInfo];
+api::declare_syscalls![Log, MemInfo, GetTime];
 
 ostd::cell_main!(cell_main);
 
 /// free — print one physical-frame allocator snapshot in KiB.
 fn cell_main() {
+    let output = ostd::io::ProcessOutput::read_own()
+        .unwrap_or_else(|_| ostd::syscall::sys_exit(1));
     let info = match ostd::syscall::sys_mem_info() {
         Ok(info) => info,
         Err(_) => {
-            ostd::io::println("free: MemInfo denied or unavailable");
+            emit(output.stderr(), &[b"free: MemInfo denied or unavailable\n"]);
             ostd::syscall::sys_exit(1);
         }
     };
@@ -23,7 +25,7 @@ fn cell_main() {
         info.free_frames,
         info.page_size,
     ) else {
-        ostd::io::println("free: MemInfo denied or unavailable");
+        emit(output.stderr(), &[b"free: MemInfo denied or unavailable\n"]);
         ostd::syscall::sys_exit(1);
     };
 
@@ -34,13 +36,19 @@ fn cell_main() {
     let used = decimal(used_kib, &mut used_buf);
     let free = decimal(free_kib, &mut free_buf);
 
-    ostd::io::println("              total        used        free");
-    ostd::io::print("Mem (KiB):    ");
-    ostd::io::print(total);
-    ostd::io::print("      ");
-    ostd::io::print(used);
-    ostd::io::print("      ");
-    ostd::io::println(free);
+    emit(
+        output.stdout(),
+        &[
+            b"              total        used        free\n",
+            b"Mem (KiB):    ",
+            total.as_bytes(),
+            b"      ",
+            used.as_bytes(),
+            b"      ",
+            free.as_bytes(),
+            b"\n",
+        ],
+    );
     ostd::syscall::sys_exit(0);
 }
 
@@ -75,4 +83,19 @@ fn decimal(mut value: u64, buffer: &mut [u8; 20]) -> &str {
         }
     }
     core::str::from_utf8(&buffer[cursor..]).expect("decimal digits are valid UTF-8")
+}
+
+fn emit(stream: &ostd::io::OutputStream, parts: &[&[u8]]) {
+    let deadline = match ostd::session::monotonic_ns()
+        .ok()
+        .and_then(|now| now.checked_add(30_000_000_000))
+    {
+        Some(deadline) if deadline != u64::MAX => deadline,
+        _ => ostd::syscall::sys_exit(1),
+    };
+    for bytes in parts {
+        if stream.write_all(bytes, deadline).is_err() {
+            ostd::syscall::sys_exit(1);
+        }
+    }
 }

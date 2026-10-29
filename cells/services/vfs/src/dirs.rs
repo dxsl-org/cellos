@@ -27,6 +27,7 @@ use api::dir_handles::ViDirHandle;
 use api::dir_name::{join_component, validate_dir_component, DirNameError};
 
 use crate::caller::Caller;
+use crate::paths::{may_alias, may_alias_within};
 
 /// Most handles one cell may hold at once.
 ///
@@ -43,6 +44,11 @@ pub(crate) struct DirEntry {
     /// Handle this one was derived from; `None` for a directly acquired root.
     /// Revoking the parent revokes this entry with it.
     pub(crate) parent: Option<u64>,
+    /// A prepared-child reservation is charged and linked, but never usable.
+    pub(crate) published: bool,
+    /// A child of `path` was created, removed or renamed after this handle was
+    /// issued; reported as `vfs_dir_page::CHANGED` on every later page.
+    pub(crate) changed: bool,
 }
 
 /// Per-cell state that outlives any individual handle.
@@ -90,6 +96,7 @@ pub struct DirTable {
     pub(crate) entries: BTreeMap<u64, DirEntry>,
     pub(crate) cells: BTreeMap<u64, CellState>,
     next: u64,
+    pub(crate) prepared: crate::prepared_cwd::PreparedCwd,
 }
 
 impl DirTable {
@@ -100,6 +107,7 @@ impl DirTable {
             // 0 is never a handle: it is what a zeroed spawn carrier holds, and
             // issuing it would make "no handle" and "this handle" the same value.
             next: 1,
+            prepared: crate::prepared_cwd::PreparedCwd::default(),
         }
     }
 
@@ -140,8 +148,28 @@ impl DirTable {
         self.state(caller).map_or(0, |s| s.handles)
     }
 
+    /// Mark every handle on directory `path` (see `paths::may_alias`) as changed.
+    pub(crate) fn mark_changed(&mut self, path: &str) {
+        for entry in self.entries.values_mut().filter(|e| may_alias(&e.path, path)) {
+            entry.changed = true;
+        }
+    }
+
+    /// Mark every handle to `path` or to a directory below it as changed.
+    pub(crate) fn mark_changed_within(&mut self, path: &str) {
+        for entry in self.entries.values_mut().filter(|e| may_alias_within(&e.path, path)) {
+            entry.changed = true;
+        }
+    }
+
+    /// Whether a handle on directory `path` exists, i.e. whether a change to
+    /// its entries would be observed.
+    pub(crate) fn watches(&self, path: &str) -> bool {
+        self.entries.values().any(|e| may_alias(&e.path, path))
+    }
+
     pub(crate) fn owned(&self, caller: Caller, dir: ViDirHandle) -> Option<&DirEntry> {
-        self.entries.get(&dir.0).filter(|e| e.owner == caller)
+        self.entries.get(&dir.0).filter(|e| e.owner == caller && e.published)
     }
 
     pub(crate) fn insert(
@@ -165,6 +193,8 @@ impl DirTable {
                 owner,
                 path,
                 parent,
+                published: true,
+                changed: false,
             },
         );
         Ok(ViDirHandle(id))

@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::backend::FsBackend;
+use crate::backend::{FsBackend, ListPage};
 
 pub(crate) struct GuestDiskStub(pub(crate) u64);
 
@@ -11,6 +11,10 @@ impl FsBackend for GuestDiskStub {
 
     fn list(&self, _: &str, _: &mut [u8]) -> usize {
         0
+    }
+
+    fn list_page(&self, _: &str, _: u32, _: &mut [u8]) -> Option<ListPage> {
+        None
     }
 
     fn stat(&self, _: &str) -> Option<(u64, bool)> {

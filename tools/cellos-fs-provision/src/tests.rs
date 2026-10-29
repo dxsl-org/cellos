@@ -13,7 +13,7 @@ impl Fixture {
         Self { dir, image }
     }
     fn args(&self, base: u64, intent: Intent, receipt: &str) -> Args {
-        Args { image: self.image.clone(), base, sectors: 131072, intent, receipt: self.dir.join(receipt) }
+        Args { image: self.image.clone(), base, sectors: 131072, intent, receipt: self.dir.join(receipt), seed: None }
     }
     fn write_at(&self, offset: u64, bytes: &[u8]) {
         let mut file = OpenOptions::new().write(true).open(&self.image).unwrap();
@@ -102,4 +102,25 @@ fn existing_receipt_and_exclusive_image_lock_refuse_before_mutation() {
     assert!(run(f.args(800000, Intent::FreshBlank, "locked.json")).is_err());
     assert_eq!(f.hash(), before);
     drop(lock);
+}
+
+#[test]
+fn seeded_tree_reads_back_after_reopen() {
+    let f = Fixture::new();
+    let seed = f.dir.join("seed");
+    std::fs::create_dir_all(seed.join("cellos")).unwrap();
+    std::fs::write(seed.join("cellos/k.txt"), b"denied bytes\n").unwrap();
+    std::fs::write(seed.join("zz.txt"), b"z\n").unwrap();
+    let mut args = f.args(931072, Intent::FreshBlank, "seeded.json");
+    args.seed = Some(seed.clone());
+    run(args).unwrap();
+    let window = Window::new(931072, 131072, 1_127_680 * 512).unwrap();
+    let file = File::open(&f.image).unwrap();
+    let mut fs = CellosFs::open(HostDisk { file, window, writable: false }).unwrap();
+    let mut root: Vec<(String, bool)> = fs.list_dir("/").unwrap().into_iter().map(|(n, d, _)| (n, d)).collect();
+    root.sort();
+    assert_eq!(root, [(String::from("cellos"), true), (String::from("zz.txt"), false)]);
+    let mut buf = [0u8; 32];
+    let n = fs.read_file("/cellos/k.txt", 0, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"denied bytes\n");
 }

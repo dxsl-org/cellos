@@ -34,7 +34,10 @@ use protocol::{
 };
 
 const HOTSWAP_TASK_NAME: &str = "hotswap";
-const SHELL_TASK_NAME: &str = "shell";
+/// Task names reviewed to request a snapshot. Empty: the suite shell (`cellbox`) no
+/// longer qualifies (S2c-min) and no retained snapshot worker exists, so a snapshot is
+/// unavailable until a `SnapshotTarget` owner is added.
+const SNAPSHOT_CALLER_NAMES: &[&str] = &[];
 const PROCESS_TABLE_ROWS: usize = 64;
 
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
@@ -80,7 +83,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             }
 
             if data[0] == OP_SNAPSHOT {
-                if !sender_has_exact_name(sender_tid, SHELL_TASK_NAME) {
+                if !SNAPSHOT_CALLER_NAMES.iter().any(|name| sender_has_exact_name(sender_tid, name)) {
                     let _ = sys_send(sender_tid, &encode_status(0, STATUS_REJECTED_CALLER));
                     return;
                 }

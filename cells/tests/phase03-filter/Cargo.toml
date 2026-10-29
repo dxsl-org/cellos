@@ -1,0 +1,18 @@
+[package]
+name = "app-phase03-filter"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Private Phase03 stdin/stdout filter fixture: exact bytes, exit statuses and early-exit modes for shell pipelines"
+
+[[bin]]
+name = "phase03-filter"
+path = "src/main.rs"
+
+[dependencies]
+api = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+terminal-sdk = { path = "../../../libs/terminal", version = "0.1.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

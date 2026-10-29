@@ -55,6 +55,13 @@ impl AccessTable {
         }
     }
 
+    /// A table with replacement rule data, so a test can change policy under
+    /// a live handle.
+    #[cfg(test)]
+    pub(crate) fn with_rules(exact: &'static [PathRule], prefixes: &'static [PathRule]) -> Self {
+        Self { exact, prefixes, service_lookup: default_service_lookup }
+    }
+
     /// Whether `caller` may write to `path`.
     ///
     /// `/srv/cellos/kms` is narrower than the broad `/srv/` prefix: only the
