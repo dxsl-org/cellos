@@ -1874,7 +1874,25 @@ fn cell_main() {
         for event in ostd::input::poll_events(16) {
             match event {
                 InputEvent::Key(ke) => {
-                    if ke.state == KeyState::Pressed {
+                    if matches!(ke.state, KeyState::Pressed | KeyState::Repeated) {
+                        // Repeat editing and navigation, not shortcuts that toggle or submit.
+                        if ke.state == KeyState::Repeated {
+                            let modified = ke.modifiers.contains(Modifiers::CTRL)
+                                || ke.modifiers.contains(Modifiers::ALT)
+                                || ke.modifiers.contains(Modifiers::META);
+                            let repeatable = matches!(ke.keysym,
+                                KeySym::Backspace | KeySym::Up | KeySym::Down
+                                | KeySym::Left | KeySym::Right | KeySym::PageUp
+                                | KeySym::PageDown | KeySym::Home | KeySym::End | KeySym::F3)
+                                || ke.char().is_some_and(|ch| !ch.is_control());
+                            let navigation_shortcut = (ke.keysym == KeySym::Tab
+                                && ke.modifiers.contains(Modifiers::CTRL))
+                                || (matches!(ke.keysym, KeySym::Left | KeySym::Right)
+                                    && ke.modifiers.contains(Modifiers::ALT));
+                            if !navigation_shortcut && (modified || !repeatable) {
+                                continue;
+                            }
+                        }
                         viewer.handle_key(ke.keysym, ke.char(), ke.modifiers);
                     }
                 }

@@ -594,7 +594,16 @@ fn cell_main() {
                         need_render = true;
                     }
                 }
-                InputEvent::Key(ke) if ke.state == KeyState::Pressed => {
+                InputEvent::Key(ke) if matches!(ke.state, KeyState::Pressed | KeyState::Repeated) => {
+                    // Repeat URL editing without repeating tab actions, submission or fullscreen.
+                    if ke.state == KeyState::Repeated
+                        && (matches!(ke.keysym, KeySym::Return | KeySym::Escape | KeySym::F11)
+                            || ke.modifiers.contains(Modifiers::CTRL)
+                            || ke.modifiers.contains(Modifiers::ALT)
+                            || ke.modifiers.contains(Modifiers::META))
+                    {
+                        continue;
+                    }
                     if app.handle_key(ke.keysym, ke.char(), ke.modifiers) {
                         need_render = true;
                     }
