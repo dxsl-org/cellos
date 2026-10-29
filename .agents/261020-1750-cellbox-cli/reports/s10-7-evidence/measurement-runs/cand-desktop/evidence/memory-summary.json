@@ -1,0 +1,211 @@
+{
+  "schema": "cellos.s10-7.memory-run-summary/1",
+  "provenance": {
+    "kernel_build": "cand-desktop-test-hooks",
+    "kernel_sha256": "360a5c10eb2955b767f2198cc6336d8a7e4040b251b5e585ffdcad122a8acd91",
+    "kernel_features": [
+      "policy-required",
+      "test-hooks"
+    ],
+    "kernel_path": "/tmp/cellbox-s10-7/measure/cand-desktop/cand-desktop-test-hooks.kernel.elf",
+    "profile": "desktop",
+    "set": "cand-desktop",
+    "kind": "candidate",
+    "control_kernel_non_hooks_sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a",
+    "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+    "measurement_kernel_is_not_the_promoted_kernel": true
+  },
+  "entries": [
+    {
+      "label": "autoload-background#1",
+      "user_stack": {
+        "bottom": 38592512,
+        "top": 38658048,
+        "pages": 16,
+        "source": "entry-stop rsp page + present-page run + guard pages absent"
+      },
+      "kernel_stack": {
+        "bottom": 38518784,
+        "top": 38584320,
+        "pages": 16,
+        "kernel_rsp": 38584032,
+        "tss_rsp0": 38584032,
+        "owner_check": {
+          "sepc": 4630511616,
+          "regs2": 38658048,
+          "iretq_rip": 4630511616,
+          "iretq_cs": 35,
+          "iretq_rsp": 38658048,
+          "iretq_ss": 27,
+          "note": "sepc/regs[2] are required; the iretq words are recorded evidence only"
+        },
+        "cpu_locals_va": 18446744071590363392,
+        "tss_va": 18446744071590358916,
+        "source": "CPU_LOCALS[0].kernel_rsp == TSS.rsp0 at the entry stop; top-kernel_rsp == 288 (trap frame)"
+      },
+      "initial_rsp": 38658048,
+      "primed_proofs": {
+        "user-stack": {
+          "start": 38592512,
+          "limit": 38658048,
+          "bytes_checked": 65536,
+          "pattern": 165
+        },
+        "kernel-stack": {
+          "start": 38518784,
+          "limit": 38580224,
+          "bytes_checked": 61440,
+          "pattern": 165
+        }
+      },
+      "primed_status": {
+        "user-stack": {
+          "verified": true,
+          "start": 38592512,
+          "limit": 38658048,
+          "bytes_checked": 65536
+        },
+        "kernel-stack": {
+          "verified": true,
+          "start": 38518784,
+          "limit": 38580224,
+          "bytes_checked": 61440
+        }
+      },
+      "proof_scope": "pre-run verify_primed taken at the ENTRY STOP (before the first user instruction); the top page of the kernel stack (trap frame, switch frame) and the user page holding the initial rsp are written by the spawn path before that stop and are excluded from the proof, so a depth below one page cannot be told from untouched.",
+      "ns": 18465652212822,
+      "instance": 1,
+      "role": "autoload-background"
+    },
+    {
+      "label": "foreground-terminal#2",
+      "user_stack": {
+        "bottom": 45285376,
+        "top": 45350912,
+        "pages": 16,
+        "source": "entry-stop rsp page + present-page run + guard pages absent"
+      },
+      "kernel_stack": {
+        "bottom": 45211648,
+        "top": 45277184,
+        "pages": 16,
+        "kernel_rsp": 45276896,
+        "tss_rsp0": 45276896,
+        "owner_check": {
+          "sepc": 4697620480,
+          "regs2": 45350912,
+          "iretq_rip": 4697620480,
+          "iretq_cs": 35,
+          "iretq_rsp": 45350912,
+          "iretq_ss": 27,
+          "note": "sepc/regs[2] are required; the iretq words are recorded evidence only"
+        },
+        "cpu_locals_va": 18446744071590363392,
+        "tss_va": 18446744071590358916,
+        "source": "CPU_LOCALS[0].kernel_rsp == TSS.rsp0 at the entry stop; top-kernel_rsp == 288 (trap frame)"
+      },
+      "initial_rsp": 45350912,
+      "primed_proofs": {
+        "user-stack": {
+          "start": 45285376,
+          "limit": 45350912,
+          "bytes_checked": 65536,
+          "pattern": 165
+        },
+        "kernel-stack": {
+          "start": 45211648,
+          "limit": 45273088,
+          "bytes_checked": 61440,
+          "pattern": 165
+        }
+      },
+      "primed_status": {
+        "user-stack": {
+          "verified": true,
+          "start": 45285376,
+          "limit": 45350912,
+          "bytes_checked": 65536
+        },
+        "kernel-stack": {
+          "verified": true,
+          "start": 45211648,
+          "limit": 45273088,
+          "bytes_checked": 61440
+        }
+      },
+      "proof_scope": "pre-run verify_primed taken at the ENTRY STOP (before the first user instruction); the top page of the kernel stack (trap frame, switch frame) and the user page holding the initial rsp are written by the spawn path before that stop and are excluded from the proof, so a depth below one page cannot be told from untouched.",
+      "ns": 18500611548580,
+      "instance": 2,
+      "role": "foreground-terminal"
+    }
+  ],
+  "snapshots": [
+    {
+      "phase": "initial-prompt",
+      "instance": 2,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 35352,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "instance": 2,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 35352,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "finite-stream",
+      "instance": 2,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "collected-cat-buffered",
+      "instance": 2,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "collected-cat-cancelled",
+      "instance": 2,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "terminal-stream-live",
+      "instance": 2,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "errors": []
+    }
+  ],
+  "failure": null
+}

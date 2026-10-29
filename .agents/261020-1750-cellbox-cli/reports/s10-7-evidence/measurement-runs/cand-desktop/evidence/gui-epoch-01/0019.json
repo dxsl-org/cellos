@@ -1,0 +1,34 @@
+{
+  "index": 19,
+  "monotonic_ns": 18575155425932,
+  "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0019.png",
+  "exact_read": [
+    [
+      "",
+      "=== Cellos shell ready \u2014 type 'help' for commands ===",
+      "Cellos > top --records -d 1 --frames 2 | to jsonl | cat",
+      "{\"frame\":\"begin\",\"sample_id\":2,\"monotonic_ns\":95524310800,\"meta\":{\"schema\":\"top",
+      ".cell.v1\",\"provider_epoch\":\"18e2fac629a7e05a\",\"interval_ns\":1180413270,\"online_",
+      "cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":13,\"total_t",
+      "asks\":13,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_byte",
+      "s\":208850944,\"mem_used_bytes\":130572288,\"mem_free_bytes\":78278656,\"memory_inter",
+      "val\":true}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":7,\"generation\":167,\"root_tid\":14,\"name\":\"desk",
+      "top\",\"name_truncated\":fals"
+    ],
+    [
+      26,
+      10
+    ]
+  ],
+  "gating": false,
+  "accepted": false,
+  "oracle": {
+    "status": "PENDING",
+    "code": "prompt-not-reached",
+    "reason": null,
+    "cls": null,
+    "hits": 11,
+    "bytes": 5121
+  }
+}

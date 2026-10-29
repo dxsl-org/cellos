@@ -1,0 +1,691 @@
+{
+  "set": "b2-headless",
+  "profile": "headless",
+  "status": "COMPLETE",
+  "candidate_runs": 1,
+  "mode": "S10-7.4-b2-headless-shared-subset",
+  "start_ns": 18352400913943,
+  "original_window_seconds": 900,
+  "command_deadlines_unchanged": true,
+  "deadlines": {
+    "command_s": 120,
+    "status_s": 60,
+    "total_window_s": 900
+  },
+  "qemu_pid": 49821,
+  "argv": [
+    "qemu-system-x86_64",
+    "-machine",
+    "q35",
+    "-accel",
+    "tcg",
+    "-cpu",
+    "qemu64,+pdpe1gb",
+    "-m",
+    "256M",
+    "-display",
+    "none",
+    "-chardev",
+    "socket,id=ser0,path=/tmp/cellbox-s10-7/measure/b2-headless/run-5551cd/vm/sock/measurement-serial.sock,server=on,wait=off",
+    "-serial",
+    "chardev:ser0",
+    "-qmp",
+    "unix:/tmp/cellbox-s10-7/measure/b2-headless/run-5551cd/vm/sock/measurement-qmp.sock,server=on,wait=off",
+    "-monitor",
+    "none",
+    "-drive",
+    "file=/tmp/cellbox-s10-7/measure/b2-headless/vicell-x86-b2-test-hooks.iso,media=cdrom,readonly=on,format=raw",
+    "-boot",
+    "d",
+    "-no-reboot",
+    "-netdev",
+    "user,id=net0,restrict=on",
+    "-device",
+    "e1000,netdev=net0",
+    "-chardev",
+    "socket,path=/tmp/cellbox-s10-7/measure/b2-headless/run-5551cd/vm/sock/gdb.sock,server=on,wait=off,id=gdb0",
+    "-gdb",
+    "chardev:gdb0",
+    "-S",
+    "-D",
+    "/tmp/cellbox-s10-7/measure/b2-headless/run-5551cd/vm/evidence/qemu-trace.log",
+    "-msg",
+    "timestamp=on",
+    "-trace",
+    "enable=gdbstub_io_command",
+    "-trace",
+    "enable=gdbstub_io_reply",
+    "-trace",
+    "enable=gdbstub_hit_watchpoint",
+    "-trace",
+    "enable=gdbstub_hit_break",
+    "-trace",
+    "enable=breakpoint_singlestep"
+  ],
+  "ordinary_idle": {
+    "name": "ordinary-prompt-idle",
+    "start_ns": 18417923137426,
+    "end_ns": 18427923390977,
+    "target_hz": 10,
+    "samples": [
+      {
+        "monotonic_ns": 18417923307956,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18418023393312,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18418123391061,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18418223458569,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18418323407596,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18418423418397,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18418523403636,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18418623401166,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18418723597869,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18418823481549,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18418923403256,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18419023429145,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18419123472212,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18419223420039,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18419323396677,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18419423465004,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18419523459850,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18419623396518,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18419723503917,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18419823596683,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18419923487075,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18420023451837,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18420123427660,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18420223462273,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18420323420970,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18420423415463,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18420523515722,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18420623535163,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18420723499953,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18420823446145,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18420923433890,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18421023502820,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18421123448975,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18421223390839,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18421323421649,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18421423458625,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18421523455622,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18421623457509,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18421723604401,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18421823458328,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18421923425353,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18422023580693,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18422123472734,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18422223423615,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18422323403361,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18422423527131,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18422523468234,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18422623427232,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18422723421925,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18422823425479,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18422923407453,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18423023553383,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18423123496713,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18423223455356,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18423323597227,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18423423440313,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18423523514293,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18423623543801,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18423723524258,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18423823521134,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18423923446330,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18424023420727,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18424123544788,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18424223430820,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18424323419702,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18424423431707,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18424523436531,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18424623476989,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18424723508034,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18424823425931,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18424923422052,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18425023413093,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18425123414001,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18425223446548,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18425323432691,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18425423448742,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18425523456606,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18425623460466,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18425723414189,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18425823447044,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18425923489574,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18426023502628,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18426123574286,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18426223443960,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18426323402658,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18426423467372,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18426523437076,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18426623421488,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18426723470545,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18426823446692,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18426923560447,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18427023507600,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18427123505098,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18427223420159,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18427323417506,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18427423429403,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18427523427787,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18427623439455,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18427723394298,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18427823416136,
+        "serial_bytes": 0
+      }
+    ],
+    "qemu_cpu_ticks_delta": 223,
+    "host_ticks_per_second": 100,
+    "serial_bytes": 0,
+    "scope": "whole-QEMU CPU incl sampling overhead; content changes not redraw calls"
+  },
+  "shared_subset": [
+    {
+      "phase": "b2-echo",
+      "command": "echo b2-shared-subset",
+      "status": 0,
+      "expected_status": 0,
+      "status_ok": true,
+      "row_expected": "b2-shared-subset",
+      "row_seen": true,
+      "output_rows": [
+        "b2-shared-subset"
+      ],
+      "output_rows_total": 1
+    },
+    {
+      "phase": "b2-ls",
+      "command": "ls /",
+      "status": 0,
+      "expected_status": 0,
+      "status_ok": true,
+      "row_expected": null,
+      "row_seen": null,
+      "output_rows": [
+        "POLICY.BIN",
+        "bin",
+        "data",
+        "etc",
+        "mnt",
+        "readme.txt",
+        "srv",
+        "tmp"
+      ],
+      "output_rows_total": 8
+    },
+    {
+      "phase": "b2-cat",
+      "command": "cat /etc/cellos/system.toml",
+      "status": 0,
+      "expected_status": 0,
+      "status_ok": true,
+      "row_expected": "[logging]",
+      "row_seen": true,
+      "output_rows": [
+        "# Embedded boot settings, loaded before init starts.",
+        "version = 1",
+        "",
+        "[logging]",
+        "level = \"info\"",
+        "",
+        "[memory]",
+        "default_cell_heap_mib = 16"
+      ],
+      "output_rows_total": 8
+    },
+    {
+      "phase": "b2-ps",
+      "command": "ps",
+      "status": 0,
+      "expected_status": 0,
+      "status_ok": true,
+      "row_expected": null,
+      "row_seen": null,
+      "output_rows": [
+        "  PID  STATE      NAME",
+        "  ---  ---------  ----------------",
+        "  2    Waiting    init",
+        "  5    Waiting    vfs",
+        "  6    Waiting    e1000",
+        "  8    Waiting    serial",
+        "  10   Waiting    input",
+        "  11   Waiting    net",
+        "  12   Running    shell"
+      ],
+      "output_rows_total": 9
+    }
+  ],
+  "surface_events": [
+    {
+      "phase": "initial-prompt",
+      "monotonic_ns": 18417805217140
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "monotonic_ns": 18417923135316
+    },
+    {
+      "phase": "b2-echo",
+      "monotonic_ns": 18427985006727
+    },
+    {
+      "command": "echo b2-shared-subset",
+      "name": "b2-echo",
+      "start_ns": 18427985025074,
+      "end_ns": 18428026285674,
+      "rows": [
+        "b2-shared-subset"
+      ]
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 18428026291619,
+      "end_ns": 18428047136667,
+      "rows": [
+        "echo st=$?",
+        "st=0"
+      ]
+    },
+    {
+      "phase": "b2-ls",
+      "monotonic_ns": 18428124838477
+    },
+    {
+      "command": "ls /",
+      "name": "b2-ls",
+      "start_ns": 18428124854993,
+      "end_ns": 18428166260085,
+      "rows": [
+        "POLICY.BIN",
+        "bin",
+        "data",
+        "etc",
+        "mnt",
+        "readme.txt",
+        "srv",
+        "tmp"
+      ]
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 18428166266363,
+      "end_ns": 18428187166279,
+      "rows": [
+        "echo st=$?",
+        "st=0"
+      ]
+    },
+    {
+      "phase": "b2-cat",
+      "monotonic_ns": 18428262401116
+    },
+    {
+      "command": "cat /etc/cellos/system.toml",
+      "name": "b2-cat",
+      "start_ns": 18428262410656,
+      "end_ns": 18428385164988,
+      "rows": [
+        "# Embedded boot settings, loaded before init starts.",
+        "version = 1",
+        "",
+        "[logging]",
+        "level = \"info\"",
+        "",
+        "[memory]",
+        "default_cell_heap_mib = 16"
+      ]
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 18428385170453,
+      "end_ns": 18428406102124,
+      "rows": [
+        "echo st=$?",
+        "st=0"
+      ]
+    },
+    {
+      "phase": "b2-ps",
+      "monotonic_ns": 18428496679178
+    },
+    {
+      "command": "ps",
+      "name": "b2-ps",
+      "start_ns": 18428496696822,
+      "end_ns": 18428517666561,
+      "rows": [
+        "  PID  STATE      NAME",
+        "  ---  ---------  ----------------",
+        "  2    Waiting    init",
+        "  5    Waiting    vfs",
+        "  6    Waiting    e1000",
+        "  8    Waiting    serial",
+        "  10   Waiting    input",
+        "  11   Waiting    net",
+        "  12   Running    shell"
+      ]
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 18428517671358,
+      "end_ns": 18428538542966,
+      "rows": [
+        "echo st=$?",
+        "st=0"
+      ]
+    },
+    {
+      "phase": "complete",
+      "monotonic_ns": 18428631356284
+    }
+  ],
+  "timestamps": {
+    "exact_prompt_ns": 18417798626258,
+    "prompt_prefix_end_offset": 40560,
+    "predicate_observed_ns": 18417805215011
+  },
+  "end_ns": 18428856623788,
+  "workload_complete": true,
+  "decisions": [],
+  "native_scope_count": 12,
+  "additional_native_packets": 0
+}

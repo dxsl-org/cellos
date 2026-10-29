@@ -1,0 +1,101 @@
+{
+  "task": "S10-7.4 harness wiring (offline; no VM, no QEMU)",
+  "sources_dir": ".agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-7/",
+  "run_entries": {
+    "cand-desktop": {
+      "preflight": "cd /home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-7 && PYTHONDONTWRITEBYTECODE=1 python3 -B run_cand_desktop.py --preflight",
+      "run": "cd /home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-7 && PYTHONDONTWRITEBYTECODE=1 python3 -B run_cand_desktop.py --run",
+      "token": "observer-s10-7/RUN_CONSUMED-cand-desktop",
+      "evidence_after": "reports/s10-7-evidence/measurement-runs/cand-desktop/"
+    },
+    "cand-headless": {
+      "preflight": "cd /home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-7 && PYTHONDONTWRITEBYTECODE=1 python3 -B run_cand_headless.py --preflight",
+      "run": "cd /home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-7 && PYTHONDONTWRITEBYTECODE=1 python3 -B run_cand_headless.py --run",
+      "token": "observer-s10-7/RUN_CONSUMED-cand-headless",
+      "evidence_after": "reports/s10-7-evidence/measurement-runs/cand-headless/"
+    },
+    "b2-headless": {
+      "preflight": "cd /home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-7 && PYTHONDONTWRITEBYTECODE=1 python3 -B run_b2_headless.py --preflight",
+      "run": "cd /home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-7 && PYTHONDONTWRITEBYTECODE=1 python3 -B run_b2_headless.py --run",
+      "token": "observer-s10-7/RUN_CONSUMED-b2-headless",
+      "evidence_after": "reports/s10-7-evidence/measurement-runs/b2-headless/"
+    },
+    "b2-desktop": "NOT RUNNABLE: boot smoke panicked (D7-8); desktop historical comparator is null",
+    "notes": [
+      "--run re-evaluates the whole go/no-go (about 2.5 min cold, the 546-path census hashes large images), claims the token with O_EXCL BEFORE any VM exists, runs once, never retries; a second invocation refuses at the token or at the preflight run_token check.",
+      "Inputs were prepared offline already (s107_prepare.py): fixture NVMe disks for the two candidate sets and the glyph oracle under /tmp/cellbox-s10-7/measure/<set>/run-inputs/ (rebuilt glyph sha 820c92d2... == retained GLYPH_SHA); b2-headless needs none.",
+      "Each run kills only the QEMU PID it started (machine.proc.pid, retained Machine.stop)."
+    ]
+  },
+  "wiring": {
+    "user_stack": "retained observer instance (entry-stop rsp page rounded up; 16 pages mapped; two guard pages verified unmapped by the retained _entry). Cross-checked in s107_memory.discover_user_stack by an independent present-page run below the top with guards absent; mismatch STOPs. B2 tasks accept 16 or 64 pages.",
+    "kernel_stack": "read at the entry stop of the task (user mode, first instruction): kernel static CPU_LOCALS[0].kernel_rsp (== kernel_trap_sp == kstack_top-288), symbol address from the measurement kernel .symtab (non-PIE EXEC, no slide), cross-checked with gdt::TABLES[0].tss.rsp0 (+68); top=round_up_page(kernel_rsp), top-kernel_rsp must be 288; usable = the 16 (cand) / 16|64 (B2) mapped pages below top, 2 guard pages below must be unmapped; OWNERSHIP proven by the seeded trap frame still on that stack: sepc(+264)==entry pc and regs[2](+16)==user stack top. Single-hart required (CPU_LOCALS[1].kernel_rsp==0). Any inconsistency or unreadable page = STOP (fail closed).",
+    "heap_arena": "cellbox ELF .symtab symbol ___CUSTOM_HEAP_ARENA at inst.base+0x2a8060, 6 MiB (desktop; headless resolved the same way); B2 shell ostd::heap::HEAP_MEM 1 MiB at +0xbc050 (residency only). Symbol must lie inside a PT_LOAD segment or STOP.",
+    "elf_segments": "inst.base + PT_LOAD va/memsz (retained observer instance + elf_layout loads).",
+    "prime_proof": "verify_primed at the same entry stop: user [bottom, rsp&~4095), kernel [bottom, top-PAGE). The page(s) written by the spawn path before the first instruction (top kernel page with trap frame/switch frame; user page holding the initial rsp) are excluded. A failed proof is recorded (exact=false, depth_valid unaffected unless saturated-unproven); unreadable memory STOPs.",
+    "snapshots": "MemoryMixin._snapshot runs the retained mapping snapshot first, then collect() on the focus instance at EVERY retained snapshot name (initial-prompt, ordinary-prompt-idle, finite-stream, collected-cat-buffered, collected-cat-cancelled, terminal-stream-live, terminal-stream-cancelled, rg-cancelled, interactive-top-idle, complete); the feed-hook DISARM request is not a phase and is skipped. Record errors STOP the run (retained convention: snapshot failures are fatal).",
+    "status_row": "S10-7.3 select_status replaces Surface.status: desktop = whole-screen rows of the retained command(); headless = the exact-echo-verified echo row + following rows (exact_echo_output re-verifies the echo). Missing/duplicate/ambiguous rows STOP. Deadlines unchanged: 120 s command, 60 s status, 900 s total.",
+    "kernel_provenance": "every memory record carries kernel_build, kernel_sha256 (== manifest), kernel_features (contains test-hooks), control-kernel sha, profile, set; MemoryContext refuses a kernel whose sha differs, whose features lack test-hooks, or whose .symtab lacks test_hook_prime_watermark; preflight asserts the control kernel lacks it.",
+    "no_guest_writes": "only read_physical_memory/read_memory/read_register are used by the new code (tests use a client that raises on any other call; source scan forbids write primitives). No new breakpoint/watchpoint/step logic: the memory mixin overrides only _entry/_snapshot/write_results; stepping, resume and the one-extra-step recurrence classes are the retained AtomicClient (desktop) / RecurringClient (headless, B2).",
+    "b2": "B2MemoryObserver keeps the retained transport/stop loop and 512 slot entry breakpoints but replaces __init__/_handle/_entry/_snapshot: task identity = three 48-byte .text windows per signed B2 ELF (pairwise distinct, relocation-free); the same entry_record() (ranges, ownership check, proofs); shell snapshot at every phase; ls/cat/echo/ps/kill are shell builtins at the B2 commit (executor.rs dispatch_builtin) so typed commands spawn nothing: observed only if a spawn is caught and its stacks are still present."
+  },
+  "cannot_be_observed_so_class_is_not_A": [
+    "User-stack and kernel-stack depth within the pages written before the entry stop (one page each): depth is a lower bound and exact=true only for the pre-run-proven pages below; a stack that never leaves the top page reads as the page floor.",
+    "Stack watermark = peak since spawn is a LOWER BOUND (pattern-equal/zero stores invisible); a stray non-0xA5 byte inflates it.",
+    "Only the focus Cellbox instance is snapshotted (and the entry proof of the autoload background Cellbox is recorded, never snapshotted). Terminal, vfs, services and any worker/thread tasks are not measured; no pre-run pause exists for their stacks.",
+    "Live QEMU physical reads returning identical bytes to the synthetic fixtures is unproven; the entry-stop kernel-record read assumes kernel higher-half mappings exist in the task CR3 (SAS) - if not, the run STOPs at entry (class D).",
+    "The vCPU rsp at a pause is not attributable to the focus task, so no sp cross-check is claimed.",
+    "B2: allocator peak is NOT measured (no Cellbox heapwatch); desktop B2 comparator is null (boot panic); ls/cat/echo/ps/kill are builtins so their six-tool stacks are not separately observable; no Ctrl-C/cancel/top/rg/pipeline phases (dropped, justified in schedule-b2.json).",
+    "Timing from test-hooks kernels is not a startup comparator (per-tick name scan, prime memsets); the boot-time selftest corpus can panic the boot (D7-8 b2-desktop did).",
+    "The run argv (retained D.Machine: q35, 256M, 1 vCPU, ISO cdrom + NVMe fixture, no -smp) differs from the boot smokes (-m 2048M, -smp 2 for desktop, virtio qcow2); the hooks kernels have never booted under the run argv (class E/D risk)."
+  ],
+  "class_declaration": {
+    "A": "all phases complete, every snapshot ok and exact, allocator peak measured",
+    "B": "all phases complete, every snapshot ok, but an exactness flag false or an element not measurable (B2 allocator is always B at best)",
+    "C": "stopped before complete after >=1 memory snapshot",
+    "D": "prompt reached but no memory snapshot (entry/range discovery failure)",
+    "E": "ready never reached (panic/no prompt)",
+    "note": "harness-level pre-declaration implemented in s107_run.classify_run; only A was defined in the CP1 text"
+  },
+  "deviations_and_findings": [
+    {
+      "id": "F1",
+      "what": "protected 546-path census is NOT exactly unchanged vs the S10-4.17 preservation-after.json",
+      "detail": "5 canonical paths were rewritten by the approved S10-5 promotion (kernel/src/embedded-x86_64/{boot-config/autoload.toml,boot-config/services.toml,init,kernel_fs.img} and target/x86_64-unknown-none/release/cellos-kernel; each equals promotion.json) and 76 /tmp/cellbox-s10-3d-resume/cand/* entries no longer exist (each has a byte-identical twin under ~/.cache/cellos-candidates/4fae8b20...). go-no-go accepts only differences matched to promotion.json or the cache twin; exact_unchanged=false is reported. kernel/src/main.rs (user VMX edit) is byte-identical. A run re-takes the census before the claim and after the run and requires exact equality."
+    },
+    {
+      "id": "F2",
+      "what": "one retained test excluded from the clean gate",
+      "detail": "test_t7_t11_flow.PreservationAndPolicy.test_preflight_defines_every_go_no_go_criterion re-runs the S10-4.17 PRE-RUN preflight and cannot hold after the run (RUN_CONSUMED, vanished compressed trace and candidate tree, S10-5 census). Gate = 268 of the 269 retained tests + 35 + 91 new = 394, zero failures/errors/skips. Its failure against the current state is archived (excluded-retained-test-current-state.txt)."
+    },
+    {
+      "id": "F3",
+      "what": "retained evidence dependencies under /tmp vanished",
+      "detail": "/tmp/cellbox-s10-4 (heap-instructions, canonical/before.json, the 431,927,301 B compressed trace), /tmp/cellbox-s10-3d-resume/cand, /tmp/cellbox-phase10-*/ fixtures+glyph. The compressed trace cannot be re-verified (only its recorded size/sha remain). Runs use the ~/.cache candidate copy (sha == CAND_SHA), a copy of the archived heap-instructions.json (module attribute W redirected in memory), rebuilt fixture disks and the rebuilt glyph oracle (sha == GLYPH_SHA). The gate temporarily symlinks the two vanished retained paths and removes them again."
+    },
+    {
+      "id": "F4",
+      "what": "frozen retained sources unchanged",
+      "detail": "all 43 files of the S10-4.17 frozen-sources.sha256 and all 25 prior archive trees are byte-identical (go-no-go)."
+    }
+  ],
+  "tests": {
+    "gate_of_record": "gate-attempts/attempt-02",
+    "command": "cd /home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-7 && PYTHONDONTWRITEBYTECODE=1 python3 -B s107_gate.py",
+    "tests_run": 394,
+    "components": {
+      "retained_original": 144,
+      "retained_prior_current": 47,
+      "feed_hook_new": 78,
+      "feed_hook_new_executed": 77,
+      "excluded": 1,
+      "memory": 35,
+      "own_s10_7_4": 91
+    },
+    "own_modules": {
+      "test_s107_wiring": 40,
+      "test_s107_surface": 27,
+      "test_s107_gonogo": 24
+    }
+  }
+}

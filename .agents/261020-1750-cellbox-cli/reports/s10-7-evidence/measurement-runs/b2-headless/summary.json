@@ -1,0 +1,159 @@
+{
+  "set": "b2-headless",
+  "classification": {
+    "class": "B",
+    "reason": "allocator peak not measured",
+    "missing_snapshots": []
+  },
+  "status": "COMPLETE",
+  "error": null,
+  "observer_error": null,
+  "cleanup_error": null,
+  "kernel_provenance": {
+    "kernel_build": "b2-headless-test-hooks",
+    "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+    "kernel_features": [
+      "default",
+      "test-hooks"
+    ],
+    "kernel_path": "/tmp/cellbox-s10-7/measure/b2-headless/b2-headless-test-hooks.kernel.elf",
+    "profile": "headless",
+    "set": "b2-headless",
+    "kind": "b2",
+    "control_kernel_non_hooks_sha256": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672",
+    "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+    "measurement_kernel_is_not_the_promoted_kernel": true
+  },
+  "memory_table": [
+    {
+      "file": "memory-00-initial-prompt.json",
+      "phase": "initial-prompt",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14016
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-01-ordinary-prompt-idle.json",
+      "phase": "ordinary-prompt-idle",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 9168,
+        "kernel": 14016
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-02-b2-echo.json",
+      "phase": "b2-echo",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 15248,
+        "kernel": 14016
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-03-b2-ls.json",
+      "phase": "b2-ls",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 16384,
+        "kernel": 14016
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-04-b2-cat.json",
+      "phase": "b2-cat",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 32096,
+        "kernel": 14016
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-05-b2-ps.json",
+      "phase": "b2-ps",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 32096,
+        "kernel": 14016
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    },
+    {
+      "file": "memory-06-complete.json",
+      "phase": "complete",
+      "task": "shell",
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 32096,
+        "kernel": 14016
+      },
+      "distinct_frame_bytes": 1957888,
+      "distinct_frame_bytes_excluding_heap_arena": 1957888,
+      "errors": []
+    }
+  ],
+  "preservation": {
+    "census_unchanged": true,
+    "census_paths": 546,
+    "frozen_sources": {
+      "ok": true,
+      "detail": {
+        "files": 43,
+        "drift": []
+      }
+    },
+    "prior_archives": {
+      "ok": true,
+      "detail": {
+        "archives": 25,
+        "changed": []
+      }
+    }
+  },
+  "candidate_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "retained_redirects": {
+    "common.W": [
+      "/tmp/cellbox-s10-4",
+      "/tmp/cellbox-s10-7/harness-prep/retained-W"
+    ],
+    "observer.W": [
+      "/tmp/cellbox-s10-4",
+      "/tmp/cellbox-s10-7/harness-prep/retained-W"
+    ]
+  },
+  "rerun_authorized": false,
+  "cbx27_met": false,
+  "phase10_criterion4_met": false
+}

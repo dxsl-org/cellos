@@ -1,0 +1,15 @@
+{
+  "ns": 18600685699580,
+  "ledger_hits": 29,
+  "ledger_bytes": 7043,
+  "hook_hits": 29,
+  "scopes": {
+    "scopes_at_hook": 29,
+    "successful_scopes": 29,
+    "successful_with_hook_tb_entry": 29,
+    "failed_primary_scopes": 0
+  },
+  "hook_pc": 4664187520,
+  "breakpoint_census_before": 521,
+  "breakpoint_census_after": 520
+}

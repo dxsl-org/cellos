@@ -1,0 +1,113 @@
+{
+  "set": "cand-headless",
+  "kernel_provenance": {
+    "kernel_build": "cand-headless-test-hooks",
+    "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+    "kernel_features": [
+      "default",
+      "policy-required",
+      "test-hooks"
+    ],
+    "kernel_path": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-test-hooks.kernel.elf",
+    "profile": "headless",
+    "set": "cand-headless",
+    "kind": "candidate",
+    "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+    "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+    "measurement_kernel_is_not_the_promoted_kernel": true
+  },
+  "profile": "headless",
+  "iso": {
+    "path": "/tmp/cellbox-s10-7/measure/cand-headless/vicell-x86-test-hooks.iso",
+    "sha256": "b534c7512b844a8d05a360e5c5e9b04fce58803aefb04c5fc93f77f4fe215563"
+  },
+  "argv": [
+    "qemu-system-x86_64",
+    "-machine",
+    "q35",
+    "-accel",
+    "tcg",
+    "-cpu",
+    "qemu64,+pdpe1gb",
+    "-m",
+    "256M",
+    "-display",
+    "none",
+    "-chardev",
+    "socket,id=ser0,path=/tmp/cellbox-s10-7/measure/cand-headless/run-69e00e/vm/sock/measurement-serial.sock,server=on,wait=off",
+    "-serial",
+    "chardev:ser0",
+    "-qmp",
+    "unix:/tmp/cellbox-s10-7/measure/cand-headless/run-69e00e/vm/sock/measurement-qmp.sock,server=on,wait=off",
+    "-monitor",
+    "none",
+    "-drive",
+    "file=/tmp/cellbox-s10-7/measure/cand-headless/vicell-x86-test-hooks.iso,media=cdrom,readonly=on,format=raw",
+    "-boot",
+    "d",
+    "-no-reboot",
+    "-netdev",
+    "user,id=net0,restrict=on",
+    "-device",
+    "e1000,netdev=net0",
+    "-drive",
+    "file=/tmp/cellbox-s10-7/measure/cand-headless/run-69e00e/vm/disk.img,if=none,format=raw,id=p10fx",
+    "-device",
+    "nvme,drive=p10fx,serial=cellosp10",
+    "-chardev",
+    "socket,path=/tmp/cellbox-s10-7/measure/cand-headless/run-69e00e/vm/sock/gdb.sock,server=on,wait=off,id=gdb0",
+    "-gdb",
+    "chardev:gdb0",
+    "-S",
+    "-D",
+    "/tmp/cellbox-s10-7/measure/cand-headless/run-69e00e/vm/evidence/qemu-trace.log",
+    "-msg",
+    "timestamp=on",
+    "-trace",
+    "enable=gdbstub_io_command",
+    "-trace",
+    "enable=gdbstub_io_reply",
+    "-trace",
+    "enable=gdbstub_hit_watchpoint",
+    "-trace",
+    "enable=gdbstub_hit_break",
+    "-trace",
+    "enable=breakpoint_singlestep"
+  ],
+  "fixture_disk": "/tmp/cellbox-s10-7/measure/cand-headless/run-inputs/disk-main/disk.img",
+  "fixture_disk_sha256": "3b98e006db94c437bc56fd96474e0d985d7d4d57be254583467a20ab4f017e13",
+  "glyph_sha256": null,
+  "mode": "observed",
+  "set_files": {
+    "set": "cand-headless",
+    "paths": {
+      "kernel": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-test-hooks.kernel.elf",
+      "control_kernel": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-control.kernel.elf",
+      "iso": "/tmp/cellbox-s10-7/measure/cand-headless/vicell-x86-test-hooks.iso",
+      "kernel_fs_img": "/tmp/cellbox-s10-7/measure/cand-headless/kernel_fs.img",
+      "init": "/tmp/cellbox-s10-7/measure/cand-headless/init"
+    },
+    "expected": {
+      "kernel": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "control_kernel": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+      "iso": "b534c7512b844a8d05a360e5c5e9b04fce58803aefb04c5fc93f77f4fe215563",
+      "kernel_fs_img": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+      "init": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab"
+    },
+    "actual": {
+      "kernel": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+      "control_kernel": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+      "iso": "b534c7512b844a8d05a360e5c5e9b04fce58803aefb04c5fc93f77f4fe215563",
+      "kernel_fs_img": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+      "init": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab"
+    },
+    "match": {
+      "kernel": true,
+      "control_kernel": true,
+      "iso": true,
+      "kernel_fs_img": true,
+      "init": true
+    },
+    "all_match": true
+  }
+}

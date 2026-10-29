@@ -1,0 +1,742 @@
+{
+  "status": "COMPLETE",
+  "error": null,
+  "profile": "desktop",
+  "instances": [
+    {
+      "id": 1,
+      "role": "autoload-background",
+      "base": 4630511616,
+      "cr3": 364544,
+      "initial_rsp": 38658048,
+      "stack_top": 38658048,
+      "stack_bottom": 38592512,
+      "stack_pages": {
+        "38592512": 38592512,
+        "38596608": 38596608,
+        "38600704": 38600704,
+        "38604800": 38604800,
+        "38608896": 38608896,
+        "38612992": 38612992,
+        "38617088": 38617088,
+        "38621184": 38621184,
+        "38625280": 38625280,
+        "38629376": 38629376,
+        "38633472": 38633472,
+        "38637568": 38637568,
+        "38641664": 38641664,
+        "38645760": 38645760,
+        "38649856": 38649856,
+        "38653952": 38653952
+      },
+      "touched_pages": [
+        38653952,
+        38649856,
+        38645760,
+        38641664
+      ],
+      "heap": 4639588544,
+      "peak_aligned_used_bytes": 25272,
+      "phase_peaks": {
+        "boot": 25272
+      },
+      "last_value": 25272,
+      "pending_writer": null,
+      "coverage_writes": 6,
+      "post_events": 5,
+      "initial_counter": 0,
+      "watch_completed_post": 4631441601,
+      "stack_write_attempt_depth_bound_bytes": [
+        12289,
+        16384
+      ],
+      "scope": "aligned allocator event peak; CPU stack write-attempt4KiB bounds, NOT exact stack/RSS/kernel-stack peak"
+    },
+    {
+      "id": 2,
+      "role": "foreground-terminal",
+      "base": 4697620480,
+      "cr3": 364544,
+      "initial_rsp": 45350912,
+      "stack_top": 45350912,
+      "stack_bottom": 45285376,
+      "stack_pages": {
+        "45285376": 45285376,
+        "45289472": 45289472,
+        "45293568": 45293568,
+        "45297664": 45297664,
+        "45301760": 45301760,
+        "45305856": 45305856,
+        "45309952": 45309952,
+        "45314048": 45314048,
+        "45318144": 45318144,
+        "45322240": 45322240,
+        "45326336": 45326336,
+        "45330432": 45330432,
+        "45334528": 45334528,
+        "45338624": 45338624,
+        "45342720": 45342720,
+        "45346816": 45346816
+      },
+      "touched_pages": [
+        45346816,
+        45342720,
+        45338624,
+        45334528,
+        45330432,
+        45326336,
+        45322240,
+        45318144,
+        45314048,
+        45309952,
+        45305856,
+        45301760
+      ],
+      "heap": 4706697408,
+      "peak_aligned_used_bytes": 67464,
+      "phase_peaks": {
+        "terminal-launch": 33632,
+        "finite-stream": 67464,
+        "endless-collected-cat": 56160,
+        "endless-terminal-stream": 53144
+      },
+      "last_value": 42408,
+      "pending_writer": null,
+      "coverage_writes": 4403,
+      "post_events": 4402,
+      "initial_counter": 0,
+      "watch_completed_post": 4698550465,
+      "stack_write_attempt_depth_bound_bytes": [
+        45057,
+        49152
+      ],
+      "scope": "aligned allocator event peak; CPU stack write-attempt4KiB bounds, NOT exact stack/RSS/kernel-stack peak"
+    }
+  ],
+  "focus_base": 4697620480,
+  "heap_post_event_count": 4407,
+  "observer_pause_ns": 44192919155,
+  "stack_write_attempts": [
+    {
+      "monotonic_ns": 18465666175964,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 38653952,
+      "page_pa": 38653952,
+      "pc": 4631097424,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 18,
+          "pte": 80080935,
+          "shift": 21
+        },
+        {
+          "table_pa": 80080896,
+          "index": 221,
+          "pte": 9223372036893429863,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18465670744556,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 38649856,
+      "page_pa": 38649856,
+      "pc": 4631097449,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 18,
+          "pte": 80080935,
+          "shift": 21
+        },
+        {
+          "table_pa": 80080896,
+          "index": 220,
+          "pte": 9223372036893425767,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18465675406161,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 38645760,
+      "page_pa": 38645760,
+      "pc": 4631097464,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 18,
+          "pte": 80080935,
+          "shift": 21
+        },
+        {
+          "table_pa": 80080896,
+          "index": 219,
+          "pte": 9223372036893421671,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18465690990118,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 38641664,
+      "page_pa": 38641664,
+      "pc": 4631450590,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 18,
+          "pte": 80080935,
+          "shift": 21
+        },
+        {
+          "table_pa": 80080896,
+          "index": 218,
+          "pte": 9223372036893417575,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18500624970337,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 45346816,
+      "page_pa": 45346816,
+      "pc": 4698206288,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 319,
+          "pte": 9223372036900122727,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18500629843073,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 45342720,
+      "page_pa": 45342720,
+      "pc": 4698206313,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 318,
+          "pte": 9223372036900118631,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18500634556344,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 45338624,
+      "page_pa": 45338624,
+      "pc": 4698206328,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 317,
+          "pte": 9223372036900114535,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18500650060915,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 45334528,
+      "page_pa": 45334528,
+      "pc": 4698559454,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 316,
+          "pte": 9223372036900110439,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18500728483315,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 45330432,
+      "page_pa": 45330432,
+      "pc": 4698562504,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 315,
+          "pte": 9223372036900106343,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18500733258345,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 45326336,
+      "page_pa": 45326336,
+      "pc": 4698562519,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 314,
+          "pte": 9223372036900102247,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18500738370252,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 45322240,
+      "page_pa": 45322240,
+      "pc": 4698589289,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 313,
+          "pte": 9223372036900098151,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18501023505563,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 45318144,
+      "page_pa": 45318144,
+      "pc": 4698562519,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 312,
+          "pte": 9223372036900094055,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18501029177435,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 45314048,
+      "page_pa": 45314048,
+      "pc": 4698589289,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 311,
+          "pte": 9223372036900089959,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18546780746395,
+      "instance": 2,
+      "phase": "finite-stream",
+      "page_va": 45309952,
+      "page_pa": 45309952,
+      "pc": 4698562519,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 310,
+          "pte": 9223372036900085863,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18546785863843,
+      "instance": 2,
+      "phase": "finite-stream",
+      "page_va": 45305856,
+      "page_pa": 45305856,
+      "pc": 4698589289,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 309,
+          "pte": 9223372036900081767,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 18547320168015,
+      "instance": 2,
+      "phase": "finite-stream",
+      "page_va": 45301760,
+      "page_pa": 45301760,
+      "pc": 4698589289,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 36552743,
+          "shift": 30
+        },
+        {
+          "table_pa": 36552704,
+          "index": 21,
+          "pte": 109756455,
+          "shift": 21
+        },
+        {
+          "table_pa": 109756416,
+          "index": 308,
+          "pte": 9223372036900077671,
+          "shift": 12
+        }
+      ]
+    }
+  ],
+  "snapshots": [
+    {
+      "phase": "initial-prompt",
+      "instance": 2,
+      "monotonic_ns": 18511791140311,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 33632,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "instance": 2,
+      "monotonic_ns": 18521895523212,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 33632,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    },
+    {
+      "phase": "finite-stream",
+      "instance": 2,
+      "monotonic_ns": 18600804279211,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 41904,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    },
+    {
+      "phase": "collected-cat-buffered",
+      "instance": 2,
+      "monotonic_ns": 18638554430918,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 53168,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    },
+    {
+      "phase": "collected-cat-cancelled",
+      "instance": 2,
+      "monotonic_ns": 18667786243732,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 42096,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    },
+    {
+      "phase": "terminal-stream-live",
+      "instance": 2,
+      "monotonic_ns": 18700516875021,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 50536,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    }
+  ],
+  "draw_events": [],
+  "resident_bytes": null,
+  "exact_stack_peak_bytes": null,
+  "kernel_stack_peak_bytes": null,
+  "historical_runtime_baseline": null
+}

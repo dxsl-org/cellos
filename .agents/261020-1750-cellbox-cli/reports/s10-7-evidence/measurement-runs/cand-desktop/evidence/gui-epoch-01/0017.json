@@ -1,0 +1,26 @@
+{
+  "index": 17,
+  "monotonic_ns": 18571947611367,
+  "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0017.png",
+  "exact_read": [
+    [
+      "",
+      "=== Cellos shell ready \u2014 type 'help' for commands ===",
+      "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+    ],
+    [
+      0,
+      3
+    ]
+  ],
+  "gating": false,
+  "accepted": false,
+  "oracle": {
+    "status": "PENDING",
+    "code": "prompt-not-reached",
+    "reason": null,
+    "cls": null,
+    "hits": 2,
+    "bytes": 513
+  }
+}

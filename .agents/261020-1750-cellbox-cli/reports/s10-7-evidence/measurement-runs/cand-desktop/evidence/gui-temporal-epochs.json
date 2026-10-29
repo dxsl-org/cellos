@@ -1,0 +1,1241 @@
+[
+  {
+    "id": 1,
+    "name": "finite-stream",
+    "command": "top --records -d 1 --frames 2 | to jsonl | cat",
+    "kind": "finite",
+    "oracle": {
+      "status": "READY",
+      "code": null,
+      "reason": null,
+      "cls": null,
+      "frames": 2,
+      "expected_cursor": [
+        9,
+        25
+      ],
+      "scrolls": 68,
+      "hits": 15,
+      "bytes": 6906,
+      "last_hit_ns": 18575773573955
+    },
+    "timeout_seconds": 120,
+    "start_ns": 18521964094209,
+    "state": "COMPLETE",
+    "samples": [
+      {
+        "index": 0,
+        "monotonic_ns": 18544247960558,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0000.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            55,
+            2
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 1,
+        "monotonic_ns": 18545889541845,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0001.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            55,
+            2
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 2,
+        "monotonic_ns": 18547519637333,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0002.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            55,
+            2
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 3,
+        "monotonic_ns": 18549123821226,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0003.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            55,
+            2
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 4,
+        "monotonic_ns": 18550745934779,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0004.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 5,
+        "monotonic_ns": 18552380652104,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0005.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 6,
+        "monotonic_ns": 18554013197137,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0006.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 7,
+        "monotonic_ns": 18555646689822,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0007.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 8,
+        "monotonic_ns": 18557279345499,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0008.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 9,
+        "monotonic_ns": 18558908806440,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0009.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 10,
+        "monotonic_ns": 18560515322674,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0010.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 11,
+        "monotonic_ns": 18562147481665,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0011.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 12,
+        "monotonic_ns": 18563783520952,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0012.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 13,
+        "monotonic_ns": 18565423384753,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0013.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 14,
+        "monotonic_ns": 18567053444007,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0014.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 15,
+        "monotonic_ns": 18568686423250,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0015.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 16,
+        "monotonic_ns": 18570317831511,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0016.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 17,
+        "monotonic_ns": 18571947611367,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0017.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 2,
+          "bytes": 513
+        }
+      },
+      {
+        "index": 18,
+        "monotonic_ns": 18573550229115,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0018.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 2,
+          "bytes": 513
+        }
+      },
+      {
+        "index": 19,
+        "monotonic_ns": 18575155425932,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0019.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat",
+            "{\"frame\":\"begin\",\"sample_id\":2,\"monotonic_ns\":95524310800,\"meta\":{\"schema\":\"top",
+            ".cell.v1\",\"provider_epoch\":\"18e2fac629a7e05a\",\"interval_ns\":1180413270,\"online_",
+            "cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":13,\"total_t",
+            "asks\":13,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_byte",
+            "s\":208850944,\"mem_used_bytes\":130572288,\"mem_free_bytes\":78278656,\"memory_inter",
+            "val\":true}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":7,\"generation\":167,\"root_tid\":14,\"name\":\"desk",
+            "top\",\"name_truncated\":fals"
+          ],
+          [
+            26,
+            10
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 11,
+          "bytes": 5121
+        }
+      },
+      {
+        "index": 20,
+        "monotonic_ns": 18576814430512,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0020.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat",
+            "{\"frame\":\"begin\",\"sample_id\":2,\"monotonic_ns\":95524310800,\"meta\":{\"schema\":\"top",
+            ".cell.v1\",\"provider_epoch\":\"18e2fac629a7e05a\",\"interval_ns\":1180413270,\"online_",
+            "cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":13,\"total_t",
+            "asks\":13,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_byte",
+            "s\":208850944,\"mem_used_bytes\":130572288,\"mem_free_bytes\":78278656,\"memory_inter",
+            "val\":true}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":7,\"generation\":167,\"root_tid\":14,\"name\":\"desk",
+            "top\",\"name_truncated\":fals"
+          ],
+          [
+            26,
+            10
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "quiescence",
+          "reason": null,
+          "cls": null,
+          "prompt": true,
+          "last_hit_ns": 18575773573955
+        }
+      },
+      {
+        "index": 21,
+        "monotonic_ns": 18578421035133,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0021.png",
+        "exact_read": [
+          [
+            "",
+            "=== Cellos shell ready \u2014 type 'help' for commands ===",
+            "Cellos > top --records -d 1 --frames 2 | to jsonl | cat",
+            "{\"frame\":\"begin\",\"sample_id\":2,\"monotonic_ns\":95524310800,\"meta\":{\"schema\":\"top",
+            ".cell.v1\",\"provider_epoch\":\"18e2fac629a7e05a\",\"interval_ns\":1180413270,\"online_",
+            "cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":13,\"total_t",
+            "asks\":13,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_byte",
+            "s\":208850944,\"mem_used_bytes\":130572288,\"mem_free_bytes\":78278656,\"memory_inter",
+            "val\":true}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":7,\"generation\":167,\"root_tid\":14,\"name\":\"desk",
+            "top\",\"name_truncated\":fals"
+          ],
+          [
+            26,
+            10
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "quiescence",
+          "reason": null,
+          "cls": null,
+          "prompt": true,
+          "last_hit_ns": 18575773573955
+        }
+      },
+      {
+        "index": 22,
+        "monotonic_ns": 18580028371112,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0022.png",
+        "exact_read": [
+          [
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":11,\"generation\":168,\"root_tid\":15,\"name\":\"cel",
+            "lbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":938134390,\"cpu_t",
+            "enths\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":702967300,\"cpu_tenths",
+            "\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10371507200,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":429521030,\"cpu_tenth",
+            "s\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191017220,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4869128910,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6413360470,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121884670,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos >"
+          ],
+          [
+            9,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "READY",
+          "code": null,
+          "reason": null,
+          "cls": null,
+          "frames": 2,
+          "expected_cursor": [
+            9,
+            25
+          ],
+          "scrolls": 68,
+          "hits": 15,
+          "bytes": 6906,
+          "last_hit_ns": 18575773573955
+        },
+        "screen_match": true
+      },
+      {
+        "index": 23,
+        "monotonic_ns": 18581719390909,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-01/0023.png",
+        "exact_read": [
+          [
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":11,\"generation\":168,\"root_tid\":15,\"name\":\"cel",
+            "lbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":938134390,\"cpu_t",
+            "enths\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":702967300,\"cpu_tenths",
+            "\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10371507200,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":429521030,\"cpu_tenth",
+            "s\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191017220,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4869128910,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6413360470,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121884670,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos >"
+          ],
+          [
+            9,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": true,
+        "oracle": {
+          "status": "READY",
+          "code": null,
+          "reason": null,
+          "cls": null,
+          "frames": 2,
+          "expected_cursor": [
+            9,
+            25
+          ],
+          "scrolls": 68,
+          "hits": 15,
+          "bytes": 6906,
+          "last_hit_ns": 18575773573955
+        },
+        "screen_match": true
+      }
+    ],
+    "ledger": null,
+    "typed_rows": [
+      "",
+      "=== Cellos shell ready \u2014 type 'help' for commands ===",
+      "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+    ],
+    "typed_cursor": [
+      55,
+      2
+    ],
+    "typed_grab_ns": 18543802730558,
+    "typed_exact_ns": 18543889682163,
+    "pre_hits": 9,
+    "Enter_batch_id": 55,
+    "Enter_commit": {
+      "id": 55,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d5d7d7d0a",
+      "deadline": 18548.889689197,
+      "start": 18543.889689197,
+      "finish": 18543.890816271,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 152,
+          "start": 18543.890232035,
+          "outcome": "COMMITTED",
+          "finish": 18543.890809959,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 152,
+      "caller": "MainThread",
+      "caller_deadline": 18641.96407165,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    "commit_finish_ns": 18543890809959,
+    "armed_ns": 18544190915505,
+    "end_ns": 18581832248527,
+    "oracle_final": {
+      "status": "READY",
+      "code": null,
+      "reason": null,
+      "cls": null,
+      "frames": 2,
+      "expected_rows": [
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":11,\"generation\":168,\"root_tid\":15,\"name\":\"cel",
+        "lbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":938134390,\"cpu_t",
+        "enths\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":702967300,\"cpu_tenths",
+        "\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+        "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10371507200,\"c",
+        "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+        "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":429521030,\"cpu_tenth",
+        "s\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191017220,\"cpu_tenths",
+        "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4869128910,\"cpu_tenth",
+        "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+        "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6413360470,\"cpu_tenths",
+        "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+        "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121884670,\"cpu_tent",
+        "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+        "Cellos >"
+      ],
+      "expected_cursor": [
+        9,
+        25
+      ],
+      "scrolls": 68,
+      "hits": 15,
+      "bytes": 6906,
+      "last_hit_ns": 18575773573955
+    }
+  },
+  {
+    "id": 2,
+    "name": "status",
+    "command": "echo st=$?",
+    "kind": "status",
+    "oracle": {
+      "status": "READY",
+      "code": null,
+      "reason": null,
+      "cls": null,
+      "frames": 0,
+      "expected_cursor": [
+        9,
+        2
+      ],
+      "scrolls": 0,
+      "hits": 2,
+      "bytes": 15,
+      "last_hit_ns": 18595790227801
+    },
+    "timeout_seconds": 60,
+    "start_ns": 18581832717339,
+    "state": "COMPLETE",
+    "samples": [
+      {
+        "index": 0,
+        "monotonic_ns": 18592241278120,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-02/0000.png",
+        "exact_read": [
+          [
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":11,\"generation\":168,\"root_tid\":15,\"name\":\"cel",
+            "lbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":938134390,\"cpu_t",
+            "enths\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":702967300,\"cpu_tenths",
+            "\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10371507200,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":429521030,\"cpu_tenth",
+            "s\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191017220,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4869128910,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6413360470,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121884670,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos > echo st=$?"
+          ],
+          [
+            19,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "no-output-yet",
+          "reason": null,
+          "cls": null
+        }
+      },
+      {
+        "index": 1,
+        "monotonic_ns": 18593878304626,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-02/0001.png",
+        "exact_read": [
+          [
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":11,\"generation\":168,\"root_tid\":15,\"name\":\"cel",
+            "lbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":938134390,\"cpu_t",
+            "enths\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":702967300,\"cpu_tenths",
+            "\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10371507200,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":429521030,\"cpu_tenth",
+            "s\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191017220,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4869128910,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6413360470,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121884670,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos > echo st=$?"
+          ],
+          [
+            19,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 2,
+        "monotonic_ns": 18595489496045,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-02/0002.png",
+        "exact_read": [
+          [
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":11,\"generation\":168,\"root_tid\":15,\"name\":\"cel",
+            "lbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":938134390,\"cpu_t",
+            "enths\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":702967300,\"cpu_tenths",
+            "\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10371507200,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":429521030,\"cpu_tenth",
+            "s\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191017220,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4869128910,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6413360470,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121884670,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos > echo st=$?"
+          ],
+          [
+            19,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "prompt-not-reached",
+          "reason": null,
+          "cls": null,
+          "hits": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "index": 3,
+        "monotonic_ns": 18597107000459,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-02/0003.png",
+        "exact_read": [
+          [
+            "lbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":938134390,\"cpu_t",
+            "enths\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":702967300,\"cpu_tenths",
+            "\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10371507200,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":429521030,\"cpu_tenth",
+            "s\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191017220,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4869128910,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6413360470,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121884670,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos > echo st=$?"
+          ],
+          [
+            0,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "PENDING",
+          "code": "quiescence",
+          "reason": null,
+          "cls": null,
+          "prompt": true,
+          "last_hit_ns": 18595790227801
+        }
+      },
+      {
+        "index": 4,
+        "monotonic_ns": 18598799747093,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-02/0004.png",
+        "exact_read": [
+          [
+            "enths\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":702967300,\"cpu_tenths",
+            "\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10371507200,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":429521030,\"cpu_tenth",
+            "s\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191017220,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4869128910,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6413360470,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121884670,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos > echo st=$?",
+            "st=0",
+            "Cellos >"
+          ],
+          [
+            9,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": false,
+        "oracle": {
+          "status": "READY",
+          "code": null,
+          "reason": null,
+          "cls": null,
+          "frames": 0,
+          "expected_cursor": [
+            9,
+            2
+          ],
+          "scrolls": 0,
+          "hits": 2,
+          "bytes": 15,
+          "last_hit_ns": 18595790227801
+        },
+        "screen_match": true
+      },
+      {
+        "index": 5,
+        "monotonic_ns": 18600483390637,
+        "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-02/0005.png",
+        "exact_read": [
+          [
+            "enths\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":702967300,\"cpu_tenths",
+            "\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+            "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10371507200,\"c",
+            "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+            "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":429521030,\"cpu_tenth",
+            "s\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191017220,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+            ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4869128910,\"cpu_tenth",
+            "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+            "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6413360470,\"cpu_tenths",
+            "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+            "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121884670,\"cpu_tent",
+            "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+            "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+            "Cellos > echo st=$?",
+            "st=0",
+            "Cellos >"
+          ],
+          [
+            9,
+            25
+          ]
+        ],
+        "gating": false,
+        "accepted": true,
+        "oracle": {
+          "status": "READY",
+          "code": null,
+          "reason": null,
+          "cls": null,
+          "frames": 0,
+          "expected_cursor": [
+            9,
+            2
+          ],
+          "scrolls": 0,
+          "hits": 2,
+          "bytes": 15,
+          "last_hit_ns": 18595790227801
+        },
+        "screen_match": true
+      }
+    ],
+    "ledger": null,
+    "typed_rows": [
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":11,\"generation\":168,\"root_tid\":15,\"name\":\"cel",
+      "lbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":938134390,\"cpu_t",
+      "enths\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":702967300,\"cpu_tenths",
+      "\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+      "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10371507200,\"c",
+      "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+      "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":429521030,\"cpu_tenth",
+      "s\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191017220,\"cpu_tenths",
+      "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4869128910,\"cpu_tenth",
+      "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+      "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6413360470,\"cpu_tenths",
+      "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+      "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121884670,\"cpu_tent",
+      "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+      "Cellos > echo st=$?"
+    ],
+    "typed_cursor": [
+      19,
+      25
+    ],
+    "typed_grab_ns": 18591793139321,
+    "typed_exact_ns": 18591877719235,
+    "pre_hits": 27,
+    "Enter_batch_id": 66,
+    "Enter_commit": {
+      "id": 66,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d5d7d7d0a",
+      "deadline": 18596.877726332,
+      "start": 18591.877726332,
+      "finish": 18591.878633697,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 2112,
+          "start": 18591.878133641,
+          "outcome": "COMMITTED",
+          "finish": 18591.878629885,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 2112,
+      "caller": "MainThread",
+      "caller_deadline": 18641.83271182,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    "commit_finish_ns": 18591878629885,
+    "armed_ns": 18592178849937,
+    "end_ns": 18600599593383,
+    "oracle_final": {
+      "status": "READY",
+      "code": null,
+      "reason": null,
+      "cls": null,
+      "frames": 0,
+      "expected_rows": [
+        "Cellos > echo st=$?",
+        "st=0",
+        "Cellos >"
+      ],
+      "expected_cursor": [
+        9,
+        2
+      ],
+      "scrolls": 0,
+      "hits": 2,
+      "bytes": 15,
+      "last_hit_ns": 18595790227801
+    }
+  }
+]

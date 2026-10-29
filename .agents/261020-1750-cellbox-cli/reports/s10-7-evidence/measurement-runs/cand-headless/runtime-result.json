@@ -1,0 +1,1411 @@
+{
+  "set": "cand-headless",
+  "profile": "headless",
+  "status": "STOP",
+  "candidate_runs": 1,
+  "mode": "S10-7.4-headless-memory-armed",
+  "start_ns": 18180139224916,
+  "original_window_seconds": 900,
+  "command_deadlines_unchanged": true,
+  "deadlines": {
+    "command_s": 120,
+    "status_s": 60,
+    "total_window_s": 900
+  },
+  "qemu_pid": 49298,
+  "argv": [
+    "qemu-system-x86_64",
+    "-machine",
+    "q35",
+    "-accel",
+    "tcg",
+    "-cpu",
+    "qemu64,+pdpe1gb",
+    "-m",
+    "256M",
+    "-display",
+    "none",
+    "-chardev",
+    "socket,id=ser0,path=/tmp/cellbox-s10-7/measure/cand-headless/run-69e00e/vm/sock/measurement-serial.sock,server=on,wait=off",
+    "-serial",
+    "chardev:ser0",
+    "-qmp",
+    "unix:/tmp/cellbox-s10-7/measure/cand-headless/run-69e00e/vm/sock/measurement-qmp.sock,server=on,wait=off",
+    "-monitor",
+    "none",
+    "-drive",
+    "file=/tmp/cellbox-s10-7/measure/cand-headless/vicell-x86-test-hooks.iso,media=cdrom,readonly=on,format=raw",
+    "-boot",
+    "d",
+    "-no-reboot",
+    "-netdev",
+    "user,id=net0,restrict=on",
+    "-device",
+    "e1000,netdev=net0",
+    "-drive",
+    "file=/tmp/cellbox-s10-7/measure/cand-headless/run-69e00e/vm/disk.img,if=none,format=raw,id=p10fx",
+    "-device",
+    "nvme,drive=p10fx,serial=cellosp10",
+    "-chardev",
+    "socket,path=/tmp/cellbox-s10-7/measure/cand-headless/run-69e00e/vm/sock/gdb.sock,server=on,wait=off,id=gdb0",
+    "-gdb",
+    "chardev:gdb0",
+    "-S",
+    "-D",
+    "/tmp/cellbox-s10-7/measure/cand-headless/run-69e00e/vm/evidence/qemu-trace.log",
+    "-msg",
+    "timestamp=on",
+    "-trace",
+    "enable=gdbstub_io_command",
+    "-trace",
+    "enable=gdbstub_io_reply",
+    "-trace",
+    "enable=gdbstub_hit_watchpoint",
+    "-trace",
+    "enable=gdbstub_hit_break",
+    "-trace",
+    "enable=breakpoint_singlestep"
+  ],
+  "ordinary_idle": {
+    "name": "ordinary-prompt-idle",
+    "start_ns": 18197387586580,
+    "end_ns": 18207387817807,
+    "target_hz": 10,
+    "samples": [
+      {
+        "monotonic_ns": 18197387740253,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 18197487815597,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18197587814166,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18197687816339,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18197787808469,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18197887833398,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18197987815028,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18198087817961,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18198187818105,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18198287820502,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18198387808756,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18198487814175,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18198587825987,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18198687821166,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18198787826942,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18198887866830,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18198987854931,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18199087814718,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18199187823668,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18199287823911,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18199387819615,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18199487824389,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18199587824067,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18199687875189,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18199787874349,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18199887824358,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18199987821742,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18200087872279,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18200187829298,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18200287879891,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18200387875394,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18200487819200,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18200587812668,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18200687815637,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18200787874767,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18200887820359,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18200987816464,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18201087828864,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18201187827226,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18201287819219,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18201387820208,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18201487830288,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18201587874925,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18201687884673,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18201787886309,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18201887811160,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18201987814674,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18202087816638,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18202187825038,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18202287875538,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18202387816329,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18202487823999,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18202587819660,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18202687818793,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18202787814104,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18202887810201,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18202987817263,
+        "serial_bytes": 171
+      },
+      {
+        "monotonic_ns": 18203087866172,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18203187864034,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18203287855752,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18203387840196,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18203487820643,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18203587810936,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18203687857073,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18203787847345,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18203887812127,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18203987831096,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18204087822264,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18204187825947,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18204287822641,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18204387837465,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18204487831183,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18204587823872,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18204687900143,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18204787815607,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18204887826068,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18204987893274,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18205087855551,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18205187831551,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18205287831905,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18205387816379,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18205487822327,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18205587823679,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18205687819558,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18205787818620,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18205887824656,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18205987839043,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18206087877793,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18206187834652,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18206287824144,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18206387818957,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18206487820659,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18206587850707,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18206687837879,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18206787834198,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18206887840514,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18206987818920,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18207087826393,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18207188063111,
+        "serial_bytes": 234
+      },
+      {
+        "monotonic_ns": 18207287843884,
+        "serial_bytes": 234
+      }
+    ],
+    "qemu_cpu_ticks_delta": 705,
+    "host_ticks_per_second": 100,
+    "serial_bytes": 234,
+    "scope": "whole-QEMU CPU incl sampling overhead; content changes not redraw calls"
+  },
+  "streams": {
+    "collected_cat_submit_ns": 18227859683432,
+    "collected_cat_zero_json_seconds": 10,
+    "collected_cat_cancel": {
+      "ctrl_c_ns": 18237966648315,
+      "prompt_ns": 18238841594205,
+      "ctrl_c_to_prompt_ms": 874.94589,
+      "status": 130,
+      "rows": []
+    },
+    "flow_submit_ns": 18244424115506,
+    "first_live_observed_ns": 18251437537338,
+    "terminal_stream_cancel": {
+      "ctrl_c_ns": 18261527102390,
+      "prompt_ns": 18262260452260,
+      "ctrl_c_to_prompt_ms": 733.34987,
+      "status": 130,
+      "rows": []
+    },
+    "rg_cancel": {
+      "ctrl_c_ns": 18270807050238,
+      "prompt_ns": 18276812496863,
+      "ctrl_c_to_prompt_ms": 6005.446625,
+      "status": 130,
+      "rows": []
+    },
+    "quiescence_seconds": 4,
+    "fixture_bytes": 7340032,
+    "scope": "Collected cat buffers; no-cat terminal sink streams. Separate contract-correct boundedness measures, not generic throughput."
+  },
+  "error": "Stop: timeout: new interrupt prompt",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-s10-7/s107_run.py\", line 299, in run_headless\n    result['top_idle'] = surface.top_idle()\n                         ^^^^^^^^^^^^^^^^^^\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/common.py\", line 203, in top_idle\n    result=self.sample_idle('interactive-top-idle');result['interrupt']=self.interrupt(before);return result\n                                                                        ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/common.py\", line 177, in interrupt\n    self.sh.send(b'\\x03');self.wait(lambda:self.sh.idle(count=before[0]+1),10,'new interrupt prompt');rows=[]\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/common.py\", line 114, in wait\n    raise Stop(f'timeout: {label}')\ncommon.Stop: timeout: new interrupt prompt\n",
+  "surface_events": [
+    {
+      "phase": "initial-prompt",
+      "monotonic_ns": 18197300541366
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "monotonic_ns": 18197387584437
+    },
+    {
+      "phase": "finite-stream",
+      "monotonic_ns": 18207529067378
+    },
+    {
+      "command": "top --records -d 1 --frames 2 | to jsonl | cat",
+      "name": "finite-stream",
+      "start_ns": 18207529083805,
+      "end_ns": 18226302804726,
+      "rows": [
+        "[net-bridge] NIC driver reply timeout; frame not acknowledged",
+        "{\"frame\":\"begin\",\"sample_id\":2,\"monotonic_ns\":25120185980,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e2fa88869a204a\",\"interval_ns\":1047704610,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":8,\"total_tasks\":8,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":234041344,\"mem_used_bytes\":81780736,\"mem_free_bytes\":152260608,\"memory_interval\":true}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":8,\"generation\":163,\"root_tid\":10,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2918729580,\"cpu_tenths\":367,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":165,\"root_tid\":12,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":1675072980,\"cpu_tenths\":249,\"cpu_quality\":\"ok\",\"quota_bytes\":18704,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":226165510,\"cpu_tenths\":18,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":169431920,\"cpu_tenths\":13,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":175176440,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3755398270,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2742184,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3187932560,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"serial\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4530431960,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+        "{\"frame\":\"begin\",\"sample_id\":3,\"monotonic_ns\":27193300680,\"meta\":{\"schema\":\"top.cell.v1\",\"provider_epoch\":\"18e2fa88869a204a\",\"interval_ns\":2073114700,\"online_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":8,\"total_tasks\":8,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_bytes\":234041344,\"mem_used_bytes\":81780736,\"mem_free_bytes\":152260608,\"memory_interval\":true}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":8,\"generation\":163,\"root_tid\":10,\"name\":\"input\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3772823840,\"cpu_tenths\":411,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":165,\"root_tid\":12,\"name\":\"cellbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2412094670,\"cpu_tenths\":355,\"cpu_quality\":\"ok\",\"quota_bytes\":18704,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":284323460,\"cpu_tenths\":28,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":195462140,\"cpu_tenths\":12,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":175176440,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3755398270,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2742184,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3187932560,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"serial\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4530431960,\"cpu_tenths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}"
+      ]
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 18226302810924,
+      "end_ns": 18227768862362,
+      "rows": [
+        "echo st=$?",
+        "st=0"
+      ]
+    },
+    {
+      "phase": "endless-collected-cat",
+      "monotonic_ns": 18227859358801
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 18238841605978,
+      "end_ns": 18240326693788,
+      "rows": [
+        "echo st=$?",
+        "st=130"
+      ]
+    },
+    {
+      "phase": "endless-terminal-stream",
+      "monotonic_ns": 18244423780319
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 18262260465530,
+      "end_ns": 18263705874213,
+      "rows": [
+        "echo st=$?",
+        "st=130"
+      ]
+    },
+    {
+      "phase": "rg-large",
+      "monotonic_ns": 18267806660062
+    },
+    {
+      "command": "echo st=$?",
+      "name": "status",
+      "start_ns": 18276812510166,
+      "end_ns": 18278279003477,
+      "rows": [
+        "echo st=$?",
+        "st=130"
+      ]
+    },
+    {
+      "phase": "interactive-top",
+      "monotonic_ns": 18278467091120
+    },
+    {
+      "phase": "interactive-top-idle",
+      "monotonic_ns": 18314075594944
+    }
+  ],
+  "timestamps": {
+    "exact_prompt_ns": 18197283538381,
+    "prompt_prefix_end_offset": 43965,
+    "predicate_observed_ns": 18197300539841
+  },
+  "observer_error": "TypeError: MemoryMixin._stop() missing 1 required positional argument: 'message'",
+  "end_ns": 18334548935554,
+  "workload_complete": false,
+  "decisions": [
+    {
+      "event_id": 1,
+      "first_ordinal": 309,
+      "site": 4597891249,
+      "start_ns": 18211597809156,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "finite-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "finite-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 309,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "finite-stream",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "d2777ee8c1d9d0c0b4eb5e0ce7f3c4e6c4ca31f71b8f281476e08d9f07fb432c",
+        "site": 4597891249,
+        "TB": "0x7f79b40092c0",
+        "exit_flag": 3,
+        "vcpu_tid": 49309,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 310,
+      "after_rip": 4597891253,
+      "terminal_latch_cleared": true,
+      "end_ns": 18211607522874
+    },
+    {
+      "event_id": 2,
+      "first_ordinal": 336,
+      "site": 4597891249,
+      "start_ns": 18211876877055,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "finite-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "finite-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 336,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "finite-stream",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "465e415982a95c8527330db8d626f8089994ee5117d89a5c80336d3386e1f23c",
+        "site": 4597891249,
+        "TB": "0x7f79b4008e80",
+        "exit_flag": 3,
+        "vcpu_tid": 49309,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 337,
+      "after_rip": 4597891253,
+      "terminal_latch_cleared": true,
+      "end_ns": 18211886623530
+    },
+    {
+      "event_id": 3,
+      "first_ordinal": 3738,
+      "site": 4597890822,
+      "start_ns": 18259938651044,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "endless-terminal-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "endless-terminal-stream",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 3738,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "endless-terminal-stream",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "3c2d6d71c34f582bc68dc673e828d2c64959c9bca87792fd8e32a03fc5a0c5e2",
+        "site": 4597890822,
+        "TB": "0x7f79b4006300",
+        "exit_flag": 3,
+        "vcpu_tid": 49309,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 3739,
+      "after_rip": 4597890823,
+      "terminal_latch_cleared": true,
+      "end_ns": 18259947889412
+    },
+    {
+      "event_id": 4,
+      "first_ordinal": 5292,
+      "site": 4597891249,
+      "start_ns": 18282756679431,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 5292,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "interactive-top",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "fc9372ff5c17a557978e742736e4ca5b317542675161774967d7b35ca39946f8",
+        "site": 4597891249,
+        "TB": "0x7f79b40080c0",
+        "exit_flag": 3,
+        "vcpu_tid": 49309,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 5293,
+      "after_rip": 4597891253,
+      "terminal_latch_cleared": true,
+      "end_ns": 18282765905158
+    },
+    {
+      "event_id": 5,
+      "first_ordinal": 5719,
+      "site": 4597890822,
+      "start_ns": 18287140564369,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 5719,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "interactive-top",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "f47fd6a195360dfd5a1fce5b98dc64a40d0a283d2a39a46d9705499bcd9e7cd2",
+        "site": 4597890822,
+        "TB": "0x7f79b4006e80",
+        "exit_flag": 3,
+        "vcpu_tid": 49309,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 5720,
+      "after_rip": 4597890823,
+      "terminal_latch_cleared": true,
+      "end_ns": 18287150072969
+    },
+    {
+      "event_id": 6,
+      "first_ordinal": 6017,
+      "site": 4597891249,
+      "start_ns": 18290236956505,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 6017,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "interactive-top",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "bb55a562ae256c6e1deaa8f616c51dcce9f67d190caa74f0b5e2d2f4685ef96f",
+        "site": 4597891249,
+        "TB": "0x7f79b4014b80",
+        "exit_flag": 3,
+        "vcpu_tid": 49309,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 6018,
+      "after_rip": 4597891253,
+      "terminal_latch_cleared": true,
+      "end_ns": 18290246315468
+    },
+    {
+      "event_id": 7,
+      "first_ordinal": 6278,
+      "site": 4597890822,
+      "start_ns": 18293132612088,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 6278,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "interactive-top",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "1e3d65244b70d8edae2e6fea7d1186a992d7bca8108f1e0442d85261b2aac4f9",
+        "site": 4597890822,
+        "TB": "0x7f79b4009300",
+        "exit_flag": 3,
+        "vcpu_tid": 49309,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 6279,
+      "after_rip": 4597890823,
+      "terminal_latch_cleared": true,
+      "end_ns": 18293141913971
+    },
+    {
+      "event_id": 8,
+      "first_ordinal": 8081,
+      "site": 4597890822,
+      "start_ns": 18312840857068,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 8081,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "interactive-top",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "f3bec3107d0982938a9514c3638392b4d1091fb6aa3b901875cb10fe58350ae8",
+        "site": 4597890822,
+        "TB": "0x7f79b4006380",
+        "exit_flag": 3,
+        "vcpu_tid": 49309,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 8082,
+      "after_rip": 4597890823,
+      "terminal_latch_cleared": true,
+      "end_ns": 18312850380627
+    },
+    {
+      "event_id": 9,
+      "first_ordinal": 8140,
+      "site": 4597890822,
+      "start_ns": 18313574498759,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "interactive-top",
+        "verified_instance_count": 1,
+        "instances": [
+          4596957184
+        ],
+        "entry_ordinal": 1,
+        "focus": 4596957184,
+        "heap_watches": [
+          [
+            4606034112,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 8140,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "interactive-top",
+          "verified_instance_count": 1,
+          "instances": [
+            4596957184
+          ],
+          "entry_ordinal": 1,
+          "focus": 4596957184,
+          "heap_watches": [
+            [
+              4606034112,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "2f8e3de2da82ee4e41bdef578a97ad3e0bb657335d073d2454c0567fb8745d1f",
+        "site": 4597890822,
+        "TB": "0x7f79b4007940",
+        "exit_flag": 3,
+        "vcpu_tid": 49309,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 8141,
+      "after_rip": 4597890823,
+      "terminal_latch_cleared": true,
+      "end_ns": 18313584100963
+    }
+  ],
+  "native_scope_count": 9918,
+  "additional_native_packets": 9
+}

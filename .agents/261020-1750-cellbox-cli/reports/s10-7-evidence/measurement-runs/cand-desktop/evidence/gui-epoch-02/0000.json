@@ -1,0 +1,47 @@
+{
+  "index": 0,
+  "monotonic_ns": 18592241278120,
+  "frame": "/tmp/cellbox-s10-7/measure/cand-desktop/run-ff08f6/vm/evidence/gui-epoch-02/0000.png",
+  "exact_read": [
+    [
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":11,\"generation\":168,\"root_tid\":15,\"name\":\"cel",
+      "lbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":938134390,\"cpu_t",
+      "enths\":35,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":164,\"root_tid\":11,\"name\":\"net\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":702967300,\"cpu_tenths",
+      "\":27,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":166,\"root_tid\":13,\"name\":\"fb-c",
+      "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10371507200,\"c",
+      "pu_tenths\":23,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":159,\"root_tid\":6,\"name\":\"e1000",
+      "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":429521030,\"cpu_tenth",
+      "s\":16,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":156,\"root_tid\":3,\"name\":\"nvme\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":191017220,\"cpu_tenths",
+      "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":155,\"root_tid\":2,\"name\":\"init\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":4869128910,\"cpu_tenth",
+      "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":2881858,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":158,\"root_tid\":5,\"name\":\"vfs\",",
+      "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6413360470,\"cpu_tenths",
+      "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":736,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":161,\"root_tid\":8,\"name\":\"seria",
+      "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":121884670,\"cpu_tent",
+      "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+      "Cellos > echo st=$?"
+    ],
+    [
+      19,
+      25
+    ]
+  ],
+  "gating": false,
+  "accepted": false,
+  "oracle": {
+    "status": "PENDING",
+    "code": "no-output-yet",
+    "reason": null,
+    "cls": null
+  }
+}

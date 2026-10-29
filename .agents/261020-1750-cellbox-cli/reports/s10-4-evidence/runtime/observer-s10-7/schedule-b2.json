@@ -1,0 +1,45 @@
+{
+  "schema": "cellos.s10-7.b2-schedule/1",
+  "set": "b2-headless",
+  "profile": "headless",
+  "purpose": "S10-7.4 B2 historical comparator: the SHARED command subset only (D7 slice text: sh, ls cat echo ps kill, idle redraw), run on the same retained headless harness (exact prompt, exact echo, idle sampler, status selection).",
+  "source_of_original_order": "runtime/run.py run_one(): ready -> sample_idle('ordinary-prompt-idle') -> streams() [finite-stream, endless-collected-cat, endless-terminal-stream, rg-large] -> top_idle() [interactive-top, interactive-top-idle] -> phase('complete') + snapshot('complete'). The kept phases below preserve that relative order (ready, idle, finite commands, complete).",
+  "prompt": "Cellos > ",
+  "deadlines": {"command_s": 120, "status_s": 60, "total_window_s": 900, "note": "identical to the original harness; no deadline is raised or added for B2"},
+  "idle": {"seconds": 10, "samples_expected": 100, "sampler": "common.Surface.sample_idle (10 Hz target, whole-QEMU CPU ticks, serial byte count)"},
+  "status_command": "echo st=$?",
+  "status_selection": "observer-memory/status_select.select_status (row after this command's own echo; fail closed on missing/duplicate)",
+  "memory": {
+    "snapshot_at": "every kept phase (initial-prompt, ordinary-prompt-idle, each finite command, complete)",
+    "measured_tasks": "B2 shell (persistent) at every snapshot; ls/cat/echo/ps/kill are observed only if a spawn is caught at an entry stop and its stacks are still present at a snapshot",
+    "per_task": ["mapped regions (ELF PT_LOAD, user stack, kernel stack, heap arena HEAP_MEM)", "user-stack and kernel-stack sentinel watermark (0xA5, test-hooks kernel)", "pre-run verify_primed proof at the entry stop"],
+    "allocator_peak": "NOT MEASURED for B2: the B2 shell has no Cellbox heapwatch/allocator guard hooks"
+  },
+  "phases": [
+    {"name": "initial-prompt", "kind": "ready", "original_phase": "initial-prompt", "snapshot": true,
+     "justification": "Shared: exact initial 'Cellos > ' prompt via the retained exact-idle predicate; B2 prints the same prompt literal (boot smoke: 'USER: Cellos > ')."},
+    {"name": "ordinary-prompt-idle", "kind": "idle", "seconds": 10, "samples_expected": 100, "original_phase": "ordinary-prompt-idle", "snapshot": true,
+     "justification": "Shared: idle redraw at the prompt, 10 s x 100 samples, identical sampler."},
+    {"name": "b2-echo", "kind": "command", "command": "echo b2-shared-subset", "expect_row": "b2-shared-subset", "expect_status": 0, "original_phase": null, "snapshot": true,
+     "justification": "Shared command `echo`; replaces the role of the original finite typed command (a typed line that returns to the prompt). B2 `echo` is a shell builtin (executor.rs dispatch_builtin)."},
+    {"name": "b2-ls", "kind": "command", "command": "ls /", "expect_row": null, "expect_status": 0, "original_phase": null, "snapshot": true,
+     "justification": "Shared command `ls`; root listing is served by the VFS service/BootFS, present in both builds."},
+    {"name": "b2-cat", "kind": "command", "command": "cat /etc/cellos/system.toml", "expect_row": "[logging]", "expect_status": 0, "original_phase": null, "snapshot": true,
+     "justification": "Shared command `cat` of an existing file: /etc/cellos/system.toml is in the B2 headless kernel_fs.img (static-verification: image has /etc/cellos/system.toml with explicit [logging])."},
+    {"name": "b2-ps", "kind": "command", "command": "ps", "expect_row": null, "expect_status": 0, "original_phase": null, "snapshot": true,
+     "justification": "Shared command `ps` (process list)."},
+    {"name": "complete", "kind": "snapshot", "original_phase": "complete", "snapshot": true,
+     "justification": "Shared: final snapshot, as the original schedule."}
+  ],
+  "on_status_mismatch": "record and continue",
+  "on_status_mismatch_justification": "B2 command semantics have never been executed on this harness (no VM run of b2-headless exists); a non-zero status or a missing expected row is a comparator fact, not a harness failure, and the one-run budget (D7-3) makes stopping lose the later phases. Status SELECTION failures (missing/duplicate/ambiguous row) still STOP (fail closed) as in the original harness.",
+  "dropped": [
+    {"original_phase": "finite-stream", "command": "top --records -d 1 --frames 2 | to jsonl | cat", "reason": "needs `top --records`, `to jsonl` and typed pipelines: Cellbox features that do not exist in B2 (B2 `top` is a builtin TUI loop without --records/to jsonl)."},
+    {"original_phase": "endless-collected-cat", "command": "top --records --frames 100000 | to jsonl | cat", "reason": "same missing features; additionally B2 `cat` without a path returns at once from an empty stdin (commands.rs cmd_cat), so there is no cancellable collected-cat to Ctrl-C."},
+    {"original_phase": "endless-terminal-stream", "command": "top --records --frames 100000 | to jsonl", "reason": "needs `top --records` and `to jsonl`; no B2 equivalent."},
+    {"original_phase": "rg-large", "command": "rg -F p10-literal-that-occurs-nowhere-0123456789 /mnt/sd/rg/big.log", "reason": "B2 has no `rg`, and the b2-headless run attaches no /mnt/sd data disk."},
+    {"original_phase": "interactive-top", "command": "top", "reason": "B2 `top` is a different, builtin TUI (not the Cellbox record+TUI); the original oracle (cell_row_drawn) targets the candidate renderer. Excluded to keep the subset to shared commands."},
+    {"original_phase": "interactive-top-idle", "command": "(idle inside top)", "reason": "depends on interactive-top; also its Ctrl-C/status-130 recovery is the cancel path that B2 cannot exercise without top/cat streaming."},
+    {"original_phase": "interrupt (Ctrl-C) recovery with st=130", "command": "Ctrl-C + echo st=$?", "reason": "no cancellable shared command exists in B2 (cat returns immediately); not simulated with a different command to avoid a non-shared workload."}
+  ]
+}

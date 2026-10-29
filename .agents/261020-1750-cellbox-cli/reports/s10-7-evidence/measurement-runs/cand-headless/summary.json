@@ -1,0 +1,190 @@
+{
+  "set": "cand-headless",
+  "classification": {
+    "class": "C",
+    "reason": "workload did not complete every snapshot phase",
+    "missing_snapshots": [
+      "complete"
+    ]
+  },
+  "status": "STOP",
+  "error": "Stop: timeout: new interrupt prompt",
+  "observer_error": "TypeError: MemoryMixin._stop() missing 1 required positional argument: 'message'",
+  "cleanup_error": null,
+  "kernel_provenance": {
+    "kernel_build": "cand-headless-test-hooks",
+    "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+    "kernel_features": [
+      "default",
+      "policy-required",
+      "test-hooks"
+    ],
+    "kernel_path": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-test-hooks.kernel.elf",
+    "profile": "headless",
+    "set": "cand-headless",
+    "kind": "candidate",
+    "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+    "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+    "measurement_kernel_is_not_the_promoted_kernel": true
+  },
+  "memory_table": [
+    {
+      "file": "memory-00-initial-prompt.json",
+      "phase": "initial-prompt",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 26264,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-01-ordinary-prompt-idle.json",
+      "phase": "ordinary-prompt-idle",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 35352,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-02-finite-stream.json",
+      "phase": "finite-stream",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-03-collected-cat-buffered.json",
+      "phase": "collected-cat-buffered",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-04-collected-cat-cancelled.json",
+      "phase": "collected-cat-cancelled",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-05-terminal-stream-live.json",
+      "phase": "terminal-stream-live",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-06-terminal-stream-cancelled.json",
+      "phase": "terminal-stream-cancelled",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-07-rg-cancelled.json",
+      "phase": "rg-cancelled",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    },
+    {
+      "file": "memory-08-interactive-top-idle.json",
+      "phase": "interactive-top-idle",
+      "task": 1,
+      "ok": true,
+      "exact": true,
+      "stack_depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "distinct_frame_bytes": 10264576,
+      "distinct_frame_bytes_excluding_heap_arena": 10264576,
+      "errors": []
+    }
+  ],
+  "preservation": {
+    "census_unchanged": true,
+    "census_paths": 546,
+    "frozen_sources": {
+      "ok": true,
+      "detail": {
+        "files": 43,
+        "drift": []
+      }
+    },
+    "prior_archives": {
+      "ok": true,
+      "detail": {
+        "archives": 25,
+        "changed": []
+      }
+    }
+  },
+  "candidate_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "retained_redirects": {
+    "common.W": [
+      "/tmp/cellbox-s10-4",
+      "/tmp/cellbox-s10-7/harness-prep/retained-W"
+    ],
+    "observer.W": [
+      "/tmp/cellbox-s10-4",
+      "/tmp/cellbox-s10-7/harness-prep/retained-W"
+    ]
+  },
+  "rerun_authorized": false,
+  "cbx27_met": false,
+  "phase10_criterion4_met": false
+}

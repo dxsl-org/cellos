@@ -1,0 +1,184 @@
+{
+  "schema": "cellos.s10-7.memory-run-summary/1",
+  "provenance": {
+    "kernel_build": "cand-headless-test-hooks",
+    "kernel_sha256": "3e279f9eb7154aae7cc9481e997ad8963da8f3e1a791b7b7a4e8ede98f8c8ffa",
+    "kernel_features": [
+      "default",
+      "policy-required",
+      "test-hooks"
+    ],
+    "kernel_path": "/tmp/cellbox-s10-7/measure/cand-headless/cand-headless-test-hooks.kernel.elf",
+    "profile": "headless",
+    "set": "cand-headless",
+    "kind": "candidate",
+    "control_kernel_non_hooks_sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+    "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+    "measurement_kernel_is_not_the_promoted_kernel": true
+  },
+  "entries": [
+    {
+      "label": "headless#1",
+      "user_stack": {
+        "bottom": 38592512,
+        "top": 38658048,
+        "pages": 16,
+        "source": "entry-stop rsp page + present-page run + guard pages absent"
+      },
+      "kernel_stack": {
+        "bottom": 38518784,
+        "top": 38584320,
+        "pages": 16,
+        "kernel_rsp": 38584032,
+        "tss_rsp0": 38584032,
+        "owner_check": {
+          "sepc": 4596957184,
+          "regs2": 38658048,
+          "iretq_rip": 4596957184,
+          "iretq_cs": 35,
+          "iretq_rsp": 38658048,
+          "iretq_ss": 27,
+          "note": "sepc/regs[2] are required; the iretq words are recorded evidence only"
+        },
+        "cpu_locals_va": 18446744071577780480,
+        "tss_va": 18446744071577776004,
+        "source": "CPU_LOCALS[0].kernel_rsp == TSS.rsp0 at the entry stop; top-kernel_rsp == 288 (trap frame)"
+      },
+      "initial_rsp": 38658048,
+      "primed_proofs": {
+        "user-stack": {
+          "start": 38592512,
+          "limit": 38658048,
+          "bytes_checked": 65536,
+          "pattern": 165
+        },
+        "kernel-stack": {
+          "start": 38518784,
+          "limit": 38580224,
+          "bytes_checked": 61440,
+          "pattern": 165
+        }
+      },
+      "primed_status": {
+        "user-stack": {
+          "verified": true,
+          "start": 38592512,
+          "limit": 38658048,
+          "bytes_checked": 65536
+        },
+        "kernel-stack": {
+          "verified": true,
+          "start": 38518784,
+          "limit": 38580224,
+          "bytes_checked": 61440
+        }
+      },
+      "proof_scope": "pre-run verify_primed taken at the ENTRY STOP (before the first user instruction); the top page of the kernel stack (trap frame, switch frame) and the user page holding the initial rsp are written by the spawn path before that stop and are excluded from the proof, so a depth below one page cannot be told from untouched.",
+      "ns": 18197082161434,
+      "instance": 1,
+      "role": "headless"
+    }
+  ],
+  "snapshots": [
+    {
+      "phase": "initial-prompt",
+      "instance": 1,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 26264,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "instance": 1,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 35352,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "finite-stream",
+      "instance": 1,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "collected-cat-buffered",
+      "instance": 1,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "collected-cat-cancelled",
+      "instance": 1,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "terminal-stream-live",
+      "instance": 1,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "terminal-stream-cancelled",
+      "instance": 1,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "rg-cancelled",
+      "instance": 1,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "errors": []
+    },
+    {
+      "phase": "interactive-top-idle",
+      "instance": 1,
+      "ok": true,
+      "exact": true,
+      "depth_bytes": {
+        "user": 45720,
+        "kernel": 16072
+      },
+      "errors": []
+    }
+  ],
+  "failure": null
+}

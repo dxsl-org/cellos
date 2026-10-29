@@ -1,0 +1,388 @@
+{
+  "schema": "cellos.s10-7.b2-memory-snapshot/1",
+  "phase": "b2-cat",
+  "records": [
+    {
+      "schema": "cellos.s10-7.memory-snapshot/1",
+      "phase": "b2-cat",
+      "instance": 1,
+      "cr3": 364544,
+      "monotonic_ns": 18428496229709,
+      "provenance": {
+        "kernel_build": "b2-headless-test-hooks",
+        "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+        "kernel_features": [
+          "default",
+          "test-hooks"
+        ],
+        "kernel_path": "/tmp/cellbox-s10-7/measure/b2-headless/b2-headless-test-hooks.kernel.elf",
+        "profile": "headless",
+        "set": "b2-headless",
+        "kind": "b2",
+        "control_kernel_non_hooks_sha256": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672",
+        "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+        "measurement_kernel_is_not_the_promoted_kernel": true
+      },
+      "resident": {
+        "scope": "guest present mapped backing, eager SAS identity mapping; NOT host RSS, NOT working set, NOT physical-memory",
+        "regions": [
+          {
+            "label": "elf-load-0",
+            "kind": "elf-segment",
+            "va": 4496293888,
+            "size_bytes": 695597,
+            "page_span": [
+              4496293888,
+              4496990208
+            ],
+            "pages": 170,
+            "present_pages": 170,
+            "not_present_pages": 0,
+            "mapped_backed_bytes": 696320,
+            "not_present_bytes": 0,
+            "fully_mapped": true,
+            "distinct_frames": 170,
+            "not_present_ranges": [],
+            "leaf_page_sizes": {
+              "4096": 170
+            },
+            "extra": {
+              "p_flags": 5,
+              "filesz": 695597
+            },
+            "overlaps": {
+              "elf-load-1": 1
+            }
+          },
+          {
+            "label": "elf-load-1",
+            "kind": "elf-segment",
+            "va": 4496989488,
+            "size_bytes": 50656,
+            "page_span": [
+              4496986112,
+              4497043456
+            ],
+            "pages": 14,
+            "present_pages": 14,
+            "not_present_pages": 0,
+            "mapped_backed_bytes": 57344,
+            "not_present_bytes": 0,
+            "fully_mapped": true,
+            "distinct_frames": 14,
+            "not_present_ranges": [],
+            "leaf_page_sizes": {
+              "4096": 14
+            },
+            "extra": {
+              "p_flags": 4,
+              "filesz": 50656
+            },
+            "overlaps": {
+              "elf-load-0": 1
+            }
+          },
+          {
+            "label": "elf-load-2",
+            "kind": "elf-segment",
+            "va": 4497043456,
+            "size_bytes": 17960,
+            "page_span": [
+              4497043456,
+              4497063936
+            ],
+            "pages": 5,
+            "present_pages": 5,
+            "not_present_pages": 0,
+            "mapped_backed_bytes": 20480,
+            "not_present_bytes": 0,
+            "fully_mapped": true,
+            "distinct_frames": 5,
+            "not_present_ranges": [],
+            "leaf_page_sizes": {
+              "4096": 5
+            },
+            "extra": {
+              "p_flags": 6,
+              "filesz": 17960
+            },
+            "overlaps": {}
+          },
+          {
+            "label": "elf-load-3",
+            "kind": "elf-segment",
+            "va": 4497063936,
+            "size_bytes": 1048658,
+            "page_span": [
+              4497063936,
+              4498116608
+            ],
+            "pages": 257,
+            "present_pages": 257,
+            "not_present_pages": 0,
+            "mapped_backed_bytes": 1052672,
+            "not_present_bytes": 0,
+            "fully_mapped": true,
+            "distinct_frames": 257,
+            "not_present_ranges": [],
+            "leaf_page_sizes": {
+              "4096": 257
+            },
+            "extra": {
+              "p_flags": 6,
+              "filesz": 0
+            },
+            "overlaps": {
+              "elf-load-4": 1,
+              "heap-arena": 257
+            }
+          },
+          {
+            "label": "elf-load-4",
+            "kind": "elf-segment",
+            "va": 4498112600,
+            "size_bytes": 4068,
+            "page_span": [
+              4498112512,
+              4498120704
+            ],
+            "pages": 2,
+            "present_pages": 2,
+            "not_present_pages": 0,
+            "mapped_backed_bytes": 8192,
+            "not_present_bytes": 0,
+            "fully_mapped": true,
+            "distinct_frames": 2,
+            "not_present_ranges": [],
+            "leaf_page_sizes": {
+              "4096": 2
+            },
+            "extra": {
+              "p_flags": 4,
+              "filesz": 4068
+            },
+            "overlaps": {
+              "elf-load-3": 1,
+              "heap-arena": 1
+            }
+          },
+          {
+            "label": "user-stack",
+            "kind": "user-stack",
+            "va": 37441536,
+            "size_bytes": 65536,
+            "page_span": [
+              37441536,
+              37507072
+            ],
+            "pages": 16,
+            "present_pages": 16,
+            "not_present_pages": 0,
+            "mapped_backed_bytes": 65536,
+            "not_present_bytes": 0,
+            "fully_mapped": true,
+            "distinct_frames": 16,
+            "not_present_ranges": [],
+            "leaf_page_sizes": {
+              "4096": 16
+            },
+            "extra": {
+              "source": "observer instance stack_bottom/stack_top (guard pages below verified unmapped at entry)"
+            },
+            "overlaps": {}
+          },
+          {
+            "label": "kernel-stack",
+            "kind": "kernel-stack",
+            "va": 37367808,
+            "size_bytes": 65536,
+            "page_span": [
+              37367808,
+              37433344
+            ],
+            "pages": 16,
+            "present_pages": 16,
+            "not_present_pages": 0,
+            "mapped_backed_bytes": 65536,
+            "not_present_bytes": 0,
+            "fully_mapped": true,
+            "distinct_frames": 16,
+            "not_present_ranges": [],
+            "leaf_page_sizes": {
+              "4096": 16
+            },
+            "extra": {
+              "source": "caller-supplied usable range (the observer does not know it)"
+            },
+            "overlaps": {}
+          },
+          {
+            "label": "heap-arena",
+            "kind": "heap-arena",
+            "va": 4497064016,
+            "size_bytes": 1048576,
+            "page_span": [
+              4497063936,
+              4498116608
+            ],
+            "pages": 257,
+            "present_pages": 257,
+            "not_present_pages": 0,
+            "mapped_backed_bytes": 1052672,
+            "not_present_bytes": 0,
+            "fully_mapped": true,
+            "distinct_frames": 257,
+            "not_present_ranges": [],
+            "leaf_page_sizes": {
+              "4096": 257
+            },
+            "extra": {
+              "source": "caller-supplied"
+            },
+            "overlaps": {
+              "elf-load-3": 257,
+              "elf-load-4": 1
+            }
+          }
+        ],
+        "total": {
+          "sum_of_region_mapped_backed_bytes": 3018752,
+          "distinct_frame_bytes": 1957888,
+          "distinct_frame_bytes_excluding_heap_arena": 1957888,
+          "not_present_pages": 0,
+          "note": "sum counts pages shared by overlapping regions (e.g. heap arena inside ELF .bss, adjacent segments on one page) more than once; distinct_frame_bytes does not"
+        }
+      },
+      "stacks": [
+        {
+          "label": "user-stack",
+          "kind": "user-stack",
+          "usable_start": 37441536,
+          "top": 37507072,
+          "usable_bytes": 65536,
+          "pattern": 165,
+          "untouched_prefix_bytes": 33440,
+          "depth_bytes": 32096,
+          "depth_pages": 8,
+          "status": "partial",
+          "exact": true,
+          "depth_valid": true,
+          "prime_evidence": "pre-run-verified",
+          "primed_proof": {
+            "start": 37441536,
+            "limit": 37507072,
+            "bytes_checked": 65536,
+            "pattern": 165
+          },
+          "semantics": "mirror of kernel test_hook_watermark_bytes: usable - leading run of pattern bytes; lower bound of true depth"
+        },
+        {
+          "label": "kernel-stack",
+          "kind": "kernel-stack",
+          "usable_start": 37367808,
+          "top": 37433344,
+          "usable_bytes": 65536,
+          "pattern": 165,
+          "untouched_prefix_bytes": 51520,
+          "depth_bytes": 14016,
+          "depth_pages": 4,
+          "status": "partial",
+          "exact": true,
+          "depth_valid": true,
+          "prime_evidence": "pre-run-verified",
+          "primed_proof": {
+            "start": 37367808,
+            "limit": 37429248,
+            "bytes_checked": 61440,
+            "pattern": 165
+          },
+          "semantics": "mirror of kernel test_hook_watermark_bytes: usable - leading run of pattern bytes; lower bound of true depth"
+        }
+      ],
+      "stack_depth_bytes": {
+        "user": 32096,
+        "kernel": 14016
+      },
+      "heap_arena": {
+        "label": "heap-arena",
+        "kind": "heap-arena",
+        "va": 4497064016,
+        "size_bytes": 1048576,
+        "page_span": [
+          4497063936,
+          4498116608
+        ],
+        "pages": 257,
+        "present_pages": 257,
+        "not_present_pages": 0,
+        "mapped_backed_bytes": 1052672,
+        "not_present_bytes": 0,
+        "fully_mapped": true,
+        "distinct_frames": 257,
+        "not_present_ranges": [],
+        "leaf_page_sizes": {
+          "4096": 257
+        },
+        "extra": {
+          "source": "caller-supplied"
+        },
+        "overlaps": {
+          "elf-load-3": 257,
+          "elf-load-4": 1
+        }
+      },
+      "errors": [],
+      "ok": true,
+      "all_stack_depths_exact": true,
+      "limits": [
+        "All numbers are guest-resident bytes under QEMU/TCG of one paused vCPU; not host RSS, working set, physical-memory, or Intel/VMX production figures.",
+        "mapped_backed_bytes counts guest-present 4 KiB pages under the eager SAS identity mapping (no demand paging/swap found in kernel/src by source reading): resident by construction, not an accessed/dirty-bit measurement.",
+        "Stack depth is a sentinel scan: valid only if the stack was primed (kernel feature `test-hooks`, pattern 0xA5, whole usable range). It is meaningful ONLY for the separately built labelled test-hooks measurement kernel, never for the promoted candidate kernel.",
+        "depth_bytes is a LOWER BOUND of true depth: zero-valued or pattern-equal (0xA5) stores are invisible; any non-pattern byte (including a stray write) below the real deepest store raises the reported depth.",
+        "exact=true only with a pre-run verify_primed proof; a fully consumed range without proof (saturated-unproven) cannot be told from an unprimed stack and is not a valid depth.",
+        "Peaks are since priming (task spawn); a snapshot is point-in-time at the pause and says nothing about later growth. The kernel stack depth includes the spawn trap frame at its top; the user stack depth includes initial argv/auxv-like setup if the loader writes it.",
+        "The heap arena is reported separately and may lie inside an ELF segment (.bss), so region sums can double count; use total.distinct_frame_bytes[_excluding_heap_arena]. allocator_used_bytes (Heap.used) is a separate observer measurement, not residency."
+      ],
+      "spawn": {
+        "ordinal": 1,
+        "name": "shell",
+        "label": "shell#1",
+        "primed_status": {
+          "user-stack": {
+            "verified": true,
+            "start": 37441536,
+            "limit": 37507072,
+            "bytes_checked": 65536
+          },
+          "kernel-stack": {
+            "verified": true,
+            "start": 37367808,
+            "limit": 37429248,
+            "bytes_checked": 61440
+          }
+        },
+        "proof_scope": "pre-run verify_primed taken at the ENTRY STOP (before the first user instruction); the top page of the kernel stack (trap frame, switch frame) and the user page holding the initial rsp are written by the spawn path before that stop and are excluded from the proof, so a depth below one page cannot be told from untouched."
+      }
+    }
+  ],
+  "unobserved": [],
+  "allocator_peak": null,
+  "allocator_peak_reason": "B2 shell has no Cellbox heapwatch/allocator guard hooks; allocator peak is not measured for B2",
+  "tools_not_spawned_note": "ls/cat/echo/ps/kill are shell builtins at this commit (executor.rs dispatch_builtin); the ELFs exist but a typed command does not spawn them",
+  "provenance": {
+    "kernel_build": "b2-headless-test-hooks",
+    "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+    "kernel_features": [
+      "default",
+      "test-hooks"
+    ],
+    "kernel_path": "/tmp/cellbox-s10-7/measure/b2-headless/b2-headless-test-hooks.kernel.elf",
+    "profile": "headless",
+    "set": "b2-headless",
+    "kind": "b2",
+    "control_kernel_non_hooks_sha256": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672",
+    "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+    "measurement_kernel_is_not_the_promoted_kernel": true
+  },
+  "monotonic_ns": 18428496278779
+}

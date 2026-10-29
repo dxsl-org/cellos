@@ -1,0 +1,11 @@
+{
+  "set": "b2-headless",
+  "files_match_manifest": true,
+  "actual": {
+    "kernel": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+    "control_kernel": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672",
+    "iso": "6e0b1691b62704634bc0889a1c66b067434f92f4e8e8fc7974d34c2413bda1c0",
+    "kernel_fs_img": "f75f3c0651107571b03f6249f4f2c4c12d0ef747620ccd12228039b47ece0330",
+    "init": "920c0294727b5b10cf8ca88738ef3c71f82366363b34b7f88547eebc522b3621"
+  }
+}

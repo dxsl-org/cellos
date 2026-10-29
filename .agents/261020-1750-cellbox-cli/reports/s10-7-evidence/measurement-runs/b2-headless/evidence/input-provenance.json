@@ -1,0 +1,108 @@
+{
+  "set": "b2-headless",
+  "kernel_provenance": {
+    "kernel_build": "b2-headless-test-hooks",
+    "kernel_sha256": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+    "kernel_features": [
+      "default",
+      "test-hooks"
+    ],
+    "kernel_path": "/tmp/cellbox-s10-7/measure/b2-headless/b2-headless-test-hooks.kernel.elf",
+    "profile": "headless",
+    "set": "b2-headless",
+    "kind": "b2",
+    "control_kernel_non_hooks_sha256": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672",
+    "stack_pattern": "0xA5 (kernel test-hooks prime of the whole usable range at spawn)",
+    "measurement_kernel_is_not_the_promoted_kernel": true
+  },
+  "profile": "headless",
+  "iso": {
+    "path": "/tmp/cellbox-s10-7/measure/b2-headless/vicell-x86-b2-test-hooks.iso",
+    "sha256": "6e0b1691b62704634bc0889a1c66b067434f92f4e8e8fc7974d34c2413bda1c0"
+  },
+  "argv": [
+    "qemu-system-x86_64",
+    "-machine",
+    "q35",
+    "-accel",
+    "tcg",
+    "-cpu",
+    "qemu64,+pdpe1gb",
+    "-m",
+    "256M",
+    "-display",
+    "none",
+    "-chardev",
+    "socket,id=ser0,path=/tmp/cellbox-s10-7/measure/b2-headless/run-5551cd/vm/sock/measurement-serial.sock,server=on,wait=off",
+    "-serial",
+    "chardev:ser0",
+    "-qmp",
+    "unix:/tmp/cellbox-s10-7/measure/b2-headless/run-5551cd/vm/sock/measurement-qmp.sock,server=on,wait=off",
+    "-monitor",
+    "none",
+    "-drive",
+    "file=/tmp/cellbox-s10-7/measure/b2-headless/vicell-x86-b2-test-hooks.iso,media=cdrom,readonly=on,format=raw",
+    "-boot",
+    "d",
+    "-no-reboot",
+    "-netdev",
+    "user,id=net0,restrict=on",
+    "-device",
+    "e1000,netdev=net0",
+    "-chardev",
+    "socket,path=/tmp/cellbox-s10-7/measure/b2-headless/run-5551cd/vm/sock/gdb.sock,server=on,wait=off,id=gdb0",
+    "-gdb",
+    "chardev:gdb0",
+    "-S",
+    "-D",
+    "/tmp/cellbox-s10-7/measure/b2-headless/run-5551cd/vm/evidence/qemu-trace.log",
+    "-msg",
+    "timestamp=on",
+    "-trace",
+    "enable=gdbstub_io_command",
+    "-trace",
+    "enable=gdbstub_io_reply",
+    "-trace",
+    "enable=gdbstub_hit_watchpoint",
+    "-trace",
+    "enable=gdbstub_hit_break",
+    "-trace",
+    "enable=breakpoint_singlestep"
+  ],
+  "fixture_disk": null,
+  "fixture_disk_sha256": null,
+  "glyph_sha256": null,
+  "mode": "observed",
+  "set_files": {
+    "set": "b2-headless",
+    "paths": {
+      "kernel": "/tmp/cellbox-s10-7/measure/b2-headless/b2-headless-test-hooks.kernel.elf",
+      "control_kernel": "/tmp/cellbox-s10-7/measure/b2-headless/b2-headless-control.kernel.elf",
+      "iso": "/tmp/cellbox-s10-7/measure/b2-headless/vicell-x86-b2-test-hooks.iso",
+      "kernel_fs_img": "/tmp/cellbox-s10-7/measure/b2-headless/kernel_fs.img",
+      "init": "/tmp/cellbox-s10-7/measure/b2-headless/init"
+    },
+    "expected": {
+      "kernel": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "control_kernel": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672",
+      "iso": "6e0b1691b62704634bc0889a1c66b067434f92f4e8e8fc7974d34c2413bda1c0",
+      "kernel_fs_img": "f75f3c0651107571b03f6249f4f2c4c12d0ef747620ccd12228039b47ece0330",
+      "init": "920c0294727b5b10cf8ca88738ef3c71f82366363b34b7f88547eebc522b3621"
+    },
+    "actual": {
+      "kernel": "19a30055837bbf0f108c9e78b1e294ab4bfbf7f50a285223ad981610a2767ffb",
+      "control_kernel": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672",
+      "iso": "6e0b1691b62704634bc0889a1c66b067434f92f4e8e8fc7974d34c2413bda1c0",
+      "kernel_fs_img": "f75f3c0651107571b03f6249f4f2c4c12d0ef747620ccd12228039b47ece0330",
+      "init": "920c0294727b5b10cf8ca88738ef3c71f82366363b34b7f88547eebc522b3621"
+    },
+    "match": {
+      "kernel": true,
+      "control_kernel": true,
+      "iso": true,
+      "kernel_fs_img": true,
+      "init": true
+    },
+    "all_match": true
+  }
+}
