@@ -1,0 +1,44 @@
+[package]
+name = "app-cellbox"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[[bin]]
+name = "cellbox"
+path = "src/main.rs"
+
+[features]
+# shell_test: replaces the `cellbox sh` interactive session with a deterministic
+# scenario harness. Build with `cargo build --release --target
+# riscv64gc-unknown-none-elf -Z build-std=core,alloc -p app-cellbox --features
+# shell_test` and embed the binary in a shell-test kernel image. Never enabled in
+# production.
+shell_test = []
+# p09-faults: lane-only build for scripts/qemu-phase09-ssh-test.sh (Phase 09 S9-6).
+# The ssh client logs `P04 INFO ssh-test-config rekey=lane`, uses the lowered lane
+# rekey policy (20 s / 2 MiB / 4096 packets), honours the `: p09-fault <point>
+# <action>;` and `: p09-sink;` remote-command prefixes (kernel-log hooks, holds and a
+# throttled stdout digest) and logs `ssh-rekeys` / `ssh-bytes` at exit. Never part of
+# the canonical image.
+p09-faults = ["dep:sha2"]
+
+[dependencies]
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+api = { path = "../../../libs/api", version = "0.1.0" }
+terminal-sdk = { path = "../../../libs/terminal", version = "0.1.0" }
+# Pure argv/pattern/record/grep/sed/awk/top logic — a sibling crate rather than a
+# module so it can be host-tested without ostd's panic/alloc lang items.
+text-engine = { path = "../../../libs/text-engine", version = "0.1.0" }
+# Ratatui on the shell's own session: the interactive `top` view.
+vitui = { path = "../../../libs/vitui", version = "0.1.0" }
+# ripgrep 15.2.0 matcher/searcher/ignore adaptation + serial VFS walker: `rg`.
+vigrep = { path = "../../../libs/vigrep", version = "0.1.0" }
+# Sunset SSH client narrowed to the cellbox profile: `ssh` (Phase 09).
+vissh = { path = "../../../libs/vissh", version = "0.1.0" }
+zeroize = { version = "1", default-features = false }
+# Lane-only stdout digest (`p09-faults`); the same version vissh already links.
+sha2 = { version = "0.11", default-features = false, optional = true }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }
