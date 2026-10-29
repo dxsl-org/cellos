@@ -1,0 +1,409 @@
+{
+  "status": "STOP_OBSERVATION",
+  "error": "RspError: single native instruction did not advance current breakpoint",
+  "profile": "headless",
+  "instances": [
+    {
+      "id": 1,
+      "role": "headless",
+      "base": 4429185024,
+      "cr3": 364544,
+      "initial_rsp": 38940672,
+      "stack_top": 38940672,
+      "stack_bottom": 38875136,
+      "stack_pages": {
+        "38875136": 38875136,
+        "38879232": 38879232,
+        "38883328": 38883328,
+        "38887424": 38887424,
+        "38891520": 38891520,
+        "38895616": 38895616,
+        "38899712": 38899712,
+        "38903808": 38903808,
+        "38907904": 38907904,
+        "38912000": 38912000,
+        "38916096": 38916096,
+        "38920192": 38920192,
+        "38924288": 38924288,
+        "38928384": 38928384,
+        "38932480": 38932480,
+        "38936576": 38936576
+      },
+      "touched_pages": [
+        38936576,
+        38932480,
+        38928384,
+        38924288,
+        38920192,
+        38916096,
+        38912000,
+        38907904,
+        38903808
+      ],
+      "heap": 4438261952,
+      "peak_aligned_used_bytes": 43056,
+      "phase_peaks": {
+        "boot": 25120,
+        "initial-prompt": 29216,
+        "ordinary-prompt-idle": 33312,
+        "finite-stream": 43056
+      },
+      "last_value": 38104,
+      "pending_writer": null,
+      "coverage_writes": 210,
+      "post_events": 209,
+      "initial_counter": 0,
+      "watch_completed_post": 4430119089,
+      "stack_write_attempt_depth_bound_bytes": [
+        32769,
+        36864
+      ],
+      "scope": "aligned allocator event peak; CPU stack write-attempt4KiB bounds, NOT exact stack/RSS/kernel-stack peak"
+    }
+  ],
+  "focus_base": 4429185024,
+  "heap_post_event_count": 209,
+  "observer_pause_ns": 524074821,
+  "stack_write_attempts": [
+    {
+      "monotonic_ns": 383870553491108,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 38936576,
+      "page_pa": 38936576,
+      "pc": 4429774256,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 61177895,
+          "shift": 21
+        },
+        {
+          "table_pa": 61177856,
+          "index": 290,
+          "pte": 9223372036893712487,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 383870558018419,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 38932480,
+      "page_pa": 38932480,
+      "pc": 4429774281,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 61177895,
+          "shift": 21
+        },
+        {
+          "table_pa": 61177856,
+          "index": 289,
+          "pte": 9223372036893708391,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 383870562556973,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 38928384,
+      "page_pa": 38928384,
+      "pc": 4429774296,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 61177895,
+          "shift": 21
+        },
+        {
+          "table_pa": 61177856,
+          "index": 288,
+          "pte": 9223372036893704295,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 383870569611351,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 38924288,
+      "page_pa": 38924288,
+      "pc": 4430128078,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 61177895,
+          "shift": 21
+        },
+        {
+          "table_pa": 61177856,
+          "index": 287,
+          "pte": 9223372036893700199,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 383870625969107,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 38920192,
+      "page_pa": 38920192,
+      "pc": 4430131128,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 61177895,
+          "shift": 21
+        },
+        {
+          "table_pa": 61177856,
+          "index": 286,
+          "pte": 9223372036893696103,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 383870630612263,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 38916096,
+      "page_pa": 38916096,
+      "pc": 4430131143,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 61177895,
+          "shift": 21
+        },
+        {
+          "table_pa": 61177856,
+          "index": 285,
+          "pte": 9223372036893692007,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 383870635552244,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 38912000,
+      "page_pa": 38912000,
+      "pc": 4430157913,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 61177895,
+          "shift": 21
+        },
+        {
+          "table_pa": 61177856,
+          "index": 284,
+          "pte": 9223372036893687911,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 383870788435348,
+      "instance": 1,
+      "phase": "ordinary-prompt-idle",
+      "page_va": 38907904,
+      "page_pa": 38907904,
+      "pc": 4430131143,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 61177895,
+          "shift": 21
+        },
+        {
+          "table_pa": 61177856,
+          "index": 283,
+          "pte": 9223372036893683815,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 383870793313011,
+      "instance": 1,
+      "phase": "ordinary-prompt-idle",
+      "page_va": 38903808,
+      "page_pa": 38903808,
+      "pc": 4430157913,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 61177895,
+          "shift": 21
+        },
+        {
+          "table_pa": 61177856,
+          "index": 282,
+          "pte": 9223372036893679719,
+          "shift": 12
+        }
+      ]
+    }
+  ],
+  "snapshots": [
+    {
+      "phase": "initial-prompt",
+      "instance": 1,
+      "monotonic_ns": 383870734667956,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 29216,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "instance": 1,
+      "monotonic_ns": 383880827278642,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 33312,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    }
+  ],
+  "draw_events": [],
+  "resident_bytes": null,
+  "exact_stack_peak_bytes": null,
+  "kernel_stack_peak_bytes": null,
+  "historical_runtime_baseline": null
+}

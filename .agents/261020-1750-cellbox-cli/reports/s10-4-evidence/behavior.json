@@ -1,0 +1,85 @@
+{
+  "candidate_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "new_runtime_runs": 0,
+  "l0": {
+    "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/l0-classification.json",
+    "sha256": "8e3d62e4f794342a7ebc407eaec52fc9280a46d65a9fc471e4fdd4e153c42a02",
+    "ceiling": "Existing qualified canonical six-consecutive headless/desktop behavior only; seconds fields are fixture wall time, not cold-start."
+  },
+  "l3": {
+    "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L3-p04-terminal/verdict.json",
+    "sha256": "8fdc5fa2cfa37483405ddf44a11235ed9aeded520700caf37262d03eaf8645bc",
+    "checks": {
+      "marker:rg-fx-big-exact": {
+        "pass": true,
+        "detail": ""
+      },
+      "marker:endless-local-sink-streams-live": {
+        "pass": true,
+        "detail": ""
+      },
+      "marker:endless-local-sink-ctrl-c-130": {
+        "pass": true,
+        "detail": ""
+      },
+      "marker:endless-local-sink-shell-alive": {
+        "pass": true,
+        "detail": ""
+      },
+      "marker:endless-local-sink-no-oom": {
+        "pass": true,
+        "detail": ""
+      },
+      "marker:frontend-reattach-redraw": {
+        "pass": true,
+        "detail": ""
+      },
+      "marker:oneshot-consumer-close": {
+        "pass": true,
+        "detail": ""
+      },
+      "oneshot-consumer-close-bounded": {
+        "pass": true,
+        "detail": [
+          "56"
+        ]
+      },
+      "endless-local-sink-ctrl-c-prompt-bounded": {
+        "pass": true,
+        "detail": [
+          "9"
+        ]
+      },
+      "rg-fx-big-elapsed-recorded": {
+        "pass": true,
+        "detail": [
+          [
+            "301519",
+            "7340032"
+          ]
+        ]
+      },
+      "no-oom-heap-exhausted-uart": {
+        "pass": true,
+        "detail": []
+      }
+    },
+    "ceiling": "Private imported P04 fixture/payload-match behavior, not canonical-kernel runtime memory/throughput."
+  },
+  "bounded_recovery": {
+    "endless_local_sink_ctrl_c_to_prompt_ms": 9,
+    "consumer_close_ms": 56,
+    "scope": "Driver-recorded fixture values; not universal latency or performance ceilings."
+  },
+  "rg_fixture": {
+    "reported_elapsed_field": 301519,
+    "file_bytes": 7340032,
+    "scope": "Exact retained fixture detail; clock-unit caveats retained, not host/QEMU throughput."
+  },
+  "idle_redraw": "Retained reattach/redraw correctness passes; idle redraw rate, CPU cost and latency not measured.",
+  "new_cold_start_ms": null,
+  "resident_bytes": null,
+  "peak_heap_bytes": null,
+  "peak_stack_bytes": null,
+  "no_optimization_claim": true
+}

@@ -1,0 +1,8 @@
+error: failed to load manifest for workspace member `/tmp/cellbox-s10-4/baseline-worktree/cells/apps/vm-runner`
+referenced by workspace at `/tmp/cellbox-s10-4/baseline-worktree/Cargo.toml`
+
+Caused by:
+  failed to read `/tmp/cellbox-s10-4/baseline-worktree/cells/apps/vm-runner/Cargo.toml`
+
+Caused by:
+  No such file or directory (os error 2)

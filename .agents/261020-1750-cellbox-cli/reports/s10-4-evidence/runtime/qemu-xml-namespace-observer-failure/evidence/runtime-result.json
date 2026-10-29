@@ -1,0 +1,14 @@
+{
+  "profile": "headless",
+  "mode": "observed",
+  "number": 1,
+  "work": "/tmp/cellbox-s10-4-runtime-headless-observed-1-9f8b66",
+  "status": "STOP",
+  "start_monotonic_ns": 382330639005158,
+  "qemu_start_monotonic_ns": 382331635085065,
+  "qemu_pid": 2123206,
+  "error": "Stop: observation blocker: RspError: malformed target XML",
+  "traceback": "Traceback (most recent call last):\n  File \"/tmp/cellbox-s10-4/runtime/run.py\", line 17, in run_one\n    obs.check()\n  File \"/tmp/cellbox-s10-4/runtime/observer.py\", line 53, in check\n    if self.error:raise Stop(f'observation blocker: {self.error}')\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ncommon.Stop: observation blocker: RspError: malformed target XML\n",
+  "observer_error": "Stop: observation blocker: RspError: malformed target XML",
+  "end_monotonic_ns": 382332087276803
+}

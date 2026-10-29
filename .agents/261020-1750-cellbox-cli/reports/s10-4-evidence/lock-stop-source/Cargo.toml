@@ -1,0 +1,263 @@
+# ViCell v0.2 Workspace - Cell-Based Architecture
+
+[workspace]
+resolver = "2"
+# tools/ contains standalone std crates (vi-compiler, viui-build) with their own
+# [workspace] roots — exclude them so Cargo doesn't see multiple workspace roots.
+exclude = [
+    "tools/vi-compiler",
+    "tools/viui-build",
+    "tools/cellos-fs-provision", # offline std host tool; never a bare-metal cell
+    "third_party/redoxfs",   # vendored fork — own resolver; unused since the CellosFS Native switch
+    "third_party/mlibc",     # mlibc vendored copy — built with Meson, not Cargo
+    # cell-build is a build-script helper (uses std) — it compiles only for the host
+    # as a [build-dependency]; excluding it keeps `cargo check` from trying to
+    # compile it for the bare-metal target (riscv64gc-unknown-none-elf).
+    "libs/cell-build",
+    # vove is a restricted private sub-repo (git submodule) — separate license,
+    # excluded from the public Cellos workspace to prevent accidental inclusion.
+    "cells/apps/vove",
+    # std-smoke is a Tier 1 std cell built with custom sysroot and json-target-spec
+    "cells/demos/std-smoke",
+]
+members = [
+    "kernel",
+    "boards",
+    "libs/types",
+    "libs/api",
+    "libs/ostd",
+    "libs/ai-proto",
+    "libs/tensor-math",
+    "libs/gguf-rs",
+    "libs/ai-tokenizer",
+    "libs/ai-engine",
+    "libs/ai-sdk",
+    "libs/attestation",
+    "libs/http-core",
+    "libs/render-core",
+    "libs/text-engine",
+    "libs/mlibc-shim",
+    "libs/agent-proto",
+    "libs/authority-protocol",
+    "libs/boot-config",
+    "libs/viui",
+    "libs/viui-macros",
+    "libs/cellos-fs",
+    "libs/port-platform",
+    "libs/dom-arena",
+    "libs/ocel-pdf-proto",
+    "libs/ocel-service-proto",
+    
+    "libs/polling-cellos",
+    "libs/mio-cellos",
+    # HAL
+    "hal/core",
+    "hal/soc/bcm27xx",
+    "hal/soc/arm-virt",
+    "hal/soc/riscv",
+    "hal/soc/x86",
+    "hal/traits/arch",
+    "hal/traits/timer",
+    "hal/traits/interrupt",
+    "hal/traits/uart",
+    "hal/traits/gpio",
+    "hal/traits/i2c",
+    "hal/traits/spi",
+    "hal/traits/pwm",
+    "hal/traits/adc",
+    "hal/traits/can",
+    "hal/traits/mmc",
+    "hal/traits/display",
+    "hal/traits/hypervisor",
+    "hal/traits/mte",
+    "hal/arch/riscv",
+    "hal/arch/arm",
+    "hal/arch/x86",
+    
+    # Cells - Drivers
+    "cells/drivers/disk",
+    "cells/drivers/e1000",
+    "cells/drivers/igb",
+    "cells/drivers/serial-x86",
+    "cells/drivers/gpio",
+    "cells/drivers/gpio-bcm",
+    "cells/drivers/nvme",
+    "cells/drivers/ahci",
+    "cells/drivers/xhci",
+    "cells/drivers/gpu",
+    "cells/drivers/i2c-gpio",
+    "cells/drivers/i2c-bcm",
+    "cells/drivers/spi-gpio",
+    "cells/drivers/spi-bcm",
+    "cells/drivers/pwm-gpio",
+    "cells/drivers/adc-sim",
+    "cells/drivers/can-loopback",
+    "cells/drivers/virtio-net",
+    "cells/drivers/virtio-blk",
+    "cells/drivers/virtio-gpu",
+    "cells/drivers/gpio-sifive",
+    "cells/drivers/serial",
+    "cells/drivers/wasm",
+    "cells/drivers/imu-mpu6050",
+    "cells/drivers/display-ssd1306",
+    "cells/drivers/bcm-display",
+    "cells/drivers/dwc2-usb",
+    "cells/drivers/hid",
+    
+    # Cells - Services
+    "cells/services/platform",
+    "cells/services/vfs",
+    "cells/services/compositor",
+    "cells/services/net",
+    "cells/services/net-broker",
+    "cells/services/input",
+    "cells/services/power",
+    "cells/services/config",
+    "cells/services/hypervisor",
+    "cells/services/kms",
+    "cells/services/silo",
+    "cells/services/supervisor",
+    "cells/services/httpd",
+    "cells/services/ai",
+    "cells/services/ocel-js",
+    "cells/services/ocel-quickjs",
+    "cells/services/ocel-pdf",
+    "cells/services/budget-authority",
+    "cells/services/workload-router",
+    "cells/services/placement-controller",
+
+    # Cells - Tools (system + CLI)
+    "cells/tools/init",
+    "cells/tools/shell",
+    "cells/tools/sys-tools",
+    "cells/tools/net-tools",
+    "cells/tools/wasm",
+
+    # Cells - Apps (user applications)
+    "cells/apps/fb-console",
+    "cells/apps/robot-dashboard",
+    "cells/apps/desktop",
+    "cells/apps/ocel",
+    "cells/apps/files",
+    "cells/apps/terminal",
+    "cells/apps/c2c-render",
+    "cells/apps/hypha/llm-gateway",   # Hypha P0 — LLM network gateway
+    "cells/apps/hypha/core",          # Hypha P1 — agent brain (chat loop)
+    "cells/apps/hypha/tools/fs",      # Hypha P2 — filesystem tool cell
+    "cells/apps/hypha/tools/sys",     # Hypha P3 — system introspection tool cell
+    "cells/apps/hypha/tools/spawn",   # Hypha P3 — cell lifecycle tool cell
+    "cells/apps/haily-agent",
+    "cells/apps/chrome",
+
+    # Cells - Demos (hardware/feature demos + games)
+    "cells/demos/doom",
+    "cells/demos/tetris",
+    "cells/demos/tetris-c",
+    "cells/demos/tetris-lua",
+    "cells/demos/hello",
+    "cells/demos/hello-cell",
+    "cells/demos/periph-demo",
+    "cells/demos/sensor-demo",
+    "cells/demos/spi-demo",
+    "cells/demos/pwm-demo",
+    "cells/demos/adc-demo",
+    "cells/demos/can-demo",
+    "cells/demos/robot-demo",
+    "cells/demos/https-demo",
+    "cells/demos/http-smoke",
+    "cells/demos/cfi-test",
+    "cells/demos/viui-demo",
+    "cells/demos/sdk-demo",
+    "cells/demos/audio-demo",
+    "cells/demos/hotswap-demo-v1",
+    "cells/demos/hotswap-demo-v2",
+    "cells/demos/async-echo",
+    "cells/demos/tokio-smoke",
+
+    # Cells - Tests
+    "cells/tests/atomic-publication-probe",
+    "cells/tests/bench",
+    "cells/tests/backend",
+    "cells/tests/vfs-test",
+    "cells/tests/srv-test",
+    "cells/tests/hypervisor-test",
+    "cells/tests/gpio-test-rv",
+    "cells/tests/periph-test",
+    "cells/tests/posix-shim-test",
+    "cells/tests/c-math-smoke",
+    "cells/tests/mlibc-smoke",
+    "cells/tests/test-isolation",
+    "cells/tests/input-test",
+    "cells/tests/window-policy-probe",
+    "cells/tests/silo-test",
+    "cells/tests/wx-test",
+    "cells/tests/tier2-exploit",
+    "cells/tests/tier2-smoke",
+    "cells/tests/tier2-rpc-proto",
+    "cells/tests/tier2-rpc-provider",
+    "cells/tests/tier2-rpc-driver",
+    "cells/tests/tier2-grant-owner",
+    "cells/tests/tier2-grant-receiver",
+    "cells/tests/ai-test",
+    "cells/tests/cpp-smoke",
+    "cells/tests/tls-test",
+    "cells/tests/futex-test",
+    "cells/tests/pipe-test",
+    "cells/tests/pipe-peer",
+    "cells/tests/c-pthread",
+    "cells/tests/c-spawn",
+    "cells/tests/c-spawn-child",
+
+    # Cells - Runtimes
+    "cells/runtimes/lua",
+    "cells/services/sshd",
+
+]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+authors = ["DXSL"]
+
+[workspace.dependencies]
+spin     = { version = "0.9",  default-features = false, features = ["spin_mutex"] }
+ab_glyph = { version = "0.2.32", default-features = false, features = ["libm"] }
+vm-fdt   = { version = "0.3",  default-features = false, features = ["alloc"] }
+
+[patch.crates-io]
+# Vendored fork of virtio-drivers 0.7.5 with Cellos-local extensions:
+# - VirtIOGpu::flush_rect() — partial-rect DMA flush
+# - VirtIOGpu::read_events() / clear_events() — display hotplug event handling
+# Keep in sync with kernel/third_party/virtio_drivers/ on any upstream bump.
+virtio-drivers = { path = "kernel/third_party/virtio_drivers", version = "0.7.5" }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+opt-level = 2
+
+# The workspace default is size, because cell and kernel images are flash- and RAM-bounded. The
+# inference engine's kernels are the exception: at `-Oz` LLVM leaves the per-block helpers
+# (`q8_0_block_to_f32`, `accumulate_products`, `chunks_exact`) as out-of-line calls — verified in
+# the emitted assembly, six calls per 32-weight block — which is the entire gap to a tuned kernel.
+#
+# `opt-level = 2` is the measured optimum for both targets, not a compromise:
+#
+#   config          Q8_0 matvec (host)   135M decode (host)   in-cell QEMU RV64   service-ai image
+#   -Oz (default)   1.35 GFLOP/s         209 ms/token        7.89 s              236,328 B
+#   -O2 (this)      6.8 GFLOP/s          42 ms/token         6.85 s              230,288 B
+#   -O3             10.5 GFLOP/s         29 ms/token         8.77 s              228,392 B
+#
+# The engine and the benchmark that produced these numbers live in
+# .agents/260914-cpu-engine-optimization/. Both numbers matter: the cell is what ships today, and
+# `-O3`'s longer unrolled body costs 11% under QEMU's TCG because every f32 op goes through
+# softfloat while code shape decides the rest.
+[profile.release.package.tensor-math]
+opt-level = 2
+
+[profile.release.package.ai-engine]
+opt-level = 2

@@ -1,0 +1,95 @@
+{
+  "stage": "S10-4",
+  "status": "STOP_B2_LOCK_RECONCILIATION_REQUIRED",
+  "authorized_delta": "User2026-10-28 minimal disposable root Cargo.toml exclusion of nonexistent cells/apps/vm-runner only; non-pristine B2 comparator",
+  "dependency_closure": {
+    "manifests": {
+      "cells/tools/shell/Cargo.toml": "app-shell",
+      "libs/ostd/Cargo.toml": "ostd",
+      "libs/types/Cargo.toml": "types",
+      "libs/api/Cargo.toml": "api",
+      "libs/http-core/Cargo.toml": "http-core",
+      "libs/text-engine/Cargo.toml": "text-engine",
+      "libs/cell-build/Cargo.toml": "cell-build",
+      "cells/tools/sys-tools/Cargo.toml": "app-sys-tools"
+    },
+    "vm_runner_compile_dependency": false,
+    "note": "Conservative recursive local path dependency census including optional/dev/build tables. Shell runtime spawn_external(\"vm-runner\") string remains a separate user-app fallback; excluded member is not in selected ELF compile dependency closure."
+  },
+  "repaired_commands": [
+    {
+      "command": [
+        "rustc",
+        "+nightly-2026-05-01",
+        "-Vv"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+      "log": "/tmp/cellbox-s10-4/logs-repaired/b2-rustc.log",
+      "returncode": 0
+    },
+    {
+      "command": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "-V"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+      "log": "/tmp/cellbox-s10-4/logs-repaired/b2-cargo.log",
+      "returncode": 0
+    },
+    {
+      "command": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc",
+        "-p",
+        "app-shell",
+        "-p",
+        "app-sys-tools",
+        "--bin",
+        "app-shell",
+        "--bin",
+        "ls",
+        "--bin",
+        "cat",
+        "--bin",
+        "echo",
+        "--bin",
+        "ps",
+        "--bin",
+        "kill"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+      "log": "/tmp/cellbox-s10-4/logs-repaired/b2-build.log",
+      "returncode": 101
+    }
+  ],
+  "original_failure_preserved": true,
+  "static_measurement": "static/measurement.json",
+  "b2_elf_results": null,
+  "runtime_runs": 0,
+  "runtime_peaks": "not measured, reservation-only ceiling; observer decision awaits user",
+  "cbx27_met": false,
+  "phase10_criterion4_met": false,
+  "canonical_promotion": false,
+  "worktree_retained_pending_disposition": true,
+  "preservation_at_first_stop": {
+    "unchanged": true,
+    "files": 546,
+    "canonical_files": 469,
+    "changed": []
+  },
+  "retained_behavior": "behavior.json",
+  "final_static_preservation": {
+    "unchanged": true,
+    "files": 546,
+    "canonical_files": 469,
+    "changed": []
+  }
+}

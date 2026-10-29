@@ -1,0 +1,71 @@
+[
+  {
+    "command": [
+      "rustc",
+      "+nightly-2026-05-01",
+      "-Vv"
+    ],
+    "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+    "log": "/tmp/cellbox-s10-4/logs-reconciled/b2-rustc.log",
+    "returncode": 0
+  },
+  {
+    "command": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "-V"
+    ],
+    "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+    "log": "/tmp/cellbox-s10-4/logs-reconciled/b2-cargo.log",
+    "returncode": 0
+  },
+  {
+    "command": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc",
+      "-p",
+      "app-shell",
+      "-p",
+      "app-sys-tools",
+      "--bin",
+      "app-shell",
+      "--bin",
+      "ls",
+      "--bin",
+      "cat",
+      "--bin",
+      "echo",
+      "--bin",
+      "ps",
+      "--bin",
+      "kill"
+    ],
+    "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+    "log": "/tmp/cellbox-s10-4/logs-reconciled/b2-build.log",
+    "returncode": 0
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/cellos-sign",
+      "--sign",
+      "/tmp/cellbox-s10-4/b2-signed/shell",
+      "/tmp/cellbox-s10-4/b2-signed/ls",
+      "/tmp/cellbox-s10-4/b2-signed/cat",
+      "/tmp/cellbox-s10-4/b2-signed/echo",
+      "/tmp/cellbox-s10-4/b2-signed/ps",
+      "/tmp/cellbox-s10-4/b2-signed/kill"
+    ],
+    "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+    "log": "/tmp/cellbox-s10-4/logs-reconciled/b2-sign.log",
+    "returncode": 1
+  }
+]

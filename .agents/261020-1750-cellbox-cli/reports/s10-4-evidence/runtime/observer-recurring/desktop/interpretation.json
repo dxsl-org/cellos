@@ -1,0 +1,146 @@
+{
+  "profile": "desktop",
+  "status": "STOP",
+  "error": "JSONDecodeError: Expecting ':' delimiter: line 1 column 54 (char 53)",
+  "observer_error": "Stop: observation blocker: TypeError: list indices must be integers or slices, not str",
+  "cleanup_error": null,
+  "workload_complete": false,
+  "complete_event_coverage_for_approved_schedule": false,
+  "host_interval_seconds_including_setup_cleanup": 83.661660257,
+  "native_step_packets": 46,
+  "scope_records": 47,
+  "original_same_pc_failures": 0,
+  "additional_native_packets": 0,
+  "recurrence_events": [],
+  "event_outcomes": {},
+  "checks": {
+    "one_fresh_profile_attempt": true,
+    "original_deadline_and_command_limits": true,
+    "no_guest_write_Z0_injection_or_mode_setter": true,
+    "all_recorded_step_execute_watch_censuses_equal": false,
+    "one_extra_max_per_independent_event": true,
+    "additional_packet_count_matches": true,
+    "all_admitted_flag3_proofs_recomputed": true,
+    "no_control_after_terminal_event": true,
+    "raw_counter_and_coverage_totals_match": true,
+    "protected_and_previous_preserved": true
+  },
+  "forbidden_packets": [],
+  "controls_after_terminal": [],
+  "surface_events": [
+    {
+      "phase": "terminal-launch",
+      "monotonic_ns": 415537637113183
+    },
+    {
+      "phase": "initial-prompt",
+      "monotonic_ns": 415584755236317
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "monotonic_ns": 415584825369040
+    },
+    {
+      "phase": "finite-stream",
+      "monotonic_ns": 415594933218625
+    }
+  ],
+  "streams": null,
+  "top_idle": null,
+  "instances": [
+    {
+      "id": 1,
+      "role": "autoload-background",
+      "base": "0x114000000",
+      "post_events": 5,
+      "coverage_writes": 6,
+      "maximum_retained_post_event_aligned_bytes": 25272,
+      "complete_approved_workload_aligned_allocator_peak_bytes": null,
+      "peak_scope": "partial retained post-event interval; not a true-workload peak",
+      "phase_event_maxima_bytes": {
+        "boot": 25272
+      },
+      "last_observed_value": 25272,
+      "pending_writer": null,
+      "stack_usable_reservation_bytes": 65536,
+      "stack_CPU_write_attempt_pages": 4,
+      "stack_CPU_write_attempt_depth_bound_bytes": [
+        12289,
+        16384
+      ],
+      "stack_bound_scope": "CPU write-attempt4KiB page bounds over retained interval; NOT exact byte/RSP/kernel-stack peak",
+      "exact_stack_peak_bytes": null,
+      "kernel_stack_peak_bytes": null,
+      "resident_bytes": null
+    },
+    {
+      "id": 2,
+      "role": "foreground-terminal",
+      "base": "0x118000000",
+      "post_events": 25,
+      "coverage_writes": 26,
+      "maximum_retained_post_event_aligned_bytes": 34048,
+      "complete_approved_workload_aligned_allocator_peak_bytes": null,
+      "peak_scope": "partial retained post-event interval; not a true-workload peak",
+      "phase_event_maxima_bytes": {
+        "terminal-launch": 33632,
+        "finite-stream": 34048
+      },
+      "last_observed_value": 34048,
+      "pending_writer": null,
+      "stack_usable_reservation_bytes": 65536,
+      "stack_CPU_write_attempt_pages": 9,
+      "stack_CPU_write_attempt_depth_bound_bytes": [
+        32769,
+        36864
+      ],
+      "stack_bound_scope": "CPU write-attempt4KiB page bounds over retained interval; NOT exact byte/RSP/kernel-stack peak",
+      "exact_stack_peak_bytes": null,
+      "kernel_stack_peak_bytes": null,
+      "resident_bytes": null
+    }
+  ],
+  "mapped_backing_snapshots": [
+    {
+      "phase": "initial-prompt",
+      "instance": 2,
+      "monotonic_ns": 415584790623281,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 33632,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "instance": 2,
+      "monotonic_ns": 415594893361422,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 33632,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    }
+  ],
+  "draw_entry_counts": {},
+  "observer_pause_ns_completed_stop_intervals": 911310585,
+  "resident_bytes": null,
+  "historical_runtime_baseline": null,
+  "limits": [
+    "Observed timings include all-stop observer overhead; not startup/performance results",
+    "A clean observer-thread shutdown does not imply the workload schedule completed",
+    "Event maxima in an incomplete schedule are not full-workload peaks",
+    "Stack write-attempt4KiB bounds are not exact stack or RSP high-water marks",
+    "Mapped ELF-plus-user-stack backing is not RSS, residency, quota or whole-cell memory",
+    "Draw/flush entry counts are attempts/calls, not redraw cost or framebuffer changes",
+    "Hidden exit-request origin and historical failure causality remain unproven"
+  ],
+  "evidence_sha256": {
+    "runtime-result.json": "4e87a2deb2e0d01800822d6dfdae3c306aa44352cd8402963f746e68ef204d23",
+    "evidence/observation.json": "f0c5826cd1af4c80789c82d1f36a55fedf7ce30e416d2b3f133afa0ce5e7e43c",
+    "evidence/steps.jsonl": "625eaa7ce0a5e101b5b033bdfb440b0727c1c29f7048c3c73a62f916a5cf8196",
+    "evidence/rsp-traffic.jsonl": "8e0ba02b1f6b090b1207506624063b7f60bd3b8ed1015fa134bfc055d59a5aa1",
+    "evidence/qmp-queries.jsonl": "235b7305c3945cad74d033376b8be2f3121bde1a0196982704ee429c42bfc9ce",
+    "evidence/qemu-trace.log": "dc243abf59659f23d920b49024f3c007efb5efe6ff973aa77ed59bd6e40b7a6a",
+    "evidence/heap-events.jsonl": "99030ceebe2a8c895120db854819a0f8a893a6d65a8fb4957b3964f08930e100",
+    "evidence/coverage-events.jsonl": "f194730d213e61ae558f85b9c9a8ae156542f311b224acc6a3830156cc41633b"
+  }
+}

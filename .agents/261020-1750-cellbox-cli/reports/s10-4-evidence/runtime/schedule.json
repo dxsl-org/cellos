@@ -1,0 +1,45 @@
+{
+  "approved": "user2026-10-28 D4-Obs1/2/3 A",
+  "schedule": [
+    [
+      "headless",
+      "untraced",
+      1
+    ],
+    [
+      "headless",
+      "untraced",
+      2
+    ],
+    [
+      "headless",
+      "untraced",
+      3
+    ],
+    [
+      "desktop",
+      "untraced",
+      1
+    ],
+    [
+      "desktop",
+      "untraced",
+      2
+    ],
+    [
+      "desktop",
+      "untraced",
+      3
+    ],
+    [
+      "headless",
+      "observed",
+      1
+    ],
+    [
+      "desktop",
+      "observed",
+      1
+    ]
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "scope": "Source-grounded interpretation rules, not an observation of the hidden cause",
+  "references": [
+    {
+      "url": "https://github.com/qemu/qemu/blob/v8.2.2/accel/tcg/cpu-exec.c",
+      "functions": ["cpu_exec_loop", "cpu_handle_interrupt", "cpu_loop_exec_tb", "cpu_tb_exec", "cpu_exec_step_atomic"],
+      "findings": [
+        "cpu_handle_interrupt consumes CPU_INTERRUPT_DEBUG into EXCP_DEBUG before a subsequent TB dispatch; SSTEP_NOIRQ does not mask CPU_INTERRUPT_DEBUG.",
+        "cpu_loop_exec_tb and the atomic-step path emit trace_exec_tb before cpu_tb_exec enters generated guest code.",
+        "cpu_tb_exec emits trace_exec_tb_exit after tcg_qemu_tb_exec returns; flags greater than TB_EXIT_IDX1 mean that TB did not start. Longjmp paths need not emit that exit event.",
+        "TB dispatch alone is not proof of guest instruction retirement. Missing TB exit alone cannot establish non-retirement.",
+        "A complete, enabled, correctly ordered interval with no TB entry constrains execution more strongly than bare T05; it does not uniquely identify pending DEBUG."
+      ]
+    },
+    {
+      "url": "https://github.com/qemu/qemu/blob/v8.2.2/gdbstub/system.c",
+      "functions": ["gdb_chr_event", "gdb_vm_state_change", "gdb_get_cpu_index"],
+      "findings": [
+        "Debugger connection initializes c_cpu and g_cpu to the first attached CPU; system-mode GDB CPU index is CPUState cpu_index plus one.",
+        "A watch stop clears watchpoint_hit after constructing the stop packet; bare T05 does not expose pending-debug state.",
+        "The stop callback emits its stop reply before disabling single-step. A following processed read request is an ordering witness after that callback."
+      ]
+    },
+    {
+      "url": "https://github.com/qemu/qemu/blob/v8.2.2/gdbstub/gdbstub.c",
+      "functions": ["handle_step", "handle_query_curr_tid", "handle_query_qemu_sstepbits", "handle_query_qemu_sstep"],
+      "findings": [
+        "Unaddressed native s enables CPUState single-step and continues; no guest PC/register write is required.",
+        "qC reports the first thread of the current process, not independent equality of both debugger CPU selectors.",
+        "qqemu.sstepbits and qqemu.sstep query supported/default modes; setters remain outside the diagnostic policy."
+      ]
+    },
+    {
+      "url": "https://github.com/qemu/qemu/blob/v8.2.2/scripts/tracetool/backend/log.py",
+      "findings": ["The log backend emits enabled events through qemu_log; timestamp mode adds host thread ID and wall-clock timestamp."]
+    },
+    {
+      "url": "https://github.com/qemu/qemu/blob/v8.2.2/util/log.c",
+      "functions": ["qemu_log_trylock", "qemu_log_unlock", "qemu_log"],
+      "findings": ["A shared log stream is locked for each qemu_log call and flushed before unlocking; the diagnostic does not select per-thread or lossy ring-buffer logging."]
+    },
+    {
+      "url": "https://github.com/qemu/qemu/blob/v8.2.2/qapi/machine.json",
+      "findings": ["query-cpus-fast exposes vCPU index, target, QOM path and host thread ID, not instruction-retirement or internal pending-debug state."]
+    },
+    {
+      "url": "https://github.com/qemu/qemu/blob/v8.2.2/qapi/trace.json",
+      "findings": ["Trace event state queries distinguish enabled, disabled and unavailable. Only exact exec_tb/exec_tb_exit dynamic logging-state changes are admitted by this wrapper."]
+    }
+  ],
+  "installed_host_capability": {
+    "package": "qemu-system-x86 1:8.2.2+ds-0ubuntu1.17 amd64",
+    "build_id": "ce72f123d382a9642649676c0fad7b73f7dde749",
+    "events_definition": "/usr/share/qemu/trace-events-all",
+    "observed_static_support": "qemu-system-x86_64 -trace help lists all selected events; the binary contains their log-backend format strings.",
+    "source_ceiling": "Upstream v8.2.2 paths are inspected; exact Ubuntu patched source is not independently reconstructed. Runtime positive trace-health witnesses are still required.",
+    "debugger_prerequisite": "No installed gdb/gdb-multiarch or matching local build-ID DWARF found; no debugger attached, package installed or host memory/register instrumentation performed."
+  },
+  "forbidden_inferences": [
+    "No trace entry alone does not prove a specific pending-debug cause.",
+    "TB entry or translation is not an instruction-retirement counter.",
+    "Metadata, trace-health failure or non-reproduction cannot authorize another candidate attempt or drain step.",
+    "This diagnostic never qualifies full-workload memory, historical runtime equivalence, RSS, exact stack/kernel-stack peak, canonical promotion or containment release."
+  ]
+}

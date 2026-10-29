@@ -1,0 +1,14 @@
+{
+  "manifests": {
+    "cells/tools/shell/Cargo.toml": "app-shell",
+    "libs/ostd/Cargo.toml": "ostd",
+    "libs/types/Cargo.toml": "types",
+    "libs/api/Cargo.toml": "api",
+    "libs/http-core/Cargo.toml": "http-core",
+    "libs/text-engine/Cargo.toml": "text-engine",
+    "libs/cell-build/Cargo.toml": "cell-build",
+    "cells/tools/sys-tools/Cargo.toml": "app-sys-tools"
+  },
+  "vm_runner_compile_dependency": false,
+  "note": "Conservative recursive local path dependency census including optional/dev/build tables. Shell runtime spawn_external(\"vm-runner\") string remains a separate user-app fallback; excluded member is not in selected ELF compile dependency closure."
+}

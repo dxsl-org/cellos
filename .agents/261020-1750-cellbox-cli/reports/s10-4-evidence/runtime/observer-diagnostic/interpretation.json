@@ -1,0 +1,161 @@
+{
+  "status": "TB_NOT_STARTED_REQUESTED_EXIT_OBSERVED",
+  "confidence": "CONFIRMED for this attempt's unstarted-TB/zero-retirement mechanism; hidden exit-request origin and prior jmp failure attribution remain UNPROVEN",
+  "original_executed_classifier_retained": "INCONCLUSIVE_SAME_PC",
+  "classifier_ceiling": "Original runner distinguishes zero TB dispatch only and conservatively labels a dispatched TB inconclusive. Offline source-contract interpretation of explicit exit flag3 adds the unstarted-TB fact without changing the original result.",
+  "proof_conditions": {
+    "one_candidate_run": true,
+    "native_commands_equal_scopes": true,
+    "one_terminal_same_pc_failure": true,
+    "complete_capture": true,
+    "exactly_one_final_TB_entry_and_exit": true,
+    "same_TB_pointer": true,
+    "entry_PC_matches_pre_and_post_RIP": true,
+    "requested_exit_flag3": true,
+    "same_vcpu_context": true,
+    "same_CS_CR3_RSP_EFLAGS": true,
+    "TF_RF_clear_before_and_after": true,
+    "step_mode7_before_and_after": true,
+    "all_execute_watch_censuses_preserved": true,
+    "no_guest_write_or_software_breakpoint_packets": true,
+    "no_continue_or_step_after_failed_s": true,
+    "protected_inputs_and_old_trace_unchanged": true
+  },
+  "scope_count": 551,
+  "trace_health_successes": 550,
+  "site": "0x1080e3f06",
+  "instruction": "58 pop %rax (post-sub successor); not the earlier failed eb02 jmp site",
+  "phase": "finite-stream",
+  "before": {
+    "rip": 4430118662,
+    "eflags": 514,
+    "cs": 35,
+    "cr3": 364544,
+    "rsp": 39458688,
+    "instruction_read_address": 4430118662,
+    "instruction_bytes": "58c3488d35a90d1a00bf2b000000e827",
+    "stop": "T05thread:01;watch:1088a80c0;",
+    "sstepbits": "ENABLE=1,NOIRQ=2,NOTIMER=4",
+    "sstep": "0x7",
+    "tf": false,
+    "rf": false
+  },
+  "after": {
+    "rip": 4430118662,
+    "eflags": 514,
+    "cs": 35,
+    "cr3": 364544,
+    "rsp": 39458688,
+    "instruction_read_address": 4430118662,
+    "instruction_bytes": "58c3488d35a90d1a00bf2b000000e827",
+    "stop": "T05thread:01;",
+    "sstepbits": "ENABLE=1,NOIRQ=2,NOTIMER=4",
+    "sstep": "0x7",
+    "tf": false,
+    "rf": false
+  },
+  "tb_entry": {
+    "tid": 2134370,
+    "time": "1793200602.394333",
+    "event": "exec_tb",
+    "text": "tb:0x711ed7805a00 pc=0x1080e3f06"
+  },
+  "tb_exit": {
+    "tid": 2134370,
+    "time": "1793200602.394337",
+    "event": "exec_tb_exit",
+    "text": "tb:0x711ed7805a00 flags=0x3"
+  },
+  "previous_success": {
+    "ordinal": 550,
+    "site": "0x1080e3f06",
+    "before": {
+      "rip": 4430118662,
+      "eflags": 518,
+      "cs": 35,
+      "cr3": 364544,
+      "rsp": 39458688,
+      "instruction_read_address": 4430118662,
+      "instruction_bytes": "58c3488d35a90d1a00bf2b000000e827",
+      "stop": "T05thread:01;watch:1088a80c0;",
+      "sstepbits": "ENABLE=1,NOIRQ=2,NOTIMER=4",
+      "sstep": "0x7",
+      "tf": false,
+      "rf": false
+    },
+    "after": {
+      "rip": 4430118663,
+      "eflags": 518,
+      "cs": 35,
+      "cr3": 364544,
+      "rsp": 39458696,
+      "instruction_read_address": 4430118663,
+      "instruction_bytes": "c3488d35a90d1a00bf2b000000e827f3",
+      "stop": "T05thread:01;",
+      "sstepbits": "ENABLE=1,NOIRQ=2,NOTIMER=4",
+      "sstep": "0x7",
+      "tf": false,
+      "rf": false
+    },
+    "trace": {
+      "complete_ordered_scope": true,
+      "line_count": 31,
+      "command_tid": 2134367,
+      "stop": "T05thread:01;",
+      "tb_entries": [
+        {
+          "tid": 2134370,
+          "time": "1793200602.385700",
+          "event": "exec_tb",
+          "text": "tb:0x711ed7806700 pc=0x1080e3f06"
+        }
+      ],
+      "tb_exits": [
+        {
+          "tid": 2134370,
+          "time": "1793200602.385704",
+          "event": "exec_tb_exit",
+          "text": "tb:(nil) flags=0x0"
+        }
+      ],
+      "zero_tb_dispatch_observed": false,
+      "retirement_proven_by_trace_alone": false,
+      "interpretation": "TB dispatch observed, not affirmative instruction-retirement proof.",
+      "offset": 2755991,
+      "end_offset": 2757942,
+      "raw_sha256": "509c113fa4531cfa41ace26b8f1773cd7c563fb62988da70efbd25d0916763a5"
+    }
+  },
+  "source_contract": {
+    "url": "https://github.com/qemu/qemu/blob/v8.2.2/include/tcg/tcg.h",
+    "symbol": "TB_EXIT_REQUESTED",
+    "value": 3,
+    "meaning": "The CPU exit_request flag caused return before the pointed-to TB started. Non-index exits require synchronize_from_tb/set_pc.",
+    "execution_source": "https://github.com/qemu/qemu/blob/v8.2.2/accel/tcg/cpu-exec.c",
+    "native_step_caveat": "cpu_tb_exec can set EXCP_DEBUG for enabled host single-step after a returned unstarted TB. It does not first require successful guest-instruction retirement.",
+    "installed_binary_confirmation": "Compiled return-mask/flag>1 synchronization branch at0x8cdc85..0x8cdd2c and single-step/exception-index debug branch at0x8cdcb6,0x8cdf18..0x8cdf32; exact captured objdump output retained. This is static inspection, not hidden CPUState capture."
+  },
+  "not_established": [
+    "Who/what set exit_request in this attempt",
+    "Actual pending CPU_INTERRUPT_DEBUG state",
+    "Whether the earlier 0x1080e40b1 jmp failure had the same cause",
+    "A proven-safe general additional-step completion protocol",
+    "Full-workload memory qualification or any promotion/containment gate"
+  ],
+  "next_decision": "Keep stopped, or separately approve a bounded semantics amendment after review of how explicit zero-retirement evidence can authorize any additional native control. No extra step or rerun is inferred from this result.",
+  "forbidden_packets": [],
+  "post_failure_controls": [],
+  "native_step_packets": 551,
+  "final_native_step_packet_line": 83277,
+  "trace_exit_flags": {
+    "0x0": 550,
+    "0x3": 1
+  },
+  "evidence_hashes": {
+    "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+    "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+    "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+    "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+    "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+  }
+}

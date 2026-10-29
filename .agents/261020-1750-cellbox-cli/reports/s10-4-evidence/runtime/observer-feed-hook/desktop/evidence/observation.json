@@ -1,0 +1,723 @@
+{
+  "status": "COMPLETE",
+  "error": null,
+  "profile": "desktop",
+  "instances": [
+    {
+      "id": 1,
+      "role": "autoload-background",
+      "base": 4630511616,
+      "cr3": 364544,
+      "initial_rsp": 60968960,
+      "stack_top": 60968960,
+      "stack_bottom": 60903424,
+      "stack_pages": {
+        "60903424": 60903424,
+        "60907520": 60907520,
+        "60911616": 60911616,
+        "60915712": 60915712,
+        "60919808": 60919808,
+        "60923904": 60923904,
+        "60928000": 60928000,
+        "60932096": 60932096,
+        "60936192": 60936192,
+        "60940288": 60940288,
+        "60944384": 60944384,
+        "60948480": 60948480,
+        "60952576": 60952576,
+        "60956672": 60956672,
+        "60960768": 60960768,
+        "60964864": 60964864
+      },
+      "touched_pages": [
+        60964864,
+        60960768,
+        60956672,
+        60952576
+      ],
+      "heap": 4639588544,
+      "peak_aligned_used_bytes": 25272,
+      "phase_peaks": {
+        "boot": 25272
+      },
+      "last_value": 25272,
+      "pending_writer": null,
+      "coverage_writes": 6,
+      "post_events": 5,
+      "initial_counter": 0,
+      "watch_completed_post": 4631441601,
+      "stack_write_attempt_depth_bound_bytes": [
+        12289,
+        16384
+      ],
+      "scope": "aligned allocator event peak; CPU stack write-attempt4KiB bounds, NOT exact stack/RSS/kernel-stack peak"
+    },
+    {
+      "id": 2,
+      "role": "foreground-terminal",
+      "base": 4697620480,
+      "cr3": 364544,
+      "initial_rsp": 61116416,
+      "stack_top": 61116416,
+      "stack_bottom": 61050880,
+      "stack_pages": {
+        "61050880": 61050880,
+        "61054976": 61054976,
+        "61059072": 61059072,
+        "61063168": 61063168,
+        "61067264": 61067264,
+        "61071360": 61071360,
+        "61075456": 61075456,
+        "61079552": 61079552,
+        "61083648": 61083648,
+        "61087744": 61087744,
+        "61091840": 61091840,
+        "61095936": 61095936,
+        "61100032": 61100032,
+        "61104128": 61104128,
+        "61108224": 61108224,
+        "61112320": 61112320
+      },
+      "touched_pages": [
+        61112320,
+        61108224,
+        61104128,
+        61100032,
+        61095936,
+        61091840,
+        61087744,
+        61083648,
+        61079552,
+        61075456,
+        61071360,
+        61067264
+      ],
+      "heap": 4706697408,
+      "peak_aligned_used_bytes": 67544,
+      "phase_peaks": {
+        "terminal-launch": 33632,
+        "finite-stream": 67544,
+        "endless-collected-cat": 56176
+      },
+      "last_value": 42112,
+      "pending_writer": null,
+      "coverage_writes": 3162,
+      "post_events": 3161,
+      "initial_counter": 0,
+      "watch_completed_post": 4698550465,
+      "stack_write_attempt_depth_bound_bytes": [
+        45057,
+        49152
+      ],
+      "scope": "aligned allocator event peak; CPU stack write-attempt4KiB bounds, NOT exact stack/RSS/kernel-stack peak"
+    }
+  ],
+  "focus_base": 4697620480,
+  "heap_post_event_count": 3166,
+  "observer_pause_ns": 32820014096,
+  "stack_write_attempts": [
+    {
+      "monotonic_ns": 431452783751406,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 60964864,
+      "page_pa": 60964864,
+      "pc": 4631097424,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 36,
+          "pte": 9223372036915740775,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431452788523784,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 60960768,
+      "page_pa": 60960768,
+      "pc": 4631097449,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 35,
+          "pte": 9223372036915736679,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431452793278424,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 60956672,
+      "page_pa": 60956672,
+      "pc": 4631097464,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 34,
+          "pte": 9223372036915732583,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431452809148598,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 60952576,
+      "page_pa": 60952576,
+      "pc": 4631450590,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 33,
+          "pte": 9223372036915728487,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431504217999898,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 61112320,
+      "page_pa": 61112320,
+      "pc": 4698206288,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 72,
+          "pte": 9223372036915888231,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431504222970366,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 61108224,
+      "page_pa": 61108224,
+      "pc": 4698206313,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 71,
+          "pte": 9223372036915884135,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431504227936962,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 61104128,
+      "page_pa": 61104128,
+      "pc": 4698206328,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 70,
+          "pte": 9223372036915880039,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431504243668189,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 61100032,
+      "page_pa": 61100032,
+      "pc": 4698559454,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 69,
+          "pte": 9223372036915875943,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431504353345686,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 61095936,
+      "page_pa": 61095936,
+      "pc": 4698562504,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 68,
+          "pte": 9223372036915871847,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431504358489481,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 61091840,
+      "page_pa": 61091840,
+      "pc": 4698562519,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 67,
+          "pte": 9223372036915867751,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431504363824220,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 61087744,
+      "page_pa": 61087744,
+      "pc": 4698589289,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 66,
+          "pte": 9223372036915863655,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431504651807841,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 61083648,
+      "page_pa": 61083648,
+      "pc": 4698562519,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 65,
+          "pte": 9223372036915859559,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431504657292716,
+      "instance": 2,
+      "phase": "terminal-launch",
+      "page_va": 61079552,
+      "page_pa": 61079552,
+      "pc": 4698589289,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 64,
+          "pte": 9223372036915855463,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431548051159280,
+      "instance": 2,
+      "phase": "finite-stream",
+      "page_va": 61075456,
+      "page_pa": 61075456,
+      "pc": 4698562519,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 63,
+          "pte": 9223372036915851367,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431548056732778,
+      "instance": 2,
+      "phase": "finite-stream",
+      "page_va": 61071360,
+      "page_pa": 61071360,
+      "pc": 4698589289,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 62,
+          "pte": 9223372036915847271,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 431548615287752,
+      "instance": 2,
+      "phase": "finite-stream",
+      "page_va": 61067264,
+      "page_pa": 61067264,
+      "pc": 4698589289,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 29,
+          "pte": 98062375,
+          "shift": 21
+        },
+        {
+          "table_pa": 98062336,
+          "index": 61,
+          "pte": 9223372036915843175,
+          "shift": 12
+        }
+      ]
+    }
+  ],
+  "snapshots": [
+    {
+      "phase": "initial-prompt",
+      "instance": 2,
+      "monotonic_ns": 431514179161169,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 33632,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "instance": 2,
+      "monotonic_ns": 431524242079188,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 33632,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    },
+    {
+      "phase": "finite-stream",
+      "instance": 2,
+      "monotonic_ns": 431600300103623,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 41920,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    },
+    {
+      "phase": "collected-cat-buffered",
+      "instance": 2,
+      "monotonic_ns": 431637036569086,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 54512,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    }
+  ],
+  "draw_events": [],
+  "resident_bytes": null,
+  "exact_stack_peak_bytes": null,
+  "kernel_stack_peak_bytes": null,
+  "historical_runtime_baseline": null
+}

@@ -1,0 +1,69 @@
+test_actual_client_keeps_atomic_receive_and_original_guard_resume (test_all.TimeoutRetention.test_actual_client_keeps_atomic_receive_and_original_guard_resume) ... ok
+test_all_wait_error_types_rethrow_and_keep_last_already_observed_frame_read_epoch (test_all.TimeoutRetention.test_all_wait_error_types_rethrow_and_keep_last_already_observed_frame_read_epoch) ... ok
+test_current_prefix_alone_never_bridges_lost_stable_row_coverage (test_all.TimeoutRetention.test_current_prefix_alone_never_bridges_lost_stable_row_coverage) ... ok
+test_nonfinite_status_preserves_original_nonzero_status_path (test_all.TimeoutRetention.test_nonfinite_status_preserves_original_nonzero_status_path) ... ok
+test_only_qualified_known_banner_is_opaque_preoutput_history (test_all.TimeoutRetention.test_only_qualified_known_banner_is_opaque_preoutput_history) ... ok
+test_retention_decodes_only_last_frame_without_guest_capture (test_all.TimeoutRetention.test_retention_decodes_only_last_frame_without_guest_capture) ... ok
+test_source_geometry_complete_ordered_vs_missed_output (test_all.RenderedTemporalProof.test_source_geometry_complete_ordered_vs_missed_output) ... ok
+test_commit_identity_is_frozen_and_ledger_cannot_be_rearmed (test_temporal.TemporalLedgerTests.test_commit_identity_is_frozen_and_ledger_cannot_be_rearmed) ... ok
+test_commit_must_prove_exact_single_enter_not_other_input (test_temporal.TemporalLedgerTests.test_commit_must_prove_exact_single_enter_not_other_input) ... ok
+test_complete_output_without_new_prompt_is_not_completion (test_temporal.TemporalLedgerTests.test_complete_output_without_new_prompt_is_not_completion) ... ok
+test_cursor_retreat_without_scroll_cannot_append (test_temporal.TemporalLedgerTests.test_cursor_retreat_without_scroll_cannot_append) ... ok
+test_dropped_middle_captures_cannot_reconstruct_hidden_records (test_temporal.TemporalLedgerTests.test_dropped_middle_captures_cannot_reconstruct_hidden_records) ... ok
+test_duplicate_cell_generation_row_cannot_replace_missing_row (test_temporal.TemporalLedgerTests.test_duplicate_cell_generation_row_cannot_replace_missing_row) ... ok
+test_duplicate_complete_frame_is_not_two_distinct_samples (test_temporal.TemporalLedgerTests.test_duplicate_complete_frame_is_not_two_distinct_samples) ... ok
+test_dynamic_count_mismatch_rejects_even_when_both_frames_have_rows (test_temporal.TemporalLedgerTests.test_dynamic_count_mismatch_rejects_even_when_both_frames_have_rows) ... ok
+test_dynamic_per_frame_counts_and_long_metadata_are_not_fixed_eight (test_temporal.TemporalLedgerTests.test_dynamic_per_frame_counts_and_long_metadata_are_not_fixed_eight) ... ERROR
+test_exact_multiple_of_79_record_boundaries_preserve_json_identity (test_temporal.TemporalLedgerTests.test_exact_multiple_of_79_record_boundaries_preserve_json_identity) ... ok
+test_frequent_partial_rows_and_repeated_captures_do_not_duplicate_records (test_temporal.TemporalLedgerTests.test_frequent_partial_rows_and_repeated_captures_do_not_duplicate_records) ... ok
+test_fresh_bare_prompt_has_no_two_frame_evidence (test_temporal.TemporalLedgerTests.test_fresh_bare_prompt_has_no_two_frame_evidence) ... ok
+test_full_retained_two_frame_62_physical_row_trace_then_own_status_epoch (test_temporal.TemporalLedgerTests.test_full_retained_two_frame_62_physical_row_trace_then_own_status_epoch) ... ok
+test_identical_typed_snapshot_never_appends_or_accepts (test_temporal.TemporalLedgerTests.test_identical_typed_snapshot_never_appends_or_accepts) ... ok
+test_incomplete_or_dropped_end_is_not_success (test_temporal.TemporalLedgerTests.test_incomplete_or_dropped_end_is_not_success) ... ok
+test_malformed_json_even_with_final_prompt_cannot_accept (test_temporal.TemporalLedgerTests.test_malformed_json_even_with_final_prompt_cannot_accept) ... ok
+test_missing_end_and_out_of_order_begin_row_end_reject (test_temporal.TemporalLedgerTests.test_missing_end_and_out_of_order_begin_row_end_reject) ... ok
+test_missing_row_is_detected_by_actual_total_cells (test_temporal.TemporalLedgerTests.test_missing_row_is_detected_by_actual_total_cells) ... ok
+test_narrow_79_column_boundaries_preserve_end_and_next_begin (test_temporal.TemporalLedgerTests.test_narrow_79_column_boundaries_preserve_end_and_next_begin) ... ok
+test_non_ascii_or_overwide_typed_rows_are_not_exact_screen_evidence (test_temporal.TemporalLedgerTests.test_non_ascii_or_overwide_typed_rows_are_not_exact_screen_evidence) ... ok
+test_observation_timestamps_cannot_go_backwards (test_temporal.TemporalLedgerTests.test_observation_timestamps_cannot_go_backwards) ... ok
+test_one_frame_with_command_frames_two_is_still_incomplete (test_temporal.TemporalLedgerTests.test_one_frame_with_command_frames_two_is_still_incomplete) ... ok
+test_only_second_frame_and_prompt_do_not_prove_first (test_temporal.TemporalLedgerTests.test_only_second_frame_and_prompt_do_not_prove_first) ... ok
+test_precommit_timestamp_does_not_attribute_complete_output (test_temporal.TemporalLedgerTests.test_precommit_timestamp_does_not_attribute_complete_output) ... ok
+test_repeated_long_metadata_with_two_plausible_scrolls_fails_closed (test_temporal.TemporalLedgerTests.test_repeated_long_metadata_with_two_plausible_scrolls_fails_closed) ... ok
+test_repeated_row_alignment_with_multiple_valid_scrolls_is_unproved (test_temporal.TemporalLedgerTests.test_repeated_row_alignment_with_multiple_valid_scrolls_is_unproved) ... ok
+test_required_begin_row_end_fields_cannot_be_inferred (test_temporal.TemporalLedgerTests.test_required_begin_row_end_fields_cannot_be_inferred) ... ok
+test_rewriting_a_stable_row_is_unknown_alignment_not_output (test_temporal.TemporalLedgerTests.test_rewriting_a_stable_row_is_unknown_alignment_not_output) ... ok
+test_second_frame_reusing_sample_identity_rejects (test_temporal.TemporalLedgerTests.test_second_frame_reusing_sample_identity_rejects) ... ok
+test_single_coalesced_62_row_jump_is_observability_incomplete (test_temporal.TemporalLedgerTests.test_single_coalesced_62_row_jump_is_observability_incomplete) ... ok
+test_stale_old_prompt_screen_never_accepts (test_temporal.TemporalLedgerTests.test_stale_old_prompt_screen_never_accepts) ... ok
+test_status_needs_own_exact_zero_and_subsequent_prompt (test_temporal.TemporalLedgerTests.test_status_needs_own_exact_zero_and_subsequent_prompt) ... ok
+test_status_zero_and_prompt_do_not_replace_finite_frame_evidence (test_temporal.TemporalLedgerTests.test_status_zero_and_prompt_do_not_replace_finite_frame_evidence) ... ok
+test_status_zero_in_prior_history_is_not_own_epoch_output (test_temporal.TemporalLedgerTests.test_status_zero_in_prior_history_is_not_own_epoch_output) ... ok
+test_unarmed_even_complete_ordered_trace_never_accepts (test_temporal.TemporalLedgerTests.test_unarmed_even_complete_ordered_trace_never_accepts) ... ok
+test_unreadable_capture_recovers_only_with_retained_unique_overlap (test_temporal.TemporalLedgerTests.test_unreadable_capture_recovers_only_with_retained_unique_overlap) ... ok
+test_unreadable_then_nonoverlapping_jump_never_recovers_missing_data (test_temporal.TemporalLedgerTests.test_unreadable_then_nonoverlapping_jump_never_recovers_missing_data) ... ok
+test_wrong_cursor_rejects_even_when_visible_final_prompt_is_exact (test_temporal.TemporalLedgerTests.test_wrong_cursor_rejects_even_when_visible_final_prompt_is_exact) ... ok
+test_wrong_typed_command_cursor_and_wrapped_command_cannot_arm (test_temporal.TemporalLedgerTests.test_wrong_typed_command_cursor_and_wrapped_command_cannot_arm) ... ok
+
+======================================================================
+ERROR: test_dynamic_per_frame_counts_and_long_metadata_are_not_fixed_eight (test_temporal.TemporalLedgerTests.test_dynamic_per_frame_counts_and_long_metadata_are_not_fixed_eight)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-gui-temporal/test_temporal.py", line 387, in test_dynamic_per_frame_counts_and_long_metadata_are_not_fixed_eight
+    self.assert_valid_lines(encode(self.dynamic_records()), chunk=23)
+  File "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-gui-temporal/test_temporal.py", line 139, in assert_valid_lines
+    results = self.replay(ledger, captures)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-gui-temporal/test_temporal.py", line 120, in replay
+    results.append(ledger.observe(rows, cursor, stamp))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-gui-temporal/temporal.py", line 223, in observe
+    self._fail('ambiguous row overlap' if shifts else
+  File "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-gui-temporal/temporal.py", line 108, in _fail
+    raise OracleIncomplete('oracle-observability-incomplete: ' + reason)
+temporal.OracleIncomplete: oracle-observability-incomplete: ambiguous row overlap
+
+----------------------------------------------------------------------
+Ran 46 tests in 3.321s
+
+FAILED (errors=1)

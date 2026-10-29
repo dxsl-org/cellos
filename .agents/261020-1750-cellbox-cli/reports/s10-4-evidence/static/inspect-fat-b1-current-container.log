@@ -1,0 +1,131 @@
+Checking: /home/dmin/cellos/kernel/src/embedded-x86_64/kernel_fs.img
+Size: 16777216 bytes (16384 KB)
+Sig: 55aa (should be 55aa)
+FS type: b'  FAT16 '
+BPS=512 SPC=1 RES=1 FAT_CNT=2 ROOT_ENT=512 FAT_SZ=160
+Root dir at 164352, Data area at 180736
+  --- root ---
+    LFN[1] 'apps'
+    SFN APPS~1        -> LFN 'apps'  attr=10 clus=2 sz=0
+    LFN[1] 'bin'
+    SFN BIN~1         -> LFN 'bin'  attr=10 clus=4 sz=0
+    LFN[1] 'data'
+    SFN DATA~1        -> LFN 'data'  attr=10 clus=8 sz=0
+    LFN[1] 'etc'
+    SFN ETC~1         -> LFN 'etc'  attr=10 clus=9 sz=0
+    SFN POLICY.BIN           attr=20 clus=11 sz=1519
+    LFN[1] 'welcome.md'
+    SFN WELCOM~1.MD   -> LFN 'welcome.md'  attr=20 clus=25422 sz=402
+apps dir (SFN='APPS~1') at cluster 2, offset 180736
+  --- /apps ---
+    SFN .                    attr=10 clus=2 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'chrome'
+    SFN CHROME~1      -> LFN 'chrome'  attr=10 clus=3 sz=0
+chrome dir (SFN='CHROME~1') at cluster 3, offset 181248
+  --- /apps/chrome ---
+    SFN .                    attr=10 clus=3 sz=0
+    SFN ..                   attr=10 clus=2 sz=0
+    LFN[1] 'chrome.lua'
+    SFN CHROME~1.LUA  -> LFN 'chrome.lua'  attr=20 clus=14 sz=866
+    LFN[1] 'chrome.toml'
+    SFN CHROME~2.TOM  -> LFN 'chrome.toml'  attr=20 clus=16 sz=787
+bin dir (SFN='BIN~1') at cluster 4, offset 181760
+  --- /bin ---
+    SFN .                    attr=10 clus=4 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'ahci'
+    SFN AHCI~1        -> LFN 'ahci'  attr=20 clus=18 sz=44720
+    LFN[1] 'cat'
+    SFN CAT~1         -> LFN 'cat'  attr=20 clus=106 sz=20976
+    LFN[1] 'cellbox'
+    SFN CELLBO~1      -> LFN 'cellbox'  attr=20 clus=147 sz=88576
+    LFN[1] 'chrome'
+    SFN CHROME~1      -> LFN 'chrome'  attr=20 clus=320 sz=1147232
+    LFN[1] 'compositor'
+    SFN COMPOS~1      -> LFN 'compositor'  attr=20 clus=2561 sz=112064
+    LFN[1] 'config'
+    SFN CONFIG~1      -> LFN 'config'  attr=20 clus=2780 sz=42912
+    LFN[1] 'desktop'
+    SFN DESKTO~1      -> LFN 'desktop'  attr=20 clus=2864 sz=1168336
+    LFN[1] 'e1000'
+    SFN E1000~1       -> LFN 'e1000'  attr=20 clus=5146 sz=29672
+    LFN[1] 'echo'
+    SFN ECHO~1        -> LFN 'echo'  attr=20 clus=5204 sz=20952
+    LFN[1] 'fb-console'
+    SFN FB-CON~1      -> LFN 'fb-console'  attr=20 clus=5245 sz=588592
+    LFN[1] 'files'
+    SFN FILES~1       -> LFN 'files'  attr=20 clus=6395 sz=1178056
+    LFN[1] 'igb'
+    SFN IGB~1         -> LFN 'igb'  attr=20 clus=8696 sz=39424
+    LFN[1] 'input'
+    SFN INPUT~1       -> LFN 'input'  attr=20 clus=8773 sz=42288
+    LFN[1] 'kill'
+    SFN KILL~1        -> LFN 'kill'  attr=20 clus=8856 sz=21096
+    LFN[1] 'ls'
+    SFN LS~1          -> LFN 'ls'  attr=20 clus=8898 sz=20952
+    LFN[1] 'net'
+    SFN NET~1         -> LFN 'net'  attr=20 clus=8939 sz=806144
+    LFN[1] 'nvme'
+    SFN NVME~1        -> LFN 'nvme'  attr=20 clus=10514 sz=36096
+    LFN[1] 'ocel'
+    SFN OCEL~1        -> LFN 'ocel'  attr=20 clus=10585 sz=4326184
+    LFN[1] 'ocel-quickjs'
+    SFN OCEL-Q~1      -> LFN 'ocel-quickjs'  attr=20 clus=19035 sz=919272
+    LFN[1] 'platform'
+    SFN PLATFO~1      -> LFN 'platform'  attr=20 clus=20831 sz=38488
+    LFN[1] 'ps'
+    SFN PS~1          -> LFN 'ps'  attr=20 clus=20907 sz=15432
+    LFN[1] 'serial'
+    SFN SERIAL~1      -> LFN 'serial'  attr=20 clus=20938 sz=35752
+    LFN[1] 'shell'
+    SFN SHELL~1       -> LFN 'shell'  attr=20 clus=21008 sz=881120
+    LFN[1] 'sshd'
+    SFN SSHD~1        -> LFN 'sshd'  attr=20 clus=22729 sz=197048
+    LFN[1] 'terminal'
+    SFN TERMIN~1      -> LFN 'terminal'  attr=20 clus=23114 sz=595032
+    LFN[2] ''
+    LFN[1] 'tier2-exploit'
+    SFN TIER2-~1      -> LFN 'tier2-exploit'  attr=20 clus=24277 sz=28904
+    LFN[1] 'tier2-smoke'
+    SFN TIER2-~2      -> LFN 'tier2-smoke'  attr=20 clus=24334 sz=34264
+    LFN[1] 'vfs'
+    SFN VFS~1         -> LFN 'vfs'  attr=20 clus=24401 sz=425624
+    LFN[1] 'vm-runner'
+    SFN VM-RUN~1      -> LFN 'vm-runner'  attr=20 clus=25233 sz=38848
+    LFN[1] 'xhci'
+    SFN XHCI~1        -> LFN 'xhci'  attr=20 clus=25309 sz=52712
+data dir (SFN='DATA~1') at cluster 8, offset 183808
+  --- /data ---
+    SFN .                    attr=10 clus=8 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[2] 'html'
+    LFN[1] 'ocel-js-demo.'
+    SFN OCEL-J~1.HTM  -> LFN 'ocel-js-demo.html'  attr=20 clus=25412 sz=1263
+    LFN[2] 'eb.css'
+    LFN[1] 'ocel-native-w'
+    SFN OCEL-N~1.CSS  -> LFN 'ocel-native-web.css'  attr=20 clus=25415 sz=303
+    LFN[2] 'eb.html'
+    LFN[1] 'ocel-native-w'
+    SFN OCEL-N~2.HTM  -> LFN 'ocel-native-web.html'  attr=20 clus=25416 sz=402
+    LFN[2] 'eb.js'
+    LFN[1] 'ocel-native-w'
+    SFN OCEL-N~3.JS   -> LFN 'ocel-native-web.js'  attr=20 clus=25417 sz=388
+etc dir (SFN='ETC~1') at cluster 9, offset 184320
+  --- /etc ---
+    SFN .                    attr=10 clus=9 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellos'
+    SFN CELLOS~1      -> LFN 'cellos'  attr=10 clus=10 sz=0
+cellos dir (SFN='CELLOS~1') at cluster 10, offset 184832
+  --- /etc/cellos ---
+    SFN .                    attr=10 clus=10 sz=0
+    SFN ..                   attr=10 clus=9 sz=0
+    LFN[2] ''
+    LFN[1] 'autoload.toml'
+    SFN AUTOLO~1.TOM  -> LFN 'autoload.toml'  attr=20 clus=25418 sz=281
+    LFN[2] ''
+    LFN[1] 'services.toml'
+    SFN SERVIC~1.TOM  -> LFN 'services.toml'  attr=20 clus=25419 sz=703
+    LFN[1] 'system.toml'
+    SFN SYSTEM~1.TOM  -> LFN 'system.toml'  attr=20 clus=25421 sz=128

@@ -1,0 +1,94 @@
+{
+  "stage": "S10-4",
+  "status": "STOP_B2_PREREQUISITE",
+  "source": {
+    "status": "STOP_B2_PREREQUISITE",
+    "candidate": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+    "baseline_head": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+    "missing_workspace_members": [
+      "cells/apps/vm-runner"
+    ],
+    "tracked_tree_entries": {
+      "cells/apps/vm-runner": ""
+    },
+    "commands": [
+      {
+        "command": [
+          "rustc",
+          "+nightly-2026-05-01",
+          "-Vv"
+        ],
+        "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+        "log": "/tmp/cellbox-s10-4/logs/b2-rustc.log",
+        "returncode": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "+nightly-2026-05-01",
+          "-V"
+        ],
+        "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+        "log": "/tmp/cellbox-s10-4/logs/b2-cargo.log",
+        "returncode": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "+nightly-2026-05-01",
+          "build",
+          "--release",
+          "--locked",
+          "--target",
+          "x86_64-unknown-none",
+          "-Z",
+          "build-std=core,alloc",
+          "-p",
+          "app-shell",
+          "-p",
+          "app-sys-tools",
+          "--bin",
+          "app-shell",
+          "--bin",
+          "ls",
+          "--bin",
+          "cat",
+          "--bin",
+          "echo",
+          "--bin",
+          "ps",
+          "--bin",
+          "kill"
+        ],
+        "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+        "log": "/tmp/cellbox-s10-4/logs/b2-build.log",
+        "returncode": 101
+      }
+    ],
+    "b2_build_exit": 101,
+    "b2_signed_unsigned_elf_results": null,
+    "runtime_runs": 0,
+    "product_or_worktree_source_edits": false,
+    "scope_change_authorized": false,
+    "unmeasured": [
+      "per-ELF matched B2 sizes",
+      "new startup",
+      "heap/stack runtime high-water",
+      "idle redraw cost"
+    ],
+    "disposition": "Await explicit Main/user choice; no changed revision, stub member, manifest removal, rebuild, signing bypass, candidate change, acceptance flip or promotion."
+  },
+  "preservation": {
+    "unchanged": true,
+    "files": 546,
+    "canonical_files": 469,
+    "changed": []
+  },
+  "new_footprint_measurements": false,
+  "new_runtime_runs": 0,
+  "result_cp2_requested": false,
+  "cbx27_met": false,
+  "phase10_criterion4_met": false,
+  "canonical_promotion": false,
+  "worktree_retained_pending_disposition": true
+}

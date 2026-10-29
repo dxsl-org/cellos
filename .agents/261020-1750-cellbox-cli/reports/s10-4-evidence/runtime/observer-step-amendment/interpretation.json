@@ -1,0 +1,147 @@
+{
+  "status": "PROOF_REJECTED_BOUNDARY_STOP",
+  "checks": {
+    "one_candidate_run": true,
+    "no_guest_write_or_Z0_injection_packets": true,
+    "at_most_one_decision_and_additional_scope": true,
+    "at_most_one_additional_native_packet": true,
+    "no_continuation_after_terminal_native_step": true,
+    "no_recurrence_authorized": true,
+    "all_execute_watch_censuses_unchanged": true,
+    "canonical_candidate_userVMX_unchanged": true,
+    "previous_diagnostic_unchanged": true,
+    "old_compressed_trace_unchanged": true,
+    "executing_host_sources_unchanged": true
+  },
+  "native_step_packets": 1,
+  "native_scope_records": 1,
+  "no_progress_records": 1,
+  "additional_native_packets": 0,
+  "original_no_progress_failures_preserved": true,
+  "full_observed_workload_complete": false,
+  "recurrence_authorized": false,
+  "root_exit_request_origin": "UNPROVEN",
+  "forbidden_packets": [],
+  "post_terminal_controls": [],
+  "decision": {
+    "first_ordinal": 1,
+    "site": 4328521728,
+    "start_ns": 387249781516221,
+    "extra_steps_used": 0,
+    "outcome": "PROOF_REJECTED_BOUNDARY_STOP",
+    "error": "Stop: write-watch coverage missing or changed",
+    "end_ns": 387249783029643
+  },
+  "first_failure": {
+    "ordinal": 1,
+    "addr": 4328521728,
+    "phase": "boot",
+    "before": {
+      "rip": 4328521728,
+      "eflags": 514,
+      "cs": 35,
+      "cr3": 364544,
+      "rsp": 37699584,
+      "instruction_read_address": 4328521728,
+      "instruction_bytes": "4883e4f0488d1dfd0305004c8d25f603",
+      "stop": "T05thread:01;",
+      "sstepbits": "ENABLE=1,NOIRQ=2,NOTIMER=4",
+      "sstep": "0x7",
+      "tf": false,
+      "rf": false
+    },
+    "after": {
+      "rip": 4328521728,
+      "eflags": 514,
+      "cs": 35,
+      "cr3": 364544,
+      "rsp": 37699584,
+      "instruction_read_address": 4328521728,
+      "instruction_bytes": "4883e4f0488d1dfd0305004c8d25f603",
+      "stop": "T05thread:01;",
+      "sstepbits": "ENABLE=1,NOIRQ=2,NOTIMER=4",
+      "sstep": "0x7",
+      "tf": false,
+      "rf": false
+    },
+    "qmp_before": {
+      "cpus": [
+        {
+          "thread-id": 2137775,
+          "props": {
+            "core-id": 0,
+            "thread-id": 0,
+            "socket-id": 0
+          },
+          "qom-path": "/machine/unattached/device[0]",
+          "cpu-index": 0,
+          "target": "x86_64"
+        }
+      ],
+      "status": {
+        "status": "debug",
+        "singlestep": false,
+        "running": false
+      }
+    },
+    "qmp_after": {
+      "cpus": [
+        {
+          "thread-id": 2137775,
+          "props": {
+            "core-id": 0,
+            "thread-id": 0,
+            "socket-id": 0
+          },
+          "qom-path": "/machine/unattached/device[0]",
+          "cpu-index": 0,
+          "target": "x86_64"
+        }
+      ],
+      "status": {
+        "status": "debug",
+        "singlestep": false,
+        "running": false
+      }
+    },
+    "error": "RspError: single native instruction did not advance current breakpoint",
+    "capture_error": null,
+    "trace": {
+      "complete_ordered_scope": true,
+      "line_count": 31,
+      "command_tid": 2137771,
+      "stop": "T05thread:01;",
+      "tb_entries": [
+        {
+          "tid": 2137775,
+          "time": "1793201717.782238",
+          "event": "exec_tb",
+          "text": "tb:0x74ca18000040 pc=0x102000000"
+        }
+      ],
+      "tb_exits": [
+        {
+          "tid": 2137775,
+          "time": "1793201717.782243",
+          "event": "exec_tb_exit",
+          "text": "tb:0x74ca18000040 flags=0x3"
+        }
+      ],
+      "zero_tb_dispatch_observed": false,
+      "retirement_proven_by_trace_alone": false,
+      "interpretation": "TB dispatch observed, not affirmative instruction-retirement proof.",
+      "offset": 66357,
+      "end_offset": 68317,
+      "raw_sha256": "9534b50d9b2f5d5c8634d5c4f4f088a569a84f1796f10ff270f334783f95bee5"
+    }
+  },
+  "controls_after_first_no_progress_native": [],
+  "next_gate": "Explicit recurrence/workload-continuation CP1 remains required; this approval permits only the one global additional operation and diagnostic stop. No further step, candidate run, desktop or full qualification is inferred.",
+  "evidence_hashes": {
+    "summary.json": "8bd262a6d90133be64b6c6e9bc3f668f27f9807700f5d2ba0e61b71af5b03b28",
+    "evidence/steps.jsonl": "fe70031f2e3660c1d966ff2a0e623aa5c2ddd0e8f8563752c1aa3903def0673f",
+    "evidence/rsp-traffic.jsonl": "5593c4f15fccb6ef06e204e589e5457571afcdd561b8c32bee6f104bef23b28e",
+    "evidence/qmp-queries.jsonl": "970483970d660d24df4a498378d312cd738b082ed9d0e601b1d01573c658767e",
+    "evidence/qemu-trace.log": "c0cc94518d8c25671e1d2428f64c521293652f2260535cd698b983a6af48b3fa"
+  }
+}

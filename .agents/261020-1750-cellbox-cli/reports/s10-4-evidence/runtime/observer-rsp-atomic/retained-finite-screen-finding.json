@@ -1,0 +1,132 @@
+{
+  "scope": "Retained-only actual S10-4.14 finite-screen STOP; no predicate edit, rerun, new screenshot or guest control",
+  "actual_error": "Stop: timeout waiting for finite-stream: read screen",
+  "actual_boundary": "Finite original command typed-line exact pixel assertion passed, Enter batch accepted by emulator, then original120s read-screen deadline expires before original acceptance predicate succeeds. No finite status, complete stream result or later workload phase measured.",
+  "last_GUI_batch": {
+    "id": 55,
+    "payload": {
+      "execute": "input-send-event",
+      "arguments": {
+        "events": [
+          {
+            "type": "key",
+            "data": {
+              "down": true,
+              "key": {
+                "type": "qcode",
+                "data": "ret"
+              }
+            }
+          },
+          {
+            "type": "key",
+            "data": {
+              "down": false,
+              "key": {
+                "type": "qcode",
+                "data": "ret"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "commit_count": 1,
+    "outcome": "COMMITTED",
+    "start": 424326.049945704,
+    "finish": 424326.051057351,
+    "deadline": 424331.049945704
+  },
+  "retained_foreground_heap_progress": {
+    "finite_post_events": 2012,
+    "first_ns": 424302255020586,
+    "last_ns": 424358669565335,
+    "last_value": 41880,
+    "scope": "Allocator events are observer progress only, not command output/frame count or completion proxy"
+  },
+  "source_acceptance_predicate": {
+    "call": "common.py205 Surface.command finite-stream uses120s",
+    "read_until": "phase10_canonical_drive.py1067-1097 command_read types/validates command, sendsEnter, polls read_screen and at_fresh_prompt; final screenshot saved only on success1098",
+    "requirements": "at_fresh_prompt1080-1083 requires readable exact fresh prompt/cursor AND original typed command still present in rows[:-1]",
+    "possible_false_negative": "Long collected JSON output can scroll the command echo out of visible Terminal rows; this static predicate then rejects even a real fresh prompt. This is a POSSIBLE host oracle issue, not proof of what the missing final screenshot showed.",
+    "failed_last_observation_retention": "common.CheckedDesk.wait_for73-79 raises common.Stop, while read_until1095 catches phase04 StepFailed only. Last local read value is not serialized on this path. Proof.grab303-315 deletes temporary dump after loading; no timeout screenshot remains.",
+    "what_cannot_be_concluded": "Cannot distinguish timeout due guest still running, no fresh prompt, unreadable/scrolled final screen, false predicate, or timing overhead from retained screens. Do not label command success or product failure."
+  },
+  "runtime_fixes_exercised": {
+    "atomic_receive": {
+      "validated_pending_frames": 54880,
+      "decoded_packet_dispatches": 54880,
+      "positive_ACK_attempts": 54880,
+      "pending_at_end": [],
+      "terminal_wire_errors": [],
+      "scope": "One pending-frame record per validated frame; packet_rx after successful ACK. ACK-attempt log precedes send and alone never proves delivery.",
+      "complete_ACK_dispatch_counts_match": true
+    },
+    "GUI": {
+      "batch_count": 55,
+      "committed_batches": 55,
+      "exact_pre_dispatch_rejections": 0,
+      "batches_frozen_during_paused_gate": 2,
+      "natural_resume_epoch": 2065,
+      "ordinary_RSP_continue_packets": 2065
+    },
+    "recurring_events": [
+      {
+        "event_id": 1,
+        "phase": "finite-stream",
+        "site": "0x1180e30c1",
+        "first_ordinal": 1418,
+        "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+        "extra_steps_used": 1,
+        "terminal_latch_cleared": true,
+        "extra_scope_ordinals": [
+          1419
+        ],
+        "zero_retirement_proof_recomputed": true,
+        "raw_sha256": "afb11542effc0c9884271ddb6484efbff78716e9d889084141e299601451eb46",
+        "empty_watch_expected": false,
+        "additional_before_rip": "0x1180e30c1",
+        "additional_after_rip": "0x1180e30c5",
+        "additional_rip_delta": 4,
+        "additional_returned_stop": "T05thread:01;",
+        "additional_error": null,
+        "capture_error": null
+      },
+      {
+        "event_id": 2,
+        "phase": "finite-stream",
+        "site": "0x1180e2f16",
+        "first_ordinal": 1434,
+        "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+        "extra_steps_used": 1,
+        "terminal_latch_cleared": true,
+        "extra_scope_ordinals": [
+          1435
+        ],
+        "zero_retirement_proof_recomputed": true,
+        "raw_sha256": "38b1407f7576424f9ad5ec672438c6cf2fcdcd26cf867f5265a82e8cc5a61b3a",
+        "empty_watch_expected": false,
+        "additional_before_rip": "0x1180e2f16",
+        "additional_after_rip": "0x1180e2f17",
+        "additional_rip_delta": 1,
+        "additional_returned_stop": "T05thread:01;",
+        "additional_error": null,
+        "capture_error": null
+      }
+    ]
+  },
+  "next_gate_not_implemented": [
+    "Keep actual partial STOP and prior/full-metric acceptance ceilings; no budget increase or automatic rerun.",
+    "If further investigation is approved, a host-only contract-correct finite GUI oracle must separately prove bounded two-frame JSON result, exitstatus/new prompt without requiring scrolled-off echo, preserve launch/pixel negativecontrols and original120s deadline, and retain last raw screen plus parsed read on ALL timeout exception types.",
+    "Offline deterministic renderer/transcript tests should first establish whether the current visible-echo predicate can falsely reject valid completed long-output screens; historical absent finalscreen cannot be manufactured. Any new desktop execution needs separate explicit approval."
+  ],
+  "preservation": {
+    "unchanged": true,
+    "files": 546,
+    "canonical_files": 469,
+    "changed": [],
+    "previous_archives_unchanged": true,
+    "old_compressed_trace_unchanged": true,
+    "host_source_changed": []
+  }
+}

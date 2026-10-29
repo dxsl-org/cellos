@@ -1,0 +1,7 @@
+{
+  "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/phase-10-s0-proposal.md",
+  "full_source_sha256": "ee111ad719be4ded21c567203028f0b37807f62f2d434105665c0c13fd6c6210",
+  "excerpt_sha256": "2acb66559884fc8750ff1c5d4a4c7fdda114b833c7f28beb36e7b7019649368b",
+  "approved_state_machine_source": "runtime/observer-input-admission-analysis/next-protocol.json",
+  "scope": "Recorded approved S10-4.13 CP1 before result edits"
+}

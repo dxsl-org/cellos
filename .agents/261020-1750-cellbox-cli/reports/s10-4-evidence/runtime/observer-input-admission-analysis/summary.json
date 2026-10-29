@@ -1,0 +1,42 @@
+{
+  "status": "READ_ONLY_EXACT_PACKAGE_INPUT_REJECTION_ANALYSIS_COMPLETE",
+  "date": "2026-10-29",
+  "confidence": "PROBABLE failure mechanism: observed QMP-error stack trace plus exact-package control-flow analysis plus installed file identity; no new candidate reproduction/test",
+  "installed_package": "qemu-system-x86 1:8.2.2+ds-0ubuntu1.17 (source qemu)",
+  "installed_binary_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+  "installed_binary_dpkg_md5_match": true,
+  "exact_source_binding_resolved": true,
+  "source_binding_evidence": [
+    "Installed dpkg-query and apt-cache metadata identify the exact Ubuntu source version",
+    "Exact-version Launchpad primary DSC fetched; original archive SHA2565e692dd20950a819ff6550cd3974e00319a93f47c0a15f808c58df1a9e4d2478 and Debian archive SHA256bd2e6336e97dce02ac0e769a6833e21865229f5e6a09192dc59d59731854d967 match published DSC",
+    "All128 active quilt patches inspected: none touch input.c, input QAPI, QMP dispatch, main-loop or run-state source snapshots; entire Debian payload only references ui/input.c in historical changelog",
+    "Installed qemu-system-x86_64 MD5 exactly matches dpkg package file checksum; SHA256 matches retained observed binary"
+  ],
+  "primary_source_descriptor": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/qemu/1:8.2.2+ds-0ubuntu1.17/qemu_8.2.2+ds-0ubuntu1.17.dsc",
+  "rejection_decision": "Exact package ui/input.c145-147 sets VM not running and returns BEFORE all event-handler validation150-159, dispatch161-172 and sync174. Therefore ZERO events, including ZERO prefix, from THAT rejected batch are accepted. This does not undo or negate earlier accepted batches in the typed command.",
+  "atomicity": "The handler is a normal noncoroutine/non-OOB QMP command dispatched through the main-loop bottom half/BQL context. Its matching response is authoritative admission, not an external running precheck. RESUME itself is emitted before RUNNING in system/cpus.c713-718.",
+  "raw_failed_GUI_batch_reconstructible": false,
+  "raw_batch_ceiling": "No GUI input-send-event/raw event array was journaled; all583 QMP log requests are observer-only. RSP/TCG selected metadata and UART receive receipts do not encode GUI batch payloads. Idle screenshots precede finite typing; typed-line screenshot occurs only after type_text, where this run failed. Exact key/accepted command prefix remain absent, not inferred from timing.",
+  "safe_to_defer": "YES for a FUTURE fresh attempt's frozen exact pending batch ONLY on the matching structured source-proven pre-dispatch rejection, under the single coordinated observer/QMP gate and fixed bounds. NO replay of this historical absent batch, no accepted-prefix replay, no retry after ambiguous transport/EOF/timeout/other error.",
+  "single_next_protocol": "next-protocol.json specifies one common RLock/condition phase gate excluding input during all-stop/native proof, unchanged original ordinary resume opportunities, target-response atomic commit, exact immutable batch journaling/zero-delivery deferral, max64 attempts within ONE existing5s/caller/900s deadline, terminal ambiguous outcomes and comprehensive deterministic tests before exactlyONE separately approved desktop smoke. Safety proven; liveness under unchanged deadlines not guaranteed.",
+  "headless_separate": "Original10s top interrupt deadline spent at least7.355372922s debugger-stopped; at most2.644627078s not proven stopped. Whole-run103.061082835s handling counter is not pure pause. At least720.853005664s of900s global window remained by conservative bound, but unused global budget never extends expired command deadline. Guest Ctrl-C receipt/counterfactual outcome unproven; no headless run or clock/budget amendment proposed.",
+  "operations_not_performed": [
+    "No candidate execution, guest input, retry, native step or workload resume",
+    "No host runtime/product fix or existing-source edit",
+    "No package installation, source build, test, formatter or code verification",
+    "No existing observer archive, executable source or nested manifest changed",
+    "No project documentation, changelog, git index, commit or push changed in this investigation"
+  ],
+  "source_retention": "Exact DSC and full Debian patch archive,128-patch census, nine relevant original source snapshots and hashes retained here.40MB checksum-matched original source archive remains in /tmp/cellbox-s10-4-input-source-20261029; no full source build/extraction required.",
+  "evidence_files": [
+    "installed-binary-identity.json",
+    "source-downloads.json",
+    "patch-census.json",
+    "patch-series.txt",
+    "source-snapshots.json",
+    "rejection-proof.json",
+    "raw-batch-audit.json",
+    "next-protocol.json"
+  ],
+  "acceptance_ceiling": "All previous actual partial results and CBX27/criterion4/S10-5/canonical/containment blocks unchanged; no CP1 implementation/run or CP2 acceptance inferred."
+}

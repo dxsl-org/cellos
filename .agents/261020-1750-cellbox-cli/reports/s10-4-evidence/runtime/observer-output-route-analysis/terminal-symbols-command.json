@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "nm",
+    "-n",
+    "-S",
+    "-C",
+    "--defined-only",
+    "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "scope": "Static exactELF symbol inspection, no target execution"
+}

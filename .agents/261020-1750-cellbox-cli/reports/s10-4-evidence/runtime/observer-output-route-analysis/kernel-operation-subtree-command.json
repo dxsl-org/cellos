@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "objdump",
+    "-d",
+    "-C",
+    "--start-address=0xffffffff8005fdb0",
+    "--stop-address=0xffffffff8005ff51",
+    "/tmp/cellbox-s10-3d-resume/cand/desktop.kernel.elf"
+  ],
+  "returncode": 0,
+  "stderr": ""
+}

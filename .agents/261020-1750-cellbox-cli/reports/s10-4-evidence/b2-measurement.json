@@ -1,0 +1,517 @@
+{
+  "status": "STOP_B2_CHECKED_SIGNING_F1",
+  "baseline_head": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+  "non_pristine": true,
+  "deviations": [
+    "User-authorized root workspace member vm-runner exclusion only; not in selected compile graph, runtime spawn-string nuance retained.",
+    "Preferred vm-runner lock entry removal impossible: no such entry. Explicitly authorized offline metadata fallback added only local app-chrome/files/terminal0.1.0; none in measured graph. All original lock package blocks byte-identical."
+  ],
+  "original_lock_blocks": 407,
+  "all_existing_lock_blocks_byte_identical": true,
+  "added_local_lock_packages": [
+    "app-chrome",
+    "files",
+    "terminal"
+  ],
+  "registry_version_source_changes": [],
+  "dev_public_key_sha256": "7db0b01f39d179aacf7b03dbd7dd9d71f641598bed40fb9839d3c1e1117e666f",
+  "artifacts": [
+    {
+      "name": "shell",
+      "unsigned": {
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/shell",
+        "bytes": 880992,
+        "sha256": "2951a28b324ebd5e85922f3ba51128811e2fbbe84166c2ab54540b436d82648f",
+        "text_bytes": 744578,
+        "data_bytes": 17960,
+        "bss_bytes": 1048658,
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n 744578\t  17960\t1048658\t1811196\t 1ba2fc\t/tmp/cellbox-s10-4/b2-unsigned/shell\n"
+      },
+      "signed": null,
+      "unsigned_staging_copy_not_signed": true
+    },
+    {
+      "name": "ls",
+      "unsigned": {
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/ls",
+        "bytes": 24424,
+        "sha256": "3a4d5478565c00a3b9d6d97c28f3730cc2add03a20493883b971c48970c0778c",
+        "text_bytes": 7227,
+        "data_bytes": 496,
+        "bss_bytes": 1048625,
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   7227\t    496\t1048625\t1056348\t 101e5c\t/tmp/cellbox-s10-4/b2-unsigned/ls\n"
+      },
+      "signed": null,
+      "unsigned_staging_copy_not_signed": true
+    },
+    {
+      "name": "cat",
+      "unsigned": {
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/cat",
+        "bytes": 24424,
+        "sha256": "959c64e60c7668e13f6f6043ad1bf968ddb710ddf0a4014d113498e353fc507f",
+        "text_bytes": 6727,
+        "data_bytes": 520,
+        "bss_bytes": 1048625,
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   6727\t    520\t1048625\t1055872\t 101c80\t/tmp/cellbox-s10-4/b2-unsigned/cat\n"
+      },
+      "signed": null,
+      "unsigned_staging_copy_not_signed": true
+    },
+    {
+      "name": "echo",
+      "unsigned": {
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/echo",
+        "bytes": 24424,
+        "sha256": "4f25b11d26759227f611a4ec1a6a7f4e3a87ca5bf5eff32d652aa0c1ec60346d",
+        "text_bytes": 6307,
+        "data_bytes": 496,
+        "bss_bytes": 1048625,
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   6307\t    496\t1048625\t1055428\t 101ac4\t/tmp/cellbox-s10-4/b2-unsigned/echo\n"
+      },
+      "signed": null,
+      "unsigned_staging_copy_not_signed": true
+    },
+    {
+      "name": "ps",
+      "unsigned": {
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/ps",
+        "bytes": 15304,
+        "sha256": "c567c9beed845f897b0792c3aadc0fd4a7e84a1a9f449a2e4cb95bfd03e72c49",
+        "text_bytes": 2699,
+        "data_bytes": 320,
+        "bss_bytes": 0,
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   2699\t    320\t      0\t   3019\t    bcb\t/tmp/cellbox-s10-4/b2-unsigned/ps\n"
+      },
+      "signed": null,
+      "unsigned_staging_copy_not_signed": true
+    },
+    {
+      "name": "kill",
+      "unsigned": {
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/kill",
+        "bytes": 24496,
+        "sha256": "8839eb6c288077dca80e0dae46933df67a1b9159bf0ad9f18c2e07051204cdda",
+        "text_bytes": 7826,
+        "data_bytes": 568,
+        "bss_bytes": 1048625,
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   7826\t    568\t1048625\t1057019\t 1020fb\t/tmp/cellbox-s10-4/b2-unsigned/kill\n"
+      },
+      "signed": null,
+      "unsigned_staging_copy_not_signed": true
+    }
+  ],
+  "six_signed_bytes": null,
+  "six_unsigned_bytes": 994064,
+  "suite_unsigned_bytes": 880992,
+  "workers_unsigned_bytes": 113072,
+  "suite_signed_bytes": null,
+  "workers_signed_bytes": null,
+  "signed_delta_vs_b1": null,
+  "after_vs_b2": null,
+  "runtime_comparator_available": false,
+  "feature_equivalent": false,
+  "build_commands": [
+    {
+      "command": [
+        "rustc",
+        "+nightly-2026-05-01",
+        "-Vv"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+      "log": "/tmp/cellbox-s10-4/logs-reconciled/b2-rustc.log",
+      "returncode": 0
+    },
+    {
+      "command": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "-V"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+      "log": "/tmp/cellbox-s10-4/logs-reconciled/b2-cargo.log",
+      "returncode": 0
+    },
+    {
+      "command": [
+        "cargo",
+        "+nightly-2026-05-01",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "--target",
+        "x86_64-unknown-none",
+        "-Z",
+        "build-std=core,alloc",
+        "-p",
+        "app-shell",
+        "-p",
+        "app-sys-tools",
+        "--bin",
+        "app-shell",
+        "--bin",
+        "ls",
+        "--bin",
+        "cat",
+        "--bin",
+        "echo",
+        "--bin",
+        "ps",
+        "--bin",
+        "kill"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+      "log": "/tmp/cellbox-s10-4/logs-reconciled/b2-build.log",
+      "returncode": 0
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/cellos-sign",
+        "--sign",
+        "/tmp/cellbox-s10-4/b2-signed/shell",
+        "/tmp/cellbox-s10-4/b2-signed/ls",
+        "/tmp/cellbox-s10-4/b2-signed/cat",
+        "/tmp/cellbox-s10-4/b2-signed/echo",
+        "/tmp/cellbox-s10-4/b2-signed/ps",
+        "/tmp/cellbox-s10-4/b2-signed/kill"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+      "log": "/tmp/cellbox-s10-4/logs-reconciled/b2-sign.log",
+      "returncode": 1
+    }
+  ],
+  "lock_audit": {
+    "selected_step": "offline fallback; preferred vm-runner package deletion impossible because original lock contains no such package",
+    "command": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "metadata",
+      "--offline",
+      "--format-version",
+      "1",
+      "--filter-platform",
+      "x86_64-unknown-none"
+    ],
+    "removed": [],
+    "added": [
+      {
+        "package": {
+          "name": "app-chrome",
+          "version": "0.1.0",
+          "dependencies": [
+            "api",
+            "cell-build",
+            "ostd",
+            "viui"
+          ]
+        },
+        "in_measured_graph_by_name": false
+      },
+      {
+        "package": {
+          "name": "files",
+          "version": "0.1.0",
+          "dependencies": [
+            "api",
+            "cell-build",
+            "ostd",
+            "text-engine",
+            "viui"
+          ]
+        },
+        "in_measured_graph_by_name": false
+      },
+      {
+        "package": {
+          "name": "terminal",
+          "version": "0.1.0",
+          "dependencies": [
+            "api",
+            "cell-build",
+            "ostd",
+            "text-engine",
+            "viui"
+          ]
+        },
+        "in_measured_graph_by_name": false
+      }
+    ],
+    "same_version_package_metadata_changed": [],
+    "measured_graph": [
+      {
+        "name": "app-shell",
+        "version": "0.1.0",
+        "source": null
+      },
+      {
+        "name": "app-sys-tools",
+        "version": "0.1.0",
+        "source": null
+      },
+      {
+        "name": "api",
+        "version": "0.1.0",
+        "source": null
+      },
+      {
+        "name": "cell-build",
+        "version": "0.2.0",
+        "source": null
+      },
+      {
+        "name": "http-core",
+        "version": "0.1.0",
+        "source": null
+      },
+      {
+        "name": "ostd",
+        "version": "0.2.0",
+        "source": null
+      },
+      {
+        "name": "text-engine",
+        "version": "0.1.0",
+        "source": null
+      },
+      {
+        "name": "types",
+        "version": "0.1.0",
+        "source": null
+      },
+      {
+        "name": "ab_glyph",
+        "version": "0.2.32",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "ab_glyph_rasterizer",
+        "version": "0.1.10",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "aho-corasick",
+        "version": "1.1.4",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "allocator-api2",
+        "version": "0.2.21",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "byteorder",
+        "version": "1.5.0",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "cobs",
+        "version": "0.3.0",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "core_maths",
+        "version": "0.1.1",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "embedded-io",
+        "version": "0.4.0",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "embedded-io",
+        "version": "0.6.1",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "embedded-io",
+        "version": "0.7.1",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "equivalent",
+        "version": "1.0.3",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "foldhash",
+        "version": "0.1.5",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "hash32",
+        "version": "0.3.1",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "hashbrown",
+        "version": "0.15.5",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "heapless",
+        "version": "0.8.0",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "httparse",
+        "version": "1.10.1",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "itoa",
+        "version": "1.0.18",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "libm",
+        "version": "0.2.16",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "linked_list_allocator",
+        "version": "0.10.6",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "lock_api",
+        "version": "0.4.14",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "memchr",
+        "version": "2.8.3",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "owned_ttf_parser",
+        "version": "0.25.1",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "postcard-derive",
+        "version": "0.2.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "postcard",
+        "version": "1.1.3",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "proc-macro2",
+        "version": "1.0.107",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "quote",
+        "version": "1.0.47",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "regex-automata",
+        "version": "0.4.16",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "regex-syntax",
+        "version": "0.8.11",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "scopeguard",
+        "version": "1.2.0",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "serde",
+        "version": "1.0.229",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "serde_core",
+        "version": "1.0.229",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "serde_derive",
+        "version": "1.0.229",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "serde_json",
+        "version": "1.0.151",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "spin",
+        "version": "0.9.9",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "spinning_top",
+        "version": "0.2.5",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "stable_deref_trait",
+        "version": "1.2.1",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "syn",
+        "version": "2.0.119",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "syn",
+        "version": "3.0.3",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "thiserror-impl",
+        "version": "2.0.19",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "thiserror",
+        "version": "2.0.19",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "tinyvec",
+        "version": "1.13.3",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "ttf-parser",
+        "version": "0.25.1",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "unicode-ident",
+        "version": "1.0.24",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "unicode-normalization",
+        "version": "0.1.25",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "zmij",
+        "version": "1.0.23",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      }
+    ],
+    "vm_runner_in_graph": false,
+    "package_versions_sources_unchanged": false,
+    "old_lock_version": 4,
+    "new_lock_version": 4
+  },
+  "desktop_original_unsigned_six_bytes": 3261680,
+  "desktop_unsigned_six_delta_vs_b2": 2267616,
+  "signing_refusal": "Historical workspace F1 unallowlisted unsafe token in unrelated ocel-quickjs/native_layout.rs; F5 passed. No bypass/allowlist edit or valid signed B2 result."
+}

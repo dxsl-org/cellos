@@ -1,0 +1,529 @@
+{
+  "candidate_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821",
+  "profile": "headless",
+  "profile_record": {
+    "dir": "/tmp/cellbox-s10-3d-resume/cand/headless",
+    "manifest_sha256": "4066a0e2e9c2c680eb9c6f5084210f802559035b02f07f6ec39782311cafef5c",
+    "manifest": {
+      "schema": "cellos-x86-image-manifest/1",
+      "profile": "headless",
+      "init_features": [
+        "input"
+      ],
+      "kernel_features": [
+        "policy-required"
+      ],
+      "key_class": "dev",
+      "signing_route": "x86-candidate-headless",
+      "objcopy": "objcopy",
+      "files": {
+        "/POLICY.BIN": {
+          "sha256": "f0be61df403852caef4a27fecd6db470d1effedf0071a5a1144491fbf4e08008",
+          "size": 2013
+        },
+        "/bin/ahci": {
+          "sha256": "e6cb9d65b1cc47c619cf62b68cbaa572fbfb97623aa8beba4708bf28ac1e2f02",
+          "size": 44744,
+          "package": "driver-ahci",
+          "binary": "driver-ahci",
+          "signed": true
+        },
+        "/bin/cat": {
+          "sha256": "5c2ae62d45493b4ff55d107d95b920dc0cf7dfac657aaf5e963297921d5c8eef",
+          "size": 30328,
+          "package": "app-sys-tools",
+          "binary": "cat",
+          "signed": true
+        },
+        "/bin/cellbox": {
+          "sha256": "11674cd9bb9ef9421313727d5c4a323f2a8043c435468abacde6f55c2e5e86eb",
+          "size": 3093952,
+          "package": "app-cellbox",
+          "binary": "cellbox",
+          "signed": true
+        },
+        "/bin/cellbox-ssh": {
+          "sha256": "11674cd9bb9ef9421313727d5c4a323f2a8043c435468abacde6f55c2e5e86eb",
+          "size": 3093952,
+          "package": "app-cellbox",
+          "binary": "cellbox",
+          "signed": true
+        },
+        "/bin/config": {
+          "sha256": "53a0a4554a9b4ef37350928da566708ec6d4765625464bfdd31d1404d7e5fd75",
+          "size": 47384,
+          "package": "service-config",
+          "binary": "service-config",
+          "signed": true
+        },
+        "/bin/e1000": {
+          "sha256": "d10281b801b23e3e2f13816ce24d91e5d67907905e823874e35c58d06a91d5fb",
+          "size": 29672,
+          "package": "driver-e1000",
+          "binary": "driver-e1000",
+          "signed": true
+        },
+        "/bin/echo": {
+          "sha256": "9f742446789bed1dc64f1f588e5ca8e8c64f471c61e35fd4fa7014f38cb32e9d",
+          "size": 30296,
+          "package": "app-sys-tools",
+          "binary": "echo",
+          "signed": true
+        },
+        "/bin/igb": {
+          "sha256": "cbb8b1a632ae6c2fa917082c7ec3c12893690d47d1e88e2cc8d2fa650e202cae",
+          "size": 39440,
+          "package": "driver-igb",
+          "binary": "driver-igb",
+          "signed": true
+        },
+        "/bin/input": {
+          "sha256": "1543d4f3d38dc7d260e910959633828a360919889ad9142919ca58ebac0fc089",
+          "size": 167240,
+          "package": "service-input",
+          "binary": "service-input",
+          "signed": true
+        },
+        "/bin/kill": {
+          "sha256": "38c9b4297580226fa7ec453a7e9ded8fd104e78654e4b9b7bc933185b312898c",
+          "size": 30360,
+          "package": "app-sys-tools",
+          "binary": "kill",
+          "signed": true
+        },
+        "/bin/ls": {
+          "sha256": "ca76e07f11611fa58608dffaddcdc4b3fd5979d3819ab633fbc76746db6c40ba",
+          "size": 30288,
+          "package": "app-sys-tools",
+          "binary": "ls",
+          "signed": true
+        },
+        "/bin/net": {
+          "sha256": "14767da8e1fd739b849c95f40de05156c62d72babbdf3f17d2223d4042f1d666",
+          "size": 491112,
+          "package": "service-net",
+          "binary": "service-net",
+          "signed": true
+        },
+        "/bin/nvme": {
+          "sha256": "c40e7a84615af1ef99e11bf84e34c75e6b8b999fc2ba8b6a0c6da34bb631ebbe",
+          "size": 40800,
+          "package": "driver-nvme",
+          "binary": "driver-nvme",
+          "signed": true
+        },
+        "/bin/platform": {
+          "sha256": "adb6edc54d94c29dbe0c083097cd70323994992d5aa34e0403ebe02c24b062d3",
+          "size": 38488,
+          "package": "service-platform",
+          "binary": "platform",
+          "signed": true
+        },
+        "/bin/ps": {
+          "sha256": "f408f7184e4411752229d0efd6f435d73e200ba34a65bf6ed5ad379862362249",
+          "size": 30192,
+          "package": "app-sys-tools",
+          "binary": "ps",
+          "signed": true
+        },
+        "/bin/serial": {
+          "sha256": "48fad0f332c380d776714d9c4a327a94508b7ca7b6edab07b26cdcecbfeff14c",
+          "size": 35744,
+          "package": "driver-serial-x86",
+          "binary": "driver-serial-x86",
+          "signed": true
+        },
+        "/bin/shutdown": {
+          "sha256": "56120dab8d3b9816fa341fed7dd6f914e1bd49b57bdf547fb1c89f85a0139b35",
+          "size": 26000,
+          "package": "app-sys-tools",
+          "binary": "shutdown",
+          "signed": true
+        },
+        "/bin/tier2-exploit": {
+          "sha256": "2ffdb4e8c73ac528373d0ecc1e735a3991977c366fdcfc46107a7e024a5f446c",
+          "size": 28896,
+          "package": "tier2-exploit",
+          "binary": "tier2-exploit",
+          "signed": false
+        },
+        "/bin/tier2-smoke": {
+          "sha256": "7f158e2f13520d955f6c2f8dac37930052e7b8e30464e5107b09b5008c3faa96",
+          "size": 34256,
+          "package": "tier2-smoke",
+          "binary": "tier2-smoke",
+          "signed": false
+        },
+        "/bin/vfs": {
+          "sha256": "40b2a51bbc29a043016cc5b7a5b8f857c1cf9f791a4234951a5e4479131686a1",
+          "size": 613440,
+          "package": "service-vfs",
+          "binary": "service-vfs",
+          "signed": true
+        },
+        "/bin/xhci": {
+          "sha256": "e568eeb2ac90305a8ecfb13c4873cbb989b139587f6fe129e25e54cad30c26bc",
+          "size": 53080,
+          "package": "driver-xhci",
+          "binary": "driver-xhci",
+          "signed": true
+        },
+        "/etc/cellos/autoload.toml": {
+          "sha256": "4e7b41e8035662b776a4d4a72ae7fb569d763f88379ef508d2cb6c778280949b",
+          "size": 170
+        },
+        "/etc/cellos/services.toml": {
+          "sha256": "484b0bffbb9d472e3c1149e3bf38205604c92e7682d2172fea0a4ac2b1967855",
+          "size": 807
+        },
+        "/etc/cellos/system.toml": {
+          "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293",
+          "size": 128
+        }
+      },
+      "kernel_fs_img": {
+        "sha256": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+        "size": 12582912
+      },
+      "init": {
+        "sha256": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab",
+        "size": 406976,
+        "package": "app-init"
+      },
+      "source": {
+        "git_head": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+        "dirty_files": 2490,
+        "dirty_digest_sha256": "6b713f3ef4881002d481d4e8b339601406a3891606f3e6d963d8498f21fa6630",
+        "cargo": "cargo 1.97.0-nightly (eb9b60f1f 2026-04-24)",
+        "rustc": "rustc 1.97.0-nightly (f53b654a8 2026-04-30)",
+        "rustflags": "-C relocation-model=pic",
+        "toolchain_env": {
+          "CC_x86_64_unknown_none": "cc",
+          "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
+          "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu"
+        }
+      },
+      "build_started_utc": "2026-10-28T00:24:47+00:00",
+      "build_finished_utc": "2026-10-28T00:25:50+00:00"
+    },
+    "files": {
+      "/POLICY.BIN": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/POLICY.BIN",
+        "sha256": "f0be61df403852caef4a27fecd6db470d1effedf0071a5a1144491fbf4e08008",
+        "size": 2013,
+        "binary": null,
+        "package": null,
+        "signed": false,
+        "payload_sha256": null,
+        "dev_signature_valid": null
+      },
+      "/bin/ahci": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/ahci",
+        "sha256": "e6cb9d65b1cc47c619cf62b68cbaa572fbfb97623aa8beba4708bf28ac1e2f02",
+        "size": 44744,
+        "binary": "driver-ahci",
+        "package": "driver-ahci",
+        "signed": true,
+        "payload_sha256": "745da908af600a8be1288867518c784a97269942a57b065f599e22b488b03922",
+        "dev_signature_valid": true
+      },
+      "/bin/cat": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/cat",
+        "sha256": "5c2ae62d45493b4ff55d107d95b920dc0cf7dfac657aaf5e963297921d5c8eef",
+        "size": 30328,
+        "binary": "cat",
+        "package": "app-sys-tools",
+        "signed": true,
+        "payload_sha256": "7c53ed1b9cd4e882a97dce278a8d6529ec5b25d6405ed6e3f50ab26c397fbd3a",
+        "dev_signature_valid": true
+      },
+      "/bin/cellbox": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/cellbox",
+        "sha256": "11674cd9bb9ef9421313727d5c4a323f2a8043c435468abacde6f55c2e5e86eb",
+        "size": 3093952,
+        "binary": "cellbox",
+        "package": "app-cellbox",
+        "signed": true,
+        "payload_sha256": "9d0ab04c690dbb17162a81ae4dcfe413b213801fa6fe28f89cac4ee4d311a469",
+        "dev_signature_valid": true
+      },
+      "/bin/cellbox-ssh": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/cellbox-ssh",
+        "sha256": "11674cd9bb9ef9421313727d5c4a323f2a8043c435468abacde6f55c2e5e86eb",
+        "size": 3093952,
+        "binary": "cellbox",
+        "package": "app-cellbox",
+        "signed": true,
+        "payload_sha256": "9d0ab04c690dbb17162a81ae4dcfe413b213801fa6fe28f89cac4ee4d311a469",
+        "dev_signature_valid": true
+      },
+      "/bin/config": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/config",
+        "sha256": "53a0a4554a9b4ef37350928da566708ec6d4765625464bfdd31d1404d7e5fd75",
+        "size": 47384,
+        "binary": "service-config",
+        "package": "service-config",
+        "signed": true,
+        "payload_sha256": "79a8c62d32ca99fc2846a3717c18e0ed38e21d751cffac20b4e5f88801e8dd1b",
+        "dev_signature_valid": true
+      },
+      "/bin/e1000": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/e1000",
+        "sha256": "d10281b801b23e3e2f13816ce24d91e5d67907905e823874e35c58d06a91d5fb",
+        "size": 29672,
+        "binary": "driver-e1000",
+        "package": "driver-e1000",
+        "signed": true,
+        "payload_sha256": "6a413560156aaa03635d99d60d29358ae26187eb90534404e4b187666a88d525",
+        "dev_signature_valid": true
+      },
+      "/bin/echo": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/echo",
+        "sha256": "9f742446789bed1dc64f1f588e5ca8e8c64f471c61e35fd4fa7014f38cb32e9d",
+        "size": 30296,
+        "binary": "echo",
+        "package": "app-sys-tools",
+        "signed": true,
+        "payload_sha256": "fca7c71ba52db910357a6d15fb2f4decc42f8d7e995ecea80fe423a1734d3055",
+        "dev_signature_valid": true
+      },
+      "/bin/igb": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/igb",
+        "sha256": "cbb8b1a632ae6c2fa917082c7ec3c12893690d47d1e88e2cc8d2fa650e202cae",
+        "size": 39440,
+        "binary": "driver-igb",
+        "package": "driver-igb",
+        "signed": true,
+        "payload_sha256": "0d621453aed8ca4378d7669463bca580aad505b0ed3e7db5eb8da42303ca3816",
+        "dev_signature_valid": true
+      },
+      "/bin/input": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/input",
+        "sha256": "1543d4f3d38dc7d260e910959633828a360919889ad9142919ca58ebac0fc089",
+        "size": 167240,
+        "binary": "service-input",
+        "package": "service-input",
+        "signed": true,
+        "payload_sha256": "ea12d690f69f90895e5eed90c68eb9fe82447fed8f71e33b903a283cc9078bff",
+        "dev_signature_valid": true
+      },
+      "/bin/kill": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/kill",
+        "sha256": "38c9b4297580226fa7ec453a7e9ded8fd104e78654e4b9b7bc933185b312898c",
+        "size": 30360,
+        "binary": "kill",
+        "package": "app-sys-tools",
+        "signed": true,
+        "payload_sha256": "6cf04162bfff47996e322f75f8182678d053420a18ea345f27ae6bb664fe2af4",
+        "dev_signature_valid": true
+      },
+      "/bin/ls": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/ls",
+        "sha256": "ca76e07f11611fa58608dffaddcdc4b3fd5979d3819ab633fbc76746db6c40ba",
+        "size": 30288,
+        "binary": "ls",
+        "package": "app-sys-tools",
+        "signed": true,
+        "payload_sha256": "1097040d8a13bd64e7af3e61ac84c2b3f9314c04a0e6f437dfd6d784e66a27a4",
+        "dev_signature_valid": true
+      },
+      "/bin/net": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/net",
+        "sha256": "14767da8e1fd739b849c95f40de05156c62d72babbdf3f17d2223d4042f1d666",
+        "size": 491112,
+        "binary": "service-net",
+        "package": "service-net",
+        "signed": true,
+        "payload_sha256": "36eb6a310c58630be10b8077eea59e8db10b55bd6c2b0fb285c1b5bffd72ad0f",
+        "dev_signature_valid": true
+      },
+      "/bin/nvme": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/nvme",
+        "sha256": "c40e7a84615af1ef99e11bf84e34c75e6b8b999fc2ba8b6a0c6da34bb631ebbe",
+        "size": 40800,
+        "binary": "driver-nvme",
+        "package": "driver-nvme",
+        "signed": true,
+        "payload_sha256": "ca658c9474e84abd99c80e6c7659ace6fcdbb319ae9ebdad5df396ace0b77e57",
+        "dev_signature_valid": true
+      },
+      "/bin/platform": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/platform",
+        "sha256": "adb6edc54d94c29dbe0c083097cd70323994992d5aa34e0403ebe02c24b062d3",
+        "size": 38488,
+        "binary": "platform",
+        "package": "service-platform",
+        "signed": true,
+        "payload_sha256": "e6b562fac33b067a2db171dafff46e6e4990e0ed94c78743aa5962c4491012f2",
+        "dev_signature_valid": true
+      },
+      "/bin/ps": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/ps",
+        "sha256": "f408f7184e4411752229d0efd6f435d73e200ba34a65bf6ed5ad379862362249",
+        "size": 30192,
+        "binary": "ps",
+        "package": "app-sys-tools",
+        "signed": true,
+        "payload_sha256": "da111e1ec895110946af919311ada80ba4556ae267029e0bb665f47abcfd3a31",
+        "dev_signature_valid": true
+      },
+      "/bin/serial": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/serial",
+        "sha256": "48fad0f332c380d776714d9c4a327a94508b7ca7b6edab07b26cdcecbfeff14c",
+        "size": 35744,
+        "binary": "driver-serial-x86",
+        "package": "driver-serial-x86",
+        "signed": true,
+        "payload_sha256": "b3bf41ffd3bc56a852fd90e0a58baeee06d9b2948ad91ffb5c7d691d798bfae9",
+        "dev_signature_valid": true
+      },
+      "/bin/shutdown": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/shutdown",
+        "sha256": "56120dab8d3b9816fa341fed7dd6f914e1bd49b57bdf547fb1c89f85a0139b35",
+        "size": 26000,
+        "binary": "shutdown",
+        "package": "app-sys-tools",
+        "signed": true,
+        "payload_sha256": "47d006b1226ad80cf705ce0492ea71bbb347cd7652079db9fe95cd6fbaedbc69",
+        "dev_signature_valid": true
+      },
+      "/bin/tier2-exploit": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/tier2-exploit",
+        "sha256": "2ffdb4e8c73ac528373d0ecc1e735a3991977c366fdcfc46107a7e024a5f446c",
+        "size": 28896,
+        "binary": "tier2-exploit",
+        "package": "tier2-exploit",
+        "signed": false,
+        "payload_sha256": null,
+        "dev_signature_valid": null
+      },
+      "/bin/tier2-smoke": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/tier2-smoke",
+        "sha256": "7f158e2f13520d955f6c2f8dac37930052e7b8e30464e5107b09b5008c3faa96",
+        "size": 34256,
+        "binary": "tier2-smoke",
+        "package": "tier2-smoke",
+        "signed": false,
+        "payload_sha256": null,
+        "dev_signature_valid": null
+      },
+      "/bin/vfs": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/vfs",
+        "sha256": "40b2a51bbc29a043016cc5b7a5b8f857c1cf9f791a4234951a5e4479131686a1",
+        "size": 613440,
+        "binary": "service-vfs",
+        "package": "service-vfs",
+        "signed": true,
+        "payload_sha256": "55e32b7314b158acc0ceb78d608efcdf066b899159ea7fba650e242a4be52753",
+        "dev_signature_valid": true
+      },
+      "/bin/xhci": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/xhci",
+        "sha256": "e568eeb2ac90305a8ecfb13c4873cbb989b139587f6fe129e25e54cad30c26bc",
+        "size": 53080,
+        "binary": "driver-xhci",
+        "package": "driver-xhci",
+        "signed": true,
+        "payload_sha256": "dbce7cbe1a2eb5fce00b279218a17c5996fb21eb3ebf28a72a49a5a1d1119580",
+        "dev_signature_valid": true
+      },
+      "/etc/cellos/autoload.toml": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/etc-cellos-autoload.toml",
+        "sha256": "4e7b41e8035662b776a4d4a72ae7fb569d763f88379ef508d2cb6c778280949b",
+        "size": 170,
+        "binary": null,
+        "package": null,
+        "signed": false,
+        "payload_sha256": null,
+        "dev_signature_valid": null
+      },
+      "/etc/cellos/services.toml": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/etc-cellos-services.toml",
+        "sha256": "484b0bffbb9d472e3c1149e3bf38205604c92e7682d2172fea0a4ac2b1967855",
+        "size": 807,
+        "binary": null,
+        "package": null,
+        "signed": false,
+        "payload_sha256": null,
+        "dev_signature_valid": null
+      },
+      "/etc/cellos/system.toml": {
+        "file": "/tmp/cellbox-s10-3d-resume/cand/headless/files/etc-cellos-system.toml",
+        "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293",
+        "size": 128,
+        "binary": null,
+        "package": null,
+        "signed": false,
+        "payload_sha256": null,
+        "dev_signature_valid": null
+      }
+    },
+    "init": {
+      "path": "/tmp/cellbox-s10-3d-resume/cand/headless/init",
+      "sha256": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab",
+      "size": 406976,
+      "payload_sha256": "70eac0ad415751915c4e4a0a700637a7ef0fe71630e2577a022f887633f0f60a",
+      "dev_signature_valid": true
+    },
+    "kernel_fs_img": {
+      "path": "/tmp/cellbox-s10-3d-resume/cand/headless/kernel_fs.img",
+      "sha256": "384c04fa298c4d234bacee149af8787cc917aeb4541dea912365073ae790fcb3",
+      "size": 12582912
+    },
+    "kernel": {
+      "path": "/tmp/cellbox-s10-3d-resume/cand/headless.kernel.elf",
+      "sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+      "size": 15599680,
+      "features": [
+        "default",
+        "policy-required"
+      ],
+      "embeds_kernel_fs_img": true,
+      "embeds_init": true
+    },
+    "iso": {
+      "path": "/tmp/cellbox-s10-3d-resume/cand/headless.iso",
+      "sha256": "49b32f3442f40fd52295ccf12f0009e9e46a99cd32615ffeb3a5a7ec598a753a",
+      "size": 19472384
+    }
+  },
+  "argv": [
+    "qemu-system-x86_64",
+    "-machine",
+    "q35",
+    "-accel",
+    "tcg",
+    "-cpu",
+    "qemu64,+pdpe1gb",
+    "-m",
+    "256M",
+    "-display",
+    "none",
+    "-chardev",
+    "socket,id=ser0,path=/tmp/cellbox-s10-4-runtime-headless-untraced-2-4f6313/sock/measurement-serial.sock,server=on,wait=off",
+    "-serial",
+    "chardev:ser0",
+    "-qmp",
+    "unix:/tmp/cellbox-s10-4-runtime-headless-untraced-2-4f6313/sock/measurement-qmp.sock,server=on,wait=off",
+    "-monitor",
+    "none",
+    "-drive",
+    "file=/tmp/cellbox-s10-3d-resume/cand/headless.iso,media=cdrom,readonly=on,format=raw",
+    "-boot",
+    "d",
+    "-no-reboot",
+    "-netdev",
+    "user,id=net0,restrict=on",
+    "-device",
+    "e1000,netdev=net0",
+    "-drive",
+    "file=/tmp/cellbox-s10-4-runtime-headless-untraced-2-4f6313/disk.img,if=none,format=raw,id=p10fx",
+    "-device",
+    "nvme,drive=p10fx,serial=cellosp10"
+  ],
+  "fixture_source": "/tmp/cellbox-phase10-40k50w51/disk-main/disk.img",
+  "fixture_source_sha256": "9b6dec60edb60deea8e5e91e48781141e2b5a016444ac741206652b4c295bef3",
+  "fixture_clone_sha256": "9b6dec60edb60deea8e5e91e48781141e2b5a016444ac741206652b4c295bef3",
+  "glyph_sha256": null,
+  "mode": "untraced"
+}

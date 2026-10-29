@@ -1,0 +1,26 @@
+{
+  "source": "runtime/headless-observed-1/rsp-traffic.jsonl",
+  "sha256": "77ac4486a1cf8f011ad021cffa84d7738a420a33ae315d983b39250ca2242f11",
+  "records": 17170,
+  "command_packets": 3112,
+  "native_steps": 221,
+  "advancing_native_steps": 220,
+  "same_pc_steps": 1,
+  "postadd_0x1080e40b1_steps": 124,
+  "prior_postadd_advances_to_0x1080e40b5": 123,
+  "failed_step": {
+    "txline": 17152,
+    "from": "0x1080e40b1",
+    "to": "0x1080e40b1",
+    "stop": "T05thread:01;",
+    "same": true
+  },
+  "context_query_commands": [],
+  "register_read_counts": {
+    "p10": 1125,
+    "p1d": 10,
+    "p7": 1,
+    "p12": 1
+  },
+  "scope": "retained previous run analysis only, not a candidate execution"
+}

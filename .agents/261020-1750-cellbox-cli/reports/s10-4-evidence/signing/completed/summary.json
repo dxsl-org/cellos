@@ -1,0 +1,10 @@
+{
+  "commands": [],
+  "deployable_image_or_candidate": false,
+  "error": "scanner source coverage mismatch",
+  "exception": "RuntimeError",
+  "feature_equivalent": false,
+  "runtime_comparator_available": false,
+  "scope": "D4-Sign1 A historical measurement artifacts only",
+  "status": "STOP"
+}

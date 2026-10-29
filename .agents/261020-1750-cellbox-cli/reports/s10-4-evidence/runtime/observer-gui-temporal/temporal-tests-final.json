@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "-m",
+    "unittest",
+    "-v",
+    "test_all.TimeoutRetention",
+    "test_all.RenderedTemporalProof",
+    "test_temporal"
+  ],
+  "cwd": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-gui-temporal",
+  "start_ns": 426368526403623,
+  "end_ns": 426371933957625,
+  "returncode": 1,
+  "scope": "Final new temporal/renderer/retention cases; retained144 not rerun; prior failures remain retained explicitly"
+}

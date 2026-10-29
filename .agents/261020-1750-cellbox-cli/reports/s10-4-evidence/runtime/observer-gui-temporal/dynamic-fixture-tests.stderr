@@ -1,0 +1,8 @@
+test_dynamic_per_frame_counts_and_long_metadata_are_not_fixed_eight (test_temporal.TemporalLedgerTests.test_dynamic_per_frame_counts_and_long_metadata_are_not_fixed_eight) ... ok
+test_repeated_long_metadata_with_two_plausible_scrolls_fails_closed (test_temporal.TemporalLedgerTests.test_repeated_long_metadata_with_two_plausible_scrolls_fails_closed) ... ok
+test_copied_row_bodies_with_two_plausible_scrolls_fail_closed (test_temporal.TemporalLedgerTests.test_copied_row_bodies_with_two_plausible_scrolls_fail_closed) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.075s
+
+OK

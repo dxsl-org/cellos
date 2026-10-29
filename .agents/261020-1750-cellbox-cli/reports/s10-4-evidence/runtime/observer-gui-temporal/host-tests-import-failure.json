@@ -1,0 +1,10 @@
+{
+  "returncode": 1,
+  "scope": "Initial approved verification command failed during import before unittest discovery or any test/renderer/VM execution",
+  "error": "AttributeError: module 'diagnostic' has no attribute 'CheckedDesk'",
+  "cause": "New GUI integration referenced diagnostic re-export rather than actual common.CheckedDesk owner",
+  "correction": "New sibling imports existing common module and uses common.CheckedDesk/Stop/qualified glyph definitions; no retained source edited",
+  "tests_executed": 0,
+  "candidate_runs": 0,
+  "next": "Execute the full once-after-edits suite after correcting this new-host import ownership error; retain this failure explicitly"
+}

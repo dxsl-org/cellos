@@ -1,0 +1,41 @@
+{
+  "scope": "Retained-only analysis after the one authorized S10-4.12 replacement STOP; no further fix or candidate run",
+  "actual_error": "StepFailed: QMP input-send-event: {'class': 'GenericError', 'desc': 'VM not running'}",
+  "call_chain": "Surface.streams -> finite command_read -> Desk.type_text -> Qmp.keys -> serialized instance cmd -> original Qmp.cmd -> structured QMP error raised",
+  "stage": "Real GUI initial prompt and ordinary idle completed; finite command still being typed, not completed",
+  "framing_and_ownership_result": {
+    "recorded_observer_transactions": 583,
+    "request_counts": {
+      "query-cpus-fast": 83,
+      "query-status": 83,
+      "trace-event-get-state": 253,
+      "trace-event-set-state": 164
+    },
+    "response_type_or_ownership_mismatches": [],
+    "pending_request_at_end": null,
+    "scope": "Recorded observer transactions all complete and typed correctly; GUI raw replies were not newly logged. No recurrence of the earlier JSON fragmentation/reply-type failure was observed."
+  },
+  "distinct_host_assumption": "Serializing transport ownership does not make the guest running. The approved all-stop observer may stop the VM at hardware break/watchpoints when a GUI input batch is submitted. Original Qmp.keys assumes input-send-event is immediately admissible. A valid VM-not-running rejection is not transport corruption or evidence of product failure.",
+  "version_pinned_reference": {
+    "url": "https://raw.githubusercontent.com/qemu/qemu/v8.2.2/ui/input.c",
+    "function": "qmp_input_send_event",
+    "upstream_guard": "if (!runstate_is_running() && !runstate_check(RUN_STATE_SUSPENDED)) { error_setg(errp, \"VM not running\"); return; }",
+    "upstream_order": "The run-state error/return precedes both event-handler validation and event dispatch loops, followed later by qemu_input_event_sync.",
+    "installed_binary_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+    "installed_version": "QEMU8.2.2 Debian1:8.2.2+ds-0ubuntu1.17",
+    "source_binding_ceiling": "Upstream v8.2.2 source plus observed installed error; Ubuntu patched ui/input.c source not independently reconstructed. No claim of byte-exact patched-source proof or current failed batch delivery receipt."
+  },
+  "not_done": [
+    "No input error suppressed, event batch replayed, key resent or new candidate attempt",
+    "No QMP cont, extra RSP continue/step, breakpoint/watch removal or guest write to force input admission",
+    "No headless rerun, timeout increase, pause-excluded clock or alternate input route"
+  ],
+  "next_gate_not_authorized": [
+    "Keep actual partial result/STOP and successful shared-transport ownership fix as separate findings.",
+    "Any future input-admission amendment needs explicit CP1 and deterministic running/debug/stop-race/whole-batch exactly-once tests before a separately bounded desktop replacement.",
+    "A query-status precheck alone is insufficient: an asynchronous hardware stop can occur before input-send-event even while the QMP transport mutex is held.",
+    "If proposing deferred delivery, retain the exact not-yet-accepted event batch and modifier/down-up order; never replay the already accepted command prefix. Establish the installed rejection's pre-dispatch non-delivery semantics before allowing that exact rejection to be requeued.",
+    "No retry after transport/EOF/timeout or other ambiguous acceptance, no generic error retries, no extra guest resume/step solely for delivery, no coverage/proof weakening and no deadline enlargement. Any state-aware delivery must use only original ordinary observer resume opportunities and existing deadlines."
+  ],
+  "metric_ceiling": "41 native/scopes, zero same-PC events or additional steps, all recorded execute/watch censuses equal. Partial event/stack-page/mapped snapshots only; no complete desktop schedule or full peak."
+}

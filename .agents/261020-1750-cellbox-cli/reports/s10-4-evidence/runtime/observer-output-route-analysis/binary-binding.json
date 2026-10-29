@@ -1,0 +1,132 @@
+{
+  "terminal": {
+    "path": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal",
+    "sha256": "816718a20188bb797a65622d17087010e8d41c7a933248dc303847c7d11ff3cc",
+    "size": 950600,
+    "ELF_type": 3,
+    "loads": [
+      {
+        "va": 0,
+        "memsz": 192732,
+        "filesz": 192732,
+        "offset": 4096,
+        "flags": 5
+      },
+      {
+        "va": 192736,
+        "memsz": 701232,
+        "filesz": 701232,
+        "offset": 196832,
+        "flags": 4
+      },
+      {
+        "va": 897024,
+        "memsz": 8088,
+        "filesz": 8088,
+        "offset": 901120,
+        "flags": 6
+      },
+      {
+        "va": 905216,
+        "memsz": 5242944,
+        "filesz": 0,
+        "offset": 0,
+        "flags": 6
+      },
+      {
+        "va": 6148160,
+        "memsz": 4092,
+        "filesz": 4092,
+        "offset": 909376,
+        "flags": 4
+      }
+    ],
+    "has_debug_info": false,
+    "has_symtab": true,
+    "embedded_manifest_prefix_hex": "4543495602ff04000000000000000000"
+  },
+  "cellbox": {
+    "path": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cellbox",
+    "sha256": "8ea134442bb27719cf4c2ce5a8f3613f5667f88f1762a1d731cba9fd83ab54a2",
+    "size": 3094016,
+    "ELF_type": 3,
+    "loads": [
+      {
+        "va": 0,
+        "memsz": 2043603,
+        "filesz": 2043603,
+        "offset": 4096,
+        "flags": 5
+      },
+      {
+        "va": 2043608,
+        "memsz": 574288,
+        "filesz": 574288,
+        "offset": 2047704,
+        "flags": 4
+      },
+      {
+        "va": 2621440,
+        "memsz": 161560,
+        "filesz": 161560,
+        "offset": 2625536,
+        "flags": 6
+      },
+      {
+        "va": 2785280,
+        "memsz": 7340360,
+        "filesz": 0,
+        "offset": 0,
+        "flags": 6
+      },
+      {
+        "va": 10125640,
+        "memsz": 3828,
+        "filesz": 3828,
+        "offset": 2789704,
+        "flags": 4
+      }
+    ],
+    "has_debug_info": false,
+    "has_symtab": true,
+    "embedded_manifest_prefix_hex": "4543495602ff00000000000000000000"
+  },
+  "kernel": {
+    "path": "/tmp/cellbox-s10-3d-resume/cand/desktop.kernel.elf",
+    "sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a",
+    "size": 28182592,
+    "ELF_type": 2,
+    "loads": [
+      {
+        "va": 18446744071562067968,
+        "memsz": 1564672,
+        "filesz": 1564672,
+        "offset": 4096,
+        "flags": 5
+      },
+      {
+        "va": 18446744071563632640,
+        "memsz": 25731116,
+        "filesz": 25731116,
+        "offset": 1568768,
+        "flags": 4
+      },
+      {
+        "va": 18446744071589367808,
+        "memsz": 26176,
+        "filesz": 26176,
+        "offset": 27303936,
+        "flags": 6
+      },
+      {
+        "va": 18446744071589396480,
+        "memsz": 630784,
+        "filesz": 630784,
+        "offset": 27332608,
+        "flags": 6
+      }
+    ],
+    "has_debug_info": false,
+    "has_symtab": true
+  }
+}

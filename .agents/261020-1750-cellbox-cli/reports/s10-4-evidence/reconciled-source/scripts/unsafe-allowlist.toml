@@ -1,0 +1,782 @@
+# F1 unsafe allowlist — approved holes in the language-based isolation wall.
+#
+# Consumed by `scripts/cellos-sign` (see `scripts/cellos_sign/__init__.py` for the
+# threat model). Two exemption kinds, checked independently:
+#
+#   [[file]]   this .rs file may contain the `unsafe` keyword (token layer)
+#   [[crate]]  this crate's roots need not carry #![forbid(unsafe_code)]
+#              (attribute layer)
+#
+# Every entry needs `class`, `reason`, `approver`, `date`. Entries that are meant
+# to expire also carry `review_by` and `tracking`; `--check` reports any entry
+# past `review_by`, or older than `max_age_days` when it has none, so a temporary
+# exemption cannot quietly become permanent.
+#
+# Review an addition the way you would review the unsafe itself: this file *is*
+# the hole. It never loosens by accident — `--check` also reports entries whose
+# file no longer contains unsafe, so the list can be tightened.
+#
+# `approver = "cellos-maintainers"` on the entries dated 2026-07-14 records the
+# truth: they were migrated wholesale from the ALLOWLIST set in the retired
+# `scripts/check-cells-unsafe-ratchet.py`, which was reviewed as a group on that
+# date and named no individual. New entries name a person.
+
+version = 1
+
+# Days after which an entry without an explicit `review_by` is reported as
+# overdue. Reporting only — the ratchet never loosens itself on a timer.
+max_age_days = 90
+
+# ── File exemptions from the token rule ──────────────────────────────────────
+
+
+[[file]]
+path = "cells/tests/tier2-exploit/src/main.rs"
+class = "test-harness"
+reason = "Negative exploit test: deliberate NULL write to prove hardware Page Fault containment in Tier 2"
+approver = "dmin"
+date = "2026-09-06"
+
+[[file]]
+path = "cells/tests/tier2-grant-owner/src/main.rs"
+class = "test-harness"
+reason = "Phase-03 Tier-2 grant owner: volatile read/write of the owner mapping GrantAlloc/GrantSlice return is the property under test (the returned pointer must be writable by its owner)."
+approver = "dmin"
+date = "2026-09-28"
+
+[[file]]
+path = "cells/tests/tier2-grant-receiver/src/main.rs"
+class = "test-harness"
+reason = "Phase-03 Tier-2 grant receiver: reads and deliberately stores through the receiver mapping GrantSlice returns, so a revoked or read-only receiver PTE faults in the cell where the runner can attribute it."
+approver = "dmin"
+date = "2026-09-28"
+
+[[file]]
+path = "cells/tests/tier2-rpc-driver/src/main.rs"
+class = "test-harness"
+reason = "Phase-02 cross-tier exchange: deliberate invalid user buffer passed to sys_send to prove kernel TaskCopyView copy_from_user validation refuses it before delivery."
+approver = "dmin"
+date = "2026-10-09"
+
+[[file]]
+path = "cells/demos/doom/src/main.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/demos/tetris-c/src/main.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/demos/tetris-lua/src/ffi.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/demos/tetris-lua/src/main.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/runtimes/lua/src/bindings_io.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/runtimes/lua/src/bindings_net.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/runtimes/lua/src/bindings_vfs.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/runtimes/lua/src/ffi.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/runtimes/lua/src/main.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/runtimes/lua/src/repl_session.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/services/ocel-quickjs/src/engine.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 2): the QuickJS driver calls the vendored engine across the C ABI (JS_NewRuntime/JS_Eval/JS_ToCString ...) and owns the runtime/context lifetimes; the C side is outside the Rust type system entirely."
+approver = "dmin"
+date = "2026-10-06"
+
+[[file]]
+path = "cells/services/ocel-quickjs/src/ffi.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 2): engine declarations plus the three clock shims the engine expects from an OS (gettimeofday/clock_gettime/localtime_r); pointer work is confined to the extern \"C\" bodies."
+approver = "dmin"
+date = "2026-10-06"
+
+[[file]]
+path = "cells/services/ocel-pdf/src/engine.rs"
+class = "c-ffi"
+reason = "Isolated Tier 2 MuPDF FFI: this wrapper owns the native document and keeps borrowed input alive; all C exceptions are caught in C before returning to Rust."
+approver = "dmin"
+date = "2026-10-06"
+
+[[file]]
+path = "cells/tests/tls-test/src/regs.rs"
+class = "test-harness"
+reason = "Per-task TLS base test: reading the user thread pointer register (tp / TPIDR_EL0) and touching the thread's own TLS block through it are exactly what the test proves; both are confined to this file behind safe wrappers."
+approver = "dmin"
+date = "2026-09-22"
+
+[[file]]
+path = "cells/tests/cpp-smoke/src/cpp.rs"
+class = "c-ffi"
+reason = "C++ FFI (cpp-freestanding profile): extern \"C\" calls into the cell's C++ translation units are unsafe by construction; the C++ side is outside the Rust type system entirely. All unsafe in this crate is confined to this file behind safe wrappers."
+approver = "dmin"
+date = "2026-09-22"
+
+[[file]]
+path = "cells/tests/c-math-smoke/src/main.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/tests/mlibc-smoke/src/main.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/tests/posix-shim-test/src/main.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/tests/posix-shim-test/src/fstat.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-09-03"
+
+[[file]]
+path = "cells/drivers/e1000/src/controller.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/drivers/e1000/src/dma_layout.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "cellos-maintainers"
+date = "2026-09-03"
+
+[[file]]
+path = "cells/drivers/nvme/src/controller.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/drivers/nvme/src/dispatch.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/drivers/nvme/src/queue.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/drivers/ahci/src/controller.rs"
+class = "driver-mmio"
+reason = "Driver Cell: bounds-checked MMIO register access via MmioRegion plus volatile DMA structure access. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "dmin"
+date = "2026-10-05"
+
+[[file]]
+path = "cells/drivers/ahci/src/dispatch.rs"
+class = "driver-mmio"
+reason = "Driver Cell: copies one sector between the DrvRequest IPC buffer and the authorized DMA buffer. The wall around this unsafe is the DMA authorization, not LBI."
+approver = "dmin"
+date = "2026-10-05"
+
+[[file]]
+path = "cells/drivers/igb/src/controller.rs"
+class = "driver-mmio"
+reason = "Driver Cell: bounds-checked MMIO register access via MmioRegion plus volatile access to the advanced-format TX/RX descriptor rings and DMA buffers the controller reads and writes. Every region is allocated through DmaBuf and authorized for the controller BDF before its IOVA is programmed; the wall around this unsafe is the DMA authorization, not LBI."
+approver = "dmin"
+date = "2026-10-05"
+
+[[file]]
+path = "cells/drivers/igb/src/dma_layout.rs"
+class = "driver-mmio"
+reason = "Driver Cell: MaybeUninit array construction for the fixed-size TX/RX DMA buffer tables, with a drop guard so a partial authorization releases only the constructed prefix."
+approver = "dmin"
+date = "2026-10-05"
+
+[[file]]
+path = "cells/drivers/xhci/src/dma.rs"
+class = "driver-mmio"
+reason = "Driver Cell: bounds-checked volatile access to the xHCI rings, contexts and payload buffers the controller fetches by DMA. Every region is allocated through DmaBuf and authorized for the controller BDF before its IOVA is programmed; the wall around this unsafe is the DMA authorization, not LBI."
+approver = "dmin"
+date = "2026-10-05"
+
+[[file]]
+path = "cells/drivers/virtio-blk/src/device.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/drivers/virtio-gpu/src/cursor.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/drivers/virtio-gpu/src/display.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/drivers/virtio-net/src/device.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/services/input/src/virtio_device.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/drivers/dwc2-usb/src/usb_channel.rs"
+class = "driver-mmio"
+reason = "Driver Cell: stages payloads into and collects them out of the cell-owned per-channel DmaBuf slots that the DWC2 core reads and writes directly in DMA mode -- the mode Linux uses for this SoC, and the only one that completes a data-phase transfer on the board. The grant region is owned by this cell for its lifetime, every copy length is bounded by DMA_SLOT_BYTES and the caller's slice, and exact cache-sync tokens pin each range across device access."
+approver = "cellos-maintainers"
+date = "2026-09-21"
+
+[[file]]
+path = "cells/drivers/bcm-display/src/mailbox.rs"
+class = "driver-mmio"
+reason = "Driver Cell: bounded copies marshal property words into and out of the cell-owned persistent DmaBuf; exact cache-sync tokens pin the page across VideoCore access, and post-submit uncertainty poisons the transport until reboot."
+approver = "lungmat8"
+date = "2026-08-28"
+
+[[file]]
+path = "cells/drivers/bcm-display/src/lib.rs"
+class = "driver-mmio"
+reason = "Driver Cell: row-copy dirty rect into VideoCore IV framebuffer memory via raw pointer."
+approver = "cellos-maintainers"
+date = "2026-08-23"
+
+[[file]]
+path = "cells/drivers/bcm-display/src/main.rs"
+class = "driver-mmio"
+reason = "Driver Cell: construct slice from GpuFlush raw pointer payload in single address space."
+approver = "cellos-maintainers"
+date = "2026-08-23"
+
+[[file]]
+path = "cells/guests/silo-guest/src/mailbox.rs"
+class = "hypervisor"
+reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/guests/silo-guest/src/main.rs"
+class = "hypervisor"
+reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/services/hypervisor/src/timer.rs"
+class = "hypervisor"
+reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/services/hypervisor/src/virtio_gpu/resource.rs"
+class = "hypervisor"
+reason = "virtio-gpu backend: blits guest scanout pixels into the compositor Grant obtained from sys_grant_slice. The raw pointer is the Grant base and every write is bounds-checked against scanout.len before the slice is formed."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/services/hypervisor/src/virtio_gpu/resource/render.rs"
+class = "hypervisor"
+reason = "virtio-gpu backend render path — same Grant-base contract as resource.rs."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/services/hypervisor/src/vmm.rs"
+class = "hypervisor"
+reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/tests/hypervisor-test/src/main.rs"
+class = "hypervisor"
+reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+
+[[file]]
+path = "cells/demos/audio-demo/src/main.rs"
+class = "legacy-raw-ptr"
+reason = "Legacy raw-pointer plumbing that predates the ratchet. Tracked tech debt — refactor to a safe abstraction rather than adding neighbours to this class."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/demos/cfi-test/src/main.rs"
+class = "legacy-raw-ptr"
+reason = "Legacy raw-pointer plumbing that predates the ratchet. Tracked tech debt — refactor to a safe abstraction rather than adding neighbours to this class."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/tests/wx-test/src/main.rs"
+class = "test-violation"
+reason = "Deliberate W^X violation — the cell writes its own .text to prove the loader's post-relocation lowering pass (kernel/src/loader/wx.rs) actually revokes WRITE. A cell honouring forbid(unsafe_code) cannot exercise a hardware page-permission bit, so the unsafe IS the test. Pass is decided by the kernel log, not by this cell."
+approver = "cellos-maintainers"
+date = "2026-07-30"
+
+[[file]]
+path = "cells/services/compositor/src/surface_table/state.rs"
+class = "legacy-raw-ptr"
+reason = "Raw Grant pointer is Send only because compositor access is serialized; ownership and detach protocol prevent concurrent use."
+approver = "lungmat8"
+date = "2026-08-25"
+
+[[file]]
+path = "cells/services/compositor/src/surface_table/pixels.rs"
+class = "legacy-raw-ptr"
+reason = "Reads the active shared Grant through a raw pointer while the ownership and detach protocol keeps that mapping live."
+approver = "lungmat8"
+date = "2026-08-25"
+
+[[file]]
+path = "cells/services/net/src/tls/dispatch.rs"
+class = "legacy-raw-ptr"
+reason = "`poll_future` erases the `SocketSet<'_>` borrow into a task-local TLS context slot that the transport callbacks read for the duration of one poll; the context is cleared on the same stack frame before returning."
+approver = "cellos-maintainers"
+date = "2026-10-08"
+
+[[file]]
+path = "cells/services/net/src/tls/socket.rs"
+class = "legacy-raw-ptr"
+reason = "Legacy raw-pointer plumbing that predates the ratchet. Tracked tech debt — refactor to a safe abstraction rather than adding neighbours to this class."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/services/net/src/tls/transport.rs"
+class = "legacy-raw-ptr"
+reason = "Legacy raw-pointer plumbing that predates the ratchet. Tracked tech debt — refactor to a safe abstraction rather than adding neighbours to this class."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[file]]
+path = "cells/services/silo/src/vmm.rs"
+class = "temporary-audit"
+reason = "Silo VMM guest world switch. Temporary: audited as part of the hypervisor group but not yet given a per-block SAFETY contract naming the guest-memory invariant it relies on. Re-review or split out by review_by."
+approver = "cellos-maintainers"
+date = "2026-07-30"
+review_by = "2026-10-28"
+tracking = "midori-lessons phase 07 (grant/pointer audit)"
+
+[[file]]
+path = "cells/services/vfs/kernel-fs-legacy.rs"
+class = "temporary-audit"
+reason = "VFS raw-pointer I/O awaiting the grant/pointer audit. Temporary — do not treat as settled."
+approver = "cellos-maintainers"
+date = "2026-07-30"
+review_by = "2026-10-28"
+tracking = "midori-lessons phase 07 (grant/pointer audit)"
+
+[[file]]
+path = "cells/services/vfs/src/grant_read.rs"
+class = "temporary-audit"
+reason = "The two \"caller blocks\" copy_nonoverlapping writes into the caller's grant (dispatch.rs:195 ReadGrant, dispatch.rs:249 ReadFileGrant). Their whole soundness argument is \"the caller's ipc_call blocks until we reply, so it cannot free the grant\" — exactly the assumption phase 07 must audit. This entry legitimises nothing beyond that audit window."
+approver = "cellos-maintainers"
+date = "2026-07-30"
+review_by = "2026-10-28"
+tracking = "midori-lessons phase 07 — audit the two caller-blocks assumptions"
+
+[[file]]
+path = "cells/services/vfs/src/fast_handler.rs"
+class = "temporary-audit"
+reason = "VFS raw-pointer I/O awaiting the grant/pointer audit. Temporary — do not treat as settled."
+approver = "cellos-maintainers"
+date = "2026-07-30"
+review_by = "2026-10-28"
+tracking = "midori-lessons phase 07 (grant/pointer audit)"
+
+[[file]]
+path = "cells/tests/c-pthread/src/main.rs"
+class = "c-ffi"
+reason = "C FFI witness for the port-platform pthread runtime: the `unsafe extern \"C\"` block is the only way to call `cellos_pthread_witness` in the linked C runtime, which is outside the Rust type system entirely."
+approver = "dmin"
+date = "2026-09-25"
+
+[[file]]
+path = "cells/tests/c-spawn/src/main.rs"
+class = "c-ffi"
+reason = "C FFI witness for the port-platform spawn adapter: the `unsafe extern \"C\"` block is the only way to call `cellos_spawn_witness` in the linked C runtime, which is outside the Rust type system entirely."
+approver = "dmin"
+date = "2026-09-25"
+
+[[file]]
+path = "cells/tests/c-spawn-child/src/main.rs"
+class = "c-ffi"
+reason = "C FFI child witness for the port-platform spawn adapter: the `unsafe extern \"C\"` block is the only way to call `cellos_spawn_child_witness` in the linked C runtime, which is outside the Rust type system entirely."
+approver = "dmin"
+date = "2026-09-25"
+
+# ── Crate exemptions from the attribute rule ─────────────────────────────────────
+#
+# Derived from the [[file]] entries above: a crate owning an allowlisted
+# file cannot carry #![forbid(unsafe_code)] on its root. Removing the last
+# [[file]] entry for a crate means this entry must go too — `--check`
+# reports it as unused.
+
+[[crate]]
+name = "app-tls-test"
+class = "test-harness"
+reason = "Owns allowlisted unsafe under cells/tests/tls-test/ — see the [[file]] entry for the justification."
+approver = "dmin"
+date = "2026-09-22"
+
+[[crate]]
+name = "app-cpp-smoke"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/cpp-smoke/ — see the [[file]] entry of class \"c-ffi\" for the justification."
+approver = "dmin"
+date = "2026-09-22"
+
+[[crate]]
+name = "app-c-math-smoke"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/c-math-smoke/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "app-mlibc-smoke"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/mlibc-smoke/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "app-posix-shim-test"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/posix-shim-test/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "doom"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/demos/doom/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "lua"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/runtimes/lua/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "ocel-quickjs"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/services/ocel-quickjs/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+approver = "dmin"
+date = "2026-10-06"
+
+[[crate]]
+name = "ocel-pdf"
+class = "c-ffi"
+reason = "Native PDF renderer behind the explicitly approved capability-free Tier 2 launch edge; unsafe is confined to engine.rs."
+approver = "dmin"
+date = "2026-10-06"
+
+[[crate]]
+name = "tetris-c"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/demos/tetris-c/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "tetris-lua"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/demos/tetris-lua/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "driver-e1000"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/e1000/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "driver-nvme"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/nvme/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "driver-ahci"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/ahci/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "dmin"
+date = "2026-10-05"
+
+[[crate]]
+name = "driver-xhci"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/xhci/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "dmin"
+date = "2026-10-05"
+
+[[crate]]
+name = "driver-igb"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/igb/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "dmin"
+date = "2026-10-05"
+
+[[crate]]
+name = "driver-virtio-blk"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/virtio-blk/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "driver-virtio-gpu"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/virtio-gpu/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "driver-virtio-net"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/virtio-net/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "service-input"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/services/input/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+
+[[crate]]
+name = "driver-dwc2-usb"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/dwc2-usb/ -- see the [[file]] entry for cells/drivers/dwc2-usb/src/usb_channel.rs, which needs a bounded copy into and out of the DMA payload slots the controller accesses directly."
+approver = "cellos-maintainers"
+date = "2026-09-21"
+
+[[crate]]
+name = "driver-bcm-display"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/bcm-display/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-08-23"
+
+[[crate]]
+name = "hypervisor-test"
+class = "hypervisor"
+reason = "Owns allowlisted unsafe under cells/tests/hypervisor-test/ — see the [[file]] entries of class \"hypervisor\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "service-hypervisor"
+class = "hypervisor"
+reason = "Owns allowlisted unsafe under cells/services/hypervisor/ — see the [[file]] entries of class \"hypervisor\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "silo-guest"
+class = "hypervisor"
+reason = "Owns allowlisted unsafe under cells/guests/silo-guest/ — see the [[file]] entries of class \"hypervisor\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "audio-demo"
+class = "legacy-raw-ptr"
+reason = "Owns allowlisted unsafe under cells/demos/audio-demo/ — see the [[file]] entries of class \"legacy-raw-ptr\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "cfi-test"
+class = "legacy-raw-ptr"
+reason = "Owns allowlisted unsafe under cells/demos/cfi-test/ — see the [[file]] entries of class \"legacy-raw-ptr\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "wx-test"
+class = "test-violation"
+reason = "Owns the deliberate W^X violation under cells/tests/wx-test/ — see the [[file]] entry of class \"test-violation\". The crate root carries #![allow(unsafe_code)] with the carve-out stated in its module docs."
+approver = "cellos-maintainers"
+date = "2026-07-30"
+
+[[crate]]
+name = "tier2-exploit"
+class = "test-violation"
+reason = "Owns deliberate NULL write in cells/tests/tier2-exploit/ to prove Tier 2 hardware Page Fault containment"
+approver = "dmin"
+date = "2026-09-06"
+
+[[crate]]
+name = "tier2-grant-owner"
+class = "test-violation"
+reason = "Phase-03 Tier-2 grant pair producer: the crate root must dereference the raw pointer GrantAlloc/GrantSlice return to prove the owner mapping is writable; see its [[file]] entry."
+approver = "dmin"
+date = "2026-09-28"
+
+[[crate]]
+name = "tier2-grant-receiver"
+class = "test-violation"
+reason = "Phase-03 Tier-2 grant pair consumer: the crate root must store through the raw pointer GrantSlice returns, since that store is the fault witness; see its [[file]] entry."
+approver = "dmin"
+date = "2026-09-28"
+[[crate]]
+name = "tier2-rpc-driver"
+class = "test-violation"
+reason = "Phase-02 cross-tier exchange driver exercises raw-pointer syscall copy-path validation — see [[file]] entry."
+approver = "dmin"
+date = "2026-10-09"
+
+
+[[crate]]
+name = "service-compositor"
+class = "legacy-raw-ptr"
+reason = "Owns allowlisted unsafe under cells/services/compositor/ — see the [[file]] entries of class \"legacy-raw-ptr\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "service-net"
+class = "legacy-raw-ptr"
+reason = "Owns allowlisted unsafe under cells/services/net/ — see the [[file]] entries of class \"legacy-raw-ptr\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-14"
+
+[[crate]]
+name = "app-shell"
+class = "temporary-audit"
+reason = "Owns allowlisted unsafe under cells/tools/shell/ — see the [[file]] entries of class \"temporary-audit\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-30"
+review_by = "2026-10-28"
+tracking = "midori-lessons phase 06 (DataPtr removal)"
+
+[[crate]]
+name = "service-silo"
+class = "temporary-audit"
+reason = "Owns allowlisted unsafe under cells/services/silo/ — see the [[file]] entries of class \"temporary-audit\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-30"
+review_by = "2026-10-28"
+tracking = "midori-lessons phase 07 (grant/pointer audit)"
+
+[[crate]]
+name = "service-vfs"
+class = "temporary-audit"
+reason = "Owns allowlisted unsafe under cells/services/vfs/ — see the [[file]] entries of class \"temporary-audit\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-07-30"
+review_by = "2026-10-28"
+tracking = "midori-lessons phase 07 (grant/pointer audit)"
+
+[[crate]]
+name = "c-pthread"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/c-pthread/ — see the [[file]] entry for the justification."
+approver = "dmin"
+date = "2026-09-25"
+
+[[crate]]
+name = "app-c-spawn"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/c-spawn/ — see the [[file]] entry for the justification."
+approver = "dmin"
+date = "2026-09-25"
+
+[[crate]]
+name = "app-c-spawn-child"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/c-spawn-child/ — see the [[file]] entry for the justification."
+approver = "dmin"
+date = "2026-09-25"

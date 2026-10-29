@@ -1,0 +1,100 @@
+{
+  "actual_build_rustc_log": {
+    "bytes": 212,
+    "sha256": "bad5444a63089c36f7ab533cfb95f78c2ef4a4440bbed965d6458e322361da30"
+  },
+  "current_CLI_tools": {
+    "/home/dmin/cellos/scripts/cellos-sign": {
+      "bytes": 635,
+      "sha256": "005bb64c653e7328151c2275690f6dd48a89a05eb61876ec3499b4f5bbddd7f0"
+    },
+    "/home/dmin/cellos/scripts/cellos_sign/__init__.py": {
+      "bytes": 2154,
+      "sha256": "b8d84078e60506142599d27a31e5f055181aa04b80defd88067c7e92ad6548bd"
+    },
+    "/home/dmin/cellos/scripts/cellos_sign/allowlist.py": {
+      "bytes": 5281,
+      "sha256": "a58b8ffa9bbf68ab7da144393195cd1a1e6d88cbf0f399101c0a577507d8d524"
+    },
+    "/home/dmin/cellos/scripts/cellos_sign/cli.py": {
+      "bytes": 7422,
+      "sha256": "ed92c59aff7694458f089e669376acec223099331547c94b2223aa320b126efa"
+    },
+    "/home/dmin/cellos/scripts/cellos_sign/lexer.py": {
+      "bytes": 4751,
+      "sha256": "47760ca487eff94d4c0de589a84af0f547178c12d8e6b6b7d0b711c389a76d14"
+    },
+    "/home/dmin/cellos/scripts/cellos_sign/policy.py": {
+      "bytes": 6795,
+      "sha256": "5566dec5578d5c964c616c025cb49818b71f49be4859b186d18ea63d10dc1083"
+    },
+    "/home/dmin/cellos/scripts/cellos_sign/scan.py": {
+      "bytes": 6282,
+      "sha256": "5b93ac6ee338e12cfad6ddf6ca71d3d54bfb89fe54b12cece8fbdfdee19e5b20"
+    },
+    "/home/dmin/cellos/scripts/cellos_sign/signing.py": {
+      "bytes": 13838,
+      "sha256": "a1d25650f79383f7e09af9a95a9b4ad153bec8884f5f8913daf94fb181d1c876"
+    },
+    "/home/dmin/cellos/scripts/cellos_sign/toolchain.py": {
+      "bytes": 3904,
+      "sha256": "3d45630702e3def6ce00bde116b69a0457a09592c494b29612709839569a0685"
+    }
+  },
+  "dev_public_key_hex": "22fc297792f0b6ffc0bfcfdb7edb0c0aa14e025a365ec0e342e86e3829cb74b6",
+  "dev_public_key_sha256": "7db0b01f39d179aacf7b03dbd7dd9d71f641598bed40fb9839d3c1e1117e666f",
+  "executables": {
+    "actual_pinned_rustc": {
+      "bytes": 646176,
+      "path": "/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/bin/rustc",
+      "sha256": "69bbd1aed973b74c1932212284872efbb11991f91bce888655633a41c9d278ad"
+    },
+    "git": {
+      "bytes": 4066232,
+      "path": "/usr/bin/git",
+      "sha256": "eb54b535467e0975c1284d4c4d08eea779aeb248a5d34b02e2ee171382e22201"
+    },
+    "objcopy": {
+      "bytes": 166536,
+      "path": "/usr/bin/x86_64-linux-gnu-objcopy",
+      "sha256": "9276e918e3c26d3aa7ef9dd2232cd8ac692f03d3c1f270bfa5144a2b5492b713"
+    },
+    "python3": {
+      "bytes": 8020928,
+      "path": "/usr/bin/python3.12",
+      "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f"
+    },
+    "readelf": {
+      "bytes": 789280,
+      "path": "/usr/bin/x86_64-linux-gnu-readelf",
+      "sha256": "64c58e15274bbbb5153f31078e455e9e77ee5f51489e709bba5bb788ce9df2b0"
+    },
+    "rustc": {
+      "bytes": 21139856,
+      "path": "/home/dmin/.cargo/bin/rustup",
+      "sha256": "5be191e8c70a5007074254cb74d78dbfdd25cd5a61c27de7b8e5410122ec24f4"
+    },
+    "size": {
+      "bytes": 31184,
+      "path": "/usr/bin/x86_64-linux-gnu-size",
+      "sha256": "ac2e5c6a62140912c3f36d5b65e12465eb75df372d81093a387a949a7d105fa9"
+    }
+  },
+  "full_compiler_commit": "f53b654a8882fd5fc036c4ca7a4ff41ce32497a6",
+  "harness": {
+    "bytes": 23860,
+    "sha256": "b86020cd779b632385963980fbed7977351ade71a5b8cd8a81e6252b7856a38c"
+  },
+  "historical_allowlist": {
+    "bytes": 32639,
+    "historical_HEAD_exact": true,
+    "historical_path": "/tmp/cellbox-s10-4/baseline-worktree/scripts/unsafe-allowlist.toml",
+    "sha256": "91984e5e39dd7d077c85ec13e3e0f8718462d2b852b89ef2d28dee34b5c22dd3"
+  },
+  "historical_signer": {
+    "bytes": 15797,
+    "historical_HEAD_exact": true,
+    "historical_path": "/tmp/cellbox-s10-4/baseline-worktree/scripts/sign-cell.py",
+    "sha256": "1be5d58070a2e1288cb505b4f41ae9e993899d2481ad12f3ac51268f50a6d230"
+  }
+}

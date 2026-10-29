@@ -1,0 +1,42 @@
+{
+  "scope": "Synthetic deterministic fake clock/transport; no candidate execution",
+  "client_type": "AtomicRspClient",
+  "original_rsp_sha256": "c8c3bffb20a609201e0a7dd59b58b35fde4c935cec221aadd0830e87eab76880",
+  "wire_frame_hex": "245430357468726561643a30313b233037",
+  "valid_checksum": true,
+  "polls": [
+    {
+      "ordinal": 1,
+      "start": 0.0,
+      "timeout": 0.1,
+      "error": "RspTimeout: RSP deadline expired",
+      "end": 0.1,
+      "buffer_hex": "245430357468726561643a30313b233037",
+      "state": "running",
+      "ACK_count": 0
+    },
+    {
+      "ordinal": 2,
+      "start": 0.1,
+      "timeout": 0.1,
+      "returned_stop": "T05thread:01;",
+      "end": 0.1,
+      "buffer_hex": "",
+      "state": "stopped",
+      "ACK_count": 1
+    }
+  ],
+  "receive_calls": 1,
+  "sent_raw_hex": [
+    "2b"
+  ],
+  "final_state_before_close": "stopped",
+  "last_stop": "T05thread:01;",
+  "final_buffer_hex": "",
+  "positive_ACK_count": 1,
+  "decoded_stop_dispatch_count": 1,
+  "stop_received_across_original_polls": true,
+  "no_guest_control_packet": true,
+  "old_loss_signature": false,
+  "no_timeout_increase": true
+}

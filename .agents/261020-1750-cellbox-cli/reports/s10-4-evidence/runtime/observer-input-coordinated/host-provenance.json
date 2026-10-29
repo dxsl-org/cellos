@@ -1,0 +1,58 @@
+{
+  "qemu": {
+    "qemu_binary": "/usr/bin/qemu-system-x86_64",
+    "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+    "version": "QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.17)\nCopyright (c) 2003-2023 Fabrice Bellard and the QEMU Project developers\n",
+    "elf_notes": "\nDisplaying notes found in: .note.gnu.property\n  Owner                Data size \tDescription\n  GNU                  0x00000020\tNT_GNU_PROPERTY_TYPE_0\n      Properties: x86 feature: IBT, SHSTK\n\tx86 ISA needed: x86-64-baseline\n\nDisplaying notes found in: .note.gnu.build-id\n  Owner                Data size \tDescription\n  GNU                  0x00000014\tNT_GNU_BUILD_ID (unique build ID bitstring)\n    Build ID: ce72f123d382a9642649676c0fad7b73f7dde749\n\nDisplaying notes found in: .note.ABI-tag\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_ABI_TAG (ABI version tag)\n    OS: Linux, ABI: 3.2.0\n",
+    "host_sources": {
+      "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic/diagnostic.py": "b11e2b7c641f0c49412ba9d1f491452742b2059bb3bb078887834509b380a3e7",
+      "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/common.py": "aed7d9c2ee8ac8b4bb4d47948ce14d56b0c58b14c02c4d340336abf3916590ec",
+      "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer.py": "9a8aeaefbc31c24df43a67ad6c65dcb48505b0d7933909f3133aa5cbcfd954dc",
+      "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/rsp.py": "c8c3bffb20a609201e0a7dd59b58b35fde4c935cec221aadd0830e87eab76880",
+      "/home/dmin/cellos/scripts/phase10_canonical_drive.py": "d4fcb022dc340f6d79451fa02ae3b38e0ca90f809f0c943ba48abfbeb835fad9",
+      "/home/dmin/cellos/scripts/phase04_gui_drive.py": "bfef6d8e6426bbddcb2d5e59d9f00dced631bef995af7c62d3366486d32027bc",
+      "/home/dmin/cellos/scripts/phase05_vt_hostile.py": "709bd4e3863764f9002d536c2bd29cd368ae117fde5f90bd03c805216b5c9ae2"
+    },
+    "source_reference_scope": "upstream v8.2.2 source plus installed event metadata; Ubuntu patched source not independently reconstructed"
+  },
+  "executing_host_sources": {
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-input-coordinated/coordinated.py": "b1b1c4e4adb6fcd3f14f9df21af196dcea7eb7a1c17f80d581bd982ff387725f",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-input-coordinated/admission.py": "7ca6fda60af58bf0f2c147578f8477582a246a2476da4033df995df44c46f91a",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-input-coordinated/test_admission.py": "70ca0a47c0db2ab9e46d1c877de8e8ec385e54a5fff83e21062c64fba72fb613",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-input-coordinated/test_coordinated.py": "5b93994433b6d8bb294cfb70d7e48347173b183ebad6b9c6e33998a15b0e058d",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-qmp-serialized/serialized.py": "fcb2696aa9b54e55a4b51d1011d598cc0789e6ef754a251e2fd0cc21d23d0e3d",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-recurring/recurring.py": "046c211b9770bd0deef45885d76c1677bf4e6b512563d4a82e99a3cfbe28928a",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-step-amendment-corrected/amendment.py": "e14d1b79b8f61ec160ccbbd9c1595d6648afa28078371b5c430a7ec77e5609c9",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic/diagnostic.py": "b11e2b7c641f0c49412ba9d1f491452742b2059bb3bb078887834509b380a3e7",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/rsp.py": "c8c3bffb20a609201e0a7dd59b58b35fde4c935cec221aadd0830e87eab76880",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/common.py": "aed7d9c2ee8ac8b4bb4d47948ce14d56b0c58b14c02c4d340336abf3916590ec",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer.py": "9a8aeaefbc31c24df43a67ad6c65dcb48505b0d7933909f3133aa5cbcfd954dc",
+    "/home/dmin/cellos/scripts/phase10_canonical_drive.py": "d4fcb022dc340f6d79451fa02ae3b38e0ca90f809f0c943ba48abfbeb835fad9",
+    "/home/dmin/cellos/scripts/phase04_gui_drive.py": "bfef6d8e6426bbddcb2d5e59d9f00dced631bef995af7c62d3366486d32027bc",
+    "/home/dmin/cellos/scripts/phase05_vt_hostile.py": "709bd4e3863764f9002d536c2bd29cd368ae117fde5f90bd03c805216b5c9ae2"
+  },
+  "retained_health": {
+    "same_binary": true,
+    "source_exact": true,
+    "successful_scopes": 550,
+    "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+    "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+    "evidence_sha256": {
+      "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+      "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+      "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+      "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+      "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+    },
+    "same_site_in_current_boot_required": false
+  },
+  "input_source_binding": {
+    "verified": true,
+    "binary_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+    "version": "1:8.2.2+ds-0ubuntu1.17",
+    "proof_sha256": "de42153d85b858cb47a17df7d2186b140aef4e57c15c35f056a7d118707137e1",
+    "next_protocol_sha256": "663a6f5ade81c40c066bcb598fb5c6ae42dec3a31ee0a268111dff72490e6db9",
+    "zero_prefix_scope": "Only events of the exact structured VM-not-running rejected batch; not earlier accepted batches"
+  },
+  "approval": "S10-4.13 CP1 user2026-10-29; coordinated exact-unaccepted-batch admission; max64 in same5s/caller/900 deadline; one fresh desktop only; no extra guest execution"
+}

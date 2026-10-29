@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "-v",
+    "test_diagnostic"
+  ],
+  "cwd": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+  "start_ns": 386081674365627,
+  "end_ns": 386081802334646,
+  "exit_code": 0,
+  "output": "test_analyze_requires_prior_health_complete_context_and_terminal_failure (test_diagnostic.DiagnosticTests.test_analyze_requires_prior_health_complete_context_and_terminal_failure) ... ok\ntest_capture_failure_is_terminal_after_restoration_without_fallback (test_diagnostic.DiagnosticTests.test_capture_failure_is_terminal_after_restoration_without_fallback) ... ok\ntest_deadline_cannot_be_extended_by_qmp_query (test_diagnostic.DiagnosticTests.test_deadline_cannot_be_extended_by_qmp_query) ... ok\ntest_native_one_step_restore_and_all_other_guards_unchanged (test_diagnostic.DiagnosticTests.test_native_one_step_restore_and_all_other_guards_unchanged) ... ok\ntest_prompt_wait_checks_observer_before_any_more_input_or_progress (test_diagnostic.DiagnosticTests.test_prompt_wait_checks_observer_before_any_more_input_or_progress) ... ok\ntest_qmp_control_policy_never_sends_forbidden_commands (test_diagnostic.DiagnosticTests.test_qmp_control_policy_never_sends_forbidden_commands) ... ok\ntest_qmp_multiple_cpu_running_and_unavailable_event_are_stops (test_diagnostic.DiagnosticTests.test_qmp_multiple_cpu_running_and_unavailable_event_are_stops) ... ok\ntest_qmp_preflight_records_raw_messages_and_only_expected_names (test_diagnostic.DiagnosticTests.test_qmp_preflight_records_raw_messages_and_only_expected_names) ... ok\ntest_read_extensions_exactly_scoped_and_setters_steps_writes_denied (test_diagnostic.DiagnosticTests.test_read_extensions_exactly_scoped_and_setters_steps_writes_denied) ... ok\ntest_same_pc_original_guard_stops_once_and_forbids_resume_or_step (test_diagnostic.DiagnosticTests.test_same_pc_original_guard_stops_once_and_forbids_resume_or_step) ... ok\ntest_scoped_trace_enable_query_before_disable_and_read_complete_interval (test_diagnostic.DiagnosticTests.test_scoped_trace_enable_query_before_disable_and_read_complete_interval) ... ok\ntest_trace_incomplete_duplicate_step_wrong_mode_or_thread_rejected (test_diagnostic.DiagnosticTests.test_trace_incomplete_duplicate_step_wrong_mode_or_thread_rejected) ... ok\ntest_trace_missing_exit_with_entry_never_proves_retirement (test_diagnostic.DiagnosticTests.test_trace_missing_exit_with_entry_never_proves_retirement) ... ok\ntest_trace_zero_dispatch_not_pending_cause_or_retirement_claim (test_diagnostic.DiagnosticTests.test_trace_zero_dispatch_not_pending_cause_or_retirement_claim) ... ok\n\n----------------------------------------------------------------------\nRan 14 tests in 0.013s\n\nOK\n",
+  "scope": "new synthetic diagnostic behavioral tests only; no QEMU/candidate execution"
+}

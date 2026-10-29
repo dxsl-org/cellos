@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "-m",
+    "unittest",
+    "-v",
+    "test_temporal.TemporalLedgerTests.test_dynamic_per_frame_counts_and_long_metadata_are_not_fixed_eight",
+    "test_temporal.TemporalLedgerTests.test_repeated_long_metadata_with_two_plausible_scrolls_fails_closed",
+    "test_temporal.TemporalLedgerTests.test_copied_row_bodies_with_two_plausible_scrolls_fail_closed"
+  ],
+  "cwd": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-gui-temporal",
+  "start_ns": 426463213199315,
+  "end_ns": 426463322906079,
+  "returncode": 0,
+  "scope": "Only three affected dynamic fixtures; both original ambiguous fixtures preserved as failclosed adversarial cases, distinct CPU metrics success, no ledger guard change"
+}

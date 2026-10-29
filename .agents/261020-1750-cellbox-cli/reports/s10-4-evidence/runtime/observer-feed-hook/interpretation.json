@@ -1,0 +1,301 @@
+{
+  "scope": "retained-only reading of the one S10-4.17 desktop result; no rerun, no fix, no VM operation",
+  "classification": "B",
+  "classification_name": "SUCCESS_METRIC_ONLY",
+  "run": {
+    "desktop_runs": 1,
+    "headless_runs": 0,
+    "rerun_authorized": false,
+    "status": "STOP",
+    "wall_seconds": 231.960982331,
+    "original_window_seconds": 900,
+    "command_deadlines_unchanged": true
+  },
+  "metric": {
+    "proved": true,
+    "finite": {
+      "status": "READY",
+      "code": null,
+      "reason": null,
+      "cls": null,
+      "frames": 2,
+      "expected_cursor": [
+        9,
+        25
+      ],
+      "scrolls": 68,
+      "hits": 15,
+      "bytes": 6916,
+      "last_hit_ns": 431575416106291,
+      "commit_finish_ns": 431545080997231
+    },
+    "status": {
+      "status": "READY",
+      "code": null,
+      "reason": null,
+      "cls": null,
+      "frames": 0,
+      "expected_cursor": [
+        9,
+        2
+      ],
+      "scrolls": 0,
+      "hits": 2,
+      "bytes": 15,
+      "last_hit_ns": 431595126338347
+    },
+    "meaning": "Frontend-consumed Terminal bytes (ByteSink::feed ledger) proved: two complete JSON frames, fresh prompt, then the separate original echo st=$? epoch = st=0 and a new prompt; each epoch cross-checked against the exact final GUI screen (two identical reads 1.5 s apart)."
+  },
+  "ledger": {
+    "hits": 30,
+    "bytes": 7053,
+    "stdout_bytes": 7053,
+    "stderr_bytes": 0,
+    "sha256_of_concatenated_bytes": "b9d5443d0b418559fcfd87de4b2f77d9fa331fd1c4da4ff0ebae20d8a17ac66f",
+    "violation": null,
+    "jsonl_records": 30,
+    "jsonl_all_accepted": true,
+    "jsonl_mode": "0o600",
+    "sites_seen": [
+      "0x14b",
+      "0x1a5"
+    ]
+  },
+  "identity_gate": {
+    "entry": 4664066048,
+    "hook_pc": 4664187520,
+    "cr3": 364544,
+    "cs": 35,
+    "initial_rsp": 63418368,
+    "stack_top": 63418368,
+    "windows_checked": [
+      "entry",
+      "feed-prologue",
+      "feed-ret-epilogue",
+      "call-site-0x146",
+      "call-site-0x1a0",
+      "call-site-0x1e0",
+      "call-site-0x228"
+    ],
+    "pages": [
+      4664066048,
+      4664184832,
+      4664188928
+    ],
+    "phase": "terminal-launch",
+    "ns": 431459021057475,
+    "terminal_entry_count": 1,
+    "z1_installed": "Z1,11601da80,1"
+  },
+  "three_way_count": {
+    "ledger_hits": 30,
+    "hook_hits": 30,
+    "successful_scopes_at_hook": 30,
+    "with_hook_tb_entry": 30,
+    "scopes_recorded_in_steps_jsonl": 30,
+    "failed_primary_scopes": 0,
+    "all_equal": true
+  },
+  "disarm": {
+    "ns": 431600181892971,
+    "ledger_hits": 30,
+    "ledger_bytes": 7053,
+    "hook_hits": 30,
+    "scopes": {
+      "scopes_at_hook": 30,
+      "successful_scopes": 30,
+      "successful_with_hook_tb_entry": 30,
+      "failed_primary_scopes": 0
+    },
+    "hook_pc": 4664187520,
+    "breakpoint_census_before": 521,
+    "breakpoint_census_after": 520
+  },
+  "epochs": [
+    {
+      "kind": "finite",
+      "state": "COMPLETE",
+      "samples": 23,
+      "all_samples_non_gating": true,
+      "accepted_sample": 22,
+      "screen_match_samples": 2,
+      "enter_batch": 55,
+      "enter_commit_count": 1,
+      "typed_exact_before_enter": true,
+      "armed_to_complete_seconds": 36.056026184,
+      "original_deadline_seconds": 120,
+      "last_hit_ns": 431575416106291
+    },
+    {
+      "kind": "status",
+      "state": "COMPLETE",
+      "samples": 6,
+      "all_samples_non_gating": true,
+      "accepted_sample": 5,
+      "screen_match_samples": 2,
+      "enter_batch": 66,
+      "enter_commit_count": 1,
+      "typed_exact_before_enter": true,
+      "armed_to_complete_seconds": 8.43430524,
+      "original_deadline_seconds": 60,
+      "last_hit_ns": 431595126338347
+    }
+  ],
+  "tail_stop": {
+    "error_head": "Stop: bad status rows ['{\"frame\":\"row\",\"value\":{\"cell_id\":5,",
+    "observed_phase_sequence": [
+      "terminal-launch",
+      "initial-prompt",
+      "ordinary-prompt-idle",
+      "finite-stream",
+      "endless-collected-cat"
+    ],
+    "classification_of_tail_stop": "E",
+    "cause": "retained original-schedule check Surface.status(): `need(len(vals)==1)` over the WHOLE visible screen after the collected-cat Ctrl-C status. The screen legitimately shows both the earlier finite `st=0` row and the new `st=130` row, so the check raises \"bad status rows\". It is a latent defect of the retained desktop schedule (S10-4.4 common.py), unreachable until the finite epoch could complete; it is not a candidate failure and not a hook failure. Not fixed or rerun.",
+    "later_original_phases_not_run": [
+      "endless-terminal-stream",
+      "rg-large",
+      "interactive-top",
+      "complete snapshot"
+    ]
+  },
+  "transport_and_recovery": {
+    "native_scopes": 3220,
+    "hook_scopes": 30,
+    "additional_native_packets": 7,
+    "recoveries": [
+      [
+        "ADDITIONAL_ADVANCED_CONTINUE",
+        "0x1180e2f16"
+      ],
+      [
+        "ADDITIONAL_ADVANCED_CONTINUE",
+        "0x1180e30c1"
+      ],
+      [
+        "ADDITIONAL_ADVANCED_CONTINUE",
+        "0x1180e2f16"
+      ],
+      [
+        "ADDITIONAL_ADVANCED_CONTINUE",
+        "0x1180e2f16"
+      ],
+      [
+        "ADDITIONAL_ADVANCED_CONTINUE",
+        "0x1180e30c1"
+      ],
+      [
+        "ADDITIONAL_ADVANCED_CONTINUE",
+        "0x1180e2f16"
+      ],
+      [
+        "ADDITIONAL_ADVANCED_CONTINUE",
+        "0x1180e2f16"
+      ]
+    ],
+    "recoveries_all_advanced": true,
+    "recoveries_at_hook_pc": 0,
+    "gui_batches": 125,
+    "gui_batches_all_committed_once": true,
+    "rsp_packet_tx": 85812,
+    "rsp_packet_rx": 85812,
+    "observer_pause_seconds": 32.820014096
+  },
+  "memory_partial_bounds_only": {
+    "scope": "Aligned allocator events, CPU stack write-attempt 4 KiB bounds and mapped-backing snapshots for the phases actually run; NOT full workload, NOT RSS/exact/kernel stack",
+    "instances": [
+      {
+        "role": "autoload-background",
+        "peak_aligned_used_bytes": 25272,
+        "last_value": 25272,
+        "post_events": 5,
+        "phase_peaks": {
+          "boot": 25272
+        },
+        "stack_write_attempt_depth_bound_bytes": [
+          12289,
+          16384
+        ]
+      },
+      {
+        "role": "foreground-terminal",
+        "peak_aligned_used_bytes": 67544,
+        "last_value": 42112,
+        "post_events": 3161,
+        "phase_peaks": {
+          "terminal-launch": 33632,
+          "finite-stream": 67544,
+          "endless-collected-cat": 56176
+        },
+        "stack_write_attempt_depth_bound_bytes": [
+          45057,
+          49152
+        ]
+      }
+    ],
+    "snapshots": [
+      {
+        "phase": "initial-prompt",
+        "instance": 2,
+        "monotonic_ns": 431514179161169,
+        "cr3": 364544,
+        "aligned_live_used_bytes": 33632,
+        "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+        "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+      },
+      {
+        "phase": "ordinary-prompt-idle",
+        "instance": 2,
+        "monotonic_ns": 431524242079188,
+        "cr3": 364544,
+        "aligned_live_used_bytes": 33632,
+        "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+        "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+      },
+      {
+        "phase": "finite-stream",
+        "instance": 2,
+        "monotonic_ns": 431600300103623,
+        "cr3": 364544,
+        "aligned_live_used_bytes": 41920,
+        "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+        "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+      },
+      {
+        "phase": "collected-cat-buffered",
+        "instance": 2,
+        "monotonic_ns": 431637036569086,
+        "cr3": 364544,
+        "aligned_live_used_bytes": 54512,
+        "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+        "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+      }
+    ],
+    "resident_bytes": null,
+    "exact_stack_peak_bytes": null,
+    "kernel_stack_peak_bytes": null,
+    "historical_runtime_baseline": null
+  },
+  "preservation": {
+    "unchanged": true,
+    "files": 546,
+    "canonical_files": 469,
+    "changed": [],
+    "previous_archives_unchanged": true,
+    "previous_archive_count": 25,
+    "old_compressed_trace_unchanged": true,
+    "host_source_changed": []
+  },
+  "acceptance": {
+    "cbx27_met": false,
+    "phase10_criterion4_met": false,
+    "reason": "full workload not completed; RSS/exact stack/kernel stack/historical comparator unavailable"
+  },
+  "residual_limits": [
+    "Entry-only hook: completion of the last feed is established by the exact final-screen cross-check, not a return hook.",
+    "feed exposes no Cell/session/operation id; attribution rests on the single Terminal instance, epoch cut and payload self-identification.",
+    "Terminal notice() text bypasses feed; none was visible (no [terminal/[shell row).",
+    "A structure-preserving loss/duplication/reorder that is scrolled off the 26-row screen would not be detected (documented in T5).",
+    "The hook was disarmed after the status epoch; Terminal output after that is unobserved by design."
+  ]
+}

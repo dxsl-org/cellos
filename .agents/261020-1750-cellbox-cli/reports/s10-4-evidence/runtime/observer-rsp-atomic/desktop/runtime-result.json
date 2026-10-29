@@ -1,0 +1,2594 @@
+{
+  "profile": "desktop",
+  "status": "STOP",
+  "candidate_runs": 1,
+  "mode": "S10-4.14-atomic-RSP-coordinated-input",
+  "start_ns": 424197663708511,
+  "original_window_seconds": 900,
+  "command_deadlines_unchanged": true,
+  "qemu_pid": 2240306,
+  "argv": [
+    "qemu-system-x86_64",
+    "-machine",
+    "q35",
+    "-accel",
+    "tcg",
+    "-cpu",
+    "qemu64,+pdpe1gb",
+    "-m",
+    "256M",
+    "-display",
+    "none",
+    "-chardev",
+    "socket,id=ser0,path=/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/sock/measurement-serial.sock,server=on,wait=off",
+    "-serial",
+    "chardev:ser0",
+    "-qmp",
+    "unix:/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/sock/measurement-qmp.sock,server=on,wait=off",
+    "-monitor",
+    "none",
+    "-drive",
+    "file=/tmp/cellbox-s10-3d-resume/cand/desktop.iso,media=cdrom,readonly=on,format=raw",
+    "-boot",
+    "d",
+    "-no-reboot",
+    "-netdev",
+    "user,id=net0,restrict=on",
+    "-device",
+    "e1000,netdev=net0",
+    "-drive",
+    "file=/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/disk.img,if=none,format=raw,id=p10fx",
+    "-device",
+    "nvme,drive=p10fx,serial=cellosp10",
+    "-device",
+    "virtio-keyboard-pci",
+    "-device",
+    "virtio-tablet-pci",
+    "-chardev",
+    "socket,path=/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/sock/gdb.sock,server=on,wait=off,id=gdb0",
+    "-gdb",
+    "chardev:gdb0",
+    "-S",
+    "-D",
+    "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/qemu-trace.log",
+    "-msg",
+    "timestamp=on",
+    "-trace",
+    "enable=gdbstub_io_command",
+    "-trace",
+    "enable=gdbstub_io_reply",
+    "-trace",
+    "enable=gdbstub_hit_watchpoint",
+    "-trace",
+    "enable=gdbstub_hit_break",
+    "-trace",
+    "enable=breakpoint_singlestep"
+  ],
+  "vm_start_ns": 424198709162744,
+  "ordinary_idle": {
+    "name": "ordinary-prompt-idle",
+    "start_ns": 424291988821575,
+    "end_ns": 424301989122806,
+    "target_hz": 10,
+    "samples": [
+      {
+        "monotonic_ns": 424291988995597,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-000.png"
+      },
+      {
+        "monotonic_ns": 424292089151515,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-001.png"
+      },
+      {
+        "monotonic_ns": 424292189078714,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-002.png"
+      },
+      {
+        "monotonic_ns": 424292289102919,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-003.png"
+      },
+      {
+        "monotonic_ns": 424292389137629,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-004.png"
+      },
+      {
+        "monotonic_ns": 424292489089357,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-005.png"
+      },
+      {
+        "monotonic_ns": 424292589077725,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-006.png"
+      },
+      {
+        "monotonic_ns": 424292689133374,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-007.png"
+      },
+      {
+        "monotonic_ns": 424292789092305,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-008.png"
+      },
+      {
+        "monotonic_ns": 424292889084522,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-009.png"
+      },
+      {
+        "monotonic_ns": 424292989085807,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-010.png"
+      },
+      {
+        "monotonic_ns": 424293089085893,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-011.png"
+      },
+      {
+        "monotonic_ns": 424293189135497,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-012.png"
+      },
+      {
+        "monotonic_ns": 424293289085481,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-013.png"
+      },
+      {
+        "monotonic_ns": 424293389078827,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-014.png"
+      },
+      {
+        "monotonic_ns": 424293489077841,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-015.png"
+      },
+      {
+        "monotonic_ns": 424293589079526,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-016.png"
+      },
+      {
+        "monotonic_ns": 424293689099536,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-017.png"
+      },
+      {
+        "monotonic_ns": 424293789086606,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-018.png"
+      },
+      {
+        "monotonic_ns": 424293889074451,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-019.png"
+      },
+      {
+        "monotonic_ns": 424293989076477,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-020.png"
+      },
+      {
+        "monotonic_ns": 424294089128056,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-021.png"
+      },
+      {
+        "monotonic_ns": 424294189065959,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-022.png"
+      },
+      {
+        "monotonic_ns": 424294289088662,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-023.png"
+      },
+      {
+        "monotonic_ns": 424294389082786,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-024.png"
+      },
+      {
+        "monotonic_ns": 424294489079563,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-025.png"
+      },
+      {
+        "monotonic_ns": 424294589075227,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-026.png"
+      },
+      {
+        "monotonic_ns": 424294689141339,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-027.png"
+      },
+      {
+        "monotonic_ns": 424294789085281,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-028.png"
+      },
+      {
+        "monotonic_ns": 424294889082046,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-029.png"
+      },
+      {
+        "monotonic_ns": 424294989077972,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-030.png"
+      },
+      {
+        "monotonic_ns": 424295089080515,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-031.png"
+      },
+      {
+        "monotonic_ns": 424295189074416,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-032.png"
+      },
+      {
+        "monotonic_ns": 424295289088364,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-033.png"
+      },
+      {
+        "monotonic_ns": 424295389079226,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-034.png"
+      },
+      {
+        "monotonic_ns": 424295489079385,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-035.png"
+      },
+      {
+        "monotonic_ns": 424295589079945,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-036.png"
+      },
+      {
+        "monotonic_ns": 424295689078219,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-037.png"
+      },
+      {
+        "monotonic_ns": 424295789084361,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-038.png"
+      },
+      {
+        "monotonic_ns": 424295889074685,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-039.png"
+      },
+      {
+        "monotonic_ns": 424295989079005,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-040.png"
+      },
+      {
+        "monotonic_ns": 424296089077748,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-041.png"
+      },
+      {
+        "monotonic_ns": 424296189098678,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-042.png"
+      },
+      {
+        "monotonic_ns": 424296289080997,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-043.png"
+      },
+      {
+        "monotonic_ns": 424296389114914,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-044.png"
+      },
+      {
+        "monotonic_ns": 424296489082571,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-045.png"
+      },
+      {
+        "monotonic_ns": 424296589081294,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-046.png"
+      },
+      {
+        "monotonic_ns": 424296689079743,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-047.png"
+      },
+      {
+        "monotonic_ns": 424296789091656,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-048.png"
+      },
+      {
+        "monotonic_ns": 424296889078429,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-049.png"
+      },
+      {
+        "monotonic_ns": 424296990715684,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-050.png"
+      },
+      {
+        "monotonic_ns": 424297090973768,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-051.png"
+      },
+      {
+        "monotonic_ns": 424297190995493,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-052.png"
+      },
+      {
+        "monotonic_ns": 424297289486688,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-053.png"
+      },
+      {
+        "monotonic_ns": 424297389086081,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-054.png"
+      },
+      {
+        "monotonic_ns": 424297489084375,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-055.png"
+      },
+      {
+        "monotonic_ns": 424297598981199,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-056.png"
+      },
+      {
+        "monotonic_ns": 424297700225037,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-057.png"
+      },
+      {
+        "monotonic_ns": 424297800220467,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-058.png"
+      },
+      {
+        "monotonic_ns": 424297900188874,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-059.png"
+      },
+      {
+        "monotonic_ns": 424297999492701,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-060.png"
+      },
+      {
+        "monotonic_ns": 424298098989391,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-061.png"
+      },
+      {
+        "monotonic_ns": 424298201313564,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-062.png"
+      },
+      {
+        "monotonic_ns": 424298302395356,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-063.png"
+      },
+      {
+        "monotonic_ns": 424298400741437,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-064.png"
+      },
+      {
+        "monotonic_ns": 424298500029222,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-065.png"
+      },
+      {
+        "monotonic_ns": 424298599191625,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-066.png"
+      },
+      {
+        "monotonic_ns": 424298697911083,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-067.png"
+      },
+      {
+        "monotonic_ns": 424298796554903,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-068.png"
+      },
+      {
+        "monotonic_ns": 424298897751457,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-069.png"
+      },
+      {
+        "monotonic_ns": 424298997147751,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-070.png"
+      },
+      {
+        "monotonic_ns": 424299096936458,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-071.png"
+      },
+      {
+        "monotonic_ns": 424299194042324,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-072.png"
+      },
+      {
+        "monotonic_ns": 424299291119003,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-073.png"
+      },
+      {
+        "monotonic_ns": 424299391440379,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-074.png"
+      },
+      {
+        "monotonic_ns": 424299489257199,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-075.png"
+      },
+      {
+        "monotonic_ns": 424299589077706,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-076.png"
+      },
+      {
+        "monotonic_ns": 424299689079884,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-077.png"
+      },
+      {
+        "monotonic_ns": 424299789079180,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-078.png"
+      },
+      {
+        "monotonic_ns": 424299889153730,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-079.png"
+      },
+      {
+        "monotonic_ns": 424299989140893,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-080.png"
+      },
+      {
+        "monotonic_ns": 424300089135927,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-081.png"
+      },
+      {
+        "monotonic_ns": 424300189094898,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-082.png"
+      },
+      {
+        "monotonic_ns": 424300289082170,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-083.png"
+      },
+      {
+        "monotonic_ns": 424300389085330,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-084.png"
+      },
+      {
+        "monotonic_ns": 424300489081159,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-085.png"
+      },
+      {
+        "monotonic_ns": 424300589192984,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-086.png"
+      },
+      {
+        "monotonic_ns": 424300689421274,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-087.png"
+      },
+      {
+        "monotonic_ns": 424300789088342,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-088.png"
+      },
+      {
+        "monotonic_ns": 424300889081356,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-089.png"
+      },
+      {
+        "monotonic_ns": 424300989073460,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-090.png"
+      },
+      {
+        "monotonic_ns": 424301089076699,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-091.png"
+      },
+      {
+        "monotonic_ns": 424301189087045,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-092.png"
+      },
+      {
+        "monotonic_ns": 424301289081345,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-093.png"
+      },
+      {
+        "monotonic_ns": 424301389090177,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-094.png"
+      },
+      {
+        "monotonic_ns": 424301489080934,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-095.png"
+      },
+      {
+        "monotonic_ns": 424301589078764,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-096.png"
+      },
+      {
+        "monotonic_ns": 424301689081403,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-097.png"
+      },
+      {
+        "monotonic_ns": 424301789100243,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-098.png"
+      },
+      {
+        "monotonic_ns": 424301889072497,
+        "changed_pixels": 0,
+        "cursor": [
+          9,
+          2
+        ],
+        "frame": "/tmp/cellbox-s10-4-rsp-atomic-20261029/desktop/vm/evidence/screens/ordinary-prompt-idle-099.png"
+      }
+    ],
+    "qemu_cpu_ticks_delta": 1030,
+    "host_ticks_per_second": 100,
+    "serial_bytes": 0,
+    "scope": "whole-QEMU CPU incl sampling overhead; content changes not redraw calls"
+  },
+  "error": "Stop: timeout waiting for finite-stream: read screen",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-rsp-atomic/run_atomic.py\", line 73, in run_desktop\n    result['streams'] = surface.streams()\n                        ^^^^^^^^^^^^^^^^^\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/common.py\", line 205, in streams\n    self.phase('finite-stream');rows=self.command('finite-stream','top --records -d 1 --frames 2 | to jsonl | cat',120)\n                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-input-coordinated/coordinated.py\", line 66, in command\n    return super().command(name, cmd, timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/common.py\", line 149, in command\n    rows=self.d.command_read(name,cmd,timeout);out=rows\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/dmin/cellos/scripts/phase10_canonical_drive.py\", line 1077, in command_read\n    return self.read_until(name, before, done or self.at_fresh_prompt(len(self.pad(typed_rows)), typed_rows[-1]), timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/dmin/cellos/scripts/phase10_canonical_drive.py\", line 1094, in read_until\n    img, (rows, cursor) = self.wait_for(pred, f\"{name}: read screen\", timeout, interval=1.5)\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/common.py\", line 79, in wait_for\n    raise Stop(f'timeout waiting for {what}')\ncommon.Stop: timeout waiting for finite-stream: read screen\n",
+  "surface_events": [
+    {
+      "phase": "terminal-launch",
+      "monotonic_ns": 424224990377122
+    },
+    {
+      "phase": "initial-prompt",
+      "monotonic_ns": 424291909861205
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "monotonic_ns": 424291988819060
+    },
+    {
+      "phase": "finite-stream",
+      "monotonic_ns": 424302049321931
+    }
+  ],
+  "timestamps": {
+    "desktop_ready_ns": 424221910966577,
+    "terminal_click_ns": 424224990382573,
+    "exact_prompt_ns": 424287509385910
+  },
+  "gui_batches": [
+    {
+      "id": 1,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a2022616273222c202264617461223a207b2261786973223a202278222c202276616c7565223a20353437387d7d2c207b2274797065223a2022616273222c202264617461223a207b2261786973223a202279222c202276616c7565223a2033323033307d7d5d7d7d0a",
+      "deadline": 424229.990396294,
+      "start": 424224.990396294,
+      "finish": 424224.991539541,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 26,
+          "start": 424224.991019514,
+          "outcome": "COMMITTED",
+          "finish": 424224.991534334,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 26,
+      "caller": "MainThread",
+      "caller_deadline": 425098.861241338,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 2,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a202262746e222c202264617461223a207b22646f776e223a20747275652c2022627574746f6e223a20226c656674227d7d5d7d7d0a",
+      "deadline": 424230.591686261,
+      "start": 424225.591686261,
+      "finish": 424225.592564929,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 26,
+          "start": 424225.592215924,
+          "outcome": "COMMITTED",
+          "finish": 424225.592560149,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 26,
+      "caller": "MainThread",
+      "caller_deadline": 425098.861241338,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 3,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a202262746e222c202264617461223a207b22646f776e223a2066616c73652c2022627574746f6e223a20226c656674227d7d5d7d7d0a",
+      "deadline": 424230.742682632,
+      "start": 424225.742682632,
+      "finish": 424225.743631402,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 26,
+          "start": 424225.743173977,
+          "outcome": "COMMITTED",
+          "finish": 424225.743625378,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 26,
+      "caller": "MainThread",
+      "caller_deadline": 425098.861241338,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 4,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a2022616273222c202264617461223a207b2261786973223a202278222c202276616c7565223a2033303732307d7d2c207b2274797065223a2022616273222c202264617461223a207b2261786973223a202279222c202276616c7565223a20313633387d7d5d7d7d0a",
+      "deadline": 424231.343782469,
+      "start": 424226.343782469,
+      "finish": 424226.344716461,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 26,
+          "start": 424226.344239752,
+          "outcome": "COMMITTED",
+          "finish": 424226.344709878,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 26,
+      "caller": "MainThread",
+      "caller_deadline": 425098.861241338,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 5,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a2022616273222c202264617461223a207b2261786973223a202278222c202276616c7565223a2031323830307d7d2c207b2274797065223a2022616273222c202264617461223a207b2261786973223a202279222c202276616c7565223a2031363338347d7d5d7d7d0a",
+      "deadline": 424292.555317042,
+      "start": 424287.555317042,
+      "finish": 424287.556341923,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 48,
+          "start": 424287.555859962,
+          "outcome": "COMMITTED",
+          "finish": 424287.556335831,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 48,
+      "caller": "MainThread",
+      "caller_deadline": 425098.861241338,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 6,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a202262746e222c202264617461223a207b22646f776e223a20747275652c2022627574746f6e223a20226c656674227d7d5d7d7d0a",
+      "deadline": 424293.156493236,
+      "start": 424288.156493236,
+      "finish": 424288.15744987,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 48,
+          "start": 424288.157023098,
+          "outcome": "COMMITTED",
+          "finish": 424288.157443335,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 48,
+      "caller": "MainThread",
+      "caller_deadline": 425098.861241338,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 7,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a202262746e222c202264617461223a207b22646f776e223a2066616c73652c2022627574746f6e223a20226c656674227d7d5d7d7d0a",
+      "deadline": 424293.307570018,
+      "start": 424288.307570018,
+      "finish": 424288.308498114,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 48,
+          "start": 424288.308164243,
+          "outcome": "COMMITTED",
+          "finish": 424288.30849363,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 48,
+      "caller": "MainThread",
+      "caller_deadline": 425098.861241338,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 8,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a2022616273222c202264617461223a207b2261786973223a202278222c202276616c7565223a2033303732307d7d2c207b2274797065223a2022616273222c202264617461223a207b2261786973223a202279222c202276616c7565223a20313633387d7d5d7d7d0a",
+      "deadline": 424293.908625087,
+      "start": 424288.908625087,
+      "finish": 424288.909595524,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 48,
+          "start": 424288.909140606,
+          "outcome": "COMMITTED",
+          "finish": 424288.909590213,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 48,
+      "caller": "MainThread",
+      "caller_deadline": 425098.861241338,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 9,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202274227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202274227d7d7d5d7d7d0a",
+      "deadline": 424307.049391082,
+      "start": 424302.049391082,
+      "finish": 424302.050580994,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 50,
+          "start": 424302.050079791,
+          "outcome": "COMMITTED",
+          "finish": 424302.050576032,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "PAUSED_OR_STEPPING",
+      "epoch": 49,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 10,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226f227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226f227d7d7d5d7d7d0a",
+      "deadline": 424307.170713259,
+      "start": 424302.170713259,
+      "finish": 424302.171722793,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 50,
+          "start": 424302.171205771,
+          "outcome": "COMMITTED",
+          "finish": 424302.17171757,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 50,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 11,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202270227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202270227d7d7d5d7d7d0a",
+      "deadline": 424307.291846407,
+      "start": 424302.291846407,
+      "finish": 424302.292879515,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 52,
+          "start": 424302.292303143,
+          "outcome": "COMMITTED",
+          "finish": 424302.292872182,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 52,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 12,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d5d7d7d0a",
+      "deadline": 424307.413002776,
+      "start": 424302.413002776,
+      "finish": 424302.414102981,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 53,
+          "start": 424302.413533475,
+          "outcome": "COMMITTED",
+          "finish": 424302.414096732,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 53,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 13,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d696e7573227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d696e7573227d7d7d5d7d7d0a",
+      "deadline": 424307.53422721,
+      "start": 424302.53422721,
+      "finish": 424302.535630892,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 53,
+          "start": 424302.534712308,
+          "outcome": "COMMITTED",
+          "finish": 424302.53562417,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 53,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 14,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d696e7573227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d696e7573227d7d7d5d7d7d0a",
+      "deadline": 424307.655760176,
+      "start": 424302.655760176,
+      "finish": 424302.656936349,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 53,
+          "start": 424302.656361575,
+          "outcome": "COMMITTED",
+          "finish": 424302.656929747,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 53,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 15,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202272227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202272227d7d7d5d7d7d0a",
+      "deadline": 424307.777033444,
+      "start": 424302.777033444,
+      "finish": 424302.782938608,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424302.782430738,
+          "outcome": "COMMITTED",
+          "finish": 424302.782933997,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "PAUSED_OR_STEPPING",
+      "epoch": 54,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 16,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202265227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202265227d7d7d5d7d7d0a",
+      "deadline": 424307.903070086,
+      "start": 424302.903070086,
+      "finish": 424302.904088701,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424302.903515885,
+          "outcome": "COMMITTED",
+          "finish": 424302.904081245,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 17,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202263227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202263227d7d7d5d7d7d0a",
+      "deadline": 424308.024231536,
+      "start": 424303.024231536,
+      "finish": 424303.025370932,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424303.024810442,
+          "outcome": "COMMITTED",
+          "finish": 424303.025365578,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 18,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226f227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226f227d7d7d5d7d7d0a",
+      "deadline": 424308.145495983,
+      "start": 424303.145495983,
+      "finish": 424303.146543682,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424303.1459927,
+          "outcome": "COMMITTED",
+          "finish": 424303.146537807,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 19,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202272227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202272227d7d7d5d7d7d0a",
+      "deadline": 424308.266660021,
+      "start": 424303.266660021,
+      "finish": 424303.267694689,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424303.26716056,
+          "outcome": "COMMITTED",
+          "finish": 424303.267687412,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 20,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202264227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202264227d7d7d5d7d7d0a",
+      "deadline": 424308.387811196,
+      "start": 424303.387811196,
+      "finish": 424303.388849948,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424303.388301861,
+          "outcome": "COMMITTED",
+          "finish": 424303.388844198,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 21,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202273227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202273227d7d7d5d7d7d0a",
+      "deadline": 424308.508974038,
+      "start": 424303.508974038,
+      "finish": 424303.510047186,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424303.509510991,
+          "outcome": "COMMITTED",
+          "finish": 424303.51004164,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 22,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d5d7d7d0a",
+      "deadline": 424308.630181092,
+      "start": 424303.630181092,
+      "finish": 424303.631279567,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424303.630712545,
+          "outcome": "COMMITTED",
+          "finish": 424303.631273872,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 23,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d696e7573227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d696e7573227d7d7d5d7d7d0a",
+      "deadline": 424308.751400518,
+      "start": 424303.751400518,
+      "finish": 424303.752472197,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424303.751891881,
+          "outcome": "COMMITTED",
+          "finish": 424303.752466364,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 24,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202264227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202264227d7d7d5d7d7d0a",
+      "deadline": 424308.872591687,
+      "start": 424303.872591687,
+      "finish": 424303.873612258,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424303.873059135,
+          "outcome": "COMMITTED",
+          "finish": 424303.873605284,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 25,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d5d7d7d0a",
+      "deadline": 424308.993716615,
+      "start": 424303.993716615,
+      "finish": 424303.994719483,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424303.994159879,
+          "outcome": "COMMITTED",
+          "finish": 424303.994712832,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 26,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202231227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202231227d7d7d5d7d7d0a",
+      "deadline": 424309.114924767,
+      "start": 424304.114924767,
+      "finish": 424304.115982835,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424304.115443786,
+          "outcome": "COMMITTED",
+          "finish": 424304.115977008,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 27,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d5d7d7d0a",
+      "deadline": 424309.236131087,
+      "start": 424304.236131087,
+      "finish": 424304.23725369,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424304.236654526,
+          "outcome": "COMMITTED",
+          "finish": 424304.237247827,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 28,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d696e7573227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d696e7573227d7d7d5d7d7d0a",
+      "deadline": 424309.357438017,
+      "start": 424304.357438017,
+      "finish": 424304.358545951,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424304.357977532,
+          "outcome": "COMMITTED",
+          "finish": 424304.358539791,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 29,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d696e7573227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d696e7573227d7d7d5d7d7d0a",
+      "deadline": 424309.478672305,
+      "start": 424304.478672305,
+      "finish": 424304.479762288,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424304.479199222,
+          "outcome": "COMMITTED",
+          "finish": 424304.479756566,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 30,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202266227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202266227d7d7d5d7d7d0a",
+      "deadline": 424309.599894815,
+      "start": 424304.599894815,
+      "finish": 424304.601002258,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424304.600438814,
+          "outcome": "COMMITTED",
+          "finish": 424304.600995614,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 31,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202272227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202272227d7d7d5d7d7d0a",
+      "deadline": 424309.721122991,
+      "start": 424304.721122991,
+      "finish": 424304.72219924,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424304.721646735,
+          "outcome": "COMMITTED",
+          "finish": 424304.722190744,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 32,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202261227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202261227d7d7d5d7d7d0a",
+      "deadline": 424309.842324341,
+      "start": 424304.842324341,
+      "finish": 424304.843408471,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424304.842839771,
+          "outcome": "COMMITTED",
+          "finish": 424304.843401907,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 33,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226d227d7d7d5d7d7d0a",
+      "deadline": 424309.963533355,
+      "start": 424304.963533355,
+      "finish": 424304.964602399,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424304.964063394,
+          "outcome": "COMMITTED",
+          "finish": 424304.96459637,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 34,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202265227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202265227d7d7d5d7d7d0a",
+      "deadline": 424310.084741133,
+      "start": 424305.084741133,
+      "finish": 424305.085786036,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 55,
+          "start": 424305.085228895,
+          "outcome": "COMMITTED",
+          "finish": 424305.085779302,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 55,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 35,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202273227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202273227d7d7d5d7d7d0a",
+      "deadline": 424310.20592136,
+      "start": 424305.20592136,
+      "finish": 424305.206920358,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 56,
+          "start": 424305.206353788,
+          "outcome": "COMMITTED",
+          "finish": 424305.206913358,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 56,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 36,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d5d7d7d0a",
+      "deadline": 424310.327052812,
+      "start": 424305.327052812,
+      "finish": 424305.328112752,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 57,
+          "start": 424305.327514096,
+          "outcome": "COMMITTED",
+          "finish": 424305.328105261,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 57,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 37,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202232227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202232227d7d7d5d7d7d0a",
+      "deadline": 424310.44824072,
+      "start": 424305.44824072,
+      "finish": 424305.449234149,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 57,
+          "start": 424305.448723678,
+          "outcome": "COMMITTED",
+          "finish": 424305.449229561,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 57,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 38,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d5d7d7d0a",
+      "deadline": 424310.569346893,
+      "start": 424305.569346893,
+      "finish": 424305.570300555,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 58,
+          "start": 424305.569752692,
+          "outcome": "COMMITTED",
+          "finish": 424305.570294414,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 58,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 39,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20227368696674227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226261636b736c617368227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226261636b736c617368227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20227368696674227d7d7d5d7d7d0a",
+      "deadline": 424310.690425947,
+      "start": 424305.690425947,
+      "finish": 424305.691813435,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 59,
+          "start": 424305.690876667,
+          "outcome": "COMMITTED",
+          "finish": 424305.691805923,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 59,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 40,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d5d7d7d0a",
+      "deadline": 424310.811945424,
+      "start": 424305.811945424,
+      "finish": 424305.813000727,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 59,
+          "start": 424305.812439993,
+          "outcome": "COMMITTED",
+          "finish": 424305.812993886,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 59,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 41,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202274227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202274227d7d7d5d7d7d0a",
+      "deadline": 424310.93313429,
+      "start": 424305.93313429,
+      "finish": 424305.934138496,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 59,
+          "start": 424305.933586412,
+          "outcome": "COMMITTED",
+          "finish": 424305.934131775,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 59,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 42,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226f227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226f227d7d7d5d7d7d0a",
+      "deadline": 424311.054266368,
+      "start": 424306.054266368,
+      "finish": 424306.055275476,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 61,
+          "start": 424306.054697329,
+          "outcome": "COMMITTED",
+          "finish": 424306.055267368,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 61,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 43,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d5d7d7d0a",
+      "deadline": 424311.175410425,
+      "start": 424306.175410425,
+      "finish": 424306.176448646,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 61,
+          "start": 424306.175884295,
+          "outcome": "COMMITTED",
+          "finish": 424306.176441974,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 61,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 44,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226a227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226a227d7d7d5d7d7d0a",
+      "deadline": 424311.296582933,
+      "start": 424306.296582933,
+      "finish": 424306.297717932,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 61,
+          "start": 424306.297170931,
+          "outcome": "COMMITTED",
+          "finish": 424306.297712216,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 61,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 45,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202273227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202273227d7d7d5d7d7d0a",
+      "deadline": 424311.41784867,
+      "start": 424306.41784867,
+      "finish": 424306.418902316,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 62,
+          "start": 424306.418395658,
+          "outcome": "COMMITTED",
+          "finish": 424306.418897319,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 62,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 46,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226f227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226f227d7d7d5d7d7d0a",
+      "deadline": 424311.539054269,
+      "start": 424306.539054269,
+      "finish": 424306.540172806,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 63,
+          "start": 424306.539622669,
+          "outcome": "COMMITTED",
+          "finish": 424306.540167035,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 63,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 47,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226e227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226e227d7d7d5d7d7d0a",
+      "deadline": 424311.660285493,
+      "start": 424306.660285493,
+      "finish": 424306.661337337,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 63,
+          "start": 424306.660810593,
+          "outcome": "COMMITTED",
+          "finish": 424306.661331743,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 63,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 48,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226c227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226c227d7d7d5d7d7d0a",
+      "deadline": 424311.781440111,
+      "start": 424306.781440111,
+      "finish": 424306.782283882,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 64,
+          "start": 424306.781765867,
+          "outcome": "COMMITTED",
+          "finish": 424306.782278488,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 64,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 49,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d5d7d7d0a",
+      "deadline": 424311.90241347,
+      "start": 424306.90241347,
+      "finish": 424306.903398206,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 65,
+          "start": 424306.902845077,
+          "outcome": "COMMITTED",
+          "finish": 424306.903391495,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 65,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 50,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20227368696674227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226261636b736c617368227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20226261636b736c617368227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a20227368696674227d7d7d5d7d7d0a",
+      "deadline": 424312.023514144,
+      "start": 424307.023514144,
+      "finish": 424307.025240558,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 65,
+          "start": 424307.024430333,
+          "outcome": "COMMITTED",
+          "finish": 424307.025234277,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 65,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 51,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022737063227d7d7d5d7d7d0a",
+      "deadline": 424312.145428007,
+      "start": 424307.145428007,
+      "finish": 424307.146632085,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 65,
+          "start": 424307.145998649,
+          "outcome": "COMMITTED",
+          "finish": 424307.14662533,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 65,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 52,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202263227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202263227d7d7d5d7d7d0a",
+      "deadline": 424312.266760714,
+      "start": 424307.266760714,
+      "finish": 424307.26780449,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 65,
+          "start": 424307.26724191,
+          "outcome": "COMMITTED",
+          "finish": 424307.267796173,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 65,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 53,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202261227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202261227d7d7d5d7d7d0a",
+      "deadline": 424312.387922996,
+      "start": 424307.387922996,
+      "finish": 424307.388899036,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 67,
+          "start": 424307.388355093,
+          "outcome": "COMMITTED",
+          "finish": 424307.388891751,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 67,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 54,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202274227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a202274227d7d7d5d7d7d0a",
+      "deadline": 424312.509011636,
+      "start": 424307.509011636,
+      "finish": 424307.51004434,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 67,
+          "start": 424307.509501794,
+          "outcome": "COMMITTED",
+          "finish": 424307.510039079,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 67,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    {
+      "id": 55,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d5d7d7d0a",
+      "deadline": 424331.049945704,
+      "start": 424326.049945704,
+      "finish": 424326.051057351,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 143,
+          "start": 424326.050434768,
+          "outcome": "COMMITTED",
+          "finish": 424326.051051328,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 143,
+      "caller": "MainThread",
+      "caller_deadline": 424422.049343553,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    }
+  ],
+  "gate_terminal_reason": "observer stopped",
+  "natural_resume_epoch": 2065,
+  "end_ns": 424448307941764,
+  "workload_complete": false,
+  "decisions": [
+    {
+      "event_id": 1,
+      "first_ordinal": 1418,
+      "site": 4698550465,
+      "start_ns": 424345780079245,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "finite-stream",
+        "verified_instance_count": 2,
+        "instances": [
+          4630511616,
+          4697620480
+        ],
+        "entry_ordinal": 2,
+        "focus": 4697620480,
+        "heap_watches": [
+          [
+            4639588544,
+            8
+          ],
+          [
+            4706697408,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "finite-stream",
+        "verified_instance_count": 2,
+        "instances": [
+          4630511616,
+          4697620480
+        ],
+        "entry_ordinal": 2,
+        "focus": 4697620480,
+        "heap_watches": [
+          [
+            4639588544,
+            8
+          ],
+          [
+            4706697408,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 1418,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "finite-stream",
+          "verified_instance_count": 2,
+          "instances": [
+            4630511616,
+            4697620480
+          ],
+          "entry_ordinal": 2,
+          "focus": 4697620480,
+          "heap_watches": [
+            [
+              4639588544,
+              8
+            ],
+            [
+              4706697408,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "afb11542effc0c9884271ddb6484efbff78716e9d889084141e299601451eb46",
+        "site": 4698550465,
+        "TB": "0x73c60a209540",
+        "exit_flag": 3,
+        "vcpu_tid": 2240309,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 1419,
+      "after_rip": 4698550469,
+      "terminal_latch_cleared": true,
+      "end_ns": 424345790185159
+    },
+    {
+      "event_id": 2,
+      "first_ordinal": 1434,
+      "site": 4698550038,
+      "start_ns": 424346046981393,
+      "extra_steps_used": 1,
+      "recurrence_authorized": true,
+      "max_additional_steps_per_event": 1,
+      "lifecycle_before": {
+        "phase": "finite-stream",
+        "verified_instance_count": 2,
+        "instances": [
+          4630511616,
+          4697620480
+        ],
+        "entry_ordinal": 2,
+        "focus": 4697620480,
+        "heap_watches": [
+          [
+            4639588544,
+            8
+          ],
+          [
+            4706697408,
+            8
+          ]
+        ]
+      },
+      "lifecycle_after": {
+        "phase": "finite-stream",
+        "verified_instance_count": 2,
+        "instances": [
+          4630511616,
+          4697620480
+        ],
+        "entry_ordinal": 2,
+        "focus": 4697620480,
+        "heap_watches": [
+          [
+            4639588544,
+            8
+          ],
+          [
+            4706697408,
+            8
+          ]
+        ]
+      },
+      "proof": {
+        "admitted": true,
+        "first_ordinal": 1434,
+        "retained_health": {
+          "same_binary": true,
+          "source_exact": true,
+          "successful_scopes": 550,
+          "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+          "source_archive": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic",
+          "evidence_sha256": {
+            "evidence/steps.jsonl": "7fd7d5e1d071bb4890aa12ac56be776acf4650dca4a94b7b2c6919b3a1c5ed03",
+            "evidence/rsp-traffic.jsonl": "61aa12235521f466013eced0afcb46374e23bd21908021dd13c47896d581363c",
+            "evidence/qmp-queries.jsonl": "07a6d5253b57d82d2b7e0849f53d148a85089e60ed9452252568047bf101a536",
+            "evidence/qemu-trace.log": "c95dc57040ed2bf20ca4546949b7d8b75cec0addee14d20ea060120f7f2b4885",
+            "summary.json": "d6c5f555cd52781e15479d506b86445107d5798d2af14b14cbbb6786cf549891"
+          },
+          "same_site_in_current_boot_required": false
+        },
+        "lifecycle": {
+          "phase": "finite-stream",
+          "verified_instance_count": 2,
+          "instances": [
+            4630511616,
+            4697620480
+          ],
+          "entry_ordinal": 2,
+          "focus": 4697620480,
+          "heap_watches": [
+            [
+              4639588544,
+              8
+            ],
+            [
+              4706697408,
+              8
+            ]
+          ]
+        },
+        "empty_watch_expected": false,
+        "raw_sha256": "38b1407f7576424f9ad5ec672438c6cf2fcdcd26cf867f5265a82e8cc5a61b3a",
+        "site": 4698550038,
+        "TB": "0x73c60a2072c0",
+        "exit_flag": 3,
+        "vcpu_tid": 2240309,
+        "recurrence_authorized": true,
+        "max_additional_steps_per_event": 1
+      },
+      "additional_allowance_consumed": true,
+      "outcome": "ADDITIONAL_ADVANCED_CONTINUE",
+      "additional_ordinal": 1435,
+      "after_rip": 4698550039,
+      "terminal_latch_cleared": true,
+      "end_ns": 424346057522568
+    }
+  ],
+  "native_scope_count": 2046,
+  "additional_native_packets": 2
+}

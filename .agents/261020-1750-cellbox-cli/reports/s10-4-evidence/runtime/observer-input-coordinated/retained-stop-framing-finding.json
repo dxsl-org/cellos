@@ -1,0 +1,72 @@
+{
+  "scope": "Retained-only analysis of the single S10-4.13 attempt; no reproduction, fix or rerun",
+  "confidence": "PROBABLE host short-poll frame-consumption/ACK deadline loss (raw-wire/parsed-event discrepancy plus exact executing source ordering); first swallowed poll exception/deadline itself was not journaled",
+  "actual_stop": "Stop: 900s measurement window expired",
+  "cleanup_observer_error": "Stop: observation blocker: RspTimeout: RSP receive timed out",
+  "ready_predicate": "[desktop] Ready. Entering event loop.",
+  "last_serial_boundary": "Desktop initializing/display resolution confirmed; Cellbox loader mappings recorded, no desktop-ready marker or verified Cellbox entry",
+  "unprocessed_wire_stop": {
+    "monotonic_ns": 421442766530027,
+    "raw_hex": "245430357468726561643a30313b233037",
+    "payload": "T05thread:01;",
+    "computed_checksum": "07",
+    "wire_checksum": "07",
+    "checksum_valid": true,
+    "seconds_after_VM_start": 22.668266244,
+    "following_positive_ACK_tx": false,
+    "following_packet_rx_count": 0,
+    "following_stopped_state_count": 0,
+    "wire_activity_after_stop": [
+      {
+        "monotonic_ns": 422320129046758,
+        "event": "tx",
+        "raw_hex": "03"
+      }
+    ],
+    "seconds_until_cleanup_interrupt": 877.362516731
+  },
+  "last_successful_native_scope": {
+    "ordinal": 14,
+    "site": "0x10c000000",
+    "before_RIP": "0x10c000000",
+    "after_RIP": "0x10c000004",
+    "end_ns": 421437456364872,
+    "phase": "boot"
+  },
+  "source_ordering": {
+    "file": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/rsp.py",
+    "sha256": "c8c3bffb20a609201e0a7dd59b58b35fde4c935cec221aadd0830e87eab76880",
+    "frame_consumption": "rsp.py180-207: complete frame/checksum bytes are removed from persistent _buffer at200 BEFORE positive ACK send204 and packet_rx recording206",
+    "ACK_deadline": "rsp.py130-139: _send checks _remaining(deadline)132 BEFORE recording tx133 or attempting sendall135; expiry raises RspTimeout",
+    "poll_handling": "observer.py163-167: ordinary wait_stop(timeout=.1) catches any RspTimeout and treats it as no stop unless snapshot/shutdown pending",
+    "failure_path": "A complete valid stop arriving at the .1s poll boundary can be consumed, then pre-ACK deadline expiry raises. No ACK/packet_rx/stopped state is recorded; next poll cannot recover consumed frame. The raw signature here matches this source path.",
+    "not_directly_retained": "Exact .1s poll deadline and first swallowed RspTimeout stack were not logged; no claim of a new deterministic reproduction."
+  },
+  "not_a_GUI_result": {
+    "GUI_batches": 0,
+    "verified_Cellbox_instances": 0,
+    "heap_post_events": 0,
+    "snapshots": 0,
+    "native_scopes": 14,
+    "native_additional_steps": 0,
+    "natural_resume_epochs": 15,
+    "ordinary_c_packets": 15,
+    "metric_ceiling": "No new allocator/stack/mapped-bound value measured; empty event streams are NOT zero memory usage or complete coverage."
+  },
+  "next_gate_not_implemented": [
+    "Keep coordinated admission implementation/79 host tests and this actual pre-GUI STOP separately; runtime input admission was NOT exercised.",
+    "Separate CP1 for host RSP receive/ACK poll-atomicity correction in a fresh wrapper, preserving old rsp.py/archives and all guest-control guards. Do not discard a complete frame before ACK/delivery can safely complete.",
+    "Deterministic fake-clock/byte-transport tests must cover full/fragmented/coalesced stop exactly at receive/ACK deadline, persistent frame retention across ordinary polls, checksum/malformed data, ACK uncertain-write fail-closed semantics and no duplicate event delivery.",
+    "Distinguish benign empty receive-poll timeout from uncertain ACK-send failure; do not silently treat every RspTimeout as no stop. No extra native s/c, software breakpoint/write, coverage relaxation or timeout increase.",
+    "Only after explicit approval/tests may a separately bounded fresh desktop attempt run. Do not repair/replay/continue the already terminated failed VM, or infer a product boot hang."
+  ],
+  "preservation": {
+    "unchanged": true,
+    "files": 546,
+    "canonical_files": 469,
+    "changed": [],
+    "previous_archives_unchanged": true,
+    "old_compressed_trace_unchanged": true,
+    "host_source_changed": []
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "slice": "S10-4.16",
+  "approval": "User CP1 approved2026-10-29 relayed by Main: retained-only/read-only candidate-bound complete-output route investigation",
+  "allowed": ["Static exact qualified Terminal/cellbox/kernel ELF, symbols, assembly, source and retained bytes", "Existing debug observer reuse/protocol feasibility", "Evidence-backed route choices and concrete next CP1 prerequisites", "Explicit proposal/plan/qualification/changelog and new investigation evidence"],
+  "forbidden": ["Observer implementation", "Product/candidate patch or rebuild", "New guest controls, writes, input route or VM run", "Tests/builds/fixes/commits/push", "Editing previous observer archives or nested manifests", "Output/status inference from proxy metrics"],
+  "prior_S10_4_15_outcome": "One desktop stopped observability-incomplete; complete first frame/prompt/status/later workload unproved. No retrospective completion reconstruction.",
+  "candidate_sha256": "4fae8b20ba283b38688028b14008eb0abcf4104ca929a5a80be354675ad32821"
+}

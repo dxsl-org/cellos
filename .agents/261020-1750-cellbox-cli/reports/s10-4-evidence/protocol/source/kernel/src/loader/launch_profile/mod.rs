@@ -1,0 +1,116 @@
+//! Exact launch-edge profiles for kernel-authorized spawns.
+//!
+//! Authorization is by the exact `(caller identity, route, target path)` edge.
+//! This is deliberately narrower than ambient `SpawnCap`: callers keep their
+//! own lifecycle authority model, while child ceilings come from reviewed rows.
+
+mod profiles;
+mod targets;
+
+#[cfg(test)]
+mod tests;
+
+use crate::task::cap::CapSet;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum LaunchRoute {
+    Path,
+    Elf,
+    Mem,
+    Pinned,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct CallerLaunchState<'a> {
+    pub name: &'a str,
+    pub has_spawn: bool,
+    pub has_supervisor: bool,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct LaunchProfile {
+    /// Maximum authority a child on this exact reviewed edge may receive.
+    /// This is deliberately independent of the caller capability snapshot used
+    /// to authorize publication.
+    pub child_ceiling: CapSet,
+    pub denial_label: &'static str,
+    pub requires_lifecycle_authority: bool,
+}
+
+impl LaunchProfile {
+    pub(super) const fn new(
+        child_ceiling: CapSet,
+        denial_label: &'static str,
+        requires_lifecycle_authority: bool,
+    ) -> Self {
+        Self {
+            child_ceiling,
+            denial_label,
+            requires_lifecycle_authority,
+        }
+    }
+}
+
+pub fn authorize(
+    caller: CallerLaunchState<'_>,
+    route: LaunchRoute,
+    target: &str,
+) -> Option<LaunchProfile> {
+    let profile = match caller.name {
+        "init" if caller.has_spawn => profiles::init_profile(route, target),
+        #[cfg(feature = "phase02-terminal-profile")]
+        "phase02-session-parent" | "phase02-session-child" => {
+            profiles::phase02_session_profile(caller.name, route, target)
+        }
+        "cellbox" => {
+            #[cfg(feature = "phase02-terminal-profile")]
+            if target == "/bin/phase02-session-parent" {
+                return profiles::phase02_session_profile(caller.name, route, target);
+            }
+            #[cfg(feature = "phase03-filter-profile")]
+            if target == "/bin/p03-filter" {
+                return profiles::phase03_filter_profile(route, target);
+            }
+            profiles::cellbox_profile(route, target)
+        }
+        // Reviewed GUI Terminal edge (Phase 04 S3): the only row `terminal` owns.
+        "terminal" => profiles::terminal_profile(route, target),
+        // Private Phase04 fixture: the same one edge for the test driver that links
+        // the Terminal's SDK host. Never compiled into an ordinary image.
+        #[cfg(feature = "phase04-driver-profile")]
+        "phase04-terminal-driver" => profiles::phase04_driver_profile(route, target),
+        "desktop" => profiles::desktop_profile(route, target),
+        "pipe-test" => profiles::pipe_test_profile(route, target),
+        "c-spawn" => profiles::c_spawn_profile(route, target),
+        "hypha" if caller.has_spawn => profiles::hypha_profile(route, target),
+        "tool-spawn" if caller.has_spawn => profiles::tool_spawn_profile(route, target),
+        "dwc2-usb" if caller.has_spawn => profiles::dwc2_function_worker_profile(route, target),
+        "backend-supervisor" if caller.has_spawn => {
+            profiles::backend_supervisor_profile(route, target)
+        }
+        "c2c-render" if caller.has_spawn => profiles::render_worker_profile(route, target),
+        "supervisor" if caller.has_spawn && caller.has_supervisor => {
+            profiles::supervisor_profile(route, target)
+        }
+        "bench" | "capacity-probe" if caller.has_spawn => {
+            profiles::pinned_profile(caller.name, route, target)
+        }
+        "periph-demo" => profiles::pinned_profile(caller.name, route, target),
+        _ => None,
+    }?;
+
+    // SpawnFromElf carries caller-owned bytes and only an advisory path. Until
+    // VFS can attest grant provenance, arbitrary bytes must not borrow a launch
+    // profile that carries authority. Service-IPC tools use an empty ceiling;
+    // capability-bearing ELF routes remain lifecycle-only. The S2-T/S2-W rights
+    // do not count here: they were ambient to every ELF before that annex, so a
+    // row holding only them stays reachable on this route (D-TW1).
+    if matches!(route, LaunchRoute::Elf)
+        && profile.child_ceiling.without_observe_mutate() != CapSet::EMPTY
+        && !profile.requires_lifecycle_authority
+    {
+        return None;
+    }
+
+    Some(profile)
+}

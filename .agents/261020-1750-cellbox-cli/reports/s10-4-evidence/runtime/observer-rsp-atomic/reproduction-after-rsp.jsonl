@@ -1,0 +1,6 @@
+{"monotonic_ns": 424185505675934, "event": "rx", "raw_hex": "245430357468726561643a30313b233037"}
+{"monotonic_ns": 424185505816376, "event": "wire_frame_pending", "payload_hex": "5430357468726561643a30313b", "wire_length": 17}
+{"monotonic_ns": 424185505851237, "event": "tx", "raw_hex": "2b"}
+{"monotonic_ns": 424185505857574, "event": "packet_rx", "payload_hex": "5430357468726561643a30313b"}
+{"monotonic_ns": 424185505915759, "event": "state", "state": "stopped", "reply_hex": "5430357468726561643a30313b"}
+{"monotonic_ns": 424185505924734, "event": "state", "state": "closed"}

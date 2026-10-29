@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "nm",
+    "-n",
+    "-S",
+    "-C",
+    "--defined-only",
+    "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cellbox"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "ELF_sha256": "8ea134442bb27719cf4c2ce5a8f3613f5667f88f1762a1d731cba9fd83ab54a2",
+  "scope": "Static symbol inspection only; no candidate execution"
+}

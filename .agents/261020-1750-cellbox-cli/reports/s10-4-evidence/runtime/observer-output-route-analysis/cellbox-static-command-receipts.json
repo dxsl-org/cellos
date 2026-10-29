@@ -1,0 +1,57 @@
+[
+  {
+    "argv": [
+      "readelf",
+      "-h",
+      "-l",
+      "-S",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cellbox"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "cellbox-elf-layout.txt",
+    "scope": "Static exact candidate ELF inspection only"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0x12120",
+      "--stop-address=0x123d5",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cellbox"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "cellbox-relay-device.asm",
+    "scope": "Static exact candidate ELF inspection only"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0x17be0",
+      "--stop-address=0x17d50",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cellbox"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "cellbox-terminal-write.asm",
+    "scope": "Static exact candidate ELF inspection only"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0x19ec0",
+      "--stop-address=0x1ac3c",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop/files/cellbox"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "cellbox-read-line.asm",
+    "scope": "Static exact candidate ELF inspection only"
+  }
+]

@@ -1,0 +1,151 @@
+{
+  "scope": "Read-only post-run diagnosis; no candidate rerun or host fix applied",
+  "headless_pause_accounting": {
+    "failure": "Original10s wait for new interactive-top interrupt prompt expired",
+    "Ctrl_C_send_timestamp_retained": false,
+    "snapshot_lower_wait_start_ns": 415498015267604,
+    "shutdown_only_heap_watch_remove_upper_timeout_ns": 415508055118692,
+    "possible_actual_wait_start_bounds_ns": [
+      415498015267604,
+      415498055118692
+    ],
+    "interval_contained_in_every_possible_original10s_wait_ns": [
+      415498055118692,
+      415508015267604
+    ],
+    "common_interval_seconds": 9.960148912,
+    "proven_stopped_seconds_minimum_within_actual10s_wait": 7.355372922,
+    "time_not_proven_stopped_seconds_upper_bound_within_actual10s_wait": 2.644627078,
+    "method": "Union of RSP stopped-state receipt to next native-s/continue packet_tx (before send). Use only intersection of all possible timeout windows, not an invented exact Ctrl-C time.",
+    "native_s_packets_in_common_interval": 692,
+    "continue_packets_in_common_interval": 691,
+    "retained_heap_post_events_in_common_interval": 690,
+    "heap_values_in_common_interval": {
+      "first": 235376,
+      "last": 266400
+    },
+    "last_serial_receipt": {
+      "monotonic_ns": 415488296374500,
+      "offset": 33107,
+      "bytes": 1
+    },
+    "last_serial_receipt_before_possible_interrupt_seconds": 9.718893104,
+    "completed_stop_interval_pause_total_seconds": 103.061082835,
+    "aggregate_pause_counter_caveat": "Observer.pause_ns sums completed _stopped handling intervals, including native-step execution and snapshot handling. Its103.061s whole-run total is not pure guest-stopped time or the10s interrupt interval and must not simply be subtracted from that deadline.",
+    "conclusion": "The unchanged wall-clock deadline spent at least the measured bound debugger-stopped, while native/heap progress remained observable. This is not evidence of a product interrupt failure. Retained data do not prove when guest consumed Ctrl-C or whether it would have produced the prompt within10 unpaused seconds.",
+    "not_authorized": "No timeout extension, pause-excluded deadline, observer coverage/proof reduction, or rerun was applied."
+  },
+  "desktop_QMP_ownership": {
+    "kind": "Host shared-transport ownership/concurrency defect, not product finding",
+    "actual_failure": "JSONDecodeError: Expecting ':' delimiter: line 1 column 54 (char 53)",
+    "observer_failure": "Stop: observation blocker: TypeError: list indices must be integers or slices, not str",
+    "source_evidence": {
+      "machine_owner": {
+        "path": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/common.py",
+        "sha256": "aed7d9c2ee8ac8b4bb4d47948ce14d56b0c58b14c02c4d340336abf3916590ec",
+        "contract": "Machine.start line60 creates one machine.qmp = D.Qmp"
+      },
+      "desktop_same_owner": {
+        "path": "/home/dmin/cellos/scripts/phase10_canonical_drive.py",
+        "sha256": "d4fcb022dc340f6d79451fa02ae3b38e0ca90f809f0c943ba48abfbeb835fad9",
+        "contract": "Desk.__init__ line929 assigns self.qmp = mach.qmp; type_text line961 uses self.qmp.keys"
+      },
+      "GUI_transaction": {
+        "path": "/home/dmin/cellos/scripts/phase04_gui_drive.py",
+        "sha256": "bfef6d8e6426bbddcb2d5e59d9f00dced631bef995af7c62d3366486d32027bc",
+        "contract": "Qmp lines188-218 owns one unbuffered rwb socket file; cmd(name, **args) writes/reads entire replies without lock or request IDs; keys and grab call this same cmd"
+      },
+      "observer_same_file": {
+        "path": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic/diagnostic.py",
+        "sha256": "b11e2b7c641f0c49412ba9d1f491452742b2059bb3bb078887834509b380a3e7",
+        "contract": "TraceControl.query lines85-110 writes/reads self.machine.qmp.file directly without transaction lock; retained by AmendedTraceControl and RecurringClient"
+      }
+    },
+    "retained_final_QMP_order": [
+      {
+        "event": "request",
+        "monotonic_ns": 415597592559964,
+        "message": {
+          "execute": "query-cpus-fast"
+        }
+      },
+      {
+        "event": "request",
+        "monotonic_ns": 415597596084927,
+        "message": {
+          "execute": "query-cpus-fast"
+        }
+      },
+      {
+        "event": "response",
+        "monotonic_ns": 415597596554623,
+        "message": {
+          "return": [
+            {
+              "thread-id": 2219286,
+              "props": {
+                "core-id": 0,
+                "thread-id": 0,
+                "socket-id": 0
+              },
+              "qom-path": "/machine/unattached/device[0]",
+              "cpu-index": 0,
+              "target": "x86_64"
+            }
+          ]
+        }
+      },
+      {
+        "event": "request",
+        "monotonic_ns": 415597596610616,
+        "message": {
+          "execute": "query-status"
+        }
+      },
+      {
+        "event": "response",
+        "monotonic_ns": 415597596804796,
+        "message": {
+          "return": [
+            {
+              "thread-id": 2219286,
+              "props": {
+                "core-id": 0,
+                "thread-id": 0,
+                "socket-id": 0
+              },
+              "qom-path": "/machine/unattached/device[0]",
+              "cpu-index": 0,
+              "target": "x86_64"
+            }
+          ]
+        }
+      }
+    ],
+    "observed_misattribution": "query-status receives a CPU-list return, not a status object; GUI input simultaneously raises malformed-JSON and observer context capture fails.",
+    "exact_corrupted_JSON_bytes_retained": false,
+    "boundary": "47th scope fails during pre-step QMP capture, before before/trace/native-s;46 native packets total,0 additional; no complete terminal census proof, not evidence of actual watch removal.",
+    "minimal_proposed_fix_not_applied": [
+      "One shared host threading.RLock per machine.qmp transport, installed before observer/GUI use.",
+      "Wrap actual Qmp instance cmd for the full write-through-matching-return/error transaction. Existing keys/abs_move/buttons/grab then use the same wrapped cmd; do not lock only writes or individual readline calls.",
+      "A new host TraceControl.query override holds that identical lock around the entire unchanged policy-checked original query body, including trace commands whose arguments contain name.",
+      "Do not route trace commands through existing cmd(name, **args) unmodified: name is both Python positional parameter and QMP trace argument. Do not rename/bypass public API or alter immutable retained helpers.",
+      "Release lock on all exceptions; no holding it across GUI waits or snapshot queue waits; retain original deadlines, proof gates, event logging and coverage."
+    ],
+    "required_deterministic_tests_before_any_replacement": [
+      "Barrier-controlled simultaneous GUI input/screendump and observer CPU/status/trace transactions cannot interleave bytes or consume another response.",
+      "Trace-event name arguments preserved; asynchronous events skipped without losing ownership; error/EOF/timeout releases lock.",
+      "No lock held during cross-thread snapshot/wait; all existing recurrence/admission/one-extra/terminal/deadline invariants retained."
+    ],
+    "next_execution_gate": "Separate explicit approval for bounded fresh desktop replacement after host-only fix/tests; do not reinterpret recurring recovery as retry-run permission. Headless retry/budget-policy change is not included."
+  },
+  "evidence_sha256": {
+    "headless/evidence/rsp-traffic.jsonl": "6a0b3f0c3c564f4bdc2f8aa1b9e415e8fa09d9cb8857ba7569f19a22334c9db6",
+    "headless/evidence/serial-receipts.json": "fed2e02750c427beed323ddbc3144b965c1124ccc29c646a9292d1b70c28d109",
+    "headless/evidence/heap-events.jsonl": "4ad2f203d77cdac32c962f1f3ba91f65b36deaa1c4b85abfd683354aefd72c31",
+    "headless/runtime-result.json": "faefe81fcdd0824dfdb143eed64209f6c0ab25e2bbc0e6c396d8a6e929726a1d",
+    "desktop/runtime-result.json": "4e87a2deb2e0d01800822d6dfdae3c306aa44352cd8402963f746e68ef204d23",
+    "desktop/evidence/qmp-queries.jsonl": "235b7305c3945cad74d033376b8be2f3121bde1a0196982704ee429c42bfc9ce",
+    "desktop/evidence/steps.jsonl": "625eaa7ce0a5e101b5b033bdfb440b0727c1c29f7048c3c73a62f916a5cf8196"
+  }
+}

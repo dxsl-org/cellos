@@ -1,0 +1,31 @@
+{
+  "argv": [
+    "qemu-system-x86_64",
+    "-machine",
+    "q35",
+    "-accel",
+    "tcg",
+    "-m",
+    "32M",
+    "-display",
+    "none",
+    "-serial",
+    "none",
+    "-monitor",
+    "none",
+    "-nic",
+    "none",
+    "-drive",
+    "file=/tmp/cellbox-s10-4/runtime/watch-step-loop.img,format=raw,if=floppy,readonly=on",
+    "-boot",
+    "a",
+    "-chardev",
+    "socket,path=/tmp/cellbox-s10-4/runtime/watch-step-loop-investigation/gdb.sock,server=on,wait=off,id=dbg",
+    "-gdb",
+    "chardev:dbg",
+    "-S"
+  ],
+  "events": [],
+  "loops": 1000,
+  "status": "NO_NO_PROGRESS_IN_1000_ISOLATED_ITERATIONS"
+}

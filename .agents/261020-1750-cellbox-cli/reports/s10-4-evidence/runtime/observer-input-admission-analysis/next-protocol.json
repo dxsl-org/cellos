@@ -1,0 +1,55 @@
+{
+  "status": "PROPOSED NEXT CP1 ONLY; no implementation, test, candidate run or input resubmission authorized by this investigation",
+  "protocol": "One coordinated ordinary-run input gate with target-side atomic acceptance, not a status-precheck fix followed by another speculative retry fix",
+  "execution_scope_if_approved": "Exactly ONE fresh desktop original observed schedule after all deterministic host tests pass. No headless rerun, candidate/product/B2 rebuild, new guest controls, coverage/proof relaxation, alternate input route, deadline increase or further retry run.",
+  "source_prerequisite": "RESOLVED at exact-package source level: installed1:8.2.2+ds-0ubuntu1.17 binary matches dpkg file checksum; exact Launchpad DSC/orig/debian checksums match; all128 active patches audited, none change input/dispatch/main-loop files. ui/input.c145-147 rejects before150-174 validation/dispatch/sync. Rejected BATCH has zero accepted prefix; earlier batches of the command may already be accepted.",
+  "coordination": [
+    "Retain the existing SAME per-QMP RLock/full request-reply ownership. Use it as the observer execution/input-admission gate too; no second independent mutex that permits input during a native/proof critical section.",
+    "Explicit phases are PAUSED_OR_STEPPING, ORDINARY_RESUME_PENDING_OR_RUNNING and TERMINAL. Enter paused phase under the gate before servicing _stopped/heap/stack/snapshot/native-step/proof/restoration work; keep GUI input out of that critical section. Trace queries remain reentrant on the same RLock.",
+    "The observer alone executes its ORIGINAL ordinary RSP resume, after all guards/restoration/proof are satisfied. Update a natural-resume epoch under the gate and notify pending input; never add a c, s, QMP cont or resume solely for input delivery.",
+    "Do not hold the gate across blocking wait_stop while the VM is ordinarily running, a GUI screen wait, condition wait, snapshot queue wait or thread join. Conditions release the RLock completely so the observer continues and can naturally resume. Terminal/error/900s expiry wakes and rejects all pending input.",
+    "A resume notification, RSP running flag, QMP RESUME event or query-status running observation is only readiness information, not atomic acceptance. The exact package emits RESUME before setting RUNNING, and an asynchronous hardware stop can race any external status check.",
+    "Only the input-send-event handler's matching structured return/error is the acceptance linearization point. At source level its noncoroutine main-loop handler checks run-state before dispatch under QEMU's main-loop/BQL context. A race to debug-stop is handled as a proved zero-delivery rejection, never assumed away by the host lock."
+  ],
+  "batch_state_machine": [
+    "One pending batch for the original single GUI producer. Encode/freeze the complete original events array and routing fields once before first transmission; retain exact bytes, local batch ID, modifier/down-up order, caller/phase, first deadline and natural-resume epoch. Do not regenerate a line or prepend earlier accepted characters.",
+    "Journal every exact GUI request and structured reply before interpreting it, with monotonic timestamps and batch/attempt/epoch identity; retain raw bytes. Preserve cmd(name,**args) and the separate direct trace-query name argument behavior.",
+    "Attempt only while the observer ordinary-run gate is open, under the same full-transaction RLock. Fresh running observations/natural resume notifications may schedule an attempt but are never a proof that it will succeed.",
+    "A matched successful return commits that batch ONCE and unblocks the producer to issue the next original batch. It proves emulator acceptance, not guest consumption or workload completion; never resend a successful batch.",
+    "ONLY a matched structured GenericError with desc exactly VM not running, for this outstanding input-send-event and unchanged source-bound binary, permits RETAIN_UNACCEPTED. The package guard proves that no event from that batch was dispatched. Release all locks and defer until a fresh ordinary-run readiness observation or natural-resume opportunity, coordinating with the observer's owned debug-stop processing. Resubmit the identical immutable batch, not any accepted prefix.",
+    "If a stop races admission before the observer has classified its RSP reply, retain the rejected batch without sending another event until ownership/phase is established. Unexpected signal/state, missing ownership, proof/coverage drift or terminal observer error stops both sides.",
+    "EOF, socket timeout, malformed/lost response, transport failure, source drift, other QMP errors or ambiguous acceptance are TERMINAL with NO resubmission. Never parse a formatted StepFailed string as proof of non-delivery. No blanket error retries or key-release workaround."
+  ],
+  "proposed_explicit_bounds_requiring_CP1": {
+    "pending_batches": 1,
+    "max_input_attempts_per_batch_including_first": 64,
+    "per_batch_total_host_deadline_seconds": 5,
+    "deadline_rule": "Use the minimum of existing5s QMP-call budget, remaining original caller budget and remaining original900s VM window. Establish this deadline once before gate acquisition; waiting, classification queries and every rejected attempt consume it. Do not reset socket/command budgets for another attempt.",
+    "readiness_wait": "Condition/observer notifications plus bounded read-only status observation, never a tight input-send loop. At most one actual attempt per new readiness observation; max64 and the single5s deadline both apply. No additional guest execution is caused to create readiness.",
+    "on_exhaustion": "Report exact unaccepted batch/attempt history and STOP. No second desktop run or automatic policy adjustment.",
+    "liveness_ceiling": "Source proves safe non-delivery for rejected batches, not that a sufficiently long ordinary-run opportunity exists under these unchanged deadlines. The one authorized smoke may still honestly stop for admission timeout."
+  },
+  "required_deterministic_tests_before_the_one_smoke": [
+    "Both QMP owners retain complete request/reply/event ownership and trace-name API across all gate phases and error/EOF/timeout unlock paths.",
+    "Running success commits exactly once; debug rejection dispatches zero of a multi-event modifier/down-up batch; paused-to-natural-resume deferral delivers that same byte-identical batch once.",
+    "Hardware stop AFTER running precheck but BEFORE input handling returns exact pre-dispatch rejection; no accepted prefix or duplicate appears on later success.",
+    "Success followed by lost/timeout/malformed reply is terminal and never resubmitted; all nonmatching errors are terminal. Earlier accepted command batches are never replayed.",
+    "No GUI input reaches native/proof/restoration critical sections; original recurring one-extra-per-proved-event semantics and every coverage/lifecycle/source/context guard remain intact.",
+    "Pending GUI wait releases the common RLock; observer can process stops, service snapshots and naturally resume. Ordinary wait_stop never holds the admission gate; terminal/cleanup wakes pending GUI work without deadlock.",
+    "Only original observer c/s sequence is issued; deferred input never forces a resume, drain, third native step, watch removal or alternate input mechanism.",
+    "One shared monotonic5s/caller/900s deadline and max64-attempt cap cover lock wait, readiness polls and all attempts; no budget reset or silent timeout extension. Test exhaustion and source/ownership/state drift.",
+    "Exercise every original GUI input form used by launch, typing, modifiers, mouse and Ctrl-C through this same state machine, not just the character that happened to fail. Preserve original screen/prompt/cancel/status and metric semantics."
+  ],
+  "headless_separate_ceiling": {
+    "new_headless_run": false,
+    "original_top_interrupt_wall_deadline_seconds": 10,
+    "proven_debug_stopped_seconds_minimum_within_it": 7.355372922,
+    "remaining_time_not_proven_stopped_seconds_upper_bound": 2.644627078,
+    "completed_observer_handling_intervals_whole_run_seconds": 103.061082835,
+    "whole_run_counter_caveat": "Includes native execution/snapshot handling and cannot be subtracted as pure pause from that command deadline.",
+    "headless_host_profile_interval_including_setup_cleanup_seconds": 179.146994336,
+    "original_900s_window_remaining_lower_bound_seconds": 720.853005664,
+    "interpretation": "The global900s allowance was not exhausted, but unused global time does not extend an expired10s command deadline. Retained data do not prove guest Ctrl-C receipt or a genuine interrupt failure versus counterfactual10-unpaused-second success. Keep the actual partial result; no pause-excluded clock or headless rerun is included."
+  },
+  "result_gate": "Report the one desktop attempt's actual complete workload plus complete event coverage, or the exact STOP/partial interval. Preserve all five prior observer archives/sources/manifests and546canonical/candidate/userVMX paths. No automatic matched baseline, full criterion4/CBX27, exact stack/RSS, S10-5/canonical/containment closure, commit or push."
+}

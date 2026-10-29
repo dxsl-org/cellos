@@ -1,0 +1,61 @@
+[
+  {
+    "member": "qemu-8.2.2/qapi/qmp-dispatch.c",
+    "file": "source/qapi/qmp-dispatch.c",
+    "sha256": "0f86358543b5715532cfb373d4eb68f7507fa7f4ce5b4eb28a5b407b00775d2e",
+    "active_patches_touching_file": [],
+    "identity": "Exact published source version original file; zero applied Ubuntu/Debian patches touch it"
+  },
+  {
+    "member": "qemu-8.2.2/qapi/ui.json",
+    "file": "source/qapi/ui.json",
+    "sha256": "7a1d902337600bbe44ec5c34126f33e2807afe66e69641c54ff8a37010f426cf",
+    "active_patches_touching_file": [],
+    "identity": "Exact published source version original file; zero applied Ubuntu/Debian patches touch it"
+  },
+  {
+    "member": "qemu-8.2.2/monitor/qmp.c",
+    "file": "source/monitor/qmp.c",
+    "sha256": "f7f9b3204a998c294564eada948589531ef16f28e327b8bfd2322a19a769ac74",
+    "active_patches_touching_file": [],
+    "identity": "Exact published source version original file; zero applied Ubuntu/Debian patches touch it"
+  },
+  {
+    "member": "qemu-8.2.2/ui/input.c",
+    "file": "source/ui/input.c",
+    "sha256": "e67241a5d54df6b19397f31172b0143ea0d5590676c6d6bd5e11e458f7d5e1f4",
+    "active_patches_touching_file": [],
+    "identity": "Exact published source version original file; zero applied Ubuntu/Debian patches touch it"
+  },
+  {
+    "member": "qemu-8.2.2/system/runstate.c",
+    "file": "source/system/runstate.c",
+    "sha256": "fe562e8e062e89d8099cf8d7c6202184fd822ed49bd6af7e250d0a8060b3a027",
+    "active_patches_touching_file": [],
+    "identity": "Exact published source version original file; zero applied Ubuntu/Debian patches touch it"
+  },
+  {
+    "member": "qemu-8.2.2/util/main-loop.c",
+    "file": "source/util/main-loop.c",
+    "sha256": "4616cd4701ae87dd3290edd4d55b87639b49a17c5cef7fbdc4bb22b27c2da58f",
+    "active_patches_touching_file": []
+  },
+  {
+    "member": "qemu-8.2.2/include/qemu/main-loop.h",
+    "file": "source/include/qemu/main-loop.h",
+    "sha256": "b87853aafddad5a712eb2cffadb14b779009b696997fcb9d97e9ac6c9a62935c",
+    "active_patches_touching_file": []
+  },
+  {
+    "member": "qemu-8.2.2/system/cpus.c",
+    "file": "source/system/cpus.c",
+    "sha256": "24022894229f954ac745b0739a6a2b62a76997025fa6740b11d9b984a885f439",
+    "active_patches_touching_file": []
+  },
+  {
+    "member": "qemu-8.2.2/system/main.c",
+    "file": "source/system/main.c",
+    "sha256": "b3e8e82ea8b6a7b23a64aeaea847767eb43ebec6c6cbf6cf5c3f281bebad21fe",
+    "active_patches_touching_file": []
+  }
+]

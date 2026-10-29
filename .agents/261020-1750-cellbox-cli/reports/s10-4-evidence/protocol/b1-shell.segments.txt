@@ -1,0 +1,28 @@
+
+Elf file type is DYN (Position-Independent Executable file)
+Entry point 0x0
+There are 9 program headers, starting at offset 64
+
+Program Headers:
+  Type           Offset   VirtAddr           PhysAddr           FileSiz  MemSiz   Flg Align
+  LOAD           0x001000 0x0000000000000000 0x0000000000000000 0x0a9d2d 0x0a9d2d R E 0x1000
+  LOAD           0x0aad30 0x00000000000a9d30 0x00000000000a9d30 0x00c5e0 0x00c5e0 R   0x1000
+  LOAD           0x0b8000 0x00000000000b7000 0x00000000000b7000 0x004628 0x004628 RW  0x1000
+  LOAD           0x000000 0x00000000000bc000 0x00000000000bc000 0x000000 0x100052 RW  0x1000
+  LOAD           0x0bd058 0x00000000001bc058 0x00000000001bc058 0x000fe4 0x000fe4 R   0x1000
+  DYNAMIC        0x0bc528 0x00000000000bb528 0x00000000000bb528 0x000100 0x000100 RW  0x8
+  GNU_RELRO      0x0b8000 0x00000000000b7000 0x00000000000b7000 0x004628 0x004628 R   0x1
+  GNU_EH_FRAME   0x0be010 0x00000000001bd010 0x00000000001bd010 0x00000c 0x00000c R   0x4
+  GNU_STACK      0x000000 0x0000000000000000 0x0000000000000000 0x000000 0x000000 RW  0
+
+ Section to Segment mapping:
+  Segment Sections...
+   00     .text 
+   01     .dynsym .gnu.hash .hash .dynstr .rela.dyn .rodata 
+   02     .data .dynamic 
+   03     .bss 
+   04     __ViCell_syscalls __ViCell_manifest .eh_frame_hdr .eh_frame 
+   05     .dynamic 
+   06     .data .dynamic 
+   07     .eh_frame_hdr 
+   08     

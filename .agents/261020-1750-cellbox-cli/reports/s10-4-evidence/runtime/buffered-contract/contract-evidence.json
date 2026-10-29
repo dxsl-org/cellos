@@ -1,0 +1,279 @@
+{
+  "classification": "observer assumption error, no demonstrated product hang",
+  "existing_approved_behavior": "Collected byte sinks buffer and Ctrl-C discards collected bytes/status130; no-cat terminal pipeline streams live.",
+  "source_excerpts": [
+    {
+      "path": "cells/tools/cellbox/src/executor.rs",
+      "sha256": "6f6524c721a7dee3b3ded952a9ca770caed105e7f8b962ebe5475c6304bb7b63",
+      "ranges": [
+        {
+          "first": 1875,
+          "last": 1895,
+          "lines": [
+            "    let terminal = plan.output.is_none() && plan.typed_cmds == cmds.len();",
+            "    let oneshot = state::oneshot_active();",
+            "    let default_sink = typed::default_sink(terminal && !oneshot, plan);",
+            "    // The live terminal is a streaming sink: each encoded row is written as it is",
+            "    // pulled and Ctrl-C is polled between rows, so an endless producer is neither",
+            "    // buffered nor uninterruptible. A one-shot's stdout streams the same way (S10-0.5):",
+            "    // a closed reader stops the producer at once. Only a redirect target, a byte",
+            "    // consumer or an enclosing capture (`$(...)`) need the whole, bounded buffer.",
+            "    let outcome = if terminal && oneshot && state::capture_depth() == 0 {",
+            "        LocalOutcome::Streamed(typed::stream_rows(source, plan.category, first_stage, rest, default_sink, &mut OneShotSink))",
+            "    } else if terminal && serial_active() && state::capture_depth() <= 1 {",
+            "        flush_repl_capture();",
+            "        let mut sink = TerminalSink { latch: latch.clone() };",
+            "        LocalOutcome::Streamed(typed::stream_rows(source, plan.category, first_stage, rest, default_sink, &mut sink))",
+            "    } else {",
+            "        // A Collected run polls Ctrl-C before every pull (S10-3b), so an endless",
+            "        // producer feeding a byte consumer (`| cat`) stops with 130 and writes nothing.",
+            "        let bound = if plan.search.is_some() { typed::SEARCH_COLLECT_BOUND } else { typed::COLLECT_BOUND };",
+            "        LocalOutcome::Collected(typed::run_rows_within(source, plan.category, first_stage, rest, default_sink, bound, &mut || {",
+            "            latch.poll_now()",
+            "        }))"
+          ]
+        },
+        {
+          "first": 1919,
+          "last": 1922,
+          "lines": [
+            "    // Ctrl-C ends the job with 130 whoever saw it; a Collected run writes nothing.",
+            "    if latch.is_set() {",
+            "        shell_console(\"^C\\n\");",
+            "        return INTERRUPTED_STATUS;"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "cells/tools/cellbox/src/typed.rs",
+      "sha256": "b2ca07f44e38bd9de37de8b0eb06d5bdd5161536ef0918756eda3775785d89b3",
+      "ranges": [
+        {
+          "first": 915,
+          "last": 931,
+          "lines": [
+            "/// The chain as a Collected sink sees it (S10-3b): `interrupted` is polled before every",
+            "/// pull, and the first `true` ends the input, so an endless producer is not drained to",
+            "/// the bound with Ctrl-C pending.",
+            "struct Interruptible<'a> {",
+            "    chain: &'a mut dyn RowSource,",
+            "    interrupted: &'a mut dyn FnMut() -> bool,",
+            "    hit: bool,",
+            "}",
+            "",
+            "impl RowSource for Interruptible<'_> {",
+            "    fn next_item(&mut self) -> Result<Option<Item>, PipelineError> {",
+            "        if self.hit || (self.interrupted)() {",
+            "            self.hit = true;",
+            "            return Ok(None);",
+            "        }",
+            "        self.chain.next_item()",
+            "    }"
+          ]
+        },
+        {
+          "first": 959,
+          "last": 1001,
+          "lines": [
+            "/// [`run_rows`] with an explicit collect bound and an interrupt poll, made before every",
+            "/// pull. On interrupt the chain is closed, no bytes are returned, and the failure carries",
+            "/// [`INTERRUPTED_STATUS`].",
+            "pub fn run_rows_within(",
+            "    source: Box<dyn RowSource>,",
+            "    category: Category,",
+            "    first_stage: usize,",
+            "    stages: &[Stage],",
+            "    default_sink: DefaultSink,",
+            "    bound: CollectBound,",
+            "    interrupted: &mut dyn FnMut() -> bool,",
+            ") -> Result<Vec<u8>, RunFailure> {",
+            "    let (mut chain, explicit, slot, sink_stage) = build_chain(source, category, first_stage, stages)?;",
+            "    let mut gate = Interruptible { chain: &mut *chain, interrupted, hit: false };",
+            "    let result = match &explicit {",
+            "        Some(format) => encode_all(&mut gate, category, format, bound.bytes),",
+            "        None => match default_sink {",
+            "            DefaultSink::Table => match render_table(&mut gate, category) {",
+            "                Ok(bytes) if bytes.len() > bound.bytes => Err(Collect::Overflow),",
+            "                Ok(bytes) => Ok(bytes),",
+            "                Err(message) => Err(Collect::Failed(message)),",
+            "            },",
+            "            DefaultSink::TypedJsonl => encode_all(&mut gate, category, &Format::JsonlTyped, bound.bytes),",
+            "            DefaultSink::SearchText => render_search_text(&mut gate, bound.bytes),",
+            "        },",
+            "    };",
+            "    let result = if gate.hit { Err(Collect::Interrupted) } else { result };",
+            "    chain.close();",
+            "    result.map_err(|stop| {",
+            "        slot.borrow_mut().take().unwrap_or(match stop {",
+            "            Collect::Failed(message) => RunFailure::new(sink_stage, message),",
+            "            Collect::Overflow => RunFailure {",
+            "                stage: sink_stage,",
+            "                message: format!(\"output exceeds the {} byte bound\", bound.bytes),",
+            "                status: bound.status,",
+            "            },",
+            "            Collect::Interrupted => RunFailure {",
+            "                stage: sink_stage,",
+            "                message: String::from(\"interrupted\"),",
+            "                status: INTERRUPTED_STATUS,",
+            "            },",
+            "        })",
+            "    })"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "scripts/phase10_canonical_drive.py",
+      "sha256": "d4fcb022dc340f6d79451fa02ae3b38e0ca90f809f0c943ba48abfbeb835fad9",
+      "ranges": [
+        {
+          "first": 815,
+          "last": 825,
+          "lines": [
+            "            m.chk(\"rg-walk-ctrl-c-prompt\", ok, f\"{dt:.1f}s\")",
+            "            m.chk(\"rg-walk-ctrl-c-130\", sh.status() == 130)",
+            "            flowing = lambda s: strip_ansi(s).count(b\"USER: {\") >= 3",
+            "            ok, dt, seg = sh.interrupt(\"top --records --frames 100000 | to jsonl\", 120, flowing)",
+            "            m.chk(\"endless-sink-flowing\", strip_ansi(seg).count(b\"USER: {\") >= 3)",
+            "            m.chk(\"endless-sink-ctrl-c-prompt\", ok, f\"{dt:.1f}s\")",
+            "            size = len(sh.raw())",
+            "            time.sleep(4)",
+            "            tail = logical_lines(strip_ansi(sh.raw()[size:]))",
+            "            m.chk(\"endless-sink-output-stops\", not any(l.startswith(\"{\") for l in tail), tail[:3])",
+            "            m.chk(\"endless-sink-ctrl-c-130\", sh.status() == 130)"
+          ]
+        },
+        {
+          "first": 838,
+          "last": 847,
+          "lines": [
+            "            lines, st, _ = sh.run_st(\"top --records -d 1 --frames 2 | to jsonl | cat\", 120)",
+            "            m.chk(\"cat-sink-finite-control\", st == 0 and self.frame_count(json_rows(lines)) == 2, (len(lines), st))",
+            "            ok, dt, seg = sh.interrupt(\"top --records --frames 100000 | to jsonl | cat\", 30, flowing)",
+            "            m.note(f\"endless typed stream into builtin cat: output before Ctrl-C: {strip_ansi(seg).count(b'USER: {')} rows\")",
+            "            m.chk(\"cat-sink-ctrl-c-prompt\", ok, f\"no prompt {dt:.1f}s after Ctrl-C\" if not ok else f\"{dt:.1f}s\")",
+            "            if not ok:",
+            "                for _ in range(2):",
+            "                    sh.send(b\"\\x03\")",
+            "                    time.sleep(10)",
+            "                m.chk(\"cat-sink-shell-recovers\", sh.idle(), \"three Ctrl-C over 80 s: the shell stays in the sink\")"
+          ]
+        }
+      ]
+    },
+    {
+      "path": ".agents/261020-1750-cellbox-cli/phase-10-s0-proposal.md",
+      "sha256": "f4e305ecb1a9e03d94691fd23686144d40d79e121cf91a19ee01d7553a309154",
+      "ranges": [
+        {
+          "first": 1487,
+          "last": 1499,
+          "lines": [
+            "##### S10-3b.8 Implementation and results (2026-10-26; **CP2 approved 2026-10-28** with deviations 1\u20134)",
+            "",
+            "**Product changes** (cellbox only, as S10-3b.2; whole-file hashes in `reports/s10-3b-evidence/as-built.sha256`):",
+            "- **Interruptible wait (`top.rs`).**",
+            "  - `wait_ns` is replaced by `wait_until(delay_ns, interrupted) -> Waited { Elapsed, Interrupted }`.",
+            "  - The loop itself is `wait_core`, which takes an injected clock, park and poll. It polls before every one-tick park, and an unavailable clock counts as elapsed, as before.",
+            "  - `top -b` (`run_batch`) waits through the job latch; on Ctrl-C it prints `^C` and returns 130.",
+            "- **`sleep` (`cmd_sys.rs`, `executor.rs` catalog).** `sleep` is now `Catalog::Status(cmd_sleep)`. It waits through `job_latch()`, which is now `pub(crate)`. It returns 0 when the time elapses, and `^C` with 130 when interrupted.",
+            "- **`top --records` (`native_rows.rs`).** `row_producer` passes the job latch to `TopSource` as well as to `rg`. An interrupted wait between frames closes the source and ends the stream, and the consumer reports 130.",
+            "- **Collected runs (`typed.rs`, `executor.rs`).**",
+            "  - `run_rows_within` takes an `interrupted` poll. Every Collected sink (encoder, table, search text) reads through an `Interruptible` adapter that polls before each pull.",
+            "  - On interrupt the chain is closed, no bytes are returned, and the failure carries 130.",
+            "  - `run_typed` passes `latch.poll_now()`; `run_rows` and the tests pass `|| false`."
+          ]
+        },
+        {
+          "first": 1523,
+          "last": 1526,
+          "lines": [
+            "  - `sleep 30` plus Ctrl-C gives a prompt 0.3 s later and `$?` 130;",
+            "  - `top -b -d 5 -n 10` plus Ctrl-C gives 130;",
+            "  - the endless typed stream into `cat` returns 130 and writes nothing;",
+            "  - the lossy disk text is exact;"
+          ]
+        }
+      ]
+    }
+  ],
+  "qualified_L0": {
+    "source": ".agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run1/verdict.json",
+    "sha256": "2c052509ea56b9c8eb966c57ecc2141a8e30ba7e434a2925d552eebd53df0931",
+    "marker": {
+      "pass": true,
+      "checks": {
+        "sleep-ctrl-c-prompt": {
+          "pass": true,
+          "detail": "prompt 0.3s after Ctrl-C; UART tail b'sleep 30\\nUSER: ^C\\nUSER: Cellos > '"
+        },
+        "sleep-ctrl-c-130": {
+          "pass": true,
+          "detail": "$?=130"
+        },
+        "rg-walk-ctrl-c-prompt": {
+          "pass": true,
+          "detail": "0.3s"
+        },
+        "rg-walk-ctrl-c-130": {
+          "pass": true,
+          "detail": ""
+        },
+        "endless-sink-flowing": {
+          "pass": true,
+          "detail": ""
+        },
+        "endless-sink-ctrl-c-prompt": {
+          "pass": true,
+          "detail": "0.3s"
+        },
+        "endless-sink-output-stops": {
+          "pass": true,
+          "detail": "['']"
+        },
+        "endless-sink-ctrl-c-130": {
+          "pass": true,
+          "detail": ""
+        },
+        "top-tui-ctrl-c-prompt": {
+          "pass": true,
+          "detail": ""
+        },
+        "top-tui-ctrl-c-130": {
+          "pass": true,
+          "detail": ""
+        },
+        "top-batch-ctrl-c-prompt": {
+          "pass": true,
+          "detail": "0.3s"
+        },
+        "top-batch-ctrl-c-130": {
+          "pass": true,
+          "detail": ""
+        },
+        "cat-sink-finite-control": {
+          "pass": true,
+          "detail": "(20, 0)"
+        },
+        "cat-sink-ctrl-c-prompt": {
+          "pass": true,
+          "detail": "0.3s"
+        },
+        "cat-sink-output-stops": {
+          "pass": true,
+          "detail": "['']"
+        },
+        "cat-sink-ctrl-c-130": {
+          "pass": true,
+          "detail": ""
+        }
+      },
+      "notes": [
+        "endless typed stream into builtin cat: output before Ctrl-C: 0 rows"
+      ],
+      "error": null
+    }
+  },
+  "disposition": "Main2026-10-28 directs contract-correct finite2frame/status0,10s bufferedcat/noJSON/noearlyprompt/CtrlC130/4squiescence and separate no-cat live>=3rows10s/CtrlC130/4squiescence, no product or acceptance change."
+}

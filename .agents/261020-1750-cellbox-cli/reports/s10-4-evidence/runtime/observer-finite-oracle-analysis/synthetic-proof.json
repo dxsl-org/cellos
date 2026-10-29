@@ -1,0 +1,232 @@
+{
+  "scope": "Synthetic renderer/transcript counterexample; NOT the missing historical desktop screen",
+  "conclusion": "CONFIRMED synthetic false-negative: actual retained valid two-frame output shape scrolls original echo off79x26 grid; unchanged exact pixel reader accepts final prompt/status screen, but old predicate rejects only for missing echo.",
+  "renderer": {
+    "path": "/tmp/cellbox-phase10-a3hg7abb/host-target/x86_64-unknown-linux-gnu/release/phase04-gui-glyphs",
+    "sha256": "820c92d2dc0aa5c1f50533a42283974b07998111adaff8e416f56dd4481eec79",
+    "geometry": [
+      720,
+      480
+    ],
+    "grid": [
+      79,
+      26
+    ],
+    "cell": [
+      9,
+      18
+    ],
+    "padding": [
+      8,
+      6
+    ],
+    "font": "JetBrains Mono Regular14px; retained qualified renderer; no rebuild"
+  },
+  "output_fixture": {
+    "path": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-recurring/headless/runtime-result.json",
+    "sha256": "faefe81fcdd0824dfdb143eed64209f6c0ab25e2bbc0e6c396d8a6e929726a1d",
+    "origin": "Actual successful S10-4.11 HEADLESS finite result, used only as synthetic desktop input; no desktop-completion inference",
+    "JSON_records": 20,
+    "frame_begin_count": 2,
+    "frame_end_complete_count": 2,
+    "row_lengths": [
+      404,
+      226,
+      232,
+      222,
+      225,
+      223,
+      228,
+      224,
+      224,
+      67,
+      404,
+      226,
+      232,
+      222,
+      226,
+      223,
+      228,
+      224,
+      224,
+      67
+    ],
+    "wrapped_grid_rows_for_output": 62
+  },
+  "predicate_source": "scripts/phase10_canonical_drive.py1080-1083; min_rows argument is unused; command visible-echo condition persists after exact typed-line precondition",
+  "grid_source": "cells/apps/terminal/src/grid.rs299-345 delayed autowrap,365-383 LF/scroll,510-526 full-screen scroll; ASCII subset simulated, no terminal/product patch",
+  "cases": [
+    {
+      "label": "typed-line-before-submit",
+      "image": "synthetic/typed-line-before-submit.png",
+      "image_sha256": "2eda4e5d9126d6d8d0388b9719120698b7927840d843e4ecf7f0e129c5ebc823",
+      "synthetic_rows": [
+        "",
+        "=== Cellos shell ready \u2014 type 'help' for commands ===",
+        "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+      ],
+      "reader_rows": [
+        "",
+        "=== Cellos shell ready \u2014 type 'help' for commands ===",
+        "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+      ],
+      "cursor": [
+        55,
+        2
+      ],
+      "exact_pixel_reader_accepts": true,
+      "exact_fresh_prompt_shape": false,
+      "original_command_echo_visible": false,
+      "unchanged_old_predicate_accepts": false,
+      "scroll_count": 0
+    },
+    {
+      "label": "valid-two-frame-completion-prompt",
+      "image": "synthetic/valid-two-frame-completion-prompt.png",
+      "image_sha256": "2d031a9cb780849da78e741d7bc01f62e2a49c09c57dc0b025bf3efd6a880926",
+      "synthetic_rows": [
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":8,\"generation\":115,\"root_tid\":10,\"name\":\"inpu",
+        "t\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3873271460,\"cpu_ten",
+        "ths\":403,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":117,\"root_tid\":12,\"name\":\"cell",
+        "box\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2649388250,\"cpu_t",
+        "enths\":361,\"cpu_quality\":\"ok\",\"quota_bytes\":18704,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":116,\"root_tid\":11,\"name\":\"net\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":352056660,\"cpu_tenths",
+        "\":37,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":111,\"root_tid\":6,\"name\":\"e1000",
+        "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":229824190,\"cpu_tenth",
+        "s\":19,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":214715340,\"cpu_tenths",
+        "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":5017188340,\"cpu_tenth",
+        "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3317168,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":110,\"root_tid\":5,\"name\":\"vfs\",",
+        "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":5674081570,\"cpu_tenths",
+        "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":1016,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":113,\"root_tid\":8,\"name\":\"seria",
+        "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2491582040,\"cpu_ten",
+        "ths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+        "Cellos >"
+      ],
+      "reader_rows": [
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":8,\"generation\":115,\"root_tid\":10,\"name\":\"inpu",
+        "t\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3873271460,\"cpu_ten",
+        "ths\":403,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":117,\"root_tid\":12,\"name\":\"cell",
+        "box\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2649388250,\"cpu_t",
+        "enths\":361,\"cpu_quality\":\"ok\",\"quota_bytes\":18704,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":116,\"root_tid\":11,\"name\":\"net\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":352056660,\"cpu_tenths",
+        "\":37,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":111,\"root_tid\":6,\"name\":\"e1000",
+        "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":229824190,\"cpu_tenth",
+        "s\":19,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":214715340,\"cpu_tenths",
+        "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":5017188340,\"cpu_tenth",
+        "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3317168,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":110,\"root_tid\":5,\"name\":\"vfs\",",
+        "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":5674081570,\"cpu_tenths",
+        "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":1016,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":113,\"root_tid\":8,\"name\":\"seria",
+        "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2491582040,\"cpu_ten",
+        "ths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+        "Cellos >"
+      ],
+      "cursor": [
+        9,
+        25
+      ],
+      "exact_pixel_reader_accepts": true,
+      "exact_fresh_prompt_shape": true,
+      "original_command_echo_visible": false,
+      "unchanged_old_predicate_accepts": false,
+      "scroll_count": 40
+    },
+    {
+      "label": "valid-status-zero-and-new-prompt",
+      "image": "synthetic/valid-status-zero-and-new-prompt.png",
+      "image_sha256": "7311ac28f3aa4edaad06cb94ed93559696cda50b62d3b79f68b0d274c59ec9d5",
+      "synthetic_rows": [
+        "ths\":403,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":117,\"root_tid\":12,\"name\":\"cell",
+        "box\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2649388250,\"cpu_t",
+        "enths\":361,\"cpu_quality\":\"ok\",\"quota_bytes\":18704,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":116,\"root_tid\":11,\"name\":\"net\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":352056660,\"cpu_tenths",
+        "\":37,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":111,\"root_tid\":6,\"name\":\"e1000",
+        "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":229824190,\"cpu_tenth",
+        "s\":19,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":214715340,\"cpu_tenths",
+        "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":5017188340,\"cpu_tenth",
+        "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3317168,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":110,\"root_tid\":5,\"name\":\"vfs\",",
+        "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":5674081570,\"cpu_tenths",
+        "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":1016,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":113,\"root_tid\":8,\"name\":\"seria",
+        "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2491582040,\"cpu_ten",
+        "ths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+        "Cellos > echo st=$?",
+        "st=0",
+        "Cellos >"
+      ],
+      "reader_rows": [
+        "ths\":403,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":117,\"root_tid\":12,\"name\":\"cell",
+        "box\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2649388250,\"cpu_t",
+        "enths\":361,\"cpu_quality\":\"ok\",\"quota_bytes\":18704,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":116,\"root_tid\":11,\"name\":\"net\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":352056660,\"cpu_tenths",
+        "\":37,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":111,\"root_tid\":6,\"name\":\"e1000",
+        "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":229824190,\"cpu_tenth",
+        "s\":19,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":214715340,\"cpu_tenths",
+        "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":392,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\"",
+        ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":5017188340,\"cpu_tenth",
+        "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3317168,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":110,\"root_tid\":5,\"name\":\"vfs\",",
+        "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":5674081570,\"cpu_tenths",
+        "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":1016,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":113,\"root_tid\":8,\"name\":\"seria",
+        "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2491582040,\"cpu_ten",
+        "ths\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+        "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+        "Cellos > echo st=$?",
+        "st=0",
+        "Cellos >"
+      ],
+      "cursor": [
+        9,
+        25
+      ],
+      "exact_pixel_reader_accepts": true,
+      "exact_fresh_prompt_shape": true,
+      "original_command_echo_visible": false,
+      "unchanged_old_predicate_accepts": false,
+      "scroll_count": 42
+    }
+  ],
+  "historical_S10_4_14_completion": "UNPROVEN: actual final screen/read absent; this fixture cannot reconstruct it",
+  "operations": {
+    "VM_runs": 0,
+    "guest_controls": 0,
+    "product_or_harness_edits": 0,
+    "retained_renderer_invoked_offline": true,
+    "build_or_package_install": false
+  }
+}

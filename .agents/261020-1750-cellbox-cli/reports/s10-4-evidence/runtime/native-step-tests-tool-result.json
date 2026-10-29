@@ -1,0 +1,27 @@
+{
+  "type": "message",
+  "id": "165527cf",
+  "parentId": "7d62c9f0",
+  "timestamp": "2026-10-28T14:35:53.710Z",
+  "runtime": {
+    "version": "18.12.6"
+  },
+  "message": {
+    "role": "toolResult",
+    "toolCallId": "call_8ea1c783ad064e4e9b06537a29db4214|fc_04f1082ec2b33ac9016ae2084842c481919d7a51986efab79a",
+    "toolName": "bash",
+    "content": [
+      {
+        "type": "text",
+        "text": "test_native_step_only_current_breakpoint_restored_before_return (test_rsp.ClientTests.test_native_step_only_current_breakpoint_restored_before_return) ... ok\ntest_native_step_rejects_unenrolled_noncurrent_and_raw_stepping (test_rsp.ClientTests.test_native_step_rejects_unenrolled_noncurrent_and_raw_stepping) ... ok\ntest_native_step_no_progress_fails_closed_restoring_breakpoint (test_rsp.ClientTests.test_native_step_no_progress_fails_closed_restoring_breakpoint) ... ok\ntest_native_step_returns_interleaved_watch_with_guard_untouched (test_rsp.ClientTests.test_native_step_returns_interleaved_watch_with_guard_untouched) ... ok\ntest_entry_step_returns_without_handling_unenrolled_next_pc (test_measurement.NativeStepObserverTests.test_entry_step_returns_without_handling_unenrolled_next_pc) ... ok\ntest_native_write_watch_is_handled_before_further_progress (test_measurement.NativeStepObserverTests.test_native_write_watch_is_handled_before_further_progress) ... ok\ntest_unexpected_step_signal_stops_not_continues (test_measurement.NativeStepObserverTests.test_unexpected_step_signal_stops_not_continues) ... ok\n\n----------------------------------------------------------------------\nRan 7 tests in 0.006s\n\nOK\n"
+      }
+    ],
+    "details": {
+      "wallTimeNoticeEmitted": false,
+      "timeoutSeconds": 30,
+      "wallTimeMs": 226.03205198049545
+    },
+    "isError": false,
+    "timestamp": 1793198153708
+  }
+}

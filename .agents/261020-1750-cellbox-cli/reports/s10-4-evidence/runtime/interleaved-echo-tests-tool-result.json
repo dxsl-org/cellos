@@ -1,0 +1,27 @@
+{
+  "type": "message",
+  "id": "61fa79e0",
+  "parentId": "f12bb3b5",
+  "timestamp": "2026-10-28T14:38:24.122Z",
+  "runtime": {
+    "version": "18.12.6"
+  },
+  "message": {
+    "role": "toolResult",
+    "toolCallId": "call_f4d46cf9cc4e408a86b2d1b8a978d8a1|fc_04f1082ec2b33ac9016ae208dee34481919c8aa7f931ff5c0b",
+    "toolName": "bash",
+    "content": [
+      {
+        "type": "text",
+        "text": "test_arbitrary_nonservice_line_cannot_be_ignored (test_measurement.InterleavedEchoTests.test_arbitrary_nonservice_line_cannot_be_ignored) ... ok\ntest_background_after_prompt_retained_and_exact_prompt_removed (test_measurement.InterleavedEchoTests.test_background_after_prompt_retained_and_exact_prompt_removed) ... ok\ntest_exact_fragments_across_existing_service_line_retained (test_measurement.InterleavedEchoTests.test_exact_fragments_across_existing_service_line_retained) ... ok\ntest_truncated_echo_cannot_match_command (test_measurement.InterleavedEchoTests.test_truncated_echo_cannot_match_command) ... ok\n\n----------------------------------------------------------------------\nRan 4 tests in 0.000s\n\nOK\n"
+      }
+    ],
+    "details": {
+      "wallTimeNoticeEmitted": false,
+      "timeoutSeconds": 30,
+      "wallTimeMs": 116.00193297863007
+    },
+    "isError": false,
+    "timestamp": 1793198304120
+  }
+}

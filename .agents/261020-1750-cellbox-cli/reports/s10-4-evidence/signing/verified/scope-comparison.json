@@ -1,0 +1,17 @@
+{
+  "current_tools_unchanged": true,
+  "exact_before_after_match": true,
+  "file_count": 254,
+  "historical_source_unchanged": true,
+  "historical_worktree_retained": "/tmp/cellbox-s10-4/baseline-worktree",
+  "membership_content_sha256": "65af0e93744fce172c854d2de7589087a50362deba4efbbe69a7f2ae9a6d23c0",
+  "mirror_retained": "/tmp/cellbox-s10-4/signing-review-root",
+  "original_refusal": {
+    "bytes": 3923,
+    "sha256": "d3fb6c39bc7298b3080f4e03e3580965348e42d05d6efdce42995f301e25a017"
+  },
+  "original_refusal_unchanged": true,
+  "original_unsigned_unchanged": true,
+  "protected_file_count": 546,
+  "protected_unchanged": true
+}

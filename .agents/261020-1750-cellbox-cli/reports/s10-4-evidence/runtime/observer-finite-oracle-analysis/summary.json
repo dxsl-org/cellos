@@ -1,0 +1,23 @@
+{
+  "status": "OFFLINE_SYNTHETIC_ORACLE_FALSE_NEGATIVE_CONFIRMED_HISTORICAL_COMPLETION_UNKNOWN",
+  "date": "2026-10-29",
+  "confidence": "CONFIRMED synthetic mechanism: retained qualified renderer plus exact existing read_screen/predicate and source-grounded wrap simulation create valid completed screens that old predicate rejects; historical actual last screen absent",
+  "geometry": "720x480 Terminal,79columns x26rows,9x18cells,padding8/6,JetBrainsMonoRegular14px, retained renderer SHA256820c92d2dc0aa5c1f50533a42283974b07998111adaff8e416f56dd4481eec79",
+  "fixture": "Actual successful S10-4.11 HEADLESS top two-frame JSON result used ONLY as synthetic desktop transcript:20records, two begin/two complete end, line lengths67..404characters,62wrappedrows. Not new desktop output.",
+  "proof": "Typedline exact before submit. After valid fixture output+prompt the grid scrolls40rows; after synthetic status0/newprompt42rows. Existing exactpixel reader accepts both screens with correct prompt/cursor; unchanged at_fresh_prompt rejects both solely because original command echo is no longer visible. min_rows parameter is unused.",
+  "proof_execution": "python3 prove_scroll.py returncode0 once; invokes only existing host glyph renderer, no build/testsuite/QEMU or guest input",
+  "historical_input_audit": "All55frozen GUI batches reconstruct exact original top --records -d 1 --frames 2 | to jsonl | cat plus Enter, no ambiguous key mapping and no status command. This proves requested input, not completed output.",
+  "historical_completion": "UNPROVEN: no post-submit GUI screen/read/status result retained; UART frame envelopes0/not GUI output route. Native/allocator/proof events are not completion proxies. Do not reclassify oldSTOP as success or product failure.",
+  "one_consolidated_next_CP1": "next-protocol.json: preserve exact typedline precondition, arm after originalEntercommit, collect source-bound temporal exact-GUI output ledger, prove two complete frames/newprompt/status0 without finalecho dependency; reject stale oldprompt/missingledger/ambiguousoverlap. Retain finaldump/rawread and reasons for ANY timeout exception. All original deadlines/controls preserved; all144regressions before exactlyONE separately approved desktop replacement.",
+  "observability_gate": "62outputrows exceed26visible rows; finalscreen alone and sparse1.5s snapshots cannot guarantee full two-frame evidence. New temporal oracle must failclosed if complete ordered GUI output was missed, not infer it from command '--frames2'/status0. Offline dropped/coalesced-frame tests must establish this gate before any newVM; no hidden new output route or acceptance reduction.",
+  "operations": {
+    "new_VM_runs": 0,
+    "guest_controls": 0,
+    "runtime_predicate_or_product_edits": 0,
+    "prior_archive_or_manifest_changes": 0,
+    "project_docs_or_git_changes": 0,
+    "new_analysis_evidence_only": true
+  },
+  "artifacts": ["prove_scroll.py", "proof-command.json", "synthetic-proof.json", "synthetic/typed-line-before-submit.png", "synthetic/valid-two-frame-completion-prompt.png", "synthetic/valid-status-zero-and-new-prompt.png", "historical-evidence-audit.json", "next-protocol.json"],
+  "acceptance": "All previous partial results and CBX27/criterion4/S10-5/canonical/containment ceilings unchanged; no nextCP1 implementation or replacement approval inferred. No commit/push."
+}

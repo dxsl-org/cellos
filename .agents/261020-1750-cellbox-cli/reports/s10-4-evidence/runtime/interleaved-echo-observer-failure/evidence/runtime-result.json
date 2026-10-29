@@ -1,0 +1,444 @@
+{
+  "profile": "headless",
+  "mode": "observed",
+  "number": 1,
+  "work": "/tmp/cellbox-s10-4-runtime-headless-observed-1-e6c373",
+  "status": "STOP",
+  "start_monotonic_ns": 383703453373476,
+  "qemu_start_monotonic_ns": 383705376785042,
+  "qemu_pid": 2127162,
+  "timestamps": {
+    "exact_prompt_ns": 383720489246420,
+    "prompt_prefix_end_offset": 21030,
+    "predicate_observed_ns": 383720495318614
+  },
+  "idle": {
+    "name": "ordinary-prompt-idle",
+    "start_ns": 383720559772489,
+    "end_ns": 383730560018456,
+    "target_hz": 10,
+    "samples": [
+      {
+        "monotonic_ns": 383720559909339,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383720660043203,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383720760056647,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383720860048100,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383720960054216,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383721060053141,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383721160022931,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383721260046010,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383721360059203,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383721460045650,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383721560054584,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383721660048906,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383721760048851,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383721860038122,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383721960047237,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383722060073481,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383722160028287,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383722260053895,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383722360074253,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383722460043519,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383722560044143,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383722660045417,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383722760047327,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383722860050544,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383722960024790,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383723060037860,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383723160037191,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383723260041859,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383723360040041,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383723460078908,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383723560049385,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383723660046281,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383723760070579,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383723860052677,
+        "serial_bytes": 0
+      },
+      {
+        "monotonic_ns": 383723960040870,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383724060030632,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383724160036083,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383724260033447,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383724360023756,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383724460036623,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383724560021540,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383724660027826,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383724760048536,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383724860030188,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383724960030560,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383725060027427,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383725160022025,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383725260027152,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383725360033782,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383725460025515,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383725560036105,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383725660033845,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383725760076937,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383725860064539,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383725960029012,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383726060021333,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383726160022978,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383726260066361,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383726360042319,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383726460028433,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383726560050609,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383726660038036,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383726760029158,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383726860034269,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383726960044506,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383727060050502,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383727160049745,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383727260040792,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383727360050748,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383727460029938,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383727560027192,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383727660040581,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383727760037706,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383727860053854,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383727960028088,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383728060034903,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383728160041522,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383728259997944,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383728360030416,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383728460018385,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383728560044436,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383728660036111,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383728760037981,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383728860043356,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383728960035243,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383729060037071,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383729160030457,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383729260027210,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383729360021440,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383729460046272,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383729560031586,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383729660040793,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383729760044047,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383729860041548,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383729960041869,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383730060039139,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383730160037634,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383730260062283,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383730360049922,
+        "serial_bytes": 64
+      },
+      {
+        "monotonic_ns": 383730460031086,
+        "serial_bytes": 64
+      }
+    ],
+    "qemu_cpu_ticks_delta": 504,
+    "host_ticks_per_second": 100,
+    "serial_bytes": 64,
+    "scope": "whole-QEMU CPU incl sampling overhead; content changes not redraw calls"
+  },
+  "error": "StepFailed: echo of 'top --records -d 1 --frames 2 | to jsonl | cat' not seen: 'top --reco'",
+  "traceback": "Traceback (most recent call last):\n  File \"/tmp/cellbox-s10-4/runtime/run.py\", line 20, in run_one\n    if profile=='headless' or mode=='observed':record['long_stream']=s.streams()\n                                                                     ^^^^^^^^^^^\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 187, in streams\n    self.phase('finite-stream');rows=self.command('finite-stream','top --records -d 1 --frames 2 | to jsonl | cat',120)\n                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 135, in command\n    else:out=self.sh.run(cmd,timeout)[0]\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/dmin/cellos/scripts/phase10_canonical_drive.py\", line 357, in run\n    raise StepFailed(f\"echo of {cmd!r} not seen: {echo[:200]!r}\")\nphase04_gui_drive.StepFailed: echo of 'top --records -d 1 --frames 2 | to jsonl | cat' not seen: 'top --reco'\n",
+  "surface_events": [
+    {
+      "phase": "initial-prompt",
+      "monotonic_ns": 383720495320231
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "monotonic_ns": 383720559770010
+    },
+    {
+      "phase": "finite-stream",
+      "monotonic_ns": 383730627247311
+    }
+  ],
+  "end_monotonic_ns": 383739110280660
+}

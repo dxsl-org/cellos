@@ -1,0 +1,48 @@
+test_address_length_validation (test_rsp.ClientTests.test_address_length_validation) ... ok
+test_allow_policy (test_rsp.ClientTests.test_allow_policy) ... ok
+test_binary_escapes_and_run_length (test_rsp.ClientTests.test_binary_escapes_and_run_length) ... ok
+test_checksum_mismatch_sends_nack_no_retry (test_rsp.ClientTests.test_checksum_mismatch_sends_nack_no_retry) ... ok
+test_connect_unix_xml_includes_and_little_endian_registers (test_rsp.ClientTests.test_connect_unix_xml_includes_and_little_endian_registers) ... ok
+test_console_malformed_fails (test_rsp.ClientTests.test_console_malformed_fails) ... ok
+test_deny_policy_never_sends (test_rsp.ClientTests.test_deny_policy_never_sends) ... ok
+test_escaped_star_not_run_length (test_rsp.ClientTests.test_escaped_star_not_run_length) ... ok
+test_exit_and_unexpected_stop_fail_explicitly (test_rsp.ClientTests.test_exit_and_unexpected_stop_fail_explicitly) ... ok
+test_fragmented_and_coalesced_frames (test_rsp.ClientTests.test_fragmented_and_coalesced_frames) ... ok
+test_g_prefix_uses_xml_p_for_tail (test_rsp.ClientTests.test_g_prefix_uses_xml_p_for_tail) ... ok
+test_hardware_operations_no_software_fallback (test_rsp.ClientTests.test_hardware_operations_no_software_fallback) ... ok
+test_invalid_socket_path_and_timeout (test_rsp.ClientTests.test_invalid_socket_path_and_timeout) ... ok
+test_missing_feature_capability_and_invalid_packet_size (test_rsp.ClientTests.test_missing_feature_capability_and_invalid_packet_size) ... ok
+test_missing_register_connect_fails_without_guessed_offset (test_rsp.ClientTests.test_missing_register_connect_fails_without_guessed_offset) ... ok
+test_nonhex_checksum_and_invalid_framing (test_rsp.ClientTests.test_nonhex_checksum_and_invalid_framing) ... ok
+test_partial_stop_survives_wait_timeout (test_rsp.ClientTests.test_partial_stop_survives_wait_timeout) ... ok
+test_physical_mode_unsupported_and_restore_errors_are_fatal (test_rsp.ClientTests.test_physical_mode_unsupported_and_restore_errors_are_fatal) ... ok
+test_physical_read_error_still_restores_virtual_view (test_rsp.ClientTests.test_physical_read_error_still_restores_virtual_view) ... ok
+test_physical_read_restores_virtual_view (test_rsp.ClientTests.test_physical_read_restores_virtual_view) ... ok
+test_raw_logs_append_hex_monotonic_and_close_is_idempotent (test_rsp.ClientTests.test_raw_logs_append_hex_monotonic_and_close_is_idempotent) ... ok
+test_read_exact_memory_and_chunking (test_rsp.ClientTests.test_read_exact_memory_and_chunking) ... ok
+test_register_number_gap_uses_explicit_p_only (test_rsp.ClientTests.test_register_number_gap_uses_explicit_p_only) ... ok
+test_register_unavailable_and_malformed_sizes (test_rsp.ClientTests.test_register_unavailable_and_malformed_sizes) ... ok
+test_request_c_is_asynchronous (test_rsp.ClientTests.test_request_c_is_asynchronous) ... ok
+test_resume_does_not_receive_and_wait_stop_drains_console (test_rsp.ClientTests.test_resume_does_not_receive_and_wait_stop_drains_console) ... ok
+test_run_length_invalid_forms (test_rsp.ClientTests.test_run_length_invalid_forms) ... ok
+test_short_or_nonhex_memory_fails (test_rsp.ClientTests.test_short_or_nonhex_memory_fails) ... ok
+test_single_register_unavailable_and_running_are_errors (test_rsp.ClientTests.test_single_register_unavailable_and_running_are_errors) ... ok
+test_single_register_uses_cached_xml_number (test_rsp.ClientTests.test_single_register_uses_cached_xml_number) ... ok
+test_stop_before_continue_ack_is_retained (test_rsp.ClientTests.test_stop_before_continue_ack_is_retained) ... ok
+test_target_nack_no_retry (test_rsp.ClientTests.test_target_nack_no_retry) ... ok
+test_unsupported_and_target_error_are_explicit (test_rsp.ClientTests.test_unsupported_and_target_error_are_explicit) ... ok
+test_unsupported_g_never_silently_falls_back (test_rsp.ClientTests.test_unsupported_g_never_silently_falls_back) ... ok
+test_wait_timeout_then_interrupt_no_guest_write (test_rsp.ClientTests.test_wait_timeout_then_interrupt_no_guest_write) ... ok
+test_xml_chunks_and_escaping (test_rsp.ClientTests.test_xml_chunks_and_escaping) ... ok
+test_xml_cycles_entities_bad_registers_and_wrong_architecture (test_rsp.ClientTests.test_xml_cycles_entities_bad_registers_and_wrong_architecture) ... ok
+test_counter_outside_arena_is_stop_not_clamp (test_measurement.CounterBehaviorTests.test_counter_outside_arena_is_stop_not_clamp) ... ok
+test_finite_slot_entry_census_boundaries (test_measurement.CounterBehaviorTests.test_finite_slot_entry_census_boundaries) ... ok
+test_peak_preserves_transient_value_after_free (test_measurement.CounterBehaviorTests.test_peak_preserves_transient_value_after_free) ... ok
+test_large_mappings_preserve_offsets (test_measurement.PageWalkTests.test_large_mappings_preserve_offsets) ... ok
+test_missing_mapping_has_no_fabricated_physical_zero (test_measurement.PageWalkTests.test_missing_mapping_has_no_fabricated_physical_zero) ... ok
+test_present_page_offset_and_cached_tables (test_measurement.PageWalkTests.test_present_page_offset_and_cached_tables) ... ok
+
+----------------------------------------------------------------------
+Ran 43 tests in 0.045s
+
+OK

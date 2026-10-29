@@ -1,0 +1,16 @@
+{
+  "qemu_binary": "/usr/bin/qemu-system-x86_64",
+  "qemu_sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+  "version": "QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.17)\nCopyright (c) 2003-2023 Fabrice Bellard and the QEMU Project developers\n",
+  "elf_notes": "\nDisplaying notes found in: .note.gnu.property\n  Owner                Data size \tDescription\n  GNU                  0x00000020\tNT_GNU_PROPERTY_TYPE_0\n      Properties: x86 feature: IBT, SHSTK\n\tx86 ISA needed: x86-64-baseline\n\nDisplaying notes found in: .note.gnu.build-id\n  Owner                Data size \tDescription\n  GNU                  0x00000014\tNT_GNU_BUILD_ID (unique build ID bitstring)\n    Build ID: ce72f123d382a9642649676c0fad7b73f7dde749\n\nDisplaying notes found in: .note.ABI-tag\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_ABI_TAG (ABI version tag)\n    OS: Linux, ABI: 3.2.0\n",
+  "host_sources": {
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-diagnostic/diagnostic.py": "b11e2b7c641f0c49412ba9d1f491452742b2059bb3bb078887834509b380a3e7",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/common.py": "aed7d9c2ee8ac8b4bb4d47948ce14d56b0c58b14c02c4d340336abf3916590ec",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer.py": "9a8aeaefbc31c24df43a67ad6c65dcb48505b0d7933909f3133aa5cbcfd954dc",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/rsp.py": "c8c3bffb20a609201e0a7dd59b58b35fde4c935cec221aadd0830e87eab76880",
+    "/home/dmin/cellos/scripts/phase10_canonical_drive.py": "d4fcb022dc340f6d79451fa02ae3b38e0ca90f809f0c943ba48abfbeb835fad9",
+    "/home/dmin/cellos/scripts/phase04_gui_drive.py": "bfef6d8e6426bbddcb2d5e59d9f00dced631bef995af7c62d3366486d32027bc",
+    "/home/dmin/cellos/scripts/phase05_vt_hostile.py": "709bd4e3863764f9002d536c2bd29cd368ae117fde5f90bd03c805216b5c9ae2"
+  },
+  "source_reference_scope": "upstream v8.2.2 source plus installed event metadata; Ubuntu patched source not independently reconstructed"
+}

@@ -1,0 +1,30 @@
+There are 21 section headers, starting at offset 0xd6ca0:
+
+Section Headers:
+  [Nr] Name              Type            Address          Off    Size   ES Flg Lk Inf Al
+  [ 0]                   NULL            0000000000000000 000000 000000 00      0   0  0
+  [ 1] .text             PROGBITS        0000000000000000 001000 0a9d2d 00  AX  0   0 16
+  [ 2] .dynsym           DYNSYM          00000000000a9d30 0aad30 000018 18   A  5   1  8
+  [ 3] .gnu.hash         GNU_HASH        00000000000a9d48 0aad48 00001c 00   A  2   0  8
+  [ 4] .hash             HASH            00000000000a9d64 0aad64 000010 04   A  2   0  4
+  [ 5] .dynstr           STRTAB          00000000000a9d74 0aad74 000001 00   A  0   0  1
+  [ 6] .rela.dyn         RELA            00000000000a9d78 0aad78 004bc0 18   A  2   0  8
+  [ 7] .rodata           PROGBITS        00000000000af000 0b0000 007310 00 AMS  0   0 4096
+  [ 8] .init_array       INIT_ARRAY      00000000000b6310 0b7310 000000 08   A  0   0  8
+  [ 9] .data             PROGBITS        00000000000b7000 0b8000 004528 00 WAR  0   0 4096
+  [10] .dynamic          DYNAMIC         00000000000bb528 0bc528 000100 10  WA  5   0  8
+  [11] .bss              NOBITS          00000000000bc000 0bd000 100052 00  WA  0   0 4096
+  [12] __ViCell_syscalls PROGBITS        00000000001bc058 0bd058 000008 00  AR  0   0  8
+  [13] __ViCell_manifest PROGBITS        00000000001bd000 0be000 000010 00  AR  0   0 4096
+  [14] .eh_frame_hdr     PROGBITS        00000000001bd010 0be010 00000c 00   A  0   0  4
+  [15] .eh_frame         PROGBITS        00000000001bd020 0be020 00001c 00   A  0   0  8
+  [16] .comment          PROGBITS        0000000000000000 0be03c 000093 01  MS  0   0  1
+  [17] __ViCell_sig      PROGBITS        0000000000000000 0be0cf 000040 00      0   0  1
+  [18] .symtab           SYMTAB          0000000000000000 0be110 004b78 18     19 798  8
+  [19] .strtab           STRTAB          0000000000000000 0c2c88 013f55 00      0   0  1
+  [20] .shstrtab         STRTAB          0000000000000000 0d6bdd 0000bf 00      0   0  1
+Key to Flags:
+  W (write), A (alloc), X (execute), M (merge), S (strings), I (info),
+  L (link order), O (extra OS processing required), G (group), T (TLS),
+  C (compressed), x (unknown), o (OS specific), E (exclude),
+  R (retain), D (mbind), l (large), p (processor specific)

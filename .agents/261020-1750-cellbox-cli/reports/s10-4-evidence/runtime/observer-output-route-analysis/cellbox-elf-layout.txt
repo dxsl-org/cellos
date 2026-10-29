@@ -1,0 +1,105 @@
+ELF Header:
+  Magic:   7f 45 4c 46 02 01 01 03 00 00 00 00 00 00 00 00 
+  Class:                             ELF64
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - GNU
+  ABI Version:                       0
+  Type:                              DYN (Position-Independent Executable file)
+  Machine:                           Advanced Micro Devices X86-64
+  Version:                           0x1
+  Entry point address:               0x0
+  Start of program headers:          64 (bytes into file)
+  Start of section headers:          3092672 (bytes into file)
+  Flags:                             0x0
+  Size of this header:               64 (bytes)
+  Size of program headers:           56 (bytes)
+  Number of program headers:         9
+  Size of section headers:           64 (bytes)
+  Number of section headers:         21
+  Section header string table index: 20
+
+Section Headers:
+  [Nr] Name              Type             Address           Offset
+       Size              EntSize          Flags  Link  Info  Align
+  [ 0]                   NULL             0000000000000000  00000000
+       0000000000000000  0000000000000000           0     0     0
+  [ 1] .text             PROGBITS         0000000000000000  00001000
+       00000000001f2ed3  0000000000000000  AX       0     0     16
+  [ 2] .dynsym           DYNSYM           00000000001f2ed8  001f3ed8
+       0000000000000018  0000000000000018   A       5     1     8
+  [ 3] .gnu.hash         GNU_HASH         00000000001f2ef0  001f3ef0
+       000000000000001c  0000000000000000   A       2     0     8
+  [ 4] .hash             HASH             00000000001f2f0c  001f3f0c
+       0000000000000010  0000000000000004   A       2     0     4
+  [ 5] .dynstr           STRTAB           00000000001f2f1c  001f3f1c
+       0000000000000001  0000000000000000   A       0     0     1
+  [ 6] .rela.dyn         RELA             00000000001f2f20  001f3f20
+       000000000002ec68  0000000000000018   A       2     0     8
+  [ 7] .rodata           PROGBITS         0000000000222000  00223000
+       000000000005d228  0000000000000000 AMS       0     0     4096
+  [ 8] .init_array       INIT_ARRAY       000000000027f228  00280228
+       0000000000000000  0000000000000008   A       0     0     8
+  [ 9] .data             PROGBITS         0000000000280000  00281000
+       0000000000027618  0000000000000000 WAR       0     0     4096
+  [10] .dynamic          DYNAMIC          00000000002a7618  002a8618
+       0000000000000100  0000000000000010  WA       5     0     8
+  [11] .bss              NOBITS           00000000002a8000  002a9000
+       0000000000700148  0000000000000000  WA       0     0     4096
+  [12] __ViCell_syscalls PROGBITS         00000000009a8148  002a9148
+       0000000000000008  0000000000000000  AR       0     0     8
+  [13] __ViCell_manifest PROGBITS         00000000009a9000  002aa000
+       0000000000000010  0000000000000000  AR       0     0     4096
+  [14] .eh_frame_hdr     PROGBITS         00000000009a9010  002aa010
+       000000000000000c  0000000000000000   A       0     0     4
+  [15] .eh_frame         PROGBITS         00000000009a9020  002aa020
+       000000000000001c  0000000000000000   A       0     0     8
+  [16] .comment          PROGBITS         0000000000000000  002aa03c
+       0000000000000093  0000000000000001  MS       0     0     1
+  [17] __ViCell_sig      PROGBITS         0000000000000000  002aa0cf
+       0000000000000040  0000000000000000           0     0     1
+  [18] .symtab           SYMTAB           0000000000000000  002aa110
+       000000000000dc50  0000000000000018          19   2343     8
+  [19] .strtab           STRTAB           0000000000000000  002b7d60
+       000000000003b29b  0000000000000000           0     0     1
+  [20] .shstrtab         STRTAB           0000000000000000  002f2ffb
+       00000000000000bf  0000000000000000           0     0     1
+Key to Flags:
+  W (write), A (alloc), X (execute), M (merge), S (strings), I (info),
+  L (link order), O (extra OS processing required), G (group), T (TLS),
+  C (compressed), x (unknown), o (OS specific), E (exclude),
+  R (retain), D (mbind), l (large), p (processor specific)
+
+Program Headers:
+  Type           Offset             VirtAddr           PhysAddr
+                 FileSiz            MemSiz              Flags  Align
+  LOAD           0x0000000000001000 0x0000000000000000 0x0000000000000000
+                 0x00000000001f2ed3 0x00000000001f2ed3  R E    0x1000
+  LOAD           0x00000000001f3ed8 0x00000000001f2ed8 0x00000000001f2ed8
+                 0x000000000008c350 0x000000000008c350  R      0x1000
+  LOAD           0x0000000000281000 0x0000000000280000 0x0000000000280000
+                 0x0000000000027718 0x0000000000027718  RW     0x1000
+  LOAD           0x0000000000000000 0x00000000002a8000 0x00000000002a8000
+                 0x0000000000000000 0x0000000000700148  RW     0x1000
+  LOAD           0x00000000002a9148 0x00000000009a8148 0x00000000009a8148
+                 0x0000000000000ef4 0x0000000000000ef4  R      0x1000
+  DYNAMIC        0x00000000002a8618 0x00000000002a7618 0x00000000002a7618
+                 0x0000000000000100 0x0000000000000100  RW     0x8
+  GNU_RELRO      0x0000000000281000 0x0000000000280000 0x0000000000280000
+                 0x0000000000027718 0x0000000000027718  R      0x1
+  GNU_EH_FRAME   0x00000000002aa010 0x00000000009a9010 0x00000000009a9010
+                 0x000000000000000c 0x000000000000000c  R      0x4
+  GNU_STACK      0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000000000 0x0000000000000000  RW     0x0
+
+ Section to Segment mapping:
+  Segment Sections...
+   00     .text 
+   01     .dynsym .gnu.hash .hash .dynstr .rela.dyn .rodata 
+   02     .data .dynamic 
+   03     .bss 
+   04     __ViCell_syscalls __ViCell_manifest .eh_frame_hdr .eh_frame 
+   05     .dynamic 
+   06     .data .dynamic 
+   07     .eh_frame_hdr 
+   08     

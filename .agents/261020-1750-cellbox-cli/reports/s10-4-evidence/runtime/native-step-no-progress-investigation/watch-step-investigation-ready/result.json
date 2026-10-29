@@ -1,0 +1,90 @@
+[
+  {
+    "variant": "write-watch-plus-execute",
+    "argv": [
+      "qemu-system-x86_64",
+      "-machine",
+      "q35",
+      "-accel",
+      "tcg",
+      "-m",
+      "32M",
+      "-display",
+      "none",
+      "-serial",
+      "none",
+      "-monitor",
+      "none",
+      "-nic",
+      "none",
+      "-drive",
+      "file=/tmp/cellbox-s10-4/runtime/watch-step-repro.img,format=raw,if=floppy,readonly=on",
+      "-boot",
+      "a",
+      "-chardev",
+      "socket,path=/tmp/cellbox-s10-4/runtime/watch-step-investigation-ready/write-watch-plus-execute.sock,server=on,wait=off,id=dbg",
+      "-gdb",
+      "chardev:dbg",
+      "-S"
+    ],
+    "events": [
+      {
+        "point": "after_write",
+        "stop": "T05thread:01;watch:8000;",
+        "rip": "0x7c10",
+        "word": "0300"
+      },
+      {
+        "point": "isolated_native_step_1",
+        "stop": "T05thread:01;",
+        "rip": "0x7c13",
+        "word": "0300"
+      }
+    ],
+    "status": "COMPLETE"
+  },
+  {
+    "variant": "write-watch-only",
+    "argv": [
+      "qemu-system-x86_64",
+      "-machine",
+      "q35",
+      "-accel",
+      "tcg",
+      "-m",
+      "32M",
+      "-display",
+      "none",
+      "-serial",
+      "none",
+      "-monitor",
+      "none",
+      "-nic",
+      "none",
+      "-drive",
+      "file=/tmp/cellbox-s10-4/runtime/watch-step-repro.img,format=raw,if=floppy,readonly=on",
+      "-boot",
+      "a",
+      "-chardev",
+      "socket,path=/tmp/cellbox-s10-4/runtime/watch-step-investigation-ready/write-watch-only.sock,server=on,wait=off,id=dbg",
+      "-gdb",
+      "chardev:dbg",
+      "-S"
+    ],
+    "events": [
+      {
+        "point": "after_write",
+        "stop": "T05thread:01;watch:8000;",
+        "rip": "0x7c10",
+        "word": "0300"
+      },
+      {
+        "point": "isolated_native_step_1",
+        "stop": "T05thread:01;",
+        "rip": "0x7c13",
+        "word": "0300"
+      }
+    ],
+    "status": "COMPLETE"
+  }
+]

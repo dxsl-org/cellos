@@ -1,0 +1,11 @@
+{
+  "package": "qemu-system-x86",
+  "source_package": "qemu",
+  "version": "1:8.2.2+ds-0ubuntu1.17",
+  "dpkg_query_observed": "qemu-system-x86\t1:8.2.2+ds-0ubuntu1.17\tqemu",
+  "binary": "/usr/bin/qemu-system-x86_64",
+  "sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+  "md5": "149d973a6a62739c47b5d675e33ff4ff",
+  "dpkg_md5": "149d973a6a62739c47b5d675e33ff4ff",
+  "dpkg_md5_match": true
+}

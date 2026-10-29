@@ -1,0 +1,305 @@
+0000000000000000 0000000000000032 T _start
+0000000000000040 0000000000000243 t terminal::session::drain::<terminal_sdk::host::FrontendHost>
+0000000000000290 0000000000000079 t <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+0000000000000310 000000000000016c t <core::iter::adapters::map::Map<core::ops::range::Range<usize>, <terminal::TerminalApp>::visible_cells::{closure#2}::{closure#0}> as core::iter::traits::iterator::Iterator>::try_fold::<(), <core::iter::adapters::take_while::TakeWhile<_, _> as core::iter::traits::iterator::Iterator>::try_fold::check<(usize, f32), (), core::ops::control_flow::ControlFlow<(f32, f32, &terminal::grid::TerminalCell, usize)>, <terminal::TerminalApp>::visible_cells::{closure#2}::{closure#1}, core::iter::traits::iterator::Iterator::find_map::check<(usize, f32), (f32, f32, &terminal::grid::TerminalCell, usize), &mut <terminal::TerminalApp>::visible_cells::{closure#2}::{closure#2}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<core::ops::control_flow::ControlFlow<(f32, f32, &terminal::grid::TerminalCell, usize)>>>
+0000000000000480 000000000000017f t <terminal::session::TerminalSession>::fail
+0000000000000600 000000000000021e t <terminal::session::TerminalSession>::pump
+0000000000000820 0000000000000dcf t <terminal::session::TerminalSession>::start
+00000000000015f0 000000000000005a t <terminal::session::TerminalSession>::notice
+0000000000001650 0000000000000318 t <terminal::session::TerminalSession>::on_key
+0000000000001970 0000000000000139 t <alloc::vec::Vec<terminal::grid::TerminalCell>>::resize
+0000000000001ab0 0000000000000063 t <alloc::raw_vec::RawVec<alloc::boxed::Box<[terminal::grid::TerminalCell]>>>::grow_one
+0000000000001b20 0000000000000097 t <alloc::collections::vec_deque::VecDeque<alloc::boxed::Box<[terminal::grid::TerminalCell]>>>::grow
+0000000000001bc0 00000000000001e7 t <alloc::raw_vec::RawVecInner>::finish_grow
+0000000000001db0 00000000000000fa t alloc::fmt::format
+0000000000001eb0 0000000000000012 t <&str as core::fmt::Display>::fmt
+0000000000001ed0 000000000000002c t <api::abi::cell_session::Status as core::fmt::Debug>::fmt
+0000000000001f00 0000000000000037 t <terminal::grid::ResizeError as core::fmt::Debug>::fmt
+0000000000001f40 0000000000000108 t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids
+0000000000002050 0000000000000335 t core::ptr::drop_in_place::<core::iter::adapters::flatten::FlatMap<core::iter::adapters::filter::Filter<core::iter::adapters::flatten::FlatMap<core::option::Iter<ttf_parser::tables::cmap::Table>, ttf_parser::tables::cmap::Subtables, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#0}>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#1}>, alloc::vec::Vec<(ab_glyph::glyph::GlyphId, char)>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#2}>>
+0000000000002390 0000000000000484 t <core::iter::adapters::flatten::FlatMap<core::iter::adapters::filter::Filter<core::iter::adapters::flatten::FlatMap<core::option::Iter<ttf_parser::tables::cmap::Table>, ttf_parser::tables::cmap::Subtables, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#0}>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#1}>, alloc::vec::Vec<(ab_glyph::glyph::GlyphId, char)>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#2}> as core::iter::traits::iterator::Iterator>::next
+0000000000002820 0000000000000093 t <core::iter::adapters::flatten::FlatMap<core::iter::adapters::filter::Filter<core::iter::adapters::flatten::FlatMap<core::option::Iter<ttf_parser::tables::cmap::Table>, ttf_parser::tables::cmap::Subtables, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#0}>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#1}>, alloc::vec::Vec<(ab_glyph::glyph::GlyphId, char)>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#2}> as core::iter::traits::iterator::Iterator>::size_hint
+00000000000028c0 00000000000001f5 t <core::iter::adapters::flatten::FlatMap<core::iter::adapters::filter::Filter<core::iter::adapters::flatten::FlatMap<core::option::Iter<ttf_parser::tables::cmap::Table>, ttf_parser::tables::cmap::Subtables, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#0}>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#1}>, alloc::vec::Vec<(ab_glyph::glyph::GlyphId, char)>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#2}> as core::iter::traits::iterator::Iterator>::advance_by
+0000000000002ac0 00000000000001f9 t <core::iter::adapters::flatten::FlatMap<core::iter::adapters::filter::Filter<core::iter::adapters::flatten::FlatMap<core::option::Iter<ttf_parser::tables::cmap::Table>, ttf_parser::tables::cmap::Subtables, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#0}>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#1}>, alloc::vec::Vec<(ab_glyph::glyph::GlyphId, char)>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#2}> as core::iter::traits::iterator::Iterator>::nth
+0000000000002cc0 00000000000000dd t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::glyph_svg_image
+0000000000002da0 000000000000038f t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::glyph_raster_image2
+0000000000003130 000000000000088a t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::outline
+00000000000039c0 0000000000001259 t ttf_parser::tables::glyf::outline_impl
+0000000000004c20 00000000000000de t <ttf_parser::tables::glyf::Builder>::line_to
+0000000000004d00 00000000000001df t <ttf_parser::tables::glyf::Builder>::quad_to
+0000000000004ee0 00000000000000de t <ttf_parser::tables::glyf::Builder>::move_to
+0000000000004fc0 000000000000001f t core::ptr::drop_in_place::<ab_glyph::ttfp::outliner::OutlineCurveBuilder>
+0000000000004fe0 0000000000000014 t <ab_glyph::ttfp::outliner::OutlineCurveBuilder as ttf_parser::OutlineBuilder>::move_to
+0000000000005000 0000000000000070 t <ab_glyph::ttfp::outliner::OutlineCurveBuilder as ttf_parser::OutlineBuilder>::line_to
+0000000000005070 000000000000008f t <ab_glyph::ttfp::outliner::OutlineCurveBuilder as ttf_parser::OutlineBuilder>::quad_to
+0000000000005100 00000000000000b2 t <ab_glyph::ttfp::outliner::OutlineCurveBuilder as ttf_parser::OutlineBuilder>::curve_to
+00000000000051c0 0000000000000075 t <ab_glyph::ttfp::outliner::OutlineCurveBuilder as ttf_parser::OutlineBuilder>::close
+0000000000005240 00000000000002d6 t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#2}::{closure#0}
+0000000000005520 0000000000000677 t <alloc::collections::btree::map::BTreeMap<u16, alloc::collections::btree::set_val::SetValZST>>::insert
+0000000000005ba0 0000000000000021 t <alloc::raw_vec::RawVec<(ab_glyph::glyph::GlyphId, char)>>::grow_one
+0000000000005bd0 000000000000006b t <alloc::raw_vec::RawVecInner>::grow_amortized
+0000000000005c40 00000000000001dd t <alloc::raw_vec::RawVecInner>::finish_grow
+0000000000005e20 00000000000001c9 t <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, u16, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::Internal>, alloc::collections::btree::node::marker::KV>>::split::<alloc::alloc::Global>
+0000000000005ff0 0000000000000021 t <alloc::raw_vec::RawVec<ab_glyph::outlined::OutlineCurve>>::grow_one
+0000000000006020 000000000000045f t <ttf_parser::tables::cmap::Subtable>::codepoints::<<ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#2}::{closure#0}>
+0000000000006480 00000000000001bb t <core::iter::adapters::flatten::FlattenCompat<_, _> as core::iter::traits::iterator::Iterator>::try_fold::flatten::<ttf_parser::tables::cmap::SubtablesIter, usize, core::ops::control_flow::ControlFlow<(), usize>, core::iter::adapters::filter::filter_try_fold<ttf_parser::tables::cmap::Subtable, usize, core::ops::control_flow::ControlFlow<(), usize>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#1}, core::iter::adapters::map::map_try_fold<ttf_parser::tables::cmap::Subtable, alloc::vec::Vec<(ab_glyph::glyph::GlyphId, char)>, usize, core::ops::control_flow::ControlFlow<(), usize>, <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::codepoint_ids::{closure#2}, <core::iter::adapters::flatten::FlattenCompat<_, _>>::iter_try_fold::flatten<alloc::vec::Vec<(ab_glyph::glyph::GlyphId, char)>, usize, core::ops::control_flow::ControlFlow<(), usize>, <core::iter::adapters::flatten::FlattenCompat<_, _> as core::iter::traits::iterator::Iterator>::advance_by::advance<alloc::vec::into_iter::IntoIter<(ab_glyph::glyph::GlyphId, char)>>>::{closure#0}>::{closure#0}>::{closure#0}>::{closure#0}
+0000000000006640 000000000000009e t <alloc::boxed::Box<alloc::collections::btree::node::InternalNode<u16, alloc::collections::btree::set_val::SetValZST>>>::new_uninit_in
+00000000000066e0 000000000000009e t <alloc::boxed::Box<alloc::collections::btree::node::LeafNode<u16, alloc::collections::btree::set_val::SetValZST>>>::new_uninit_in
+0000000000006780 00000000000003e1 t <ab_glyph_rasterizer::raster::Rasterizer>::tessellate_cubic
+0000000000006b70 0000000000000847 t <ab_glyph_rasterizer::raster::Rasterizer>::draw_line_scalar
+00000000000073c0 000000000000006d t <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+0000000000007430 00000000000001ac t <alloc::raw_vec::RawVecInner>::finish_grow
+00000000000075dc 0000000000000013 t alloc::raw_vec::handle_error
+00000000000075f0 000000000000000d t alloc::raw_vec::capacity_overflow
+0000000000007600 0000000000000090 t <alloc::string::String as core::fmt::Write>::write_fmt
+0000000000007690 0000000000000017 t core::ptr::drop_in_place::<alloc::string::String>
+00000000000076b0 0000000000000061 t <alloc::string::String as core::fmt::Write>::write_str
+0000000000007720 0000000000000112 t <alloc::string::String as core::fmt::Write>::write_char
+0000000000007840 0000000000000269 t alloc::fmt::format::format_inner
+0000000000007ab0 0000000000000017 t core::ptr::drop_in_place::<alloc::string::String>
+0000000000007ad0 0000000000000308 t <&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice> as serde_core::ser::SerializeStructVariant>::serialize_field::<api::services::ipc::SaveExpect>
+0000000000007de0 00000000000002b0 t <api::abi::cell_session::ObjectRefV1 as serde_core::ser::Serialize>::serialize::<&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice>>
+0000000000008090 0000000000000084 t <api::abi::cell_session::ObjectRefV1 as serde_core::de::Deserialize>::deserialize::<&mut postcard::de::deserializer::Deserializer<postcard::de::flavors::Slice>>
+0000000000008120 0000000000000046 t <api::abi::cell_session::RequestHeaderV1>::encode
+0000000000008170 00000000000000a4 t <api::abi::cell_session::frontend::FrontendStatusV1>::decode
+0000000000008220 00000000000000a5 t <api::abi::cell_session::ResultHeaderV1>::decode
+00000000000082d0 00000000000000c8 t <api::abi::cell_session::Reader>::child
+00000000000083a0 000000000000003d t <api::abi::cell_session::Writer>::binding
+00000000000083e0 000000000000003c t <api::abi::cell_session::frontend::BindFrontendChildV1>::encode
+0000000000008420 00000000000003e2 t api::services::session::encode_key
+0000000000008810 000000000000007f t core::char::methods::encode_utf8_raw
+0000000000008890 00000000000000c8 t api::services::input::decode_event
+0000000000008960 000000000000015d t <api::abi::dir_handles::ViDirHandle as serde_core::ser::Serialize>::serialize::<&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice>>
+0000000000008ac0 0000000000000082 t memcpy
+0000000000008b50 00000000000000f2 t memmove
+0000000000008c50 000000000000006d t memset
+0000000000008cc0 00000000000000f3 t <usize as core::fmt::Display>::fmt
+0000000000008dc0 0000000000000009 t core::slice::index::slice_index_fail
+0000000000008dd0 00000000000001f3 t core::str::converts::from_utf8
+0000000000008fd0 00000000000000f5 t core::slice::memchr::memchr_aligned
+00000000000090d0 000000000000000d t core::slice::sort::shared::smallsort::panic_on_ord_violation
+00000000000090e0 000000000000022d t <core::num::imp::dec2flt::decimal_seq::DecimalSeq>::left_shift
+0000000000009310 00000000000001d4 t <core::num::imp::dec2flt::decimal_seq::DecimalSeq>::right_shift
+00000000000094f0 0000000000000d8b t <f64 as core::str::traits::FromStr>::from_str
+000000000000a280 0000000000000006 t core::panicking::panic_fmt
+000000000000a290 000000000000000e t core::option::unwrap_failed
+000000000000a2a0 0000000000000009 t core::panicking::panic
+000000000000a2b0 0000000000000009 t core::option::expect_failed
+000000000000a2b9 0000000000000009 t core::panicking::panic_bounds_check
+000000000000a2d0 0000000000000009 t core::result::unwrap_failed
+000000000000a2e0 000000000000000d t core::panicking::panic_const::panic_const_div_by_zero
+000000000000a2f0 0000000000000006 t core::panicking::panic_const::panic_const_rem_by_zero
+000000000000a300 000000000000026a t <core::fmt::Formatter>::pad_integral
+000000000000a570 0000000000000059 t <core::fmt::Formatter>::pad_integral::write_prefix
+000000000000a5d0 000000000000057b t <core::fmt::Formatter>::pad
+000000000000ab50 00000000000001a5 t core::fmt::write
+000000000000ad00 0000000000000179 t core::num::imp::dec2flt::lemire::compute_float::<f64>
+000000000000ae80 0000000000000123 t libm::math::sqrt::sqrtf
+000000000000afb0 0000000000000237 t <linked_list_allocator::Heap>::deallocate
+000000000000b1f0 0000000000000173 t <linked_list_allocator::Heap>::allocate_first_fit
+000000000000b370 0000000000000191 t <&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice> as serde_core::ser::SerializeStructVariant>::serialize_field::<&str>
+000000000000b510 00000000000000ca t <&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice> as serde_core::ser::SerializeStructVariant>::serialize_field::<u32>
+000000000000b5e0 000000000000015d t <&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice> as serde_core::ser::SerializeStructVariant>::serialize_field::<usize>
+000000000000b740 0000000000000091 t <&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice> as serde_core::ser::SerializeStructVariant>::serialize_field::<u16>
+000000000000b7e0 00000000000001b4 t <postcard::de::deserializer::Deserializer<postcard::de::flavors::Slice>>::try_take_varint_u64
+000000000000b9a0 000000000000004d t core::ptr::drop_in_place::<ab_glyph::ttfp::FontRef>
+000000000000b9f0 0000000000000017 t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::units_per_em
+000000000000ba10 000000000000007f t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::ascent_unscaled
+000000000000ba90 000000000000008f t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::descent_unscaled
+000000000000bb20 0000000000000129 t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::height_unscaled
+000000000000bc50 0000000000000090 t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::line_gap_unscaled
+000000000000bce0 0000000000000012 t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::italic_angle
+000000000000bd00 000000000000027e t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::glyph_id
+000000000000bf80 000000000000006a t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::h_advance_unscaled
+000000000000bff0 0000000000000079 t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::h_side_bearing_unscaled
+000000000000c070 000000000000006a t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::v_advance_unscaled
+000000000000c0e0 0000000000000079 t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::v_side_bearing_unscaled
+000000000000c160 00000000000003b9 t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::kern_unscaled
+000000000000c520 0000000000000008 t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::glyph_count
+000000000000c530 000000000000000f t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::font_data
+000000000000c540 000000000000021d t <ostd::font_atlas::GlyphAtlas>::measure
+000000000000c760 000000000000089d t <unicode_normalization::recompose::Recompositions<core::str::iter::Chars> as core::iter::traits::iterator::Iterator>::next
+000000000000d000 0000000000000292 t <unicode_normalization::decompose::Decompositions<core::str::iter::Chars>>::push_back
+000000000000d2a0 0000000000000021 t core::ptr::drop_in_place::<tinyvec::tinyvec::TinyVec<[(u8, char); 4]>>
+000000000000d2d0 0000000000000b17 t ostd::session::kernel_call
+000000000000ddf0 000000000000037a t ostd::session::query_outcome::<ostd::session::kernel_call::{closure#0}>
+000000000000e170 000000000000024a t ostd::session::kernel_request
+000000000000e3c0 00000000000007f6 t ostd::session::service_call
+000000000000ebc0 0000000000000158 t ostd::session::query_outcome::<ostd::session::service_call::{closure#0}>
+000000000000ed20 0000000000000608 t ostd::session::service_call::{closure#0}
+000000000000f330 00000000000006c8 t <ostd::child_context::ChildContext>::new
+000000000000fa00 000000000000010c t <ostd::child_context::Grant>::encode
+000000000000fb10 00000000000002bb t <ostd::display::surface::ViSurface>::create
+000000000000fdd0 0000000000000261 t <ostd::display::surface::ViSurface>::set_title
+0000000000010040 0000000000000066 t ostd::syscall::sys_lookup_service_bound
+00000000000100b0 00000000000001aa t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::pt_to_px_scale
+0000000000010260 000000000000005d t <ab_glyph::ttfp::FontRef as ab_glyph::font::Font>::glyph_raster_image
+00000000000102c0 0000000000000648 t core::slice::sort::stable::drift::sort::<(u8, char), <[(u8, char)]>::sort_by_key<u8, <unicode_normalization::decompose::Decompositions<core::str::iter::Chars>>::sort_pending::{closure#0}>::{closure#0}>
+0000000000010910 0000000000000014 t __rustc::__rust_dealloc
+0000000000010930 0000000000000209 t ostd::heap::alloc_error
+0000000000010b40 00000000000084f9 t <ostd::typography::TextFonts>::draw_text
+0000000000019040 0000000000000243 t ostd::display::dispatcher::take_surface
+0000000000019290 00000000000001c6 t ostd::display::dispatcher::route_compositor_frame
+0000000000019460 0000000000000397 t <ostd::display::dispatcher::SurfaceEventDispatcher>::insert
+0000000000019800 000000000000018c t <&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice> as serde_core::ser::Serializer>::collect_seq::<&[u8]>
+0000000000019990 0000000000000072 t __rustc::rust_begin_unwind
+0000000000019a10 000000000000007d t <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+0000000000019a90 00000000000001e7 t <alloc::raw_vec::RawVecInner>::finish_grow
+0000000000019c80 0000000000000063 t <alloc::raw_vec::RawVecInner>::try_reserve_exact
+0000000000019cf0 000000000000006c t <alloc::raw_vec::RawVec<ostd::session::Lane>>::grow_one
+0000000000019d60 0000000000000063 t <alloc::raw_vec::RawVec<api::services::input::InputEvent>>::grow_one
+0000000000019dd0 0000000000000063 t <alloc::raw_vec::RawVec<(u8, char)>>::grow_one
+0000000000019e40 0000000000000063 t <alloc::raw_vec::RawVec<char>>::grow_one
+0000000000019eb0 000000000000006c t <alloc::sync::Arc<dyn ab_glyph::font::Font + core::marker::Send + core::marker::Sync>>::drop_slow
+0000000000019f20 00000000000001de t postcard::ser::serialize_with_flavor::<api::services::ipc::InputRequest, postcard::ser::flavors::Slice, &mut [u8]>
+000000000001a100 0000000000000187 t core::slice::sort::stable::driftsort_main::<(u8, char), <[(u8, char)]>::sort_by_key<u8, <unicode_normalization::decompose::Decompositions<core::str::iter::Chars>>::sort_pending::{closure#0}>::{closure#0}, alloc::vec::Vec<(u8, char)>>
+000000000001a290 0000000000000938 t core::slice::sort::stable::quicksort::quicksort::<(u8, char), <[(u8, char)]>::sort_by_key<u8, <unicode_normalization::decompose::Decompositions<core::str::iter::Chars>>::sort_pending::{closure#0}>::{closure#0}>
+000000000001abd0 00000000000000a7 t core::slice::sort::shared::pivot::median3_rec::<(u8, char), <[(u8, char)]>::sort_by_key<u8, <unicode_normalization::decompose::Decompositions<core::str::iter::Chars>>::sort_pending::{closure#0}>::{closure#0}>
+000000000001ac80 000000000000016b t ostd::display::ipc::stage_grant
+000000000001adf0 0000000000000294 t <tinyvec::tinyvec::TinyVec<_>>::push::drain_to_heap_and_push::<[(u8, char); 4]>
+000000000001b090 0000000000000249 t <tinyvec::tinyvec::TinyVec<_>>::push::drain_to_heap_and_push::<[char; 4]>
+000000000001b2e0 0000000000000063 t core::slice::sort::shared::smallsort::insertion_sort_shift_left::<(u8, char), <[(u8, char)]>::sort_by_key<u8, <unicode_normalization::decompose::Decompositions<core::str::iter::Chars>>::sort_pending::{closure#0}>::{closure#0}>
+000000000001b350 00000000000002e3 t core::slice::sort::shared::smallsort::sort8_stable::<(u8, char), <[(u8, char)]>::sort_by_key<u8, <unicode_normalization::decompose::Decompositions<core::str::iter::Chars>>::sort_pending::{closure#0}>::{closure#0}>
+000000000001b640 0000000000000313 t ostd::ipc::exchange
+000000000001b960 0000000000000070 t ostd::ipc::discard_call
+000000000001b9d0 00000000000000f5 t ostd::ipc::take_call
+000000000001bad0 0000000000001334 t ostd::ipc::service_call_typed_bounded::<api::services::ipc::VfsRequest, api::services::ipc::VfsResponse>
+000000000001ce10 00000000000002a0 t ostd::ipc::service_call_typed_bounded::<api::services::ipc::InputRequest, api::services::ipc::InputResponse>
+000000000001d0b0 00000000000001d3 t <postcard::de::deserializer::SeqAccess<postcard::de::flavors::Slice> as serde_core::de::SeqAccess>::next_element::<u64>
+000000000001d290 000000000000006b t <&[u8] as serde_core::de::Deserialize>::deserialize::<&mut postcard::de::deserializer::Deserializer<postcard::de::flavors::Slice>>
+000000000001d300 0000000000000089 t <alloc::vec::Vec<u8>>::resize
+000000000001d390 00000000000002c0 t <core::iter::adapters::filter::Filter<core::iter::adapters::flatten::FlatMap<core::option::Iter<ttf_parser::tables::cmap::Table>, ttf_parser::tables::cmap::Subtables, <owned_ttf_parser::preparse::FaceSubtables as core::convert::From<&ttf_parser::Face>>::from::{closure#0}>, <owned_ttf_parser::preparse::FaceSubtables as core::convert::From<&ttf_parser::Face>>::from::{closure#1}> as core::iter::traits::iterator::Iterator>::next
+000000000001d650 0000000000000067 t <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+000000000001d6c0 00000000000001d3 t <core::iter::adapters::filter::Filter<core::iter::adapters::flatten::FlatMap<core::option::Iter<ttf_parser::tables::kern::Table>, ttf_parser::tables::kern::Subtables, <owned_ttf_parser::preparse::FaceSubtables as core::convert::From<&ttf_parser::Face>>::from::{closure#2}>, <owned_ttf_parser::preparse::FaceSubtables as core::convert::From<&ttf_parser::Face>>::from::{closure#3}> as core::iter::traits::iterator::Iterator>::next
+000000000001d8a0 00000000000001dd t <alloc::raw_vec::RawVecInner>::finish_grow
+000000000001da80 0000000000000b91 t <terminal::sink::ByteSink>::feed
+000000000001e620 0000000000000087 t <terminal::sink::ByteSink>::ground
+000000000001e6b0 0000000000000233 t <terminal::sink::ByteSink>::escape
+000000000001e8f0 0000000000000214 t terminal::sink::control
+000000000001eb10 0000000000000084 t <terminal::grid::TerminalGrid>::cursor_up
+000000000001eba0 000000000000008c t <terminal::grid::TerminalGrid>::cursor_down
+000000000001ec30 0000000000000075 t <terminal::grid::TerminalGrid>::cursor_forward
+000000000001ecb0 0000000000000065 t <terminal::grid::TerminalGrid>::cursor_back
+000000000001ed20 0000000000000066 t <terminal::grid::TerminalGrid>::set_column
+000000000001ed90 00000000000000f2 t <terminal::grid::TerminalGrid>::restore_cursor
+000000000001ee90 0000000000003d5f T main
+0000000000022bf0 0000000000000a26 t <terminal::TerminalApp>::render
+0000000000023620 000000000000002c t <api::abi::cell_session::Status as core::fmt::Debug>::fmt
+0000000000023650 0000000000000264 t <core::iter::adapters::flatten::FlattenCompat<core::iter::adapters::map::Map<core::iter::adapters::take_while::TakeWhile<core::iter::adapters::map::Map<core::ops::range::Range<usize>, <terminal::TerminalApp>::visible_cells::{closure#0}>, <terminal::TerminalApp>::visible_cells::{closure#1}>, <terminal::TerminalApp>::visible_cells::{closure#2}>, core::iter::adapters::filter_map::FilterMap<core::iter::adapters::take_while::TakeWhile<core::iter::adapters::map::Map<core::ops::range::Range<usize>, <terminal::TerminalApp>::visible_cells::{closure#2}::{closure#0}>, <terminal::TerminalApp>::visible_cells::{closure#2}::{closure#1}>, <terminal::TerminalApp>::visible_cells::{closure#2}::{closure#2}>> as core::iter::traits::iterator::Iterator>::next
+00000000000238c0 00000000000001cc t terminal::cell_colors
+0000000000023a90 0000000000000057 t <terminal::grid::TerminalGrid>::erase_line
+0000000000023af0 00000000000000ee t <terminal::grid::TerminalGrid>::erase
+0000000000023be0 00000000000000cb t <terminal::grid::TerminalGrid>::break_wide
+0000000000023cb0 000000000000016b t <terminal::grid::TerminalGrid>::leave_alternate
+0000000000023e20 0000000000000215 t <terminal::grid::TerminalGrid>::scroll_down
+0000000000024040 0000000000000121 t <terminal::grid::TerminalGrid>::erase_display
+0000000000024170 0000000000000076 t <terminal::grid::TerminalGrid>::previous_line
+00000000000241f0 0000000000000211 t <terminal::grid::TerminalGrid>::select_graphic_rendition
+0000000000024410 0000000000000638 t <terminal::grid::TerminalGrid>::print
+0000000000024a50 000000000000026d t <terminal::grid::TerminalGrid>::scroll_up
+0000000000024cc0 00000000000004d9 t terminal::grid::keep_line
+00000000000251a0 00000000000003a4 t <terminal::grid::TerminalGrid>::resize
+0000000000025550 00000000000002c4 t terminal::grid::relayout
+0000000000025820 000000000000007e t <terminal::grid::TerminalGrid>::next_line
+00000000000258a0 000000000000019b t <terminal::grid::TerminalGrid>::write_str
+0000000000025a40 00000000000001c7 t terminal_sdk::session::close_operation_bounded
+0000000000025c10 00000000000001cc t <terminal_sdk::host::FrontendHost>::poll_child
+0000000000025de0 00000000000000fc t <terminal_sdk::host::FrontendHost>::submit_key
+0000000000025ee0 00000000000001dd t <terminal_sdk::host::FrontendHost>::submit_event
+00000000000260c0 00000000000000b6 t <terminal_sdk::host::FrontendHost>::input
+0000000000026180 000000000000010a t <terminal_sdk::host::FrontendHost>::submit_text
+0000000000026290 000000000000025e t <terminal_sdk::host::FrontendHost>::poll_frontend
+00000000000264f0 0000000000000100 t <terminal_sdk::host::FrontendHost>::close
+00000000000265f0 00000000000000ed t <terminal_sdk::host::FrontendHost>::retire_shell
+00000000000266e0 0000000000000147 t <terminal_sdk::host::FrontendHost>::register
+0000000000026830 0000000000000106 t terminal_sdk::host::launch_grants
+0000000000026940 000000000000015f t <terminal_sdk::stream::Operation>::create_stream
+0000000000026aa0 000000000000024e t <terminal_sdk::stream::Operation>::prepare_child
+0000000000026cf0 000000000000006c t <terminal_sdk::stream::Operation>::cancel
+0000000000026d60 00000000000000f9 t <terminal_sdk::stream::Operation>::create
+0000000000026e60 00000000000001cf t <terminal_sdk::stream::Endpoint>::read
+0000000000027030 000000000000013e t <terminal_sdk::stream::Endpoint>::delegate
+0000000000027170 000000000000012e t <terminal_sdk::stream::PreparedChild>::bind_receipt
+00000000000272a0 0000000000000273 t <terminal_sdk::stream::PreparedChild>::write_context
+0000000000027520 00000000000001a4 t <terminal_sdk::stream::PreparedChild>::commit
+00000000000276d0 0000000000000080 t <terminal_sdk::stream::PreparedChild as core::ops::drop::Drop>::drop
+0000000000027750 000000000000386c t ttf_parser::tables::cff::cff1::_parse_char_string
+000000000002afc0 0000000000000291 t ttf_parser::tables::cff::cff1::parse_private_dict
+000000000002b260 0000000000000033 t ttf_parser::tables::cff::index::parse_index::<u16>
+000000000002b2a0 000000000000002d t <ttf_parser::tables::cff::argstack::ArgumentsStack>::pop
+000000000002b2d0 0000000000000233 t ttf_parser::tables::cff::cff1::seac_code_to_glyph_id
+000000000002b510 0000000000000141 t ttf_parser::tables::cff::cff1::parse_cid_metadata
+000000000002b660 0000000000000211 t ttf_parser::tables::cff::cff1::parse_sid_metadata
+000000000002b880 000000000000007a t <ttf_parser::parser::LazyArrayIter32<ttf_parser::tables::cblc::GlyphIdOffsetPair> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::traits::iterator::Iterator::find::check<ttf_parser::tables::cblc::GlyphIdOffsetPair, <ttf_parser::tables::cblc::Table>::get::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<ttf_parser::tables::cblc::GlyphIdOffsetPair>>
+000000000002b900 00000000000000ae t <ttf_parser::parser::LazyArray32<ttf_parser::GlyphId>>::binary_search_by::<<ttf_parser::parser::LazyArray32<ttf_parser::GlyphId>>::binary_search::{closure#0}>
+000000000002b9b0 000000000000074f t <ttf_parser::tables::cbdt::Table>::get
+000000000002c100 0000000000000331 t <ttf_parser::tables::cmap::Subtables>::get
+000000000002c440 000000000000015d t <ttf_parser::tables::cff::index::Index>::get
+000000000002c5a0 0000000000000102 t <ttf_parser::tables::cff::dict::DictionaryParser>::parse_next
+000000000002c6b0 00000000000002cf t <ttf_parser::tables::cff::dict::DictionaryParser>::parse_operands
+000000000002c980 00000000000000ba t ttf_parser::tables::cff::dict::parse_float_nibble
+000000000002ca40 00000000000000db t ttf_parser::tables::cff::index::skip_index_impl
+000000000002cb20 0000000000000135 t ttf_parser::tables::cff::index::parse_index_impl
+000000000002cc60 0000000000000192 t ttf_parser::tables::cff::charset::parse_charset
+000000000002ce00 0000000000000102 t ttf_parser::tables::cff::encoding::parse_encoding
+000000000002cf10 0000000000000061 t ttf_parser::tables::kern::get_format2_class
+000000000002cf80 00000000000002a9 t <ttf_parser::tables::kern::SubtablesIter as core::iter::traits::iterator::Iterator>::next
+000000000002d230 000000000000017f t <ttf_parser::tables::cmap::format4::Subtable4>::glyph_index
+000000000002d3b0 0000000000000087 t <ttf_parser::tables::cmap::format4::Subtable4>::parse
+000000000002d440 000000000000013a t <ttf_parser::tables::cmap::format2::Subtable2>::glyph_index
+000000000002d580 00000000000000c1 t <ttf_parser::tables::cmap::format2::Subtable2>::parse
+000000000002d650 00000000000000d6 t ttf_parser::tables::glyf::resolve_coords_len
+000000000002d730 0000000000000455 t unicode_normalization::normalize::compose
+000000000002db90 00000000000002bd t viui::surface::fill_rect
+000000000002de50 0000000000000208 t compiler_builtins::float::mul::__muldf3
+000000000002e060 00000000000001c4 t compiler_builtins::float::mul::__mulsf3
+000000000002e230 000000000000004d t __floatundisf
+000000000002e280 000000000000004b t __gesf2
+000000000002e2d0 0000000000000005 t __muldf3
+000000000002e2e0 000000000000005c t fmaximum_numf
+000000000002e340 0000000000000006 t __divdf3
+000000000002e350 0000000000000034 t __floatunsisf
+000000000002e390 0000000000000006 t __divsf3
+000000000002e3a0 0000000000000066 t __fixdfsi
+000000000002e410 0000000000000050 t __ltsf2
+000000000002e460 000000000000000c t compiler_builtins::float::sub::__subsf3
+000000000002e460 000000000000000c t __subsf3
+000000000002e470 0000000000000056 t __gtdf2
+000000000002e4d0 0000000000000050 t __lesf2
+000000000002e520 0000000000000117 t __truncdfsf2
+000000000002e640 0000000000000006 t __addsf3
+000000000002e650 0000000000000038 t __fixunssfdi
+000000000002e690 000000000000004b t __floatsisf
+000000000002e6e0 0000000000000056 t __gedf2
+000000000002e740 0000000000000050 t __eqsf2
+000000000002e790 0000000000000032 t __fixunssfsi
+000000000002e7d0 0000000000000006 t __mulsf3
+000000000002e7e0 00000000000001f9 t compiler_builtins::float::add::__addsf3
+000000000002e9e0 000000000000006b t __floatdidf
+000000000002ea50 000000000000002c t __unorddf2
+000000000002ea80 00000000000002a2 t compiler_builtins::float::div::__divdf3
+000000000002ed30 0000000000000222 t compiler_builtins::float::div::__divsf3
+000000000002ef60 000000000000004d t __fixsfsi
+000000000002efb0 0000000000000043 t __floatsidf
+000000000002f000 000000000000004b t __gtsf2
+000000000002f050 0000000000000024 t __unordsf2
+000000000002f080 000000000000005c t fminimum_numf
+0000000000033830 00000000000028b0 r core::num::imp::dec2flt::table::POWER_OF_FIVE_128
+00000000000360e0 0000000000000100 r libm::math::generic::sqrt::RSQRT_TAB
+00000000000d8400 0000000000000100 r unicode_width::tables::WIDTH_ROOT
+00000000000d8500 0000000000001740 r unicode_width::tables::WIDTH_LEAVES
+00000000000d9c40 0000000000000500 r unicode_width::tables::WIDTH_MIDDLE
+00000000000da410 R __init_array_end
+00000000000da410 R __init_array_start
+00000000000db438 0000000000000020 d ostd::session::LANES
+00000000000db5c0 0000000000001118 d ostd::display::dispatcher::SURFACE_EVENTS
+00000000000dc6d8 0000000000000008 D ostd::startup::_KEEP_START
+00000000000dce98 d _DYNAMIC
+00000000000dd000 0000000000000030 b ostd::heap::HEAP
+00000000000dd000 B __bss_start
+00000000000dd030 0000000000100000 b ostd::heap::HEAP_MEM
+00000000001dd030 0000000000000001 b ostd::heap::HEAP_INIT
+00000000001dd040 0000000000400000 b terminal::__CUSTOM_HEAP_ARENA
+00000000005dd040 0000000000000008 r terminal::VICELL_SYSCALLS
+00000000005dd040 B __bss_end
+00000000005de000 0000000000000010 r terminal::VICELL_MANIFEST

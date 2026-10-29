@@ -1,0 +1,17 @@
+{
+  "scope": "offline identity analysis of INITIAL refused admission, not a replacement observation",
+  "site": "0x102000000",
+  "module": "Init",
+  "qualified_init_path": "/tmp/cellbox-s10-3d-resume/cand/headless/init",
+  "qualified_init_sha256": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab",
+  "declared_init_sha256": "fc1e6559c47f271f59609197c714dc130f4ce9e8ea001e8b682a11caf5ded7ab",
+  "elf_entry": 0,
+  "entry_file_bytes": [
+    "4883e4f0488d1dfd0305004c8d25f603"
+  ],
+  "retained_before_bytes": "4883e4f0488d1dfd0305004c8d25f603",
+  "retained_after_bytes": "4883e4f0488d1dfd0305004c8d25f603",
+  "qualified_file_hash_matches": true,
+  "exact_current_entry_bytes_match": true,
+  "comparison_to_other_cells_at_reused_addresses": "NOT USED"
+}

@@ -1,0 +1,57 @@
+{
+  "index": 5,
+  "monotonic_ns": 431600017378991,
+  "frame": "/tmp/cellbox-s10-4-feed-hook-20261029/desktop/vm/evidence/gui-epoch-02/0005.png",
+  "exact_read": [
+    [
+      "enths\":36,\"cpu_quality\":\"ok\",\"quota_bytes\":704,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":9,\"generation\":116,\"root_tid\":11,\"name\":\"net\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":699897000,\"cpu_tenths",
+      "\":29,\"cpu_quality\":\"ok\",\"quota_bytes\":64,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":5,\"generation\":118,\"root_tid\":13,\"name\":\"fb-c",
+      "onsole\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":10268509030,\"c",
+      "pu_tenths\":24,\"cpu_quality\":\"ok\",\"quota_bytes\":808,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":3,\"generation\":111,\"root_tid\":6,\"name\":\"e1000",
+      "\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":425957120,\"cpu_tenth",
+      "s\":17,\"cpu_quality\":\"ok\",\"quota_bytes\":4944,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":1,\"generation\":108,\"root_tid\":3,\"name\":\"nvme\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":220733860,\"cpu_tenths",
+      "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":2,\"generation\":107,\"root_tid\":2,\"name\":\"init\"",
+      ",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6094948310,\"cpu_tenth",
+      "s\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":3465239,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":4,\"generation\":110,\"root_tid\":5,\"name\":\"vfs\",",
+      "\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":9931643430,\"cpu_tenths",
+      "\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":1016,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":6,\"generation\":113,\"root_tid\":8,\"name\":\"seria",
+      "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":128887290,\"cpu_tent",
+      "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+      "Cellos > echo st=$?",
+      "st=0",
+      "Cellos >"
+    ],
+    [
+      9,
+      25
+    ]
+  ],
+  "gating": false,
+  "accepted": true,
+  "oracle": {
+    "status": "READY",
+    "code": null,
+    "reason": null,
+    "cls": null,
+    "frames": 0,
+    "expected_cursor": [
+      9,
+      2
+    ],
+    "scrolls": 0,
+    "hits": 2,
+    "bytes": 15,
+    "last_hit_ns": 431595126338347
+  },
+  "screen_match": true
+}

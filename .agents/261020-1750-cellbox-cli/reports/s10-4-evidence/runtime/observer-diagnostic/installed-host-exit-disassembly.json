@@ -1,0 +1,22 @@
+[
+  {
+    "command": [
+      "objdump",
+      "-d",
+      "--start-address=0x8cdc61",
+      "--stop-address=0x8cdd35",
+      "/usr/bin/qemu-system-x86_64"
+    ],
+    "output": "\n/usr/bin/qemu-system-x86_64:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n00000000008cdc61 <tcg_exec_unrealizefn@@Base+0x1e1>:\n  8cdc61:\t4c 89 fe             \tmov    %r15,%rsi\n  8cdc64:\t4c 89 f7             \tmov    %r14,%rdi\n  8cdc67:\tff 15 1b be 08 01    \tcall   *0x108be1b(%rip)        # 1959a88 <tcg_qemu_tb_exec@@Base>\n  8cdc6d:\tc6 83 b4 27 00 00 01 \tmovb   $0x1,0x27b4(%rbx)\n  8cdc74:\t49 89 c5             \tmov    %rax,%r13\n  8cdc77:\t49 89 c1             \tmov    %rax,%r9\n  8cdc7a:\t48 c7 83 c0 02 00 00 \tmovq   $0x0,0x2c0(%rbx)\n  8cdc81:\t00 00 00 00 \n  8cdc85:\t49 83 e5 fc          \tand    $0xfffffffffffffffc,%r13\n  8cdc89:\t48 83 f8 03          \tcmp    $0x3,%rax\n  8cdc8d:\t0f 86 fd 01 00 00    \tjbe    8cde90 <tcg_exec_unrealizefn@@Base+0x410>\n  8cdc93:\t4c 2b 2d 56 af 07 01 \tsub    0x107af56(%rip),%r13        # 1948bf0 <tcg_splitwx_diff@@Base>\n  8cdc9a:\t41 83 e1 03          \tand    $0x3,%r9d\n  8cdc9e:\t45 89 0c 24          \tmov    %r9d,(%r12)\n  8cdca2:\t8b 15 94 41 06 01    \tmov    0x1064194(%rip),%edx        # 1931e3c <trace_events_enabled_count@@Base>\n  8cdca8:\t85 d2                \ttest   %edx,%edx\n  8cdcaa:\t0f 85 f0 01 00 00    \tjne    8cdea0 <tcg_exec_unrealizefn@@Base+0x420>\n  8cdcb0:\t41 83 f9 01          \tcmp    $0x1,%r9d\n  8cdcb4:\t7f 3a                \tjg     8cdcf0 <tcg_exec_unrealizefn@@Base+0x270>\n  8cdcb6:\t8b 83 dc 00 00 00    \tmov    0xdc(%rbx),%eax\n  8cdcbc:\t85 c0                \ttest   %eax,%eax\n  8cdcbe:\t0f 85 54 02 00 00    \tjne    8cdf18 <tcg_exec_unrealizefn@@Base+0x498>\n  8cdcc4:\t48 8b 45 c8          \tmov    -0x38(%rbp),%rax\n  8cdcc8:\t64 48 2b 04 25 28 00 \tsub    %fs:0x28,%rax\n  8cdccf:\t00 00 \n  8cdcd1:\t0f 85 b6 02 00 00    \tjne    8cdf8d <tcg_exec_unrealizefn@@Base+0x50d>\n  8cdcd7:\t48 83 c4 38          \tadd    $0x38,%rsp\n  8cdcdb:\t4c 89 e8             \tmov    %r13,%rax\n  8cdcde:\t5b                   \tpop    %rbx\n  8cdcdf:\t41 5c                \tpop    %r12\n  8cdce1:\t41 5d                \tpop    %r13\n  8cdce3:\t41 5e                \tpop    %r14\n  8cdce5:\t41 5f                \tpop    %r15\n  8cdce7:\t5d                   \tpop    %rbp\n  8cdce8:\tc3                   \tret\n  8cdce9:\t0f 1f 80 00 00 00 00 \tnopl   0x0(%rax)\n  8cdcf0:\t48 8b 3b             \tmov    (%rbx),%rdi\n  8cdcf3:\t48 8d 15 7f b5 27 00 \tlea    0x27b57f(%rip),%rdx        # b49279 <_IO_stdin_used@@Base+0x279>\n  8cdcfa:\t4c 8d 05 4f 0a 43 00 \tlea    0x430a4f(%rip),%r8        # cfe750 <AES_isbox@@Base+0x8690>\n  8cdd01:\tb9 3f 00 00 00       \tmov    $0x3f,%ecx\n  8cdd06:\t48 8d 35 1b 2f 29 00 \tlea    0x292f1b(%rip),%rsi        # b60c28 <_IO_stdin_used@@Base+0x17c28>\n  8cdd0d:\te8 ee 2d 03 00       \tcall   900b00 <object_class_dynamic_cast_assert@@Base>\n  8cdd12:\t48 8b 90 48 01 00 00 \tmov    0x148(%rax),%rdx\n  8cdd19:\t48 8b 52 08          \tmov    0x8(%rdx),%rdx\n  8cdd1d:\t48 85 d2             \ttest   %rdx,%rdx\n  8cdd20:\t0f 84 1a 02 00 00    \tje     8cdf40 <tcg_exec_unrealizefn@@Base+0x4c0>\n  8cdd26:\t4c 89 ee             \tmov    %r13,%rsi\n  8cdd29:\t48 89 df             \tmov    %rbx,%rdi\n  8cdd2c:\tff d2                \tcall   *%rdx\n  8cdd2e:\tf6 05 ff 40 06 01 20 \ttestb  $0x20,0x10640ff(%rip)        # 1931e34 <qemu_loglevel@@Base>\n"
+  },
+  {
+    "command": [
+      "objdump",
+      "-d",
+      "--start-address=0x8cdf18",
+      "--stop-address=0x8cdf37",
+      "/usr/bin/qemu-system-x86_64"
+    ],
+    "output": "\n/usr/bin/qemu-system-x86_64:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n00000000008cdf18 <tcg_exec_unrealizefn@@Base+0x498>:\n  8cdf18:\t83 bb d8 02 00 00 ff \tcmpl   $0xffffffff,0x2d8(%rbx)\n  8cdf1f:\t0f 85 9f fd ff ff    \tjne    8cdcc4 <tcg_exec_unrealizefn@@Base+0x244>\n  8cdf25:\tc7 83 d8 02 00 00 02 \tmovl   $0x10002,0x2d8(%rbx)\n  8cdf2c:\t00 01 00 \n  8cdf2f:\t48 89 df             \tmov    %rbx,%rdi\n  8cdf32:\te8 09 2f ba ff       \tcall   470e40 <cpu_loop_exit@@Base>\n"
+  }
+]

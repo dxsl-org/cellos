@@ -1,0 +1,56 @@
+{
+  "cpus": [
+    {
+      "thread-id": 2231858,
+      "props": {
+        "core-id": 0,
+        "thread-id": 0,
+        "socket-id": 0
+      },
+      "qom-path": "/machine/unattached/device[0]",
+      "cpu-index": 0,
+      "target": "x86_64"
+    }
+  ],
+  "status": {
+    "status": "prelaunch",
+    "singlestep": false,
+    "running": false
+  },
+  "context": {
+    "rip": 65520,
+    "eflags": 2,
+    "cs": 61440,
+    "cr3": 0,
+    "rsp": 0,
+    "instruction_read_address": 65520,
+    "instruction_bytes": "00000000000000000000000000000000",
+    "stop": "T05thread:01;",
+    "sstepbits": "ENABLE=1,NOIRQ=2,NOTIMER=4",
+    "sstep": "0x7",
+    "tf": false,
+    "rf": false
+  },
+  "register_layout": {
+    "rip": {
+      "number": 16,
+      "bitsize": 64
+    },
+    "eflags": {
+      "number": 17,
+      "bitsize": 32
+    },
+    "cs": {
+      "number": 18,
+      "bitsize": 32
+    },
+    "cr3": {
+      "number": 29,
+      "bitsize": 64
+    },
+    "rsp": {
+      "number": 7,
+      "bitsize": 64
+    }
+  }
+}

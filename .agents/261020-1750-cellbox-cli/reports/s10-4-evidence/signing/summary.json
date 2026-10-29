@@ -1,0 +1,10 @@
+{
+  "commands": [],
+  "deployable_image_or_candidate": false,
+  "error": "not a regular single-link file: /home/dmin/cellos/target/x86_64-unknown-none/release/cellbox",
+  "exception": "RuntimeError",
+  "feature_equivalent": false,
+  "runtime_comparator_available": false,
+  "scope": "D4-Sign1 A historical measurement artifacts only",
+  "status": "STOP"
+}

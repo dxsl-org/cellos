@@ -1,0 +1,41 @@
+{
+  "status": "PROPOSED_NOT_AUTHORIZED_AFTER_S10_4_15_STOP",
+  "CP2_current_result": {
+    "may_accept": [
+      "Conservative temporal exact-GUI oracle and actual last-frame/rawread/epoch retention work as observed, with all failed offline iterations disclosed",
+      "191distinct offline PASS aggregate: retained144 once, current47new across retained final/targeted receipts; not one clean191 invocation",
+      "Exactly one desktop original observed attempt: real GUI launch/prompt/10s idle/typed line/Enter commit; STOP20th exact sample because physical-row provenance was lost",
+      "Actual55 GUI batch commits/56 attempts/one source-proven zero-dispatch rejection, shared QMP ownership and atomic RSP healthy",
+      "2048 native scopes including four independently proved one-extra recoveries; all execute/watch censuses/context/lifecycle/restoration checks true",
+      "Only retained partial allocator/page-depth/mapped-backing bounds; all546 protected paths and previous archives/sources/manifests unchanged"
+    ],
+    "must_not_accept": [
+      "Full two-frame desktop output, fresh prompt, status0, later original schedule or full workload coverage",
+      "A finite timeout or candidate product defect: actual STOP is observability failure at approximately31.15s within original120s",
+      "Historical missing S10-4.14 final screen reconstructed",
+      "Historical comparator, full allocator peak, RSS/residency, exact byte stack/RSP/kernel-stack peak or criterion4/CBX27 closure"
+    ]
+  },
+  "choice_A": {
+    "name": "Accept limited CP2 and retain observability prerequisite",
+    "effect": "No additional candidate execution. Continue only unrelated independently authorized work; S10-5/canonical/containment and full memory qualification remain blocked."
+  },
+  "choice_B_CP1": {
+    "name": "Retained-only feasibility for an explicitly approved complete-output observation route",
+    "scope": [
+      "Bind Terminal batching/grid/scrollback behavior and object/type lifetimes to the immutable candidate, not merely current source",
+      "Establish whether an existing supported visible route can expose every ordered output row without new input semantics; current source shows no GUI scrollback_line caller, PageUp/Down forward to session",
+      "If visible route is absent, stop for explicit user approval of a read-only Terminal grid/scrollback memory observation protocol, or of changed visible viewport geometry as a distinct diagnostic with no original-geometry metric substitution",
+      "Before any proposed candidate execution, prove complete dynamic-frame capture, source/object/CR3/PTE/epoch identity, buffer bounds, ordering, duplicate/missing/scroll/coalescing rejection, and failed-snapshot retention offline",
+      "No candidate run is included in this retained-only gate. A later run requires its own exact approved admission and one-attempt schedule."
+    ],
+    "unavailable_now": "No retained complete output or Terminal scrollback/object-memory snapshot, no qualified stable object address/lifetime observation, and no approved new complete transcript route. The stopped VM has been cleaned up; no retrospective recovery or retry."
+  },
+  "unchanged_hard_boundaries": [
+    "Original finite120s/status60s/global900s and original command schedule/limits, no pause subtraction or deadline increase",
+    "Atomic RSP delivery, full shared QMP transaction ownership, frozen input journal and source-proven zero-dispatch-only resubmission max64 within SAME5s/caller/global window",
+    "Complete equal stage-appropriate execute/watch coverage, exact lifecycle/context, positive ordered same-TB flags3 proof, one extra maximum per independently admitted event and restoration; no invented same-site requirement",
+    "No candidate/product patch/rebuild, guest memory/register writes, Z0 injection, hidden output route, input rewrite, workload resume/retry/drain after STOP, or proxy acceptance",
+    "Preserve canonical/candidate/user VMX and every retained archive/source/nested manifest; no commit/push"
+  ]
+}

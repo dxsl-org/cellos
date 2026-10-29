@@ -1,0 +1,26 @@
+{
+  "authorization": "Parent S103cResume: finish existing verifier readback for all six, no resign",
+  "earlier_harness_stops_preserved": [
+    {
+      "cause": "single-link requirement incorrectly applied to already-hardlinked protected files; corrected only for protected-file hash reads",
+      "path": "/tmp/cellbox-s10-4/signing-evidence"
+    },
+    {
+      "cause": "Path ordering vs string ordering, identical complete 38-file membership; normalized comparison ordering",
+      "path": "/tmp/cellbox-s10-4/signing-evidence-completed"
+    },
+    {
+      "cause": "rustc ELF .comment uses nine-character hash prefix; full active/pinned/build-log commit remained verified",
+      "path": "/tmp/cellbox-s10-4/signing-evidence-final"
+    },
+    {
+      "cause": "extra harness layout identity rejected normal objcopy .init_array metadata normalization; parent authorized recording deltas without resign",
+      "path": "/tmp/cellbox-s10-4/signing-evidence-complete"
+    }
+  ],
+  "harness": {
+    "bytes": 28885,
+    "sha256": "377afcf513446b6573405df523091044f1fae1c3051285a48ee508e1d8274039"
+  },
+  "new_signatures_minted_in_continuation": 0
+}

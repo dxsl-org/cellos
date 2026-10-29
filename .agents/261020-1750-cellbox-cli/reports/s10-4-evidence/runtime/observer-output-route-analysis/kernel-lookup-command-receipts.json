@@ -1,0 +1,41 @@
+[
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0xffffffff80051660",
+      "--stop-address=0xffffffff800518c2",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop.kernel.elf"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "kernel-endpoint-lookup.asm"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0xffffffff80056e90",
+      "--stop-address=0xffffffff80056f04",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop.kernel.elf"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "kernel-endpoint-index.asm"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0xffffffff80060280",
+      "--stop-address=0xffffffff800602ec",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop.kernel.elf"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "kernel-operation-index.asm"
+  }
+]

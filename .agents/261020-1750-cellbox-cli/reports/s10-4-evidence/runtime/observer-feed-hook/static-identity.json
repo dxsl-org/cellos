@@ -1,0 +1,337 @@
+{
+  "scope": "static read-only derivation from the immutable candidate Terminal ELF; no execution",
+  "terminal": {
+    "path": "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal",
+    "sha256": "816718a20188bb797a65622d17087010e8d41c7a933248dc303847c7d11ff3cc",
+    "size": 950600,
+    "etype": 3,
+    "loads": [
+      {
+        "va": 0,
+        "offset": 4096,
+        "filesz": 192732,
+        "memsz": 192732,
+        "flags": 5
+      },
+      {
+        "va": 192736,
+        "offset": 196832,
+        "filesz": 701232,
+        "memsz": 701232,
+        "flags": 4
+      },
+      {
+        "va": 897024,
+        "offset": 901120,
+        "filesz": 8088,
+        "memsz": 8088,
+        "flags": 6
+      },
+      {
+        "va": 905216,
+        "offset": 0,
+        "filesz": 0,
+        "memsz": 5242944,
+        "flags": 6
+      },
+      {
+        "va": 6148160,
+        "offset": 909376,
+        "filesz": 4092,
+        "memsz": 4092,
+        "flags": 4
+      }
+    ],
+    "text_load_flags": 5,
+    "text_va_zero_is_slot_base": true
+  },
+  "cellbox_sha256": "8ea134442bb27719cf4c2ce5a8f3613f5667f88f1762a1d731cba9fd83ab54a2",
+  "terminal_first48_hex": "4883e4f0488d1d05a40d004c8d25fea30d004c39e37408ff134883c308ebf3e86cee010048c7c03c0000004831ff0f05",
+  "cellbox_first48_hex": "4883e4f0488d1d1df227004c8d2516f227004c39e37408ff134883c308ebf3e82cf0080048c7c03c0000004831ff0f05",
+  "entry_fingerprints_differ": true,
+  "feed": {
+    "symbol": "<terminal::sink::ByteSink>::feed",
+    "va": 121472,
+    "size_from_symbol": 2961,
+    "end_va": 124448,
+    "kind": "t",
+    "first_instruction": "push   %rbp",
+    "first_instruction_bytes_hex": "55",
+    "ret_addresses": [
+      124403
+    ],
+    "panic_calls": [
+      [
+        124416,
+        "call   a2b9 <core::panicking::panic_bounds_check>"
+      ],
+      [
+        124428,
+        "call   a2b9 <core::panicking::panic_bounds_check>"
+      ]
+    ],
+    "register_prologue": [
+      "push   %rbp",
+      "push   %r15",
+      "push   %r14",
+      "push   %r13",
+      "push   %r12",
+      "push   %rbx",
+      "sub    $0xd8,%rsp",
+      "mov    %rcx,%rbx",
+      "mov    %rdx,%r14",
+      "mov    %rdi,%r12",
+      "add    %rdx,%rbx",
+      "lea    0xa0(%rsi),%rax"
+    ]
+  },
+  "drain": {
+    "symbol": "terminal::session::drain::<terminal_sdk::host::FrontendHost>",
+    "va": 64,
+    "end_va": 784,
+    "frame_adjust": "sub    $0x218,%rsp",
+    "prologue": [
+      "push   %rbp",
+      "push   %r15",
+      "push   %r14",
+      "push   %r13",
+      "push   %r12",
+      "push   %rbx"
+    ],
+    "rsp_writes": [
+      [
+        74,
+        "sub    $0x218,%rsp"
+      ],
+      [
+        139,
+        "add    $0x218,%rsp"
+      ],
+      [
+        659,
+        "sub    $0x18,%rsp"
+      ],
+      [
+        747,
+        "add    $0x18,%rsp"
+      ]
+    ]
+  },
+  "callers": {
+    "all_direct_references": [
+      {
+        "address": 326,
+        "kind": "call"
+      },
+      {
+        "address": 416,
+        "kind": "call"
+      },
+      {
+        "address": 480,
+        "kind": "call"
+      },
+      {
+        "address": 552,
+        "kind": "call"
+      }
+    ],
+    "call_count": 4,
+    "all_inside_drain": true,
+    "return_offsets": [
+      331,
+      421,
+      485,
+      557
+    ],
+    "pointer_or_lea_references": [],
+    "relocation_references": [],
+    "expected_call_sites": [
+      326,
+      416,
+      480,
+      552
+    ]
+  },
+  "call_site_prelude": [
+    {
+      "call_address": 326,
+      "return_offset": 331,
+      "rdi_from_r14": true,
+      "rsi_from_rbx": true,
+      "rdx_move": "mov    %r13,%rdx",
+      "buffer_definition": "lea    0x18(%rsp),%r13",
+      "rdx_equals_drain_rsp_plus_0x18": true,
+      "length_bound_checked_before_call": true,
+      "rcx_not_modified_between_zero_test_and_call": true,
+      "compare_instruction": "cmp    $0x200,%rcx",
+      "branch_after_compare": "ja     7a <terminal::session::drain::<terminal_sdk::host::FrontendHost>+0x3a>",
+      "branch_after_test": "je     cf <terminal::session::drain::<terminal_sdk::host::FrontendHost>+0x8f>"
+    },
+    {
+      "call_address": 416,
+      "return_offset": 421,
+      "rdi_from_r14": true,
+      "rsi_from_rbx": true,
+      "rdx_move": "mov    %r13,%rdx",
+      "buffer_definition": "lea    0x18(%rsp),%r13",
+      "rdx_equals_drain_rsp_plus_0x18": true,
+      "length_bound_checked_before_call": true,
+      "rcx_not_modified_between_zero_test_and_call": true,
+      "compare_instruction": "cmp    $0x200,%rcx",
+      "branch_after_compare": "ja     1bd <terminal::session::drain::<terminal_sdk::host::FrontendHost>+0x17d>",
+      "branch_after_test": "je     d1 <terminal::session::drain::<terminal_sdk::host::FrontendHost>+0x91>"
+    },
+    {
+      "call_address": 480,
+      "return_offset": 485,
+      "rdi_from_r14": true,
+      "rsi_from_rbx": true,
+      "rdx_move": "mov    %r12,%rdx",
+      "buffer_definition": "lea    0x18(%rsp),%r12",
+      "rdx_equals_drain_rsp_plus_0x18": true,
+      "length_bound_checked_before_call": true,
+      "rcx_not_modified_between_zero_test_and_call": true,
+      "compare_instruction": "cmp    $0x200,%rcx",
+      "branch_after_compare": "jbe    1c9 <terminal::session::drain::<terminal_sdk::host::FrontendHost>+0x189>",
+      "branch_after_test": "je     112 <terminal::session::drain::<terminal_sdk::host::FrontendHost>+0xd2>"
+    },
+    {
+      "call_address": 552,
+      "return_offset": 557,
+      "rdi_from_r14": true,
+      "rsi_from_rbx": true,
+      "rdx_move": "mov    %r12,%rdx",
+      "buffer_definition": "lea    0x18(%rsp),%r12",
+      "rdx_equals_drain_rsp_plus_0x18": true,
+      "length_bound_checked_before_call": true,
+      "rcx_not_modified_between_zero_test_and_call": true,
+      "compare_instruction": "cmp    $0x200,%rcx",
+      "branch_after_compare": "ja     1bd <terminal::session::drain::<terminal_sdk::host::FrontendHost>+0x17d>",
+      "branch_after_test": "je     112 <terminal::session::drain::<terminal_sdk::host::FrontendHost>+0xd2>"
+    }
+  ],
+  "entry_invariants": {
+    "rdx_equals_rsp_plus": 32,
+    "rcx_min": 1,
+    "rcx_max": 512,
+    "derivation": "drain_rsp+0x18 buffer; call pushes 8 bytes => RDX==RSP_entry+0x20"
+  },
+  "stream_mapping": {
+    "return_offset_to_stream_stage": {
+      "0x14b": "first",
+      "0x1a5": "first",
+      "0x1e5": "second",
+      "0x22d": "second"
+    },
+    "stage1": "host+0xc8 endpoint read, program-order first = source drain_stdout (output ring)",
+    "stage2": "host+0xe8 endpoint read, only after stage 1 loop ends = drain_stderr (diagnostic ring)",
+    "method": "program-order proof from asm plus session.rs for stderr in [false,true]; field names are NOT read from a struct layout",
+    "asm_evidence": {
+      "read_calls": [
+        174,
+        229,
+        367,
+        507
+      ],
+      "first_endpoint_lea": "lea    0xc8(%r15),%rsi",
+      "second_endpoint_adjust": "add    $0xe8,%r15",
+      "second_first_read_uses_adjusted_r15": "mov    %r15,%rsi",
+      "loop_endpoint_lea": "lea    0xc8(%r15),%rsi",
+      "loop_counters": [
+        "mov    $0x1f,%r12d",
+        "mov    $0x1f,%r13d"
+      ]
+    }
+  },
+  "windows": [
+    {
+      "label": "entry",
+      "va": 0,
+      "length": 48,
+      "hex": "4883e4f0488d1d05a40d004c8d25fea30d004c39e37408ff134883c308ebf3e86cee010048c7c03c0000004831ff0f05",
+      "relocation_free": true
+    },
+    {
+      "label": "feed-prologue",
+      "va": 121472,
+      "length": 64,
+      "hex": "554157415641554154534881ecd80000004889cb4989d64989fc4801d3488d86a00000004889442460488d86c80000004889442468488d465048898424b80000",
+      "relocation_free": true
+    },
+    {
+      "label": "feed-ret-epilogue",
+      "va": 124386,
+      "length": 18,
+      "hex": "4881c4d80000005b415c415d415e415f5dc3",
+      "relocation_free": true
+    },
+    {
+      "label": "call-site-0x146",
+      "va": 317,
+      "length": 14,
+      "hex": "4c89f74889de4c89eae835d90100",
+      "relocation_free": true
+    },
+    {
+      "label": "call-site-0x1a0",
+      "va": 407,
+      "length": 14,
+      "hex": "4c89f74889de4c89eae8dbd80100",
+      "relocation_free": true
+    },
+    {
+      "label": "call-site-0x1e0",
+      "va": 471,
+      "length": 14,
+      "hex": "4c89f74889de4c89e2e89bd80100",
+      "relocation_free": true
+    },
+    {
+      "label": "call-site-0x228",
+      "va": 543,
+      "length": 14,
+      "hex": "4c89f74889de4c89e2e853d80100",
+      "relocation_free": true
+    }
+  ],
+  "window_relocation_free": true,
+  "relocation_count": 190,
+  "receipts": [
+    {
+      "argv": [
+        "objdump",
+        "-d",
+        "-C",
+        "--start-address=0x1da80",
+        "--stop-address=0x1e620",
+        "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal"
+      ],
+      "stdout_fixture": "terminal-feed-full.asm",
+      "sha256": "ea671d89d8af5f73f391a1633ae7df7ee1b90e05234d1460ab120d2f41c8fa21"
+    },
+    {
+      "argv": [
+        "objdump",
+        "-d",
+        "-C",
+        "--start-address=0x40",
+        "--stop-address=0x310",
+        "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal"
+      ],
+      "stdout_fixture": "terminal-drain-full.asm",
+      "sha256": "85078cfd2d3d0535fd4b4e7713c793860ad6a4fef38edb84a4a7ea399e5f92e3"
+    },
+    {
+      "argv": [
+        "objdump",
+        "-d",
+        "-C",
+        "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal"
+      ],
+      "stdout_fixture": null,
+      "sha256": "a9182f4c1bdff7c752d7c9f2e2087081f3ca61c796a9adf09652baa7d27fed03",
+      "note": "whole-ELF scan; text not archived (large), derived counts below"
+    }
+  ]
+}

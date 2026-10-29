@@ -1,0 +1,265 @@
+{
+  "index": 19,
+  "monotonic_ns": 426798506028929,
+  "frame": "/tmp/cellbox-s10-4-gui-temporal-20261029/desktop/vm/evidence/gui-epoch-01/0019.png",
+  "exact_read": [
+    [
+      "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":126651750,\"cpu_tent",
+      "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+      "{\"frame\":\"begin\",\"sample_id\":3,\"monotonic_ns\":109656721220,\"meta\":{\"schema\":\"to",
+      "p.cell.v1\",\"provider_epoch\":\"18e2df4ea52631fc\",\"interval_ns\":4064986690,\"online",
+      "_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":13,\"total_",
+      "tasks\":13,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_byt",
+      "es\":209694720,\"mem_used_bytes\":130584576,\"mem_free_bytes\":79110144,\"memory_inte",
+      "rval\":true}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":12,\"generation\":121,\"root_tid\":16,\"name\":\"ter",
+      "minal\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":51994351620,\"cp",
+      "u_tenths\":235,\"cpu_quality\":\"ok\",\"quota_bytes\":70994,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":8,\"generation\":115,\"root_tid\":10,\"name\":\"inpu",
+      "t\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6620806230,\"cpu_ten",
+      "ths\":217,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":13,\"generation\":122,\"root_tid\":17,\"name\":\"cel",
+      "lbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3382007350,\"cpu_",
+      "tenths\":205,\"cpu_quality\":\"ok\",\"quota_bytes\":19185,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":7,\"generation\":119,\"root_tid\":14,\"name\":\"desk",
+      "top\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":16481281420,\"cpu_",
+      "tenths\":196,\"cpu_quality\":\"ok\",\"quota_bytes\":36157,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":117,\"root_tid\":12,\"name\":\"com",
+      "positor\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2895074550,\"c",
+      "pu_tenths\":36,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+      "{\"frame\":\"row\",\"value\":{\"cell_id\":11,\"generation\":120,\"root_tid\":15,\"name\":\"cel",
+      "lbox\",\"name_truncat"
+    ],
+    [
+      19,
+      25
+    ]
+  ],
+  "accepted": false,
+  "ledger": {
+    "kind": "finite",
+    "command": "top --records -d 1 --frames 2 | to jsonl | cat",
+    "geometry": [
+      79,
+      26
+    ],
+    "complete": false,
+    "failed": true,
+    "reasons": [
+      "missing physical-row coverage or non-append screen change"
+    ],
+    "typed_rows": [
+      "",
+      "=== Cellos shell ready \u2014 type 'help' for commands ===",
+      "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+    ],
+    "typed_cursor": [
+      55,
+      2
+    ],
+    "commit": {
+      "id": 55,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d5d7d7d0a",
+      "deadline": 426772.237734171,
+      "start": 426767.237734171,
+      "finish": 426767.238707487,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 143,
+          "start": 426767.238176785,
+          "outcome": "COMMITTED",
+          "finish": 426767.238702234,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 143,
+      "caller": "MainThread",
+      "caller_deadline": 426868.558221609,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    "rows": [
+      {
+        "absolute_row": 3,
+        "text": ""
+      }
+    ],
+    "transcript": "",
+    "records": [],
+    "frames": [],
+    "window_start": 0,
+    "cursor": [
+      0,
+      3
+    ],
+    "prompt_absolute_row": null,
+    "time": {
+      "commit_finish_ns": 426767238707487,
+      "last_capture_ns": 426798506028929
+    },
+    "evidence": [
+      {
+        "monotonic_ns": 426767603596697,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426769238282035,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426770871338909,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426772481352686,
+        "readable": true,
+        "duplicate": false,
+        "shift": 0,
+        "window_start": 0,
+        "absolute_cursor_row": 3,
+        "cursor": [
+          0,
+          3
+        ]
+      },
+      {
+        "monotonic_ns": 426774115353720,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426775750025509,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426777382590941,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426779020214674,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426780661545183,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426782293340125,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426783902508927,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426785509634245,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426787142259112,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426788783126985,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426790419276001,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426792053567291,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426793666730787,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426795297650069,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426796901572571,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426798506028929,
+        "readable": true,
+        "candidate_shifts": [],
+        "rows": [
+          "l\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":126651750,\"cpu_tent",
+          "hs\":0,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+          "{\"frame\":\"end\",\"complete\":true,\"unavailable_fields\":[],\"dropped\":0}",
+          "{\"frame\":\"begin\",\"sample_id\":3,\"monotonic_ns\":109656721220,\"meta\":{\"schema\":\"to",
+          "p.cell.v1\",\"provider_epoch\":\"18e2df4ea52631fc\",\"interval_ns\":4064986690,\"online",
+          "_cpus\":1,\"cpu_unit\":\"core_tenths\",\"cpu_available\":true,\"total_cells\":13,\"total_",
+          "tasks\":13,\"gone_cells\":0,\"gone_tasks\":null,\"mem_state\":\"present\",\"mem_total_byt",
+          "es\":209694720,\"mem_used_bytes\":130584576,\"mem_free_bytes\":79110144,\"memory_inte",
+          "rval\":true}}",
+          "{\"frame\":\"row\",\"value\":{\"cell_id\":12,\"generation\":121,\"root_tid\":16,\"name\":\"ter",
+          "minal\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":51994351620,\"cp",
+          "u_tenths\":235,\"cpu_quality\":\"ok\",\"quota_bytes\":70994,\"limit_bytes\":16777216}}",
+          "{\"frame\":\"row\",\"value\":{\"cell_id\":8,\"generation\":115,\"root_tid\":10,\"name\":\"inpu",
+          "t\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":6620806230,\"cpu_ten",
+          "ths\":217,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+          "{\"frame\":\"row\",\"value\":{\"cell_id\":13,\"generation\":122,\"root_tid\":17,\"name\":\"cel",
+          "lbox\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":3382007350,\"cpu_",
+          "tenths\":205,\"cpu_quality\":\"ok\",\"quota_bytes\":19185,\"limit_bytes\":16777216}}",
+          "{\"frame\":\"row\",\"value\":{\"cell_id\":7,\"generation\":119,\"root_tid\":14,\"name\":\"desk",
+          "top\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":16481281420,\"cpu_",
+          "tenths\":196,\"cpu_quality\":\"ok\",\"quota_bytes\":36157,\"limit_bytes\":16777216}}",
+          "{\"frame\":\"row\",\"value\":{\"cell_id\":10,\"generation\":117,\"root_tid\":12,\"name\":\"com",
+          "positor\",\"name_truncated\":false,\"state\":\"Live\",\"tasks\":1,\"cpu_ns\":2895074550,\"c",
+          "pu_tenths\":36,\"cpu_quality\":\"ok\",\"quota_bytes\":0,\"limit_bytes\":16777216}}",
+          "{\"frame\":\"row\",\"value\":{\"cell_id\":11,\"generation\":120,\"root_tid\":15,\"name\":\"cel",
+          "lbox\",\"name_truncat"
+        ],
+        "cursor": [
+          19,
+          25
+        ]
+      }
+    ]
+  }
+}

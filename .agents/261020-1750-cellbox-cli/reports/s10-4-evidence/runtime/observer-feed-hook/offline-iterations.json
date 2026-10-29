@@ -1,0 +1,75 @@
+{
+  "scope": "Every offline iteration before the go decision, recorded honestly. None involved a VM, QEMU, guest or prior-archive write. Individual module runs below were development runs and are NOT the gate; the gate is gate-attempts/attempt-02 (single invocation).",
+  "iterations": [
+    {
+      "n": 1,
+      "what": "T1 test_t1_static first run",
+      "result": "2 FAIL",
+      "cause": "test expectations only: jumps to 0xd1 are 0x191/0x1aa/0x258 (0x136 jumps to 0xcf which falls through); retained excerpt stops mid-instruction at 0x1db1f",
+      "fix": "tests corrected; no production-code change"
+    },
+    {
+      "n": 2,
+      "what": "oracle smoke on the synthetic two-epoch session",
+      "result": "finite epoch FAIL malformed-json",
+      "cause": "evaluate() could not bound a finished epoch when a later epoch was already in the ledger (offline fixture only; the real run evaluates progressively)",
+      "fix": "added optional until_ns parameter to hook_ledger.evaluate (not used by the run path)"
+    },
+    {
+      "n": 3,
+      "what": "T4/T5 first run",
+      "result": "18 FAIL",
+      "cause": "test expectations: within-frame row swaps and value flips are structure-preserving (documented residual, now asserted explicitly with the final-screen cross-check); wrong total_cells pattern was a no-op; seq-duplicate value; split fixture time base; partial-window selection",
+      "fix": "tests corrected; oracle unchanged"
+    },
+    {
+      "n": 4,
+      "what": "T2/T3 first run",
+      "result": "5 ERROR 1 FAIL",
+      "cause": "test used non-existent X.Stop; retained entry reads are 17 (21 includes 4 extra Cellbox windows)",
+      "fix": "tests corrected"
+    },
+    {
+      "n": 5,
+      "what": "hook robustness review before the gate",
+      "result": "design change",
+      "cause": "unreadable text window/payload memory replies would have surfaced as an RSP exception (host class) instead of a hook stop",
+      "fix": "hook_observer converts memory-reply RspError in entry windows and per-hit reads to HookStop codes window-read-failed/hit-memory-reply; two tests added"
+    },
+    {
+      "n": 6,
+      "what": "T7-T11 first run",
+      "result": "3 FAIL 4 ERROR",
+      "cause": "test fixtures needed a progressive ledger view; a mutation grew a hit past 512 B; run_hook preflight used X.verify_inputs (diagnostic module has none; it is common.verify_inputs) -- a real defect in the preflight",
+      "fix": "tests and run_hook.py corrected"
+    },
+    {
+      "n": 7,
+      "what": "T7-T11 budgets test",
+      "result": "1 FAIL",
+      "cause": "test arithmetic (native_scope_count already includes additional scopes)",
+      "fix": "test corrected"
+    },
+    {
+      "n": 8,
+      "what": "gate attempt-01 (single invocation)",
+      "result": "PASS 269 tests (144 retained + 47 + 78 new), zero fail/error/skip",
+      "follow_up": "the go/no-go preflight then failed G4_prior_archive_manifest_intact because my comparison did not skip nested evidence.sha256 files (preflight defect, not a product/hook defect)",
+      "fix": "run_hook.py corrected; executing sources changed, so attempt-01 was superseded and the whole gate rerun"
+    },
+    {
+      "n": 9,
+      "what": "gate attempt-02 (single invocation) - THE FROZEN GATE",
+      "result": "PASS 269 tests, 0 failures 0 errors 0 skipped 0 expected failures 0 unexpected successes",
+      "artifacts": "verification-summary.json, frozen-sources.sha256, gate-attempts/attempt-02/{receipt.json,stdout-stderr.txt}"
+    },
+    {
+      "n": 10,
+      "what": "go/no-go preflight after attempt-02",
+      "result": "GO (13 checks true)",
+      "artifacts": "go-no-go-preflight.json, go-no-go.json (re-run inside --run)"
+    }
+  ],
+  "prior_archives_unchanged_by_gate": true,
+  "candidate_runs_before_go": 0
+}

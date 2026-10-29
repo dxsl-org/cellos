@@ -1,0 +1,804 @@
+0000000000000000 0000000000000032 T _start
+0000000000000000 a app_shell.a6737ef9a7b9a8a0-cgu.01
+0000000000000000 a compiler_builtins.fd1c49f5e436c28b-cgu.0
+0000000000000000 a compiler_builtins.fd1c49f5e436c28b-cgu.1
+0000000000000000 a compiler_builtins.fd1c49f5e436c28b-cgu.2
+0000000000000000 a compiler_builtins.fd1c49f5e436c28b-cgu.3
+0000000000000000 a compiler_builtins.fd1c49f5e436c28b-cgu.4
+0000000000000000 a compiler_builtins.fd1c49f5e436c28b-cgu.5
+0000000000000000 a compiler_builtins.fd1c49f5e436c28b-cgu.6
+0000000000000000 a compiler_builtins.fd1c49f5e436c28b-cgu.7
+0000000000000040 00000000000002d4 t core::ptr::drop_in_place::<app_shell::parser::Ast>
+0000000000000320 000000000000005c t app_shell::executor::cmd_source::{closure#0}
+0000000000000380 0000000000000218 t app_shell::executor::dispatch_builtin::{closure#9}
+00000000000005a0 000000000000007f t ostd::input::drain_pending_input_events
+0000000000000620 0000000000000052 t app_shell::cmd_sys::cmd_shutdown
+0000000000000680 0000000000000206 t app_shell::executor::print_jobs
+0000000000000890 00000000000001e5 t app_shell::executor::expand_word
+0000000000000a80 00000000000000d2 t app_shell::executor::shell_print
+0000000000000b60 0000000000003b3c t app_shell::executor::cmd_awk_args
+00000000000046a0 00000000000025f3 t app_shell::executor::cmd_sed_args
+0000000000006ca0 0000000000001314 t app_shell::executor::expand_token
+0000000000007fc0 0000000000000187 t app_shell::executor::shell_println
+0000000000008150 0000000000000ab0 t app_shell::executor::spawn_external
+0000000000008c00 000000000000702b t app_shell::executor::dispatch_builtin
+000000000000fc30 0000000000000e7c t app_shell::executor::read_utility_text
+0000000000010ab0 0000000000000bee t app_shell::executor::cmd_hv
+00000000000116a0 0000000000000a8a t app_shell::executor::execute
+0000000000012130 000000000000013c t app_shell::executor::cmd_read
+0000000000012270 00000000000001c9 t app_shell::executor::cmd_test
+0000000000012440 0000000000001469 t app_shell::executor::exec_cmd
+00000000000138b0 000000000000010b t alloc::fmt::format
+00000000000139c0 000000000000009e t alloc::boxed::box_new_uninit
+0000000000013a60 000000000000006d t <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+0000000000013ad0 00000000000001bb t <alloc::raw_vec::RawVecInner>::finish_grow
+0000000000013c8b 0000000000000013 t alloc::raw_vec::handle_error
+0000000000013ca0 000000000000000d t alloc::raw_vec::capacity_overflow
+0000000000013cb0 0000000000000057 t <alloc::raw_vec::RawVec<u8>>::grow_one
+0000000000013d10 000000000000010e t <alloc::string::String as core::clone::Clone>::clone
+0000000000013e20 0000000000000090 t <alloc::string::String as core::fmt::Write>::write_fmt
+0000000000013eb0 0000000000000017 t core::ptr::drop_in_place::<alloc::string::String>
+0000000000013ed0 0000000000000061 t <alloc::string::String as core::fmt::Write>::write_str
+0000000000013f40 0000000000000112 t <alloc::string::String as core::fmt::Write>::write_char
+0000000000014060 0000000000000269 t alloc::fmt::format::format_inner
+00000000000142d0 0000000000000017 t core::ptr::drop_in_place::<alloc::string::String>
+00000000000142e7 0000000000000009 t <alloc::vec::Vec<_, _>>::insert_mut::assert_failed
+00000000000142f0 000000000000000d t <alloc::vec::Vec<_, _>>::split_off::assert_failed
+0000000000014300 0000000000000e3b t postcard::ser::serialize_with_flavor::<api::services::ipc::VfsRequest, postcard::ser::flavors::Slice, &mut [u8]>
+0000000000015140 00000000000000c8 t api::services::input::decode_event
+0000000000015210 0000000000000082 t memcpy
+00000000000152a0 00000000000000f2 t memmove
+00000000000153a0 000000000000006d t memset
+0000000000015410 000000000000015d t <api::abi::dir_handles::ViDirHandle as serde_core::ser::Serialize>::serialize::<&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice>>
+0000000000015570 00000000000000f5 t app_shell::cmd_fs::append_file
+0000000000015670 000000000000051b t app_shell::cmd_fs::vfs_list_dir_details
+0000000000015b90 000000000000028c t <core::str::iter::SplitInternal<char>>::next_inclusive
+0000000000015e20 0000000000000082 t app_shell::cmd_fs::stat_file_vfs
+0000000000015eb0 000000000000033a t app_shell::cmd_fs::vfs_write_chunked
+00000000000161f0 000000000000054d t app_shell::cmd_fs::resolve_shell_path
+0000000000016740 0000000000000289 t <core::str::iter::SplitInternal<char>>::next
+00000000000169d0 0000000000000157 t app_shell::cmd_fs::read_file_vfs_owned
+0000000000016b30 0000000000000a1f t app_shell::cmd_fs::cmd_cp
+0000000000017550 00000000000001a0 t app_shell::cmd_fs::is_directory_target
+00000000000176f0 00000000000001b2 t <core::str::iter::SplitInternal<char>>::next_back
+00000000000178b0 00000000000000a3 t app_shell::cmd_fs::copy_single_file
+0000000000017960 00000000000006a0 t app_shell::cmd_fs::copy_dir_recursive
+0000000000018000 0000000000000013 t <alloc::string::String as core::fmt::Display>::fmt
+0000000000018020 000000000000017e t app_shell::cmd_fs::read_file_bytes
+00000000000181a0 0000000000000b28 t app_shell::cmd_fs::cmd_mv
+0000000000018cd0 000000000000107a t app_shell::cmd_fs::cmd_rm
+0000000000019d50 00000000000001c0 t <core::str::iter::Chars as core::iter::traits::iterator::Iterator>::advance_by
+0000000000019f10 00000000000004fd t <&str as core::str::pattern::Pattern>::is_contained_in
+000000000001a410 00000000000000dd t app_shell::cmd_fs::cmd_find
+000000000001a4f0 00000000000004c6 t app_shell::cmd_fs::find_recursive
+000000000001a9c0 0000000000000247 t app_shell::cmd_fs::cmd_sort
+000000000001ac10 0000000000000253 t app_shell::cmd_fs::cmd_uniq
+000000000001ae70 0000000000000335 t app_shell::cmd_fs::cmd_vcat
+000000000001b1b0 00000000000002a2 t app_shell::cmd_fs::cmd_touch
+000000000001b460 0000000000000386 t api::services::ipc::decode::<api::services::ipc::VfsResponse>
+000000000001b7f0 00000000000000f9 t <alloc::vec::Vec<alloc::string::String>>::extend_trusted::<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<alloc::string::String>>>
+000000000001b8f0 000000000000021e t <alloc::vec::Vec<alloc::string::String> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<alloc::string::String, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<app_shell::parser::Tok>, app_shell::parser::parse_for_stmt::{closure#3}>>>::from_iter
+000000000001bb10 00000000000002af t <core::str::iter::Lines as core::iter::traits::iterator::Iterator>::next
+000000000001bdc0 0000000000000289 t <core::str::iter::Split<char> as core::iter::traits::iterator::Iterator>::next
+000000000001c050 00000000000001a8 t <alloc::vec::Vec<&str> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<&str, text_engine::args::LegacyArgs>>::from_iter
+000000000001c200 00000000000001e7 t <alloc::vec::Vec<&str> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<&str, core::str::iter::SplitWhitespace>>::from_iter
+000000000001c3f0 00000000000001e3 t <core::str::iter::SplitWhitespace as core::iter::traits::iterator::Iterator>::next
+000000000001c5e0 00000000000001bb t <alloc::vec::Vec<&str> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<&str, core::str::iter::Lines>>::from_iter
+000000000001c7a0 000000000000006d t <alloc::vec::Vec<u8> as alloc::vec::spec_extend::SpecExtend<&u8, core::slice::iter::Iter<u8>>>::spec_extend
+000000000001c810 0000000000000104 t <alloc::vec::Vec<app_shell::commands::LsEntry> as core::slice::sort::stable::BufGuard<app_shell::commands::LsEntry>>::with_capacity
+000000000001c920 00000000000001a0 t <alloc::vec::Vec<&str> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<&str, core::iter::adapters::map::Map<core::slice::iter::Iter<alloc::string::String>, <alloc::string::String>::as_str>>>::from_iter
+000000000001cac0 00000000000001a3 t <alloc::vec::Vec<app_shell::parser::WordSegment> as core::clone::Clone>::clone
+000000000001cc70 0000000000000049 t <alloc::vec::Vec<alloc::string::String> as core::ops::drop::Drop>::drop
+000000000001ccc0 0000000000000294 t core::ptr::drop_in_place::<app_shell::parser::Ast>
+000000000001cf60 0000000000000127 t core::ptr::drop_in_place::<app_shell::parser::Cmd>
+000000000001d090 00000000000001a3 t <alloc::vec::Vec<app_shell::parser::Redirect> as core::ops::drop::Drop>::drop
+000000000001d240 00000000000000c2 t <alloc::vec::Vec<app_shell::parser::Word> as core::ops::drop::Drop>::drop
+000000000001d310 0000000000000049 t <alloc::vec::Vec<app_shell::commands::LsEntry> as core::ops::drop::Drop>::drop
+000000000001d360 0000000000000049 t <alloc::vec::Vec<app_shell::text_tools::grep::io::vfs::DirEntry> as core::ops::drop::Drop>::drop
+000000000001d3b0 00000000000009a8 t app_shell::parser::parse_pipeline
+000000000001dd60 00000000000037b4 t app_shell::parser::parse
+0000000000021520 00000000000000f8 t <u8 as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
+0000000000021620 00000000000003e0 t app_shell::parser::parse_tokens
+0000000000021a00 000000000000030f t app_shell::parser::push_arm
+0000000000021d10 0000000000000186 t app_shell::commands::cmd_echo_to_vec
+0000000000021ea0 000000000000011f t app_shell::commands::push_unique
+0000000000021fc0 00000000000006c6 t app_shell::commands::cmd_ps
+0000000000022690 00000000000015ae t app_shell::commands::cmd_top
+0000000000023c40 0000000000000958 t app_shell::commands::cmd_echo
+00000000000245a0 00000000000006d1 t app_shell::commands::cmd_exec
+0000000000024c80 00000000000004c5 t app_shell::commands::exec_load_and_spawn
+0000000000025150 00000000000000b8 t app_shell::commands::cmd_help
+0000000000025210 000000000000036a t app_shell::commands::cmd_kill
+0000000000025580 0000000000000830 t <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, alloc::string::String, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<alloc::string::String, alloc::string::String>>::remove_kv::{closure#0}, alloc::alloc::Global>
+0000000000025db0 000000000000038c t <alloc::collections::btree::node::BalancingContext<alloc::string::String, alloc::string::String>>::bulk_steal_left
+0000000000026140 00000000000003f4 t <alloc::collections::btree::node::BalancingContext<alloc::string::String, alloc::string::String>>::do_merge::<<alloc::collections::btree::node::BalancingContext<alloc::string::String, alloc::string::String>>::merge_tracking_child<alloc::alloc::Global>::{closure#0}, alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, alloc::string::String, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::alloc::Global>
+0000000000026540 00000000000003eb t <alloc::collections::btree::node::BalancingContext<alloc::string::String, alloc::string::String>>::bulk_steal_right
+0000000000026930 00000000000001cd t core::slice::sort::unstable::heapsort::heapsort::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt>
+0000000000026b00 000000000000024d t core::slice::sort::unstable::heapsort::heapsort::<api::abi::syscall::ProcessInfo, <[api::abi::syscall::ProcessInfo]>::sort_unstable_by_key<usize, app_shell::commands::cmd_ps::{closure#1}>::{closure#0}>
+0000000000026d50 00000000000001ad t core::slice::sort::unstable::heapsort::heapsort::<&str, <&str as core::cmp::PartialOrd>::lt>
+0000000000026f00 0000000000000210 t <app_shell::history::History>::push
+0000000000027110 0000000000000141 t app_shell::shell_state::stdin_bytes
+0000000000027260 000000000000019c t app_shell::shell_state::put
+0000000000027400 00000000000002d0 t app_shell::shell_state::get_var
+00000000000276d0 00000000000002ba t app_shell::shell_state::set_var
+0000000000027990 0000000000000322 t app_shell::shell_state::unset_var
+0000000000027cc0 00000000000000d2 t app_shell::shell_state::write_out
+0000000000027da0 00000000000004fe t app_shell::top::sample_processes
+00000000000282a0 0000000000000314 t app_shell::history::cmd_history
+00000000000285c0 0000000000000149 T main
+0000000000028710 000000000000010c t core::slice::sort::stable::driftsort_main::<app_shell::commands::LsEntry, <[app_shell::commands::LsEntry]>::sort_by<app_shell::commands::cmd_ls::{closure#2}>::{closure#0}, alloc::vec::Vec<app_shell::commands::LsEntry>>
+0000000000028820 0000000000000735 t core::slice::sort::stable::drift::sort::<app_shell::commands::LsEntry, <[app_shell::commands::LsEntry]>::sort_by<app_shell::commands::cmd_ls::{closure#2}>::{closure#0}>
+0000000000028f60 0000000000000d30 t core::slice::sort::stable::quicksort::quicksort::<app_shell::commands::LsEntry, <[app_shell::commands::LsEntry]>::sort_by<app_shell::commands::cmd_ls::{closure#2}>::{closure#0}>
+0000000000029c90 0000000000000149 t core::slice::sort::shared::pivot::median3_rec::<app_shell::commands::LsEntry, <[app_shell::commands::LsEntry]>::sort_by<app_shell::commands::cmd_ls::{closure#2}>::{closure#0}>
+0000000000029de0 000000000000010c t core::slice::sort::stable::driftsort_main::<app_shell::commands::LsEntry, <[app_shell::commands::LsEntry]>::sort_by<app_shell::commands::cmd_ls::{closure#4}>::{closure#0}, alloc::vec::Vec<app_shell::commands::LsEntry>>
+0000000000029ef0 0000000000000735 t core::slice::sort::stable::drift::sort::<app_shell::commands::LsEntry, <[app_shell::commands::LsEntry]>::sort_by<app_shell::commands::cmd_ls::{closure#4}>::{closure#0}>
+000000000002a630 0000000000000d30 t core::slice::sort::stable::quicksort::quicksort::<app_shell::commands::LsEntry, <[app_shell::commands::LsEntry]>::sort_by<app_shell::commands::cmd_ls::{closure#4}>::{closure#0}>
+000000000002b360 0000000000000163 t core::slice::sort::shared::pivot::median3_rec::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt>
+000000000002b4d0 0000000000000140 t core::slice::sort::shared::pivot::median3_rec::<api::abi::syscall::ProcessInfo, <[api::abi::syscall::ProcessInfo]>::sort_unstable_by_key<usize, app_shell::commands::cmd_ps::{closure#1}>::{closure#0}>
+000000000002b610 0000000000000139 t core::slice::sort::shared::pivot::median3_rec::<&str, <&str as core::cmp::PartialOrd>::lt>
+000000000002b750 000000000000019a t core::slice::sort::unstable::ipnsort::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt>
+000000000002b8f0 0000000000000be6 t core::slice::sort::unstable::quicksort::quicksort::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt>
+000000000002c4e0 00000000000001c6 t core::slice::sort::unstable::ipnsort::<api::abi::syscall::ProcessInfo, <[api::abi::syscall::ProcessInfo]>::sort_unstable_by_key<usize, app_shell::commands::cmd_ps::{closure#1}>::{closure#0}>
+000000000002c6b0 0000000000000fea t core::slice::sort::unstable::quicksort::quicksort::<api::abi::syscall::ProcessInfo, <[api::abi::syscall::ProcessInfo]>::sort_unstable_by_key<usize, app_shell::commands::cmd_ps::{closure#1}>::{closure#0}>
+000000000002d6a0 0000000000000211 t core::slice::sort::unstable::ipnsort::<&str, <&str as core::cmp::PartialOrd>::lt>
+000000000002d8c0 0000000000000af1 t core::slice::sort::unstable::quicksort::quicksort::<&str, <&str as core::cmp::PartialOrd>::lt>
+000000000002e3c0 000000000000010a t app_shell::cmd_cwd::get_shell_cwd
+000000000002e4d0 00000000000003f5 t app_shell::cmd_cwd::cmd_cd
+000000000002e8d0 0000000000000061 t app_shell::cmd_cwd::cmd_pwd
+000000000002e940 0000000000000151 t <str>::trim_matches::<char>
+000000000002eaa0 000000000000008c t <str>::trim_end_matches::<char>
+000000000002eb30 0000000000000167 t <str>::trim_start_matches::<<char>::is_whitespace>
+000000000002eca0 000000000000007d t <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+000000000002ed20 00000000000001e7 t <alloc::raw_vec::RawVecInner>::finish_grow
+000000000002ef10 0000000000000086 t <app_shell::shell::ViShell>::new
+000000000002efa0 000000000000006c t <alloc::raw_vec::RawVec<alloc::vec::Vec<u8>>>::grow_one
+000000000002f010 0000000000000063 t <alloc::raw_vec::RawVec<app_shell::jobs::Job>>::grow_one
+000000000002f080 0000000000000063 t <alloc::raw_vec::RawVec<app_shell::parser::WordSegment>>::grow_one
+000000000002f0f0 0000000000000063 t <alloc::raw_vec::RawVec<app_shell::parser::Tok>>::grow_one
+000000000002f160 0000000000000063 t <alloc::raw_vec::RawVec<app_shell::parser::Redirect>>::grow_one
+000000000002f1d0 0000000000000063 t <alloc::raw_vec::RawVec<&[app_shell::parser::Tok]>>::grow_one
+000000000002f240 0000000000000063 t <alloc::raw_vec::RawVec<(alloc::vec::Vec<u8>, alloc::vec::Vec<u8>)>>::grow_one
+000000000002f2b0 0000000000000063 t <alloc::raw_vec::RawVec<(alloc::string::String, core::option::Option<alloc::string::String>)>>::grow_one
+000000000002f320 0000000000000117 t <alloc::raw_vec::RawVecInner>::try_allocate_in
+000000000002f440 00000000000041d7 t ostd::executor::block_on::<<app_shell::shell::ViShell>::run::{closure#0}>
+0000000000033620 0000000000000022 t ostd::syscall::sys_exit
+0000000000033650 0000000000000279 t alloc::str::join_generic_copy::<str, u8, alloc::string::String>
+00000000000338d0 0000000000000259 t alloc::str::join_generic_copy::<str, u8, &str>
+0000000000033b30 0000000000000608 t <core::iter::adapters::map::Map<core::slice::iter::Iter<&[app_shell::parser::Tok]>, app_shell::parser::parse_pipeline::{closure#2}> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::traits::iterator::Iterator::find::check<app_shell::parser::Cmd, &mut app_shell::parser::parse_pipeline::{closure#3}>::{closure#0}, core::ops::control_flow::ControlFlow<app_shell::parser::Cmd>>
+0000000000034140 000000000000008a t <alloc::vec::into_iter::IntoIter<alloc::string::String> as core::ops::drop::Drop>::drop
+00000000000341d0 00000000000000c3 t <alloc::vec::into_iter::IntoIter<app_shell::parser::Cmd> as core::ops::drop::Drop>::drop
+00000000000342a0 0000000000000066 t <alloc::vec::into_iter::IntoIter<app_shell::text_tools::grep::io::vfs::DirEntry> as core::ops::drop::Drop>::drop
+0000000000034310 0000000000000da1 t <app_shell::async_utils::AsyncStdin>::handle_tab
+00000000000350c0 00000000000001b4 t <core::str::iter::SplitInternal<core::str::IsWhitespace>>::next_back
+0000000000035280 000000000000234c t app_shell::text_tools::grep::run
+00000000000375d0 0000000000000408 t app_shell::text_tools::grep::io::read_text_file
+00000000000379e0 000000000000083d t app_shell::text_tools::grep::io::walk_path
+0000000000038220 0000000000000067 t app_shell::text_tools::grep::io::walk_path::{closure#0}
+0000000000038290 0000000000000179 t core::slice::sort::shared::smallsort::insertion_sort_shift_left::<api::abi::syscall::ProcessInfo, <[api::abi::syscall::ProcessInfo]>::sort_unstable_by_key<usize, app_shell::commands::cmd_ps::{closure#1}>::{closure#0}>
+0000000000038410 00000000000001a9 t core::slice::sort::shared::smallsort::bidirectional_merge::<&str, <&str as core::cmp::PartialOrd>::lt>
+00000000000385c0 0000000000000137 t core::slice::sort::shared::smallsort::insertion_sort_shift_left::<app_shell::commands::LsEntry, <[app_shell::commands::LsEntry]>::sort_by<app_shell::commands::cmd_ls::{closure#2}>::{closure#0}>
+0000000000038700 00000000000000f3 t core::slice::sort::shared::smallsort::insertion_sort_shift_left::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt>
+0000000000038800 00000000000000f1 t core::slice::sort::shared::smallsort::insertion_sort_shift_left::<&str, <&str as core::cmp::PartialOrd>::lt>
+0000000000038900 0000000000000283 t core::slice::sort::shared::smallsort::sort4_stable::<app_shell::commands::LsEntry, <[app_shell::commands::LsEntry]>::sort_by<app_shell::commands::cmd_ls::{closure#2}>::{closure#0}>
+0000000000038b90 000000000000023b t core::slice::sort::shared::smallsort::sort4_stable::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt>
+0000000000038dd0 000000000000026d t core::slice::sort::shared::smallsort::sort4_stable::<api::abi::syscall::ProcessInfo, <[api::abi::syscall::ProcessInfo]>::sort_unstable_by_key<usize, app_shell::commands::cmd_ps::{closure#1}>::{closure#0}>
+0000000000039040 0000000000000225 t core::slice::sort::shared::smallsort::sort4_stable::<&str, <&str as core::cmp::PartialOrd>::lt>
+0000000000039270 00000000000000da t ostd::ipc::service_call_typed::<api::services::ipc::VfsRequest, api::services::ipc::VfsResponse>
+0000000000039350 00000000000000d4 t <alloc::collections::vec_deque::VecDeque<alloc::string::String>>::with_capacity_in
+0000000000039430 00000000000000e2 t <alloc::collections::vec_deque::VecDeque<alloc::string::String>>::truncate
+0000000000039520 0000000000000035 t app_shell::cmd_sys::cmd_env
+0000000000039560 00000000000005a0 t app_shell::cmd_sys::cmd_date
+0000000000039b00 00000000000006c1 t app_shell::cmd_sys::cmd_free
+000000000003a1d0 0000000000000137 t app_shell::cmd_sys::cmd_sleep
+000000000003a310 00000000000000d9 t app_shell::cmd_sys::cmd_uname
+000000000003a3f0 00000000000009e4 t app_shell::text_tools::grep::io::vfs::list_dir
+000000000003ade0 000000000000019a t app_shell::text_tools::grep::io::vfs::request_vfs
+000000000003af80 0000000000000346 t app_shell::text_tools::grep::io::vfs::stat_path
+000000000003b2d0 000000000000008a t <u8 as core::fmt::Display>::fmt
+000000000003b360 00000000000000e9 t <u16 as core::fmt::Display>::fmt
+000000000003b450 0000000000000110 t <i32 as core::fmt::Display>::fmt
+000000000003b560 00000000000000f3 t <u64 as core::fmt::Display>::fmt
+000000000003b660 0000000000000009 t core::slice::index::slice_index_fail
+000000000003b670 00000000000001f3 t core::str::converts::from_utf8
+000000000003b870 0000000000000150 t core::slice::memchr::memchr_aligned
+000000000003b9c0 0000000000000106 t core::slice::memchr::memrchr
+000000000003bad0 0000000000000009 t core::slice::copy_from_slice_impl::len_mismatch_fail
+000000000003bae0 00000000000000f9 t core::unicode::unicode_data::n::lookup_slow
+000000000003bbe0 0000000000000298 t <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str
+000000000003be80 000000000000005d t <core::fmt::builders::PadAdapter as core::fmt::Write>::write_char
+000000000003bee0 0000000000000025 t <core::fmt::builders::PadAdapter as core::fmt::Write>::write_fmt
+000000000003bf10 000000000000018d t <core::fmt::builders::DebugStruct>::field
+000000000003c0a0 0000000000000132 t <core::fmt::builders::DebugTuple>::field
+000000000003c1e0 0000000000000188 t <core::str::lossy::Utf8Chunks as core::iter::traits::iterator::Iterator>::next
+000000000003c368 000000000000000f t core::panicking::assert_failed::<core::option::Option<usize>, core::option::Option<usize>>
+000000000003c377 0000000000000009 t core::panicking::assert_failed_inner
+000000000003c380 0000000000000006 t core::panicking::panic_fmt
+000000000003c386 000000000000000c t core::panicking::assert_failed::<usize, usize>
+000000000003c3a0 0000000000000006 t core::str::slice_error_fail
+000000000003c3b0 0000000000000129 t core::str::slice_error_fail_rt
+000000000003c4e0 000000000000000e t core::option::unwrap_failed
+000000000003c4f0 0000000000000009 t core::panicking::panic
+000000000003c500 0000000000000009 t core::option::expect_failed
+000000000003c509 0000000000000009 t core::panicking::panic_bounds_check
+000000000003c520 0000000000000006 t core::cell::panic_already_borrowed
+000000000003c530 00000000000000f9 t core::unicode::unicode_data::alphabetic::lookup_slow
+000000000003c630 0000000000000009 t core::result::unwrap_failed
+000000000003c640 000000000000000d t core::panicking::panic_const::panic_const_div_overflow
+000000000003c650 000000000000000d t core::panicking::panic_const::panic_const_rem_overflow
+000000000003c660 000000000000026a t <core::fmt::Formatter>::pad_integral
+000000000003c8d0 0000000000000059 t <core::fmt::Formatter>::pad_integral::write_prefix
+000000000003c930 00000000000000f0 t <core::fmt::Formatter>::debug_struct_field3_finish
+000000000003ca20 0000000000000242 t <core::fmt::Formatter>::debug_struct_fields_finish
+000000000003cc70 000000000000057b t <core::fmt::Formatter>::pad
+000000000003d1f0 00000000000001a5 t core::fmt::write
+000000000003d3a0 00000000000000ba t <char as core::fmt::Display>::fmt
+000000000003d460 000000000000000d t core::slice::sort::shared::smallsort::panic_on_ord_violation
+000000000003d470 000000000000051b t <core::str::pattern::StrSearcher>::new
+000000000003d990 0000000000000237 t <linked_list_allocator::Heap>::deallocate
+000000000003dbd0 0000000000000173 t <linked_list_allocator::Heap>::allocate_first_fit
+000000000003dd50 0000000000000191 t <&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice> as serde_core::ser::SerializeStructVariant>::serialize_field::<&str>
+000000000003def0 00000000000000ca t <&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice> as serde_core::ser::SerializeStructVariant>::serialize_field::<u32>
+000000000003dfc0 000000000000015d t <&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice> as serde_core::ser::SerializeStructVariant>::serialize_field::<usize>
+000000000003e120 00000000000001b4 t <postcard::de::deserializer::Deserializer<postcard::de::flavors::Slice>>::try_take_varint_u64
+000000000003e2e0 000000000000021c t <api::services::ipc::InputRequest as serde_core::ser::Serialize>::serialize::<&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice>>
+000000000003e500 000000000000008c t __rustc::__rust_alloc
+000000000003e590 0000000000000014 t __rustc::__rust_dealloc
+000000000003e5b0 0000000000000209 t ostd::heap::alloc_error
+000000000003e7c0 0000000000000c9f t <ostd::clients::vfs::VfsClient>::read_file_bounded
+000000000003f460 000000000000015d t <ostd::fs::File>::open
+000000000003f5c0 0000000000000072 t __rustc::rust_begin_unwind
+000000000003f640 0000000000000742 t <ostd::io::Stdin>::read_line
+000000000003fd90 0000000000000044 t <alloc::string::String>::push
+000000000003fde0 000000000000009a t <alloc::collections::vec_deque::VecDeque<alloc::string::String>>::grow
+000000000003fe80 000000000000016d t ostd::io::print_usize
+000000000003fff0 00000000000002b7 t ostd::syscall::sys_spawn_from_path
+00000000000402b0 0000000000000065 t ostd::syscall::sys_lookup_service_bound
+0000000000040320 000000000000006d t <alloc::vec::Vec<u8> as alloc::vec::spec_extend::SpecExtend<&u8, core::slice::iter::Iter<u8>>>::spec_extend
+0000000000040390 0000000000000356 t <core::iter::adapters::map::Map<core::str::iter::Split<char>, <ostd::clients::vfs::read_file::path::FileReadPlan>::parse::{closure#1}> as core::iter::traits::iterator::Iterator>::try_fold::<(), <core::iter::adapters::GenericShunt<core::iter::adapters::map::Map<core::str::iter::Split<char>, <ostd::clients::vfs::read_file::path::FileReadPlan>::parse::{closure#1}>, core::result::Result<core::convert::Infallible, api::services::dir_name::DirNameError>> as core::iter::traits::iterator::Iterator>::try_fold<(), core::iter::traits::iterator::Iterator::try_for_each::call<&str, core::ops::control_flow::ControlFlow<&str>, core::ops::control_flow::ControlFlow<&str>::Break>::{closure#0}, core::ops::control_flow::ControlFlow<&str>>::{closure#0}, core::ops::control_flow::ControlFlow<core::ops::control_flow::ControlFlow<&str>>>
+00000000000406f0 00000000000001f7 t ostd::ipc::exchange
+00000000000408f0 00000000000013f9 t ostd::ipc::service_call_typed::<api::services::ipc::VfsRequest, api::services::ipc::VfsResponse>
+0000000000041cf0 000000000000030d t ostd::args::set_spawn_argv
+0000000000042000 000000000000048c t <ostd::service::ServiceRef<1>>::call::<api::services::ipc::VfsRequest, api::services::ipc::VfsResponse>
+0000000000042490 000000000000018c t <&mut postcard::ser::serializer::Serializer<postcard::ser::flavors::Slice> as serde_core::ser::Serializer>::collect_seq::<&[u8]>
+0000000000042620 000000000000007d t <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+00000000000426a0 00000000000001e7 t <alloc::raw_vec::RawVecInner>::finish_grow
+0000000000042890 0000000000000063 t <alloc::raw_vec::RawVec<alloc::string::String>>::grow_one
+0000000000042900 0000000000000063 t <alloc::raw_vec::RawVec<api::abi::dir_handles::ViDirHandle>>::grow_one
+0000000000042970 0000000000000117 t <alloc::raw_vec::RawVecInner>::try_allocate_in
+0000000000042a90 00000000000000a8 t ostd::input::release_focus
+0000000000042b40 00000000000000ba t ostd::input::request_focus
+0000000000042c00 0000000000000158 t <alloc::vec::Vec<regex_syntax::hir::literal::Literal>>::dedup_by::<<regex_syntax::hir::literal::Seq>::dedup::{closure#0}>
+0000000000042d60 0000000000000193 t <alloc::vec::Vec<regex_syntax::hir::literal::Literal>>::extend_trusted::<alloc::vec::drain::Drain<regex_syntax::hir::literal::Literal>>
+0000000000042f00 000000000000027e t <alloc::vec::Vec<regex_automata::nfa::thompson::map::Utf8BoundedEntry>>::extend_with
+0000000000043180 000000000000010e t <alloc::vec::Vec<regex_syntax::hir::ClassBytesRange> as core::clone::Clone>::clone
+0000000000043290 0000000000000128 t <alloc::vec::Vec<regex_syntax::hir::ClassUnicodeRange> as core::clone::Clone>::clone
+00000000000433c0 00000000000003cc t <alloc::vec::Vec<alloc::collections::btree::map::BTreeMap<alloc::sync::Arc<str>, regex_automata::util::primitives::SmallIndex>> as core::ops::drop::Drop>::drop
+0000000000043790 0000000000000258 t core::ptr::drop_in_place::<regex_syntax::ast::Ast>
+00000000000439f0 000000000000014f t core::ptr::drop_in_place::<regex_syntax::ast::ClassSet>
+0000000000043b40 000000000000010a t core::ptr::drop_in_place::<regex_syntax::ast::ClassSetItem>
+0000000000043c50 0000000000000044 t <alloc::vec::Vec<regex_syntax::hir::Hir> as core::ops::drop::Drop>::drop
+0000000000043ca0 00000000000001a8 t core::ptr::drop_in_place::<regex_syntax::hir::HirKind>
+0000000000043e50 0000000000000049 t <alloc::vec::Vec<regex_syntax::hir::literal::Literal> as core::ops::drop::Drop>::drop
+0000000000043ea0 0000000000000068 t <alloc::vec::Vec<regex_automata::nfa::thompson::literal_trie::State> as core::ops::drop::Drop>::drop
+0000000000043f10 0000000000000066 t <alloc::vec::Vec<regex_automata::nfa::thompson::nfa::State> as core::ops::drop::Drop>::drop
+0000000000043f80 000000000000006a t <alloc::vec::Vec<regex_automata::nfa::thompson::builder::State> as core::ops::drop::Drop>::drop
+0000000000043ff0 0000000000000204 t <alloc::vec::Vec<regex_syntax::hir::Properties> as core::fmt::Debug>::fmt
+0000000000044200 00000000000007bf t <regex_automata::nfa::thompson::compiler::Compiler>::c_at_least
+00000000000449c0 0000000000000184 t core::ptr::drop_in_place::<regex_syntax::hir::Hir>
+0000000000044b50 000000000000002e t <regex_automata::nfa::thompson::compiler::Compiler>::patch
+0000000000044b80 00000000000004ad t <regex_automata::nfa::thompson::compiler::Compiler>::c_cap
+0000000000045030 00000000000036bf t <regex_automata::nfa::thompson::compiler::Compiler>::c
+00000000000486f0 00000000000003ae t <regex_automata::nfa::thompson::compiler::Compiler>::c_bounded
+0000000000048aa0 000000000000022f t <regex_automata::nfa::thompson::compiler::Compiler>::c_concat::<core::iter::adapters::map::Map<core::ops::range::Range<u32>, <regex_automata::nfa::thompson::compiler::Compiler>::c_exactly::{closure#0}>>
+0000000000048cd0 00000000000003eb t <regex_automata::nfa::thompson::compiler::Compiler>::c_alt_iter::<core::iter::adapters::map::Map<core::slice::iter::Iter<regex_syntax::hir::Hir>, <regex_automata::nfa::thompson::compiler::Compiler>::c_alt_slice::{closure#1}>>
+00000000000490c0 000000000000041d t <regex_automata::nfa::thompson::compiler::Utf8Compiler>::new
+00000000000494e0 00000000000000fa t <regex_automata::nfa::thompson::compiler::Utf8Compiler>::finish
+00000000000495e0 00000000000001b6 t <regex_automata::nfa::thompson::compiler::Utf8Compiler>::add
+00000000000497a0 00000000000001c3 t <regex_automata::nfa::thompson::compiler::Utf8Compiler>::compile_from
+0000000000049970 00000000000003ab t <regex_automata::nfa::thompson::compiler::Utf8Compiler>::compile
+0000000000049d20 000000000000005b t <regex_automata::nfa::thompson::compiler::Compiler>::add_union_reverse
+0000000000049d80 000000000000005b t <regex_automata::nfa::thompson::compiler::Compiler>::add_union
+0000000000049de0 0000000000000041 t <regex_automata::nfa::thompson::compiler::Compiler>::add_empty
+0000000000049e30 0000000000000cc6 t <regex_automata::nfa::thompson::compiler::Compiler>::build_many_from_hir::<&regex_syntax::hir::Hir>
+000000000004ab00 00000000000002e0 t <core::iter::adapters::map::Map<core::slice::iter::Iter<&regex_syntax::hir::Hir>, <regex_automata::nfa::thompson::compiler::Compiler>::compile<&regex_syntax::hir::Hir>::{closure#1}> as core::iter::traits::iterator::Iterator>::next
+000000000004ade0 0000000000000321 t <regex_automata::nfa::thompson::compiler::Compiler>::new
+000000000004b110 0000000000000089 t <regex_automata::nfa::thompson::compiler::Compiler>::configure
+000000000004b1a0 00000000000049c4 t regex_automata::meta::strategy::new
+000000000004fb70 0000000000000372 t core::ptr::drop_in_place::<regex_automata::nfa::thompson::compiler::Compiler>
+000000000004fef0 0000000000000065 t core::ptr::drop_in_place::<regex_automata::nfa::thompson::error::BuildError>
+000000000004ff60 00000000000000a1 t core::ptr::drop_in_place::<regex_automata::meta::strategy::ReverseInner>
+0000000000050010 0000000000000a26 t <regex_automata::meta::strategy::ReverseInner as core::fmt::Debug>::fmt
+0000000000050a40 000000000000001e t <regex_automata::meta::strategy::ReverseInner as regex_automata::meta::strategy::Strategy>::name
+0000000000050a60 000000000000000d t <regex_automata::meta::strategy::ReverseInner as regex_automata::meta::strategy::Strategy>::group_info
+0000000000050a70 0000000000000201 t <regex_automata::meta::strategy::ReverseInner as regex_automata::meta::strategy::Strategy>::create_cache
+0000000000050c80 00000000000000a6 t <regex_automata::meta::strategy::ReverseInner as regex_automata::meta::strategy::Strategy>::reset_cache
+0000000000050d30 0000000000000008 t <regex_automata::meta::strategy::ReverseInner as regex_automata::meta::strategy::Strategy>::is_accelerated
+0000000000050d40 00000000000000a5 t <regex_automata::meta::strategy::ReverseInner as regex_automata::meta::strategy::Strategy>::memory_usage
+0000000000050df0 0000000000000106 t <regex_automata::meta::strategy::ReverseInner as regex_automata::meta::strategy::Strategy>::search
+0000000000050f00 00000000000000c7 t <regex_automata::meta::strategy::ReverseInner as regex_automata::meta::strategy::Strategy>::search_half
+0000000000050fd0 00000000000000b8 t <regex_automata::meta::strategy::ReverseInner as regex_automata::meta::strategy::Strategy>::is_match
+0000000000051090 00000000000002e1 t <regex_automata::meta::strategy::ReverseInner as regex_automata::meta::strategy::Strategy>::search_slots
+0000000000051380 0000000000000005 t <regex_automata::meta::strategy::ReverseInner as regex_automata::meta::strategy::Strategy>::which_overlapping_matches
+0000000000051390 0000000000000796 t <regex_automata::meta::strategy::Core as regex_automata::meta::strategy::Strategy>::which_overlapping_matches
+0000000000051b30 0000000000000292 t <regex_automata::meta::strategy::Core as regex_automata::meta::strategy::Strategy>::search_slots
+0000000000051dd0 0000000000000b12 t <regex_automata::meta::strategy::ReverseInner>::try_search_full
+00000000000528f0 000000000000013f t <regex_automata::meta::strategy::Core>::search_nofail
+0000000000052a30 000000000000008d t <regex_automata::meta::strategy::Core as regex_automata::meta::strategy::Strategy>::search
+0000000000052ac0 00000000000000c8 t <regex_automata::meta::strategy::Core as regex_automata::meta::strategy::Strategy>::is_match
+0000000000052b90 00000000000000a7 t <regex_automata::meta::strategy::Core as regex_automata::meta::strategy::Strategy>::search_half
+0000000000052c40 000000000000013a t <regex_automata::meta::strategy::Core as regex_automata::meta::strategy::Strategy>::memory_usage
+0000000000052d80 0000000000000012 t core::ptr::drop_in_place::<regex_automata::nfa::thompson::nfa::NFA>
+0000000000052da0 000000000000002a t <bool as core::fmt::Debug>::fmt
+0000000000052dd0 00000000000000ce t core::ptr::drop_in_place::<regex_automata::meta::strategy::Core>
+0000000000052ea0 0000000000000129 t <regex_automata::meta::strategy::Core as core::fmt::Debug>::fmt
+0000000000052fd0 000000000000009c t core::ptr::drop_in_place::<regex_automata::meta::wrappers::Hybrid>
+0000000000053070 00000000000000b7 t <regex_automata::meta::wrappers::Hybrid as core::fmt::Debug>::fmt
+0000000000053130 00000000000000b7 t <regex_automata::meta::wrappers::OnePass as core::fmt::Debug>::fmt
+00000000000531f0 00000000000000b7 t <regex_automata::meta::wrappers::BoundedBacktracker as core::fmt::Debug>::fmt
+00000000000532b0 0000000000000041 t core::ptr::drop_in_place::<regex_automata::meta::wrappers::PikeVM>
+0000000000053300 00000000000000b7 t <regex_automata::meta::wrappers::PikeVM as core::fmt::Debug>::fmt
+00000000000533c0 0000000000000017 t core::ptr::drop_in_place::<core::option::Option<regex_automata::nfa::thompson::nfa::NFA>>
+00000000000533e0 0000000000000139 t <core::option::Option<regex_automata::nfa::thompson::nfa::NFA> as core::fmt::Debug>::fmt
+0000000000053520 000000000000001f t core::ptr::drop_in_place::<core::option::Option<regex_automata::util::prefilter::Prefilter>>
+0000000000053540 0000000000000226 t <core::option::Option<regex_automata::util::prefilter::Prefilter> as core::fmt::Debug>::fmt
+0000000000053770 0000000000000012 t core::ptr::drop_in_place::<regex_automata::meta::regex::RegexInfo>
+0000000000053790 0000000000000209 t <regex_automata::meta::regex::RegexInfo as core::fmt::Debug>::fmt
+00000000000539a0 000000000000001e t <regex_automata::meta::strategy::Core as regex_automata::meta::strategy::Strategy>::name
+00000000000539c0 000000000000000d t <regex_automata::meta::strategy::Core as regex_automata::meta::strategy::Strategy>::group_info
+00000000000539d0 000000000000005f t <regex_automata::meta::strategy::Core as regex_automata::meta::strategy::Strategy>::create_cache
+0000000000053a30 000000000000006e t <regex_automata::meta::strategy::Core as regex_automata::meta::strategy::Strategy>::reset_cache
+0000000000053aa0 000000000000000a t <regex_automata::meta::strategy::Core as regex_automata::meta::strategy::Strategy>::is_accelerated
+0000000000053ab0 0000000000000005 t core::ptr::drop_in_place::<regex_automata::meta::strategy::ReverseAnchored>
+0000000000053ac0 00000000000000a6 t <regex_automata::meta::strategy::ReverseAnchored as core::fmt::Debug>::fmt
+0000000000053b70 000000000000001e t <regex_automata::meta::strategy::ReverseAnchored as regex_automata::meta::strategy::Strategy>::name
+0000000000053b90 000000000000005f t <regex_automata::meta::strategy::ReverseAnchored as regex_automata::meta::strategy::Strategy>::create_cache
+0000000000053bf0 000000000000006e t <regex_automata::meta::strategy::ReverseAnchored as regex_automata::meta::strategy::Strategy>::reset_cache
+0000000000053c60 0000000000000003 t <regex_automata::meta::strategy::ReverseAnchored as regex_automata::meta::strategy::Strategy>::is_accelerated
+0000000000053c70 0000000000000005 t <regex_automata::meta::strategy::ReverseAnchored as regex_automata::meta::strategy::Strategy>::memory_usage
+0000000000053c80 000000000000015d t <regex_automata::meta::strategy::ReverseAnchored as regex_automata::meta::strategy::Strategy>::search
+0000000000053de0 00000000000000f7 t <regex_automata::meta::strategy::ReverseAnchored as regex_automata::meta::strategy::Strategy>::search_half
+0000000000053ee0 000000000000011e t <regex_automata::meta::strategy::ReverseAnchored as regex_automata::meta::strategy::Strategy>::is_match
+0000000000054000 000000000000024c t <regex_automata::meta::strategy::ReverseAnchored as regex_automata::meta::strategy::Strategy>::search_slots
+0000000000054250 0000000000000005 t <regex_automata::meta::strategy::ReverseAnchored as regex_automata::meta::strategy::Strategy>::which_overlapping_matches
+0000000000054260 000000000000012c t <&regex_automata::meta::strategy::Core as core::fmt::Debug>::fmt
+0000000000054390 0000000000000282 t regex_automata::meta::prefix::hir_can_consume_byte
+0000000000054620 0000000000000115 t regex_automata::meta::prefix::has_disjoint_class_separator
+0000000000054740 0000000000000125 t regex_automata::meta::prefix::has_disjoint_class_separator_at
+0000000000054870 000000000000014e t regex_automata::meta::prefix::class_is_disjoint_from_literal
+00000000000549c0 00000000000001b8 t regex_automata::meta::prefix::hir_is_disjoint_from_class
+0000000000054b80 00000000000000b5 t regex_automata::util::utf8::decode_last
+0000000000054c40 00000000000000f1 t regex_automata::util::utf8::decode
+0000000000054d40 000000000000017a t <regex_automata::util::escape::DebugByte as core::fmt::Debug>::fmt
+0000000000054ec0 00000000000000b1 t <usize as core::fmt::Debug>::fmt
+0000000000054f80 0000000000000112 t <regex_automata::util::start::StartByteMap as core::fmt::Debug>::fmt
+00000000000550a0 000000000000002c t <regex_automata::util::start::Start as core::fmt::Debug>::fmt
+00000000000550d0 000000000000019e t <&regex_automata::util::alphabet::BitSet as core::fmt::Debug>::fmt
+0000000000055270 000000000000013f t <u8 as core::fmt::Debug>::fmt
+00000000000553b0 00000000000000a9 t <&regex_automata::util::alphabet::ByteSet as core::fmt::Debug>::fmt
+0000000000055460 000000000000034c t <regex_automata::util::alphabet::ByteClasses as core::fmt::Debug>::fmt
+00000000000557b0 000000000000005d t <regex_automata::util::alphabet::Unit as core::fmt::Debug>::fmt
+0000000000055810 0000000000000488 t <regex_automata::util::sparse_set::SparseSets>::new
+0000000000055ca0 00000000000002eb t <regex_automata::nfa::thompson::pikevm::ActiveStates>::reset
+0000000000055f90 00000000000000d5 t <regex_automata::nfa::thompson::pikevm::PikeVM>::search_slots_imp
+0000000000056070 0000000000000576 t <regex_automata::nfa::thompson::pikevm::PikeVM>::search_imp
+00000000000565f0 0000000000000220 t <regex_automata::nfa::thompson::pikevm::PikeVM>::next
+0000000000056810 0000000000000b58 t <regex_automata::nfa::thompson::pikevm::PikeVM>::epsilon_closure
+0000000000057370 0000000000000038 t <regex_automata::nfa::thompson::pikevm::SlotTable>::for_state
+00000000000573b0 000000000000048e t regex_automata::util::determinize::add_nfa_states
+0000000000057840 00000000000003c9 t regex_automata::util::determinize::epsilon_closure
+0000000000057c10 000000000000002a t <regex_automata::meta::error::RetryError as core::convert::From<regex_automata::util::search::MatchError>>::from
+0000000000057c40 00000000000001e3 t <&regex_automata::nfa::thompson::pikevm::PikeVM as core::fmt::Debug>::fmt
+0000000000057e30 00000000000000cb t <regex_automata::nfa::thompson::pikevm::Config as core::fmt::Debug>::fmt
+0000000000057f00 0000000000000163 t <core::option::Option<regex_automata::util::search::MatchKind> as core::fmt::Debug>::fmt
+0000000000058070 000000000000027f t alloc::str::join_generic_copy::<str, u8, alloc::string::String>
+00000000000582f0 0000000000000173 t regex_automata::util::empty::skip_splits_fwd::<regex_automata::util::search::HalfMatch, <regex_automata::nfa::thompson::pikevm::PikeVM>::search_slots_imp::{closure#0}>
+0000000000058470 0000000000000130 t regex_automata::util::empty::skip_splits_fwd::<regex_automata::util::search::HalfMatch, <regex_automata::hybrid::dfa::DFA>::try_search_fwd::{closure#0}>
+00000000000585a0 0000000000000061 t regex_automata::hybrid::search::find_fwd
+0000000000058610 0000000000000a0c t regex_automata::hybrid::search::find_fwd_imp
+0000000000059020 00000000000004e1 t regex_automata::hybrid::search::eoi_fwd
+0000000000059510 0000000000000148 t regex_automata::util::empty::skip_splits_rev::<regex_automata::util::search::HalfMatch, <regex_automata::hybrid::dfa::DFA>::try_search_rev::{closure#0}>
+0000000000059660 000000000000002b t regex_automata::hybrid::search::find_rev
+0000000000059690 00000000000006ed t regex_automata::hybrid::search::find_rev_imp
+0000000000059d80 000000000000050a t regex_automata::hybrid::search::eoi_rev
+000000000005a290 00000000000004e2 t regex_automata::meta::limited::hybrid_try_search_half_rev
+000000000005a780 000000000000050a t regex_automata::meta::limited::hybrid_eoi_rev
+000000000005ac90 0000000000000768 t regex_automata::hybrid::search::find_overlapping_fwd
+000000000005b400 0000000000000996 t <regex_automata::hybrid::dfa::Builder>::build_from_nfa
+000000000005bda0 00000000000000bb t regex_automata::hybrid::dfa::skip_empty_utf8_splits_overlapping::<<regex_automata::hybrid::dfa::DFA>::try_search_overlapping_fwd::{closure#0}>
+000000000005be60 0000000000000a53 t <regex_automata::hybrid::dfa::Lazy>::clear_cache
+000000000005c8c0 00000000000012c5 t <regex_automata::hybrid::dfa::Lazy>::init_cache
+000000000005db90 00000000000000a7 t <regex_automata::hybrid::dfa::Lazy>::next_state_id
+000000000005dc40 000000000000028b t <regex_automata::hybrid::dfa::DFA>::start_state
+000000000005ded0 0000000000000c18 t <regex_automata::hybrid::dfa::Lazy>::cache_start_group
+000000000005eaf0 0000000000000294 t <regex_automata::hybrid::dfa::DFA>::start_state_forward
+000000000005ed90 0000000000000270 t <regex_automata::hybrid::dfa::DFA>::start_state_reverse
+000000000005f000 000000000000040d t <regex_automata::hybrid::dfa::Cache>::reset
+000000000005f410 0000000000001643 t <regex_automata::hybrid::dfa::Lazy>::cache_next_state
+0000000000060a60 000000000000038a t <regex_automata::hybrid::dfa::Builder>::configure
+0000000000060df0 00000000000000f1 t <&regex_automata::hybrid::dfa::DFA as core::fmt::Debug>::fmt
+0000000000060ef0 00000000000000a6 t <regex_automata::util::alphabet::ByteSet as core::fmt::Debug>::fmt
+0000000000060fa0 0000000000000027 t core::ptr::drop_in_place::<regex_automata::hybrid::dfa::Config>
+0000000000060fd0 0000000000000145 t <regex_automata::hybrid::dfa::Config as core::fmt::Debug>::fmt
+0000000000061120 00000000000000dc t <core::option::Option<core::option::Option<usize>> as core::fmt::Debug>::fmt
+0000000000061200 00000000000000e0 t <core::option::Option<usize> as core::fmt::Debug>::fmt
+00000000000612e0 00000000000000e0 t <core::option::Option<regex_automata::util::alphabet::ByteSet> as core::fmt::Debug>::fmt
+00000000000613c0 0000000000000178 t <core::option::Option<bool> as core::fmt::Debug>::fmt
+0000000000061540 0000000000000025 t core::ptr::drop_in_place::<core::option::Option<core::option::Option<regex_automata::util::prefilter::Prefilter>>>
+0000000000061570 00000000000000dd t <core::option::Option<core::option::Option<regex_automata::util::prefilter::Prefilter>> as core::fmt::Debug>::fmt
+0000000000061650 00000000000001f3 t <regex_automata::util::captures::GroupInfoInner>::add_first_group
+0000000000061850 00000000000001d6 t <regex_automata::util::captures::Captures>::all
+0000000000061a30 0000000000000293 t regex_automata::util::prefilter::suffixes::<&regex_syntax::hir::Hir>
+0000000000061cd0 000000000000014d t <&u8 as core::fmt::Debug>::fmt
+0000000000061e20 00000000000008ba t <regex_automata::nfa::thompson::literal_trie::LiteralTrie>::compile
+00000000000626e0 00000000000000eb t <regex_automata::nfa::thompson::literal_trie::LiteralTrie>::forward
+00000000000627d0 00000000000000eb t <regex_automata::nfa::thompson::literal_trie::LiteralTrie>::reverse
+00000000000628c0 00000000000000b1 t <&usize as core::fmt::Debug>::fmt
+0000000000062980 00000000000000b9 t <regex_automata::util::search::MatchError>::quit
+0000000000062a40 00000000000000a8 t <regex_automata::util::search::MatchError>::gave_up
+0000000000062af0 0000000000000b74 t <alloc::collections::btree::map::BTreeMap<regex_automata::util::determinize::state::State, regex_automata::hybrid::id::LazyStateID>>::insert
+0000000000063670 000000000000002d t <&bool as core::fmt::Debug>::fmt
+00000000000636a0 0000000000000012 t <&str as core::fmt::Display>::fmt
+00000000000636c0 0000000000000267 t <regex_automata::nfa::thompson::range_trie::RangeTrie>::iter::<regex_automata::nfa::thompson::error::BuildError, <regex_automata::nfa::thompson::compiler::Compiler>::c_unicode_class::{closure#0}>
+0000000000063930 00000000000001a4 t <regex_automata::nfa::thompson::range_trie::RangeTrie>::clear
+0000000000063ae0 0000000000000030 t <&regex_automata::util::look::Look as core::fmt::Debug>::fmt
+0000000000063b10 000000000000000b t core::panicking::assert_failed::<regex_automata::hybrid::id::LazyStateID, regex_automata::hybrid::id::LazyStateID>
+0000000000063b20 000000000000005f t <regex_automata::util::determinize::state::State>::match_pattern
+0000000000063b80 00000000000000e3 t <regex_automata::util::determinize::state::State>::dead
+0000000000063c70 000000000000035e t <regex_automata::nfa::thompson::nfa::Inner>::add
+0000000000063fd0 0000000000000270 t <regex_automata::nfa::thompson::nfa::Inner as core::fmt::Debug>::fmt
+0000000000064240 000000000000077a t <&regex_automata::nfa::thompson::nfa::State as core::fmt::Debug>::fmt
+00000000000649c0 00000000000000bc t <regex_automata::nfa::thompson::nfa::Transition as core::fmt::Debug>::fmt
+0000000000064a80 00000000000000ba t <&regex_syntax::hir::Properties as core::fmt::Debug>::fmt
+0000000000064b40 0000000000000146 t <&alloc::boxed::Box<regex_syntax::hir::PropertiesI> as core::fmt::Debug>::fmt
+0000000000064c90 00000000000000bf t <&regex_automata::nfa::thompson::nfa::Transition as core::fmt::Debug>::fmt
+0000000000064d50 0000000000000016 t <regex_automata::nfa::thompson::nfa::NFA as core::fmt::Debug>::fmt
+0000000000064d70 0000000000000126 t <alloc::boxed::Box<[u8]> as core::clone::Clone>::clone
+0000000000064ea0 0000000000000259 t <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::sync::Arc<str>, regex_automata::util::primitives::SmallIndex, alloc::collections::btree::node::marker::Internal>, alloc::collections::btree::node::marker::KV>>::split::<alloc::alloc::Global>
+0000000000065100 0000000000000139 t <regex_automata::util::iter::Searcher>::handle_overlapping_empty_match::<<regex_automata::meta::regex::FindMatches as core::iter::traits::iterator::Iterator>::next::{closure#0}>
+0000000000065240 000000000000007d t <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+00000000000652c0 00000000000001e7 t <alloc::raw_vec::RawVecInner>::finish_grow
+00000000000654b0 00000000000000d8 t <alloc::sync::Arc<regex_automata::meta::regex::RegexInfoI>>::drop_slow
+0000000000065590 000000000000006c t <alloc::sync::Arc<dyn regex_automata::meta::strategy::Strategy>>::drop_slow
+0000000000065600 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::hir::Properties>>::grow_one
+0000000000065670 0000000000000132 t <alloc::raw_vec::RawVecInner>::shrink_unchecked
+00000000000657b0 0000000000000063 t <alloc::raw_vec::RawVec<alloc::vec::Vec<core::option::Option<alloc::sync::Arc<str>>>>>::grow_one
+0000000000065820 0000000000000063 t <alloc::raw_vec::RawVec<core::option::Option<alloc::sync::Arc<str>>>>::grow_one
+0000000000065890 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::utf8::Utf8Range>>::grow_one
+0000000000065900 0000000000000063 t <alloc::raw_vec::RawVec<regex_automata::util::primitives::StateID>>::grow_one
+0000000000065970 0000000000000063 t <alloc::raw_vec::RawVec<regex_automata::nfa::thompson::range_trie::NextInsert>>::grow_one
+00000000000659e0 0000000000000063 t <alloc::raw_vec::RawVec<regex_automata::nfa::thompson::range_trie::Transition>>::grow_one
+0000000000065a50 0000000000000063 t <alloc::raw_vec::RawVec<regex_automata::nfa::thompson::literal_trie::Frame>>::grow_one
+0000000000065ac0 0000000000000063 t <alloc::raw_vec::RawVec<regex_automata::nfa::thompson::literal_trie::State>>::grow_one
+0000000000065b30 0000000000000063 t <alloc::raw_vec::RawVec<regex_automata::nfa::thompson::builder::State>>::grow_one
+0000000000065ba0 00000000000001cd t <alloc::raw_vec::RawVecInner>::try_allocate_in
+0000000000065d70 0000000000000948 t <regex_automata::meta::regex::Builder>::build_from_hir
+00000000000666c0 0000000000000019 t core::ptr::drop_in_place::<<regex_automata::meta::regex::Builder>::build_many_from_hir<&regex_syntax::hir::Hir>::{closure#1}>
+00000000000666e0 0000000000000040 t <<regex_automata::meta::regex::Builder>::build_many_from_hir<&regex_syntax::hir::Hir>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
+0000000000066720 0000000000000020 t <regex_automata::meta::regex::Builder>::build_many_from_hir::<&regex_syntax::hir::Hir>::{closure#1}
+0000000000066740 000000000000015f t <alloc::sync::Arc<regex_automata::util::captures::GroupInfoInner>>::drop_slow
+00000000000668a0 0000000000000098 t <alloc::sync::Arc<regex_automata::nfa::thompson::nfa::Inner>>::drop_slow
+0000000000066940 0000000000000025 t <alloc::sync::Arc<[u8]>>::drop_slow
+0000000000066970 0000000000000106 t <alloc::sync::Arc<[u8]>>::copy_from_slice
+0000000000066a80 0000000000000600 t regex_automata::util::syntax::parse_with
+0000000000067080 0000000000000190 t <regex_automata::meta::regex::Config as core::fmt::Debug>::fmt
+0000000000067210 0000000000000151 t <core::option::Option<regex_automata::nfa::thompson::compiler::WhichCaptures> as core::fmt::Debug>::fmt
+0000000000067370 0000000000000020 t <alloc::sync::Arc<dyn regex_automata::util::prefilter::PrefilterI> as core::fmt::Debug>::fmt
+0000000000067390 0000000000000147 t core::slice::sort::shared::smallsort::insert_tail::<regex_syntax::hir::literal::Literal, <regex_syntax::hir::literal::Literal as core::cmp::PartialOrd>::lt>
+00000000000674e0 000000000000080a t core::slice::sort::stable::drift::sort::<regex_syntax::hir::literal::Literal, <regex_syntax::hir::literal::Literal as core::cmp::PartialOrd>::lt>
+0000000000067cf0 0000000000000b27 t core::slice::sort::stable::quicksort::quicksort::<regex_syntax::hir::literal::Literal, <regex_syntax::hir::literal::Literal as core::cmp::PartialOrd>::lt>
+0000000000068820 00000000000002ee t core::slice::sort::shared::smallsort::sort4_stable::<regex_syntax::hir::literal::Literal, <regex_syntax::hir::literal::Literal as core::cmp::PartialOrd>::lt>
+0000000000068b10 000000000000018d t core::slice::sort::shared::pivot::median3_rec::<regex_syntax::hir::literal::Literal, <regex_syntax::hir::literal::Literal as core::cmp::PartialOrd>::lt>
+0000000000068ca0 000000000000015e t <regex_automata::nfa::thompson::builder::Builder>::add
+0000000000068e00 00000000000034e7 t <regex_automata::nfa::thompson::builder::Builder>::build
+000000000006c2f0 00000000000000ec t <regex_automata::nfa::thompson::builder::Builder>::patch
+000000000006c3e0 0000000000000186 t core::slice::sort::stable::driftsort_main::<regex_syntax::hir::literal::Literal, <regex_syntax::hir::literal::Literal as core::cmp::PartialOrd>::lt, alloc::vec::Vec<regex_syntax::hir::literal::Literal>>
+000000000006c570 000000000000073e t <regex_automata::meta::reverse_inner::InnerPrefilter>::new
+000000000006ccb0 00000000000001a8 t core::ptr::drop_in_place::<regex_syntax::hir::HirKind>
+000000000006ce60 0000000000000168 t regex_automata::meta::reverse_inner::prefilter_with_literals
+000000000006cfd0 000000000000018f t <regex_automata::meta::wrappers::PikeVMCache>::reset
+000000000006d160 0000000000000012 t <regex_automata::meta::wrappers::OnePassEngine>::get_nfa
+000000000006d180 0000000000000012 t <regex_automata::meta::wrappers::OnePassEngine>::search_slots
+000000000006d1a0 00000000000002c8 t <regex_automata::meta::wrappers::Hybrid>::create_cache
+000000000006d470 00000000000002a6 t <regex_automata::meta::wrappers::HybridEngine>::try_search
+000000000006d720 0000000000000118 t <regex_automata::meta::wrappers::HybridEngine>::try_search_half_fwd
+000000000006d840 0000000000000126 t <regex_automata::meta::wrappers::HybridEngine>::try_search_half_rev
+000000000006d970 000000000000019e t <regex_automata::meta::wrappers::PikeVMEngine>::search_slots
+000000000006db10 00000000000002cc t <regex_automata::nfa::thompson::pikevm::PikeVM>::search_slots
+000000000006dde0 00000000000001f5 t <regex_automata::meta::wrappers::PikeVMEngine>::is_match
+000000000006dfe0 000000000000046d t <regex_automata::nfa::thompson::map::Utf8SuffixMap>::clear
+000000000006e450 0000000000000012 t <regex_automata::meta::wrappers::DFAEngine>::try_search
+000000000006e470 0000000000000012 t <regex_automata::meta::wrappers::DFAEngine>::try_search_half_fwd
+000000000006e490 0000000000000012 t <regex_automata::meta::wrappers::DFAEngine>::try_search_half_rev
+000000000006e4b0 0000000000000012 t <regex_automata::meta::wrappers::DFAEngine>::try_search_half_fwd_stopat
+000000000006e4d0 00000000000002bd t <regex_automata::meta::wrappers::ReverseHybrid>::new
+000000000006e790 0000000000000012 t <regex_automata::meta::wrappers::ReverseDFAEngine>::try_search_half_rev_limited
+000000000006e7b0 00000000000000c5 t regex_automata::meta::reverse_inner::has_no_earlier_match
+000000000006e880 0000000000000b74 t regex_automata::meta::reverse_inner::flatten
+000000000006f400 00000000000000e0 t <&core::option::Option<core::option::Option<regex_automata::util::prefilter::Prefilter>> as core::fmt::Debug>::fmt
+000000000006f4e0 0000000000000227 t <&core::option::Option<regex_automata::util::prefilter::Prefilter> as core::fmt::Debug>::fmt
+000000000006f710 00000000000000df t <&core::option::Option<core::option::Option<usize>> as core::fmt::Debug>::fmt
+000000000006f7f0 00000000000000e3 t <&core::option::Option<usize> as core::fmt::Debug>::fmt
+000000000006f8e0 00000000000000e7 t <&core::option::Option<regex_automata::meta::wrappers::HybridEngine> as core::fmt::Debug>::fmt
+000000000006f9d0 00000000000000ba t <&regex_automata::meta::wrappers::HybridEngine as core::fmt::Debug>::fmt
+000000000006fa90 00000000000003f9 t <&regex_automata::hybrid::regex::Regex as core::fmt::Debug>::fmt
+000000000006fe90 0000000000000145 t <regex_automata::hybrid::dfa::Config as core::fmt::Debug>::fmt
+000000000006ffe0 00000000000000e2 t <&core::option::Option<regex_automata::meta::wrappers::OnePassEngine> as core::fmt::Debug>::fmt
+00000000000700d0 0000000000000120 t <&regex_automata::meta::wrappers::OnePassEngine as core::fmt::Debug>::fmt
+00000000000701f0 00000000000000e7 t <&core::option::Option<regex_automata::meta::wrappers::ReverseHybridEngine> as core::fmt::Debug>::fmt
+00000000000702e0 00000000000002ed t <&regex_automata::meta::wrappers::ReverseHybridEngine as core::fmt::Debug>::fmt
+00000000000705d0 00000000000000e2 t <&core::option::Option<regex_automata::meta::wrappers::BoundedBacktrackerEngine> as core::fmt::Debug>::fmt
+00000000000706c0 0000000000000120 t <&regex_automata::meta::wrappers::BoundedBacktrackerEngine as core::fmt::Debug>::fmt
+00000000000707e0 00000000000000e2 t <&core::option::Option<u8> as core::fmt::Debug>::fmt
+00000000000708d0 00000000000000ba t <&regex_automata::meta::wrappers::ReverseDFA as core::fmt::Debug>::fmt
+0000000000070990 00000000000000e2 t <&core::option::Option<regex_automata::meta::wrappers::ReverseDFAEngine> as core::fmt::Debug>::fmt
+0000000000070a80 0000000000000120 t <&regex_automata::meta::wrappers::ReverseDFAEngine as core::fmt::Debug>::fmt
+0000000000070ba0 00000000000000ba t <&regex_automata::meta::wrappers::PikeVMEngine as core::fmt::Debug>::fmt
+0000000000070c60 00000000000000ba t <&regex_automata::meta::wrappers::DFA as core::fmt::Debug>::fmt
+0000000000070d20 00000000000000e2 t <&core::option::Option<regex_automata::meta::wrappers::DFAEngine> as core::fmt::Debug>::fmt
+0000000000070e10 0000000000000120 t <&regex_automata::meta::wrappers::DFAEngine as core::fmt::Debug>::fmt
+0000000000070f30 0000000000000075 t core::ptr::drop_in_place::<regex_syntax::ast::Group>
+0000000000070fb0 0000000000000127 t core::ptr::drop_in_place::<regex_syntax::ast::ClassSet>
+00000000000710e0 00000000000003b3 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::bump_space
+00000000000714a0 00000000000000a2 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::char
+0000000000071550 0000000000000805 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::pop_group_end
+0000000000071d60 0000000000000106 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::bump
+0000000000071e70 0000000000001060 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_escape
+0000000000072ed0 000000000000047c t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::push_group
+0000000000073350 0000000000000f09 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::pop_group
+0000000000074260 0000000000000399 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::push_alternate
+0000000000074600 00000000000008a6 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_set_class
+0000000000074eb0 0000000000000845 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_uncounted_repetition
+0000000000075700 0000000000000e26 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_counted_repetition
+0000000000076530 000000000000065b t <regex_syntax::ast::parse::NestLimiter<&mut regex_syntax::ast::parse::Parser>>::check
+0000000000076b90 00000000000001e5 t core::ptr::drop_in_place::<regex_syntax::ast::Ast>
+0000000000076d80 0000000000000829 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_decimal
+00000000000775b0 00000000000001bb t regex_syntax::ast::parse::specialize_err::<u32>
+0000000000077770 00000000000000f8 t <u8 as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
+0000000000077870 000000000000002c t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::bump_and_bump_space
+00000000000778a0 000000000000009e t alloc::boxed::box_new_uninit
+0000000000077940 000000000000022d t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::unclosed_class_error
+0000000000077b70 0000000000000ac8 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_set_class_range
+0000000000078640 00000000000003ec t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::pop_class
+0000000000078a30 00000000000000e5 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::peek
+0000000000078b20 000000000000047f t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::maybe_parse_ascii_class
+0000000000078fa0 0000000000000250 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::push_class_open
+00000000000791f0 00000000000000cf t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::bump_if
+00000000000792c0 0000000000000204 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::push_class_op
+00000000000794d0 000000000000039e t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::pop_class_op
+0000000000079870 0000000000000af8 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_set_class_open
+000000000007a370 000000000000014c t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_set_class_item
+000000000007a4c0 00000000000002bc t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::peek_space
+000000000007a780 0000000000000239 t <regex_syntax::ast::parse::Primitive>::into_class_literal::<&mut regex_syntax::ast::parse::Parser>
+000000000007a9c0 0000000000000081 t core::ptr::drop_in_place::<regex_syntax::ast::parse::Primitive>
+000000000007aa50 0000000000000cd1 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_group
+000000000007b730 0000000000000d66 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_flags
+000000000007c4a0 0000000000000cd0 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_capture_name
+000000000007d170 000000000000025d t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_flag
+000000000007d3d0 000000000000024d t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_hex
+000000000007d620 000000000000142e t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_unicode_class
+000000000007ea50 0000000000000173 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_perl_class
+000000000007ebd0 0000000000000051 t regex_syntax::is_escapeable_character
+000000000007ec30 0000000000000816 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::maybe_parse_special_word_boundary
+000000000007f450 0000000000000269 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_octal
+000000000007f6c0 0000000000000b65 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_hex_brace
+0000000000080230 0000000000000bb7 t <regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_hex_digits
+0000000000080df0 00000000000001f8 t <regex_syntax::ast::parse::NestLimiter<&mut regex_syntax::ast::parse::Parser>>::increment_depth
+0000000000080ff0 0000000000000158 t <alloc::vec::Vec<regex_syntax::hir::literal::Literal>>::dedup_by::<<regex_syntax::hir::literal::Seq>::dedup::{closure#0}>
+0000000000081150 00000000000000ed t <alloc::vec::Vec<regex_syntax::ast::Ast>>::extend_trusted::<alloc::vec::drain::Drain<regex_syntax::ast::Ast>>
+0000000000081240 00000000000001bc t <alloc::vec::Vec<regex_syntax::hir::Hir>>::extend_trusted::<alloc::vec::drain::Drain<regex_syntax::hir::Hir>>
+0000000000081400 0000000000000108 t <alloc::vec::Vec<u8>>::into_boxed_slice
+0000000000081510 00000000000001d0 t <alloc::vec::Vec<regex_syntax::hir::ClassBytesRange> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<regex_syntax::hir::ClassBytesRange, core::iter::adapters::map::Map<core::iter::adapters::copied::Copied<core::slice::iter::Iter<(u8, u8)>>, regex_syntax::hir::translate::hir_ascii_class_bytes::{closure#0}>>>::from_iter
+00000000000816e0 000000000000027b t <alloc::vec::Vec<regex_syntax::hir::literal::Literal> as core::clone::Clone>::clone
+0000000000081960 000000000000013e t <alloc::vec::Vec<regex_syntax::ast::ClassSetItem> as core::ops::drop::Drop>::drop
+0000000000081aa0 00000000000002e6 t core::ptr::drop_in_place::<regex_syntax::ast::ClassSetItem>
+0000000000081d90 0000000000000043 t core::ptr::drop_in_place::<alloc::boxed::Box<regex_syntax::ast::ClassSet>>
+0000000000081de0 0000000000000285 t core::ptr::drop_in_place::<regex_syntax::ast::Ast>
+0000000000082070 0000000000000044 t <alloc::vec::Vec<regex_syntax::hir::Hir> as core::ops::drop::Drop>::drop
+00000000000820c0 00000000000001a8 t core::ptr::drop_in_place::<regex_syntax::hir::HirKind>
+0000000000082270 0000000000000049 t <alloc::vec::Vec<regex_syntax::hir::literal::Literal> as core::ops::drop::Drop>::drop
+00000000000822c0 0000000000000554 t <regex_syntax::hir::Hir as core::ops::drop::Drop>::drop
+0000000000082820 00000000000001a8 t core::ptr::drop_in_place::<regex_syntax::hir::HirKind>
+00000000000829d0 000000000000171f t <regex_syntax::hir::Hir>::alternation
+00000000000840f0 000000000000019b t <regex_syntax::hir::Hir>::into_parts
+0000000000084290 00000000000001ae t <regex_syntax::hir::Properties>::class
+0000000000084440 000000000000023b t <regex_syntax::hir::Hir>::class
+0000000000084680 00000000000003b4 t <regex_syntax::hir::Properties>::alternation
+0000000000084a40 0000000000000f78 t <regex_syntax::hir::Hir>::concat
+00000000000859c0 000000000000036a t <regex_syntax::hir::Hir as core::cmp::PartialEq>::eq
+0000000000085d30 0000000000000232 t <regex_syntax::hir::Hir>::literal::<alloc::vec::Vec<u8>>
+0000000000085f70 0000000000000135 t <regex_syntax::hir::ClassUnicode>::literal
+00000000000860b0 0000000000000017 t core::ptr::drop_in_place::<alloc::string::String>
+00000000000860d0 000000000000006c t <alloc::string::String as core::fmt::Write>::write_str
+0000000000086140 0000000000000128 t <alloc::string::String as core::fmt::Write>::write_char
+0000000000086270 000000000000010a t <regex_syntax::hir::Class>::literal
+0000000000086380 0000000000000453 t <regex_syntax::hir::ClassUnicode>::push
+00000000000867e0 00000000000002c9 t <regex_syntax::hir::ClassUnicode>::negate
+0000000000086ab0 000000000000017f t <regex_syntax::hir::ClassBytes>::case_fold_simple
+0000000000086c30 00000000000004df t <regex_syntax::hir::ClassBytes>::push
+0000000000087110 00000000000001ec t <regex_syntax::hir::ClassBytes>::negate
+0000000000087300 000000000000020d t <regex_syntax::hir::Properties>::repetition
+0000000000087510 00000000000000f4 t <regex_syntax::hir::Properties>::look
+0000000000087610 00000000000000fa t <regex_syntax::hir::Properties>::empty
+0000000000087710 0000000000000117 t <regex_syntax::hir::Properties>::literal
+0000000000087830 00000000000000c8 t <regex_syntax::hir::LookSet as core::fmt::Debug>::fmt
+0000000000087900 0000000000001839 t <regex_syntax::hir::literal::Extractor>::extract
+0000000000089140 000000000000060d t <regex_syntax::hir::literal::Extractor>::union
+0000000000089750 0000000000001039 t <regex_syntax::hir::literal::Extractor>::cross
+000000000008a790 000000000000023a t <regex_syntax::hir::literal::Seq>::cross_preamble
+000000000008a9d0 0000000000000b66 t <regex_syntax::hir::literal::Seq>::optimize_by_preference
+000000000008b540 00000000000001ee t <regex_syntax::hir::literal::PreferenceTrie>::minimize
+000000000008b730 0000000000000083 t core::ptr::drop_in_place::<regex_syntax::hir::literal::Seq>
+000000000008b7c0 0000000000000390 t <regex_syntax::hir::literal::PreferenceTrie>::insert
+000000000008bb50 000000000000309a t <regex_syntax::hir::translate::TranslatorI as regex_syntax::ast::visitor::Visitor>::visit_post
+000000000008ebf0 000000000000027b t <regex_syntax::hir::Hir>::class
+000000000008ee70 000000000000046c t <regex_syntax::hir::translate::TranslatorI>::hir_unicode_class
+000000000008f2e0 0000000000000092 t <regex_syntax::hir::translate::TranslatorI>::push
+000000000008f380 000000000000025c t <regex_syntax::hir::translate::TranslatorI>::push_char
+000000000008f5e0 0000000000000238 t <regex_syntax::hir::translate::TranslatorI>::hir_perl_byte_class
+000000000008f820 000000000000030c t <regex_syntax::hir::translate::TranslatorI>::convert_unicode_class_error
+000000000008fb30 0000000000000197 t <regex_syntax::hir::translate::TranslatorI>::bytes_fold_and_negate
+000000000008fcd0 00000000000001f7 t <regex_syntax::hir::translate::HirFrame>::unwrap_expr
+000000000008fed0 0000000000000075 t core::ptr::drop_in_place::<regex_syntax::hir::translate::HirFrame>
+000000000008ff50 0000000000000184 t core::ptr::drop_in_place::<regex_syntax::hir::Hir>
+00000000000900e0 0000000000002144 t <regex_syntax::hir::translate::TranslatorI as regex_syntax::ast::visitor::Visitor>::visit_class_set_item_post
+0000000000092230 00000000000002d1 t <regex_syntax::hir::translate::TranslatorI>::class_literal_byte
+0000000000092510 0000000000000135 t <regex_syntax::hir::translate::TranslatorI as regex_syntax::ast::visitor::Visitor>::visit_class_set_binary_op_in
+0000000000092650 0000000000000184 t core::slice::sort::stable::driftsort_main::<regex_syntax::hir::ClassBytesRange, <regex_syntax::hir::ClassBytesRange as core::cmp::PartialOrd>::lt, alloc::vec::Vec<regex_syntax::hir::ClassBytesRange>>
+00000000000927e0 00000000000006c8 t core::slice::sort::stable::drift::sort::<regex_syntax::hir::ClassBytesRange, <regex_syntax::hir::ClassBytesRange as core::cmp::PartialOrd>::lt>
+0000000000092eb0 0000000000000187 t core::slice::sort::stable::driftsort_main::<regex_syntax::hir::ClassUnicodeRange, <regex_syntax::hir::ClassUnicodeRange as core::cmp::PartialOrd>::lt, alloc::vec::Vec<regex_syntax::hir::ClassUnicodeRange>>
+0000000000093040 0000000000000698 t core::slice::sort::stable::drift::sort::<regex_syntax::hir::ClassUnicodeRange, <regex_syntax::hir::ClassUnicodeRange as core::cmp::PartialOrd>::lt>
+00000000000936e0 0000000000000102 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassBytesRange>>::new::<[regex_syntax::hir::ClassBytesRange; 1]>
+00000000000937f0 0000000000000202 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassBytesRange>>::canonicalize
+0000000000093a00 000000000000012c t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassBytesRange>>::new::<[regex_syntax::hir::ClassBytesRange; 3]>
+0000000000093b30 0000000000000059 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassBytesRange>>::new::<alloc::vec::Vec<regex_syntax::hir::ClassBytesRange>>
+0000000000093b90 0000000000000105 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassUnicodeRange>>::new::<[regex_syntax::hir::ClassUnicodeRange; 1]>
+0000000000093ca0 00000000000001bf t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassUnicodeRange>>::canonicalize
+0000000000093e60 0000000000000143 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassUnicodeRange>>::new::<[regex_syntax::hir::ClassUnicodeRange; 3]>
+0000000000093fb0 0000000000000059 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassUnicodeRange>>::new::<alloc::vec::Vec<regex_syntax::hir::ClassUnicodeRange>>
+0000000000094010 0000000000000380 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassBytesRange>>::difference
+0000000000094390 00000000000001c9 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassBytesRange>>::intersect
+0000000000094560 00000000000000c4 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassBytesRange>>::union
+0000000000094630 00000000000003b6 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassUnicodeRange>>::difference
+00000000000949f0 00000000000001d4 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassUnicodeRange>>::intersect
+0000000000094bd0 00000000000000c8 t <regex_syntax::hir::interval::IntervalSet<regex_syntax::hir::ClassUnicodeRange>>::union
+0000000000094ca0 00000000000000b3 t <regex_syntax::ast::Ast>::repetition
+0000000000094d60 00000000000000d3 t <regex_syntax::ast::Ast>::empty
+0000000000094e40 00000000000039c7 t <regex_syntax::parser::Parser>::parse
+0000000000098810 0000000000000258 t core::ptr::drop_in_place::<regex_syntax::ast::Ast>
+0000000000098a70 00000000000003c0 t <regex_syntax::ast::Ast as core::ops::drop::Drop>::drop
+0000000000098e30 000000000000055f t <regex_syntax::ast::ClassSet as core::ops::drop::Drop>::drop
+0000000000099390 00000000000001d7 t <regex_syntax::ast::Concat>::into_ast
+0000000000099570 000000000000016d t <regex_syntax::ast::ClassSetUnion>::push
+00000000000996e0 000000000000009d t core::slice::sort::shared::smallsort::insertion_sort_shift_left::<regex_syntax::hir::ClassBytesRange, <regex_syntax::hir::ClassBytesRange as core::cmp::PartialOrd>::lt>
+0000000000099780 000000000000008a t core::slice::sort::shared::smallsort::insertion_sort_shift_left::<regex_syntax::hir::ClassUnicodeRange, <regex_syntax::hir::ClassUnicodeRange as core::cmp::PartialOrd>::lt>
+0000000000099810 00000000000004f6 t core::slice::sort::shared::smallsort::sort8_stable::<regex_syntax::hir::ClassBytesRange, <regex_syntax::hir::ClassBytesRange as core::cmp::PartialOrd>::lt>
+0000000000099d10 00000000000004bf t core::slice::sort::shared::smallsort::sort8_stable::<regex_syntax::hir::ClassUnicodeRange, <regex_syntax::hir::ClassUnicodeRange as core::cmp::PartialOrd>::lt>
+000000000009a1d0 000000000000007d t <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+000000000009a250 00000000000001e7 t <alloc::raw_vec::RawVecInner>::finish_grow
+000000000009a440 00000000000000c9 t <regex_syntax::utf8::Utf8Sequences>::new
+000000000009a510 0000000000000063 t <alloc::raw_vec::RawVec<core::option::Option<core::num::nonzero::NonZero<usize>>>>::grow_one
+000000000009a580 0000000000000063 t <alloc::raw_vec::RawVec<alloc::string::String>>::grow_one
+000000000009a5f0 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::ast::CaptureName>>::grow_one
+000000000009a660 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::ast::ClassSetItem>>::grow_one
+000000000009a6d0 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::ast::Ast>>::grow_one
+000000000009a740 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::ast::Comment>>::grow_one
+000000000009a7b0 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::ast::FlagsItem>>::grow_one
+000000000009a820 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::hir::ClassBytesRange>>::grow_one
+000000000009a890 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::hir::ClassUnicodeRange>>::grow_one
+000000000009a900 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::hir::Hir>>::grow_one
+000000000009a970 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::ast::parse::ClassState>>::grow_one
+000000000009a9e0 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::ast::parse::GroupState>>::grow_one
+000000000009aa50 0000000000000063 t <alloc::raw_vec::RawVec<regex_syntax::hir::literal::Literal>>::grow_one
+000000000009aac0 0000000000000063 t <alloc::raw_vec::RawVec<(&regex_syntax::ast::Ast, regex_syntax::ast::visitor::Frame)>>::grow_one
+000000000009ab30 0000000000000063 t <alloc::raw_vec::RawVec<char>>::grow_one
+000000000009aba0 0000000000000117 t <alloc::raw_vec::RawVecInner>::try_allocate_in
+000000000009acc0 00000000000004a0 t <regex_syntax::utf8::Utf8Sequences as core::iter::traits::iterator::Iterator>::next
+000000000009b160 0000000000000104 t core::ptr::drop_in_place::<regex_syntax::ast::ClassSetItem>
+000000000009b270 0000000000000092 t core::ptr::drop_in_place::<regex_syntax::ast::ClassSetBinaryOp>
+000000000009b310 0000000000000043 t core::ptr::drop_in_place::<alloc::boxed::Box<regex_syntax::ast::ClassSet>>
+000000000009b360 0000000000000055 t <alloc::vec::drain::Drain<u8> as core::ops::drop::Drop>::drop
+000000000009b3b5 000000000000000b t core::panicking::assert_failed::<char, char>
+000000000009b3c0 00000000000006ec t regex_syntax::unicode::class
+000000000009bab0 0000000000000076 t <regex_syntax::unicode::ClassQuery>::canonical_binary
+000000000009bb30 00000000000002a8 t regex_syntax::unicode::symbolic_name_normalize
+000000000009bde0 000000000000006a t <alloc::vec::into_iter::IntoIter<regex_syntax::hir::Hir> as core::ops::drop::Drop>::drop
+000000000009be50 000000000000009b t <alloc::string::String as core::fmt::Write>::write_fmt
+000000000009bef0 0000000000000da7 t core::slice::sort::stable::quicksort::quicksort::<regex_syntax::hir::ClassBytesRange, <regex_syntax::hir::ClassBytesRange as core::cmp::PartialOrd>::lt>
+000000000009cca0 00000000000000f2 t core::slice::sort::shared::pivot::median3_rec::<regex_syntax::hir::ClassBytesRange, <regex_syntax::hir::ClassBytesRange as core::cmp::PartialOrd>::lt>
+000000000009cda0 0000000000000d27 t core::slice::sort::stable::quicksort::quicksort::<regex_syntax::hir::ClassUnicodeRange, <regex_syntax::hir::ClassUnicodeRange as core::cmp::PartialOrd>::lt>
+000000000009dad0 00000000000000df t core::slice::sort::shared::pivot::median3_rec::<regex_syntax::hir::ClassUnicodeRange, <regex_syntax::hir::ClassUnicodeRange as core::cmp::PartialOrd>::lt>
+000000000009dbb0 00000000000000ee t regex_syntax::debug::utf8_decode
+000000000009dca0 0000000000000bfc t <text_engine::sed::pattern::SedPattern>::compile
+000000000009e8a0 00000000000001ac t <core::str::pattern::StrSearcher as core::str::pattern::Searcher>::next_match
+000000000009ea50 00000000000001cf t text_engine::sed::pattern::validate_hir
+000000000009ec20 000000000000006a t <text_engine::sed::pattern::looks_literal as core::ops::function::FnMut<(&regex_syntax::hir::Hir,)>>::call_mut
+000000000009ec90 0000000000000184 t core::ptr::drop_in_place::<regex_syntax::hir::Hir>
+000000000009ee20 0000000000000372 t core::ptr::drop_in_place::<regex_automata::nfa::thompson::compiler::Compiler>
+000000000009f1a0 0000000000000075 t core::ptr::drop_in_place::<regex_automata::meta::error::BuildError>
+000000000009f220 0000000000000027 t core::ptr::drop_in_place::<regex_automata::meta::regex::Builder>
+000000000009f250 00000000000001b8 t <core::str::pattern::TwoWaySearcher>::next::<core::str::pattern::MatchOnly>
+000000000009f410 0000000000000206 t core::ptr::drop_in_place::<regex_automata::meta::regex::FindMatches>
+000000000009f620 00000000000001a2 t core::ptr::drop_in_place::<regex_automata::hybrid::dfa::Cache>
+000000000009f7d0 0000000000000215 t <core::str::iter::Split<&str> as core::iter::traits::iterator::Iterator>::next
+000000000009f9f0 00000000000001b2 t <alloc::vec::Vec<alloc::boxed::Box<regex_automata::meta::regex::Cache>> as core::ops::drop::Drop>::drop
+000000000009fbb0 0000000000000187 t core::ptr::drop_in_place::<regex_automata::hybrid::dfa::Cache>
+000000000009fd40 0000000000000085 t core::ptr::drop_in_place::<text_engine::awk::Expr>
+000000000009fdd0 00000000000000d7 t <alloc::vec::Vec<text_engine::grep::MatcherSpec> as core::ops::drop::Drop>::drop
+000000000009feb0 0000000000000049 t <alloc::vec::Vec<text_engine::awk::lexer::Token> as core::ops::drop::Drop>::drop
+000000000009ff00 000000000000006a t <alloc::vec::Vec<regex_automata::nfa::thompson::builder::State> as core::ops::drop::Drop>::drop
+000000000009ff70 0000000000000127 t <text_engine::args::ArgCursor>::next_owned
+00000000000a00a0 000000000000021b t text_engine::grep::push_input
+00000000000a02c0 0000000000000ef3 t text_engine::awk::lexer::tokenize
+00000000000a11c0 000000000000007d t <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+00000000000a1240 00000000000001e7 t <alloc::raw_vec::RawVecInner>::finish_grow
+00000000000a1430 000000000000030f t <text_engine::records::RecordReader>::next_record
+00000000000a1740 0000000000000063 t <alloc::raw_vec::RawVec<&str>>::grow_one
+00000000000a17b0 0000000000000166 t <text_engine::sed::replacement::Replacement>::expand
+00000000000a1920 0000000000000063 t <alloc::raw_vec::RawVec<alloc::boxed::Box<regex_automata::meta::regex::Cache>>>::grow_one
+00000000000a1990 0000000000000063 t <alloc::raw_vec::RawVec<text_engine::awk::Expr>>::grow_one
+00000000000a1a00 0000000000000063 t <alloc::raw_vec::RawVec<text_engine::top::TopRow>>::grow_one
+00000000000a1a70 0000000000000063 t <alloc::raw_vec::RawVec<text_engine::grep::LoadedInput>>::grow_one
+00000000000a1ae0 0000000000000063 t <alloc::raw_vec::RawVec<text_engine::awk::lexer::Token>>::grow_one
+00000000000a1b50 0000000000000117 t <alloc::raw_vec::RawVecInner>::try_allocate_in
+00000000000a1c70 00000000000000c4 t core::ptr::drop_in_place::<text_engine::sed::parser::SedScript>
+00000000000a1d40 00000000000000ac t core::ptr::drop_in_place::<text_engine::sed::pattern::SedPattern>
+00000000000a1df0 00000000000000ff t text_engine::records::extend_input
+00000000000a1ef0 0000000000000369 t <alloc::collections::btree::map::BTreeMap<regex_automata::util::determinize::state::State, regex_automata::hybrid::id::LazyStateID> as core::ops::drop::Drop>::drop
+00000000000a2260 00000000000003b5 t <text_engine::sed::parser::Address>::matches
+00000000000a2620 0000000000000d0f t text_engine::sed::parser::parse_substitute
+00000000000a3330 00000000000001bc t text_engine::sed::parser::parse_address
+00000000000a34f0 00000000000000da t <usize>::from_ascii_radix
+00000000000a35d0 00000000000002f4 t text_engine::sed::parser::scan_segment
+00000000000a38d0 00000000000001a8 t text_engine::grep::parse::push_pattern
+00000000000a3a80 00000000000003b6 t text_engine::grep::parse::load_pattern_file
+00000000000a3e40 0000000000000104 t alloc::fmt::format
+00000000000a3f50 0000000000000464 t core::slice::sort::unstable::ipnsort::<text_engine::top::TopRow, <[text_engine::top::TopRow]>::sort_unstable_by<text_engine::top::build_rows::{closure#3}>::{closure#0}>
+00000000000a43c0 000000000000107e t core::slice::sort::unstable::quicksort::quicksort::<text_engine::top::TopRow, <[text_engine::top::TopRow]>::sort_unstable_by<text_engine::top::build_rows::{closure#3}>::{closure#0}>
+00000000000a5440 000000000000065a t core::slice::sort::shared::smallsort::sort4_stable::<text_engine::top::TopRow, <[text_engine::top::TopRow]>::sort_unstable_by<text_engine::top::build_rows::{closure#3}>::{closure#0}>
+00000000000a5aa0 00000000000002e5 t core::slice::sort::shared::smallsort::insert_tail::<text_engine::top::TopRow, <[text_engine::top::TopRow]>::sort_unstable_by<text_engine::top::build_rows::{closure#3}>::{closure#0}>
+00000000000a5d90 0000000000000435 t core::slice::sort::unstable::heapsort::heapsort::<text_engine::top::TopRow, <[text_engine::top::TopRow]>::sort_unstable_by<text_engine::top::build_rows::{closure#3}>::{closure#0}>
+00000000000a61d0 00000000000003a1 t core::slice::sort::shared::pivot::median3_rec::<text_engine::top::TopRow, <[text_engine::top::TopRow]>::sort_unstable_by<text_engine::top::build_rows::{closure#3}>::{closure#0}>
+00000000000a6580 00000000000001c8 t core::slice::sort::unstable::quicksort::partition_lomuto_branchless_cyclic::<text_engine::top::TopRow, <[text_engine::top::TopRow]>::sort_unstable_by<text_engine::top::build_rows::{closure#3}>::{closure#0}>::{closure#0}
+00000000000a6750 00000000000001c8 t core::slice::sort::unstable::quicksort::partition_lomuto_branchless_cyclic::<text_engine::top::TopRow, core::slice::sort::unstable::quicksort::quicksort<text_engine::top::TopRow, <[text_engine::top::TopRow]>::sort_unstable_by<text_engine::top::build_rows::{closure#3}>::{closure#0}>::{closure#0}>::{closure#0}
+00000000000a6920 00000000000002b4 t <core::iter::adapters::GenericShunt<core::iter::adapters::map::Map<core::slice::iter::Iter<alloc::string::String>, text_engine::grep::compile_matchers::{closure#0}>, core::result::Result<core::convert::Infallible, alloc::string::String>> as core::iter::traits::iterator::Iterator>::next
+00000000000a6be0 0000000000000493 t <text_engine::matcher::CompiledPattern>::compile
+00000000000a7080 000000000000013c t text_engine::matcher::validate_hir
+00000000000a71c0 00000000000002cf t <text_engine::matcher::CompiledPattern>::is_match
+00000000000a7490 00000000000006f9 t <text_engine::awk::parser::Parser>::expr
+00000000000a7b90 000000000000009e t alloc::boxed::box_new_uninit
+00000000000a7c30 0000000000000283 t <str>::trim_matches::<<char>::is_whitespace>
+00000000000a7ec0 0000000000000050 t <alloc::sync::Arc<regex_automata::meta::regex::RegexI>>::drop_slow
+00000000000a7f10 0000000000000634 t text_engine::awk::looks_like_program
+00000000000a8550 0000000000000382 t <&str as core::str::pattern::Pattern>::is_contained_in
+00000000000a88e0 0000000000000153 t <char as core::str::pattern::Pattern>::is_contained_in
+00000000000a8a40 0000000000000030 t <&regex_syntax::hir::Look as core::fmt::Debug>::fmt
+00000000000a8a70 0000000000000016 t <&alloc::string::String as core::fmt::Display>::fmt
+00000000000a8a90 000000000000010f t <&i64 as core::fmt::Display>::fmt
+00000000000a8ba0 0000000000000f3a t text_engine::awk::runtime::eval
+00000000000a9ae0 00000000000000b2 t core::ptr::drop_in_place::<core::option::Option<text_engine::matcher::CompiledPattern>>
+00000000000a9ba0 000000000000018d t <text_engine::awk::runtime::Value>::num
+00000000000b436e 0000000000000123 r core::unicode::unicode_data::n::OFFSETS
+00000000000b4594 00000000000000ac r core::unicode::unicode_data::n::SHORT_OFFSET_RUNS
+00000000000b4652 00000000000005ef r core::unicode::unicode_data::alphabetic::OFFSETS
+00000000000b4c44 00000000000000cc r core::unicode::unicode_data::alphabetic::SHORT_OFFSET_RUNS
+00000000000b5bbe 0000000000000100 r core::unicode::unicode_data::white_space::WHITESPACE_MAP
+00000000000b6310 R __init_array_end
+00000000000b6310 R __init_array_start
+00000000000b7510 0000000000000020 d app_shell::shell_state::FUNS
+00000000000b7530 0000000000000020 d app_shell::shell_state::SINK
+00000000000b7550 0000000000000020 d app_shell::shell_state::VARS
+00000000000b7570 0000000000000020 d app_shell::shell_state::STDIN
+00000000000b7590 0000000000000030 d app_shell::history::GLOBAL_HISTORY
+00000000000b7c08 0000000000000008 D ostd::startup::_KEEP_START
+00000000000bb528 d _DYNAMIC
+00000000000bc000 0000000000000002 b app_shell::shell_state::LOOP_SIGNAL
+00000000000bc000 B __bss_start
+00000000000bc004 000000000000000c b app_shell::shell_state::EXIT_REQUEST
+00000000000bc010 0000000000000001 b app_shell::shell_state::BG_SPAWN
+00000000000bc018 0000000000000030 b ostd::heap::HEAP
+00000000000bc050 0000000000100000 b ostd::heap::HEAP_MEM
+00000000001bc050 0000000000000001 b ostd::heap::HEAP_INIT
+00000000001bc051 0000000000000001 b ostd::executor::PARK_PROOF_EMITTED
+00000000001bc052 B __bss_end
+00000000001bc058 0000000000000008 r app_shell::VICELL_SYSCALLS
+00000000001bd000 0000000000000010 r app_shell::VICELL_MANIFEST

@@ -1,0 +1,71 @@
+{
+  "claim": "This exact VM-not-running rejection accepts zero events from the rejected input-send-event batch; not a claim that earlier batches in the command were unaccepted.",
+  "installed_identity": {
+    "package": "qemu-system-x86",
+    "source_package": "qemu",
+    "version": "1:8.2.2+ds-0ubuntu1.17",
+    "dpkg_query_observed": "qemu-system-x86\t1:8.2.2+ds-0ubuntu1.17\tqemu",
+    "binary": "/usr/bin/qemu-system-x86_64",
+    "sha256": "d306a5fcc9e390c2c9faeb58944fada0e4b47780154d02b5465ed4ff9879c972",
+    "md5": "149d973a6a62739c47b5d675e33ff4ff",
+    "dpkg_md5": "149d973a6a62739c47b5d675e33ff4ff",
+    "dpkg_md5_match": true
+  },
+  "published_source": {
+    "dsc_url": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/qemu/1:8.2.2+ds-0ubuntu1.17/qemu_8.2.2+ds-0ubuntu1.17.dsc",
+    "dsc_sha256": "4d3a8ab08c652a65cfc1578336db1a10e2ee376d4f24356d65969e7a168a27f8",
+    "original_archive_sha256": "5e692dd20950a819ff6550cd3974e00319a93f47c0a15f808c58df1a9e4d2478",
+    "debian_archive_sha256": "bd2e6336e97dce02ac0e769a6833e21865229f5e6a09192dc59d59731854d967",
+    "active_patch_count": 128,
+    "input_file_patch_hits": [],
+    "all_debian_input_references": [
+      {
+        "file": "debian/changelog",
+        "terms": [
+          "ui/input.c"
+        ]
+      }
+    ]
+  },
+  "control_flow": {
+    "file": "source/ui/input.c",
+    "file_sha256": "e67241a5d54df6b19397f31172b0143ea0d5590676c6d6bd5e11e458f7d5e1f4",
+    "function_start_line": 125,
+    "runstate_guard_lines": [
+      145,
+      148
+    ],
+    "exact_error": {
+      "class": "GenericError",
+      "desc": "VM not running"
+    },
+    "event_handler_validation_lines": [
+      150,
+      159
+    ],
+    "first_event_dispatch_lines": [
+      161,
+      172
+    ],
+    "input_sync_line": 174,
+    "proof": "The matching error is set at146 and returns at147, before either event loop. Original keys supplies events only, no device/head lookup. No prefix of that batch can reach event dispatch or sync on this path."
+  },
+  "critical_context": {
+    "QAPI_input_command": "source/qapi/ui.json:1293-1296 has neither coroutine nor allow-oob",
+    "noncoroutine_handler_dispatch": "source/qapi/qmp-dispatch.c:247-259 schedules bottom half in iohandler context;122-130 invokes command function",
+    "mainloop_context": "source/util/main-loop.c:289-313 dispatches GLib after reacquiring iothread/BQL;615-638 locates iohandler context on main loop",
+    "resume_event_caveat": "source/system/cpus.c:713-718 emits RESUME before runstate_set(RUN_STATE_RUNNING); neither that event nor an external status precheck is an atomic admission guarantee",
+    "event_dispatch_scope": "Noncoroutine input handler checks state then validates all handlers before dispatching events/sync within its main-loop transaction. Actual QMP handler response, not host status observation, is the acceptance linearization point."
+  },
+  "defer_safety_decision": {
+    "future_exact_unaccepted_batch": "Demonstrably safe to retain/defer and conditionally resubmit ONLY after this exact matching structured pre-dispatch rejection, with immutable original payload, pinned binary/source and observer coordination.",
+    "historical_failed_batch": "Not reconstructible and must not be replayed; raw GUI payload/accepted prefix were not logged.",
+    "success_or_ambiguous_failure": "Success commits batch once. EOF/timeout/malformed/lost reply/other QMP error never authorizes resubmission because acceptance may be unknown."
+  },
+  "confidence": "PROBABLE failure mechanism (observed stack/QMP error plus exact-package control flow and installed file identity); zero-prefix conclusion is a direct control-flow proof for the matching package handler branch, not a new candidate reproduction",
+  "limitations": [
+    "Exact-version publisher source/checksums and installed dpkg file checksum are bound; no independent rebuild or machine-code equivalence proof claimed",
+    "Uploader PGP signature retained but not independently verified",
+    "No candidate execution, package install, input retry or code fix occurred in this investigation"
+  ]
+}

@@ -1,0 +1,136 @@
+{
+  "b1-shell": {
+    "path": "/tmp/cellbox-s10-4/static/b1/shell",
+    "sha256": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90",
+    "symbols": [
+      "000000000003e500 000000000000008c t __rustc::__rust_alloc",
+      "000000000003e590 0000000000000014 t __rustc::__rust_dealloc",
+      "000000000003e5b0 0000000000000209 t ostd::heap::alloc_error",
+      "00000000000bc018 0000000000000030 b ostd::heap::HEAP",
+      "00000000000bc050 0000000000100000 b ostd::heap::HEAP_MEM",
+      "00000000001bc050 0000000000000001 b ostd::heap::HEAP_INIT"
+    ],
+    "debug_sections": [],
+    "symtab_present": true,
+    "nm_stderr": ""
+  },
+  "b1-ps": {
+    "path": "/tmp/cellbox-s10-4/static/b1/ps",
+    "sha256": "74b5bc6e0826f6f84bda495bce33284a7addd1363b595dbd0004d5415be8d468",
+    "symbols": [],
+    "debug_sections": [],
+    "symtab_present": true,
+    "nm_stderr": ""
+  },
+  "b2-shell-unsigned": {
+    "path": "/tmp/cellbox-s10-4/b2-unsigned/shell",
+    "sha256": "2951a28b324ebd5e85922f3ba51128811e2fbbe84166c2ab54540b436d82648f",
+    "symbols": [
+      "000000000003e500 000000000000008c t __rustc::__rust_alloc",
+      "000000000003e590 0000000000000014 t __rustc::__rust_dealloc",
+      "000000000003e5b0 0000000000000209 t ostd::heap::alloc_error",
+      "00000000000bc018 0000000000000030 b ostd::heap::HEAP",
+      "00000000000bc050 0000000000100000 b ostd::heap::HEAP_MEM",
+      "00000000001bc050 0000000000000001 b ostd::heap::HEAP_INIT"
+    ],
+    "debug_sections": [],
+    "symtab_present": true,
+    "nm_stderr": ""
+  },
+  "b2-ps-unsigned": {
+    "path": "/tmp/cellbox-s10-4/b2-unsigned/ps",
+    "sha256": "c567c9beed845f897b0792c3aadc0fd4a7e84a1a9f449a2e4cb95bfd03e72c49",
+    "symbols": [],
+    "debug_sections": [],
+    "symtab_present": true,
+    "nm_stderr": ""
+  },
+  "candidate-headless-cellbox": {
+    "path": "/tmp/cellbox-s10-4/static/headless/cellbox",
+    "sha256": "11674cd9bb9ef9421313727d5c4a323f2a8043c435468abacde6f55c2e5e86eb",
+    "symbols": [
+      "00000000000ea260 000000000000008c t __rustc::__rust_alloc",
+      "00000000000ea2f0 0000000000000014 t __rustc::__rust_dealloc",
+      "00000000000ea310 0000000000000209 t ostd::heap::alloc_error",
+      "00000000002a8060 0000000000600000 b cellbox::__CUSTOM_HEAP_ARENA",
+      "00000000008a80c0 0000000000000030 b ostd::heap::HEAP",
+      "00000000008a80f0 0000000000100000 b ostd::heap::HEAP_MEM",
+      "00000000009a80f0 0000000000000001 b ostd::heap::HEAP_INIT"
+    ],
+    "debug_sections": [],
+    "symtab_present": true,
+    "nm_stderr": ""
+  },
+  "candidate-desktop-cellbox": {
+    "path": "/tmp/cellbox-s10-4/static/desktop/cellbox",
+    "sha256": "8ea134442bb27719cf4c2ce5a8f3613f5667f88f1762a1d731cba9fd83ab54a2",
+    "symbols": [
+      "00000000000e9270 000000000000008c t __rustc::__rust_alloc",
+      "00000000000e9300 0000000000000014 t __rustc::__rust_dealloc",
+      "00000000000e9320 0000000000000209 t ostd::heap::alloc_error",
+      "00000000002a8060 0000000000600000 b cellbox::__CUSTOM_HEAP_ARENA",
+      "00000000008a80c0 0000000000000030 b ostd::heap::HEAP",
+      "00000000008a80f0 0000000000100000 b ostd::heap::HEAP_MEM",
+      "00000000009a80f0 0000000000000001 b ostd::heap::HEAP_INIT"
+    ],
+    "debug_sections": [],
+    "symtab_present": true,
+    "nm_stderr": ""
+  },
+  "candidate-headless-kernel": {
+    "path": "/tmp/cellbox-s10-3d-resume/cand/headless.kernel.elf",
+    "sha256": "7efb030f3ff8f0f5cac965e12112e1dd567585eb59bc935f1c16e416266efb74",
+    "symbols": [
+      "ffffffff800e1960 00000000000000dd t cellos_kernel::memory::heap::try_box::<cellos_kernel::task::tcb::Task>",
+      "ffffffff800e24e0 0000000000000139 t __rustc::__rust_realloc",
+      "ffffffff800e2620 0000000000000076 t __rustc::__rust_dealloc",
+      "ffffffff800e26a0 000000000000000f t __rustc::__rust_alloc_error_handler",
+      "ffffffff800e26b0 00000000000003b3 t cellos_kernel::memory::heap::alloc_error_handler",
+      "ffffffff800ed5c0 0000000000000052 t cellos_kernel::memory::heap::usage",
+      "ffffffff800f5580 0000000000000867 t <cellos_kernel::task::stack::Stack>::allocate",
+      "ffffffff800fbd30 0000000000000217 t <cellos_kernel::task::stack::Stack as core::ops::drop::Drop>::drop",
+      "ffffffff801622a0 000000000000019a t <linked_list_allocator::LockedHeap as core::alloc::global::GlobalAlloc>::alloc",
+      "ffffffff80162440 00000000000002e6 t <linked_list_allocator::LockedHeap as core::alloc::global::GlobalAlloc>::dealloc",
+      "ffffffff80e0f1e8 0000000000000210 d cellos_kernel::task::SCHEDULER",
+      "ffffffff80e102b8 0000000000040000 b cellos_kernel::memory::rt_heap::RT_POOL_MEM",
+      "ffffffff80e502b8 0000000000000a40 b cellos_kernel::memory::rt_heap::RT_HEAP",
+      "ffffffff80e960b8 0000000000000008 b cellos_kernel::memory::heap::NULL_FROM_HEAP",
+      "ffffffff80e960c0 0000000000000008 b cellos_kernel::memory::heap::NULL_FROM_QUOTA",
+      "ffffffff80e960c8 0000000000000038 b cellos_kernel::memory::heap::ALLOCATOR",
+      "ffffffff80e96100 0000000000000040 b cellos_kernel::memory::heap::FAIL_SITE",
+      "ffffffff80e96688 0000000000000200 b cellos_kernel::memory::cell_quota::DMA_IN_USE",
+      "ffffffff80e968a8 0000000000000200 b cellos_kernel::memory::cell_quota::IN_USE"
+    ],
+    "debug_sections": [],
+    "symtab_present": true,
+    "nm_stderr": ""
+  },
+  "candidate-desktop-kernel": {
+    "path": "/tmp/cellbox-s10-3d-resume/cand/desktop.kernel.elf",
+    "sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a",
+    "symbols": [
+      "ffffffff800e1960 00000000000000dd t cellos_kernel::memory::heap::try_box::<cellos_kernel::task::tcb::Task>",
+      "ffffffff800e24e0 0000000000000139 t __rustc::__rust_realloc",
+      "ffffffff800e2620 0000000000000076 t __rustc::__rust_dealloc",
+      "ffffffff800e26a0 000000000000000f t __rustc::__rust_alloc_error_handler",
+      "ffffffff800e26b0 00000000000003b3 t cellos_kernel::memory::heap::alloc_error_handler",
+      "ffffffff800ed5c0 0000000000000052 t cellos_kernel::memory::heap::usage",
+      "ffffffff800f5580 0000000000000867 t <cellos_kernel::task::stack::Stack>::allocate",
+      "ffffffff800fbd30 0000000000000217 t <cellos_kernel::task::stack::Stack as core::ops::drop::Drop>::drop",
+      "ffffffff801622a0 000000000000019a t <linked_list_allocator::LockedHeap as core::alloc::global::GlobalAlloc>::alloc",
+      "ffffffff80162440 00000000000002e6 t <linked_list_allocator::LockedHeap as core::alloc::global::GlobalAlloc>::dealloc",
+      "ffffffff81a0f1e8 0000000000000210 d cellos_kernel::task::SCHEDULER",
+      "ffffffff81a102b8 0000000000040000 b cellos_kernel::memory::rt_heap::RT_POOL_MEM",
+      "ffffffff81a502b8 0000000000000a40 b cellos_kernel::memory::rt_heap::RT_HEAP",
+      "ffffffff81a960b8 0000000000000008 b cellos_kernel::memory::heap::NULL_FROM_HEAP",
+      "ffffffff81a960c0 0000000000000008 b cellos_kernel::memory::heap::NULL_FROM_QUOTA",
+      "ffffffff81a960c8 0000000000000038 b cellos_kernel::memory::heap::ALLOCATOR",
+      "ffffffff81a96100 0000000000000040 b cellos_kernel::memory::heap::FAIL_SITE",
+      "ffffffff81a96688 0000000000000200 b cellos_kernel::memory::cell_quota::DMA_IN_USE",
+      "ffffffff81a968a8 0000000000000200 b cellos_kernel::memory::cell_quota::IN_USE"
+    ],
+    "debug_sections": [],
+    "symtab_present": true,
+    "nm_stderr": ""
+  }
+}

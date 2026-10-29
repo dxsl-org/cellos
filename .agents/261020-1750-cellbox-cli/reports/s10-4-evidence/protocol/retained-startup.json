@@ -1,0 +1,50 @@
+[
+  {
+    "lane": "L0-headless-run1",
+    "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run1/verdict.json",
+    "sha256": "2c052509ea56b9c8eb966c57ecc2141a8e30ba7e434a2925d552eebd53df0931",
+    "prompt_detail": "T=3.1s",
+    "marker_pass": true,
+    "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+  },
+  {
+    "lane": "L0-headless-run2",
+    "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run2/verdict.json",
+    "sha256": "1ecbb5e869b0767a83f51bc2ad76772edeb111ef99b35a182603776cb7b316bd",
+    "prompt_detail": "T=2.8s",
+    "marker_pass": true,
+    "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+  },
+  {
+    "lane": "L0-headless-run3",
+    "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run3/verdict.json",
+    "sha256": "ed60a1f30e0015e91cf0eb06aaea82f3b8db9107f38b414eb1b4249934838c4d",
+    "prompt_detail": "T=2.5s",
+    "marker_pass": true,
+    "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+  },
+  {
+    "lane": "L0-headless-run4",
+    "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run4/verdict.json",
+    "sha256": "4773c618c9c8ff9d5caca77bf544e0b70c162ca1298e547b13efa021096c1a06",
+    "prompt_detail": "T=2.5s",
+    "marker_pass": true,
+    "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+  },
+  {
+    "lane": "L0-headless-run5",
+    "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run5/verdict.json",
+    "sha256": "8cd4416398ff0809be4e477d45cf08eee1c6ecf626695d7fb90480254c7c90cf",
+    "prompt_detail": "T=2.5s",
+    "marker_pass": true,
+    "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+  },
+  {
+    "lane": "L0-headless-run6",
+    "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run6/verdict.json",
+    "sha256": "1d0c7f9a252583b0731a7f5836b9bb77967c484b28135c44c40af8433f9933f2",
+    "prompt_detail": "T=2.5s",
+    "marker_pass": true,
+    "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+  }
+]

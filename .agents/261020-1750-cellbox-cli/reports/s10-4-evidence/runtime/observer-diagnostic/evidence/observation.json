@@ -1,0 +1,517 @@
+{
+  "status": "STOP_OBSERVATION",
+  "error": "RspError: single native instruction did not advance current breakpoint",
+  "profile": "headless",
+  "instances": [
+    {
+      "id": 1,
+      "role": "headless",
+      "base": 4429185024,
+      "cr3": 364544,
+      "initial_rsp": 39481344,
+      "stack_top": 39481344,
+      "stack_bottom": 39415808,
+      "stack_pages": {
+        "39415808": 39415808,
+        "39419904": 39419904,
+        "39424000": 39424000,
+        "39428096": 39428096,
+        "39432192": 39432192,
+        "39436288": 39436288,
+        "39440384": 39440384,
+        "39444480": 39444480,
+        "39448576": 39448576,
+        "39452672": 39452672,
+        "39456768": 39456768,
+        "39460864": 39460864,
+        "39464960": 39464960,
+        "39469056": 39469056,
+        "39473152": 39473152,
+        "39477248": 39477248
+      },
+      "touched_pages": [
+        39477248,
+        39473152,
+        39469056,
+        39464960,
+        39460864,
+        39456768,
+        39452672,
+        39448576,
+        39444480,
+        39440384,
+        39436288,
+        39432192
+      ],
+      "heap": 4438261952,
+      "peak_aligned_used_bytes": 51256,
+      "phase_peaks": {
+        "boot": 25120,
+        "initial-prompt": 29216,
+        "ordinary-prompt-idle": 33312,
+        "finite-stream": 51256
+      },
+      "last_value": 50048,
+      "pending_writer": null,
+      "coverage_writes": 540,
+      "post_events": 539,
+      "initial_counter": 0,
+      "watch_completed_post": 4430118662,
+      "stack_write_attempt_depth_bound_bytes": [
+        45057,
+        49152
+      ],
+      "scope": "aligned allocator event peak; CPU stack write-attempt4KiB bounds, NOT exact stack/RSS/kernel-stack peak"
+    }
+  ],
+  "focus_base": 4429185024,
+  "heap_post_event_count": 539,
+  "observer_pause_ns": 5298891636,
+  "stack_write_attempts": [
+    {
+      "monotonic_ns": 386116272925490,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 39477248,
+      "page_pa": 39477248,
+      "pc": 4429774256,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 422,
+          "pte": 9223372036894253159,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 386116277435308,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 39473152,
+      "page_pa": 39473152,
+      "pc": 4429774281,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 421,
+          "pte": 9223372036894249063,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 386116282169431,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 39469056,
+      "page_pa": 39469056,
+      "pc": 4429774296,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 420,
+          "pte": 9223372036894244967,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 386116297149331,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 39464960,
+      "page_pa": 39464960,
+      "pc": 4430128078,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 419,
+          "pte": 9223372036894240871,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 386116351179994,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 39460864,
+      "page_pa": 39460864,
+      "pc": 4430131128,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 418,
+          "pte": 9223372036894236775,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 386116355689778,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 39456768,
+      "page_pa": 39456768,
+      "pc": 4430131143,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 417,
+          "pte": 9223372036894232679,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 386116362251935,
+      "instance": 1,
+      "phase": "boot",
+      "page_va": 39452672,
+      "page_pa": 39452672,
+      "pc": 4430157913,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 416,
+          "pte": 9223372036894228583,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 386116528157220,
+      "instance": 1,
+      "phase": "ordinary-prompt-idle",
+      "page_va": 39448576,
+      "page_pa": 39448576,
+      "pc": 4430131143,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 415,
+          "pte": 9223372036894224487,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 386116558326494,
+      "instance": 1,
+      "phase": "ordinary-prompt-idle",
+      "page_va": 39444480,
+      "page_pa": 39444480,
+      "pc": 4430157913,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 414,
+          "pte": 9223372036894220391,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 386131167590732,
+      "instance": 1,
+      "phase": "finite-stream",
+      "page_va": 39440384,
+      "page_pa": 39440384,
+      "pc": 4430131143,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 413,
+          "pte": 9223372036894216295,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 386131172799256,
+      "instance": 1,
+      "phase": "finite-stream",
+      "page_va": 39436288,
+      "page_pa": 39436288,
+      "pc": 4430157913,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 412,
+          "pte": 9223372036894212199,
+          "shift": 12
+        }
+      ]
+    },
+    {
+      "monotonic_ns": 386131458119408,
+      "instance": 1,
+      "phase": "finite-stream",
+      "page_va": 39432192,
+      "page_pa": 39432192,
+      "pc": 4430157913,
+      "cr3": 364544,
+      "witness": [
+        {
+          "table_pa": 364544,
+          "index": 0,
+          "pte": 368679,
+          "shift": 39
+        },
+        {
+          "table_pa": 368640,
+          "index": 0,
+          "pte": 34951207,
+          "shift": 30
+        },
+        {
+          "table_pa": 34951168,
+          "index": 18,
+          "pte": 59404327,
+          "shift": 21
+        },
+        {
+          "table_pa": 59404288,
+          "index": 411,
+          "pte": 9223372036894208103,
+          "shift": 12
+        }
+      ]
+    }
+  ],
+  "snapshots": [
+    {
+      "phase": "initial-prompt",
+      "instance": 1,
+      "monotonic_ns": 386116457012717,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 29216,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    },
+    {
+      "phase": "ordinary-prompt-idle",
+      "instance": 1,
+      "monotonic_ns": 386126595353359,
+      "cr3": 364544,
+      "aligned_live_used_bytes": 33312,
+      "mapped_segment_plus_user_stack_backing_bytes": 10199040,
+      "scope": "guest present mapped backing, NOT RSS/working set/whole-cell/kernel stack/quota"
+    }
+  ],
+  "draw_events": [],
+  "resident_bytes": null,
+  "exact_stack_peak_bytes": null,
+  "kernel_stack_peak_bytes": null,
+  "historical_runtime_baseline": null
+}

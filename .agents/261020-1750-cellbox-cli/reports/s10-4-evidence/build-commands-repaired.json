@@ -1,0 +1,54 @@
+[
+  {
+    "command": [
+      "rustc",
+      "+nightly-2026-05-01",
+      "-Vv"
+    ],
+    "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+    "log": "/tmp/cellbox-s10-4/logs-repaired/b2-rustc.log",
+    "returncode": 0
+  },
+  {
+    "command": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "-V"
+    ],
+    "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+    "log": "/tmp/cellbox-s10-4/logs-repaired/b2-cargo.log",
+    "returncode": 0
+  },
+  {
+    "command": [
+      "cargo",
+      "+nightly-2026-05-01",
+      "build",
+      "--release",
+      "--locked",
+      "--target",
+      "x86_64-unknown-none",
+      "-Z",
+      "build-std=core,alloc",
+      "-p",
+      "app-shell",
+      "-p",
+      "app-sys-tools",
+      "--bin",
+      "app-shell",
+      "--bin",
+      "ls",
+      "--bin",
+      "cat",
+      "--bin",
+      "echo",
+      "--bin",
+      "ps",
+      "--bin",
+      "kill"
+    ],
+    "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+    "log": "/tmp/cellbox-s10-4/logs-repaired/b2-build.log",
+    "returncode": 101
+  }
+]

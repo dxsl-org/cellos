@@ -1,0 +1,16 @@
+{
+  "status": "STOP_OBSERVATION",
+  "error": "BoundaryStop: PROOF_REJECTED_BOUNDARY_STOP",
+  "profile": "headless",
+  "instances": [],
+  "focus_base": null,
+  "heap_post_event_count": 0,
+  "observer_pause_ns": 0,
+  "stack_write_attempts": [],
+  "snapshots": [],
+  "draw_events": [],
+  "resident_bytes": null,
+  "exact_stack_peak_bytes": null,
+  "kernel_stack_peak_bytes": null,
+  "historical_runtime_baseline": null
+}

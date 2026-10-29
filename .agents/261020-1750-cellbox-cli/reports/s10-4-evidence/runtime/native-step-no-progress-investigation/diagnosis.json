@@ -1,0 +1,606 @@
+{
+  "status": "UNAVAILABLE_PROVEN_SAFE_OBSERVER_STEP_COMPLETION_PREREQUISITE",
+  "product_defect": false,
+  "candidate_retry_performed": false,
+  "native_step_no_progress": {
+    "actual_rip": "0x1080e40b1",
+    "instruction": "eb02 jmp 0x1080e40b5",
+    "pre_stop": "T05thread:01;watch:1088a80c0;",
+    "step_stop": "T05thread:01;",
+    "same_pc": true,
+    "restoration_OK": true,
+    "heap_aligned_used_at_stop": 38104,
+    "packets": [
+      {
+        "monotonic_ns": 383882551530324,
+        "event": "rx",
+        "raw_hex": "245430357468726561643a30313b77617463683a3130383861383063303b236330"
+      },
+      {
+        "monotonic_ns": 383882551553618,
+        "event": "tx",
+        "raw_hex": "2b"
+      },
+      {
+        "monotonic_ns": 383882551572190,
+        "event": "packet_rx",
+        "payload_hex": "5430357468726561643a30313b77617463683a3130383861383063303b"
+      },
+      {
+        "monotonic_ns": 383882551580516,
+        "event": "state",
+        "state": "stopped",
+        "reply_hex": "5430357468726561643a30313b77617463683a3130383861383063303b"
+      },
+      {
+        "monotonic_ns": 383882551589597,
+        "event": "packet_tx",
+        "payload_hex": "703130"
+      },
+      {
+        "monotonic_ns": 383882551594225,
+        "event": "tx",
+        "raw_hex": "24703130236431"
+      },
+      {
+        "monotonic_ns": 383882551625281,
+        "event": "rx",
+        "raw_hex": "2b2462313430306530383031303030303030233735"
+      },
+      {
+        "monotonic_ns": 383882551635107,
+        "event": "tx",
+        "raw_hex": "2b"
+      },
+      {
+        "monotonic_ns": 383882551649885,
+        "event": "packet_rx",
+        "payload_hex": "62313430306530383031303030303030"
+      },
+      {
+        "monotonic_ns": 383882551710508,
+        "event": "packet_tx",
+        "payload_hex": "6d3130383861383063302c38"
+      },
+      {
+        "monotonic_ns": 383882551715473,
+        "event": "tx",
+        "raw_hex": "246d3130383861383063302c38236665"
+      },
+      {
+        "monotonic_ns": 383882551746225,
+        "event": "rx",
+        "raw_hex": "2b2464383934303030303030303030303030233439"
+      },
+      {
+        "monotonic_ns": 383882551755425,
+        "event": "tx",
+        "raw_hex": "2b"
+      },
+      {
+        "monotonic_ns": 383882551771061,
+        "event": "packet_rx",
+        "payload_hex": "64383934303030303030303030303030"
+      },
+      {
+        "monotonic_ns": 383882551790884,
+        "event": "packet_tx",
+        "payload_hex": "703130"
+      },
+      {
+        "monotonic_ns": 383882551795596,
+        "event": "tx",
+        "raw_hex": "24703130236431"
+      },
+      {
+        "monotonic_ns": 383882551836772,
+        "event": "rx",
+        "raw_hex": "2b2462313430306530383031303030303030233735"
+      },
+      {
+        "monotonic_ns": 383882551861892,
+        "event": "tx",
+        "raw_hex": "2b"
+      },
+      {
+        "monotonic_ns": 383882551880762,
+        "event": "packet_rx",
+        "payload_hex": "62313430306530383031303030303030"
+      },
+      {
+        "monotonic_ns": 383882551898299,
+        "event": "packet_tx",
+        "payload_hex": "703130"
+      },
+      {
+        "monotonic_ns": 383882551907882,
+        "event": "tx",
+        "raw_hex": "24703130236431"
+      },
+      {
+        "monotonic_ns": 383882551950170,
+        "event": "rx",
+        "raw_hex": "2b2462313430306530383031303030303030233735"
+      },
+      {
+        "monotonic_ns": 383882551976081,
+        "event": "tx",
+        "raw_hex": "2b"
+      },
+      {
+        "monotonic_ns": 383882551995592,
+        "event": "packet_rx",
+        "payload_hex": "62313430306530383031303030303030"
+      },
+      {
+        "monotonic_ns": 383882552030900,
+        "event": "packet_tx",
+        "payload_hex": "7a312c3130383065343062312c31"
+      },
+      {
+        "monotonic_ns": 383882552040193,
+        "event": "tx",
+        "raw_hex": "247a312c3130383065343062312c31233539"
+      },
+      {
+        "monotonic_ns": 383882552071868,
+        "event": "rx",
+        "raw_hex": "2b244f4b233961"
+      },
+      {
+        "monotonic_ns": 383882552081454,
+        "event": "tx",
+        "raw_hex": "2b"
+      },
+      {
+        "monotonic_ns": 383882552095232,
+        "event": "packet_rx",
+        "payload_hex": "4f4b"
+      },
+      {
+        "monotonic_ns": 383882552103306,
+        "event": "packet_tx",
+        "payload_hex": "73"
+      },
+      {
+        "monotonic_ns": 383882552107799,
+        "event": "tx",
+        "raw_hex": "2473233733"
+      },
+      {
+        "monotonic_ns": 383882552119231,
+        "event": "state",
+        "state": "running",
+        "native_single_step": true
+      },
+      {
+        "monotonic_ns": 383882552127578,
+        "event": "rx",
+        "raw_hex": "2b"
+      },
+      {
+        "monotonic_ns": 383882552309604,
+        "event": "rx",
+        "raw_hex": "245430357468726561643a30313b233037"
+      },
+      {
+        "monotonic_ns": 383882552321249,
+        "event": "tx",
+        "raw_hex": "2b"
+      },
+      {
+        "monotonic_ns": 383882552336037,
+        "event": "packet_rx",
+        "payload_hex": "5430357468726561643a30313b"
+      },
+      {
+        "monotonic_ns": 383882552343442,
+        "event": "state",
+        "state": "stopped",
+        "reply_hex": "5430357468726561643a30313b"
+      },
+      {
+        "monotonic_ns": 383882552350201,
+        "event": "packet_tx",
+        "payload_hex": "703130"
+      },
+      {
+        "monotonic_ns": 383882552354386,
+        "event": "tx",
+        "raw_hex": "24703130236431"
+      },
+      {
+        "monotonic_ns": 383882552384759,
+        "event": "rx",
+        "raw_hex": "2b2462313430306530383031303030303030233735"
+      },
+      {
+        "monotonic_ns": 383882552393987,
+        "event": "tx",
+        "raw_hex": "2b"
+      },
+      {
+        "monotonic_ns": 383882552408635,
+        "event": "packet_rx",
+        "payload_hex": "62313430306530383031303030303030"
+      },
+      {
+        "monotonic_ns": 383882552422887,
+        "event": "packet_tx",
+        "payload_hex": "5a312c3130383065343062312c31"
+      },
+      {
+        "monotonic_ns": 383882552427420,
+        "event": "tx",
+        "raw_hex": "245a312c3130383065343062312c31233339"
+      },
+      {
+        "monotonic_ns": 383882552476434,
+        "event": "rx",
+        "raw_hex": "2b244f4b233961"
+      },
+      {
+        "monotonic_ns": 383882552500211,
+        "event": "tx",
+        "raw_hex": "2b"
+      },
+      {
+        "monotonic_ns": 383882552515737,
+        "event": "packet_rx",
+        "payload_hex": "4f4b"
+      },
+      {
+        "monotonic_ns": 383882552554169,
+        "event": "state",
+        "state": "closed"
+      }
+    ],
+    "raw_trace_sha256": "77ac4486a1cf8f011ad021cffa84d7738a420a33ae315d983b39250ca2242f11"
+  },
+  "source_evidence": [
+    {
+      "url": "https://raw.githubusercontent.com/qemu/qemu/v8.2.2/gdbstub/gdbstub.c",
+      "sha256": "fc070617bba2a741a5e678de4bfc48c3044d8802a7a46469e11ec080bb106d90",
+      "excerpts": [
+        {
+          "needle": "static void handle_step",
+          "line": 1312,
+          "first": 1307,
+          "text": [
+            "    gdb_memtohex(gdbserver_state.str_buf, gdbserver_state.mem_buf->data, len);",
+            "    gdb_put_strbuf();",
+            "}",
+            "",
+            "",
+            "static void handle_step(GArray *params, void *user_ctx)",
+            "{",
+            "    if (params->len) {",
+            "        gdb_set_cpu_pc(get_param(params, 0)->val_ull);",
+            "    }",
+            "",
+            "    cpu_single_step(gdbserver_state.c_cpu, gdbserver_state.sstep_flags);",
+            "    gdb_continue();",
+            "}",
+            ""
+          ]
+        },
+        {
+          "needle": "cpu_single_step(gdbserver_state.c_cpu",
+          "line": 1318,
+          "first": 1313,
+          "text": [
+            "{",
+            "    if (params->len) {",
+            "        gdb_set_cpu_pc(get_param(params, 0)->val_ull);",
+            "    }",
+            "",
+            "    cpu_single_step(gdbserver_state.c_cpu, gdbserver_state.sstep_flags);",
+            "    gdb_continue();",
+            "}",
+            "",
+            "static void handle_backward(GArray *params, void *user_ctx)",
+            "{",
+            "    if (!gdb_can_reverse()) {",
+            "        gdb_put_packet(\"E22\");",
+            "    }",
+            "    if (params->len == 1) {"
+          ]
+        },
+        {
+          "needle": "sstep_flags = SSTEP_ENABLE",
+          "line": 73,
+          "first": 68,
+          "text": [
+            "     * What single-step modes are supported is accelerator dependent.",
+            "     * By default try to use no IRQs and no timers while single",
+            "     * stepping so as to make single stepping like a typical ICE HW step.",
+            "     */",
+            "    gdbserver_state.supported_sstep_flags = accel_supported_gdbstub_sstep_flags();",
+            "    gdbserver_state.sstep_flags = SSTEP_ENABLE | SSTEP_NOIRQ | SSTEP_NOTIMER;",
+            "    gdbserver_state.sstep_flags &= gdbserver_state.supported_sstep_flags;",
+            "}",
+            "",
+            "/* writes 2*len+1 bytes in buf */",
+            "void gdb_memtohex(GString *buf, const uint8_t *mem, int len)",
+            "{",
+            "    int i, c;",
+            "    for(i = 0; i < len; i++) {",
+            "        c = mem[i];"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://raw.githubusercontent.com/qemu/qemu/v8.2.2/gdbstub/system.c",
+      "sha256": "7ebdffa82f33873f401b94064f0dae18f41bd6d7efd41a947698362c2e1b4496",
+      "excerpts": [
+        {
+          "needle": "if (cpu->watchpoint_hit)",
+          "line": 150,
+          "first": 145,
+          "text": [
+            "",
+            "    gdb_append_thread_id(cpu, tid);",
+            "",
+            "    switch (state) {",
+            "    case RUN_STATE_DEBUG:",
+            "        if (cpu->watchpoint_hit) {",
+            "            switch (cpu->watchpoint_hit->flags & BP_MEM_ACCESS) {",
+            "            case BP_MEM_READ:",
+            "                type = \"r\";",
+            "                break;",
+            "            case BP_MEM_ACCESS:",
+            "                type = \"a\";",
+            "                break;",
+            "            default:",
+            "                type = \"\";"
+          ]
+        },
+        {
+          "needle": "cpu->watchpoint_hit = NULL",
+          "line": 168,
+          "first": 163,
+          "text": [
+            "                                         gdb_get_cpu_index(cpu),",
+            "                                         cpu->watchpoint_hit->vaddr);",
+            "            g_string_printf(buf, \"T%02xthread:%s;%swatch:%\" VADDR_PRIx \";\",",
+            "                            GDB_SIGNAL_TRAP, tid->str, type,",
+            "                            cpu->watchpoint_hit->vaddr);",
+            "            cpu->watchpoint_hit = NULL;",
+            "            goto send_packet;",
+            "        } else {",
+            "            trace_gdbstub_hit_break();",
+            "        }",
+            "        tb_flush(cpu);",
+            "        ret = GDB_SIGNAL_TRAP;",
+            "        break;",
+            "    case RUN_STATE_PAUSED:",
+            "        trace_gdbstub_hit_paused();"
+          ]
+        },
+        {
+          "needle": "cpu_single_step(cpu, 0)",
+          "line": 215,
+          "first": 210,
+          "text": [
+            "send_packet:",
+            "    gdb_put_packet(buf->str);",
+            "    gdbserver_state.allow_stop_reply = false;",
+            "",
+            "    /* disable single step if it was enabled */",
+            "    cpu_single_step(cpu, 0);",
+            "}",
+            "",
+            "#ifndef _WIN32",
+            "static void gdb_sigterm_handler(int signal)",
+            "{",
+            "    if (runstate_is_running()) {",
+            "        vm_stop(RUN_STATE_PAUSED);",
+            "    }",
+            "}"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://raw.githubusercontent.com/qemu/qemu/v8.2.2/system/watchpoint.c",
+      "sha256": "c220690a420ee4d48b46ba35981c1201eb4b931c9fa816459781b09cec07113e",
+      "excerpts": [
+        {
+          "needle": "if (cpu->watchpoint_hit)",
+          "line": 152,
+          "first": 147,
+          "text": [
+            "{",
+            "    CPUClass *cc = CPU_GET_CLASS(cpu);",
+            "    CPUWatchpoint *wp;",
+            "",
+            "    assert(tcg_enabled());",
+            "    if (cpu->watchpoint_hit) {",
+            "        /*",
+            "         * We re-entered the check after replacing the TB.",
+            "         * Now raise the debug interrupt so that it will",
+            "         * trigger after the current instruction.",
+            "         */",
+            "        qemu_mutex_lock_iothread();",
+            "        cpu_interrupt(cpu, CPU_INTERRUPT_DEBUG);",
+            "        qemu_mutex_unlock_iothread();",
+            "        return;"
+          ]
+        },
+        {
+          "needle": "cpu_interrupt(cpu, CPU_INTERRUPT_DEBUG)",
+          "line": 159,
+          "first": 154,
+          "text": [
+            "         * We re-entered the check after replacing the TB.",
+            "         * Now raise the debug interrupt so that it will",
+            "         * trigger after the current instruction.",
+            "         */",
+            "        qemu_mutex_lock_iothread();",
+            "        cpu_interrupt(cpu, CPU_INTERRUPT_DEBUG);",
+            "        qemu_mutex_unlock_iothread();",
+            "        return;",
+            "    }",
+            "",
+            "    if (cc->tcg_ops->adjust_watchpoint_address) {",
+            "        /* this is currently used only by ARM BE32 */",
+            "        addr = cc->tcg_ops->adjust_watchpoint_address(cpu, addr, len);",
+            "    }",
+            ""
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://raw.githubusercontent.com/qemu/qemu/v8.2.2/accel/tcg/cpu-exec.c",
+      "sha256": "9643d9f679ecb80038ae5f44f69d72f4288dfc6357173aaf9433b3d196aa1018",
+      "excerpts": [
+        {
+          "needle": "if (interrupt_request & CPU_INTERRUPT_DEBUG)",
+          "line": 821,
+          "first": 816,
+          "text": [
+            "        interrupt_request = cpu->interrupt_request;",
+            "        if (unlikely(cpu->singlestep_enabled & SSTEP_NOIRQ)) {",
+            "            /* Mask out external interrupts for this step. */",
+            "            interrupt_request &= ~CPU_INTERRUPT_SSTEP_MASK;",
+            "        }",
+            "        if (interrupt_request & CPU_INTERRUPT_DEBUG) {",
+            "            cpu->interrupt_request &= ~CPU_INTERRUPT_DEBUG;",
+            "            cpu->exception_index = EXCP_DEBUG;",
+            "            qemu_mutex_unlock_iothread();",
+            "            return true;",
+            "        }",
+            "#if !defined(CONFIG_USER_ONLY)",
+            "        if (replay_mode == REPLAY_MODE_PLAY && !replay_has_interrupt()) {",
+            "            /* Do nothing */",
+            "        } else if (interrupt_request & CPU_INTERRUPT_HALT) {"
+          ]
+        },
+        {
+          "needle": "cpu->interrupt_request &= ~CPU_INTERRUPT_DEBUG",
+          "line": 822,
+          "first": 817,
+          "text": [
+            "        if (unlikely(cpu->singlestep_enabled & SSTEP_NOIRQ)) {",
+            "            /* Mask out external interrupts for this step. */",
+            "            interrupt_request &= ~CPU_INTERRUPT_SSTEP_MASK;",
+            "        }",
+            "        if (interrupt_request & CPU_INTERRUPT_DEBUG) {",
+            "            cpu->interrupt_request &= ~CPU_INTERRUPT_DEBUG;",
+            "            cpu->exception_index = EXCP_DEBUG;",
+            "            qemu_mutex_unlock_iothread();",
+            "            return true;",
+            "        }",
+            "#if !defined(CONFIG_USER_ONLY)",
+            "        if (replay_mode == REPLAY_MODE_PLAY && !replay_has_interrupt()) {",
+            "            /* Do nothing */",
+            "        } else if (interrupt_request & CPU_INTERRUPT_HALT) {",
+            "            replay_interrupt();"
+          ]
+        },
+        {
+          "needle": "if (unlikely(cpu->singlestep_enabled) && cpu->exception_index == -1)",
+          "line": 503,
+          "first": 498,
+          "text": [
+            "    /*",
+            "     * If gdb single-step, and we haven't raised another exception,",
+            "     * raise a debug exception.  Single-step with another exception",
+            "     * is handled in cpu_handle_exception.",
+            "     */",
+            "    if (unlikely(cpu->singlestep_enabled) && cpu->exception_index == -1) {",
+            "        cpu->exception_index = EXCP_DEBUG;",
+            "        cpu_loop_exit(cpu);",
+            "    }",
+            "",
+            "    return last_tb;",
+            "}",
+            "",
+            "",
+            "static void cpu_exec_enter(CPUState *cpu)"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://raw.githubusercontent.com/qemu/qemu/v8.2.2/target/i386/tcg/translate.c",
+      "sha256": "10b174db6de1d1a946a81b172ebaa58ba7af0ea18bed847e2780b3f4f1aaa835",
+      "excerpts": [
+        {
+          "needle": "HF_RF_MASK",
+          "line": 2788,
+          "first": 2783,
+          "text": [
+            "        gen_set_hflag(s, HF_INHIBIT_IRQ_MASK);",
+            "    } else {",
+            "        gen_reset_hflag(s, HF_INHIBIT_IRQ_MASK);",
+            "    }",
+            "",
+            "    if (s->base.tb->flags & HF_RF_MASK) {",
+            "        gen_reset_eflags(s, RF_MASK);",
+            "    }",
+            "    if (recheck_tf) {",
+            "        gen_helper_rechecking_single_step(tcg_env);",
+            "        tcg_gen_exit_tb(NULL, 0);",
+            "    } else if (s->flags & HF_TF_MASK) {",
+            "        gen_helper_single_step(tcg_env);",
+            "    } else if (jr) {",
+            "        tcg_gen_lookup_and_goto_ptr();"
+          ]
+        },
+        {
+          "needle": "gen_reset_eflags(s, RF_MASK)",
+          "line": 2789,
+          "first": 2784,
+          "text": [
+            "    } else {",
+            "        gen_reset_hflag(s, HF_INHIBIT_IRQ_MASK);",
+            "    }",
+            "",
+            "    if (s->base.tb->flags & HF_RF_MASK) {",
+            "        gen_reset_eflags(s, RF_MASK);",
+            "    }",
+            "    if (recheck_tf) {",
+            "        gen_helper_rechecking_single_step(tcg_env);",
+            "        tcg_gen_exit_tb(NULL, 0);",
+            "    } else if (s->flags & HF_TF_MASK) {",
+            "        gen_helper_single_step(tcg_env);",
+            "    } else if (jr) {",
+            "        tcg_gen_lookup_and_goto_ptr();",
+            "    } else {"
+          ]
+        },
+        {
+          "needle": "s->flags & HF_TF_MASK",
+          "line": 2794,
+          "first": 2789,
+          "text": [
+            "        gen_reset_eflags(s, RF_MASK);",
+            "    }",
+            "    if (recheck_tf) {",
+            "        gen_helper_rechecking_single_step(tcg_env);",
+            "        tcg_gen_exit_tb(NULL, 0);",
+            "    } else if (s->flags & HF_TF_MASK) {",
+            "        gen_helper_single_step(tcg_env);",
+            "    } else if (jr) {",
+            "        tcg_gen_lookup_and_goto_ptr();",
+            "    } else {",
+            "        tcg_gen_exit_tb(NULL, 0);",
+            "    }",
+            "    s->base.is_jmp = DISAS_NORETURN;",
+            "}",
+            ""
+          ]
+        }
+      ]
+    }
+  ],
+  "interpretation": {
+    "confirmed": "QEMU gdbstub clears watchpoint_hit after reporting watched stop, and CPU_INTERRUPT_DEBUG can be consumed before an instruction even in native single-step; bare T05 and unchangedPC are not affirmative instruction-retirement proof. Host single-step is CPUState/cflags, not a P/G register-write or guest-TF setter. RF/TF guest flags were not sampled at failed event; no claim of their actual values.",
+    "not_proven": "Cannot establish hidden pending-debug/cpu-exit state or specific ordering that caused THIS observed samePC from existing allowed reads/stop packet. Do not call the trap a completed instruction, auto-retry extra steps, drop a watch guard, or infer product hang.",
+    "minimal_falsification": "Isolated actual QEMU8.2.2 Q35/TCG bootsector watchedadd+postexecuteBP branches correctly on first single-step with/without preexisting executeBP. Repetitive isolated version completes1000 watched writes/firststeps, no samePC. Generic writewatch+postBP is insufficient to reproduce actual failure."
+  },
+  "next_requirement": "Need independently observable instruction retirement/pending debug-state proof or an approved bounded semantic amendment for additional native control; no candidate change/full observed rerun authorized. Keep observed workloads incomplete, headless partial captured values labeled only partial interval, desktop observed unrun; static/timing complete; CBX27/criterion4 remain unmet."
+}

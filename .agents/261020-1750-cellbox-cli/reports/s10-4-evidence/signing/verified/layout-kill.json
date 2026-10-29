@@ -1,0 +1,557 @@
+{
+  "allocated_bytes_VA_flags_sizes_alignment_unchanged": true,
+  "program_header_byte_identity": false,
+  "section_type_entry_size_normalization": [
+    {
+      "changes": {
+        "entsize": {
+          "signed": 8,
+          "unsigned": 0
+        },
+        "type": {
+          "signed": 14,
+          "unsigned": 1
+        }
+      },
+      "section": ".init_array"
+    }
+  ],
+  "signed_program_headers": [
+    {
+      "align": 4096,
+      "filesz": 6551,
+      "flags": 5,
+      "memsz": 6551,
+      "offset": 4096,
+      "paddr": 0,
+      "type": 1,
+      "vaddr": 0
+    },
+    {
+      "align": 4096,
+      "filesz": 2496,
+      "flags": 4,
+      "memsz": 2496,
+      "offset": 10648,
+      "paddr": 6552,
+      "type": 1,
+      "vaddr": 6552
+    },
+    {
+      "align": 4096,
+      "filesz": 568,
+      "flags": 6,
+      "memsz": 568,
+      "offset": 16384,
+      "paddr": 12288,
+      "type": 1,
+      "vaddr": 12288
+    },
+    {
+      "align": 4096,
+      "filesz": 0,
+      "flags": 6,
+      "memsz": 1048625,
+      "offset": 0,
+      "paddr": 16384,
+      "type": 1,
+      "vaddr": 16384
+    },
+    {
+      "align": 8,
+      "filesz": 256,
+      "flags": 6,
+      "memsz": 256,
+      "offset": 16696,
+      "paddr": 12600,
+      "type": 2,
+      "vaddr": 12600
+    },
+    {
+      "align": 1,
+      "filesz": 568,
+      "flags": 4,
+      "memsz": 568,
+      "offset": 16384,
+      "paddr": 12288,
+      "type": 1685382482,
+      "vaddr": 12288
+    },
+    {
+      "align": 4,
+      "filesz": 12,
+      "flags": 4,
+      "memsz": 12,
+      "offset": 13096,
+      "paddr": 9000,
+      "type": 1685382480,
+      "vaddr": 9000
+    },
+    {
+      "align": 0,
+      "filesz": 0,
+      "flags": 6,
+      "memsz": 0,
+      "offset": 0,
+      "paddr": 0,
+      "type": 1685382481,
+      "vaddr": 0
+    }
+  ],
+  "signed_sections": [
+    {
+      "addr": 0,
+      "align": 0,
+      "bytes": 0,
+      "entsize": 0,
+      "flags": 0,
+      "name": "",
+      "offset": 0,
+      "type": 0
+    },
+    {
+      "addr": 0,
+      "align": 16,
+      "bytes": 6551,
+      "entsize": 0,
+      "flags": 6,
+      "name": ".text",
+      "offset": 4096,
+      "type": 1
+    },
+    {
+      "addr": 6552,
+      "align": 8,
+      "bytes": 24,
+      "entsize": 24,
+      "flags": 2,
+      "name": ".dynsym",
+      "offset": 10648,
+      "type": 11
+    },
+    {
+      "addr": 6576,
+      "align": 8,
+      "bytes": 28,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".gnu.hash",
+      "offset": 10672,
+      "type": 1879048182
+    },
+    {
+      "addr": 6604,
+      "align": 4,
+      "bytes": 16,
+      "entsize": 4,
+      "flags": 2,
+      "name": ".hash",
+      "offset": 10700,
+      "type": 5
+    },
+    {
+      "addr": 6620,
+      "align": 1,
+      "bytes": 1,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".dynstr",
+      "offset": 10716,
+      "type": 3
+    },
+    {
+      "addr": 6624,
+      "align": 8,
+      "bytes": 360,
+      "entsize": 24,
+      "flags": 2,
+      "name": ".rela.dyn",
+      "offset": 10720,
+      "type": 4
+    },
+    {
+      "addr": 8192,
+      "align": 4096,
+      "bytes": 806,
+      "entsize": 0,
+      "flags": 50,
+      "name": ".rodata",
+      "offset": 12288,
+      "type": 1
+    },
+    {
+      "addr": 9000,
+      "align": 4,
+      "bytes": 12,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".eh_frame_hdr",
+      "offset": 13096,
+      "type": 1
+    },
+    {
+      "addr": 9016,
+      "align": 8,
+      "bytes": 28,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".eh_frame",
+      "offset": 13112,
+      "type": 1
+    },
+    {
+      "addr": 9048,
+      "align": 8,
+      "bytes": 0,
+      "entsize": 8,
+      "flags": 2,
+      "name": ".init_array",
+      "offset": 13144,
+      "type": 14
+    },
+    {
+      "addr": 12288,
+      "align": 4096,
+      "bytes": 312,
+      "entsize": 0,
+      "flags": 2097155,
+      "name": ".data",
+      "offset": 16384,
+      "type": 1
+    },
+    {
+      "addr": 12600,
+      "align": 8,
+      "bytes": 256,
+      "entsize": 16,
+      "flags": 3,
+      "name": ".dynamic",
+      "offset": 16696,
+      "type": 6
+    },
+    {
+      "addr": 16384,
+      "align": 4096,
+      "bytes": 1048625,
+      "entsize": 0,
+      "flags": 3,
+      "name": ".bss",
+      "offset": 20480,
+      "type": 8
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 147,
+      "entsize": 1,
+      "flags": 48,
+      "name": ".comment",
+      "offset": 16952,
+      "type": 1
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 64,
+      "entsize": 0,
+      "flags": 0,
+      "name": "__ViCell_sig",
+      "offset": 17099,
+      "type": 1
+    },
+    {
+      "addr": 0,
+      "align": 8,
+      "bytes": 936,
+      "entsize": 24,
+      "flags": 0,
+      "name": ".symtab",
+      "offset": 17168,
+      "type": 2
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 1614,
+      "entsize": 0,
+      "flags": 0,
+      "name": ".strtab",
+      "offset": 18104,
+      "type": 3
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 155,
+      "entsize": 0,
+      "flags": 0,
+      "name": ".shstrtab",
+      "offset": 19718,
+      "type": 3
+    }
+  ],
+  "unsigned_program_headers": [
+    {
+      "align": 4096,
+      "filesz": 6551,
+      "flags": 5,
+      "memsz": 6551,
+      "offset": 4096,
+      "paddr": 0,
+      "type": 1,
+      "vaddr": 0
+    },
+    {
+      "align": 4096,
+      "filesz": 2496,
+      "flags": 4,
+      "memsz": 2496,
+      "offset": 10648,
+      "paddr": 6552,
+      "type": 1,
+      "vaddr": 6552
+    },
+    {
+      "align": 4096,
+      "filesz": 568,
+      "flags": 6,
+      "memsz": 568,
+      "offset": 16384,
+      "paddr": 12288,
+      "type": 1,
+      "vaddr": 12288
+    },
+    {
+      "align": 4096,
+      "filesz": 0,
+      "flags": 6,
+      "memsz": 1048625,
+      "offset": 20480,
+      "paddr": 16384,
+      "type": 1,
+      "vaddr": 16384
+    },
+    {
+      "align": 8,
+      "filesz": 256,
+      "flags": 6,
+      "memsz": 256,
+      "offset": 16696,
+      "paddr": 12600,
+      "type": 2,
+      "vaddr": 12600
+    },
+    {
+      "align": 1,
+      "filesz": 568,
+      "flags": 4,
+      "memsz": 568,
+      "offset": 16384,
+      "paddr": 12288,
+      "type": 1685382482,
+      "vaddr": 12288
+    },
+    {
+      "align": 4,
+      "filesz": 12,
+      "flags": 4,
+      "memsz": 12,
+      "offset": 13096,
+      "paddr": 9000,
+      "type": 1685382480,
+      "vaddr": 9000
+    },
+    {
+      "align": 0,
+      "filesz": 0,
+      "flags": 6,
+      "memsz": 0,
+      "offset": 0,
+      "paddr": 0,
+      "type": 1685382481,
+      "vaddr": 0
+    }
+  ],
+  "unsigned_sections": [
+    {
+      "addr": 0,
+      "align": 0,
+      "bytes": 0,
+      "entsize": 0,
+      "flags": 0,
+      "name": "",
+      "offset": 0,
+      "type": 0
+    },
+    {
+      "addr": 0,
+      "align": 16,
+      "bytes": 6551,
+      "entsize": 0,
+      "flags": 6,
+      "name": ".text",
+      "offset": 4096,
+      "type": 1
+    },
+    {
+      "addr": 6552,
+      "align": 8,
+      "bytes": 24,
+      "entsize": 24,
+      "flags": 2,
+      "name": ".dynsym",
+      "offset": 10648,
+      "type": 11
+    },
+    {
+      "addr": 6576,
+      "align": 8,
+      "bytes": 28,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".gnu.hash",
+      "offset": 10672,
+      "type": 1879048182
+    },
+    {
+      "addr": 6604,
+      "align": 4,
+      "bytes": 16,
+      "entsize": 4,
+      "flags": 2,
+      "name": ".hash",
+      "offset": 10700,
+      "type": 5
+    },
+    {
+      "addr": 6620,
+      "align": 1,
+      "bytes": 1,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".dynstr",
+      "offset": 10716,
+      "type": 3
+    },
+    {
+      "addr": 6624,
+      "align": 8,
+      "bytes": 360,
+      "entsize": 24,
+      "flags": 2,
+      "name": ".rela.dyn",
+      "offset": 10720,
+      "type": 4
+    },
+    {
+      "addr": 8192,
+      "align": 4096,
+      "bytes": 806,
+      "entsize": 0,
+      "flags": 50,
+      "name": ".rodata",
+      "offset": 12288,
+      "type": 1
+    },
+    {
+      "addr": 9000,
+      "align": 4,
+      "bytes": 12,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".eh_frame_hdr",
+      "offset": 13096,
+      "type": 1
+    },
+    {
+      "addr": 9016,
+      "align": 8,
+      "bytes": 28,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".eh_frame",
+      "offset": 13112,
+      "type": 1
+    },
+    {
+      "addr": 9048,
+      "align": 8,
+      "bytes": 0,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".init_array",
+      "offset": 13144,
+      "type": 1
+    },
+    {
+      "addr": 12288,
+      "align": 4096,
+      "bytes": 312,
+      "entsize": 0,
+      "flags": 2097155,
+      "name": ".data",
+      "offset": 16384,
+      "type": 1
+    },
+    {
+      "addr": 12600,
+      "align": 8,
+      "bytes": 256,
+      "entsize": 16,
+      "flags": 3,
+      "name": ".dynamic",
+      "offset": 16696,
+      "type": 6
+    },
+    {
+      "addr": 16384,
+      "align": 4096,
+      "bytes": 1048625,
+      "entsize": 0,
+      "flags": 3,
+      "name": ".bss",
+      "offset": 20480,
+      "type": 8
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 147,
+      "entsize": 1,
+      "flags": 48,
+      "name": ".comment",
+      "offset": 20480,
+      "type": 1
+    },
+    {
+      "addr": 0,
+      "align": 8,
+      "bytes": 936,
+      "entsize": 24,
+      "flags": 0,
+      "name": ".symtab",
+      "offset": 20632,
+      "type": 2
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 148,
+      "entsize": 0,
+      "flags": 0,
+      "name": ".shstrtab",
+      "offset": 21568,
+      "type": 3
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 1621,
+      "entsize": 0,
+      "flags": 0,
+      "name": ".strtab",
+      "offset": 21716,
+      "type": 3
+    }
+  ]
+}

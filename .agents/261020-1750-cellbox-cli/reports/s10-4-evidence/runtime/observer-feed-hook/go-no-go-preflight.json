@@ -1,0 +1,70 @@
+{
+  "go": true,
+  "checks": {
+    "G1_cp1_approval_recorded": {
+      "ok": true,
+      "detail": null
+    },
+    "G2_single_clean_invocation": {
+      "ok": true,
+      "detail": {
+        "status": "PASS",
+        "tests_run": 269,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "G2_frozen_sources_match": {
+      "ok": true,
+      "detail": {
+        "files": 43,
+        "drift": []
+      }
+    },
+    "G3_static_identity_matches_candidate_elf": {
+      "ok": true,
+      "detail": null
+    },
+    "G4_candidate_inputs_and_terminal_sha": {
+      "ok": true,
+      "detail": null
+    },
+    "G4_protected_paths_stable_since_s10_4_15": {
+      "ok": true,
+      "detail": {
+        "files": 546
+      }
+    },
+    "G4_prior_archive_manifest_intact": {
+      "ok": true,
+      "detail": null
+    },
+    "G4_compressed_trace_present": {
+      "ok": true,
+      "detail": null
+    },
+    "G4_qemu_health_and_input_source_binding": {
+      "ok": true,
+      "detail": null
+    },
+    "G5_run_not_consumed": {
+      "ok": true,
+      "detail": null
+    },
+    "G6_no_stray_qemu": {
+      "ok": true,
+      "detail": []
+    },
+    "G6_tmp_space": {
+      "ok": true,
+      "detail": 559411044352
+    },
+    "G7_docs_record_approval_before_execution": {
+      "ok": true,
+      "detail": null
+    }
+  },
+  "ns": 431407747939941,
+  "wall_time": 1793245873.7052207
+}

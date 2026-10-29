@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "reproduce_before.py"
+  ],
+  "cwd": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-rsp-atomic",
+  "start_ns": 423367832577387,
+  "end_ns": 423367930834153,
+  "returncode": 1,
+  "stdout": "{\n  \"scope\": \"Synthetic deterministic fake clock/transport; no candidate execution\",\n  \"client_type\": \"RspClient\",\n  \"original_rsp_sha256\": \"c8c3bffb20a609201e0a7dd59b58b35fde4c935cec221aadd0830e87eab76880\",\n  \"wire_frame_hex\": \"245430357468726561643a30313b233037\",\n  \"valid_checksum\": true,\n  \"polls\": [\n    {\n      \"ordinal\": 1,\n      \"start\": 0.0,\n      \"timeout\": 0.1,\n      \"error\": \"RspTimeout: RSP deadline expired\",\n      \"end\": 0.1,\n      \"buffer_hex\": \"\",\n      \"state\": \"running\",\n      \"ACK_count\": 0\n    },\n    {\n      \"ordinal\": 2,\n      \"start\": 0.1,\n      \"timeout\": 0.1,\n      \"error\": \"RspTimeout: RSP receive timed out\",\n      \"end\": 0.2,\n      \"buffer_hex\": \"\",\n      \"state\": \"running\",\n      \"ACK_count\": 0\n    }\n  ],\n  \"receive_calls\": 2,\n  \"sent_raw_hex\": [],\n  \"final_state_before_close\": \"running\",\n  \"last_stop\": null,\n  \"final_buffer_hex\": \"\",\n  \"positive_ACK_count\": 0,\n  \"decoded_stop_dispatch_count\": 0,\n  \"stop_received_across_original_polls\": false,\n  \"no_guest_control_packet\": true,\n  \"old_loss_signature\": true,\n  \"no_timeout_increase\": true\n}\n",
+  "stderr": "Traceback (most recent call last):\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-rsp-atomic/reproduce_before.py\", line 113, in <module>\n    main()\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-rsp-atomic/reproduce_before.py\", line 109, in main\n    assert_delivery(result)\n  File \"/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-rsp-atomic/reproduce_before.py\", line 100, in assert_delivery\n    assert result['stop_received_across_original_polls'], 'valid stop was silently lost across original .1s polls'\n           ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: valid stop was silently lost across original .1s polls\n"
+}

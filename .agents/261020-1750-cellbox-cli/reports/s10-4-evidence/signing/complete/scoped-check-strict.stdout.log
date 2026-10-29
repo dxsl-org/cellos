@@ -1,0 +1,159 @@
+NOTE: allowlist entries overdue for re-review (past `review_by`, or older than `max_age_days` when they set none):
+  app-c-math-smoke (approved 2026-07-14, 106d ago)
+  app-mlibc-smoke (approved 2026-07-14, 106d ago)
+  app-posix-shim-test (approved 2026-07-14, 106d ago)
+  audio-demo (approved 2026-07-14, 106d ago)
+  cells/demos/audio-demo/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/demos/cfi-test/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/demos/doom/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/demos/tetris-c/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/demos/tetris-lua/src/ffi.rs (approved 2026-07-14, 106d ago)
+  cells/demos/tetris-lua/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/e1000/src/controller.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/nvme/src/controller.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/nvme/src/dispatch.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/nvme/src/queue.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/virtio-blk/src/device.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/virtio-gpu/src/cursor.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/virtio-gpu/src/display.rs (approved 2026-07-14, 106d ago)
+  cells/drivers/virtio-net/src/device.rs (approved 2026-07-14, 106d ago)
+  cells/guests/silo-guest/src/mailbox.rs (approved 2026-07-14, 106d ago)
+  cells/guests/silo-guest/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/bindings_io.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/bindings_net.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/bindings_vfs.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/ffi.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/runtimes/lua/src/repl_session.rs (approved 2026-07-14, 106d ago)
+  cells/services/hypervisor/src/timer.rs (approved 2026-07-14, 106d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource.rs (approved 2026-07-14, 106d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource/render.rs (approved 2026-07-14, 106d ago)
+  cells/services/hypervisor/src/vmm.rs (approved 2026-07-14, 106d ago)
+  cells/services/input/src/virtio_device.rs (approved 2026-07-14, 106d ago)
+  cells/services/net/src/tls/socket.rs (approved 2026-07-14, 106d ago)
+  cells/services/net/src/tls/transport.rs (approved 2026-07-14, 106d ago)
+  cells/tests/c-math-smoke/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/tests/hypervisor-test/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/tests/mlibc-smoke/src/main.rs (approved 2026-07-14, 106d ago)
+  cells/tests/posix-shim-test/src/main.rs (approved 2026-07-14, 106d ago)
+  cfi-test (approved 2026-07-14, 106d ago)
+  doom (approved 2026-07-14, 106d ago)
+  driver-e1000 (approved 2026-07-14, 106d ago)
+  driver-nvme (approved 2026-07-14, 106d ago)
+  driver-virtio-blk (approved 2026-07-14, 106d ago)
+  driver-virtio-gpu (approved 2026-07-14, 106d ago)
+  driver-virtio-net (approved 2026-07-14, 106d ago)
+  hypervisor-test (approved 2026-07-14, 106d ago)
+  lua (approved 2026-07-14, 106d ago)
+  service-compositor (approved 2026-07-14, 106d ago)
+  service-hypervisor (approved 2026-07-14, 106d ago)
+  service-input (approved 2026-07-14, 106d ago)
+  service-net (approved 2026-07-14, 106d ago)
+  silo-guest (approved 2026-07-14, 106d ago)
+  tetris-c (approved 2026-07-14, 106d ago)
+  tetris-lua (approved 2026-07-14, 106d ago)
+NOTE: [[file]] cells/demos/audio-demo/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/demos/cfi-test/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/demos/doom/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/demos/tetris-c/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/demos/tetris-lua/src/ffi.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/demos/tetris-lua/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/ahci/src/controller.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/ahci/src/dispatch.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/bcm-display/src/lib.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/bcm-display/src/mailbox.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/bcm-display/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/dwc2-usb/src/usb_channel.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/e1000/src/controller.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/e1000/src/dma_layout.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/igb/src/controller.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/igb/src/dma_layout.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/nvme/src/controller.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/nvme/src/dispatch.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/nvme/src/queue.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/virtio-blk/src/device.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/virtio-gpu/src/cursor.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/virtio-gpu/src/display.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/virtio-net/src/device.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/drivers/xhci/src/dma.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/guests/silo-guest/src/mailbox.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/guests/silo-guest/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/runtimes/lua/src/bindings_io.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/runtimes/lua/src/bindings_net.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/runtimes/lua/src/bindings_vfs.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/runtimes/lua/src/ffi.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/runtimes/lua/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/runtimes/lua/src/repl_session.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/compositor/src/surface_table/pixels.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/compositor/src/surface_table/state.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/hypervisor/src/timer.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/hypervisor/src/virtio_gpu/resource.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/hypervisor/src/virtio_gpu/resource/render.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/hypervisor/src/vmm.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/input/src/virtio_device.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/net/src/tls/dispatch.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/net/src/tls/socket.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/net/src/tls/transport.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/ocel-pdf/src/engine.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/ocel-quickjs/src/engine.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/ocel-quickjs/src/ffi.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/silo/src/vmm.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/vfs/kernel-fs-legacy.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/vfs/src/fast_handler.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/services/vfs/src/grant_read.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/c-math-smoke/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/c-pthread/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/c-spawn-child/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/c-spawn/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/cpp-smoke/src/cpp.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/hypervisor-test/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/mlibc-smoke/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/posix-shim-test/src/fstat.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/posix-shim-test/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/tier2-exploit/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/tier2-grant-owner/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/tier2-grant-receiver/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/tier2-rpc-driver/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/tls-test/src/regs.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[file]] cells/tests/wx-test/src/main.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[crate]] app-c-math-smoke is no longer needed — tighten the allowlist
+NOTE: [[crate]] app-c-spawn is no longer needed — tighten the allowlist
+NOTE: [[crate]] app-c-spawn-child is no longer needed — tighten the allowlist
+NOTE: [[crate]] app-cpp-smoke is no longer needed — tighten the allowlist
+NOTE: [[crate]] app-mlibc-smoke is no longer needed — tighten the allowlist
+NOTE: [[crate]] app-posix-shim-test is no longer needed — tighten the allowlist
+NOTE: [[crate]] app-tls-test is no longer needed — tighten the allowlist
+NOTE: [[crate]] audio-demo is no longer needed — tighten the allowlist
+NOTE: [[crate]] c-pthread is no longer needed — tighten the allowlist
+NOTE: [[crate]] cfi-test is no longer needed — tighten the allowlist
+NOTE: [[crate]] doom is no longer needed — tighten the allowlist
+NOTE: [[crate]] driver-ahci is no longer needed — tighten the allowlist
+NOTE: [[crate]] driver-bcm-display is no longer needed — tighten the allowlist
+NOTE: [[crate]] driver-dwc2-usb is no longer needed — tighten the allowlist
+NOTE: [[crate]] driver-e1000 is no longer needed — tighten the allowlist
+NOTE: [[crate]] driver-igb is no longer needed — tighten the allowlist
+NOTE: [[crate]] driver-nvme is no longer needed — tighten the allowlist
+NOTE: [[crate]] driver-virtio-blk is no longer needed — tighten the allowlist
+NOTE: [[crate]] driver-virtio-gpu is no longer needed — tighten the allowlist
+NOTE: [[crate]] driver-virtio-net is no longer needed — tighten the allowlist
+NOTE: [[crate]] driver-xhci is no longer needed — tighten the allowlist
+NOTE: [[crate]] hypervisor-test is no longer needed — tighten the allowlist
+NOTE: [[crate]] lua is no longer needed — tighten the allowlist
+NOTE: [[crate]] ocel-pdf is no longer needed — tighten the allowlist
+NOTE: [[crate]] ocel-quickjs is no longer needed — tighten the allowlist
+NOTE: [[crate]] service-compositor is no longer needed — tighten the allowlist
+NOTE: [[crate]] service-hypervisor is no longer needed — tighten the allowlist
+NOTE: [[crate]] service-input is no longer needed — tighten the allowlist
+NOTE: [[crate]] service-net is no longer needed — tighten the allowlist
+NOTE: [[crate]] service-silo is no longer needed — tighten the allowlist
+NOTE: [[crate]] service-vfs is no longer needed — tighten the allowlist
+NOTE: [[crate]] silo-guest is no longer needed — tighten the allowlist
+NOTE: [[crate]] tetris-c is no longer needed — tighten the allowlist
+NOTE: [[crate]] tetris-lua is no longer needed — tighten the allowlist
+NOTE: [[crate]] tier2-exploit is no longer needed — tighten the allowlist
+NOTE: [[crate]] tier2-grant-owner is no longer needed — tighten the allowlist
+NOTE: [[crate]] tier2-grant-receiver is no longer needed — tighten the allowlist
+NOTE: [[crate]] tier2-rpc-driver is no longer needed — tighten the allowlist
+NOTE: [[crate]] wx-test is no longer needed — tighten the allowlist
+OK:   F5 — rustc f53b654a8882 is the pinned nightly-2026-05-01
+OK:   F1 — 2 crates and 38 files scanned; unsafe confined to 0 allowlisted files

@@ -1,0 +1,99 @@
+{
+  "commands": [
+    {
+      "argv": [
+        "rustup",
+        "which",
+        "--toolchain",
+        "nightly-2026-05-01",
+        "rustc"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/signing-review-root",
+      "label": "rustc-installed-path",
+      "returncode": 0,
+      "stderr": "rustc-installed-path.stderr.log",
+      "stdout": "rustc-installed-path.stdout.log"
+    },
+    {
+      "argv": [
+        "rustc",
+        "-Vv"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/signing-review-root",
+      "label": "rustc-active",
+      "returncode": 0,
+      "stderr": "rustc-active.stderr.log",
+      "stdout": "rustc-active.stdout.log"
+    },
+    {
+      "argv": [
+        "rustc",
+        "+nightly-2026-05-01",
+        "-Vv"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/signing-review-root",
+      "label": "rustc-pinned",
+      "returncode": 0,
+      "stderr": "rustc-pinned.stderr.log",
+      "stdout": "rustc-pinned.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/sign-cell.py",
+        "--emit-pubkey"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "existing-dev-pubkey",
+      "returncode": 0,
+      "stderr": "existing-dev-pubkey.stderr.log",
+      "stdout": "existing-dev-pubkey.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/cellos-sign",
+        "--repo",
+        "/tmp/cellbox-s10-4/signing-review-root",
+        "--check",
+        "--strict"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "scoped-check-strict",
+      "returncode": 0,
+      "stderr": "scoped-check-strict.stderr.log",
+      "stdout": "scoped-check-strict.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/shell"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-unsigned-shell",
+      "returncode": 0,
+      "stderr": "size-unsigned-shell.stderr.log",
+      "stdout": "size-unsigned-shell.stdout.log"
+    },
+    {
+      "argv": [
+        "readelf",
+        "-p",
+        ".comment",
+        "/tmp/cellbox-s10-4/b2-unsigned/shell"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "compiler-comment-shell",
+      "returncode": 0,
+      "stderr": "compiler-comment-shell.stderr.log",
+      "stdout": "compiler-comment-shell.stdout.log"
+    }
+  ],
+  "deployable_image_or_candidate": false,
+  "error": "ELF compiler metadata mismatch: shell",
+  "exception": "RuntimeError",
+  "feature_equivalent": false,
+  "runtime_comparator_available": false,
+  "scope": "D4-Sign1 A historical measurement artifacts only",
+  "status": "STOP"
+}

@@ -1,0 +1,10 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-gui-temporal/test_all.py"
+  ],
+  "start_ns": 426078254649949,
+  "end_ns": 426079267750841,
+  "returncode": 1,
+  "scope": "Full offline synthetic144 retained+newtemporal/renderer/all-pathretention; first import ownership failure retained separately; noVM"
+}

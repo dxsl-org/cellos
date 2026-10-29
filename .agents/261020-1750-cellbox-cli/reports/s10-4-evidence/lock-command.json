@@ -1,0 +1,17 @@
+{
+  "command": [
+    "cargo",
+    "+nightly-2026-05-01",
+    "metadata",
+    "--offline",
+    "--format-version",
+    "1",
+    "--filter-platform",
+    "x86_64-unknown-none"
+  ],
+  "cwd": "/tmp/cellbox-s10-4/baseline-worktree",
+  "offline": true,
+  "exit": 0,
+  "preferred_step": "vm-runner package entry absent from original Cargo.lock; cannot delete nonexistent entry",
+  "selected_step": "authorized offline fallback"
+}

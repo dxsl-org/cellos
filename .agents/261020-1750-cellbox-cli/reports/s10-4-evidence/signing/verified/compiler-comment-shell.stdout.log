@@ -1,0 +1,5 @@
+
+String dump of section '.comment':
+  [     0]  Linker: LLD 22.1.4 (/checkout/src/llvm-project/llvm eaab4d9841b9a8a12783d927b2df2291c1c79269)
+  [    5f]  rustc version 1.97.0-nightly (f53b654a8 2026-04-30)
+

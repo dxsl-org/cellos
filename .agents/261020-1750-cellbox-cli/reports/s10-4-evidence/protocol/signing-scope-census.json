@@ -1,0 +1,267 @@
+{
+  "kind": "proposed scoped snapshot input census, NOT scoped F1/F5 verdict or authorization",
+  "selected_cell_crates": [
+    "app-shell",
+    "app-sys-tools"
+  ],
+  "selected_artifacts": [
+    "shell",
+    "ls",
+    "cat",
+    "echo",
+    "ps",
+    "kill"
+  ],
+  "cell_source_files": [
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/build.rs",
+      "sha256": "309c7f94ddf64d2c2d1fce2f9472d674869c6feb2218ebcadbf4bab5626d5f90",
+      "bytes": 52
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/aliases.rs",
+      "sha256": "b25895be94ea3561245da47d8993c24d75e5091806999c24bbd121b5590caea0",
+      "bytes": 1651
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/async_utils.rs",
+      "sha256": "528099419e23a6a197fb017daa50a52e5c014314fc1ec553615944b10d853160",
+      "bytes": 15461
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/cmd_cwd.rs",
+      "sha256": "5230e968151e5ee202a3c9b4fecf67557878f004c40b024f7253d2fe3d162a46",
+      "bytes": 2486
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/cmd_fs.rs",
+      "sha256": "e43656419794db790f6b8be74c9562a448859eae727a441bded0f0e4294ce0eb",
+      "bytes": 40984
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/cmd_sys.rs",
+      "sha256": "936418fd391d2864d611b46f67658c7e21038e2847a3559d45cd86363166aec2",
+      "bytes": 10255
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/commands.rs",
+      "sha256": "3653eccf76f44e2d6da1138f13756eab52ebf487f5a68cc0acc34a866c78e9a9",
+      "bytes": 25015
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/config_client.rs",
+      "sha256": "dc73c013ac6e39330ad41c13be385b1bb2a6c24e54d7f58991b038cd72aab9ad",
+      "bytes": 4104
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/executor.rs",
+      "sha256": "122175e15e70f6f9064c8527b9933bcb2a9c73e7b3b1a5a1e9258659bbcbdad9",
+      "bytes": 46512
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/history.rs",
+      "sha256": "fabf579a89920d0d3bb4c70d9700bc4eefa21a3357676f263d2b9a81f3680583",
+      "bytes": 3652
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/jobs.rs",
+      "sha256": "a24030ce18b1cc13305f7847b0922b769db4ed614c84b15796df26c6cb41e5e3",
+      "bytes": 1479
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/main.rs",
+      "sha256": "27171babfc24d4a208804c32949527ad1ee3a50013ad1e060af1978e6eb734ec",
+      "bytes": 3359
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/parser.rs",
+      "sha256": "07ab4d2378d9f9b4bf51dfa7c4612ffde0f677d648115edda27a558dcf2324be",
+      "bytes": 28979
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/shell.rs",
+      "sha256": "f7cd54d41217d882164179194c419be86eb225af1c4787da3ea14d79511fd4a3",
+      "bytes": 6501
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/shell_state.rs",
+      "sha256": "27a47160dfc94679ce8bcf613629fa67ad313ce943ea4eabbb1387a13e748d82",
+      "bytes": 7882
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/shell_test.rs",
+      "sha256": "8e26be3adaf26d0e0d6f11aa6d36fd578417da0a8475a7cdd7c1d87b9d619a2f",
+      "bytes": 23749
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/snapshot_client.rs",
+      "sha256": "3bd192776b1bec69de646b21411997aace643aa973361de620510a7f986454bd",
+      "bytes": 5048
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/state_transfer.rs",
+      "sha256": "601a890f9bda5f107c4c1763ec99e16afe1824c81fe884f8d744378460703d6a",
+      "bytes": 6182
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/text_engine.rs",
+      "sha256": "fe7882e5510e59abe0df55d313c978d1904ab11ed9e9d3419284b479879e24d5",
+      "bytes": 394
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/text_tools.rs",
+      "sha256": "36144c45301cd446c70e4752620a374fa06dc60c217b3cd4ce0bbcfbd533add6",
+      "bytes": 328
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/text_tools/grep.rs",
+      "sha256": "0c0340f73012ac8fe0a6dc24c54b94919dd36bea8ffc7c664e0a32cc58f98cb7",
+      "bytes": 1386
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/text_tools/grep/io.rs",
+      "sha256": "ce916c51e5be5bfc095e750b8c811314dd988692c9a73ae3213ba6d234683b02",
+      "bytes": 3246
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/text_tools/grep/io/read.rs",
+      "sha256": "e11d110cdc3ca5c8639da10589dc1d4d7b2403f56028157e1f6ac7f19be4ca10",
+      "bytes": 1697
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/text_tools/grep/io/vfs.rs",
+      "sha256": "375a462d225debdac8b3a6be77a278234b308ccd4529d3cd759e8ae675c0dc5a",
+      "bytes": 3127
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/top.rs",
+      "sha256": "c96a866c01f68ac7c2820d020155b7845e7e73bf916b02b1403b1dcc0fee6f99",
+      "bytes": 2549
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/shell/src/top/render.rs",
+      "sha256": "690a335e69fe0f74e24306ab4ea7a1ae24273eb1c994c158e24e759534a9f2c6",
+      "bytes": 1302
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/build.rs",
+      "sha256": "309c7f94ddf64d2c2d1fce2f9472d674869c6feb2218ebcadbf4bab5626d5f90",
+      "bytes": 52
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/src/bin/cat.rs",
+      "sha256": "3116d93c021bec15fdf7dd5162ad299c64e25950e9922badfb84d14cd56fb398",
+      "bytes": 1024
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/src/bin/date.rs",
+      "sha256": "f23b6b137b78412789b0359f28b9efd437a7099a5780764a4a658905d99c4567",
+      "bytes": 2874
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/src/bin/echo.rs",
+      "sha256": "7f62c1f7143447597a3dd4b40c0421b063f0a22c72afe849bc9e02fb913cfac9",
+      "bytes": 431
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/src/bin/env.rs",
+      "sha256": "cc422e48ad3828bf88ebbf0223dd016ab1b871635d2b6e9c904c9ca7fb86fb76",
+      "bytes": 377
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/src/bin/free.rs",
+      "sha256": "888a5a9d6cd067034aa4cbbc28f18b168295c6a108185a3bcaaf837bf93f09ed",
+      "bytes": 2165
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/src/bin/hotswap.rs",
+      "sha256": "1536966aefb629c65541cfe537370a42ff13d77d0c7a52d014b584561e87a64f",
+      "bytes": 7505
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/src/bin/kill.rs",
+      "sha256": "d3aca33b96c48669b725d269b86ec57b43dddd705c9f4bb5dd5dad1ffe8762d7",
+      "bytes": 2141
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/src/bin/ls.rs",
+      "sha256": "91ee5f6738dfe4b22fe8e4801a2dcfeca4ca81bb432edb99cd52e21fd9189c6f",
+      "bytes": 911
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/src/bin/ps.rs",
+      "sha256": "5f26a5034e1e21833f508cc25d4f6d8bad56440d90a2dbb4da4a114186bf35f3",
+      "bytes": 1195
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/src/bin/shutdown.rs",
+      "sha256": "93d49dabb5b529ffe1da20bf0f2c391c41ff0b2a684d373b6c4822471190392a",
+      "bytes": 567
+    },
+    {
+      "path": "/tmp/cellbox-s10-4/baseline-worktree/cells/tools/sys-tools/src/bin/uname.rs",
+      "sha256": "127b35007139702a9b88ccdf7f7b98db01d1c561cab62c505dc5fa8fe2e0920f",
+      "bytes": 472
+    }
+  ],
+  "cell_source_count": 38,
+  "existing_crate_allowlist_entries": [
+    {
+      "name": "app-shell",
+      "class": "temporary-audit",
+      "reason": "Owns allowlisted unsafe under cells/tools/shell/ \u2014 see the [[file]] entries of class \"temporary-audit\" for the justification.",
+      "approver": "cellos-maintainers",
+      "date": "2026-07-30",
+      "review_by": "2026-10-28",
+      "tracking": "midori-lessons phase 06 (DataPtr removal)"
+    }
+  ],
+  "existing_file_allowlist_entries": [],
+  "local_dependency_manifests": {
+    "cells/tools/shell/Cargo.toml": "app-shell",
+    "libs/ostd/Cargo.toml": "ostd",
+    "libs/types/Cargo.toml": "types",
+    "libs/api/Cargo.toml": "api",
+    "libs/http-core/Cargo.toml": "http-core",
+    "libs/text-engine/Cargo.toml": "text-engine",
+    "libs/cell-build/Cargo.toml": "cell-build",
+    "cells/tools/sys-tools/Cargo.toml": "app-sys-tools"
+  },
+  "tcb_boundary": "libs/* and registry dependencies remain outside the unchanged F1 cell-source policy; source hashes and resolved graph identify them, not certify memory safety.",
+  "existing_cli_capability": "--repo ROOT with release-tarball filesystem fallback; default F1 remains whole cells/ within supplied root. No built-in --package/--scope flag; existing named candidate routes still run whole-root check and cannot authenticate this historical shell recipe.",
+  "historical_policy_failure_preserved": "Unrelated ocel-quickjs unsafe in complete historical workspace; scoped success would not change that failed verdict.",
+  "source_tools": {
+    "scripts/cellos-sign": {
+      "path": "/home/dmin/cellos/scripts/cellos-sign",
+      "sha256": "005bb64c653e7328151c2275690f6dd48a89a05eb61876ec3499b4f5bbddd7f0",
+      "bytes": 635
+    },
+    "scripts/cellos_sign/cli.py": {
+      "path": "/home/dmin/cellos/scripts/cellos_sign/cli.py",
+      "sha256": "ed92c59aff7694458f089e669376acec223099331547c94b2223aa320b126efa",
+      "bytes": 7422
+    },
+    "scripts/cellos_sign/signing.py": {
+      "path": "/home/dmin/cellos/scripts/cellos_sign/signing.py",
+      "sha256": "a1d25650f79383f7e09af9a95a9b4ad153bec8884f5f8913daf94fb181d1c876",
+      "bytes": 13838
+    },
+    "scripts/cellos_sign/policy.py": {
+      "path": "/home/dmin/cellos/scripts/cellos_sign/policy.py",
+      "sha256": "5566dec5578d5c964c616c025cb49818b71f49be4859b186d18ea63d10dc1083",
+      "bytes": 6795
+    },
+    "scripts/cellos_sign/scan.py": {
+      "path": "/home/dmin/cellos/scripts/cellos_sign/scan.py",
+      "sha256": "5b93ac6ee338e12cfad6ddf6ca71d3d54bfb89fe54b12cece8fbdfdee19e5b20",
+      "bytes": 6282
+    },
+    "scripts/cellos_sign/toolchain.py": {
+      "path": "/home/dmin/cellos/scripts/cellos_sign/toolchain.py",
+      "sha256": "3d45630702e3def6ce00bde116b69a0457a09592c494b29612709839569a0685",
+      "bytes": 3904
+    }
+  },
+  "executed_new_scoped_check": false,
+  "executed_new_signing": false
+}

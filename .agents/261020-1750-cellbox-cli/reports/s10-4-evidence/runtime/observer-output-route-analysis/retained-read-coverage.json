@@ -1,0 +1,78 @@
+{
+  "scope": "Retained RSP/source audit only; no guest memory read or VM operation",
+  "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/runtime/observer-gui-temporal/desktop/evidence/rsp-traffic.jsonl",
+  "source_sha256": "d1fd3679b20b0e6d520c7420364c73667d31300cc00ebf8a18c972997d68d483",
+  "memory_request_census": [
+    {
+      "mode": "physical",
+      "length": 2048,
+      "category": "physical_page_table_halfpage_source_path",
+      "requests": 184,
+      "example": {
+        "address": "0x59000",
+        "packet": "m59000,800"
+      }
+    },
+    {
+      "mode": "virtual",
+      "length": 1,
+      "category": "heap_init_flag",
+      "requests": 2,
+      "example": {
+        "address": "0x1149a80f0",
+        "packet": "m1149a80f0,1"
+      }
+    },
+    {
+      "mode": "virtual",
+      "length": 8,
+      "category": "allocator_counter",
+      "requests": 2031,
+      "example": {
+        "address": "0x1148a80c0",
+        "packet": "m1148a80c0,8"
+      }
+    },
+    {
+      "mode": "virtual",
+      "length": 16,
+      "category": "current_instruction_code",
+      "requests": 4101,
+      "example": {
+        "address": "0xfff0",
+        "packet": "mfff0,10"
+      }
+    },
+    {
+      "mode": "virtual",
+      "length": 48,
+      "category": "entry_or_ELF_fingerprint_code",
+      "requests": 21,
+      "example": {
+        "address": "0x102000000",
+        "packet": "m102000000,30"
+      }
+    }
+  ],
+  "uncategorized_requests": 0,
+  "physical_read_explanation": "Original read_physical_memory4096 delegates to read_memory, whose negotiated PacketSize4096 splits each page into two2048B m packets;184 packet reads correspond to92 source-path page-table reads. No Terminal/captured-output page is requested by that path.",
+  "final_debug_address_view": "virtual",
+  "Terminal_entry": {
+    "scope_ordinal": 21,
+    "retained_base": "0x116000000",
+    "retained_cr3": "0x59000",
+    "retained_rsp": "0x3c7b000",
+    "retained_CS": 35,
+    "ELF_first48": "4883e4f0488d1d05a40d004c8d25fea30d004c39e37408ff134883c308ebf3e86cee010048c7c03c0000004831ff0f05",
+    "retained_read": {
+      "request": "m116000000,30",
+      "reply": "4883e4f0488d1d05a40d004c8d25fea30d004c39e37408ff134883c308ebf3e86cee010048c7c03c0000004831ff0f05",
+      "monotonic_ns": 426685552146365
+    },
+    "exact_first48_match": true,
+    "future_feed_PC_at_this_retained_base": "0x11601da80",
+    "actual_feed_observer_installed": false
+  },
+  "full_output_buffer_snapshot_retained": false,
+  "limitation": "Only code fingerprints/current instruction, allocator8B/init1B and source-bound physical page-table reads were performed; mapping snapshots retain page-table witnesses, not Terminal buffers or Cellbox output buffers. UART has no frontend transcript. No live memory remains after cleanup."
+}

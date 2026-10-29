@@ -1,0 +1,15 @@
+{
+  "command": [
+    "git",
+    "worktree",
+    "remove",
+    "/tmp/cellbox-s10-4/baseline-worktree"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "worktree_removed": true,
+  "signed_evidence": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/signing/verified/summary.json",
+  "mirror_removed": true,
+  "build_cache_removed": true
+}

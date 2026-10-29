@@ -1,0 +1,29 @@
+{
+  "kind": "status",
+  "command": "echo st=$?",
+  "typed_grab_ns": 431591330030427,
+  "commit_finish_ns": 431591415994209,
+  "oracle": {
+    "status": "READY",
+    "code": null,
+    "reason": null,
+    "cls": null,
+    "output_text": "st=0\n",
+    "frames": 0,
+    "expected_rows": [
+      "Cellos > echo st=$?",
+      "st=0",
+      "Cellos >"
+    ],
+    "expected_cursor": [
+      9,
+      2
+    ],
+    "scrolls": 0,
+    "hits": 2,
+    "bytes": 15,
+    "last_hit_ns": 431595126338347
+  },
+  "hits_total": 30,
+  "frames": 0
+}

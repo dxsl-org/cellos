@@ -1,0 +1,127 @@
+{
+  "index": 5,
+  "monotonic_ns": 426775750025509,
+  "frame": "/tmp/cellbox-s10-4-gui-temporal-20261029/desktop/vm/evidence/gui-epoch-01/0005.png",
+  "exact_read": [
+    [
+      "",
+      "=== Cellos shell ready \u2014 type 'help' for commands ===",
+      "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+    ],
+    [
+      0,
+      3
+    ]
+  ],
+  "accepted": false,
+  "ledger": {
+    "kind": "finite",
+    "command": "top --records -d 1 --frames 2 | to jsonl | cat",
+    "geometry": [
+      79,
+      26
+    ],
+    "complete": false,
+    "failed": false,
+    "reasons": [
+      "complete own output and fresh prompt not yet proved"
+    ],
+    "typed_rows": [
+      "",
+      "=== Cellos shell ready \u2014 type 'help' for commands ===",
+      "Cellos > top --records -d 1 --frames 2 | to jsonl | cat"
+    ],
+    "typed_cursor": [
+      55,
+      2
+    ],
+    "commit": {
+      "id": 55,
+      "payload_hex": "7b2265786563757465223a2022696e7075742d73656e642d6576656e74222c2022617267756d656e7473223a207b226576656e7473223a205b7b2274797065223a20226b6579222c202264617461223a207b22646f776e223a20747275652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d2c207b2274797065223a20226b6579222c202264617461223a207b22646f776e223a2066616c73652c20226b6579223a207b2274797065223a202271636f6465222c202264617461223a2022726574227d7d7d5d7d7d0a",
+      "deadline": 426772.237734171,
+      "start": 426767.237734171,
+      "finish": 426767.238707487,
+      "attempts": [
+        {
+          "attempt": 1,
+          "epoch": 143,
+          "start": 426767.238176785,
+          "outcome": "COMMITTED",
+          "finish": 426767.238702234,
+          "reply": {
+            "return": {}
+          }
+        }
+      ],
+      "phase": "ORDINARY_RESUME_PENDING_OR_RUNNING",
+      "epoch": 143,
+      "caller": "MainThread",
+      "caller_deadline": 426868.558221609,
+      "outcome": "COMMITTED",
+      "commit_count": 1
+    },
+    "rows": [
+      {
+        "absolute_row": 3,
+        "text": ""
+      }
+    ],
+    "transcript": "",
+    "records": [],
+    "frames": [],
+    "window_start": 0,
+    "cursor": [
+      0,
+      3
+    ],
+    "prompt_absolute_row": null,
+    "time": {
+      "commit_finish_ns": 426767238707487,
+      "last_capture_ns": 426775750025509
+    },
+    "evidence": [
+      {
+        "monotonic_ns": 426767603596697,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426769238282035,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426770871338909,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426772481352686,
+        "readable": true,
+        "duplicate": false,
+        "shift": 0,
+        "window_start": 0,
+        "absolute_cursor_row": 3,
+        "cursor": [
+          0,
+          3
+        ]
+      },
+      {
+        "monotonic_ns": 426774115353720,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      },
+      {
+        "monotonic_ns": 426775750025509,
+        "readable": true,
+        "duplicate": true,
+        "shift": 0
+      }
+    ]
+  }
+}

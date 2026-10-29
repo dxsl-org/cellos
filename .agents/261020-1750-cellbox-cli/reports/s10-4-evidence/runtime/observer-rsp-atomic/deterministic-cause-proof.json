@@ -1,0 +1,55 @@
+{
+  "confidence": "CONFIRMED synthetic causal mechanism: deterministic unchanged-host failure plus fixed-class pass with identical valid full frame/clock and no new controls; missing/malformed frame alternative eliminated",
+  "historical_ceiling": "Retained S10-4.13 signature matches the confirmed mechanism, but exact historical first swallowed poll exception was not logged",
+  "before_command": [
+    "python3",
+    "reproduce_before.py"
+  ],
+  "before_returncode": 1,
+  "before": {
+    "frame_valid": true,
+    "first_poll_error": "RspTimeout: RSP deadline expired",
+    "buffer_after_first_poll": "",
+    "ACK_count": 0,
+    "dispatch_count": 0,
+    "stop_delivered": false
+  },
+  "fix_authored_only_after_before_failure": true,
+  "fix": {
+    "source": "atomic_rsp.py",
+    "sha256": "daf605888901e308c2c77f15fcfcce40147d692511e5f399fd89e9c6ac19aa73",
+    "state": "validated pending decoded frame and wire bytes survive preACK expiry; ACK success then one buffer-consume/dispatch without second deadline check; attempted ambiguous ACK send is poisoned fatal RspError, not benign poll timeout"
+  },
+  "after": {
+    "first_poll_error": "RspTimeout: RSP deadline expired",
+    "first_poll_buffer_matches_full_frame": true,
+    "receive_calls": 1,
+    "ACK_count": 1,
+    "dispatch_count": 1,
+    "stop_delivered": true,
+    "original_poll_timeouts": [
+      0.1,
+      0.1
+    ],
+    "no_guest_control": true
+  },
+  "post_implementation_verification": {
+    "command": [
+      "python3",
+      "-m",
+      "unittest",
+      "-v",
+      "test_all"
+    ],
+    "returncode": 0,
+    "tests": 144,
+    "matrix": {
+      "new_boundary": 20,
+      "original_RSP_regression_fixed_class": 43,
+      "cause_and_actual_MRO": 2,
+      "retained_coordinated": 79
+    },
+    "runs": 1
+  },
+  "no_deadline_increase": true
+}

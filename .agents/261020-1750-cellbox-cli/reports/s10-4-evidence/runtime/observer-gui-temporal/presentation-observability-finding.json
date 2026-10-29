@@ -1,0 +1,52 @@
+{
+  "scope": "Retained-only diagnosis after the single approved S10-4.15 desktop stopped; no rerun or new controls",
+  "actual_stop": {
+    "classification": "HOST_OBSERVABILITY_INCOMPLETE, not candidate product failure and not expired deadline",
+    "command": "top --records -d 1 --frames 2 | to jsonl | cat",
+    "exact_pretyped_line": true,
+    "original_Enter_batch": 55,
+    "GUI_samples": 20,
+    "exact_pixel_reads": 20,
+    "last_prior_empty_output_sample": 18,
+    "first_visible_output_sample": 19,
+    "last_prior_sample_ns": 426796901572571,
+    "first_output_sample_ns": 426798506028929,
+    "gap_seconds": 1.604456358,
+    "wait_started_ns": 426767539213558,
+    "epoch_stopped_ns": 426798692464888,
+    "elapsed_wait_to_epoch_stop_seconds": 31.15325133,
+    "original_finite_deadline_seconds": 120,
+    "last_screen": "Tail of a prior JSON row and complete end marker, then begin sample_id3/meta.total_cells13, five visible full rows and a partial sixth; cursor19,25. Initial begin/full first frame absent. No fresh prompt.",
+    "full_ledger_records_proved": 0,
+    "fresh_prompt_proved": false,
+    "status_command_sent": false,
+    "full_two_frame_contract_proved": false,
+    "actual_output_total_rows": null,
+    "offline_62_row_fixture_is_actual_desktop_output": false,
+    "last_frame": "desktop/evidence/gui-failure-01.png",
+    "last_frame_sha256": "530fb50c51e63207a9c6748133445646dc5e3aef87f4d6a2e377d2e9dc6ff087",
+    "raw_read_epoch_and_reasons": "desktop/evidence/gui-failure-01.json",
+    "all_ordered_samples": "desktop/evidence/gui-temporal-epochs.json",
+    "no_extra_guest_action_for_failure_evidence": true
+  },
+  "source_supported_observability_limit": {
+    "session": "cells/apps/terminal/src/session.rs:41-42,182-191,275-295",
+    "drain_bound_per_stream": "32 reads of up to512 bytes, at most16384bytes folded into the grid before pump returns",
+    "main": "cells/apps/terminal/src/main.rs:342-354",
+    "paint_order": "app.session.pump() precedes one app.render(); no intermediate byte/row presentation is required by this source path",
+    "grid": "cells/apps/terminal/src/grid.rs:234-244,508-523",
+    "scrollback": "Grid retains bounded scrollback, with a public internal accessor; no GUI presentation caller of scrollback_line was found in Terminal src. PageUp/PageDown map to session input, not a local scrollback viewer.",
+    "source_limit": "Source permits output to be coalesced before paint. This is NOT proof the actual missing rows were all handled in one pump, nor proof they were ever presented; candidate/source object binding and historical pump boundaries have not been reconstructed.",
+    "sampling_consequence": "Increasing host screenshot frequency alone cannot guarantee rows never presented by the frontend; the missing historical bytes cannot be recovered from these framebuffer samples. No faster-sampling rerun is justified solely by the offline success fixture."
+  },
+  "unavailable_prerequisite": "A user-approved, candidate-bound observable complete transcript route or sufficiently sized visible-output protocol with provable stage/lifecycle identity and no lost rows. Neither a complete actual framebuffer ledger nor a retained Terminal scrollback/object-memory snapshot exists for this stopped attempt.",
+  "not_admissible_substitutes": [
+    "Requested --frames2 or status0 alone",
+    "First-frame end marker without first-frame begin/all rows",
+    "Allocator/native progress, dirty pages, RSS, stack or mapped backing as output proof",
+    "Historical headless fixture as actual desktop output",
+    "Assuming faster screenshots guarantee presentation",
+    "Unapproved scrollback keys, hidden output route, guest memory/register writes, product patch, deadline increase or retry"
+  ],
+  "operations_after_stop": {"candidate_runs": 0, "guest_controls": 0, "retained_only_collection": true}
+}

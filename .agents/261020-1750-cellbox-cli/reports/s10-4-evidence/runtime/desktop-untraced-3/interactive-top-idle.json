@@ -1,0 +1,594 @@
+{
+  "name": "interactive-top-idle",
+  "start_ns": 382316919626459,
+  "end_ns": 382327017238974,
+  "target_hz": 10,
+  "samples": [
+    {
+      "monotonic_ns": 382316919752428,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-000.png"
+    },
+    {
+      "monotonic_ns": 382317021447359,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-001.png"
+    },
+    {
+      "monotonic_ns": 382317122973197,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-002.png"
+    },
+    {
+      "monotonic_ns": 382317226775106,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-003.png"
+    },
+    {
+      "monotonic_ns": 382317331830529,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-004.png"
+    },
+    {
+      "monotonic_ns": 382317435193795,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-005.png"
+    },
+    {
+      "monotonic_ns": 382317537964776,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-006.png"
+    },
+    {
+      "monotonic_ns": 382317641100371,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-007.png"
+    },
+    {
+      "monotonic_ns": 382317749223934,
+      "changed_pixels": 28010,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-008.png"
+    },
+    {
+      "monotonic_ns": 382317851723824,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-009.png"
+    },
+    {
+      "monotonic_ns": 382317953268444,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-010.png"
+    },
+    {
+      "monotonic_ns": 382318056835393,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-011.png"
+    },
+    {
+      "monotonic_ns": 382318159910775,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-012.png"
+    },
+    {
+      "monotonic_ns": 382318265516832,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-013.png"
+    },
+    {
+      "monotonic_ns": 382318369082584,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-014.png"
+    },
+    {
+      "monotonic_ns": 382318475623896,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-015.png"
+    },
+    {
+      "monotonic_ns": 382318582987484,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-016.png"
+    },
+    {
+      "monotonic_ns": 382318688827246,
+      "changed_pixels": 594,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-017.png"
+    },
+    {
+      "monotonic_ns": 382318801461090,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-018.png"
+    },
+    {
+      "monotonic_ns": 382318907254847,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-019.png"
+    },
+    {
+      "monotonic_ns": 382319012614413,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-020.png"
+    },
+    {
+      "monotonic_ns": 382319118571783,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-021.png"
+    },
+    {
+      "monotonic_ns": 382319222804319,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-022.png"
+    },
+    {
+      "monotonic_ns": 382319329604337,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-023.png"
+    },
+    {
+      "monotonic_ns": 382319431931660,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-024.png"
+    },
+    {
+      "monotonic_ns": 382319535768372,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-025.png"
+    },
+    {
+      "monotonic_ns": 382319639713418,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-026.png"
+    },
+    {
+      "monotonic_ns": 382319742088500,
+      "changed_pixels": 5355,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-027.png"
+    },
+    {
+      "monotonic_ns": 382319851910496,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-028.png"
+    },
+    {
+      "monotonic_ns": 382319954843735,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-029.png"
+    },
+    {
+      "monotonic_ns": 382320056504479,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-030.png"
+    },
+    {
+      "monotonic_ns": 382320160932322,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-031.png"
+    },
+    {
+      "monotonic_ns": 382320263236585,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-032.png"
+    },
+    {
+      "monotonic_ns": 382320367792247,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-033.png"
+    },
+    {
+      "monotonic_ns": 382320470397115,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-034.png"
+    },
+    {
+      "monotonic_ns": 382320574849216,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-035.png"
+    },
+    {
+      "monotonic_ns": 382320677502221,
+      "changed_pixels": 5337,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-036.png"
+    },
+    {
+      "monotonic_ns": 382320779779748,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-037.png"
+    },
+    {
+      "monotonic_ns": 382320885415383,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-038.png"
+    },
+    {
+      "monotonic_ns": 382320989664725,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-039.png"
+    },
+    {
+      "monotonic_ns": 382321091224101,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-040.png"
+    },
+    {
+      "monotonic_ns": 382321194537097,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-041.png"
+    },
+    {
+      "monotonic_ns": 382321296942932,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-042.png"
+    },
+    {
+      "monotonic_ns": 382321400961146,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-043.png"
+    },
+    {
+      "monotonic_ns": 382321502276483,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-044.png"
+    },
+    {
+      "monotonic_ns": 382321613015874,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-045.png"
+    },
+    {
+      "monotonic_ns": 382321719109034,
+      "changed_pixels": 2047,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-046.png"
+    },
+    {
+      "monotonic_ns": 382321822603089,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-047.png"
+    },
+    {
+      "monotonic_ns": 382321925093122,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-048.png"
+    },
+    {
+      "monotonic_ns": 382322027535573,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-049.png"
+    },
+    {
+      "monotonic_ns": 382322130879190,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-050.png"
+    },
+    {
+      "monotonic_ns": 382322233700233,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-051.png"
+    },
+    {
+      "monotonic_ns": 382322337293912,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-052.png"
+    },
+    {
+      "monotonic_ns": 382322439259669,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-053.png"
+    },
+    {
+      "monotonic_ns": 382322542115793,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-054.png"
+    },
+    {
+      "monotonic_ns": 382322646699130,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-055.png"
+    },
+    {
+      "monotonic_ns": 382322748501752,
+      "changed_pixels": 599,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-056.png"
+    },
+    {
+      "monotonic_ns": 382322852283484,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-057.png"
+    },
+    {
+      "monotonic_ns": 382322953072178,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-058.png"
+    },
+    {
+      "monotonic_ns": 382323054628746,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-059.png"
+    },
+    {
+      "monotonic_ns": 382323157229991,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-060.png"
+    },
+    {
+      "monotonic_ns": 382323261317928,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-061.png"
+    },
+    {
+      "monotonic_ns": 382323365060546,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-062.png"
+    },
+    {
+      "monotonic_ns": 382323469411258,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-063.png"
+    },
+    {
+      "monotonic_ns": 382323572029565,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-064.png"
+    },
+    {
+      "monotonic_ns": 382323677786628,
+      "changed_pixels": 677,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-065.png"
+    },
+    {
+      "monotonic_ns": 382323780185219,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-066.png"
+    },
+    {
+      "monotonic_ns": 382323882556524,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-067.png"
+    },
+    {
+      "monotonic_ns": 382323983893262,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-068.png"
+    },
+    {
+      "monotonic_ns": 382324086227941,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-069.png"
+    },
+    {
+      "monotonic_ns": 382324187356019,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-070.png"
+    },
+    {
+      "monotonic_ns": 382324291158997,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-071.png"
+    },
+    {
+      "monotonic_ns": 382324393624160,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-072.png"
+    },
+    {
+      "monotonic_ns": 382324495524056,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-073.png"
+    },
+    {
+      "monotonic_ns": 382324597907104,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-074.png"
+    },
+    {
+      "monotonic_ns": 382324702846419,
+      "changed_pixels": 2922,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-075.png"
+    },
+    {
+      "monotonic_ns": 382324804841085,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-076.png"
+    },
+    {
+      "monotonic_ns": 382324918127592,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-077.png"
+    },
+    {
+      "monotonic_ns": 382325021400596,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-078.png"
+    },
+    {
+      "monotonic_ns": 382325129564945,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-079.png"
+    },
+    {
+      "monotonic_ns": 382325233007315,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-080.png"
+    },
+    {
+      "monotonic_ns": 382325339378034,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-081.png"
+    },
+    {
+      "monotonic_ns": 382325442217691,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-082.png"
+    },
+    {
+      "monotonic_ns": 382325553454261,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-083.png"
+    },
+    {
+      "monotonic_ns": 382325657020755,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-084.png"
+    },
+    {
+      "monotonic_ns": 382325765029975,
+      "changed_pixels": 714,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-085.png"
+    },
+    {
+      "monotonic_ns": 382325873034673,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-086.png"
+    },
+    {
+      "monotonic_ns": 382325978713245,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-087.png"
+    },
+    {
+      "monotonic_ns": 382326081681155,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-088.png"
+    },
+    {
+      "monotonic_ns": 382326187305242,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-089.png"
+    },
+    {
+      "monotonic_ns": 382326290433223,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-090.png"
+    },
+    {
+      "monotonic_ns": 382326393873482,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-091.png"
+    },
+    {
+      "monotonic_ns": 382326498284944,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-092.png"
+    },
+    {
+      "monotonic_ns": 382326602020467,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-093.png"
+    },
+    {
+      "monotonic_ns": 382326705428228,
+      "changed_pixels": 2193,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-094.png"
+    },
+    {
+      "monotonic_ns": 382326809275685,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-095.png"
+    },
+    {
+      "monotonic_ns": 382326912407005,
+      "changed_pixels": 0,
+      "cursor": null,
+      "frame": "/tmp/cellbox-s10-4-runtime-desktop-untraced-3-fe799c/evidence/screens/interactive-top-idle-096.png"
+    }
+  ],
+  "qemu_cpu_ticks_delta": 1018,
+  "host_ticks_per_second": 100,
+  "serial_bytes": 0,
+  "scope": "whole-QEMU CPU incl sampling overhead; content changes not redraw calls"
+}

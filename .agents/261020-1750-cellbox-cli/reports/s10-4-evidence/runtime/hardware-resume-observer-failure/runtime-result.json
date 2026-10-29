@@ -1,0 +1,14 @@
+{
+  "profile": "headless",
+  "mode": "observed",
+  "number": 1,
+  "work": "/tmp/cellbox-s10-4-runtime-headless-observed-1-f1172c",
+  "status": "STOP",
+  "start_monotonic_ns": 382411503138900,
+  "qemu_start_monotonic_ns": 382413110708624,
+  "qemu_pid": 2123434,
+  "error": "Stop: 900s measurement window expired",
+  "traceback": "Traceback (most recent call last):\n  File \"/tmp/cellbox-s10-4/runtime/run.py\", line 18, in run_one\n    s=Surface(m,obs);s.ready();record['timestamps']=s.timestamps\n                     ^^^^^^^^^\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 110, in ready\n    end=self.wait(lambda:first_exact_prompt(self.sh,self.sh.raw()),900,'exact initial idle prompt prefix')\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 95, in wait\n    self.check()\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 90, in check\n    need(time.monotonic_ns()-self.m.start_ns<900_000_000_000,'900s measurement window expired')\n  File \"/tmp/cellbox-s10-4/runtime/common.py\", line 18, in need\n    if not ok:raise Stop(why)\n              ^^^^^^^^^^^^^^^\ncommon.Stop: 900s measurement window expired\n",
+  "surface_events": [],
+  "end_monotonic_ns": 383313593338910
+}

@@ -1,0 +1,8 @@
+test_arbitrary_substring_is_not_prompt (test_measurement.StartupObservationTests.test_arbitrary_substring_is_not_prompt) ... ok
+test_coalesced_init_log_keeps_real_prompt_event (test_measurement.StartupObservationTests.test_coalesced_init_log_keeps_real_prompt_event) ... ok
+test_partial_prompt_does_not_finish_timestamp (test_measurement.StartupObservationTests.test_partial_prompt_does_not_finish_timestamp) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.000s
+
+OK

@@ -1,0 +1,58 @@
+[
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0x40",
+      "--stop-address=0x283",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "terminal-drain.asm",
+    "scope": "Read-only static qualifiedELF boundary inspection"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0x26e60",
+      "--stop-address=0x2702f",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "terminal-endpoint-read.asm",
+    "scope": "Read-only static qualifiedELF boundary inspection"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0xffffffff80051040",
+      "--stop-address=0xffffffff8005158e",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop.kernel.elf"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "kernel-stream-io.asm",
+    "scope": "Read-only static qualifiedELF boundary inspection"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0xffffffff80117200",
+      "--stop-address=0xffffffff8011755e",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop.kernel.elf"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "kernel-pipe-session-read.asm",
+    "scope": "Read-only static qualifiedELF boundary inspection"
+  }
+]

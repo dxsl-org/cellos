@@ -1,0 +1,27 @@
+{
+  "type": "message",
+  "id": "111a9711",
+  "parentId": "dab98f63",
+  "timestamp": "2026-10-28T14:14:16.684Z",
+  "runtime": {
+    "version": "18.12.6"
+  },
+  "message": {
+    "role": "toolResult",
+    "toolCallId": "call_a02c9c0b25964b6d8059aa693b485352|fc_0710afa16c6334ca016ae2033717248191b92234feb2fbcbe8",
+    "toolName": "bash",
+    "content": [
+      {
+        "type": "text",
+        "text": "test_captured_qemu_target_without_xi_namespace (test_rsp.ClientTests.test_captured_qemu_target_without_xi_namespace) ... ok\ntest_unbound_xi_does_not_allow_unknown_prefix_or_bad_include (test_rsp.ClientTests.test_unbound_xi_does_not_allow_unknown_prefix_or_bad_include) ... ok\n\n----------------------------------------------------------------------\nRan 2 tests in 0.002s\n\nOK\n"
+      }
+    ],
+    "details": {
+      "wallTimeNoticeEmitted": false,
+      "timeoutSeconds": 30,
+      "wallTimeMs": 60.55060797929764
+    },
+    "isError": false,
+    "timestamp": 1793196856682
+  }
+}

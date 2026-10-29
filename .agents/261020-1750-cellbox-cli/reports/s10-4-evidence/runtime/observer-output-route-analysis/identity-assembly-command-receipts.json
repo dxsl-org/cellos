@@ -1,0 +1,41 @@
+[
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0x25c10",
+      "--stop-address=0x25ddc",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "terminal-poll-child.asm"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0x26290",
+      "--stop-address=0x264ee",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "terminal-poll-frontend.asm"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "-C",
+      "--start-address=0x1da80",
+      "--stop-address=0x1db20",
+      "/tmp/cellbox-s10-3d-resume/cand/desktop/files/terminal"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "terminal-feed-entry.asm"
+  }
+]

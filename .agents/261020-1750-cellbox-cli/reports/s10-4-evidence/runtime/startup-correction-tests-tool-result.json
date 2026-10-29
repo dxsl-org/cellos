@@ -1,0 +1,27 @@
+{
+  "type": "message",
+  "id": "06e964d5",
+  "parentId": "02e1c7f5",
+  "timestamp": "2026-10-28T14:02:51.606Z",
+  "runtime": {
+    "version": "18.12.6"
+  },
+  "message": {
+    "role": "toolResult",
+    "toolCallId": "call_cbb5b42454d04e32a3a4592b9f3d67c2|fc_0fe16e8e91a282f3016ae2008a69988191af660f304d202c4b",
+    "toolName": "bash",
+    "content": [
+      {
+        "type": "text",
+        "text": "test_arbitrary_substring_is_not_prompt (test_measurement.StartupObservationTests.test_arbitrary_substring_is_not_prompt) ... ok\ntest_coalesced_init_log_keeps_real_prompt_event (test_measurement.StartupObservationTests.test_coalesced_init_log_keeps_real_prompt_event) ... ok\ntest_partial_prompt_does_not_finish_timestamp (test_measurement.StartupObservationTests.test_partial_prompt_does_not_finish_timestamp) ... ok\n\n----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nOK\n"
+      }
+    ],
+    "details": {
+      "wallTimeNoticeEmitted": false,
+      "timeoutSeconds": 60,
+      "wallTimeMs": 111.0945959687233
+    },
+    "isError": false,
+    "timestamp": 1793196171605
+  }
+}

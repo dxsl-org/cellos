@@ -1,0 +1,1091 @@
+{
+  "active_patch_count": 128,
+  "series_sha256": "0fba64afac56a1583c0b689df4068f347742b656fcd2a81e181a7306348b52e8",
+  "patches": [
+    {
+      "patch": "microvm-default-machine-type.patch",
+      "sha256": "7dea34ea8169d664000551ee686f6c2909af1ffb843b69a10aa24445f98e1ce4",
+      "paths": [
+        "hw/i386/microvm.c",
+        "hw/i386/pc_piix.c"
+      ]
+    },
+    {
+      "patch": "linux-user-binfmt-P.diff",
+      "sha256": "bd0479e52d6e0f85b049bbef0c73817fc6f09f225e86d170dca8f27682701e84",
+      "paths": [
+        "linux-user/main.c"
+      ]
+    },
+    {
+      "patch": "note-missing-module-pkg-name.diff",
+      "sha256": "e62547bd3ddef849aea9d2826c8e1357a3f006e4076d5d70436fd0040dd78d84",
+      "paths": [
+        "audio/audio.c",
+        "block.c",
+        "system/vl.c",
+        "ui/console.c"
+      ]
+    },
+    {
+      "patch": "skip-unpack-edk2-blobs.patch",
+      "sha256": "02df62768b12f1b60ad769fce6080269c859054b4dcd64509122ba09439fbda2",
+      "paths": [
+        "pc-bios/meson.build"
+      ]
+    },
+    {
+      "patch": "qemu-bridge-helper-path.patch",
+      "sha256": "49cd82b8af314447f4c2666da31a03a3349342a0d7b41d906e3c42316ec5d844",
+      "paths": [
+        "qemu-options.hx"
+      ]
+    },
+    {
+      "patch": "u-boot-sam460ex-fdi.patch",
+      "sha256": "e608eca77a11af8854ac8e0dc06749bb4de5db59ea80dcad21b4f6cf7d3be6a3",
+      "paths": [
+        "roms/u-boot-sam460ex/board/ACube/common/vesa.h"
+      ]
+    },
+    {
+      "patch": "u-boot-sam460ex-mstring.patch",
+      "sha256": "ba51f1db3bc7f4c73eb8d168358888bbe679bce0f6b457736a36bf9677e376e1",
+      "paths": [
+        "roms/u-boot-sam460ex/arch/powerpc/cpu/ppc4xx/config.mk"
+      ]
+    },
+    {
+      "patch": "openbios-array-bounds.diff",
+      "sha256": "8001f5b62442c4e7208a839e092b1ce2cace967da6868a9e3f0054c2542ec686",
+      "paths": [
+        "roms/openbios/drivers/usb.c"
+      ]
+    },
+    {
+      "patch": "openbios-array-bounds-gcc12.patch",
+      "sha256": "19f725f4b81bde48c126bde4d69e2986cb807355efa78609718d41798af1b0b9",
+      "paths": [
+        "roms/openbios/arch/ppc/qemu/init.c"
+      ]
+    },
+    {
+      "patch": "openbios-use-source_date_epoch-in-makefile.patch",
+      "sha256": "cf9d45aa36f8c3e448b87e686b413d43d4837740fc0b63724a51c3c59f9596cc",
+      "paths": [
+        "qemu-5.0.orig/roms/openbios/Makefile.target",
+        "qemu-5.0/roms/openbios/Makefile.target"
+      ]
+    },
+    {
+      "patch": "seabios-hppa-use-consistent-date-and-remove-hostname.patch",
+      "sha256": "0cbef821af4d717a9cf33e8fac0a6888c913b3b8abdf67ab84d9ef704adeefb3",
+      "paths": [
+        "qemu-5.0.orig/roms/seabios-hppa/scripts/buildversion.py",
+        "qemu-5.0/roms/seabios-hppa/scripts/buildversion.py"
+      ]
+    },
+    {
+      "patch": "slof-remove-user-and-host-from-release-version.patch",
+      "sha256": "13fac7996f97512ca367a5f5a3cff81b6cb8c4e9dd0089cb986b6c1504fe2571",
+      "paths": [
+        "qemu-5.0.orig/roms/SLOF/Makefile.gen",
+        "qemu-5.0/roms/SLOF/Makefile.gen"
+      ]
+    },
+    {
+      "patch": "slof-ensure-ld-is-called-with-C-locale.patch",
+      "sha256": "6684f2b2103c3db0894a9ea70ae1c3ea1e3c4c30f4aab834eb788c254d9bd7fc",
+      "paths": [
+        "qemu-5.0.orig/roms/SLOF/Makefile.gen",
+        "qemu-5.0/roms/SLOF/Makefile.gen"
+      ]
+    },
+    {
+      "patch": "openbios-spelling-endianess.patch",
+      "sha256": "d86c9f810505b59b1fb5aae9f8a22cfd3e1402caf0c66e93fb9371969b129a7a",
+      "paths": [
+        "roms/openbios/kernel/bootstrap.c",
+        "roms/openbios/kernel/dict.c",
+        "roms/openbios/kernel/include/dict.h"
+      ]
+    },
+    {
+      "patch": "disable-xen-on-x32.patch",
+      "sha256": "c27e7354bc24d968638f1f7bec5a65b88a192bff339adfe90bc288d182090b38",
+      "paths": [
+        "hw/i386/Kconfig",
+        "meson.build",
+        "target/i386/Kconfig"
+      ]
+    },
+    {
+      "patch": "ubuntu/enable-svm-by-default.patch",
+      "sha256": "d01063baf595322a1e83f2bcbb0cb58bb4edcf8b94c785351f7d9ee7b0d24fed",
+      "paths": [
+        "hw/i386/pc_piix.c",
+        "target/i386/kvm/kvm-cpu.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/define-ubuntu-machine-types.patch",
+      "sha256": "5a829f47b5fb7e07408a03c4161818dfa04bbde0148c2d85b285354b31e6472a",
+      "paths": [
+        "qemu.orig/hw/core/machine.c",
+        "qemu.orig/hw/i386/pc.c",
+        "qemu.orig/hw/i386/pc_piix.c",
+        "qemu.orig/hw/i386/pc_q35.c",
+        "qemu.orig/hw/ppc/spapr.c",
+        "qemu.orig/hw/s390x/s390-virtio-ccw.c",
+        "qemu.orig/include/hw/boards.h",
+        "qemu.orig/include/hw/i386/pc.h",
+        "qemu/hw/core/machine.c",
+        "qemu/hw/i386/pc.c",
+        "qemu/hw/i386/pc_piix.c",
+        "qemu/hw/i386/pc_q35.c",
+        "qemu/hw/ppc/spapr.c",
+        "qemu/hw/s390x/s390-virtio-ccw.c",
+        "qemu/include/hw/boards.h",
+        "qemu/include/hw/i386/pc.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/pre-bionic-256k-ipxe-efi-roms.patch",
+      "sha256": "fd0c833acb6007c4e2c3ac9c02670838c94de75677c6ed9b74ade540931a19b3",
+      "paths": [
+        "qemu.orig/hw/core/machine.c",
+        "qemu/hw/core/machine.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/qboot-Disable-LTO-for-ELF-binary-build-step.patch",
+      "sha256": "10ddd91743c19ccd2ef88edb4c158157c851ad043cdb1d0dae30ff510011b6a2",
+      "paths": [
+        "roms/qboot/meson.build"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp-2055003-introduce-SPAPR_IRQ_NR_IPIS.patch",
+      "sha256": "5396ae68bdc7ec90ae1a454e30cd87fc3c4e9dcab0cd2ae569f889dfc43a1b53",
+      "paths": [
+        "hw/ppc/spapr_irq.c",
+        "include/hw/ppc/spapr_irq.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp-2055003-ppc64el-coredump-8193-vcpus.patch",
+      "sha256": "61a1271c669f3d0fb321a0eec4713a96454713369b2ae87946de683cab9b0ae3",
+      "paths": [
+        "hw/ppc/spapr.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2012763-maxcpus-too-low.patch",
+      "sha256": "5d77f0b709e6fcf1459ad974937cac0e7aebe1197d40d0c63d49edbad15a97ae",
+      "paths": [
+        "qemu.orig/hw/i386/pc_piix.c",
+        "qemu.orig/hw/i386/pc_q35.c",
+        "qemu/hw/i386/pc_piix.c",
+        "qemu/hw/i386/pc_q35.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-26327.patch",
+      "sha256": "7fbc5f8d885d803014dd386630097691831a89896e530016a4829cab3ee627c0",
+      "paths": [
+        "hw/pci/pcie_sriov.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-26328.patch",
+      "sha256": "4b4cacbf5090d4d75519b7c074d9904a37f71fda9e59480320c087d1439787ab",
+      "paths": [
+        "hw/nvme/ctrl.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2076927-fix-time-based-freq-kvm.patch",
+      "sha256": "425413904d020a412792783fa4feb67210d8bd3a38ba02f1644813186371b994",
+      "paths": [
+        "qemu.orig/hw/riscv/virt.c",
+        "qemu.orig/target/riscv/kvm/kvm-cpu.c",
+        "qemu.orig/target/riscv/kvm/kvm_riscv.h",
+        "qemu/hw/riscv/virt.c",
+        "qemu/target/riscv/kvm/kvm-cpu.c",
+        "qemu/target/riscv/kvm/kvm_riscv.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2028964-add-support-sierra-forest.patch",
+      "sha256": "a1d51f9438232fe7d456e07ccf3a03042fc69db4b64e33f799aef4f2fe6800aa",
+      "paths": [
+        "target/i386/cpu.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2076587-cpu-hotplug-crashes-guest-01.patch",
+      "sha256": "83cfc778891b74df2fdd449c6c416c573348f691d0a7cc5b76619b812f9323f0",
+      "paths": [
+        "accel/kvm/kvm-all.c",
+        "accel/kvm/trace-events",
+        "include/sysemu/kvm.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2076587-cpu-hotplug-crashes-guest-02.patch",
+      "sha256": "097d22572d80530bb386abe05e693a92883aa7aaa0ac61c9def4c65798a2b635",
+      "paths": [
+        "accel/kvm/kvm-all.c",
+        "include/sysemu/kvm.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2076587-cpu-hotplug-crashes-guest-03.patch",
+      "sha256": "aa30e780343e30df590441392ae45338713ce8ea77dfee114afbbf6a2d7f5276",
+      "paths": [
+        "cpu-common.c",
+        "include/exec/cpu-common.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2076587-cpu-hotplug-crashes-guest-04.patch",
+      "sha256": "3b95b27e0c573671ef580dc3c28446e400be170105bd9a032896aed1478f2034",
+      "paths": [
+        "target/ppc/kvm.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-4693-1.patch",
+      "sha256": "8554c897be7baf07022a40f8c24b00621810bf3005f39f7858dcf6fd42961810",
+      "paths": [
+        "hw/virtio/virtio-pci.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-4693-2.patch",
+      "sha256": "3a77a79fbc209c08a7a4ac1048cbf0a153e61ded67ce935e0ee5576d5f36bad5",
+      "paths": [
+        "qemu-8.2.2+ds.orig/hw/virtio/virtio-pci.c",
+        "qemu-8.2.2+ds/hw/virtio/virtio-pci.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-7730.patch",
+      "sha256": "38c4f42c6b331cf5c0cef62e0a2c086f78d672552e0b99361e6d2775f2cfe5ac",
+      "paths": [
+        "qemu-8.2.2+ds.orig/hw/audio/virtio-snd.c",
+        "qemu-8.2.2+ds/hw/audio/virtio-snd.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp-2091099-fix-9p-regression-cve-2023-2861.patch",
+      "sha256": "aa70c8fd7f980423ea7e916505f1027a343ffd0f54745413033f8b031c82bf7e",
+      "paths": [
+        "hw/9pfs/9p-util.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-01.patch",
+      "sha256": "a801bd948a5c0a0b6405af250e6a84724e8f78cfc0b70490256e6a9aad04a838",
+      "paths": [
+        "target/riscv/insn_trans/trans_rvv.c.inc"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-02.patch",
+      "sha256": "a11f8edd32417a211adb5fea0db2f65b0775b3c2810eb7472afa6138499473fa",
+      "paths": [
+        "target/riscv/insn_trans/trans_rvv.c.inc"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-03.patch",
+      "sha256": "7e765a24547ee23e4d7476dd2fbd82b22707d450d7e6a92e786165095f3c9c0c",
+      "paths": [
+        "target/riscv/vector_helper.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-04.patch",
+      "sha256": "0c10cd0702bf4be94de220594cac17202fe55c11d881ca67bedf9a4afb33cc89",
+      "paths": [
+        "target/riscv/insn_trans/trans_rvv.c.inc"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-05.patch",
+      "sha256": "0d3d8387cefce2b01a3486a06667e958b175f7fc4a8ef75ef31e07c867393c34",
+      "paths": [
+        "target/riscv/vector_helper.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-06.patch",
+      "sha256": "f3339c29fed7514ffab4d9e590f61ed29fb237ecd1f79219a5957b8c15b38afd",
+      "paths": [
+        "target/riscv/insn_trans/trans_rvv.c.inc",
+        "target/riscv/vector_helper.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-07.patch",
+      "sha256": "22703af92da8dffd7cadbed202f1cf597545d02ec558e7bde1c9e756241b4e8e",
+      "paths": [
+        "qemu-noble-sru-01-2025.orig/target/riscv/insn_trans/trans_rvv.c.inc",
+        "qemu-noble-sru-01-2025.orig/target/riscv/vector_helper.c",
+        "qemu-noble-sru-01-2025/target/riscv/insn_trans/trans_rvv.c.inc",
+        "qemu-noble-sru-01-2025/target/riscv/vector_helper.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-08.patch",
+      "sha256": "5c344dee6f6e07b9e82b7e29a7206b8aa6dbc6df5b207a696dcc4b0d3762b3bd",
+      "paths": [
+        "target/riscv/vcrypto_helper.c",
+        "target/riscv/vector_helper.c",
+        "target/riscv/vector_internals.c",
+        "target/riscv/vector_internals.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-09.patch",
+      "sha256": "306a7fbfb6839e5de31f59932df524517ee6db5f046cb5eda21e3e16cff9af7b",
+      "paths": [
+        "target/riscv/insn_trans/trans_rvbf16.c.inc",
+        "target/riscv/insn_trans/trans_rvv.c.inc",
+        "target/riscv/insn_trans/trans_rvvk.c.inc"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-10.patch",
+      "sha256": "a34d03d3e1af013bb0c62efe8122d62a1a97b0537e3fea2b80e97e75483628c7",
+      "paths": [
+        "target/riscv/insn_trans/trans_rvv.c.inc"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-11.patch",
+      "sha256": "ceba6ed8e9c6b33f981a26619849457d012a421cefb4ba2c6fd7424c941860f1",
+      "paths": [
+        "target/riscv/insn_trans/trans_rvbf16.c.inc",
+        "target/riscv/insn_trans/trans_rvv.c.inc",
+        "target/riscv/insn_trans/trans_rvvk.c.inc",
+        "target/riscv/translate.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2095169-riscv-vector-fixes-12.patch",
+      "sha256": "ce5abbfe61e497eecad99e516524c28f0508be035f5ca945c532934078ad77a9",
+      "paths": [
+        "target/riscv/vector_helper.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0-hw-s390x-sclp.c-include-s390-virtio-ccw.h-to-make.patch",
+      "sha256": "aa6b573f14d9338357ae9715208279d40707ddf91eeca7036be94a9968566aa9",
+      "paths": [
+        "hw/s390x/sclp.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0047-hw-s390x-ipl-Provide-more-memory-to-the-s390-ccw.img.patch",
+      "sha256": "3da54d7817821d9028cb296e8f90491d53c0708e9cc36c9c872d3dedd9fc65d6",
+      "paths": [
+        "hw/s390x/ipl.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0048-pc-bios-s390-ccw-Use-the-libc-from-SLOF-and-remove-s.patch",
+      "sha256": "631377b55c0b45adc7cdf9a076ab38b116b773073a05b0f5e6644a9780b39155",
+      "paths": [
+        "/dev/null",
+        "pc-bios/s390-ccw/Makefile",
+        "pc-bios/s390-ccw/bootmap.c",
+        "pc-bios/s390-ccw/bootmap.h",
+        "pc-bios/s390-ccw/cio.c",
+        "pc-bios/s390-ccw/dasd-ipl.c",
+        "pc-bios/s390-ccw/jump2ipl.c",
+        "pc-bios/s390-ccw/libc.c",
+        "pc-bios/s390-ccw/libc.h",
+        "pc-bios/s390-ccw/main.c",
+        "pc-bios/s390-ccw/menu.c",
+        "pc-bios/s390-ccw/netboot.mak",
+        "pc-bios/s390-ccw/netmain.c",
+        "pc-bios/s390-ccw/s390-ccw.h",
+        "pc-bios/s390-ccw/sclp.c",
+        "pc-bios/s390-ccw/virtio-blkdev.c",
+        "pc-bios/s390-ccw/virtio-scsi.c",
+        "pc-bios/s390-ccw/virtio.c",
+        "tests/tcg/s390x/Makefile.softmmu-target",
+        "tests/tcg/s390x/console.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0049-pc-bios-s390-ccw-Link-the-netboot-code-into-the-main.patch",
+      "sha256": "91b2c52b4c02ab494f27f3e488aa5b878135843cf7aabb6090a527df46491670",
+      "paths": [
+        "pc-bios/s390-ccw/Makefile",
+        "pc-bios/s390-ccw/bootmap.c",
+        "pc-bios/s390-ccw/cio.h",
+        "pc-bios/s390-ccw/iplb.h",
+        "pc-bios/s390-ccw/main.c",
+        "pc-bios/s390-ccw/netboot.mak",
+        "pc-bios/s390-ccw/netmain.c",
+        "pc-bios/s390-ccw/s390-ccw.h",
+        "pc-bios/s390-ccw/virtio.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0050-hw-s390x-Remove-the-possibility-to-load-the-s390-net.patch",
+      "sha256": "bd0968e0c896ccc2eae13502d876d446fd1f4977fe9461885eed7d7f64702651",
+      "paths": [
+        "hw/s390x/ipl.c",
+        "hw/s390x/ipl.h",
+        "hw/s390x/s390-virtio-ccw.c",
+        "pc-bios/meson.build"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0051-pc-bios-s390-ccw-Merge-netboot.mak-into-the-main-Mak.patch",
+      "sha256": "e4f7ff8edf1cfafdf5e014a8be9c1ab97779041adaa64af43cfbe5d3cae305d3",
+      "paths": [
+        "/dev/null",
+        "pc-bios/s390-ccw/Makefile",
+        "pc-bios/s390-ccw/netboot.mak"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0052-docs-system-s390x-bootdevices-Update-the-documentati.patch",
+      "sha256": "f15fde1fca43a07e8a3bd3be211def1c011a95a2f1ac3865b3ba8baaffea95df",
+      "paths": [
+        "docs/system/s390x/bootdevices.rst"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0053-pc-bios-s390-ccw-Remove-panics-from-ISO-IPL-path.patch",
+      "sha256": "3106e5a2c1e4bff8aef8e34221039eb7b2506c1f7bf74f45b1b92acaf5ba04ec",
+      "paths": [
+        "pc-bios/s390-ccw/bootmap.c",
+        "pc-bios/s390-ccw/bootmap.h",
+        "pc-bios/s390-ccw/s390-ccw.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0054-pc-bios-s390-ccw-Remove-panics-from-ECKD-IPL-path.patch",
+      "sha256": "145fcef08cf7bd339532afde8d1d1990c92d4242d9882b82bf854fa873164866",
+      "paths": [
+        "pc-bios/s390-ccw/bootmap.c",
+        "pc-bios/s390-ccw/bootmap.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0055-pc-bios-s390-ccw-Remove-panics-from-SCSI-IPL-path.patch",
+      "sha256": "e9fb2b2fba8311bf73d6c695f4eb7e0b66017be86e69b40cac6fde2e917859c2",
+      "paths": [
+        "pc-bios/s390-ccw/bootmap.c",
+        "pc-bios/s390-ccw/virtio-blkdev.c",
+        "pc-bios/s390-ccw/virtio-scsi.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0056-pc-bios-s390-ccw-Remove-panics-from-DASD-IPL-path.patch",
+      "sha256": "6633d9d472008ea41e7b7e840efb681ea04d1407bcbd65a6fea7b475092cf3f5",
+      "paths": [
+        "pc-bios/s390-ccw/dasd-ipl.c",
+        "pc-bios/s390-ccw/dasd-ipl.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0057-pc-bios-s390-ccw-Remove-panics-from-Netboot-IPL-path.patch",
+      "sha256": "15cb763153b6941602a145f424b7d6fe7702cddf38c341405f9c6b3cdbfa689a",
+      "paths": [
+        "pc-bios/s390-ccw/bootmap.c",
+        "pc-bios/s390-ccw/netmain.c",
+        "pc-bios/s390-ccw/s390-ccw.h",
+        "pc-bios/s390-ccw/virtio-net.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0058-pc-bios-s390-ccw-Enable-failed-IPL-to-return-after-e.patch",
+      "sha256": "3d12d9b6aa5058be64d712f773785f4039c60af03f7ed729e5a180cfdba84bba",
+      "paths": [
+        "pc-bios/s390-ccw/bootmap.c",
+        "pc-bios/s390-ccw/cio.c",
+        "pc-bios/s390-ccw/jump2ipl.c",
+        "pc-bios/s390-ccw/main.c",
+        "pc-bios/s390-ccw/s390-ccw.h",
+        "pc-bios/s390-ccw/virtio-blkdev.c",
+        "pc-bios/s390-ccw/virtio.c",
+        "pc-bios/s390-ccw/virtio.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0059-include-hw-s390x-Add-include-files-for-common-IPL-st.patch",
+      "sha256": "934e12f5366df458373837ff7aa45e36aa8e994a716b64b0aa2d9adbd40b732c",
+      "paths": [
+        "/dev/null",
+        "hw/s390x/ipl.h",
+        "include/hw/s390x/ipl/qipl.h",
+        "pc-bios/s390-ccw/Makefile",
+        "pc-bios/s390-ccw/iplb.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0060-s390x-Add-individual-loadparm-assignment-to-CCW-devi.patch",
+      "sha256": "003854feabc2116ffe08b6efc5eecdfb9489ccea68b46cb1b99f3266f45060c2",
+      "paths": [
+        "hw/s390x/ccw-device.c",
+        "hw/s390x/ccw-device.h",
+        "hw/s390x/ipl.c",
+        "hw/s390x/ipl.h",
+        "hw/s390x/s390-virtio-ccw.c",
+        "hw/s390x/sclp.c",
+        "include/hw/s390x/ipl/qipl.h",
+        "pc-bios/s390-ccw/main.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0061-hw-s390x-Build-an-IPLB-for-each-boot-device.patch",
+      "sha256": "a65b2cbe9e1f3222206d1a21cf50c9c94e438add5101f9be8858d864f4e7517a",
+      "paths": [
+        "hw/s390x/ipl.c",
+        "hw/s390x/ipl.h",
+        "include/hw/s390x/ipl/qipl.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0062-s390x-Rebuild-IPLB-for-SCSI-device-directly-from-DIA.patch",
+      "sha256": "7ea7f791f8d2a1b32f881a954897abe0b2b722f04bff6763ef9cccd501683a7a",
+      "paths": [
+        "hw/s390x/ipl.c",
+        "hw/s390x/ipl.h",
+        "include/hw/s390x/ipl/qipl.h",
+        "pc-bios/s390-ccw/jump2ipl.c",
+        "target/s390x/diag.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0063-pc-bios-s390x-Enable-multi-device-boot-loop.patch",
+      "sha256": "5f2a8950d6dffb871f63e67b078a83bede8f5ea97fe0b2ff991f9497d3c093ad",
+      "paths": [
+        "pc-bios/s390-ccw/iplb.h",
+        "pc-bios/s390-ccw/jump2ipl.c",
+        "pc-bios/s390-ccw/main.c",
+        "pc-bios/s390-ccw/netmain.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0064-docs-system-Update-documentation-for-s390x-IPL.patch",
+      "sha256": "417dd4a8bc409c8f8862a2938f294f1cd795c67f426d11369343fc6d11e727f3",
+      "paths": [
+        "docs/system/bootindex.rst",
+        "docs/system/s390x/bootdevices.rst"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0065-tests-qtest-Add-s390x-boot-order-tests-to-cdrom-test.patch",
+      "sha256": "9c8d249ee1c4e63451f27cc7b69a9937e14c759ed2dd6c278986338470061a8d",
+      "paths": [
+        "tests/qtest/cdrom-test.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0066-hw-Add-loadparm-property-to-scsi-disk-devices-for-bo.patch",
+      "sha256": "1cbfb30a9c9658ad357d2e3da2a69560f8b8e68c0cf402ff09739b4a573010db",
+      "paths": [
+        "hw/core/qdev-properties-system.c",
+        "hw/s390x/ipl.c",
+        "hw/scsi/scsi-disk.c",
+        "include/hw/qdev-properties-system.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0067-pc-bios-s390x-Initialize-cdrom-type-to-false-for-eac.patch",
+      "sha256": "45a56555c3cdf2885e157e29a22cfc889092c460528e4971182792eba4ae3093",
+      "paths": [
+        "pc-bios/s390-ccw/main.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0068-pc-bios-s390x-Initialize-machine-loadparm-before-pro.patch",
+      "sha256": "98826290b8b7d24161289206ba68814722a77231d039267661c9255077e5a75a",
+      "paths": [
+        "pc-bios/s390-ccw/main.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0069-pc-bios-s390-ccw-Re-initialize-receive-queue-index-b.patch",
+      "sha256": "d2239dd3a15027a3d42d3ec3d91e1cdd7942f8ee29e4a78bff0fa03d22216102",
+      "paths": [
+        "pc-bios/s390-ccw/virtio-net.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0070-scsi-fix-allocation-for-s390x-loadparm.patch",
+      "sha256": "f21fbf61bf27a2e38562234ae87a696e541071e144736d084184dcc44bd2bb5a",
+      "paths": [
+        "hw/scsi/scsi-disk.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0071-pc-bios-s390-ccw-virtio-Add-a-function-to-reset-a-vi.patch",
+      "sha256": "7a884bc15e1783b340432415b4496ca8ef767cce2176f25da4e18f6dac81a9fa",
+      "paths": [
+        "pc-bios/s390-ccw/virtio.c",
+        "pc-bios/s390-ccw/virtio.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0072-pc-bios-s390-ccw-Fix-boot-problem-with-virtio-net-de.patch",
+      "sha256": "36706e8237a14824c8b13b61695c63bc3e9a8f845eba8f05bb10b67d53842510",
+      "paths": [
+        "pc-bios/s390-ccw/netmain.c",
+        "pc-bios/s390-ccw/virtio-net.c",
+        "pc-bios/s390-ccw/virtio.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0073-pc-bios-s390-ccw-netmain-Fix-error-messages-with-reg.patch",
+      "sha256": "cca295b09158eb306d3494eb7fd5ae761947b7acb3df83263ab81d9a48221257",
+      "paths": [
+        "pc-bios/s390-ccw/netmain.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2049698/0074-pc-bios-s390-ccw-Abort-IPL-on-invalid-loadparm.patch",
+      "sha256": "12d95214fe52be92609daf59e0d705bbb55aece97c8f7711cce3621ccc9d630a",
+      "paths": [
+        "pc-bios/s390-ccw/bootmap.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp-2072564-01-linux-user-Honor-elf-alignment-when-placing-images.patch",
+      "sha256": "99966e7f71b265a216a5bb822fdd21e4164fdb375141a09258d33852ec55b3c3",
+      "paths": [
+        "linux-user/elfload.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp-2072564-02-elfload-Fix-alignment-when-unmapping-excess-reservat.patch",
+      "sha256": "27d416deb4dbb1396bc96a814bdb36d14d8b9fc4bdac33a1e43b05c33d1f681e",
+      "paths": [
+        "linux-user/elfload.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2101944/0047-target-i386-Expose-IBPB-BRTYPE-and-SBPB-CPUID-bits-t.patch",
+      "sha256": "e277fcbf3e1f2142068cd2a06b148a74e0711872334bf5cc16f88c4364b6260f",
+      "paths": [
+        "target/i386/cpu.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2101944/0048-target-i386-Fix-minor-typo-in-NO_NESTED_DATA_BP-feat.patch",
+      "sha256": "6c5170fbdee1949ebb0192aab89f6010efa0581eb899cdf4e8f5d00f1673e11b",
+      "paths": [
+        "target/i386/cpu.c",
+        "target/i386/cpu.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2101944/0049-target-i386-Expose-bits-related-to-SRSO-vulnerabilit.patch",
+      "sha256": "0d1790d77155712b9cf493202a6fcc474264811afd4704de7b7b5a761db116f2",
+      "paths": [
+        "target/i386/cpu.c",
+        "target/i386/cpu.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp-2101053-pci-acpi-Windows-PCI-Label-Id-bug-workaround.patch",
+      "sha256": "843c8c23b1fd85c659623d4d11039554c7ff81cae7e49f417d789ac81346ccf6",
+      "paths": [
+        "hw/i386/acpi-build.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-3446-pre1.patch",
+      "sha256": "4a393d17b818c1ba4f8a4d2009251a383a2a3793c2caf411a774676c23102a52",
+      "paths": [
+        "hw/virtio/virtio.c",
+        "include/hw/virtio/virtio.h"
+      ]
+    },
+    {
+      "patch": "CVE-2024-3446-1.patch",
+      "sha256": "64d4f0655923261e18d94c20f876fd15d451553c873b9b0d03f33219f9d6aa1e",
+      "paths": [
+        "hw/virtio/virtio-crypto.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-3446-2.patch",
+      "sha256": "df5848215257cd90e408a7bebbff7c48b0bbf16351e54d4e3e5eab5cc3a26f77",
+      "paths": [
+        "hw/char/virtio-serial-bus.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-3446-3.patch",
+      "sha256": "8c3e941ae3109b2c37c48b107fd48de398944c4af2c66dcbbe2404a3666d18ce",
+      "paths": [
+        "hw/display/virtio-gpu.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-3447.patch",
+      "sha256": "fa21ae7c9271b6e0f4f027d26ab5d48dd78ab6e837142faf8c988e81721ce1f9",
+      "paths": [
+        "hw/sd/sdhci.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-3567.patch",
+      "sha256": "27aa46a284178bd661b233833167ea4b76921d64289e804538cd21f5bd9e4a94",
+      "paths": [
+        "hw/net/net_tx_pkt.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-4467-1.patch",
+      "sha256": "1dbceb3adeba6f2f544b6a8ce229006f610acec6d533f27d52304686b7d00a73",
+      "paths": [
+        "block/qcow2.c",
+        "tests/qemu-iotests/061",
+        "tests/qemu-iotests/061.out"
+      ]
+    },
+    {
+      "patch": "CVE-2024-4467-2.patch",
+      "sha256": "8214d5ab18098fa62be0cf265fa257a4330b32403ab6bc5b877ca764af1e8847",
+      "paths": [
+        "tests/qemu-iotests/244"
+      ]
+    },
+    {
+      "patch": "CVE-2024-4467-3.patch",
+      "sha256": "4c56b34c7d11f9f40347b589ed8a0ce3640029e75911755befedbfd74375bcd1",
+      "paths": [
+        "tests/qemu-iotests/270"
+      ]
+    },
+    {
+      "patch": "CVE-2024-4467-4.patch",
+      "sha256": "18cd2189758dcc96b24fa6645c6af3ee481a423c64c651708a91c02056f4282f",
+      "paths": [
+        "block.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-6505.patch",
+      "sha256": "c0daa01f99da2303a5bce7bef97452e9648846f967e85099b2bde2dc00956c26",
+      "paths": [
+        "hw/net/virtio-net.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-7409-1.patch",
+      "sha256": "7f843b076888546c75006d8a406aaaec0aeeb93eb8ef8b26379884e71dd18757",
+      "paths": [
+        "blockdev-nbd.c",
+        "include/block/nbd.h",
+        "nbd/server.c",
+        "qemu-nbd.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-7409-2.patch",
+      "sha256": "029b59820c1db4001b745297ca4f7ab87a259883c792059f771edf594c4f1159",
+      "paths": [
+        "block/monitor/block-hmp-cmds.c",
+        "blockdev-nbd.c",
+        "include/block/nbd.h",
+        "qapi/block-export.json"
+      ]
+    },
+    {
+      "patch": "CVE-2024-7409-3.patch",
+      "sha256": "695136700721abbecd0339ee8deda5d74fae4927842e7446aca891d4e9ce4c74",
+      "paths": [
+        "blockdev-nbd.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-7409-4.patch",
+      "sha256": "8e722744ea3a36b1392dc7ebb8b15b5b227a81904ade51dd6f05732e84760150",
+      "paths": [
+        "nbd/server.c",
+        "nbd/trace-events"
+      ]
+    },
+    {
+      "patch": "CVE-2024-7409-5.patch",
+      "sha256": "9ff132e5a6ccfdd23cc28833463b457fad3a5608558945e70dc32f2628e81bda",
+      "paths": [
+        "blockdev-nbd.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-8354.patch",
+      "sha256": "f4ca2e49b7ca4ed8e34aee5d96f7d9111676093c1150007af5e93294ee9fdaa6",
+      "paths": [
+        "hw/usb/hcd-ohci.c",
+        "hw/usb/trace-events"
+      ]
+    },
+    {
+      "patch": "smbios-Fix-buffer-overrun-when-using-path-option.patch",
+      "sha256": "a57981d71d96329b5bf503d3b9316cec008c01a37acf39954027f3c2f58ebc6b",
+      "paths": [
+        "hw/smbios/smbios.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2131822/0000-target-i386-pass-X86CPU-to-x86_cpu_get_supported_fea.patch",
+      "sha256": "d86b767cd004955ebedbe95bf3355a3a669eaa5284b4a0f538088dc48271b021",
+      "paths": [
+        "target/i386/cpu.c",
+        "target/i386/cpu.h",
+        "target/i386/kvm/kvm-cpu.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2131822/0001-target-i386-do-not-expose-ARCH_CAPABILITIES-on-AMD-C.patch",
+      "sha256": "0eba4b413210b192ab7d8fcfc45a93b68dcf9b320c4e95e99eff4e3b0807f410",
+      "paths": [
+        "target/i386/kvm/kvm.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2131822/0002-target-i386-add-compatibility-property-for-arch_capa.patch",
+      "sha256": "29e60583790b8ead7b72707512f68ffd37ab44b5bff5fa73abaf4908ac5802df",
+      "paths": [
+        "hw/i386/pc.c",
+        "target/i386/cpu.c",
+        "target/i386/cpu.h",
+        "target/i386/kvm/kvm.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2131822/0003-add-noble-v2-machine-type-for-arch-caps-handling.patch",
+      "sha256": "318214a13928a29150077785aa9c211a9ae5447c73efd12a5638a9fc91c8a7b7",
+      "paths": [
+        "hw/i386/pc.c",
+        "hw/i386/pc_piix.c",
+        "hw/i386/pc_q35.c",
+        "include/hw/i386/pc.h"
+      ]
+    },
+    {
+      "patch": "CVE-2024-8354-2.patch",
+      "sha256": "7e02b72d7d08adbdd27c17d4f6880e10916e49b06cc508429e3157d7d9d3ee03",
+      "paths": [
+        "qemu-8.2.2+ds.orig/hw/usb/hcd-uhci.c",
+        "qemu-8.2.2+ds/hw/usb/hcd-uhci.c"
+      ]
+    },
+    {
+      "patch": "CVE-2025-11234-1.patch",
+      "sha256": "6814642fb3b5d9d36679dccfb0328ab0937a6f168873a787d6be74c82cb0a07d",
+      "paths": [
+        "qemu-8.2.2+ds.orig/io/channel-tls.c",
+        "qemu-8.2.2+ds/io/channel-tls.c"
+      ]
+    },
+    {
+      "patch": "CVE-2025-11234-2.patch",
+      "sha256": "6666592940032295c1260dac63d0bfdfc6fc30f6763c69e833337116e0a97a68",
+      "paths": [
+        "qemu-8.2.2+ds.orig/io/channel-websock.c",
+        "qemu-8.2.2+ds/io/channel-websock.c"
+      ]
+    },
+    {
+      "patch": "CVE-2025-11234-3.patch",
+      "sha256": "dadd12bbf737cc6654a5263df35a3aa96f62accaedcad67e0fe75cd76762deec",
+      "paths": [
+        "qemu-8.2.2+ds.orig/include/io/channel-websock.h",
+        "qemu-8.2.2+ds.orig/io/channel-websock.c",
+        "qemu-8.2.2+ds/include/io/channel-websock.h",
+        "qemu-8.2.2+ds/io/channel-websock.c"
+      ]
+    },
+    {
+      "patch": "CVE-2025-12464.patch",
+      "sha256": "7d7de84113c0705c957f4ef465b0c6284e4d8bc1e1d2ec9838e3bc8322ff2e55",
+      "paths": [
+        "qemu-8.2.2+ds.orig/net/net.c",
+        "qemu-8.2.2+ds/net/net.c"
+      ]
+    },
+    {
+      "patch": "CVE-2025-14876-1.patch",
+      "sha256": "513927b615fbf55dabaee10b05213daf32c6a5783de304f50cd9f85821f75d9a",
+      "paths": [
+        "hw/virtio/virtio-crypto.c"
+      ]
+    },
+    {
+      "patch": "CVE-2025-14876-2.patch",
+      "sha256": "c10543873b011b16bdaf74ab894510b6c8dd5d98fe747ba67f1dea552624ca10",
+      "paths": [
+        "qemu-8.2.2+ds.orig/backends/cryptodev-builtin.c",
+        "qemu-8.2.2+ds/backends/cryptodev-builtin.c"
+      ]
+    },
+    {
+      "patch": "CVE-2026-0665.patch",
+      "sha256": "a6689a07585a1c3874a35feea478013fc01838ab997c07af6610aa202c47267e",
+      "paths": [
+        "qemu-8.2.2+ds.orig/hw/i386/kvm/xen_evtchn.c",
+        "qemu-8.2.2+ds/hw/i386/kvm/xen_evtchn.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2126951-block-Drop-detach_subchain-for-bdrv_replace_node.patch",
+      "sha256": "a001db4fbe3e5533d4d394476e4d700fc7aaf1896e9cfa87cf6f887cc244a8ec",
+      "paths": [
+        "block.c",
+        "tests/qemu-iotests/257",
+        "tests/qemu-iotests/257.out"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2142099-target-i386-fix-feature-dependency-for-WAITPKG.patch",
+      "sha256": "3ffdf8b1cf2542cac1175aef11d205ddf9b9de0fde3bec782dd6c3c80e66fdd9",
+      "paths": [
+        "target/i386/cpu.c"
+      ]
+    },
+    {
+      "patch": "CVE-2024-6519.patch",
+      "sha256": "ee2a15a699205f0d4c43e7d040077c2a707d3eeebb4bf0bf46e95fe014756f76",
+      "paths": [
+        "qemu-8.2.2+ds.orig/hw/scsi/lsi53c895a.c",
+        "qemu-8.2.2+ds/hw/scsi/lsi53c895a.c"
+      ]
+    },
+    {
+      "patch": "CVE-2026-2243.patch",
+      "sha256": "cb234b5ef829367c82b8569bcdcf754af6d19ebf2cb8e89700d6934c7abf3279",
+      "paths": [
+        "qemu-8.2.2+ds.orig/block/vmdk.c",
+        "qemu-8.2.2+ds/block/vmdk.c"
+      ]
+    },
+    {
+      "patch": "CVE-2026-3195-1.patch",
+      "sha256": "71f8b4f08fb65cf722f5c67db38c310d796ec5acf6ac2a9b2a85e42e93be85c0",
+      "paths": [
+        "qemu-8.2.2+ds.orig/hw/audio/virtio-snd.c",
+        "qemu-8.2.2+ds/hw/audio/virtio-snd.c"
+      ]
+    },
+    {
+      "patch": "CVE-2026-3195-2.patch",
+      "sha256": "0e5b8cbab28c75bcdbffc9cf4a99f876352880174ae1284ab57f4f6ecd231619",
+      "paths": [
+        "qemu-8.2.2+ds.orig/hw/audio/virtio-snd.c",
+        "qemu-8.2.2+ds/hw/audio/virtio-snd.c"
+      ]
+    },
+    {
+      "patch": "CVE-2026-3196.patch",
+      "sha256": "e5924c52a7e3ea033a621ed7c8b066944bca21ce34a0c534e76fd03ce511e8aa",
+      "paths": [
+        "qemu-8.2.2+ds.orig/hw/audio/virtio-snd.c",
+        "qemu-8.2.2+ds/hw/audio/virtio-snd.c"
+      ]
+    },
+    {
+      "patch": "CVE-2026-3842.patch",
+      "sha256": "fe3ccf99e7215cf068e46585f240df8bfc62e36130385f5f3345ec8fc562b701",
+      "paths": [
+        "qemu-8.2.2+ds.orig/hw/hyperv/syndbg.c",
+        "qemu-8.2.2+ds/hw/hyperv/syndbg.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2133804/0001-linux-user-Add-termios2-support.patch",
+      "sha256": "e1a9293cd3bff8db044c767a2ce446a4f2fa6bf7bfd05677a0fb734dfa598ebe",
+      "paths": [
+        "linux-user/ioctls.h",
+        "linux-user/strace.c",
+        "linux-user/syscall.c",
+        "linux-user/syscall_types.h",
+        "linux-user/user-internals.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2133804/0002-linux-user-Add-termios2-support-to-alpha-target.patch",
+      "sha256": "bac8fc5f557ed92a12063f20a67e94a96ac7c3642495930a8baa5d4f146e52a2",
+      "paths": [
+        "linux-user/alpha/termbits.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2133804/0003-linux-user-Add-termios2-support-to-hppa-target.patch",
+      "sha256": "fbe7ee36e83afd0efeb935e12dba67ccb4f3dfbea41f789ec9334b055c939310",
+      "paths": [
+        "linux-user/hppa/termbits.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2133804/0004-linux-user-Add-termios2-support-to-mips-target.patch",
+      "sha256": "949377e986dfcad3c55dae286ad01986615680f5285af9d6102dc94a08c4ada7",
+      "paths": [
+        "linux-user/mips/termbits.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2133804/0005-linux-user-Add-termios2-support-to-sh4-target.patch",
+      "sha256": "94e5cdd1577ff29bc5145189805e05e1a7abcb7d3fa78be170b078ef6e250732",
+      "paths": [
+        "linux-user/sh4/termbits.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2133804/0006-linux-user-Add-termios2-support-to-sparc-target.patch",
+      "sha256": "4a18c5438fdd3ebff104fd0f29a588268d4e1a81aeb24f1a1572edfd22d5f4f8",
+      "paths": [
+        "linux-user/sparc/termbits.h"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2133804/0007-linux-user-Add-missing-termios-baud-rates.patch",
+      "sha256": "eeb143aed14c4d4cce1c0bf1782f4b593b35efeac7e19999160bc497eef1a6b1",
+      "paths": [
+        "linux-user/alpha/termbits.h",
+        "linux-user/generic/termbits.h",
+        "linux-user/hppa/termbits.h",
+        "linux-user/mips/termbits.h",
+        "linux-user/ppc/termbits.h",
+        "linux-user/sh4/termbits.h",
+        "linux-user/sparc/termbits.h",
+        "linux-user/syscall.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2133804/0008-linux-user-fixup-termios2-related-things-on-PowerPC.patch",
+      "sha256": "a365f03b1996e24bc750473d72dac46959ddc936d9cca91014ad74ec252bc4e0",
+      "paths": [
+        "linux-user/syscall.c"
+      ]
+    },
+    {
+      "patch": "ubuntu/lp2133804/0009-linux-user-Add-missing-termios-baud-rates-cris-arch.patch",
+      "sha256": "efa65d6c97017cb2948968349707235fab9950bbb974abf5541cb4e0253d3a97",
+      "paths": [
+        "linux-user/cris/termbits.h"
+      ]
+    }
+  ],
+  "debian_input_references": [
+    {
+      "file": "debian/changelog",
+      "terms": [
+        "ui/input.c"
+      ]
+    }
+  ],
+  "relevant_applied_patches": []
+}

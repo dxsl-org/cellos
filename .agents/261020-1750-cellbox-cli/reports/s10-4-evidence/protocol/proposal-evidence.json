@@ -1,0 +1,100 @@
+{
+  "status": "PROPOSED_SEPARATE_CP1_ONLY",
+  "decision_ids": [
+    "D4-Obs1",
+    "D4-Obs2",
+    "D4-Obs3",
+    "D4-Sign1"
+  ],
+  "runtime_observer_implemented": false,
+  "new_vm_runs": 0,
+  "new_scoped_f1_f5_invocations": 0,
+  "new_signatures": 0,
+  "gdb_binary_available": false,
+  "qemu_version_observed": "8.2.2 Debian1:8.2.2+ds-0ubuntu1.17",
+  "primary_sources": [
+    "https://github.com/qemu/qemu/blob/v8.2.2/docs/system/gdb.rst",
+    "https://github.com/qemu/qemu/blob/v8.2.2/gdbstub/system.c"
+  ],
+  "qemu_documented_capability": "TCG system emulation advertises hardware-assisted breakpoints/watchpoints; use private Unix gdbstub socket. Watch stop reports configured watchpoint.vaddr, not a byte-precise effective access.",
+  "ELF_observability": "B1/B2 shell and candidate .symtab retained, no DWARF; HEAP is0x30B with proven used-word at offset0, no persistent peak counter. B1/B2 ps have no retained heap symbols.",
+  "heap_metric": "Max aligned live allocator-used counter after every add/sub through hardware-execute sites, plus8B counter write-watch coverage guard rejecting unknown writer PC/semantics; not payload, whole-cell memory or RSS. Not exercised.",
+  "stack_metric": "First CPU write-attempt per4KiB usable-stack page; disarm after first hit, record page/depth bounds and workload completion separately. Not retired-store proof, exact RSP/byte peak, kernel stack or DMA coverage; no sentinel/guest writes. Not exercised.",
+  "baseline_limit": "No approved matched runtime carrier/launch/policy for legacy B1/B2 shell; do not boot unsafe canonical image or rename/replace cellbox. Runtime-before/after comparability and CBX27/criterion4 unmet.",
+  "signing_proposal": "Existing CLI --repo against explicitly reviewed source-exact38-Rust-file/12-root release-tarball-style mirror;8 total local crate directories, unchanged original allowlist/app-shell exception. New scoped input approval required. Current named routes do not scope F1 and cannot authenticate historical shell recipe. No allowlist/guard edits.",
+  "source_sha256": {
+    "libs/ostd/src/heap.rs": "3b96a981e48d120a72962d2bf00addc3787a008d6b3f8796166103024f70cf7f",
+    "cells/tools/cellbox/src/main.rs": "517be1ec94ab581f4bfc55fdc9a16d1c5af8a3ed1a9f64d7b741209c907a93f8",
+    "kernel/src/task/stack.rs": "fa84d8d28dddba9eefcda4cc2754c83dc5dac6205683e2d6cb90f3a1ac74f4ed",
+    "kernel/src/task.rs": "a27bc5d110f03cb3db428d6013ea3c9ac3a1bf0426cc099283944a3ba06d512d",
+    "kernel/src/task/syscall.rs": "5cc2ef44f945df8db637b1959e36213e852ed2a878b485ba370959ae8934b4d0",
+    "kernel/src/task/telemetry.rs": "a67465a16198d4c198e66caa9af63f884f7e8c8bbdbbaf3cce388cac0f0797fb",
+    "kernel/src/loader/va_alloc.rs": "5ed0cfa84bfa9167c67727e6c4439823388ad5068eb0da70015c7041f1eec0c7",
+    "kernel/src/loader/elf.rs": "77769112cb0cd7fc42b7c512971208e42dfac0584829944b0ce15c0c6a840256",
+    "kernel/src/loader/launch_profile/mod.rs": "b8db3b800292ad8ebb72c849fdce4cfad1d731b15184bc47f500cb4ab20ec04c",
+    "kernel/src/loader/launch_profile/profiles.rs": "12ff2f739cd7440d2d6b9bce22bef32460b764df6411aff396ebe6a3a93134e2",
+    "scripts/cellos_sign/cli.py": "ed92c59aff7694458f089e669376acec223099331547c94b2223aa320b126efa",
+    "scripts/cellos_sign/signing.py": "a1d25650f79383f7e09af9a95a9b4ad153bec8884f5f8913daf94fb181d1c876",
+    "scripts/cellos_sign/policy.py": "5566dec5578d5c964c616c025cb49818b71f49be4859b186d18ea63d10dc1083",
+    "scripts/cellos_sign/scan.py": "5b93ac6ee338e12cfad6ddf6ca71d3d54bfb89fe54b12cece8fbdfdee19e5b20",
+    "scripts/cellos_sign/toolchain.py": "3d45630702e3def6ce00bde116b69a0457a09592c494b29612709839569a0685"
+  },
+  "allocator_source_sha256": "5bc43056aafa772cdadeb99d0cf0fa9670636243b7b2ef8b0002d6e97f2c4884",
+  "retained_startup_notes": [
+    {
+      "lane": "L0-headless-run1",
+      "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run1/verdict.json",
+      "sha256": "2c052509ea56b9c8eb966c57ecc2141a8e30ba7e434a2925d552eebd53df0931",
+      "prompt_detail": "T=3.1s",
+      "marker_pass": true,
+      "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+    },
+    {
+      "lane": "L0-headless-run2",
+      "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run2/verdict.json",
+      "sha256": "1ecbb5e869b0767a83f51bc2ad76772edeb111ef99b35a182603776cb7b316bd",
+      "prompt_detail": "T=2.8s",
+      "marker_pass": true,
+      "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+    },
+    {
+      "lane": "L0-headless-run3",
+      "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run3/verdict.json",
+      "sha256": "ed60a1f30e0015e91cf0eb06aaea82f3b8db9107f38b414eb1b4249934838c4d",
+      "prompt_detail": "T=2.5s",
+      "marker_pass": true,
+      "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+    },
+    {
+      "lane": "L0-headless-run4",
+      "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run4/verdict.json",
+      "sha256": "4773c618c9c8ff9d5caca77bf544e0b70c162ca1298e547b13efa021096c1a06",
+      "prompt_detail": "T=2.5s",
+      "marker_pass": true,
+      "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+    },
+    {
+      "lane": "L0-headless-run5",
+      "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run5/verdict.json",
+      "sha256": "8cd4416398ff0809be4e477d45cf08eee1c6ecf626695d7fb90480254c7c90cf",
+      "prompt_detail": "T=2.5s",
+      "marker_pass": true,
+      "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+    },
+    {
+      "lane": "L0-headless-run6",
+      "source": "/home/dmin/cellos/.agents/261020-1750-cellbox-cli/reports/s10-3d-evidence/rerun/lanes/L0-headless-run6/verdict.json",
+      "sha256": "1d0c7f9a252583b0731a7f5836b9bb77967c484b28135c44c40af8433f9933f2",
+      "prompt_detail": "T=2.5s",
+      "marker_pass": true,
+      "metric": "Retained time.time() to first raw Cellos > substring, rounded0.1s; not monotonic/exact-idle protocol and not total fixture wall time."
+    }
+  ],
+  "cp1_proposal_sha256": "4720413928901ba7cccdee21129807b466e38b3d3e6481fcfdcc8d599be12802",
+  "preservation": {
+    "unchanged": true,
+    "files": 546,
+    "canonical_files": 469,
+    "changed": []
+  }
+}

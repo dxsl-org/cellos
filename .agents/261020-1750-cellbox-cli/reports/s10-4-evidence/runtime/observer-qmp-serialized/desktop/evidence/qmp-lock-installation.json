@@ -1,0 +1,8 @@
+{
+  "actual_qmp_object_id": 137927062824160,
+  "shared_lock_id": 137927061200384,
+  "lock": "threading.RLock",
+  "GUI_cmd_API": "cmd(name, **args)",
+  "direct_trace_query_same_lock": true,
+  "installed_before_observer_GUI": true
+}

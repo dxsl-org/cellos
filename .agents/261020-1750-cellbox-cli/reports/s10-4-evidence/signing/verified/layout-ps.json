@@ -1,0 +1,537 @@
+{
+  "allocated_bytes_VA_flags_sizes_alignment_unchanged": true,
+  "program_header_byte_identity": true,
+  "section_type_entry_size_normalization": [
+    {
+      "changes": {
+        "entsize": {
+          "signed": 8,
+          "unsigned": 0
+        },
+        "type": {
+          "signed": 14,
+          "unsigned": 1
+        }
+      },
+      "section": ".init_array"
+    }
+  ],
+  "signed_program_headers": [
+    {
+      "align": 4096,
+      "filesz": 2050,
+      "flags": 5,
+      "memsz": 2050,
+      "offset": 4096,
+      "paddr": 0,
+      "type": 1,
+      "vaddr": 0
+    },
+    {
+      "align": 4096,
+      "filesz": 2528,
+      "flags": 4,
+      "memsz": 2528,
+      "offset": 6152,
+      "paddr": 2056,
+      "type": 1,
+      "vaddr": 2056
+    },
+    {
+      "align": 4096,
+      "filesz": 320,
+      "flags": 6,
+      "memsz": 320,
+      "offset": 12288,
+      "paddr": 8192,
+      "type": 1,
+      "vaddr": 8192
+    },
+    {
+      "align": 8,
+      "filesz": 256,
+      "flags": 6,
+      "memsz": 256,
+      "offset": 12352,
+      "paddr": 8256,
+      "type": 2,
+      "vaddr": 8256
+    },
+    {
+      "align": 1,
+      "filesz": 320,
+      "flags": 4,
+      "memsz": 320,
+      "offset": 12288,
+      "paddr": 8192,
+      "type": 1685382482,
+      "vaddr": 8192
+    },
+    {
+      "align": 4,
+      "filesz": 12,
+      "flags": 4,
+      "memsz": 12,
+      "offset": 8636,
+      "paddr": 4540,
+      "type": 1685382480,
+      "vaddr": 4540
+    },
+    {
+      "align": 0,
+      "filesz": 0,
+      "flags": 6,
+      "memsz": 0,
+      "offset": 0,
+      "paddr": 0,
+      "type": 1685382481,
+      "vaddr": 0
+    }
+  ],
+  "signed_sections": [
+    {
+      "addr": 0,
+      "align": 0,
+      "bytes": 0,
+      "entsize": 0,
+      "flags": 0,
+      "name": "",
+      "offset": 0,
+      "type": 0
+    },
+    {
+      "addr": 0,
+      "align": 16,
+      "bytes": 2050,
+      "entsize": 0,
+      "flags": 6,
+      "name": ".text",
+      "offset": 4096,
+      "type": 1
+    },
+    {
+      "addr": 2056,
+      "align": 8,
+      "bytes": 24,
+      "entsize": 24,
+      "flags": 2,
+      "name": ".dynsym",
+      "offset": 6152,
+      "type": 11
+    },
+    {
+      "addr": 2080,
+      "align": 8,
+      "bytes": 28,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".gnu.hash",
+      "offset": 6176,
+      "type": 1879048182
+    },
+    {
+      "addr": 2108,
+      "align": 4,
+      "bytes": 16,
+      "entsize": 4,
+      "flags": 2,
+      "name": ".hash",
+      "offset": 6204,
+      "type": 5
+    },
+    {
+      "addr": 2124,
+      "align": 1,
+      "bytes": 1,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".dynstr",
+      "offset": 6220,
+      "type": 3
+    },
+    {
+      "addr": 2128,
+      "align": 8,
+      "bytes": 96,
+      "entsize": 24,
+      "flags": 2,
+      "name": ".rela.dyn",
+      "offset": 6224,
+      "type": 4
+    },
+    {
+      "addr": 4096,
+      "align": 4096,
+      "bytes": 444,
+      "entsize": 0,
+      "flags": 50,
+      "name": ".rodata",
+      "offset": 8192,
+      "type": 1
+    },
+    {
+      "addr": 4540,
+      "align": 4,
+      "bytes": 12,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".eh_frame_hdr",
+      "offset": 8636,
+      "type": 1
+    },
+    {
+      "addr": 4552,
+      "align": 8,
+      "bytes": 28,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".eh_frame",
+      "offset": 8648,
+      "type": 1
+    },
+    {
+      "addr": 4584,
+      "align": 8,
+      "bytes": 0,
+      "entsize": 8,
+      "flags": 2,
+      "name": ".init_array",
+      "offset": 8680,
+      "type": 14
+    },
+    {
+      "addr": 8192,
+      "align": 4096,
+      "bytes": 64,
+      "entsize": 0,
+      "flags": 2097155,
+      "name": ".data",
+      "offset": 12288,
+      "type": 1
+    },
+    {
+      "addr": 8256,
+      "align": 8,
+      "bytes": 256,
+      "entsize": 16,
+      "flags": 3,
+      "name": ".dynamic",
+      "offset": 12352,
+      "type": 6
+    },
+    {
+      "addr": 12288,
+      "align": 4096,
+      "bytes": 0,
+      "entsize": 0,
+      "flags": 3,
+      "name": ".bss",
+      "offset": 0,
+      "type": 8
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 147,
+      "entsize": 1,
+      "flags": 48,
+      "name": ".comment",
+      "offset": 12608,
+      "type": 1
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 64,
+      "entsize": 0,
+      "flags": 0,
+      "name": "__ViCell_sig",
+      "offset": 12755,
+      "type": 1
+    },
+    {
+      "addr": 0,
+      "align": 8,
+      "bytes": 552,
+      "entsize": 24,
+      "flags": 0,
+      "name": ".symtab",
+      "offset": 12824,
+      "type": 2
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 682,
+      "entsize": 0,
+      "flags": 0,
+      "name": ".strtab",
+      "offset": 13376,
+      "type": 3
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 155,
+      "entsize": 0,
+      "flags": 0,
+      "name": ".shstrtab",
+      "offset": 14058,
+      "type": 3
+    }
+  ],
+  "unsigned_program_headers": [
+    {
+      "align": 4096,
+      "filesz": 2050,
+      "flags": 5,
+      "memsz": 2050,
+      "offset": 4096,
+      "paddr": 0,
+      "type": 1,
+      "vaddr": 0
+    },
+    {
+      "align": 4096,
+      "filesz": 2528,
+      "flags": 4,
+      "memsz": 2528,
+      "offset": 6152,
+      "paddr": 2056,
+      "type": 1,
+      "vaddr": 2056
+    },
+    {
+      "align": 4096,
+      "filesz": 320,
+      "flags": 6,
+      "memsz": 320,
+      "offset": 12288,
+      "paddr": 8192,
+      "type": 1,
+      "vaddr": 8192
+    },
+    {
+      "align": 8,
+      "filesz": 256,
+      "flags": 6,
+      "memsz": 256,
+      "offset": 12352,
+      "paddr": 8256,
+      "type": 2,
+      "vaddr": 8256
+    },
+    {
+      "align": 1,
+      "filesz": 320,
+      "flags": 4,
+      "memsz": 320,
+      "offset": 12288,
+      "paddr": 8192,
+      "type": 1685382482,
+      "vaddr": 8192
+    },
+    {
+      "align": 4,
+      "filesz": 12,
+      "flags": 4,
+      "memsz": 12,
+      "offset": 8636,
+      "paddr": 4540,
+      "type": 1685382480,
+      "vaddr": 4540
+    },
+    {
+      "align": 0,
+      "filesz": 0,
+      "flags": 6,
+      "memsz": 0,
+      "offset": 0,
+      "paddr": 0,
+      "type": 1685382481,
+      "vaddr": 0
+    }
+  ],
+  "unsigned_sections": [
+    {
+      "addr": 0,
+      "align": 0,
+      "bytes": 0,
+      "entsize": 0,
+      "flags": 0,
+      "name": "",
+      "offset": 0,
+      "type": 0
+    },
+    {
+      "addr": 0,
+      "align": 16,
+      "bytes": 2050,
+      "entsize": 0,
+      "flags": 6,
+      "name": ".text",
+      "offset": 4096,
+      "type": 1
+    },
+    {
+      "addr": 2056,
+      "align": 8,
+      "bytes": 24,
+      "entsize": 24,
+      "flags": 2,
+      "name": ".dynsym",
+      "offset": 6152,
+      "type": 11
+    },
+    {
+      "addr": 2080,
+      "align": 8,
+      "bytes": 28,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".gnu.hash",
+      "offset": 6176,
+      "type": 1879048182
+    },
+    {
+      "addr": 2108,
+      "align": 4,
+      "bytes": 16,
+      "entsize": 4,
+      "flags": 2,
+      "name": ".hash",
+      "offset": 6204,
+      "type": 5
+    },
+    {
+      "addr": 2124,
+      "align": 1,
+      "bytes": 1,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".dynstr",
+      "offset": 6220,
+      "type": 3
+    },
+    {
+      "addr": 2128,
+      "align": 8,
+      "bytes": 96,
+      "entsize": 24,
+      "flags": 2,
+      "name": ".rela.dyn",
+      "offset": 6224,
+      "type": 4
+    },
+    {
+      "addr": 4096,
+      "align": 4096,
+      "bytes": 444,
+      "entsize": 0,
+      "flags": 50,
+      "name": ".rodata",
+      "offset": 8192,
+      "type": 1
+    },
+    {
+      "addr": 4540,
+      "align": 4,
+      "bytes": 12,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".eh_frame_hdr",
+      "offset": 8636,
+      "type": 1
+    },
+    {
+      "addr": 4552,
+      "align": 8,
+      "bytes": 28,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".eh_frame",
+      "offset": 8648,
+      "type": 1
+    },
+    {
+      "addr": 4584,
+      "align": 8,
+      "bytes": 0,
+      "entsize": 0,
+      "flags": 2,
+      "name": ".init_array",
+      "offset": 8680,
+      "type": 1
+    },
+    {
+      "addr": 8192,
+      "align": 4096,
+      "bytes": 64,
+      "entsize": 0,
+      "flags": 2097155,
+      "name": ".data",
+      "offset": 12288,
+      "type": 1
+    },
+    {
+      "addr": 8256,
+      "align": 8,
+      "bytes": 256,
+      "entsize": 16,
+      "flags": 3,
+      "name": ".dynamic",
+      "offset": 12352,
+      "type": 6
+    },
+    {
+      "addr": 12288,
+      "align": 4096,
+      "bytes": 0,
+      "entsize": 0,
+      "flags": 3,
+      "name": ".bss",
+      "offset": 12608,
+      "type": 8
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 147,
+      "entsize": 1,
+      "flags": 48,
+      "name": ".comment",
+      "offset": 12608,
+      "type": 1
+    },
+    {
+      "addr": 0,
+      "align": 8,
+      "bytes": 552,
+      "entsize": 24,
+      "flags": 0,
+      "name": ".symtab",
+      "offset": 12760,
+      "type": 2
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 148,
+      "entsize": 0,
+      "flags": 0,
+      "name": ".shstrtab",
+      "offset": 13312,
+      "type": 3
+    },
+    {
+      "addr": 0,
+      "align": 1,
+      "bytes": 689,
+      "entsize": 0,
+      "flags": 0,
+      "name": ".strtab",
+      "offset": 13460,
+      "type": 3
+    }
+  ]
+}

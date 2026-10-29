@@ -1,0 +1,466 @@
+{"event": "request", "monotonic_ns": 421420232128987, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421420232539654, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421420232617058, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421420232858187, "message": {"return": {"status": "prelaunch", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421420232925170, "message": {"execute": "trace-event-get-state", "arguments": {"name": "gdbstub_io_command"}}}
+{"event": "response", "monotonic_ns": 421420233932031, "message": {"return": [{"name": "gdbstub_io_command", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421420233994964, "message": {"execute": "trace-event-get-state", "arguments": {"name": "gdbstub_io_reply"}}}
+{"event": "response", "monotonic_ns": 421420234471666, "message": {"return": [{"name": "gdbstub_io_reply", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421420234525279, "message": {"execute": "trace-event-get-state", "arguments": {"name": "gdbstub_hit_watchpoint"}}}
+{"event": "response", "monotonic_ns": 421420235120169, "message": {"return": [{"name": "gdbstub_hit_watchpoint", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421420235180253, "message": {"execute": "trace-event-get-state", "arguments": {"name": "gdbstub_hit_break"}}}
+{"event": "response", "monotonic_ns": 421420235687816, "message": {"return": [{"name": "gdbstub_hit_break", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421420235719701, "message": {"execute": "trace-event-get-state", "arguments": {"name": "breakpoint_singlestep"}}}
+{"event": "response", "monotonic_ns": 421420236319052, "message": {"return": [{"name": "breakpoint_singlestep", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421420236375707, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421420236784561, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421420236843331, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421420237254712, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421423535289850, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421423535479088, "message": {"timestamp": {"seconds": 1793235886, "microseconds": 643655}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421423535584108, "message": {"timestamp": {"seconds": 1793235889, "microseconds": 740335}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421423535756348, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421423535778599, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421423536054074, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421423536848629, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421423537270354, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421423537333740, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421423537758670, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421423537821891, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421423538213879, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421423538257849, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421423538685528, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421423540391349, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421423540528659, "message": {"timestamp": {"seconds": 1793235889, "microseconds": 901653}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421423540626389, "message": {"timestamp": {"seconds": 1793235889, "microseconds": 902155}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421423540790858, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421423540811434, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421423541029340, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421423541165385, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421423541595388, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421423541653863, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421423542098433, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421423542148661, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421423542534122, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421423542592299, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421423543004935, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421423543064272, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421423543487751, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421423543536032, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421423543956612, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421423550405135, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421423550584339, "message": {"timestamp": {"seconds": 1793235889, "microseconds": 907349}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421423550691835, "message": {"timestamp": {"seconds": 1793235889, "microseconds": 912439}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421423550862434, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421423550886254, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421423551091126, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421423551731409, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421423552172175, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421423552261349, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421423552746766, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421423552813260, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421423553256956, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421423553290886, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421423553755741, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421423555286020, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421423555546598, "message": {"timestamp": {"seconds": 1793235889, "microseconds": 916729}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421423555668635, "message": {"timestamp": {"seconds": 1793235889, "microseconds": 916960}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421423555844657, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421423555867759, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421423556153248, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421423556299167, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421423556756509, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421423556817626, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421423557313293, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421423557383384, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421423557831819, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421423557885742, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421423558303900, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421423558368494, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421423558836726, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421423558891268, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421423559389124, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421424944380336, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421424944566221, "message": {"timestamp": {"seconds": 1793235889, "microseconds": 922594}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421424944671175, "message": {"timestamp": {"seconds": 1793235891, "microseconds": 306501}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421424944846439, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421424944868880, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421424945091114, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421424945804777, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421424946216073, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421424946266354, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421424946682674, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421424946737963, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421424947144939, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421424947176413, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421424947620232, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421424949069637, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421424949202810, "message": {"timestamp": {"seconds": 1793235891, "microseconds": 310636}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421424949299538, "message": {"timestamp": {"seconds": 1793235891, "microseconds": 310911}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421424949465213, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421424949486031, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421424949711835, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421424949853040, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421424950248559, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421424950279977, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421424950724169, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421424950778895, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421424951150216, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421424951206863, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421424951593690, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421424951636627, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421424952051914, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421424952092984, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421424952529097, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421425152924593, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421425153109132, "message": {"timestamp": {"seconds": 1793235891, "microseconds": 315654}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421425153208717, "message": {"timestamp": {"seconds": 1793235891, "microseconds": 515047}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421425153430565, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421425153460663, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421425153667844, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421425154540636, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421425154965931, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421425155024633, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421425155436063, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421425155490376, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421425155902730, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421425155957201, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421425156410029, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421425158105915, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421425158359613, "message": {"timestamp": {"seconds": 1793235891, "microseconds": 519389}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421425158576894, "message": {"timestamp": {"seconds": 1793235891, "microseconds": 519704}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421425158781887, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421425158809296, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421425159026829, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421425159140067, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421425159555379, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421425159614776, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421425160051882, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421425160107029, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421425160519962, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421425160577199, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421425160983002, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421425161036027, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421425161492352, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421425161549819, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421425162004606, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421427947350308, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421427947535464, "message": {"timestamp": {"seconds": 1793235891, "microseconds": 525197}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421427947635529, "message": {"timestamp": {"seconds": 1793235894, "microseconds": 309466}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421427947802184, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421427947829893, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421427948048082, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421427949074043, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421427949607085, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421427949684548, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421427950141742, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421427950208282, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421427950618501, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421427950671110, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421427951096988, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421427952817294, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421427953024278, "message": {"timestamp": {"seconds": 1793235894, "microseconds": 314109}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421427953126703, "message": {"timestamp": {"seconds": 1793235894, "microseconds": 314355}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421427953294044, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421427953314760, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421427953515932, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421427953629820, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421427954030534, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421427954090200, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421427954673392, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421427954738962, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421427955124605, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421427955161263, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421427955550008, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421427955604679, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421427956058795, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421427956114173, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421427956568748, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421428772153489, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421428772341424, "message": {"timestamp": {"seconds": 1793235894, "microseconds": 319782}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421428772443902, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 134062}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421428772609008, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421428772629830, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421428772831657, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421428773708158, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421428774144149, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421428774212167, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421428774651181, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421428774713246, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421428775131817, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421428775193148, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421428775639374, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421428777610677, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421428777748385, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 138630}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421428777845143, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 139170}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421428778019999, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421428778047777, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421428778244711, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421428778358254, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421428778767047, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421428778825534, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421428779268325, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421428779310355, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421428779690975, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421428779750099, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421428780183605, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421428780240734, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421428780662068, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421428780710844, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421428781350707, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421429086147492, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421429086338781, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 144642}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421429086440579, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 448163}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421429086610481, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421429086632397, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421429086827654, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421429087603777, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421429088046510, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429088109828, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421429088551451, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429088610637, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421429089043689, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429089104022, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421429089541070, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429091013950, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421429091149699, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 452525}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421429091248547, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 452772}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421429091417820, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421429091439559, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421429091641349, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421429091775490, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421429092348710, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429092404609, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421429092854635, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429092911668, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421429093293845, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429093351154, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421429093758851, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421429093806332, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421429094242306, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429094303630, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421429094722552, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421429425622168, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421429425964539, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 457864}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421429426178662, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 787445}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421429426544816, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421429426596099, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421429426889018, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421429427724529, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421429428200156, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429428261883, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421429428695030, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429428753261, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421429429205010, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429429268189, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421429429769261, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429431929877, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421429432108904, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 792859}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421429432221798, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 793131}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421429432406201, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421429432434107, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421429432695340, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421429432851673, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421429433334509, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429433403120, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421429433910209, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429433978573, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421429434380065, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429434441148, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421429434888994, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421429434959342, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421429435378889, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429435431952, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421429435910895, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421429794577766, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421429794765670, "message": {"timestamp": {"seconds": 1793235895, "microseconds": 799173}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421429794869172, "message": {"timestamp": {"seconds": 1793235896, "microseconds": 156741}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421429795036014, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421429795057080, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421429795290597, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421429796128393, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421429796537848, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429796594047, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421429797004094, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429797054554, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421429797475744, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429797531266, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421429797963575, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429799493150, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421429799635659, "message": {"timestamp": {"seconds": 1793235896, "microseconds": 161031}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421429799733128, "message": {"timestamp": {"seconds": 1793235896, "microseconds": 161277}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421429799900126, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421429799920657, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421429800144999, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421429800272308, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421429800706926, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429800773221, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421429801232546, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421429801295666, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421429802139688, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429802197883, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421429802624226, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421429802685620, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421429803113006, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421429803171026, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421429803612117, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421430056864515, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421430057040613, "message": {"timestamp": {"seconds": 1793235896, "microseconds": 167129}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421430057139190, "message": {"timestamp": {"seconds": 1793235896, "microseconds": 419016}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421430057305725, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421430057326473, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421430057539737, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421430058278269, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421430058674950, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421430058716152, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421430059117140, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421430059170816, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421430059567067, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421430059605781, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421430060074988, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421430061542858, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421430061676189, "message": {"timestamp": {"seconds": 1793235896, "microseconds": 423016}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421430061771887, "message": {"timestamp": {"seconds": 1793235896, "microseconds": 423445}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421430061939185, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421430061959578, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421430062175928, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421430062309290, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421430062714891, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421430062764125, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421430063210946, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421430063271973, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421430063647336, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421430063690217, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421430064125649, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421430064183004, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421430064755934, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421430064803777, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421430065273068, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421430717098601, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421430717286105, "message": {"timestamp": {"seconds": 1793235896, "microseconds": 428459}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421430717385872, "message": {"timestamp": {"seconds": 1793235897, "microseconds": 79138}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421430717555181, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421430717577177, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421430717808085, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421430718775492, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421430719212722, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421430719270149, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421430719681010, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421430719741814, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421430720221082, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421430720278657, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421430720690888, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421430722346690, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421430722495920, "message": {"timestamp": {"seconds": 1793235897, "microseconds": 83715}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421430722605650, "message": {"timestamp": {"seconds": 1793235897, "microseconds": 83950}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421430722779168, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421430722801780, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421430722988150, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421430723104311, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421430723503614, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421430723569077, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421430724058195, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421430724114553, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421430724512838, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421430724562732, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421430724983124, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421430725040799, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421430725467318, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421430725523490, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421430725965185, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421431725146589, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421431725327549, "message": {"timestamp": {"seconds": 1793235897, "microseconds": 89131}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421431725426763, "message": {"timestamp": {"seconds": 1793235898, "microseconds": 87181}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421431725594122, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421431725616251, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421431725836548, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421431726757194, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421431727189929, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421431727246574, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421431727663653, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421431727721971, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421431728153033, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421431728198179, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421431728676163, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421431730412960, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421431730547939, "message": {"timestamp": {"seconds": 1793235898, "microseconds": 91684}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421431730644558, "message": {"timestamp": {"seconds": 1793235898, "microseconds": 92109}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421431730810475, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421431730832625, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421431731016590, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421431731135366, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421431731541914, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421431731601225, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421431732085542, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421431732147877, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421431732561891, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421431732619385, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421431733031521, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421431733074300, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421431733512809, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421431733575034, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421431734050445, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421435001202562, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421435001389951, "message": {"timestamp": {"seconds": 1793235898, "microseconds": 97313}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421435001492977, "message": {"timestamp": {"seconds": 1793235901, "microseconds": 361550}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421435001664167, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421435001686060, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421435001907351, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421435002838126, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421435003269287, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421435003315077, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421435003730643, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421435003768719, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421435004197822, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421435004263706, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421435004719709, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421435006561301, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421435006792266, "message": {"timestamp": {"seconds": 1793235901, "microseconds": 366079}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421435006915854, "message": {"timestamp": {"seconds": 1793235901, "microseconds": 366525}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421435007086824, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421435007113572, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421435007338610, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421435007478233, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421435007915452, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421435007976256, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421435008483505, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421435008548228, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421435008946934, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421435008992572, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421435009414965, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421435009475649, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421435009923023, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421435009969500, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421435010436399, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421437446623913, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421437446809540, "message": {"timestamp": {"seconds": 1793235901, "microseconds": 372006}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421437446913588, "message": {"timestamp": {"seconds": 1793235903, "microseconds": 807162}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421437447084062, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421437447106045, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421437447356319, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421437448639139, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": true}}}
+{"event": "response", "monotonic_ns": 421437449101172, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421437449154810, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421437449621916, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421437449670856, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": true}}}
+{"event": "response", "monotonic_ns": 421437450126976, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421437450193869, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421437450682503, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421437452638654, "message": {"execute": "query-cpus-fast"}}
+{"event": "response", "monotonic_ns": 421437452775555, "message": {"timestamp": {"seconds": 1793235903, "microseconds": 812120}, "event": "RESUME"}}
+{"event": "response", "monotonic_ns": 421437452875255, "message": {"timestamp": {"seconds": 1793235903, "microseconds": 812629}, "event": "STOP"}}
+{"event": "response", "monotonic_ns": 421437453048708, "message": {"return": [{"thread-id": 2231858, "props": {"core-id": 0, "thread-id": 0, "socket-id": 0}, "qom-path": "/machine/unattached/device[0]", "cpu-index": 0, "target": "x86_64"}]}}
+{"event": "request", "monotonic_ns": 421437453071038, "message": {"execute": "query-status"}}
+{"event": "response", "monotonic_ns": 421437453317851, "message": {"return": {"status": "debug", "singlestep": false, "running": false}}}
+{"event": "request", "monotonic_ns": 421437453463213, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421437453926446, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421437453988270, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421437454430707, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "enabled"}]}}
+{"event": "request", "monotonic_ns": 421437454483939, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb", "enable": false}}}
+{"event": "response", "monotonic_ns": 421437454865068, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421437454901225, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb"}}}
+{"event": "response", "monotonic_ns": 421437455267871, "message": {"return": [{"name": "exec_tb", "vcpu": false, "state": "disabled"}]}}
+{"event": "request", "monotonic_ns": 421437455302526, "message": {"execute": "trace-event-set-state", "arguments": {"name": "exec_tb_exit", "enable": false}}}
+{"event": "response", "monotonic_ns": 421437455724843, "message": {"return": {}}}
+{"event": "request", "monotonic_ns": 421437455783023, "message": {"execute": "trace-event-get-state", "arguments": {"name": "exec_tb_exit"}}}
+{"event": "response", "monotonic_ns": 421437456243431, "message": {"return": [{"name": "exec_tb_exit", "vcpu": false, "state": "disabled"}]}}

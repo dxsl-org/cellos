@@ -1,0 +1,44 @@
+{
+  "installed_package": "qemu-system-x86",
+  "source_package": "qemu",
+  "version": "1:8.2.2+ds-0ubuntu1.17",
+  "downloads": [
+    {
+      "file": "qemu_8.2.2+ds-0ubuntu1.17.dsc",
+      "url": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/qemu/1:8.2.2+ds-0ubuntu1.17/qemu_8.2.2+ds-0ubuntu1.17.dsc",
+      "resolved_url": "https://launchpadlibrarian.net/863589427/qemu_8.2.2+ds-0ubuntu1.17.dsc",
+      "size": 9840,
+      "sha256": "4d3a8ab08c652a65cfc1578336db1a10e2ee376d4f24356d65969e7a168a27f8",
+      "published_sha256": null,
+      "published_checksum_matches": null,
+      "local_cache": "/tmp/cellbox-s10-4-input-source-20261029/qemu_8.2.2+ds-0ubuntu1.17.dsc"
+    },
+    {
+      "file": "qemu_8.2.2+ds-0ubuntu1.17.debian.tar.xz",
+      "url": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/qemu/1:8.2.2+ds-0ubuntu1.17/qemu_8.2.2+ds-0ubuntu1.17.debian.tar.xz",
+      "resolved_url": "https://launchpadlibrarian.net/863589422/qemu_8.2.2+ds-0ubuntu1.17.debian.tar.xz",
+      "size": 259688,
+      "sha256": "bd2e6336e97dce02ac0e769a6833e21865229f5e6a09192dc59d59731854d967",
+      "published_sha256": "bd2e6336e97dce02ac0e769a6833e21865229f5e6a09192dc59d59731854d967",
+      "published_checksum_matches": true,
+      "local_cache": "/tmp/cellbox-s10-4-input-source-20261029/qemu_8.2.2+ds-0ubuntu1.17.debian.tar.xz"
+    },
+    {
+      "file": "qemu_8.2.2+ds.orig.tar.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/q/qemu/qemu_8.2.2+ds.orig.tar.xz",
+      "size": 39678456,
+      "sha256": "5e692dd20950a819ff6550cd3974e00319a93f47c0a15f808c58df1a9e4d2478",
+      "published_sha256": "5e692dd20950a819ff6550cd3974e00319a93f47c0a15f808c58df1a9e4d2478",
+      "published_checksum_matches": true,
+      "local_cache": "/tmp/cellbox-s10-4-input-source-20261029/qemu_8.2.2+ds.orig.tar.xz"
+    }
+  ],
+  "identity_basis": "Installed dpkg/apt metadata plus exact-version HTTPS Launchpad primary publication and dsc SHA256s; uploader PGP signature retained, not independently verified",
+  "attempts": [
+    "apt-cache showsrc unavailable: no deb-src",
+    "versioned archive.ubuntu dsc404",
+    "Launchpad exact dsc/debian tar success; original URL timed out",
+    "published original archive fetched from archive.ubuntu and checksum matched"
+  ],
+  "package_install_build_candidate_execution": false
+}

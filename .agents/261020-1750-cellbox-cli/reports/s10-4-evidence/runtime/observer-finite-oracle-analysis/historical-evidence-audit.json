@@ -1,0 +1,37 @@
+{
+  "scope": "Offline audit of actual retained S10-4.14 evidence; no output inference from synthetic renderer fixture",
+  "GUI_reconstructed_original_input_from_frozen_batches": "top --records -d 1 --frames 2 | to jsonl | cat\n",
+  "unresolved_key_mappings": [],
+  "command_and_Enter_exact": true,
+  "all_batches_committed_once": true,
+  "status_command_sent": false,
+  "original_two_frame_command_source_limit": "Verified command requests2frames but requested count is not actual completed-output proof",
+  "UART_frame_envelope_count": 0,
+  "UART_scope": "Desktop GUI session output is not scripted/routed through UART. Existing UART captures service/kernel logs, not a GUI result channel.",
+  "last_retained_screens": [
+    "screens/ordinary-prompt-idle-096.png",
+    "screens/ordinary-prompt-idle-097.png",
+    "screens/ordinary-prompt-idle-098.png",
+    "screens/ordinary-prompt-idle-099.png"
+  ],
+  "retained_screens_are_only_preterminal_prompt_or_ordinary_idle": true,
+  "final_screen_or_last_read_after_finite_Enter_available": false,
+  "runtime_traceback_boundary": "Stop: timeout waiting for finite-stream: read screen",
+  "completion": {
+    "historical_twoframes": null,
+    "historical_exit_status": null,
+    "historical_new_prompt": null,
+    "reason": "No retained ordered GUI output ledger or finalscreen/read/statusphase. Input acceptance and heap/native progress do not prove completion."
+  },
+  "source_references": [
+    "phase10_canonical_drive.py955-962 exact key batch construction",
+    "phase10_canonical_drive.py1067-1098 typedline beforeEnter and finalshot onlyonsuccess",
+    "phase04_gui_drive.py303-315 temporarydump deleted",
+    "runtime/common.py71-79 actualtimeoutclass common.Stop"
+  ],
+  "evidence_hashes": {
+    "desktop/runtime-result.json": "a46e41106fab0e4178450352264948f7ac4bd1676d2d070157c5c5673f79f1f0",
+    "desktop/evidence/serial-measurement.raw.log": "b429e1fa3f870f9364ed41db7508af3c36a6bd95a751d275629b5a7dd29fff63",
+    "desktop/evidence/gui-input-journal.jsonl": "1acf9296ae8cf6c517ecd7690c3f2034cb786aba74d70833668973811a826501"
+  }
+}

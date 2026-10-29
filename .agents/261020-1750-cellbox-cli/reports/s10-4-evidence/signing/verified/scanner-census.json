@@ -1,0 +1,63 @@
+{
+  "file_count": 38,
+  "files": [
+    "cells/tools/shell/build.rs",
+    "cells/tools/shell/src/aliases.rs",
+    "cells/tools/shell/src/async_utils.rs",
+    "cells/tools/shell/src/cmd_cwd.rs",
+    "cells/tools/shell/src/cmd_fs.rs",
+    "cells/tools/shell/src/cmd_sys.rs",
+    "cells/tools/shell/src/commands.rs",
+    "cells/tools/shell/src/config_client.rs",
+    "cells/tools/shell/src/executor.rs",
+    "cells/tools/shell/src/history.rs",
+    "cells/tools/shell/src/jobs.rs",
+    "cells/tools/shell/src/main.rs",
+    "cells/tools/shell/src/parser.rs",
+    "cells/tools/shell/src/shell.rs",
+    "cells/tools/shell/src/shell_state.rs",
+    "cells/tools/shell/src/shell_test.rs",
+    "cells/tools/shell/src/snapshot_client.rs",
+    "cells/tools/shell/src/state_transfer.rs",
+    "cells/tools/shell/src/text_engine.rs",
+    "cells/tools/shell/src/text_tools.rs",
+    "cells/tools/shell/src/text_tools/grep.rs",
+    "cells/tools/shell/src/text_tools/grep/io.rs",
+    "cells/tools/shell/src/text_tools/grep/io/read.rs",
+    "cells/tools/shell/src/text_tools/grep/io/vfs.rs",
+    "cells/tools/shell/src/top.rs",
+    "cells/tools/shell/src/top/render.rs",
+    "cells/tools/sys-tools/build.rs",
+    "cells/tools/sys-tools/src/bin/cat.rs",
+    "cells/tools/sys-tools/src/bin/date.rs",
+    "cells/tools/sys-tools/src/bin/echo.rs",
+    "cells/tools/sys-tools/src/bin/env.rs",
+    "cells/tools/sys-tools/src/bin/free.rs",
+    "cells/tools/sys-tools/src/bin/hotswap.rs",
+    "cells/tools/sys-tools/src/bin/kill.rs",
+    "cells/tools/sys-tools/src/bin/ls.rs",
+    "cells/tools/sys-tools/src/bin/ps.rs",
+    "cells/tools/sys-tools/src/bin/shutdown.rs",
+    "cells/tools/sys-tools/src/bin/uname.rs"
+  ],
+  "mode": "unchanged filesystem fallback outside Git",
+  "root_count": 12,
+  "roots": {
+    "app-shell": [
+      "cells/tools/shell/src/main.rs"
+    ],
+    "app-sys-tools": [
+      "cells/tools/sys-tools/src/bin/cat.rs",
+      "cells/tools/sys-tools/src/bin/date.rs",
+      "cells/tools/sys-tools/src/bin/echo.rs",
+      "cells/tools/sys-tools/src/bin/env.rs",
+      "cells/tools/sys-tools/src/bin/free.rs",
+      "cells/tools/sys-tools/src/bin/hotswap.rs",
+      "cells/tools/sys-tools/src/bin/kill.rs",
+      "cells/tools/sys-tools/src/bin/ls.rs",
+      "cells/tools/sys-tools/src/bin/ps.rs",
+      "cells/tools/sys-tools/src/bin/shutdown.rs",
+      "cells/tools/sys-tools/src/bin/uname.rs"
+    ]
+  }
+}

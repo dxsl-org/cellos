@@ -1,0 +1,803 @@
+{
+  "F5": "PASS verified full active/pinned/actual-build commit f53b654a8882fd5fc036c4ca7a4ff41ce32497a6",
+  "TCB_boundary": "libs/* and registry dependencies remain outside the unchanged F1 cell-source policy; source hashes and resolved graph identify them, not certify memory safety.",
+  "artifacts": [
+    {
+      "allocated_section_bytes_unchanged": true,
+      "allocated_section_metadata_deltas": [
+        {
+          "changes": {
+            "entsize": {
+              "signed": 8,
+              "unsigned": 0
+            },
+            "type": {
+              "signed": 14,
+              "unsigned": 1
+            }
+          },
+          "section": ".init_array"
+        }
+      ],
+      "independent_existing_verifier": true,
+      "name": "shell",
+      "payload_bytes": 881056,
+      "payload_sha256": "3265f9bd13c9c01627e474cffd7a27bfdab6c85baa47995f592bec54efa29b57",
+      "program_headers_exact": false,
+      "signature_hex": "bdfcfafcac61c01922d357977fc7062066b7c642a7e33bea949c1a46457f45e892b95c772ee8d466871b37b24c9a897cc9416044e95cb906451dc38fe46ca205",
+      "signature_section": {
+        "addr": 0,
+        "align": 1,
+        "bytes": 64,
+        "entsize": 0,
+        "flags": 0,
+        "name": "__ViCell_sig",
+        "offset": 778447,
+        "type": 1
+      },
+      "signature_section_count": 1,
+      "signature_valid": true,
+      "signed": {
+        "bss_bytes": 1048658,
+        "bytes": 881120,
+        "data_bytes": 17960,
+        "path": "/tmp/cellbox-s10-4/b2-reviewed-signed/shell",
+        "sha256": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n 744578\t  17960\t1048658\t1811196\t 1ba2fc\t/tmp/cellbox-s10-4/b2-reviewed-signed/shell\n",
+        "text_bytes": 744578
+      },
+      "unsigned": {
+        "bss_bytes": 1048658,
+        "bytes": 880992,
+        "data_bytes": 17960,
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/shell",
+        "sha256": "2951a28b324ebd5e85922f3ba51128811e2fbbe84166c2ab54540b436d82648f",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n 744578\t  17960\t1048658\t1811196\t 1ba2fc\t/tmp/cellbox-s10-4/b2-unsigned/shell\n",
+        "text_bytes": 744578
+      }
+    },
+    {
+      "allocated_section_bytes_unchanged": true,
+      "allocated_section_metadata_deltas": [
+        {
+          "changes": {
+            "entsize": {
+              "signed": 8,
+              "unsigned": 0
+            },
+            "type": {
+              "signed": 14,
+              "unsigned": 1
+            }
+          },
+          "section": ".init_array"
+        }
+      ],
+      "independent_existing_verifier": true,
+      "name": "ls",
+      "payload_bytes": 20888,
+      "payload_sha256": "39c237a7fbe99b487db3599761398f7dec0ce6b067010d1a02759d8cc4c7cee2",
+      "program_headers_exact": false,
+      "signature_hex": "c86b225e2c0fb78991fa4e97f07c4d7cf924a30f6a15fbbec4e9e45693b2f0f9a44e6a30dd16ab9f1a4c80d654c5371221f2336386de8ea424ce5df245211c01",
+      "signature_section": {
+        "addr": 0,
+        "align": 1,
+        "bytes": 64,
+        "entsize": 0,
+        "flags": 0,
+        "name": "__ViCell_sig",
+        "offset": 17027,
+        "type": 1
+      },
+      "signature_section_count": 1,
+      "signature_valid": true,
+      "signed": {
+        "bss_bytes": 1048625,
+        "bytes": 20952,
+        "data_bytes": 496,
+        "path": "/tmp/cellbox-s10-4/b2-reviewed-signed/ls",
+        "sha256": "3a99ac33ff89f237c3fd908bcdb0b3e233bcb99c5570440d3a5b6a7f02adcffc",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   7227\t    496\t1048625\t1056348\t 101e5c\t/tmp/cellbox-s10-4/b2-reviewed-signed/ls\n",
+        "text_bytes": 7227
+      },
+      "unsigned": {
+        "bss_bytes": 1048625,
+        "bytes": 24424,
+        "data_bytes": 496,
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/ls",
+        "sha256": "3a4d5478565c00a3b9d6d97c28f3730cc2add03a20493883b971c48970c0778c",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   7227\t    496\t1048625\t1056348\t 101e5c\t/tmp/cellbox-s10-4/b2-unsigned/ls\n",
+        "text_bytes": 7227
+      }
+    },
+    {
+      "allocated_section_bytes_unchanged": true,
+      "allocated_section_metadata_deltas": [
+        {
+          "changes": {
+            "entsize": {
+              "signed": 8,
+              "unsigned": 0
+            },
+            "type": {
+              "signed": 14,
+              "unsigned": 1
+            }
+          },
+          "section": ".init_array"
+        }
+      ],
+      "independent_existing_verifier": true,
+      "name": "cat",
+      "payload_bytes": 20912,
+      "payload_sha256": "7568feeec0d469a220d73142bf1271126ab7fa5f79fb001a4116c39a98ddfb7e",
+      "program_headers_exact": false,
+      "signature_hex": "bf5317f7d0c9a489b566a5349aeb8ab87244969cba9ea5b8cf8614cb1375f983d832a181446973eb8b461f1762dddc8d4d5887d493a60eb664d063d5687aba0a",
+      "signature_section": {
+        "addr": 0,
+        "align": 1,
+        "bytes": 64,
+        "entsize": 0,
+        "flags": 0,
+        "name": "__ViCell_sig",
+        "offset": 17051,
+        "type": 1
+      },
+      "signature_section_count": 1,
+      "signature_valid": true,
+      "signed": {
+        "bss_bytes": 1048625,
+        "bytes": 20976,
+        "data_bytes": 520,
+        "path": "/tmp/cellbox-s10-4/b2-reviewed-signed/cat",
+        "sha256": "9fb4d1ff159ea0faf3d373043ccd25cc2bcea72b60346636d84f1208a7c0dc72",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   6727\t    520\t1048625\t1055872\t 101c80\t/tmp/cellbox-s10-4/b2-reviewed-signed/cat\n",
+        "text_bytes": 6727
+      },
+      "unsigned": {
+        "bss_bytes": 1048625,
+        "bytes": 24424,
+        "data_bytes": 520,
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/cat",
+        "sha256": "959c64e60c7668e13f6f6043ad1bf968ddb710ddf0a4014d113498e353fc507f",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   6727\t    520\t1048625\t1055872\t 101c80\t/tmp/cellbox-s10-4/b2-unsigned/cat\n",
+        "text_bytes": 6727
+      }
+    },
+    {
+      "allocated_section_bytes_unchanged": true,
+      "allocated_section_metadata_deltas": [
+        {
+          "changes": {
+            "entsize": {
+              "signed": 8,
+              "unsigned": 0
+            },
+            "type": {
+              "signed": 14,
+              "unsigned": 1
+            }
+          },
+          "section": ".init_array"
+        }
+      ],
+      "independent_existing_verifier": true,
+      "name": "echo",
+      "payload_bytes": 20888,
+      "payload_sha256": "1e9927fdf1181ba9501a80bbf437d49995226f5c2e23fd34f5b5f7eb6e311d61",
+      "program_headers_exact": false,
+      "signature_hex": "08f17d6ce6ecfda6d1dbba3d9828128689d3cfa5cb8af4ce97bb1b9d23454fdd07cc816c291332305bde0e9d78080474ffd83d57dfaff1156ab7d397c8255e0e",
+      "signature_section": {
+        "addr": 0,
+        "align": 1,
+        "bytes": 64,
+        "entsize": 0,
+        "flags": 0,
+        "name": "__ViCell_sig",
+        "offset": 17027,
+        "type": 1
+      },
+      "signature_section_count": 1,
+      "signature_valid": true,
+      "signed": {
+        "bss_bytes": 1048625,
+        "bytes": 20952,
+        "data_bytes": 496,
+        "path": "/tmp/cellbox-s10-4/b2-reviewed-signed/echo",
+        "sha256": "861ca14a7b28eab867eee713ebc9c110701873bc41edff2055a3ad415bb574c0",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   6307\t    496\t1048625\t1055428\t 101ac4\t/tmp/cellbox-s10-4/b2-reviewed-signed/echo\n",
+        "text_bytes": 6307
+      },
+      "unsigned": {
+        "bss_bytes": 1048625,
+        "bytes": 24424,
+        "data_bytes": 496,
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/echo",
+        "sha256": "4f25b11d26759227f611a4ec1a6a7f4e3a87ca5bf5eff32d652aa0c1ec60346d",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   6307\t    496\t1048625\t1055428\t 101ac4\t/tmp/cellbox-s10-4/b2-unsigned/echo\n",
+        "text_bytes": 6307
+      }
+    },
+    {
+      "allocated_section_bytes_unchanged": true,
+      "allocated_section_metadata_deltas": [
+        {
+          "changes": {
+            "entsize": {
+              "signed": 8,
+              "unsigned": 0
+            },
+            "type": {
+              "signed": 14,
+              "unsigned": 1
+            }
+          },
+          "section": ".init_array"
+        }
+      ],
+      "independent_existing_verifier": true,
+      "name": "ps",
+      "payload_bytes": 15368,
+      "payload_sha256": "864bece5a4602315d135688b4ffe10b2a7ff8fe8ead8e414f0ea681e610891c1",
+      "program_headers_exact": true,
+      "signature_hex": "80df9cf6f5b274b1d916e975774a70c9c4dad4b8db0f1c6890b8c035ccee66a8d72b7965ed357c1cb93f2b7d98405d8bb389a1515c453b9b3db5bda31338c30e",
+      "signature_section": {
+        "addr": 0,
+        "align": 1,
+        "bytes": 64,
+        "entsize": 0,
+        "flags": 0,
+        "name": "__ViCell_sig",
+        "offset": 12755,
+        "type": 1
+      },
+      "signature_section_count": 1,
+      "signature_valid": true,
+      "signed": {
+        "bss_bytes": 0,
+        "bytes": 15432,
+        "data_bytes": 320,
+        "path": "/tmp/cellbox-s10-4/b2-reviewed-signed/ps",
+        "sha256": "b5371860a45303815dd77a2b562d08055024ac7eead9cd0e143e30333341544a",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   2699\t    320\t      0\t   3019\t    bcb\t/tmp/cellbox-s10-4/b2-reviewed-signed/ps\n",
+        "text_bytes": 2699
+      },
+      "unsigned": {
+        "bss_bytes": 0,
+        "bytes": 15304,
+        "data_bytes": 320,
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/ps",
+        "sha256": "c567c9beed845f897b0792c3aadc0fd4a7e84a1a9f449a2e4cb95bfd03e72c49",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   2699\t    320\t      0\t   3019\t    bcb\t/tmp/cellbox-s10-4/b2-unsigned/ps\n",
+        "text_bytes": 2699
+      }
+    },
+    {
+      "allocated_section_bytes_unchanged": true,
+      "allocated_section_metadata_deltas": [
+        {
+          "changes": {
+            "entsize": {
+              "signed": 8,
+              "unsigned": 0
+            },
+            "type": {
+              "signed": 14,
+              "unsigned": 1
+            }
+          },
+          "section": ".init_array"
+        }
+      ],
+      "independent_existing_verifier": true,
+      "name": "kill",
+      "payload_bytes": 21032,
+      "payload_sha256": "19398eca7eb22824a763aa9448cf8443f714b8cc63c77cc9abdb3c2be426d7a2",
+      "program_headers_exact": false,
+      "signature_hex": "62204cf883a5516ec484c929f37725c87207cd9abf4f891d1c07111df81a768a9a67e8c7f51ed1a88abdb3b8b8b4e4d37f880d857b956248619b7a365f96b10b",
+      "signature_section": {
+        "addr": 0,
+        "align": 1,
+        "bytes": 64,
+        "entsize": 0,
+        "flags": 0,
+        "name": "__ViCell_sig",
+        "offset": 17099,
+        "type": 1
+      },
+      "signature_section_count": 1,
+      "signature_valid": true,
+      "signed": {
+        "bss_bytes": 1048625,
+        "bytes": 21096,
+        "data_bytes": 568,
+        "path": "/tmp/cellbox-s10-4/b2-reviewed-signed/kill",
+        "sha256": "b5fe3980d032c912b90447e886b4f8ac708dc5872a7714cad5c1a5f7a4cc2851",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   7826\t    568\t1048625\t1057019\t 1020fb\t/tmp/cellbox-s10-4/b2-reviewed-signed/kill\n",
+        "text_bytes": 7826
+      },
+      "unsigned": {
+        "bss_bytes": 1048625,
+        "bytes": 24496,
+        "data_bytes": 568,
+        "path": "/tmp/cellbox-s10-4/b2-unsigned/kill",
+        "sha256": "8839eb6c288077dca80e0dae46933df67a1b9159bf0ad9f18c2e07051204cdda",
+        "size_output": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n   7826\t    568\t1048625\t1057019\t 1020fb\t/tmp/cellbox-s10-4/b2-unsigned/kill\n",
+        "text_bytes": 7826
+      }
+    }
+  ],
+  "builds_or_tests_run": 0,
+  "commands": [
+    {
+      "argv": [
+        "rustup",
+        "which",
+        "--toolchain",
+        "nightly-2026-05-01",
+        "rustc"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/signing-review-root",
+      "label": "rustc-installed-path",
+      "returncode": 0,
+      "stderr": "rustc-installed-path.stderr.log",
+      "stdout": "rustc-installed-path.stdout.log"
+    },
+    {
+      "argv": [
+        "rustc",
+        "-Vv"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/signing-review-root",
+      "label": "rustc-active",
+      "returncode": 0,
+      "stderr": "rustc-active.stderr.log",
+      "stdout": "rustc-active.stdout.log"
+    },
+    {
+      "argv": [
+        "rustc",
+        "+nightly-2026-05-01",
+        "-Vv"
+      ],
+      "cwd": "/tmp/cellbox-s10-4/signing-review-root",
+      "label": "rustc-pinned",
+      "returncode": 0,
+      "stderr": "rustc-pinned.stderr.log",
+      "stdout": "rustc-pinned.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/sign-cell.py",
+        "--emit-pubkey"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "existing-dev-pubkey",
+      "returncode": 0,
+      "stderr": "existing-dev-pubkey.stderr.log",
+      "stdout": "existing-dev-pubkey.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/cellos-sign",
+        "--repo",
+        "/tmp/cellbox-s10-4/signing-review-root",
+        "--check",
+        "--strict"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "scoped-check-strict",
+      "returncode": 0,
+      "stderr": "scoped-check-strict.stderr.log",
+      "stdout": "scoped-check-strict.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/shell"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-unsigned-shell",
+      "returncode": 0,
+      "stderr": "size-unsigned-shell.stderr.log",
+      "stdout": "size-unsigned-shell.stdout.log"
+    },
+    {
+      "argv": [
+        "readelf",
+        "-p",
+        ".comment",
+        "/tmp/cellbox-s10-4/b2-unsigned/shell"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "compiler-comment-shell",
+      "returncode": 0,
+      "stderr": "compiler-comment-shell.stderr.log",
+      "stdout": "compiler-comment-shell.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/ls"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-unsigned-ls",
+      "returncode": 0,
+      "stderr": "size-unsigned-ls.stderr.log",
+      "stdout": "size-unsigned-ls.stdout.log"
+    },
+    {
+      "argv": [
+        "readelf",
+        "-p",
+        ".comment",
+        "/tmp/cellbox-s10-4/b2-unsigned/ls"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "compiler-comment-ls",
+      "returncode": 0,
+      "stderr": "compiler-comment-ls.stderr.log",
+      "stdout": "compiler-comment-ls.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/cat"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-unsigned-cat",
+      "returncode": 0,
+      "stderr": "size-unsigned-cat.stderr.log",
+      "stdout": "size-unsigned-cat.stdout.log"
+    },
+    {
+      "argv": [
+        "readelf",
+        "-p",
+        ".comment",
+        "/tmp/cellbox-s10-4/b2-unsigned/cat"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "compiler-comment-cat",
+      "returncode": 0,
+      "stderr": "compiler-comment-cat.stderr.log",
+      "stdout": "compiler-comment-cat.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/echo"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-unsigned-echo",
+      "returncode": 0,
+      "stderr": "size-unsigned-echo.stderr.log",
+      "stdout": "size-unsigned-echo.stdout.log"
+    },
+    {
+      "argv": [
+        "readelf",
+        "-p",
+        ".comment",
+        "/tmp/cellbox-s10-4/b2-unsigned/echo"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "compiler-comment-echo",
+      "returncode": 0,
+      "stderr": "compiler-comment-echo.stderr.log",
+      "stdout": "compiler-comment-echo.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/ps"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-unsigned-ps",
+      "returncode": 0,
+      "stderr": "size-unsigned-ps.stderr.log",
+      "stdout": "size-unsigned-ps.stdout.log"
+    },
+    {
+      "argv": [
+        "readelf",
+        "-p",
+        ".comment",
+        "/tmp/cellbox-s10-4/b2-unsigned/ps"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "compiler-comment-ps",
+      "returncode": 0,
+      "stderr": "compiler-comment-ps.stderr.log",
+      "stdout": "compiler-comment-ps.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/kill"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-unsigned-kill",
+      "returncode": 0,
+      "stderr": "size-unsigned-kill.stderr.log",
+      "stdout": "size-unsigned-kill.stdout.log"
+    },
+    {
+      "argv": [
+        "readelf",
+        "-p",
+        ".comment",
+        "/tmp/cellbox-s10-4/b2-unsigned/kill"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "compiler-comment-kill",
+      "returncode": 0,
+      "stderr": "compiler-comment-kill.stderr.log",
+      "stdout": "compiler-comment-kill.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/cellos-sign",
+        "--repo",
+        "/tmp/cellbox-s10-4/signing-review-root",
+        "--sign",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/shell",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/ls",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/cat",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/echo",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/ps",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/kill"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "scoped-sign-six",
+      "returncode": 0,
+      "stderr": "scoped-sign-six.stderr.log",
+      "stdout": "scoped-sign-six.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/sign-cell.py",
+        "--verify",
+        "--in",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/shell"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "existing-verify-shell",
+      "returncode": 0,
+      "stderr": "existing-verify-shell.stderr.log",
+      "stdout": "existing-verify-shell.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/shell"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "readback-size-unsigned-shell",
+      "returncode": 0,
+      "stderr": "readback-size-unsigned-shell.stderr.log",
+      "stdout": "readback-size-unsigned-shell.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/ls"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "readback-size-unsigned-ls",
+      "returncode": 0,
+      "stderr": "readback-size-unsigned-ls.stderr.log",
+      "stdout": "readback-size-unsigned-ls.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/cat"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "readback-size-unsigned-cat",
+      "returncode": 0,
+      "stderr": "readback-size-unsigned-cat.stderr.log",
+      "stdout": "readback-size-unsigned-cat.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/echo"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "readback-size-unsigned-echo",
+      "returncode": 0,
+      "stderr": "readback-size-unsigned-echo.stderr.log",
+      "stdout": "readback-size-unsigned-echo.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/ps"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "readback-size-unsigned-ps",
+      "returncode": 0,
+      "stderr": "readback-size-unsigned-ps.stderr.log",
+      "stdout": "readback-size-unsigned-ps.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-unsigned/kill"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "readback-size-unsigned-kill",
+      "returncode": 0,
+      "stderr": "readback-size-unsigned-kill.stderr.log",
+      "stdout": "readback-size-unsigned-kill.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/sign-cell.py",
+        "--verify",
+        "--in",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/shell"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "readback-existing-verify-shell",
+      "returncode": 0,
+      "stderr": "readback-existing-verify-shell.stderr.log",
+      "stdout": "readback-existing-verify-shell.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/shell"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-signed-shell",
+      "returncode": 0,
+      "stderr": "size-signed-shell.stderr.log",
+      "stdout": "size-signed-shell.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/sign-cell.py",
+        "--verify",
+        "--in",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/ls"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "readback-existing-verify-ls",
+      "returncode": 0,
+      "stderr": "readback-existing-verify-ls.stderr.log",
+      "stdout": "readback-existing-verify-ls.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/ls"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-signed-ls",
+      "returncode": 0,
+      "stderr": "size-signed-ls.stderr.log",
+      "stdout": "size-signed-ls.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/sign-cell.py",
+        "--verify",
+        "--in",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/cat"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "readback-existing-verify-cat",
+      "returncode": 0,
+      "stderr": "readback-existing-verify-cat.stderr.log",
+      "stdout": "readback-existing-verify-cat.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/cat"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-signed-cat",
+      "returncode": 0,
+      "stderr": "size-signed-cat.stderr.log",
+      "stdout": "size-signed-cat.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/sign-cell.py",
+        "--verify",
+        "--in",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/echo"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "readback-existing-verify-echo",
+      "returncode": 0,
+      "stderr": "readback-existing-verify-echo.stderr.log",
+      "stdout": "readback-existing-verify-echo.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/echo"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-signed-echo",
+      "returncode": 0,
+      "stderr": "size-signed-echo.stderr.log",
+      "stdout": "size-signed-echo.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/sign-cell.py",
+        "--verify",
+        "--in",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/ps"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "readback-existing-verify-ps",
+      "returncode": 0,
+      "stderr": "readback-existing-verify-ps.stderr.log",
+      "stdout": "readback-existing-verify-ps.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/ps"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-signed-ps",
+      "returncode": 0,
+      "stderr": "size-signed-ps.stderr.log",
+      "stdout": "size-signed-ps.stdout.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/dmin/cellos/scripts/sign-cell.py",
+        "--verify",
+        "--in",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/kill"
+      ],
+      "cwd": "/home/dmin/cellos",
+      "label": "readback-existing-verify-kill",
+      "returncode": 0,
+      "stderr": "readback-existing-verify-kill.stderr.log",
+      "stdout": "readback-existing-verify-kill.stdout.log"
+    },
+    {
+      "argv": [
+        "size",
+        "/tmp/cellbox-s10-4/b2-reviewed-signed/kill"
+      ],
+      "cwd": "/tmp/cellbox-s10-4",
+      "label": "size-signed-kill",
+      "returncode": 0,
+      "stderr": "size-signed-kill.stderr.log",
+      "stdout": "size-signed-kill.stdout.log"
+    }
+  ],
+  "deployable_image_or_candidate": false,
+  "dev_public_key_sha256": "7db0b01f39d179aacf7b03dbd7dd9d71f641598bed40fb9839d3c1e1117e666f",
+  "feature_equivalent": false,
+  "original_workspace_F1": "FAIL preserved; not changed to PASS",
+  "runtime_comparator_available": false,
+  "scope": "D4-Sign1 A historical measurement artifacts only",
+  "scoped_F1": "PASS: 2 crates, 38 source files, 12 crate roots; existing app-shell exception unchanged",
+  "six_signed_bytes": 980528,
+  "six_unsigned_bytes": 994064,
+  "status": "COMPLETE_SIX_VALID_SCOPED_DEV_SIGNATURES",
+  "suite_signed_bytes": 881120,
+  "workers_signed_bytes": 99408
+}

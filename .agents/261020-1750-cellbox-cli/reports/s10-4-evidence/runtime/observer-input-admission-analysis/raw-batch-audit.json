@@ -1,0 +1,27 @@
+{
+  "scope": "Retained S10-4.12 failed GUI batch reconstruction; no candidate run",
+  "raw_failing_GUI_batch_reconstructible": false,
+  "raw_failing_GUI_batch": null,
+  "known_intended_full_command": "top --records -d 1 --frames 2 | to jsonl | cat",
+  "exact_last_character_or_accepted_prefix": null,
+  "QMP_logged_request_counts": {
+    "query-cpus-fast": 83,
+    "query-status": 83,
+    "trace-event-get-state": 253,
+    "trace-event-set-state": 164
+  },
+  "QMP_GUI_input_requests_logged": 0,
+  "finite_typing_phase_start_ns": 417230006707981,
+  "latest_retained_idle_screenshot_sample_ns": 417229780409405,
+  "all_idle_screenshots_precede_finite_typing": true,
+  "evidence": [
+    "GUI Qmp.cmd writes/reads directly and does not journal raw request/reply; serialization wrapper only locks original call",
+    "TraceControl QMP journal contains only the four observer command categories listed, no GUI input",
+    "RSP packet/TCG traces capture debugger commands and selected code/register/counter/PTE data, not QMP GUI event payloads",
+    "Stamped serial receipts record received UART output offsets/times only; GUI keys are not sent through UART",
+    "Desk.command_read takes typed-line capture only after type_text returns; actual failure was inside type_text, and retained idle screens precede that phase",
+    "Runtime traceback retains command source/error, not failing key-loop locals or structured event list"
+  ],
+  "prohibited_inference": "Do not infer exact failing key or accepted prefix from0.12s typing gaps, repeated addresses, RSP PCs, screenshots before typing, or receipt timing.",
+  "future_safety": "Only a fresh future attempt can retain the immutable batch before first send. No payload is recoverable here for replay; old owned VM/clone was already stopped/removed."
+}

@@ -1,0 +1,12 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 74c811c3a..2d3a992f8 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -148,7 +148,6 @@ members = [
+     "cells/apps/hypha/tools/spawn",   # Hypha P3 — cell lifecycle tool cell
+     "cells/apps/haily-agent",
+     "cells/apps/chrome",
+-    "cells/apps/vm-runner",
+ 
+     # Cells - Demos (hardware/feature demos + games)
+     "cells/demos/doom",
