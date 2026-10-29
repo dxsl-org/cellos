@@ -1,0 +1,16 @@
+e3078fc212cc643400a2d19213f1521c035f73a1bd91a5e919d09ba823cccd6a  ./b2-desktop/command.json
+7307a7f74d6f2ea0a7d42fcf0c819de07055e8455aafb3f7c637851f86969e9a  ./b2-desktop/result.json
+4e78802395472a66aea5eef493be35f82cb48b031496ec700319cfd901b09d59  ./b2-desktop/serial.log
+fb55fde99b9a28e322c8aaa3849e5d4b860ad3b62e92242a9f7e6bc8e9ed131e  ./b2-headless/command.json
+1e9bdf169a3e48b92c35a994736d377eb30e61971ea2a080e97fca7187bd5b6c  ./b2-headless/result.json
+c660400e657520744050188c981e42b381616c8d947eb9ee62632241b328a844  ./b2-headless/serial.log
+6e6186a09a125127113a78c6e717f6e2f1740d373c3ffcd89bd03df638b9a67d  ./cand-desktop/command.json
+bcef189a35695d61fdcd70bd4c479dd83f8918d4835dedb0ffe99b89a11ebb63  ./cand-desktop/result.json
+7f3326e69e8b52e7769b41a5073ab00cd28eb847e7b2e777fa712d04a3b48463  ./cand-desktop/screen.png
+d0774af70e0a75fdddefe493ebb70e8fb4e4ffe00e25c7fe20f5c4c0a2a1d291  ./cand-desktop/serial.log
+efecfe790a0dace1bcf1fa32eef7f93dcf1a584ac7aab83e50689e95a3aa7cb9  ./cand-headless/command.json
+2a8ec8c11ce663b24c7e568f226f0e558c22cba577940131280ecf07944ea305  ./cand-headless/result.json
+f268c437d60c2c0595a9a3cb3a74105a7c53bf5a06dca0ac2e6207df64f6998f  ./cand-headless/serial.log
+7c41565ef764647190e69d654eabb549b787221e47b349349789c94f7bb12bc8  ./driver/reconstruct.py
+ffca7c3bdc355ea71cc7077e49c8c17b676f53bed9705491e65ad192e16984d7  ./driver/smoke.py
+c95d7547bf2afbba459b52acca63f8d0ca34ac156da7086fdd792479aeed63b1  ./summary.json

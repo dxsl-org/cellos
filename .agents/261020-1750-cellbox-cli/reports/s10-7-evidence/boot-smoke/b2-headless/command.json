@@ -1,0 +1,26 @@
+{
+  "set": "b2-headless",
+  "kind": "headless",
+  "argv": [
+    "qemu-system-x86_64",
+    "-machine",
+    "q35",
+    "-cpu",
+    "qemu64,+pdpe1gb",
+    "-m",
+    "256M",
+    "-nographic",
+    "-cdrom",
+    "/tmp/cellbox-s10-7/smoke/b2-headless/vicell-x86-b2-test-hooks.iso",
+    "-boot",
+    "d",
+    "-no-reboot"
+  ],
+  "accel": "tcg (default; no -enable-kvm)",
+  "deviations_from_recorded": [
+    "private ISO copy; stdout/stderr (serial) redirected to serial.log; stdin held open, no input sent"
+  ],
+  "disk_source": "/tmp/cellbox-s10-7/measure/b2-headless/vicell-x86-b2-test-hooks.iso",
+  "disk_source_sha256": "6e0b1691b62704634bc0889a1c66b067434f92f4e8e8fc7974d34c2413bda1c0",
+  "disk_copy": "/tmp/cellbox-s10-7/smoke/b2-headless/vicell-x86-b2-test-hooks.iso"
+}
