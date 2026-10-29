@@ -1,0 +1,752 @@
+{
+  "build_command_labels": [
+    "00-git-head",
+    "01-git-status-pristine",
+    "02-apply-check-b2-manifest.patch",
+    "03-apply-b2-manifest.patch",
+    "02-apply-check-b2-lock.patch",
+    "03-apply-b2-lock.patch",
+    "04-rustc",
+    "05-cargo",
+    "06-rustc-active",
+    "07-limine-build",
+    "10-build-app-shell",
+    "11-build-service-vfs",
+    "12-build-service-config",
+    "13-build-service-input",
+    "14-build-service-net",
+    "15-build-service-platform",
+    "15-build-driver-nvme",
+    "15-build-driver-e1000",
+    "15-build-driver-igb",
+    "15-build-driver-ahci",
+    "15-build-driver-xhci",
+    "15-build-driver-serial-x86",
+    "16-build-app-sys-tools",
+    "17-build-app-init",
+    "18-build-tier2",
+    "metadata",
+    "20-sign-headless",
+    "21-sign-policy",
+    "22-mkfat32-headless",
+    "23-inspect-fat-headless",
+    "24-build-kernel-headless",
+    "25-iso-headless",
+    "30-restore-tracked-embedded",
+    "31-build-ocel-desktop",
+    "32-build-service-net-qemu-dev-https",
+    "33-sign-desktop",
+    "34-package-ocel",
+    "35-package-net",
+    "36-package-b2-app-shell",
+    "36-package-b2-ls",
+    "36-package-b2-cat",
+    "36-package-b2-echo",
+    "36-package-b2-ps",
+    "36-package-b2-kill",
+    "37-build-kernel-desktop",
+    "38-iso-desktop",
+    "39-limine-bios-install-desktop",
+    "40-qemu-img-desktop",
+    "41-limine-bios-install-headless",
+    "42-qemu-img-headless"
+  ],
+  "checks": [
+    {
+      "detail": null,
+      "name": "headless: /bin/shell present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90",
+      "name": "headless: /bin/shell bytes == signed B2 app-shell",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: /bin/ls present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "3a99ac33ff89f237c3fd908bcdb0b3e233bcb99c5570440d3a5b6a7f02adcffc",
+      "name": "headless: /bin/ls bytes == signed B2 ls",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: /bin/cat present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "9fb4d1ff159ea0faf3d373043ccd25cc2bcea72b60346636d84f1208a7c0dc72",
+      "name": "headless: /bin/cat bytes == signed B2 cat",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: /bin/echo present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "861ca14a7b28eab867eee713ebc9c110701873bc41edff2055a3ad415bb574c0",
+      "name": "headless: /bin/echo bytes == signed B2 echo",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: /bin/ps present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "b5371860a45303815dd77a2b562d08055024ac7eead9cd0e143e30333341544a",
+      "name": "headless: /bin/ps bytes == signed B2 ps",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: /bin/kill present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "b5fe3980d032c912b90447e886b4f8ac708dc5872a7714cad5c1a5f7a4cc2851",
+      "name": "headless: /bin/kill bytes == signed B2 kill",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_shell)",
+      "name": "headless: /bin/shell dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_ls)",
+      "name": "headless: /bin/ls dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_cat)",
+      "name": "headless: /bin/cat dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_echo)",
+      "name": "headless: /bin/echo dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_ps)",
+      "name": "headless: /bin/ps dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_kill)",
+      "name": "headless: /bin/kill dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: /POLICY.BIN present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: /etc/cellos/autoload.toml present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: /etc/cellos/services.toml present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: /etc/cellos/system.toml present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: shell ELF carries the \"Cellos > \" prompt literal",
+      "ok": true
+    },
+    {
+      "detail": 1920574,
+      "name": "headless: kernel ELF embeds kernel_fs.img byte-for-byte",
+      "ok": true
+    },
+    {
+      "detail": 1506975,
+      "name": "headless: kernel ELF embeds init byte-for-byte",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: kernel is ELF64 x86-64 EXEC",
+      "ok": true
+    },
+    {
+      "detail": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672",
+      "name": "headless: ISO /boot/kernel.elf == kernel ELF",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: ISO /boot/limine.conf == scripts/x86/limine.conf",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: /bin/shell present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90",
+      "name": "desktop: /bin/shell bytes == signed B2 app-shell",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: /bin/ls present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "3a99ac33ff89f237c3fd908bcdb0b3e233bcb99c5570440d3a5b6a7f02adcffc",
+      "name": "desktop: /bin/ls bytes == signed B2 ls",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: /bin/cat present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "9fb4d1ff159ea0faf3d373043ccd25cc2bcea72b60346636d84f1208a7c0dc72",
+      "name": "desktop: /bin/cat bytes == signed B2 cat",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: /bin/echo present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "861ca14a7b28eab867eee713ebc9c110701873bc41edff2055a3ad415bb574c0",
+      "name": "desktop: /bin/echo bytes == signed B2 echo",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: /bin/ps present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "b5371860a45303815dd77a2b562d08055024ac7eead9cd0e143e30333341544a",
+      "name": "desktop: /bin/ps bytes == signed B2 ps",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: /bin/kill present in kernel_fs.img",
+      "ok": true
+    },
+    {
+      "detail": "b5fe3980d032c912b90447e886b4f8ac708dc5872a7714cad5c1a5f7a4cc2851",
+      "name": "desktop: /bin/kill bytes == signed B2 kill",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_shell)",
+      "name": "desktop: /bin/shell dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_ls)",
+      "name": "desktop: /bin/ls dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_cat)",
+      "name": "desktop: /bin/cat dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_echo)",
+      "name": "desktop: /bin/echo dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_ps)",
+      "name": "desktop: /bin/ps dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_kill)",
+      "name": "desktop: /bin/kill dev signature verifies",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: /POLICY.BIN present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: /etc/cellos/autoload.toml present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: /etc/cellos/services.toml present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: /etc/cellos/system.toml present",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: shell ELF carries the \"Cellos > \" prompt literal",
+      "ok": true
+    },
+    {
+      "detail": 1936934,
+      "name": "desktop: kernel ELF embeds kernel_fs.img byte-for-byte",
+      "ok": true
+    },
+    {
+      "detail": 1526223,
+      "name": "desktop: kernel ELF embeds init byte-for-byte",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: kernel is ELF64 x86-64 EXEC",
+      "ok": true
+    },
+    {
+      "detail": "5959acd79291fe693aa0deaacac5cc67dcc16cb76e911705f5290bfa1e3ba828",
+      "name": "desktop: ISO /boot/kernel.elf == kernel ELF",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: ISO /boot/limine.conf == scripts/x86/limine.conf",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: qcow2 round-trips to the limine-bios-installed ISO",
+      "ok": true
+    },
+    {
+      "detail": "e found on the image.\n185/295 = 62.71% allocated, 0.00% fragmented, 0.00% compressed clusters\nImage end offset: 12451840",
+      "name": "desktop: qcow2 qemu-img check clean",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "desktop: disk LBA0 has 0x55AA boot signature",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: qcow2 round-trips to the limine-bios-installed ISO",
+      "ok": true
+    },
+    {
+      "detail": "ere found on the image.\n86/166 = 51.81% allocated, 0.00% fragmented, 0.00% compressed clusters\nImage end offset: 5963776",
+      "name": "headless: qcow2 qemu-img check clean",
+      "ok": true
+    },
+    {
+      "detail": null,
+      "name": "headless: disk LBA0 has 0x55AA boot signature",
+      "ok": true
+    }
+  ],
+  "ok": true,
+  "profiles": {
+    "desktop": {
+      "elfs_failing_signature_verify": [
+        "/bin/tier2-exploit",
+        "/bin/tier2-smoke"
+      ],
+      "file_count": 33,
+      "files": {
+        "/POLICY.BIN": {
+          "bytes": 1519,
+          "sha256": "ef21d5086163ff08c82c34ea0f5927630b260309ed5cb2fa5ef85ee6e06dc910"
+        },
+        "/bin/ahci": {
+          "bytes": 44720,
+          "elf": true,
+          "sha256": "fde08ac246ce56ecc078387ac8b3d292bd8e2923515a1dad0272fe4134afbabe",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_ahci)",
+          "signature_verify_rc": 0
+        },
+        "/bin/cat": {
+          "bytes": 20976,
+          "elf": true,
+          "sha256": "9fb4d1ff159ea0faf3d373043ccd25cc2bcea72b60346636d84f1208a7c0dc72",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_cat)",
+          "signature_verify_rc": 0
+        },
+        "/bin/compositor": {
+          "bytes": 66872,
+          "elf": true,
+          "sha256": "452515f785afa27724de6b91ac3e7d2d0081319517636cb89d0aa27f301077e3",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_compositor)",
+          "signature_verify_rc": 0
+        },
+        "/bin/config": {
+          "bytes": 42912,
+          "elf": true,
+          "sha256": "6ec6aff2029b8b814ffca2235d3f1451cec188ef6ee859c40cf46455b2f54551",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_config)",
+          "signature_verify_rc": 0
+        },
+        "/bin/e1000": {
+          "bytes": 29672,
+          "elf": true,
+          "sha256": "b46bd1c5d131869216e45ff73d5b7be92b4efe891556c4cd0c6a2faae267bbfb",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_e1000)",
+          "signature_verify_rc": 0
+        },
+        "/bin/echo": {
+          "bytes": 20952,
+          "elf": true,
+          "sha256": "861ca14a7b28eab867eee713ebc9c110701873bc41edff2055a3ad415bb574c0",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_echo)",
+          "signature_verify_rc": 0
+        },
+        "/bin/fb-console": {
+          "bytes": 588592,
+          "elf": true,
+          "sha256": "2df20ca6c9532df83aeb8c1bbf681ec81b4f3dcb9a45ae7b6e109dd60544bde4",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_fb-console)",
+          "signature_verify_rc": 0
+        },
+        "/bin/igb": {
+          "bytes": 39424,
+          "elf": true,
+          "sha256": "9fb90ebd3546431c7f46142dea6824213bc31fb77381261b9845ff0d60a6acdf",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_igb)",
+          "signature_verify_rc": 0
+        },
+        "/bin/input": {
+          "bytes": 37920,
+          "elf": true,
+          "sha256": "4dd998ebae0787d954f3a43a79c1fd265ae1af592a7b9c8ec13f06298a6f49e3",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_input)",
+          "signature_verify_rc": 0
+        },
+        "/bin/kill": {
+          "bytes": 21096,
+          "elf": true,
+          "sha256": "b5fe3980d032c912b90447e886b4f8ac708dc5872a7714cad5c1a5f7a4cc2851",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_kill)",
+          "signature_verify_rc": 0
+        },
+        "/bin/ls": {
+          "bytes": 20952,
+          "elf": true,
+          "sha256": "3a99ac33ff89f237c3fd908bcdb0b3e233bcb99c5570440d3a5b6a7f02adcffc",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_ls)",
+          "signature_verify_rc": 0
+        },
+        "/bin/net": {
+          "bytes": 801536,
+          "elf": true,
+          "sha256": "3c0a9beb3d3e3803e7b4b8e720b0c07d5ed208e3fb235b3f6bb7082b841a1ee4",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_net)",
+          "signature_verify_rc": 0
+        },
+        "/bin/nvme": {
+          "bytes": 36096,
+          "elf": true,
+          "sha256": "63f9997609d79f8b4a2178dd2a886c16649c1505296302081bf4ce093125149b",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_nvme)",
+          "signature_verify_rc": 0
+        },
+        "/bin/ocel": {
+          "bytes": 4341072,
+          "elf": true,
+          "sha256": "ffa317c68036a4d4577f7f7c8a48794261c172b1787072d9564725c998c759ff",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_ocel)",
+          "signature_verify_rc": 0
+        },
+        "/bin/ocel-quickjs": {
+          "bytes": 804584,
+          "elf": true,
+          "sha256": "99bc7921da2879e783cc78faed1869c8d88da7083259176696c6e8ebb8f2c924",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_ocel-quickjs)",
+          "signature_verify_rc": 0
+        },
+        "/bin/platform": {
+          "bytes": 38488,
+          "elf": true,
+          "sha256": "7fb6ee4f9db332d41dd108bc1d7e84c57788b264f7e7dcfbf2674e948afcf48b",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_platform)",
+          "signature_verify_rc": 0
+        },
+        "/bin/ps": {
+          "bytes": 15432,
+          "elf": true,
+          "sha256": "b5371860a45303815dd77a2b562d08055024ac7eead9cd0e143e30333341544a",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_ps)",
+          "signature_verify_rc": 0
+        },
+        "/bin/serial": {
+          "bytes": 35752,
+          "elf": true,
+          "sha256": "a67a01d86102b0ecb1ce45f12b3fa29015850d2431c4acea65857564477ba350",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_serial)",
+          "signature_verify_rc": 0
+        },
+        "/bin/shell": {
+          "bytes": 881120,
+          "elf": true,
+          "sha256": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_shell)",
+          "signature_verify_rc": 0
+        },
+        "/bin/sshd": {
+          "bytes": 197048,
+          "elf": true,
+          "sha256": "502fc7312f93ba861cf2ff082f7c37304580219621891a2e08e39e181afb37e3",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_sshd)",
+          "signature_verify_rc": 0
+        },
+        "/bin/tier2-exploit": {
+          "bytes": 28904,
+          "elf": true,
+          "sha256": "64ffc91b920ef75506ed6ba7f07839ff85569b3b87c46bfcf638dcd49f4600f2",
+          "signature_verify_out": "FAIL: signature invalid \u2014 no valid __ViCell_sig section",
+          "signature_verify_rc": 3
+        },
+        "/bin/tier2-smoke": {
+          "bytes": 34264,
+          "elf": true,
+          "sha256": "74da62ea56a05631ef4ea8dbaaaed6bb1453b85c75018446ba5b3296d3366a6f",
+          "signature_verify_out": "FAIL: signature invalid \u2014 no valid __ViCell_sig section",
+          "signature_verify_rc": 3
+        },
+        "/bin/vfs": {
+          "bytes": 425600,
+          "elf": true,
+          "sha256": "0d6735c6892500f94f30fced9bf059e17f88a2c90a2a821e496bb391e4a1ec42",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_vfs)",
+          "signature_verify_rc": 0
+        },
+        "/bin/xhci": {
+          "bytes": 52712,
+          "elf": true,
+          "sha256": "2a7eae9b4282e6b1b6b20459826604febd9659de93223426f6a5c8c38a69d89d",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/desktop_bin_xhci)",
+          "signature_verify_rc": 0
+        },
+        "/data/ocel-js-demo.html": {
+          "bytes": 1263,
+          "sha256": "4ca5b4d8d98f3b75847db3f77de19e999a8c3eb71377127cd7740486ab6c9ab2"
+        },
+        "/data/ocel-native-web.css": {
+          "bytes": 303,
+          "sha256": "ea09ac56965b811b49d944c3b050a7d3a045e39fc3d78957280d767dde4d4d50"
+        },
+        "/data/ocel-native-web.html": {
+          "bytes": 402,
+          "sha256": "442c8819d58cf157fbedd88f47536f6cf7400caedff055c2de3df7cd05938ba9"
+        },
+        "/data/ocel-native-web.js": {
+          "bytes": 388,
+          "sha256": "f9619a12c01ca47ab390ce4992cbb988444df2cec414e26751ca5316196bafb5"
+        },
+        "/etc/cellos/autoload.toml": {
+          "bytes": 237,
+          "sha256": "8ad987ca730bd8506efdda91cc37c4bdd8b70e945b390c5c2e25e44cf8186472"
+        },
+        "/etc/cellos/services.toml": {
+          "bytes": 703,
+          "sha256": "3fb6cf84b09e21306cb6c7122b976fb9a5cf31c5f7e26c45ba619c4bd393a19c"
+        },
+        "/etc/cellos/system.toml": {
+          "bytes": 128,
+          "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+        },
+        "/welcome.md": {
+          "bytes": 402,
+          "sha256": "442c8819d58cf157fbedd88f47536f6cf7400caedff055c2de3df7cd05938ba9"
+        }
+      },
+      "image": "desktop-kernel_fs.img"
+    },
+    "headless": {
+      "elfs_failing_signature_verify": [
+        "/bin/tier2-exploit",
+        "/bin/tier2-smoke"
+      ],
+      "file_count": 23,
+      "files": {
+        "/POLICY.BIN": {
+          "bytes": 1519,
+          "sha256": "ef21d5086163ff08c82c34ea0f5927630b260309ed5cb2fa5ef85ee6e06dc910"
+        },
+        "/bin/ahci": {
+          "bytes": 44720,
+          "elf": true,
+          "sha256": "3c387e2423de914a4cba6e6a00f4eab8e007e67bd348578d09c19bb7f1c56d9d",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_ahci)",
+          "signature_verify_rc": 0
+        },
+        "/bin/cat": {
+          "bytes": 20976,
+          "elf": true,
+          "sha256": "9fb4d1ff159ea0faf3d373043ccd25cc2bcea72b60346636d84f1208a7c0dc72",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_cat)",
+          "signature_verify_rc": 0
+        },
+        "/bin/config": {
+          "bytes": 42912,
+          "elf": true,
+          "sha256": "6ec6aff2029b8b814ffca2235d3f1451cec188ef6ee859c40cf46455b2f54551",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_config)",
+          "signature_verify_rc": 0
+        },
+        "/bin/e1000": {
+          "bytes": 29672,
+          "elf": true,
+          "sha256": "323191b427c90125b3ba777d497ee1aaa70553b39de87db3529db2ab643ca5e4",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_e1000)",
+          "signature_verify_rc": 0
+        },
+        "/bin/echo": {
+          "bytes": 20952,
+          "elf": true,
+          "sha256": "861ca14a7b28eab867eee713ebc9c110701873bc41edff2055a3ad415bb574c0",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_echo)",
+          "signature_verify_rc": 0
+        },
+        "/bin/igb": {
+          "bytes": 39424,
+          "elf": true,
+          "sha256": "5d78bbdf53392e82320ac2287e91d9aa78f76ebafb9b162f15211e5570ac678c",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_igb)",
+          "signature_verify_rc": 0
+        },
+        "/bin/input": {
+          "bytes": 37920,
+          "elf": true,
+          "sha256": "4dd998ebae0787d954f3a43a79c1fd265ae1af592a7b9c8ec13f06298a6f49e3",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_input)",
+          "signature_verify_rc": 0
+        },
+        "/bin/kill": {
+          "bytes": 21096,
+          "elf": true,
+          "sha256": "b5fe3980d032c912b90447e886b4f8ac708dc5872a7714cad5c1a5f7a4cc2851",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_kill)",
+          "signature_verify_rc": 0
+        },
+        "/bin/ls": {
+          "bytes": 20952,
+          "elf": true,
+          "sha256": "3a99ac33ff89f237c3fd908bcdb0b3e233bcb99c5570440d3a5b6a7f02adcffc",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_ls)",
+          "signature_verify_rc": 0
+        },
+        "/bin/net": {
+          "bytes": 487600,
+          "elf": true,
+          "sha256": "fbad870d839dee2ca0c488c8dbbdbb1be829778b6335e3afc4214696bc78a96f",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_net)",
+          "signature_verify_rc": 0
+        },
+        "/bin/nvme": {
+          "bytes": 36096,
+          "elf": true,
+          "sha256": "e3441646c8febe528af54a83c165e0c936c912bac8a8ad8481e512f868218d7e",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_nvme)",
+          "signature_verify_rc": 0
+        },
+        "/bin/platform": {
+          "bytes": 38488,
+          "elf": true,
+          "sha256": "390916f2c91c3f50f7888de652aaba710f504d6c324a7cf9e243cde343295dc5",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_platform)",
+          "signature_verify_rc": 0
+        },
+        "/bin/ps": {
+          "bytes": 15432,
+          "elf": true,
+          "sha256": "b5371860a45303815dd77a2b562d08055024ac7eead9cd0e143e30333341544a",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_ps)",
+          "signature_verify_rc": 0
+        },
+        "/bin/serial": {
+          "bytes": 35752,
+          "elf": true,
+          "sha256": "04f0d96ac1e608bc372202307fcc64eb24f2c91a25d2c65b41eecfc9f4ef8bb0",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_serial)",
+          "signature_verify_rc": 0
+        },
+        "/bin/shell": {
+          "bytes": 881120,
+          "elf": true,
+          "sha256": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_shell)",
+          "signature_verify_rc": 0
+        },
+        "/bin/tier2-exploit": {
+          "bytes": 28904,
+          "elf": true,
+          "sha256": "2020b8180ea13678aa6e22b428dbe2dd6d08d92436292aa96f44e77d44af40df",
+          "signature_verify_out": "FAIL: signature invalid \u2014 no valid __ViCell_sig section",
+          "signature_verify_rc": 3
+        },
+        "/bin/tier2-smoke": {
+          "bytes": 34264,
+          "elf": true,
+          "sha256": "74da62ea56a05631ef4ea8dbaaaed6bb1453b85c75018446ba5b3296d3366a6f",
+          "signature_verify_out": "FAIL: signature invalid \u2014 no valid __ViCell_sig section",
+          "signature_verify_rc": 3
+        },
+        "/bin/vfs": {
+          "bytes": 425624,
+          "elf": true,
+          "sha256": "5046e588278049c5fba87a7542e28b52ad578c1150e48f700c9a1c762e1ebb31",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_vfs)",
+          "signature_verify_rc": 0
+        },
+        "/bin/xhci": {
+          "bytes": 52712,
+          "elf": true,
+          "sha256": "411a05009338dc78ca602e0558befd0297934a77bcac81e0bc44aded77a0eea1",
+          "signature_verify_out": "OK: signature valid (/tmp/b2-verify-0210rpq6/headless_bin_xhci)",
+          "signature_verify_rc": 0
+        },
+        "/etc/cellos/autoload.toml": {
+          "bytes": 152,
+          "sha256": "07849a42c41e05b98c6058e96b2715a8e53044ee6a6bb451a059e035a39e150b"
+        },
+        "/etc/cellos/services.toml": {
+          "bytes": 807,
+          "sha256": "484b0bffbb9d472e3c1149e3bf38205604c92e7682d2172fea0a4ac2b1967855"
+        },
+        "/etc/cellos/system.toml": {
+          "bytes": 128,
+          "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+        }
+      },
+      "image": "headless-kernel_fs.img"
+    }
+  },
+  "qcow2": {
+    "desktop": {
+      "format": "qcow2",
+      "virtual_size": 19279872
+    },
+    "headless": {
+      "format": "qcow2",
+      "virtual_size": 10876928
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "artifact_sha256": {
+    "desktop-base-tracked-init": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104",
+    "desktop-base-tracked-kernel_fs.img": "a4cba963e6bff4c39e0716ca036d6f7b1325499a357a04771e2a2927cd5ef5f3",
+    "desktop-cellos-x86_64-desktop.iso": "780ffa3f597457f7654fc19bafdd0ac53fa73b4b49d51887be548ec616135e55",
+    "desktop-cellos-x86_64-desktop.qcow2": "81c6288ca51a1faaedf89eb026d6771ed5ef61f98a72c3da9fd95b371a32641f",
+    "desktop-init": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104",
+    "desktop-kernel.elf": "5959acd79291fe693aa0deaacac5cc67dcc16cb76e911705f5290bfa1e3ba828",
+    "desktop-kernel_fs.img": "37040c38f62fd1b28999517f8b1bd9b646f2ed12d3073e810ea7dae601593f83",
+    "headless-init": "920c0294727b5b10cf8ca88738ef3c71f82366363b34b7f88547eebc522b3621",
+    "headless-kernel.elf": "28ba57c88c49d284f9f5fb3b2a2be349c0eee8035dc7c9429b902d79cdf5c672",
+    "headless-kernel_fs.img": "f75f3c0651107571b03f6249f4f2c4c12d0ef747620ccd12228039b47ece0330",
+    "headless-vicell-x86.iso": "1321f5ec67a4dabbb25f0f3a512071781da11c82c8f0255f18390d0dbed1e2a3",
+    "headless-vicell-x86.qcow2": "33c1b1c746c3727cef7a3178ba670886d70c14b4ea04635cc96eee0716dd4404",
+    "signed/desktop-ocel": "ffa317c68036a4d4577f7f7c8a48794261c172b1787072d9564725c998c759ff",
+    "signed/desktop-service-net": "3c0a9beb3d3e3803e7b4b8e720b0c07d5ed208e3fb235b3f6bb7082b841a1ee4",
+    "signed/headless-app-shell": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90",
+    "signed/headless-cat": "9fb4d1ff159ea0faf3d373043ccd25cc2bcea72b60346636d84f1208a7c0dc72",
+    "signed/headless-echo": "861ca14a7b28eab867eee713ebc9c110701873bc41edff2055a3ad415bb574c0",
+    "signed/headless-kill": "b5fe3980d032c912b90447e886b4f8ac708dc5872a7714cad5c1a5f7a4cc2851",
+    "signed/headless-ls": "3a99ac33ff89f237c3fd908bcdb0b3e233bcb99c5570440d3a5b6a7f02adcffc",
+    "signed/headless-ps": "b5371860a45303815dd77a2b562d08055024ac7eead9cd0e143e30333341544a"
+  },
+  "authorized_deltas_applied": [
+    "b2-manifest.patch",
+    "b2-lock.patch",
+    "F1 scoped-signing exception (scoped mirror root; whole-workspace F1 still refuses)"
+  ],
+  "b2_six_signed_elfs_identical_to_s10_4_B1_B2_hashes": true,
+  "boot_commands_not_run": {
+    "desktop": {
+      "init": "desktop-init",
+      "iso": "desktop-cellos-x86_64-desktop.iso",
+      "kernel": "desktop-kernel.elf",
+      "kernel_fs": "desktop-kernel_fs.img",
+      "qcow2": "desktop-cellos-x86_64-desktop.qcow2",
+      "qemu_boot_command_from_run-desktop.sh (NOT RUN)": "qemu-system-x86_64 -cpu qemu64,+pdpe1gb -machine q35,vmport=on -m 2048M -smp 2 -drive file=desktop-cellos-x86_64-desktop.qcow2,format=qcow2,if=virtio -netdev user,id=net0,hostfwd=tcp::2222-:22 -device e1000,netdev=net0 -device virtio-keyboard-pci -device virtio-tablet-pci -device virtio-mouse-pci -display gtk,zoom-to-fit=on -vnc 127.0.0.1:0 -qmp unix:<sock>,server,nowait -serial mon:stdio"
+    },
+    "headless": {
+      "init": "headless-init",
+      "iso": "headless-vicell-x86.iso",
+      "kernel": "headless-kernel.elf",
+      "kernel_fs": "headless-kernel_fs.img",
+      "qcow2": "headless-vicell-x86.qcow2",
+      "qemu_boot_command_from_scripts/qemu-x86_64-test.sh (NOT RUN)": "qemu-system-x86_64 -machine q35 -cpu qemu64,+pdpe1gb -m 256M -nographic -cdrom headless-vicell-x86.iso -boot d -no-reboot"
+    }
+  },
+  "commit": "3471028bc8b4db14275553b4740c17e24fa4f32b",
+  "comparator_scope": "historical-matched B2 system at 3471028bc: own kernel, init, kernel_fs.img, ISO/qcow2 for headless and desktop; NOT a pristine HEAD reproduction",
+  "deltas_beyond_authorized": [],
+  "deviations": [
+    "Driver replays build-x86_64-cells.ps1 / run-desktop.sh --rebuild step by step instead of executing them (they cannot take --locked/--offline nor route signing through the scoped mirror without editing them); every cargo call carries --locked --offline.",
+    "Cell RUSTFLAGS=\"-C relocation-model=pic\" (as the ps1); kernel via CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS from the commit CI/cargo-config-linux template (local .cargo/config.toml is gitignored). C env CC=cc/CFLAGS/BINDGEN as S10-4 qualified builds, include dir from the disposable worktree.",
+    "Desktop image follows run-desktop.sh --rebuild: base = TRACKED embedded kernel_fs.img + TRACKED init (compositor, fb-console, sshd, ocel-quickjs, vfs, config, drivers are tracked historical bytes, not rebuilt); ocel(desktop) and service-net(qemu-dev-https) rebuilt and signed; ADDITIONALLY the six B2 source-built signed shell/ls/cat/echo/ps/kill replace the stale tracked ones via package-ocel-profile.py --dest (not part of run-desktop.sh; needed so desktop carries the measured B2 bytes).",
+    "limine host tool built with make from the worktree limine.c (gitignored artifact, required by run-desktop.sh --rebuild limine bios-install).",
+    "Headless qcow2 + bios-installed ISO produced with the same post-processing as the desktop route (extra, not in the CI headless route which boots the plain ISO via -cdrom).",
+    "Headless profile = build-x86_64-cells.ps1 route (includes kill, tier2 fixtures, init signed); CI mirror route omits kill so was not used.",
+    "Desktop kernel built without -Z build-std exactly as run-desktop.sh does; headless kernel with -Z build-std=core,alloc as the ps1 states."
+  ],
+  "manifest": "manifest.json",
+  "no_vm_run": true,
+  "non_pristine": true,
+  "run_desktop_sh_executed": false,
+  "static_verification": {
+    "checks": 62,
+    "file": "static-verification.json",
+    "ok": true,
+    "passed": 62
+  },
+  "status": "BUILT"
+}

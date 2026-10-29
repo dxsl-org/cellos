@@ -1,0 +1,17 @@
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+xorriso : NOTE : Loading ISO image tree from LBA 0
+xorriso : UPDATE :      11 nodes read in 1 seconds
+xorriso : NOTE : Detected El-Torito boot information which currently is set to be discarded
+Drive current: -indev '/tmp/cellbox-s10-7/b2-image/headless-vicell-x86.iso'
+Media current: stdio file, overwriteable
+Media status : is written , is appendable
+Boot record  : El Torito , MBR protective-msdos-label cyl-align-off GPT
+Media summary: 1 session, 5311 data blocks, 10.4m data,  730g free
+Volume id    : 'ISOIMAGE'
+'/EFI/BOOT/BOOTX64.EFI'
+'/boot/kernel.elf'
+'/boot/limine/limine-bios-cd.bin'
+'/boot/limine/limine-bios.sys'
+'/boot/limine/limine-uefi-cd.bin'
+'/boot/limine.conf'
