@@ -641,3 +641,7 @@ The accountable owner approved the [handoff packet](../261030-1000-kms-ssh-key-c
 ### Bounded adopted slices — KSSH K3 and K5 (2026-10-30)
 
 The accountable owner approved the K3 ([record](../261030-1000-kms-ssh-key-custody/k3-cp1-approval.md)) and K5 ([record](../261030-1000-kms-ssh-key-custody/k5-cp1-approval.md)) lock handoffs: file-bounded exceptions recorded in `cell-contract-0024-locks.md` (K3: kernel permission/policy v8 and two additive caller flags, host/regression lanes; K5: KMS T0 volatile SSH behaviour behind an opt-in feature plus the amended three-package lock diff). They serve Cellbox publickey, not an Intel C2C outcome; no phase scope changes, all 38 lock relations keep their gates; WIP stays one implementation slice (K3 first).
+
+### Bounded adopted slice — KSSH K7 (amendment to K3, 2026-10-30)
+
+The accountable owner approved the K7 handoff ([record](../261030-1000-kms-ssh-key-custody/k7-cp1-approval.md)): file-bounded amendment to the K3 exception for the admin launch edge, signer row, tests and the new `kms-ssh-admin` cell (host/regression lanes, `DEV_POSTURE`; not an Intel C2C outcome). No phase scope changes; WIP stays one implementation slice.
