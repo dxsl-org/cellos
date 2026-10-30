@@ -325,12 +325,14 @@ pub struct Task {
     /// while this watcher was NOT parked in Recv. Drained by the next `Recv`
     /// regardless of mask, preserving the public NotifyOnExit contract.
     pub pending_deaths: Vec<(usize, usize)>,
-    /// VFS root-owner death events, kept separate from generic task watches.
+    /// Root-owner death events of registered watchers (the VFS cell and the
+    /// registered NET provider cell), kept separate from generic task watches.
     ///
     /// The opaque watch token never crosses the syscall ABI: it binds this queued
     /// event to the exact subscription so a stale cancellation cannot affect a
-    /// successor. These events are delivered only by a wildcard public receive;
-    /// a masked backend receive must never consume them.
+    /// successor. These events are delivered only by a wildcard public receive
+    /// (`Recv`, or `TryRecv` with mask 0); a masked backend receive must never
+    /// consume them.
     pub pending_owner_deaths: Vec<(u64, usize, usize)>,
 
     /// Exit reason for a generic `NotifyOnExit` wake delivered while this task
@@ -885,12 +887,12 @@ impl Task {
         None
     }
 
-    /// Whether a receive mask may dequeue a tokenized VFS owner-death event.
+    /// Whether a receive mask may dequeue a tokenized owner-death event.
     ///
-    /// Owner death is routed on VFS's public plane only. Its root TID and
-    /// subscription token identify the event after this predicate succeeds;
-    /// neither is a sender match and therefore neither can authorize a masked
-    /// backend receive.
+    /// Owner death is routed on a registered watcher's public plane only (VFS,
+    /// NET). Its root TID and subscription token identify the event after this
+    /// predicate succeeds; neither is a sender match and therefore neither can
+    /// authorize a masked backend receive.
     #[inline]
     pub(super) const fn owner_death_matches_receive_mask(mask: usize) -> bool {
         mask == 0

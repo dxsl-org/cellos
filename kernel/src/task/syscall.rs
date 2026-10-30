@@ -3382,6 +3382,25 @@ fn write_caller_identity(caller_id: usize, buf_ptr: usize, buf_len: usize, sende
     }
 }
 
+/// The oldest queued owner death a `TryRecv` with `mask` may take: only the
+/// wildcard receive (`Task::owner_death_matches_receive_mask`), FIFO, and
+/// `(token, dead_root_tid, exit_reason)` as queued. Nothing is removed here and
+/// `pending_deaths` (NotifyOnExit) is never consulted: delivering those would
+/// change every existing `TryRecv(0)` caller.
+fn peek_owner_death_for_try_recv(task: &super::Task, mask: usize) -> Option<(u64, usize, usize)> {
+    super::Task::owner_death_matches_receive_mask(mask)
+        .then(|| task.pending_owner_deaths.first().copied())
+        .flatten()
+}
+
+/// Drop the exact queued owner-death record `token` after its delivery copy
+/// succeeded; a record already gone (or another one now at the head) is left alone.
+fn remove_owner_death(task: &mut super::Task, token: u64) {
+    if let Some(pos) = task.pending_owner_deaths.iter().position(|(queued, _, _)| *queued == token) {
+        task.pending_owner_deaths.remove(pos);
+    }
+}
+
 /// May `caller_id` read the kernel's provenance record for `target_cell`?
 ///
 /// Two callers have a reason to: the filesystem service, which must decide
@@ -5101,6 +5120,37 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             buf_len,
             attest_caller,
         } => {
+            // A queued owner death is delivered first, exactly as `Recv` does
+            // for a wildcard receive: reason at the start of the buffer, zero
+            // trailer for the dead (unattributable) root, dead root TID returned.
+            // `NotifyOnExit` deaths stay out of `TryRecv` on purpose.
+            let owner_death = {
+                let mut guard = super::SCHEDULER.lock();
+                guard.as_mut().and_then(|sched| {
+                    let t = sched.tasks.get_mut(&caller_id)?;
+                    let (token, root_tid, reason) = peek_owner_death_for_try_recv(t, mask)?;
+                    Some((token, root_tid, reason, TaskCopyView::of(t)))
+                })
+            };
+            if let Some((token, root_tid, reason, caller_view)) = owner_death {
+                // Validate and copy before removing: a failed copy leaves the
+                // event queued, the same two-phase order as `Recv`.
+                if buf_len >= core::mem::size_of::<u64>() {
+                    validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)?;
+                    caller_view
+                        .write_bytes(buf_ptr, &(reason as u64).to_ne_bytes())
+                        .map_err(|_| SyscallError::InvalidInput)?;
+                }
+                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                        remove_owner_death(t, token);
+                    }
+                }
+                if attest_caller {
+                    write_caller_identity(caller_id, buf_ptr, buf_len, root_tid);
+                }
+                return Ok(root_tid);
+            }
             let mut vfs_context_drop = None;
             let pending_msg_info: Result<Option<_>, ()> = {
                 let mut guard = super::SCHEDULER.lock();
@@ -10516,5 +10566,262 @@ mod tests {
         assert!(!withhold_or_free(BASE, 1));
         assert_eq!(crate::memory::pin::quarantined_pages(), before);
         assert!(crate::memory::pin::holder_of(BASE, 4096).is_none());
+    }
+
+    // ---- NET-OD: owner-death watch grant and TryRecv delivery -----------------
+
+    const NET_TID: usize = 41_001;
+    const NET_CELL: u64 = 44;
+    const NET_GEN: u64 = 5;
+    const CLIENT_TID: usize = 41_002;
+    const CLIENT_CELL: u64 = 45;
+    const CLIENT_GEN: u64 = 3;
+    const OTHER_TID: usize = 41_003;
+    const OTHER_CELL: u64 = 46;
+    const OTHER_GEN: u64 = 2;
+    /// A provider that is not the watcher.
+    const FOREIGN_TID: usize = 41_009;
+
+    /// The watching cell (receive context already set to the client, as the
+    /// kernel does on delivery) and two live, published client principals.
+    fn net_watch_scheduler() -> Scheduler {
+        let mut sched = Scheduler::new();
+        let mut watcher = alloc::boxed::Box::new(Task::new(
+            NET_TID,
+            CellId(NET_CELL),
+            "net-watcher",
+            alloc::vec::Vec::new(),
+        ));
+        watcher.cell_generation = NET_GEN;
+        watcher.root_tid = NET_TID;
+        watcher.current_caller_cell_id = CLIENT_CELL;
+        watcher.current_caller_cell_generation = CLIENT_GEN;
+        sched.tasks.insert(NET_TID, watcher);
+        for (tid, cell, generation) in [
+            (CLIENT_TID, CLIENT_CELL, CLIENT_GEN),
+            (OTHER_TID, OTHER_CELL, OTHER_GEN),
+        ] {
+            let mut client = alloc::boxed::Box::new(Task::new(
+                tid,
+                CellId(cell),
+                "net-client",
+                alloc::vec::Vec::new(),
+            ));
+            client.cell_generation = generation;
+            client.root_tid = tid;
+            sched.tasks.insert(tid, client);
+            assert!(sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
+                cell, generation, tid as u64
+            )));
+        }
+        sched
+    }
+
+    /// One `watch_live_cell_owner` call by the NET watcher with exactly
+    /// `registry` published (and `pause` applied) for the duration of the call
+    /// only: the global registry is shared with tests that do not take
+    /// `TEST_STATE_LOCK`.
+    fn net_watch(
+        sched: &mut Scheduler,
+        registry: &[(u16, usize, u64, u64)],
+        pause: Option<(u16, usize)>,
+        cell: u64,
+        generation: u64,
+    ) -> Option<(api::cell_owner::CellOwner, u64)> {
+        for &(service, tid, cell_id, gen) in registry {
+            assert!(crate::cell::service_registry::register(service, tid, cell_id, gen));
+        }
+        if let Some((service, tid)) = pause {
+            assert!(crate::cell::service_registry::pause(service, tid));
+        }
+        let result = sched.watch_live_cell_owner(NET_TID, CellId(cell), generation);
+        for &(_, tid, _, _) in registry {
+            crate::cell::service_registry::clear_tid(tid);
+        }
+        result
+    }
+
+    fn assert_net_watch(
+        label: &str,
+        want: bool,
+        registry: &[(u16, usize, u64, u64)],
+        pause: Option<(u16, usize)>,
+        mutate: impl FnOnce(&mut Scheduler),
+        cell: u64,
+        generation: u64,
+    ) {
+        let mut sched = net_watch_scheduler();
+        mutate(&mut sched);
+        let granted = net_watch(&mut sched, registry, pause, cell, generation);
+        assert_eq!(granted.is_some(), want, "{label}");
+        // A refusal installs nothing.
+        assert_eq!(sched.cell_owner_watch_count(), usize::from(want), "{label}");
+    }
+
+    /// The grant is the registry-bound live NET provider cell serving exactly
+    /// the principal it names; everything else (and the VFS rule) is as before.
+    #[test]
+    fn net_owner_watch_grant_matrix() {
+        use api::syscall::service::{CONFIG, INPUT, KMS, NET, VFS};
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let net = [(NET, NET_TID, NET_CELL, NET_GEN)];
+        let nothing = |_: &mut Scheduler| {};
+
+        // Granted: the Active NET binding, the attested serving context, a live
+        // client generation. The watch names the client root.
+        let mut sched = net_watch_scheduler();
+        let (owner, token) = net_watch(&mut sched, &net, None, CLIENT_CELL, CLIENT_GEN)
+            .expect("registered NET watcher serving the client");
+        assert_eq!(
+            owner,
+            api::cell_owner::CellOwner::new(CLIENT_CELL, CLIENT_GEN, CLIENT_TID as u64)
+        );
+        assert!(token > 0);
+        assert_eq!(sched.cell_owner_watch_count(), 1);
+        // Only the watcher's own token is cancellable, and only by that token.
+        sched.cancel_cell_owner_watch(CLIENT_TID, token);
+        sched.cancel_cell_owner_watch(OTHER_TID, token);
+        assert_eq!(sched.cell_owner_watch_count(), 1);
+        sched.cancel_cell_owner_watch(NET_TID, token + 1);
+        assert_eq!(sched.cell_owner_watch_count(), 1);
+        sched.cancel_cell_owner_watch(NET_TID, token);
+        assert_eq!(sched.cell_owner_watch_count(), 0);
+
+        assert_net_watch("baseline", true, &net, None, nothing, CLIENT_CELL, CLIENT_GEN);
+        // Unregistered NET: refused.
+        assert_net_watch("unregistered", false, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
+        // Another service's provider with the same Cell identity is not NET.
+        for service in [CONFIG, INPUT, KMS, VFS] {
+            assert_net_watch(
+                "other service provider",
+                false,
+                &[(service, NET_TID, NET_CELL, NET_GEN)],
+                None,
+                nothing,
+                CLIENT_CELL,
+                CLIENT_GEN,
+            );
+        }
+        // Hot-swap quiesce: a Paused NET binding is refused.
+        assert_net_watch("paused", false, &net, Some((NET, NET_TID)), nothing, CLIENT_CELL, CLIENT_GEN);
+        // NET re-registered to another provider (tid, cell, generation).
+        assert_net_watch(
+            "re-registered to another provider",
+            false,
+            &[(NET, FOREIGN_TID, 47, 6)],
+            None,
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
+        // Same CellId, other generation: the stale watcher generation cannot hold it.
+        assert_net_watch(
+            "stale watcher generation",
+            false,
+            &[(NET, NET_TID, NET_CELL, NET_GEN + 1)],
+            None,
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
+        assert_net_watch(
+            "other watcher cell",
+            false,
+            &[(NET, NET_TID, NET_CELL + 1, NET_GEN)],
+            None,
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
+        // Cell 0 is the kernel's allocation, never a provider binding.
+        assert_net_watch(
+            "cell 0",
+            false,
+            &[(NET, NET_TID, 0, NET_GEN)],
+            None,
+            |sched| {
+                sched.tasks.get_mut(&NET_TID).expect("watcher").cell_id = CellId(0);
+            },
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
+        // The attested serving context must name the principal asked for.
+        assert_net_watch(
+            "serving another cell",
+            false,
+            &net,
+            None,
+            |sched| {
+                sched.tasks.get_mut(&NET_TID).expect("watcher").current_caller_cell_id = OTHER_CELL;
+            },
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
+        assert_net_watch("asking for another cell", false, &net, None, nothing, OTHER_CELL, OTHER_GEN);
+        assert_net_watch("no serving context", false, &net, None, |sched| {
+            sched.tasks.get_mut(&NET_TID).expect("watcher").clear_current_caller_context();
+        }, CLIENT_CELL, CLIENT_GEN);
+        // Stale client generation: asked for, or recorded, but never live.
+        assert_net_watch("stale client generation", false, &net, None, nothing, CLIENT_CELL, CLIENT_GEN + 1);
+        assert_net_watch(
+            "serving a dead generation",
+            false,
+            &net,
+            None,
+            |sched| {
+                sched.tasks.get_mut(&NET_TID).expect("watcher").current_caller_cell_generation =
+                    CLIENT_GEN + 1;
+            },
+            CLIENT_CELL,
+            CLIENT_GEN + 1,
+        );
+        // Dead client root.
+        assert_net_watch("dead client root", false, &net, None, |sched| {
+            assert!(sched.tasks.remove(&CLIENT_TID).is_some());
+        }, CLIENT_CELL, CLIENT_GEN);
+
+        // Regression: the registered VFS cell is granted exactly as before, with
+        // no NET registration, and is held to the same serving-context proof.
+        crate::fast_ipc::set_vfs_handler_cell(NET_CELL as usize);
+        assert_net_watch("vfs cell", true, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
+        assert_net_watch("vfs cell, other principal", false, &[], None, nothing, OTHER_CELL, OTHER_GEN);
+        crate::fast_ipc::clear_vfs_if_cell(NET_CELL as usize);
+        assert_net_watch("vfs cleared", false, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
+    }
+
+    /// `TryRecv` takes a queued owner death only for the wildcard mask, FIFO,
+    /// one exact record at a time, and never a `NotifyOnExit` death.
+    #[test]
+    fn try_recv_takes_owner_death_only_for_mask_zero() {
+        use super::{peek_owner_death_for_try_recv as peek, remove_owner_death as remove};
+        let mut task = Task::new(41_010, CellId(NET_CELL), "try-recv", alloc::vec::Vec::new());
+        assert_eq!(peek(&task, 0), None);
+
+        task.pending_owner_deaths.push((11, 101, 0xDEAD));
+        task.pending_owner_deaths.push((12, 102, 7));
+        task.pending_deaths.push((900, 5));
+
+        // A masked (dependency) receive never sees an owner death.
+        for mask in [1usize, 101, 102, 900, usize::MAX] {
+            assert_eq!(peek(&task, mask), None, "mask {mask}");
+        }
+        assert_eq!(task.pending_owner_deaths.len(), 2);
+
+        // Wildcard: the oldest record, and peeking removes nothing.
+        assert_eq!(peek(&task, 0), Some((11, 101, 0xDEAD)));
+        assert_eq!(peek(&task, 0), Some((11, 101, 0xDEAD)));
+        assert_eq!(task.pending_owner_deaths.len(), 2);
+
+        // Commit removes exactly the delivered record; an unknown token is a no-op.
+        remove(&mut task, 99);
+        assert_eq!(task.pending_owner_deaths.len(), 2);
+        remove(&mut task, 11);
+        assert_eq!(peek(&task, 0), Some((12, 102, 7)));
+        remove(&mut task, 12);
+        assert_eq!(peek(&task, 0), None);
+        assert!(task.pending_owner_deaths.is_empty());
+
+        // NotifyOnExit deaths are untouched and never offered by TryRecv.
+        assert_eq!(task.pending_deaths, alloc::vec![(900, 5)]);
     }
 }

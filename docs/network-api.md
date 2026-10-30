@@ -161,6 +161,50 @@ the smoltcp `SocketSet` out of slots.
 - RECV request: minimum 13 bytes (1 opcode + 8 cap + 4 buf_len)
 - SENDTO: minimum message buffer depends on payload size
 
+### Owner death (client cell killed or relaunched)
+
+Every socket cap belongs to one attested client principal (`cell_id`,
+`generation`); no opcode shares or transfers a cap. When that principal's root
+dies (Ctrl-C of `cellbox ssh`, a kill, a crash), the net cell reclaims every cap
+of that generation and tells the peer the connection is gone:
+
+- **How it learns.** The net cell subscribes (`WatchCellOwner`) to the death of
+  the principal whose request it is serving, on that principal's first request.
+  The kernel grants the subscription only to the registered `NET` provider cell
+  (by registry binding and generation, never by name) while it is serving that
+  exact principal, and delivers the death to the net loop's `TryRecv(0)` as a
+  message with an empty identity trailer from the dead root's TID. A relaunch of
+  the same CellId under a new generation releases the old generation the same way.
+  If the kernel refuses the watch the net cell logs
+  `[net] owner death watch unavailable; socket reclaim deferred` once and keeps
+  serving; the dead owner's sockets then leak until the net cell restarts.
+- **TCP with a connection: RST (abort), not FIN.** A killed owner did not finish,
+  so the socket is aborted: queued unsent data is discarded and one RST is sent
+  on the next network turn. The peer sees "connection reset" instead of a clean
+  EOF, and bytes the dead cell had queued but not yet had acknowledged are lost.
+  The socket stays in an abort ledger until its RST has left, or for at most
+  `ABORT_DRAIN_TICKS` (nominally 1 s at the assumed 10 MHz tick rate) if the
+  transmit path cannot take a frame; then it is dropped silently and the peer's
+  next segment is answered with an RST by smoltcp.
+- **Listeners, never-connected sockets, UDP:** removed at once; nothing is sent
+  (no IGMP leave for multicast, as for `UdpClose`).
+- **Established TLS:** the TLS state is dropped (no close-notify; a dead cell
+  cannot answer one) and the underlying TCP socket is aborted.
+- **Pending work:** the owner's ready-wait and DNS queries are cancelled (no
+  reply is owed); an in-flight TLS connect/handshake is dropped silently.
+- **Graceful close in flight is preserved.** A cap already in the
+  `TcpCloseGraceful` ledger keeps its own FIN-and-reap path: a client that asks
+  for a graceful close and exits right after the reply (`cellbox ssh` does) still
+  flushes its output before the FIN.
+- **Log.** One line per owner death that reclaimed something:
+  `[net] owner death: cell C gen G: aborted A TCP, released U other` (normal
+  clients close their sockets first, so it appears only for leaks).
+
+Not changed by owner death handling: the graceful-close deadline still removes a
+socket silently (not an abort); legacy `TcpClose` and dropping a `TcpStream`
+stay silent on the wire; TLS handshake-in-flight sockets are dropped silently;
+no TCP keepalive or user timeout is set on any socket.
+
 ---
 
 ## MAC Address

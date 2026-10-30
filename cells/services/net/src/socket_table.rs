@@ -8,7 +8,9 @@ extern crate alloc;
 
 use crate::socket_state::SocketState;
 use alloc::collections::{BTreeMap, BTreeSet};
+use core::ops::Bound;
 use smoltcp::iface::SocketHandle;
+use smoltcp::socket::tcp;
 use types::ViError;
 
 /// 256 slow HTTP connections, one simultaneous fast probe and the listener;
@@ -42,6 +44,9 @@ pub struct SocketTable {
     /// wrong-type handle.
     udp_caps: BTreeSet<u64>,
     graceful_closes: BTreeMap<u64, u64>,
+    /// Caps whose socket was aborted on owner death and whose RST has not left
+    /// yet, with the tick after which the socket is dropped silently anyway.
+    aborts: BTreeMap<u64, u64>,
     next_cap: u64,
 }
 
@@ -54,6 +59,7 @@ impl SocketTable {
             listen_ports: BTreeMap::new(),
             udp_caps: BTreeSet::new(),
             graceful_closes: BTreeMap::new(),
+            aborts: BTreeMap::new(),
             next_cap: 1,
         }
     }
@@ -181,6 +187,11 @@ impl SocketTable {
         self.is_owner(cap, caller) && self.udp_caps.contains(&cap)
     }
 
+    /// Whether `cap` holds a UDP socket, whoever owns it (internal lifecycle code).
+    pub fn is_udp_cap(&self, cap: u64) -> bool {
+        self.udp_caps.contains(&cap)
+    }
+
     /// Queue FIN once and retain the first drain deadline.
     pub fn begin_graceful_close(&mut self, cap: u64, deadline_ticks: u64) {
         self.graceful_closes.entry(cap).or_insert(deadline_ticks);
@@ -194,19 +205,77 @@ impl SocketTable {
         self.graceful_closes.iter().map(|(&cap, &deadline)| (cap, deadline))
     }
 
+    /// First cap of `owner` (test inspection: owner reclaim no longer restarts a search).
+    #[cfg(test)]
     pub fn owned_cap(&self, owner: SocketOwner) -> Option<u64> {
         self.owners.iter().find_map(|(&cap, &candidate)| {
             (candidate == owner).then_some(cap)
         })
     }
 
-    /// Root cell death invalidates every cap of the exact owner generation.
-    pub fn remove_owner(&mut self, owner: SocketOwner, sockets: &mut smoltcp::iface::SocketSet<'_>) {
-        while let Some(cap) = self.owned_cap(owner) {
-            if let Some(handle) = self.remove_internal(cap) {
-                sockets.remove(handle);
+    /// Owner death: abort every TCP socket of the exact owner generation and
+    /// free everything that has nothing to tell the peer.
+    ///
+    /// * TCP with a connection tuple: `abort()` (one RST on the next poll); the
+    ///   cap stays in the abort ledger until [`Self::aborting`] shows it satisfied
+    ///   or `deadline_ticks` passes.
+    /// * TCP listener / never connected, UDP: removed now (nothing goes on the wire).
+    /// * A cap already in the graceful-close ledger keeps its own FIN-and-reap path
+    ///   (the owner asked for a flush before it died); a cap already in the abort
+    ///   ledger is not aborted twice.
+    ///
+    /// Returns `(aborted_tcp, released_other)`: RSTs owed, and caps freed now.
+    /// A second call for the same owner returns `(0, 0)`.
+    pub fn abort_owner(
+        &mut self,
+        owner: SocketOwner,
+        sockets: &mut smoltcp::iface::SocketSet<'_>,
+        deadline_ticks: u64,
+    ) -> (usize, usize) {
+        let (mut aborted, mut released) = (0, 0);
+        // Cursor scan: skipped caps stay in the table, so a restart-from-the-top
+        // search would never finish. Each step only looks past the previous cap.
+        let mut after = Bound::Unbounded;
+        while let Some(cap) = self
+            .owners
+            .range((after, Bound::Unbounded))
+            .find_map(|(&cap, &candidate)| (candidate == owner).then_some(cap))
+        {
+            after = Bound::Excluded(cap);
+            if self.is_graceful_closing(cap) || self.is_aborting(cap) {
+                continue;
             }
+            let Some(handle) = self.entries.get(&cap).copied() else {
+                continue;
+            };
+            // A UDP handle must never reach `get_mut::<tcp::Socket>()` (it panics).
+            if !self.is_udp_cap(cap) {
+                let socket = sockets.get_mut::<tcp::Socket>(handle);
+                socket.abort();
+                if socket.remote_endpoint().is_some() {
+                    self.begin_abort(cap, deadline_ticks);
+                    aborted += 1;
+                    continue;
+                }
+            }
+            self.remove_internal(cap);
+            sockets.remove(handle);
+            released += 1;
         }
+        (aborted, released)
+    }
+
+    /// Record that `cap`'s RST is owed; the first deadline wins.
+    pub fn begin_abort(&mut self, cap: u64, deadline_ticks: u64) {
+        self.aborts.entry(cap).or_insert(deadline_ticks);
+    }
+
+    pub fn is_aborting(&self, cap: u64) -> bool {
+        self.aborts.contains_key(&cap)
+    }
+
+    pub fn aborting(&self) -> impl Iterator<Item = (u64, u64)> + '_ {
+        self.aborts.iter().map(|(&cap, &deadline)| (cap, deadline))
     }
 
     /// Remove a socket from the table if requested by its registered owner.
@@ -224,6 +293,7 @@ impl SocketTable {
         self.listen_ports.remove(&cap);
         self.udp_caps.remove(&cap);
         self.graceful_closes.remove(&cap);
+        self.aborts.remove(&cap);
         self.entries.remove(&cap)
     }
 

@@ -247,6 +247,24 @@ pub(crate) struct VfsLeaseRelease {
 
 const MAX_RETURNABLE_OWNER_WATCH_TOKEN: u64 = isize::MAX as u64;
 
+/// Who may subscribe to the root death of the principal it is serving: the
+/// registered VFS cell, or the live registry-bound provider of service `NET`
+/// (matched by Cell identity and generation, never by name, so a stale cell
+/// that reuses the CellId cannot hold the grant; a Paused or unregistered NET
+/// is refused). The caller still has to prove it is serving the principal.
+///
+/// Lock order SCHEDULER -> REGISTRY, as everywhere else the registry is read
+/// under the scheduler lock.
+fn may_watch_owner_deaths(watcher: &Task) -> bool {
+    crate::fast_ipc::is_registered_vfs_cell(watcher.cell_id.0 as usize)
+        || crate::cell::service_registry::lookup_bound(api::syscall::service::NET).is_some_and(
+            |(_, cell_id, generation)| {
+                // `lookup_bound` never yields cell 0 or generation 0.
+                cell_id == watcher.cell_id.0 && generation == watcher.cell_generation
+            },
+        )
+}
+
 /// Register `watcher` to be notified when `watched` exits or faults.
 pub fn subscribe_death(watched: usize, watcher: usize) {
     let _allocation = KernelAllocationContext::enter();
@@ -383,7 +401,8 @@ pub struct Scheduler {
     /// zeroed the statics above it, `PLATFORM` included; measured 2026-10-03.
     /// `get`/`get_mut` call sites are unchanged by the switch to `Vec`.
     cell_owners: alloc::vec::Vec<CellOwnerSlot>,
-    /// Token-indexed VFS-only root-death subscriptions.
+    /// Token-indexed root-death subscriptions (registered VFS cell, registered
+    /// NET provider cell serving that principal).
     cell_owner_watches: BTreeMap<u64, CellOwnerWatch>,
     next_cell_owner_watch: u64,
     pub next_task_id: usize,
@@ -651,8 +670,10 @@ impl Scheduler {
         Some(token)
     }
 
-    /// Atomically attest the VFS receive principal and install an exact root
-    /// death subscription. The caller holds no authority over other cells.
+    /// Atomically attest the receive principal and install an exact root death
+    /// subscription. Only a registered watcher (see [`may_watch_owner_deaths`])
+    /// serving that exact principal may subscribe; it holds no authority over
+    /// other cells.
     pub fn watch_live_cell_owner(
         &mut self,
         watcher_tid: usize,
@@ -660,7 +681,7 @@ impl Scheduler {
         generation: u64,
     ) -> Option<(api::cell_owner::CellOwner, u64)> {
         let watcher = self.tasks.get(&watcher_tid)?;
-        if !crate::fast_ipc::is_registered_vfs_cell(watcher.cell_id.0 as usize)
+        if !may_watch_owner_deaths(watcher)
             || watcher.current_caller_cell_id != cell_id.0
             || watcher.current_caller_cell_generation != generation
         {
@@ -688,6 +709,12 @@ impl Scheduler {
         {
             self.cell_owner_watches.remove(&token);
         }
+    }
+
+    /// Installed owner-death subscriptions (host tests of the grant rule).
+    #[cfg(test)]
+    pub(crate) fn cell_owner_watch_count(&self) -> usize {
+        self.cell_owner_watches.len()
     }
 
     #[cfg(feature = "test-hooks")]

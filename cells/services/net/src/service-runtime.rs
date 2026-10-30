@@ -39,6 +39,12 @@ const IPC_BURST_GRACE_YIELDS: u8 = 1;
 const SMOLTCP_MAINTENANCE_INTERVAL_MS: u64 = 100;
 const MTIME_TICKS_PER_MS: u64 = 10_000;
 const SMOLTCP_MAINTENANCE_TICKS: u64 = SMOLTCP_MAINTENANCE_INTERVAL_MS * MTIME_TICKS_PER_MS;
+/// How long a socket aborted on owner death may wait for its RST to leave
+/// (nominally 1 s at the assumed 10 MHz tick rate, like the graceful-close
+/// deadline). Only a fallback for a TX path that cannot take a frame.
+const ABORT_DRAIN_TICKS: u64 = 1_000 * MTIME_TICKS_PER_MS;
+/// Aborted sockets finished per loop turn.
+const ABORT_REAP_PER_TURN: usize = 32;
 /// One `[net-loop]` line per this many raw timer ticks (`loop-trace` images).
 ///
 /// It used to be ten times shorter (`200 * MTIME_TICKS_PER_MS`), which made the
@@ -320,6 +326,24 @@ fn reap_graceful_closes(table: &mut SocketTable, sockets: &mut SocketSet<'_>) {
     }
 }
 
+/// An aborted socket is finished once its RST has left (smoltcp clears the
+/// connection tuple when it emits it) or, as a fallback, at its deadline.
+/// `now` is passed in so the deadline is testable.
+fn reap_aborted(table: &mut SocketTable, sockets: &mut SocketSet<'_>, now: u64) {
+    for _ in 0..ABORT_REAP_PER_TURN {
+        let next = table.aborting().find_map(|(cap, deadline)| {
+            let sent = table.get_unchecked(cap).is_none_or(|h| {
+                sockets.get::<smoltcp::socket::tcp::Socket>(h).remote_endpoint().is_none()
+            });
+            (sent || now >= deadline).then_some(cap)
+        });
+        let Some(cap) = next else { break };
+        if let Some(h) = table.remove_internal(cap) {
+            sockets.remove(h);
+        }
+    }
+}
+
 fn drain_ready_waits(
     pending: &mut BTreeMap<SocketOwner, PendingReady>,
     sockets: &mut SocketSet<'_>,
@@ -406,7 +430,37 @@ fn dispatch_admitted(
     }
 }
 
-fn release_owner(
+/// A watched owner of the same Cell as `owner` but another generation: the
+/// Cell was relaunched, so the old generation is dead.
+fn stale_generation_of(
+    watched: &BTreeMap<SocketOwner, (usize, u64)>,
+    owner: SocketOwner,
+) -> Option<SocketOwner> {
+    watched
+        .keys()
+        .copied()
+        .find(|candidate| candidate.cell_id == owner.cell_id && *candidate != owner)
+}
+
+/// The watched owner whose root has exactly this TID. A worker-thread TID is
+/// not root death and never matches.
+fn owner_for_root(
+    watched: &BTreeMap<SocketOwner, (usize, u64)>,
+    root_tid: usize,
+) -> Option<SocketOwner> {
+    watched
+        .iter()
+        .find_map(|(&owner, &(root, _))| (root == root_tid).then_some(owner))
+}
+
+/// Everything a dead owner generation holds in the service, without kernel
+/// calls: ready wait and DNS queries dropped (no reply is owed: the kernel
+/// cancelled the dead owner's async operations), in-flight TLS dropped,
+/// established-TLS state dropped (no close-notify: a dead cell cannot answer),
+/// then every remaining socket aborted or freed. Returns `(aborted_tcp,
+/// released_other)` from [`SocketTable::abort_owner`].
+#[allow(clippy::too_many_arguments)]
+fn reclaim_owner_state(
     owner: SocketOwner,
     sockets: &mut SocketSet<'_>,
     table: &mut SocketTable,
@@ -415,8 +469,8 @@ fn release_owner(
     pending_ready: &mut BTreeMap<SocketOwner, PendingReady>,
     pending_dns: &mut heapless::Vec<PendingDns, DNS_QUERY_LIMIT>,
     resolver: &Resolver,
-    watched: &mut BTreeMap<SocketOwner, (usize, u64)>,
-) {
+    abort_deadline: u64,
+) -> (usize, usize) {
     pending_ready.remove(&owner);
     let mut index = 0;
     while index < pending_dns.len() {
@@ -430,14 +484,42 @@ fn release_owner(
         }
     }
     tls_pending.cancel_owner(owner, sockets, table);
-    while let Some(cap) = table.owned_cap(owner) {
-        tls_table.remove(&cap);
-        if let Some(handle) = table.remove_internal(cap) {
-            sockets.remove(handle);
-        }
-    }
+    tls_table.retain(|cap, _| !table.is_owner(*cap, owner));
+    table.abort_owner(owner, sockets, abort_deadline)
+}
+
+/// The one log line of an owner death, only when something was reclaimed
+/// (normal clients close their sockets first, so it appears exactly for leaks).
+fn owner_death_line(owner: SocketOwner, aborted: usize, released: usize) -> Option<String> {
+    (aborted + released > 0).then(|| {
+        alloc::format!(
+            "[net] owner death: cell {} gen {}: aborted {} TCP, released {} other",
+            owner.cell_id, owner.generation, aborted, released
+        )
+    })
+}
+
+fn release_owner(
+    owner: SocketOwner,
+    sockets: &mut SocketSet<'_>,
+    table: &mut SocketTable,
+    tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
+    tls_pending: &mut crate::tls_handler::TlsPending,
+    pending_ready: &mut BTreeMap<SocketOwner, PendingReady>,
+    pending_dns: &mut heapless::Vec<PendingDns, DNS_QUERY_LIMIT>,
+    resolver: &Resolver,
+    watched: &mut BTreeMap<SocketOwner, (usize, u64)>,
+) {
+    let (aborted, released) = reclaim_owner_state(
+        owner, sockets, table, tls_table, tls_pending, pending_ready, pending_dns, resolver,
+        sys_get_time().saturating_add(ABORT_DRAIN_TICKS),
+    );
+    // The kernel dropped the watch with the death; cancelling is then a no-op.
     if let Some((_, token)) = watched.remove(&owner) {
         ostd::syscall::sys_cancel_cell_owner_watch(token);
+    }
+    if let Some(line) = owner_death_line(owner, aborted, released) {
+        println(&line);
     }
 }
 
@@ -582,6 +664,7 @@ pub(crate) fn run() {
         tls_pending.poll(&mut iface, &mut device, &mut sockets, &mut table, &mut tls_table);
         poll_resolves(&resolver, &mut pending_dns, &mut sockets);
         reap_graceful_closes(&mut table, &mut sockets);
+        reap_aborted(&mut table, &mut sockets, sys_get_time());
         drain_ready_waits(&mut pending_ready, &mut sockets, &table);
 
         buffer.fill(0);
@@ -594,9 +677,7 @@ pub(crate) fn run() {
                 }
                 let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buffer)
                 else {
-                    if let Some(owner) = watched.iter().find_map(|(&owner, &(root_tid, _))|
-                        (root_tid == sender).then_some(owner))
-                    {
+                    if let Some(owner) = owner_for_root(&watched, sender) {
                         release_owner(owner, &mut sockets, &mut table, &mut tls_table,
                             &mut tls_pending, &mut pending_ready, &mut pending_dns, &resolver,
                             &mut watched);
@@ -631,9 +712,7 @@ pub(crate) fn run() {
                 if !watched.contains_key(&owner) {
                     let watch = ostd::syscall::sys_watch_cell_owner(owner.cell_id, owner.generation);
                     if let Some((principal, token)) = watch {
-                        while let Some(stale) = watched.keys().copied().find(|candidate|
-                            candidate.cell_id == owner.cell_id && *candidate != owner)
-                        {
+                        while let Some(stale) = stale_generation_of(&watched, owner) {
                             release_owner(stale, &mut sockets, &mut table, &mut tls_table,
                                 &mut tls_pending, &mut pending_ready, &mut pending_dns, &resolver,
                                 &mut watched);
@@ -717,3 +796,7 @@ mod tests;
 #[cfg(test)]
 #[path = "service-runtime-admission-tests.rs"]
 mod admission_tests;
+
+#[cfg(test)]
+#[path = "service-runtime-owner-death-tests.rs"]
+mod owner_death_tests;

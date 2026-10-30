@@ -1151,3 +1151,5 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `scripts/cellbox-ceiling-diff.py` pins its default baseline to `2f0bc0659` (the shell source it read was removed), so the phase04 terminal/GUI runners pass the ceiling gate again.
 - CI: new job `kms-ssh-dev-posture` runs `service-kms` `ssh-dev-custody`/`ssh-dev-persist` tests, builds the three KMS variants and checks the production-exclusion exit codes.
 - Kernel boot self-test `COMPLETION-QUEUE` row `waiter_cleanup_preserves_siblings` now follows the multi-waiter contract (the old row failed since N04, 2026-10-16); the boot prints `COMPLETION-QUEUE: PASS`.
+
+- Net owner-death reclaim (NET-OD): the kernel lets the registry-bound Net provider watch the cell it serves, `TryRecv` delivers owner deaths, and the Net service aborts (RST) the dead owner's TCP sockets with a drain ledger (UDP/listeners removed at once). Fixes a Ctrl-C-cancelled `cellbox ssh` leaving its connection ESTABLISHED. Host tests only; QEMU proof pending the Tier-3 rerun CP1.
