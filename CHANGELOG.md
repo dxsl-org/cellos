@@ -1130,3 +1130,5 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 [Unreleased]: https://github.com/dxsl-org/Cellos/compare/v0.2.1...HEAD
 [0.2.1]: https://github.com/dxsl-org/Cellos/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/dxsl-org/Cellos/releases/tag/v0.2.0
+
+- KSSH K3: additive caller flags `KMS_SSH_SIGN` (1<<6) and `KMS_SSH_ADMIN` (1<<7), kernel `CapSet` fields, reviewed `/bin/cellbox-ssh` edge, policy v8 with signer parity (host tests only, DEV_POSTURE; approval `.agents/261030-1000-kms-ssh-key-custody/k3-cp2-approval.md`).
