@@ -10,3 +10,6 @@ The user authorized starting Docker Desktop (and using docker.exe / WSL integrat
 
 ## Amendment 2026-10-30 (user): F1 signing gate
 The repo-wide F1 gate of `scripts/cellos-sign --sign` refuses at HEAD (9 violations; also for the stock L5/L5f lane). Decision: (1) the K7 defect (`app-kms-ssh-admin`: missing `#![forbid(unsafe_code)]`, `unsafe` keyword in `src/tests/armor.rs`) is fixed in the K7 closure (additive amendment to k7-cp1-approval.md); (2) the other 8 items (cells/tests/phase02-session-child, phase02-session-parent, phase03-filter, phase04-terminal-driver, top-load; service-input src/session.rs; app-cellbox src/rg/tests.rs) are pre-existing and outside the slice: K8 images are signed with a private per-run allowlist `$W/unsafe-allowlist.toml` (repo allowlist + explicit entries for exactly those items, kssh mode only, diff saved in evidence). The repo allowlist, crate roots and signing code stay unchanged. The dossier states "F1 not satisfied by the tracked tree at HEAD; K8 images signed under a private per-run waiver for these items".
+
+## Disposition 2026-10-30 (user: "có")
+CBX-24 publickey half recorded as met at the DEV_POSTURE T0 ceiling (RT0, RT0f class A); T1 not claimed. Recorded in acceptance.md.
