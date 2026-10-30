@@ -373,6 +373,12 @@ pub fn stage_argv(words: &[String]) -> Vec<&str> {
     core::iter::once(SSH_ENTRY).chain(words.iter().skip(1).map(String::as_str)).collect()
 }
 
+/// Lane-only key-service fault seam (`kssh-faults`; module text for the prefix rules). The
+/// `child` module has its own inline `faults` for `p09-faults`, which it shadows there;
+/// the child reaches this one as `super::faults`.
+#[cfg(feature = "kssh-faults")]
+mod faults;
+
 #[cfg(test)]
 mod tests;
 
@@ -527,6 +533,9 @@ mod child {
         key_id: String,
         public_key: [u8; 32],
         custody: KmsSshKeyCustody,
+        /// Lane-only (`kssh-faults`): the one mutation of this invocation's sign call.
+        #[cfg(feature = "kssh-faults")]
+        fault: Option<super::faults::Mode>,
     }
 
     impl Identity {
@@ -536,7 +545,11 @@ mod child {
             request: &SignRequest<'_>,
             passphrase: impl FnOnce(&str) -> Result<String, Credential>,
         ) -> Result<Signed, Credential> {
-            kms_sign(&self.client, &self.public_key, self.custody, request, || passphrase(&self.key_id))
+            #[cfg(feature = "kssh-faults")]
+            let kms = &super::faults::Faulted::new(&self.client, self.fault);
+            #[cfg(not(feature = "kssh-faults"))]
+            let kms = &self.client;
+            kms_sign(kms, &self.public_key, self.custody, request, || passphrase(&self.key_id))
         }
     }
 
@@ -552,7 +565,14 @@ mod child {
         if staged && status.custody == KmsSshKeyCustody::PassphraseWrapped {
             return Err(Credential::UnlockNeedsTerminal);
         }
-        Ok(Identity { client, key_id: String::from(key_id), public_key: status.public_key, custody: status.custody })
+        Ok(Identity {
+            client,
+            key_id: String::from(key_id),
+            public_key: status.public_key,
+            custody: status.custody,
+            #[cfg(feature = "kssh-faults")]
+            fault: None,
+        })
     }
 
     /// The VFS trust store's answer for `key` of `host:port`.
@@ -1128,6 +1148,11 @@ mod child {
             }
             None => None,
         };
+        // Lane-only (`kssh-faults`): the `: kssh-fault MODE;` command prefix selects the one
+        // mutation of this invocation's sign call.
+        #[cfg(feature = "kssh-faults")]
+        let identity =
+            identity.map(|identity| Identity { fault: super::faults::Mode::of_command(parsed.command.as_deref()), ..identity });
         let auth = if key_id.is_some() { AuthKind::PublicKey } else { AuthKind::Password };
         if !vissh::install_entropy(kernel_entropy) {
             return refuse(REMOTE_FAILURE, "entropy", "entropy source already installed");
@@ -1139,6 +1164,8 @@ mod child {
         };
         write_all(completion, &progress_record(rmode, sc::Phase::Connect, Dispatch::NotSent).encode());
         let policy = rekey_policy();
+        #[cfg(feature = "kssh-faults")]
+        let _ = ostd::syscall::sys_log(super::faults::ANNOUNCE);
         let connect = |code: &str, message: &str| end(REMOTE_FAILURE, sc::Phase::Connect, sc::Outcome::LocalError, code, message);
         let timed_out = || end(TIMED_OUT, sc::Phase::Connect, sc::Outcome::Timeout, "timeout", "timed out");
         let mut net = NetClient::new();

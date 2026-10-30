@@ -21,3 +21,6 @@ cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }
 # Phase 09 lane only: run the `ssh` checks against the Docker fixture instead of the
 # Phase04 suite (scripts/qemu-phase09-ssh-test.sh).
 phase09-ssh = []
+# KSSH K8 lane (`scripts/qemu-phase09-ssh-test.sh --kssh`): the key-custody scenarios of
+# `src/ssh/kssh.rs` replace the password-only ssh checks. Adds no package.
+kssh = ["phase09-ssh"]

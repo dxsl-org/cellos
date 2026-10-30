@@ -19,6 +19,7 @@
 //! `completion` record.
 
 use super::*;
+#[cfg(feature = "kssh")] pub(crate) mod kssh;
 
 const SSH_MS: u64 = 120_000;
 /// Bulk sink cases (MiB through the throttled consumer under TCG).

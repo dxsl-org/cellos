@@ -1,0 +1,36 @@
+=== c1 authorized key A, main port: accepted
+Warning: Permanently added '[127.0.0.1]:41915' (ED25519) to the list of known hosts.
+c1-ok
+rc=0
+=== c2 unauthorized key B, main port: refused
+Warning: Permanently added '[127.0.0.1]:41915' (ED25519) to the list of known hosts.
+tester@127.0.0.1: Permission denied (publickey,password).
+rc=255
+=== c3 probe without signature (-i A.pub, no agent)
+Warning: Permanently added '[127.0.0.1]:41915' (ED25519) to the list of known hosts.
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE KEY FILE!          @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+Permissions 0644 for 'keys/A.pub' are too open.
+It is required that your private key files are NOT accessible by others.
+This private key will be ignored.
+Load key "keys/A.pub": bad permissions
+tester@127.0.0.1: Permission denied (publickey,password).
+rc=255
+=== c4 key B on port B: accepted
+Warning: Permanently added '[127.0.0.1]:42111' (ED25519) to the list of known hosts.
+c4-ok
+rc=0
+=== c5 key A on port B: refused
+Warning: Permanently added '[127.0.0.1]:42111' (ED25519) to the list of known hosts.
+tester@127.0.0.1: Permission denied (publickey,password).
+rc=255
+=== c6 TCP connect then close, no authentication
+rc=0
+=== c7 probe of unauthorized pub on port B (-i A.pub)
+Warning: Permanently added '[127.0.0.1]:42111' (ED25519) to the list of known hosts.
+tester@127.0.0.1: Permission denied (publickey,password).
+rc=255
+=== c8 fingerprints
+256 SHA256:tgqKHasdZQEX4EV+YPi9ehSJ+3a6kAhBc5SIaSP7sZ8 ka (ED25519)
+256 SHA256:nq/WKR7eebxgBG55/XSXqTFsruGZRJ9t5iwm9iAvubw kb (ED25519)

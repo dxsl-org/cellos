@@ -2,6 +2,7 @@
 # Disposable OpenSSH fixture for the Phase 09 ssh lane (D79-1).
 #
 #   bash scripts/phase09_ssh_fixture.sh start DIR   # DIR: an owned, empty work subdirectory
+#   bash scripts/phase09_ssh_fixture.sh start DIR --kssh AUTHDIR   # KSSH K8 lane (see below)
 #   bash scripts/phase09_ssh_fixture.sh stop DIR
 #
 # `start` makes a fresh ed25519 host key and a fresh password for user `tester` in DIR
@@ -22,6 +23,15 @@
 # restarts it (Docker may republish on other host ports).
 # `stop` saves the server log to DIR/sshd.log, removes the container and deletes the key
 # and password files.
+#
+# `start DIR --kssh AUTHDIR` (KSSH K8, k8-cp1.md section 6.1; the recipe and image are NOT touched
+# and the image is never built here: an absent image exits 3, "not a run"). AUTHDIR holds
+# `authorized_keys_main` (public lines of the keys the main and rekey servers authorize) and
+# `authorized_keys_b` (the key only the third server authorizes). Differences from the default
+# fixture, config and mounts only: AuthorizedKeysFile per server, `StrictModes no` (a bind-mounted
+# key file keeps the host uid), a third sshd on port 2223 (published as DIR/port_b), and a long
+# LoginGraceTime (a wrapped key's KDF runs while the connection waits). Passwords stay enabled so
+# a publickey failure followed by a password fallback would be possible and visible.
 set -euo pipefail
 
 IMAGE="alpine@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507"
@@ -46,11 +56,28 @@ image) printf '%s\n' "$FIXTURE_IMAGE"; exit 0 ;;
 esac
 dir="${2:?fixture directory}"
 [[ -d "$dir" && ! -L "$dir" ]] || { echo "FAIL: fixture dir missing or a symlink: $dir" >&2; exit 1; }
+KSSH=0
+AUTHDIR=""
+if [[ "$cmd" == start && $# -ge 3 ]]; then
+    [[ $# -eq 4 && "$3" == --kssh ]] || { echo "usage: $0 start DIR [--kssh AUTHDIR]" >&2; exit 2; }
+    KSSH=1
+    AUTHDIR="$4"
+    [[ -d "$AUTHDIR" && ! -L "$AUTHDIR" && -s "$AUTHDIR/authorized_keys_main" && -s "$AUTHDIR/authorized_keys_b" ]] \
+        || { echo "FAIL: --kssh needs a directory with authorized_keys_main and authorized_keys_b: $AUTHDIR" >&2; exit 1; }
+elif [[ $# -gt 2 ]]; then
+    echo "usage: $0 start|stop DIR | recipe | image" >&2; exit 2
+fi
 
 case "$cmd" in
 start)
     [[ -z "$(ls -A "$dir")" ]] || { echo "FAIL: fixture dir not empty: $dir" >&2; exit 1; }
-    ensure_image
+    if [[ "$KSSH" == 1 ]]; then
+        # K8 never builds or pulls: the pinned image must already be in the local store.
+        docker image inspect "$FIXTURE_IMAGE" >/dev/null 2>&1 \
+            || { echo "FAIL: fixture image $FIXTURE_IMAGE is not in the local Docker store (K8 builds nothing)" >&2; exit 3; }
+    else
+        ensure_image
+    fi
     umask 077
     name="cellbox-p09-sshd-$$-$RANDOM"
     ssh-keygen -q -t ed25519 -N '' -C p09-fixture -f "$dir/host_ed25519"
@@ -91,17 +118,43 @@ HELPER
     chmod 600 "$dir/host_ed25519" "$dir/password"
     echo "$name" > "$dir/container"
     echo "$FIXTURE_IMAGE" > "$dir/image"
-    docker run --pull=never -d --name "$name" -p 127.0.0.1::22 -p 127.0.0.1::2222 \
-        -v "$dir/host_ed25519:/fixture/host_ed25519:ro" -v "$dir/sshd_config:/fixture/sshd_config:ro" \
-        -v "$dir/sshd_config_rekey:/fixture/sshd_config_rekey:ro" -v "$dir/password:/fixture/password:ro" \
-        -v "$dir/p9:/fixture/p9:ro" \
-        "$FIXTURE_IMAGE" sh -c 'install -m 755 /fixture/p9 /usr/bin/p9 \
-            && echo "tester:$(cat /fixture/password)" | chpasswd >/dev/null \
-            && { /usr/sbin/sshd -D -e -f /fixture/sshd_config_rekey & } \
-            && exec /usr/sbin/sshd -D -e -f /fixture/sshd_config' >/dev/null
+    if [[ "$KSSH" == 1 ]]; then
+        # K8: per-server authorized keys, StrictModes off, long grace time, third server on 2223.
+        install -m 644 "$AUTHDIR/authorized_keys_main" "$dir/authorized_keys_main"
+        install -m 644 "$AUTHDIR/authorized_keys_b" "$dir/authorized_keys_b"
+        printf 'StrictModes no\nLoginGraceTime 900\n' >> "$dir/sshd_config"
+        { sed 's/^Port 22$/Port 2222/' "$dir/sshd_config"; printf 'RekeyLimit 64K\nPidFile none\n'; } \
+            > "$dir/sshd_config_rekey"
+        printf 'AuthorizedKeysFile /fixture/authorized_keys_main\n' >> "$dir/sshd_config"
+        printf 'AuthorizedKeysFile /fixture/authorized_keys_main\n' >> "$dir/sshd_config_rekey"
+        { sed 's/^Port 22$/Port 2223/' "$dir/sshd_config" | grep -v '^AuthorizedKeysFile '; \
+          printf 'AuthorizedKeysFile /fixture/authorized_keys_b\nPidFile none\n'; } > "$dir/sshd_config_b"
+        chmod 644 "$dir/sshd_config" "$dir/sshd_config_rekey" "$dir/sshd_config_b"
+        docker run --pull=never -d --name "$name" -p 127.0.0.1::22 -p 127.0.0.1::2222 -p 127.0.0.1::2223 \
+            -v "$dir/host_ed25519:/fixture/host_ed25519:ro" -v "$dir/sshd_config:/fixture/sshd_config:ro" \
+            -v "$dir/sshd_config_rekey:/fixture/sshd_config_rekey:ro" -v "$dir/sshd_config_b:/fixture/sshd_config_b:ro" \
+            -v "$dir/password:/fixture/password:ro" -v "$dir/p9:/fixture/p9:ro" \
+            -v "$dir/authorized_keys_main:/fixture/authorized_keys_main:ro" \
+            -v "$dir/authorized_keys_b:/fixture/authorized_keys_b:ro" \
+            "$FIXTURE_IMAGE" sh -c 'install -m 755 /fixture/p9 /usr/bin/p9 \
+                && echo "tester:$(cat /fixture/password)" | chpasswd >/dev/null \
+                && { /usr/sbin/sshd -D -e -f /fixture/sshd_config_rekey & } \
+                && { /usr/sbin/sshd -D -e -f /fixture/sshd_config_b & } \
+                && exec /usr/sbin/sshd -D -e -f /fixture/sshd_config' >/dev/null
+    else
+        docker run --pull=never -d --name "$name" -p 127.0.0.1::22 -p 127.0.0.1::2222 \
+            -v "$dir/host_ed25519:/fixture/host_ed25519:ro" -v "$dir/sshd_config:/fixture/sshd_config:ro" \
+            -v "$dir/sshd_config_rekey:/fixture/sshd_config_rekey:ro" -v "$dir/password:/fixture/password:ro" \
+            -v "$dir/p9:/fixture/p9:ro" \
+            "$FIXTURE_IMAGE" sh -c 'install -m 755 /fixture/p9 /usr/bin/p9 \
+                && echo "tester:$(cat /fixture/password)" | chpasswd >/dev/null \
+                && { /usr/sbin/sshd -D -e -f /fixture/sshd_config_rekey & } \
+                && exec /usr/sbin/sshd -D -e -f /fixture/sshd_config' >/dev/null
+    fi
     listening() {
         docker logs "$name" 2>&1 | grep -q 'Server listening on 0.0.0.0 port 22\.' \
-            && docker logs "$name" 2>&1 | grep -q 'Server listening on 0.0.0.0 port 2222\.'
+            && docker logs "$name" 2>&1 | grep -q 'Server listening on 0.0.0.0 port 2222\.' \
+            && { [[ "$KSSH" != 1 ]] || docker logs "$name" 2>&1 | grep -q 'Server listening on 0.0.0.0 port 2223\.'; }
     }
     for _ in $(seq 1 120); do
         listening && break
@@ -114,6 +167,11 @@ HELPER
     mapping="$(docker port "$name" 2222/tcp)"
     [[ "$mapping" =~ ^127\.0\.0\.1:([0-9]+)$ ]] || { echo "FAIL: unexpected publication: $mapping" >&2; exit 1; }
     echo "${BASH_REMATCH[1]}" > "$dir/rekey_port"
+    if [[ "$KSSH" == 1 ]]; then
+        mapping="$(docker port "$name" 2223/tcp)"
+        [[ "$mapping" =~ ^127\.0\.0\.1:([0-9]+)$ ]] || { echo "FAIL: unexpected publication: $mapping" >&2; exit 1; }
+        echo "${BASH_REMATCH[1]}" > "$dir/port_b"
+    fi
     ssh-keygen -l -f "$dir/host_ed25519.pub" | awk '{print $2}' > "$dir/fingerprint"
     docker exec "$name" sh -c 'sshd -V 2>&1 | head -1' > "$dir/sshd-version"
     echo "fixture: $name 127.0.0.1:$(cat "$dir/port") rekey 127.0.0.1:$(cat "$dir/rekey_port") $(cat "$dir/fingerprint") $(cat "$dir/sshd-version")"

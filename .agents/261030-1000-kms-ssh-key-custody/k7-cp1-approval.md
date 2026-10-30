@@ -6,3 +6,6 @@ Date: 2026-10-30. Approver: accountable owner (user), "Duyệt CP1 + handoff K7"
 
 ## Amendment 2026-10-30 (user, "A: duyệt thêm policy.rs (chỉ sửa test)")
 `kernel/src/policy.rs` is added to the closure for exactly one test edit: the K3 assertion in `signer_v8_output_decodes_with_kernel_rule` (no admin row) becomes "exactly one admin row, for /bin/kms-ssh-admin", with its comment. No production code in policy.rs changes.
+
+## Amendment 2026-10-30 (user): F1 defect fix
+`cells/tools/kms-ssh-admin/src/main.rs` (crate root) gains `#![forbid(unsafe_code)]` and the `unsafe` keyword in `src/tests/armor.rs` is removed (test content unchanged otherwise). Closure otherwise unchanged. Reason: cellos-sign F1 gate (see k8-cp1-approval.md).

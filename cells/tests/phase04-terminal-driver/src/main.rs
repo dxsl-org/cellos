@@ -341,9 +341,13 @@ fn cell_main() {
     };
     check("shell-prompt", prompt.is_ok(), prompt.as_ref().err().map(String::as_str).unwrap_or(""));
     // Phase 09 lane (`scripts/qemu-phase09-ssh-test.sh`): only the ssh checks run.
-    #[cfg(feature = "phase09-ssh")]
+    #[cfg(all(feature = "phase09-ssh", not(feature = "kssh")))]
     if prompt.is_ok() {
         ssh::ssh_checks(&mut a);
+    }
+    #[cfg(feature = "kssh")]
+    if prompt.is_ok() {
+        ssh::kssh::kssh_checks(&mut a);
     }
     #[cfg(not(feature = "phase09-ssh"))]
     if prompt.is_ok() {

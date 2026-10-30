@@ -22,6 +22,13 @@ shell_test = []
 # throttled stdout digest) and logs `ssh-rekeys` / `ssh-bytes` at exit. Never part of
 # the canonical image.
 p09-faults = ["dep:sha2"]
+# kssh-faults: lane-only build for the K8 key-custody lane (RT0f, scripts/qemu-phase09-ssh-test.sh).
+# The ssh client logs `P04 INFO ssh-test-config kssh-faults=on` and honours the
+# `: kssh-fault session|user|signature;` remote-command prefix: one mutation of its single
+# key-service sign call (session id byte, user name, or returned signature byte), which the
+# client's own digest/signature checks must refuse. Built with `--features
+# p09-faults,kssh-faults`; never part of the canonical image.
+kssh-faults = []
 
 [dependencies]
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
