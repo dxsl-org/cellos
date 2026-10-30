@@ -51,6 +51,10 @@ struct ToServer {
     methods: (bool, bool),
     /// Refuse the signed request although the key query was accepted.
     refuse_signed: bool,
+    /// Record the server's input errors (decrypt, packet length) instead of panicking.
+    tolerant: bool,
+    /// The first error the server's input path reported while `tolerant`.
+    wire_err: Option<vissh::sunset::Error>,
 }
 
 impl ToServer {
@@ -73,6 +77,8 @@ impl ToServer {
             authorized: None,
             methods: (true, true),
             refuse_signed: false,
+            tolerant: false,
+            wire_err: None,
         }
     }
 
@@ -132,7 +138,11 @@ impl ToServer {
                 self.seen.stdin_eof = true;
             }
         }
-        self.to_srv.give(&mut self.srv).unwrap();
+        if let Err(e) = self.to_srv.give(&mut self.srv) {
+            assert!(self.tolerant, "server input: {e:?}");
+            self.wire_err.get_or_insert(e);
+            self.to_srv.0.clear();
+        }
         self.from_srv.extend(drain(&mut self.srv));
     }
 }
@@ -187,6 +197,11 @@ struct Me {
     killed: Rc<Cell<bool>>,
     exec_seen: Rc<Cell<bool>>,
     pk: Pk,
+    /// Largest stdin read (`PipeTerm` reads at most 512 bytes), and an `Idle` answer on
+    /// every `idle_every`-th read of pending input (0: never).
+    max_read: usize,
+    idle_every: u32,
+    reads: u32,
 }
 
 impl Me {
@@ -195,6 +210,7 @@ impl Me {
             trust, confirm: Trust::Refused, confirmed: 0, password, asked: 0, keys: Vec::new(),
             stdin: b"a\0\xff".to_vec(), expect: b"a\0\xff".to_vec(), sent_eof: false, stdout: Vec::new(), stderr: Vec::new(),
             progress: Vec::new(), points: Vec::new(), kill_at: None, killed: Rc::new(Cell::new(false)), exec_seen: Rc::new(Cell::new(false)),
+            max_read: usize::MAX, idle_every: 0, reads: 0,
             pk: Pk::default(),
         }
     }
@@ -299,7 +315,11 @@ impl Local for Me {
     }
     fn input(&mut self, buf: &mut [u8]) -> Input {
         if !self.stdin.is_empty() {
-            let n = self.stdin.len().min(buf.len());
+            self.reads += 1;
+            if self.idle_every != 0 && self.reads % self.idle_every == 0 {
+                return Input::Idle;
+            }
+            let n = self.stdin.len().min(buf.len()).min(self.max_read);
             buf[..n].copy_from_slice(&self.stdin[..n]);
             self.stdin.drain(..n);
             return Input::Data(n);
@@ -720,4 +740,292 @@ fn sunsets_own_message_equals_the_rfc_4252_construction_for_every_user_name_leng
         assert_eq!((out.ending.clone(), out.dispatch), (Ending::Disconnected, Dispatch::Accepted), "{user}: {out:?}");
         assert_eq!((me.pk.requests[0].1.as_str(), t.seen.pubkey_events), (user, 2));
     }
+}
+
+// ---- F-GP-1 slice A: partial acceptance, short reads, injected faults on the byte path ----
+//
+// The harness above always accepts every byte and reads whole echoes. The lane's client sits
+// on a transport that accepts only part of a write (`NetTransport` over Net `TcpSend`, at most
+// 3,840 bytes per call, smoltcp's 4 KiB TX buffer), reads at most 2,048 bytes, and a stdin
+// that returns at most 512 bytes per read and sometimes nothing. `Lossy` wraps the in-memory
+// server with exactly that policy, plus one-shot faults for the error calibration.
+
+fn xorshift(s: &mut u64) -> u64 {
+    *s ^= *s << 13;
+    *s ^= *s >> 7;
+    *s ^= *s << 17;
+    *s
+}
+
+/// Seeds per test: `VISSH_SEEDS` of them (default 16, `2000` for the soak) starting at `VISSH_SEED0`.
+fn seed_range() -> std::ops::Range<u64> {
+    let var = |k: &str, d: u64| std::env::var(k).ok().and_then(|s| s.parse().ok()).unwrap_or(d);
+    let start = var("VISSH_SEED0", 0);
+    start..start + var("VISSH_SEEDS", 16)
+}
+
+/// `len` bytes: a zero head, a 0xff head, an ASCII head, then seeded pseudo-random bytes.
+fn lane_blob(seed: u64, len: usize) -> Vec<u8> {
+    let mut s = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+    let mut v = vec![0u8; 1024];
+    v.extend(std::iter::repeat_n(0xffu8, 1024));
+    v.extend((0..1024).map(|i| b"0123456789abcdef\n"[i % 17]));
+    while v.len() < len {
+        v.extend_from_slice(&xorshift(&mut s).to_le_bytes());
+    }
+    v.truncate(len);
+    v
+}
+
+/// What the lane's transport accepts per write and returns per read (`usize::MAX`: everything).
+const SEND_CAPS: &[usize] = &[0, 1, 7, 300, 545, 3840, 4096];
+const RECV_CAPS: &[usize] = &[0, 1, 13, 2048];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Fault {
+    None,
+    /// An accepted chunk (whole packets) never reaches the server.
+    DropChunk,
+    /// An accepted chunk reaches the server twice.
+    DupChunk,
+    /// Seven bytes inside the first packet of a chunk vanish.
+    DropMid,
+    /// One bit inside the first packet of a chunk flips.
+    FlipMid,
+    /// The top bit of the first packet's (encrypted) length field flips.
+    FlipLen,
+}
+
+struct Lossy {
+    t: ToServer,
+    rng: u64,
+    send_caps: &'static [usize],
+    recv_caps: &'static [usize],
+    fault: Fault,
+    /// The fault fires on the first full-acceptance chunk once the server has read this much stdin.
+    arm_at: usize,
+    fired: bool,
+    /// Accept this many bytes in all, then fail every write with `Io`.
+    fail_send_after: Option<u64>,
+    /// Fail every read with `Io` after this many calls.
+    fail_recv_after: Option<u32>,
+    accepted: u64,
+    recv_calls: u32,
+    sends: u32,
+    partial: u32,
+    zero: u32,
+}
+
+impl Lossy {
+    fn new(seed: u64, send_caps: &'static [usize], recv_caps: &'static [usize]) -> Self {
+        let mut t = ToServer::new();
+        t.tolerant = true;
+        Lossy {
+            t, rng: seed.wrapping_mul(0xD1B5_4A32_D192_ED03) | 1, send_caps, recv_caps, fault: Fault::None, arm_at: 0, fired: false,
+            fail_send_after: None, fail_recv_after: None, accepted: 0, recv_calls: 0, sends: 0, partial: 0, zero: 0,
+        }
+    }
+    fn cap(&mut self, recv: bool) -> usize {
+        let caps = if recv { self.recv_caps } else { self.send_caps };
+        caps[(xorshift(&mut self.rng) >> 32) as usize % caps.len()]
+    }
+}
+
+impl Transport for Lossy {
+    fn send(&mut self, data: &[u8]) -> Result<usize, TransportError> {
+        // A server that hit a bad packet closes the connection.
+        if self.t.wire_err.is_some() {
+            return Err(TransportError::Closed);
+        }
+        let mut k = data.len().min(self.cap(false));
+        if let Some(limit) = self.fail_send_after {
+            if self.accepted >= limit {
+                return Err(TransportError::Io);
+            }
+            k = k.min((limit - self.accepted) as usize);
+        }
+        self.sends += 1;
+        if k == 0 {
+            self.zero += 1;
+            return Ok(0);
+        }
+        if k < data.len() {
+            self.partial += 1;
+        }
+        self.accepted += k as u64;
+        let mut bytes = data[..k].to_vec();
+        // Only a chunk that starts at a packet boundary (everything before was fully accepted).
+        if self.fault != Fault::None && !self.fired && k == data.len() && k >= 64 && self.t.seen.stdin.len() >= self.arm_at {
+            self.fired = true;
+            match self.fault {
+                Fault::None => {}
+                Fault::DropChunk => return Ok(k),
+                Fault::DupChunk => bytes.extend_from_within(..),
+                Fault::DropMid => {
+                    bytes.drain(24..31);
+                }
+                Fault::FlipMid => bytes[24] ^= 1,
+                Fault::FlipLen => bytes[0] ^= 0x80,
+            }
+        }
+        self.t.send(&bytes)?;
+        Ok(k)
+    }
+    fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
+        if self.t.wire_err.is_some() {
+            return Err(TransportError::Closed);
+        }
+        self.recv_calls += 1;
+        if self.fail_recv_after.is_some_and(|n| self.recv_calls > n) {
+            return Err(TransportError::Io);
+        }
+        let n = buf.len().min(self.cap(true));
+        self.t.recv(&mut buf[..n])
+    }
+    fn idle(&mut self) -> Result<(), TransportError> {
+        self.t.idle()
+    }
+    fn now_ms(&mut self) -> u64 {
+        self.t.now_ms()
+    }
+}
+
+fn lossy_run(l: &mut Lossy, me: &mut Me, policy: &RekeyPolicy) -> vissh::session::Outcome {
+    run(l, me, "tester", AuthKind::Password, &Mode::Exec("cmd".into()), policy)
+}
+
+/// The client of the lane's stdin: at most 512 bytes per read, an `Idle` every few reads.
+fn lane_stdin(me: Me, seed: u64) -> Me {
+    let mut me = me;
+    me.max_read = 512;
+    me.idle_every = [0, 3, 5, 7][seed as usize % 4];
+    me
+}
+
+/// T-partial: one session of `len` bytes up and echoed back under the lane's partial policy.
+fn partial_session(seed: u64, len: usize, policy: &RekeyPolicy) -> (Lossy, vissh::session::Outcome) {
+    let blob = lane_blob(seed, len);
+    let mut l = Lossy::new(seed, SEND_CAPS, RECV_CAPS);
+    let mut me = lane_stdin(Me::new(Trust::KnownExact, "right").wired(&l.t).with_stdin(blob.clone()), seed);
+    let out = lossy_run(&mut l, &mut me, policy);
+    let ctx = format!(
+        "seed {seed}: {out:?}; wire_err {:?}; sends {} partial {} zero {}; server stdin {} of {}; echo {} of {}",
+        l.t.wire_err, l.sends, l.partial, l.zero, l.t.seen.stdin.len(), blob.len(), me.stdout.len().saturating_sub(4), blob.len()
+    );
+    assert!(l.t.wire_err.is_none(), "{ctx}");
+    assert_eq!(out.ending, Ending::Disconnected, "{ctx}");
+    assert!(l.t.seen.stdin == blob, "server stdin differs: {ctx}");
+    assert!(me.stdout.get(4..) == Some(&blob[..]), "echo differs: {ctx}");
+    assert_eq!(me.keys.len(), 1, "{ctx}");
+    // The policy really cut writes: partial and zero acceptance both happened.
+    assert!(l.partial > 0 && l.zero > 0, "policy not exercised: {ctx}");
+    (l, out)
+}
+
+#[test]
+fn partial_acceptance_short_reads_and_idle_stdin_keep_every_byte_in_order() {
+    let n = seed_range().count();
+    let (mut sends, mut partial, mut zero) = (0u64, 0u64, 0u64);
+    for seed in seed_range() {
+        let (l, out) = partial_session(seed, 512 * 1024, PROD);
+        assert_eq!(out.rekeys, 0, "seed {seed}: no rekey in a lane-sized session");
+        sends += u64::from(l.sends);
+        partial += u64::from(l.partial);
+        zero += u64::from(l.zero);
+    }
+    println!("T-partial: {n} seeds x 512 KiB clean; writes {sends}, partial {partial}, zero {zero}");
+}
+
+#[test]
+fn partial_acceptance_across_rekeys_keeps_every_byte_in_order() {
+    let n = seed_range().count();
+    let policy = RekeyPolicy { limits: RekeyLimits { bytes: 24 * 1024, packets: 1 << 30 }, ..RekeyPolicy::PRODUCTION };
+    for seed in seed_range() {
+        let (_, out) = partial_session(seed, 160 * 1024, &policy);
+        assert!(out.rekeys >= 1, "seed {seed}: no rekey");
+    }
+    println!("T-partial-rekey: {n} seeds x 160 KiB clean");
+}
+
+/// One session with `fault` injected; returns the transport and the outcome.
+fn faulted(fault: Fault, seed: u64) -> (Lossy, vissh::session::Outcome) {
+    let mut l = Lossy::new(seed, &[usize::MAX], &[2048]);
+    l.fault = fault;
+    l.arm_at = 1024 + (seed as usize * 4099) % (96 * 1024);
+    let mut me = lane_stdin(Me::new(Trust::KnownExact, "right").wired(&l.t).with_stdin(bulk()), seed);
+    let out = lossy_run(&mut l, &mut me, PROD);
+    (l, out)
+}
+
+fn class(e: &vissh::sunset::Error) -> String {
+    match e {
+        vissh::sunset::Error::BigPacket { .. } => "BigPacket".into(),
+        vissh::sunset::Error::BadDecrypt => "BadDecrypt".into(),
+        other => format!("{other:?}"),
+    }
+}
+
+#[test]
+fn the_servers_first_error_tells_a_lost_packet_from_a_damaged_byte() {
+    // OpenSSH's `Bad packet length` is Sunset's `BigPacket`, `Corrupted MAC on input` its
+    // `BadDecrypt`: the length is decrypted with the sequence number as nonce before any MAC.
+    // After a lost or repeated packet that length is key-random: it exceeds Sunset's 35,000-byte
+    // buffer (`BigPacket`) with probability 1 - 35000/2^32. The rare in-range length makes the
+    // server wait for that many bytes and then fail on the block-size check (`SSHProto`) or the
+    // MAC (`BadDecrypt`); that is allowed for the two faults whose length is not fixed, a handful
+    // per soak.
+    let n = seed_range().count();
+    let in_range_allowed = n / 500;
+    for (fault, expect, random_length) in [
+        (Fault::DropChunk, "BigPacket", true),
+        (Fault::DupChunk, "BigPacket", true),
+        (Fault::FlipLen, "BigPacket", false),
+        (Fault::DropMid, "BadDecrypt", false),
+        (Fault::FlipMid, "BadDecrypt", false),
+    ] {
+        let mut seen = std::collections::BTreeMap::<String, u32>::new();
+        let mut in_range = 0;
+        for seed in seed_range() {
+            let (l, out) = faulted(fault, seed);
+            assert!(l.fired, "{fault:?} seed {seed}: never fired (session {out:?})");
+            let got = l.t.wire_err.as_ref().map(class).unwrap_or_else(|| "none".into());
+            if random_length && got != expect && (got.starts_with("SSHProto") || got == "BadDecrypt") {
+                in_range += 1;
+                assert!(in_range <= in_range_allowed, "{fault:?} seed {seed}: {in_range} in-range lengths: {got}");
+            } else {
+                assert_eq!(got, expect, "{fault:?} seed {seed}: {out:?}");
+            }
+            assert_eq!(out.ending, Ending::TransportLost, "{fault:?} seed {seed}");
+            *seen.entry(got).or_default() += 1;
+        }
+        println!("T-sig {fault:?}: first server error over {n} seeds {seen:?}");
+    }
+}
+
+#[test]
+fn a_transport_error_mid_stream_is_transport_lost_and_the_server_saw_a_prefix() {
+    let n = seed_range().count();
+    for seed in seed_range() {
+        let blob = bulk();
+        // Writes: accept this many bytes in all (a cut inside a packet is allowed), then `Io`.
+        let mut l = Lossy::new(seed, SEND_CAPS, RECV_CAPS);
+        let limit = 2000 + (seed * 7919) % 150_000;
+        l.fail_send_after = Some(limit);
+        let mut me = lane_stdin(Me::new(Trust::KnownExact, "right").wired(&l.t).with_stdin(blob.clone()), seed);
+        let out = lossy_run(&mut l, &mut me, PROD);
+        assert_eq!(out.ending, Ending::TransportLost, "send limit {limit}: {out:?}");
+        assert!(l.t.wire_err.is_none(), "send limit {limit}: {:?}", l.t.wire_err);
+        assert_eq!(l.accepted, limit);
+        assert!(blob.starts_with(&l.t.seen.stdin), "send limit {limit}: server stdin is not a prefix of the input");
+        // Reads: the transport fails after this many calls.
+        let mut l = Lossy::new(seed, SEND_CAPS, RECV_CAPS);
+        let calls = 20 + (seed as u32 * 37) % 200;
+        l.fail_recv_after = Some(calls);
+        let mut me = lane_stdin(Me::new(Trust::KnownExact, "right").wired(&l.t).with_stdin(blob.clone()), seed);
+        let out = lossy_run(&mut l, &mut me, PROD);
+        assert_eq!(out.ending, Ending::TransportLost, "recv after {calls}: {out:?}");
+        assert!(l.t.wire_err.is_none(), "recv after {calls}: {:?}", l.t.wire_err);
+        assert!(blob.starts_with(&l.t.seen.stdin), "recv after {calls}: server stdin is not a prefix of the input");
+    }
+    println!("T-busy: {n} seeds, write and read errors end TransportLost with a prefix at the server");
 }

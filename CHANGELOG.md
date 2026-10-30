@@ -1160,3 +1160,5 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - NET-GCD: the Net graceful-close deadline now decides by TCP state: FIN-WAIT-1/2, CLOSING and LAST-ACK are aborted with one RST through the abort ledger (TIME-WAIT/Closed freed silently), logging `[net] graceful close deadline: aborted N TCP`; explains the stray RST on the Tier-3 control flow. Host tests only.
 - OSD-1/OSD-3: the kernel owner-watch grant is an explicit table (Net, compositor); the compositor reclaims surfaces/views/focus of a killed GUI client; `ipc_send`/`ipc_send_kernel` refuse Retiring/Terminated targets so a service cannot park forever on a dead client's tombstone. Host tests and bare-metal builds only, no boot proof.
+
+- vissh host harness: partial/zero-write, short-read, idle-stdin and transport-error cases on 512 KiB (no reproduction of the Tier-3 `Bad packet length` finding F-GP-1, which stays open; Net/slirp/guest untested).

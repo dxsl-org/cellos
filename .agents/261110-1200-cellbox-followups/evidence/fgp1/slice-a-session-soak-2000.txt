@@ -1,0 +1,27 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running tests/session.rs (/tmp/fgp1-target/x86_64-unknown-linux-gnu/debug/deps/session-866dfe2cd65b08b6)
+
+running 25 tests
+test a_transport_error_mid_stream_is_transport_lost_and_the_server_saw_a_prefix has been running for over 60 seconds
+test partial_acceptance_across_rekeys_keeps_every_byte_in_order has been running for over 60 seconds
+test partial_acceptance_short_reads_and_idle_stdin_keep_every_byte_in_order has been running for over 60 seconds
+test the_servers_first_error_tells_a_lost_packet_from_a_damaged_byte has been running for over 60 seconds
+T-sig DropChunk: first server error over 2000 seeds {"BigPacket": 2000}
+
+thread 'the_servers_first_error_tells_a_lost_packet_from_a_damaged_byte' (602060) panicked at libs/vissh/tests/session.rs:983:13:
+assertion `left == right` failed: DupChunk seed 1106: Outcome { dispatch: Accepted, ending: TransportLost, stdout_complete: false, stderr_complete: false, rekeys: 0, peaks: Peaks { pending: 2048, chunk: 256 } }
+  left: "SSHProto"
+ right: "BigPacket"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test the_servers_first_error_tells_a_lost_packet_from_a_damaged_byte ... FAILED
+T-partial-rekey: 2000 seeds x 160 KiB clean
+T-partial: 2000 seeds x 512 KiB clean; writes 4301761, partial 2044620, zero 614344
+
+failures:
+
+failures:
+    the_servers_first_error_tells_a_lost_packet_from_a_damaged_byte
+
+test result: FAILED. 24 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1485.11s
+
+error: test failed, to rerun pass `-p vissh --test session`

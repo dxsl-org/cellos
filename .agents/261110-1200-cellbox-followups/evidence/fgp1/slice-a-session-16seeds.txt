@@ -1,0 +1,24 @@
+   Compiling vissh v0.1.0 (/home/dmin/cellos/libs/vissh)
+warning: unused variable: `n`
+    --> libs/vissh/tests/session.rs:1007:9
+     |
+1007 |     let n = seed_range().count();
+     |         ^ help: if this is intentional, prefix it with an underscore: `_n`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vissh` (test "session") generated 1 warning (run `cargo fix --test "session" -p vissh` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.89s
+     Running tests/session.rs (/tmp/fgp1-target/x86_64-unknown-linux-gnu/debug/deps/session-866dfe2cd65b08b6)
+
+running 25 tests
+T-sig DropChunk: first server error over 16 seeds {"BigPacket": 16}
+T-sig DupChunk: first server error over 16 seeds {"BigPacket": 16}
+T-sig FlipLen: first server error over 16 seeds {"BigPacket": 16}
+T-partial-rekey: 16 seeds x 160 KiB clean
+T-sig DropMid: first server error over 16 seeds {"BadDecrypt": 16}
+T-sig FlipMid: first server error over 16 seeds {"BadDecrypt": 16}
+T-partial: 16 seeds x 512 KiB clean; writes 34341, partial 16276, zero 4957
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.77s
+

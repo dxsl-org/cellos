@@ -1,0 +1,16 @@
+   Compiling vissh v0.1.0 (/home/dmin/cellos/libs/vissh)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.90s
+     Running tests/session.rs (/tmp/fgp1-target/x86_64-unknown-linux-gnu/debug/deps/session-866dfe2cd65b08b6)
+
+running 2 tests
+test a_transport_error_mid_stream_is_transport_lost_and_the_server_saw_a_prefix has been running for over 60 seconds
+test the_servers_first_error_tells_a_lost_packet_from_a_damaged_byte has been running for over 60 seconds
+T-sig DropChunk: first server error over 500 seeds {"BigPacket": 500}
+T-busy: 500 seeds, write and read errors end TransportLost with a prefix at the server
+T-sig DupChunk: first server error over 500 seeds {"BigPacket": 500}
+T-sig FlipLen: first server error over 500 seeds {"BigPacket": 500}
+T-sig DropMid: first server error over 500 seeds {"BadDecrypt": 500}
+T-sig FlipMid: first server error over 500 seeds {"BadDecrypt": 500}
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 23 filtered out; finished in 313.14s
+
