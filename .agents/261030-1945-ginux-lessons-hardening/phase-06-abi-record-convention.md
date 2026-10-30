@@ -1,61 +1,52 @@
 ---
 phase: 6
-title: "ABI record convention and pre-activation refusal"
+title: "Boundary-specific ABI records and pre-publication refusal"
 status: pending
 priority: P2
-effort: "3d"
 dependencies: [1]
 tier: medium
 ---
 
-# Phase 06: ABI record convention and pre-activation refusal
-
-> **Required — deviation-log:** Log every Decision / Deviation / Surprise in § Deviation Log the moment it occurs.
+# Phase 06: Boundary-specific ABI records and pre-publication refusal
 
 ## Overview
 
-`CellManifest` already follows most of the ginux record pattern, and its validation already runs before signature, caps and task creation (`governed_spawn.rs:43-59,103-126`). Other records do not follow it (`completion.rs`, `telemetry.rs`, `ViFstatV1`). This phase does two things:
+Item 5 is a rule for serialized/untrusted/versioned boundaries, not a reason to wrap every native Rust value or SAS method invocation in a Linux-style bootstrap header.
 
-1. Writes the convention for **new or Law-1-revised** records. Existing records are not mass-converted, because that would be Law-1 churn without a consumer.
-2. Adds the missing end-to-end proof: an injected malformed signed record is refused on x86 before any task or resource is published.
+## Requirements and architecture
 
-## Requirements
-
-- Convention (`docs/code-standards.md`, Law-1 section): a record carries an identity (magic or a typed container), `version`, explicit total size or an exact-length rule, feature bits separate from capability flags, reserved = 0, unknown feature/flag rejection, and decoding/validation before any resource activation. Feature bits are for capability negotiation only. Test or proof-stage markers never become feature bits (the anti-pattern of ginux's `NATIVE_NETWORK_FEATURE_*`, bits 0–18). Old-version policy is stated per record: current `CellManifest` keeps v1 acceptance (`manifest_parse.rs:31-48`).
-- Conformance table in Spec 17: each record in `libs/api/src/abi` with columns identity/version/size/reserved/unknown-flag/decoder-tests. Gaps are listed, not fixed.
-- Runtime refusal test on x86 q35: signed test Cells with (a) nonzero v2 reserved, (b) unknown version, (c) unknown flag. Spawn returns the documented error. No TID is published, no CSpace or resource registry entry exists, and there is no audit `CellStart`.
-
-## Assumptions
-
-- **Claim:** `scripts/qemu-manifest-continuity.sh` can target x86 or be paralleled by an x86 variant. **Confidence:** low. **How to verify:** read the script; if it is RV64-only, create `scripts/x86/qemu-manifest-refusal.sh` on the domain-test image instead.
-- **Claim:** test Cells can be signed with deliberately malformed manifests via `cellos-sign` without changing the signer. **Confidence:** medium. **How to verify:** `python3 scripts/cellos-sign --help`; otherwise patch the ELF section after signing, if the signature does not cover the manifest (and record that as a finding).
+- Internal Rust types and same-build typed calls remain typed; do not add magic/version/size fields or dynamic validation to them without a boundary requirement.
+- Serialized records, guest/native ABI, persisted metadata and independently updated component boundaries specify identity/type, version policy, exact/bounded length, reserved and unknown-bit handling, ownership and validation-before-effect. Use an existing typed envelope or exact-length contract when adequate; not every record needs all header fields.
+- Feature bits represent real negotiated behavior, never test stages or capability grants. A version supported by policy is not rejected merely for being older (CellManifest v1 is currently accepted).
+- No mass layout conversion. Any actual public bytes/SDK or error semantic change follows Law-1. Fixed producer/consumer format remains sufficient for admitted same-build components.
+- Signature coverage is preserved. Mutations intended to test parsing must be re-signed by an authorized private test pipeline or injected before the decoder in a private fixture. Never patch after signing and then call signature failure parser evidence; never weaken the signer.
 
 ## Related Files
 
-- Modify: `docs/code-standards.md` (convention), `docs/specs/17-*.md` (conformance table).
-- Create: `cells/tests/manifest-refusal-*` fixtures (or reuse `kernel/src/loader/elf_tests.rs` corpora), the x86 runner from Assumptions, and a test in `tests/integration/tests/`.
+`docs/code-standards.md` boundary guidance; actual Spec 17 path found before editing; `libs/api/src/abi/manifest_parse.rs` and existing mutation tests as evidence, not rewrite targets. Extend an isolated x86 image/runner with signed refusal fixtures if existing runtime coverage is insufficient.
 
 ## Implementation Steps
 
-1. Write the convention and the conformance table by reading each record in `libs/api/src/abi`.
-2. Build the three malformed signed fixtures.
-3. The runner boots them via the init/launch path and asserts the refusal markers and the absence of publication (inspect via the existing test-hook process listing).
-4. A negative control: one well-formed fixture spawns and publishes.
+1. Classify ABI families by actual trust/update boundary; document current contracts and specific gaps rather than enforcing one header format.
+2. Reuse existing manifest decoding and compatibility tests. Construct correctly signed malformed test fixtures with separate positive-control fixtures.
+3. Observe unknown version/flag/reserved refusal before task, authority, device or resource publication. Also observe valid supported old/current records admitted.
+4. Verify production images/signing paths contain no bypass or injection hook.
 
 ## Success Criteria
 
-- [ ] The convention and the table are merged; `check-spec-anchors.py --check` passes.
-- [ ] The x86 refusal runner passes: 3 refusals with no publication, plus 1 positive control.
-- [ ] `cargo test -p types -p api --target x86_64-unknown-linux-gnu` is unchanged and green.
+- [ ] No new per-call serialization/header/copy cost for native SAS C2C.
+- [ ] Bad records are refused before effect through the real x86 admission path; valid compatibility records still work.
+- [ ] Signature-invalid and format-invalid outcomes are distinguished in evidence.
+- [ ] All affected callers/tests/docs are enumerated before any Law-1 change; otherwise zero ABI bytes changed.
 
-## Security Considerations
+## Assumptions
 
-This proves fail-closed admission ordering on the active lane. If the signature does not cover the manifest bytes, that is a separate security finding, escalated immediately.
+An authorized malformed-fixture signing route may need exact admission. Discover it first; no permission inferred from a development seed.
 
-## Risk Notes
+## Security and risk assessment
 
-No ABI bytes change; the convention binds only future Law-1 changes. Undo: revert the docs and test commit.
+This is boundary validation, not permission issuance or LBI proof. Revert docs/private fixtures; retain refusal logs. No persistent migration.
 
 ## Deviation Log
 
-None.
+SAS review: replaced universal ABI headers with boundary-specific contracts; removed the post-signature mutation workaround.

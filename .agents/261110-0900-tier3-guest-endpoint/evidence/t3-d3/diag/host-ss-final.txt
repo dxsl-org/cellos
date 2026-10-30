@@ -1,0 +1,4 @@
+# name=final wall=1793366467.801 offset_s=138.625
+# cmd=ss -tnoi ( sport = :43539 or dport = :43539 )
+# rc=0
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess

@@ -1,0 +1,311 @@
+{
+  "head": "fc496bea0b8424e9bfc44a4e155868420132978b",
+  "pass": true,
+  "stop_rule": null,
+  "gates": {
+    "B1": true,
+    "B2": true,
+    "C1": true,
+    "C2": true
+  },
+  "guest_kernel": "6.12.81-0-virt",
+  "stage": "full",
+  "time_to_listening_s": 12.9,
+  "time_to_ssh_guest_ready_s": 11.6,
+  "timeline_s": {
+    "svm-root": 1.8,
+    "hv-starting": 2.9,
+    "vcpu-ready": 6.5,
+    "guest-kernel": 6.6,
+    "guest-init": 9.5,
+    "guest-kernel-marker": 9.5,
+    "crng-ready": 9.5,
+    "net-up": 9.6,
+    "apk-installed": 10.3,
+    "sshd-server-listening": 10.6,
+    "ssh-guest-ready": 11.6,
+    "listening": 12.9,
+    "driver-terminal": 44.8
+  },
+  "run_verdict": "driver-verdict",
+  "checks": {
+    "B1:svm-root-active": {
+      "pass": true,
+      "detail": ""
+    },
+    "B1:hypervisor-cell-starting": {
+      "pass": true,
+      "detail": ""
+    },
+    "B1:vcpu-ready": {
+      "pass": true,
+      "detail": "exactly one `vCPU ready` (a second one means the hypervisor cell restarted)"
+    },
+    "B1:no-panic-fault-triplefault": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "B1:no-hv-error-lines": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "B2:guest-kernel-banner": {
+      "pass": true,
+      "detail": "6.12.81-0-virt"
+    },
+    "B2:guest-kernel-marker": {
+      "pass": true,
+      "detail": "('6.12.81-0-virt', '6.12.81-0-virt')"
+    },
+    "B2:guest-init-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:crng-ready": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:net-up": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:apk-installed-offline": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:guest-hostkey-equals-pinned": {
+      "pass": true,
+      "detail": "['SHA256:BwBUFmCBpKiz0aSTnWWvH5+YZ2PJFfP3B9dRKV/ppw0']"
+    },
+    "B2:sshd-server-listening-line": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:listening-marker": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:no-guest-init-failure": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "C1:keyscan-fingerprint-equals-guest-key": {
+      "pass": true,
+      "detail": "[(0, 'SHA256:BwBUFmCBpKiz0aSTnWWvH5+YZ2PJFfP3B9dRKV/ppw0')]"
+    },
+    "C2:driver-ready-marker-once": {
+      "pass": true,
+      "detail": ""
+    },
+    "C2:sshd-saw-cell-connection-beyond-keyscan": {
+      "pass": true,
+      "detail": "{'connections_from_10.0.2.2': 16, 'keyscan_connections': 1}"
+    },
+    "C2:ready-after-sshd-server-listening": {
+      "pass": true,
+      "detail": "{'svm-root': 1.8, 'hv-starting': 2.9, 'vcpu-ready': 6.5, 'guest-kernel': 6.6, 'guest-init': 9.5, 'guest-kernel-marker': 9.5, 'crng-ready': 9.5, 'net-up': 9.6, 'apk-installed': 10.3, 'sshd-server-listening': 10.6, 'ssh-guest-ready': 11.6, 'listening': 12.9, 'driver-terminal': 44.8}"
+    },
+    "argv:one-loopback-hostfwd-tcg-qemu-10.2.0": {
+      "pass": true,
+      "detail": "/home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+svm,+rdrand,+rdseed -m 1G -display none -chardev socket,id=ser0,path=/tmp/cellbox-tier3-261030a/serial.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-tier3-261030a/tier3.iso -boot d -no-reboot -netdev user,id=net0,hostfwd=tcp:127.0.0.1:44375-10.0.2.16:22 -device"
+    },
+    "hashes:pins-match-and-iso-kernel-initramfs-recorded": {
+      "pass": true,
+      "detail": "{}"
+    },
+    "no-sshd-in-outer-image": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-secret-in-any-evidence-file": {
+      "pass": true,
+      "detail": "{}"
+    },
+    "no-secret-in-serial-raw": {
+      "pass": true,
+      "detail": ""
+    },
+    "protected-paths-and-cargo-lock-unchanged": {
+      "pass": true,
+      "detail": ""
+    },
+    "run-ended-by-driver-verdict": {
+      "pass": true,
+      "detail": "driver-verdict"
+    },
+    "window-within-4h-cap": {
+      "pass": true,
+      "detail": "3600"
+    },
+    "D:driver-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:marker:shell-prompt": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-conf": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-refusals": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-changed-host-key": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-first-trust-no": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-first-trust-paste-refused": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-first-trust-yes": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-first-trust-known-after": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-wrong-password": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-exec-bytes": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-exec-stdin-eof": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-exec-signal": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-pty-shell": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-pty-resize": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-pty-escape-disconnect": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-shell-alive": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:shell-long-line": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-guest-cancel-producer": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-guest-fault-may-have-run": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-guest-no-replay-ledger": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:session-a-close": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:no-unexpected-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "D:no-FAIL-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "D:driver-final-verdict": {
+      "pass": true,
+      "detail": "[('PASS', '21')]"
+    },
+    "D:boot-ceiling-selftest-pass": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:trust-store-volume-mounted": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:no-weak-entropy": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:fixture-kernel-features-recorded": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:guest-scenarios-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:sshd-saw-guest-connections": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:sshd-accepted-password-six-before-guest-scenarios": {
+      "pass": true,
+      "detail": "6"
+    },
+    "D:sshd-failed-password-once-before-guest-scenarios": {
+      "pass": true,
+      "detail": "1"
+    },
+    "D:guest-scenario-logins-accounted": {
+      "pass": true,
+      "detail": "{'driver_logins': ['4'], 'accepted_after': 4, 'failed_after': 0}"
+    },
+    "D:no-replay-ledger-exactly-one-selfkill": {
+      "pass": true,
+      "detail": "[('1', '1')]"
+    },
+    "D:selfkill-dispatch-reported": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:sshd-one-session-per-connection": {
+      "pass": true,
+      "detail": "{'sessions': 10, 'max': 1}"
+    },
+    "net:no-owner-death-watch-unavailable": {
+      "pass": true,
+      "detail": ""
+    },
+    "net:owner-death-reclaim-logged-in-cancel-window": {
+      "pass": true,
+      "detail": "[{'serial_line': 708, 'cell': 10, 'gen': 127, 'aborted': 1, 'released': 0, 'in_cancel_window': True}]"
+    }
+  },
+  "net": {
+    "owner_death_lines": [
+      {
+        "serial_line": 708,
+        "cell": 10,
+        "gen": 127,
+        "aborted": 1,
+        "released": 0,
+        "in_cancel_window": true
+      }
+    ],
+    "watch_unavailable": false,
+    "in_cancel_window": true
+  }
+}

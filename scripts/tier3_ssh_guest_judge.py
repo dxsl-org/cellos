@@ -18,12 +18,24 @@ Subcommands (host-testable, no QEMU needed; see scripts/test_tier3_ssh_guest_jud
            the three guest-only scenarios included), `P04-TERMINAL: PASS`, the guest sshd's own log
            accounting (accepted/failed passwords before and after the guest scenarios, one session
            per connection) and the no-replay ledger rule. A marker FAIL is reported as the stop
-           rule `MARKER-FAIL`: no fix-and-rerun without a new CP1.
+           rule `MARKER-FAIL`: no fix-and-rerun without a new CP1. T3-D3 adds the Net checks
+           `net:*` (below).
   diag     The T3-D2 diagnostic stage (cp1-diag-draft.md): everything `full` judges for the reused
            scenarios, plus the positive control `ssh-guest-consumer-close-producer` (must PASS) and the
            cancel scenario as an OBSERVATION (PASS or FAIL, exactly once; recorded, not a claim). The
            host-side data (ss snapshots, the slirp netdev pcap summary, guest snapshots) is CLASSIFIED,
-           not judged: the verdict names one of the outcome labels O1..O6 of the draft's section 5.
+           not judged: the verdict names one of the outcome labels O1..O7 of the draft's section 5
+           and of rerun-cp1.md section 4.1 (O7 = "reclaimed": the Net service aborted the dead
+           owner's socket with an RST, the guest connection ended and the producer stopped, the only
+           passing outcome of the T3-D3 diag boot). `--expect-outcome LABEL` (diag only) adds the check
+           `diag:outcome-is-LABEL`, so any other label fails the verdict.
+
+  Stages full and diag also judge the Net service's own serial lines (rerun-cp1.md 5.2 J3):
+           `net:no-owner-death-watch-unavailable` and `net:owner-death-reclaim-logged-in-cancel-window`
+           (`[net] owner death: cell C gen G: aborted N TCP, released M other` with N >= 1 between the
+           cancel scenario's `p09-case` line and its PASS/FAIL line). The line `[net] owner death watch
+           unavailable; socket reclaim deferred` is the stop rule STOP-7 (after the secret, digest and
+           argv rules, before the gate rules and MARKER-FAIL).
   archive  Copy the text evidence to the repository after a secret scan (STOP-5): refuses to copy
            anything when a seed, password or host private key is found in any candidate file.
 
@@ -67,6 +79,7 @@ OUTCOMES = {
     "O4": "delayed reclaim: something closes the cancelled connection, but later than the 20 s `gone` window",
     "O5": "environment/tooling failure before the scenarios; nothing is claimed",
     "O6": "surprise: any other combination; raw data recorded, no further run without a new CP1",
+    "O7": "reclaimed: the Net service aborted the dead owner's socket (RST), the guest connection ended, the producer stopped",
 }
 STATE_NAMES = {"01": "ESTABLISHED", "02": "SYN_SENT", "03": "SYN_RECV", "04": "FIN_WAIT1", "05": "FIN_WAIT2", "06": "TIME_WAIT",
                "07": "CLOSE", "08": "CLOSE_WAIT", "09": "LAST_ACK", "0A": "LISTEN", "0B": "CLOSING"}
@@ -407,6 +420,7 @@ def summarize_pcap(path, port, ports, marks, t_start, max_after=400):
             c = {"flow": flow, "client": "%s:%d" % (cip, cport), "server": "%s:%d" % (sip, sport_), "first_t": t, "last_t": t,
                  "pkts": 0, "syn": 0, "fin": {"c2s": 0, "s2c": 0}, "rst": {"c2s": 0, "s2c": 0}, "first_fin": None,
                  "first_rst": None, "zero_win": {"c2s": 0, "s2c": 0}, "zero_win_after_cancel": {"c2s": 0, "s2c": 0},
+                 "zero_win_after_first_rst": {"c2s": 0, "s2c": 0},
                  "payload_bytes": {"c2s": 0, "s2c": 0}, "after_cancel": [], "after_cancel_truncated": False}
             live[key] = c
             conns[flow].append(c)
@@ -425,6 +439,8 @@ def summarize_pcap(path, port, ports, marks, t_start, max_after=400):
             c["zero_win"][d] += 1
             if cancel_t is not None and t >= cancel_t:
                 c["zero_win_after_cancel"][d] += 1
+            if c["first_rst"] is not None:
+                c["zero_win_after_first_rst"][d] += 1
         if cancel_t is not None and t >= cancel_t - 2.0:
             if len(c["after_cancel"]) < max_after:
                 c["after_cancel"].append([round(t - cancel_t, 3), d, flag_str(flags), plen, win])
@@ -472,6 +488,12 @@ def summarize_pcap(path, port, ports, marks, t_start, max_after=400):
         "cancel_B_fin_rst_from_slirp": fr(b_cancel, "c2s"), "cancel_B_fin_rst_from_guest": fr(b_cancel, "s2c"),
         "control_A_fin_rst_from_cell": fr(a_control, "c2s"), "control_B_fin_rst_from_slirp": fr(b_control, "c2s"),
         "cancel_A_zero_window_from_cell_after_mark": None if a_cancel is None else a_cancel["zero_win_after_cancel"]["c2s"],
+        "cancel_A_rst_from_cell": None if a_cancel is None else a_cancel["rst"]["c2s"] >= 1,
+        "cancel_A_fin_from_cell": None if a_cancel is None else a_cancel["fin"]["c2s"] >= 1,
+        "cancel_A_zero_window_from_cell_after_first_rst": None if a_cancel is None else a_cancel["zero_win_after_first_rst"]["c2s"],
+        "control_A_rst_from_cell": None if a_control is None else a_control["rst"]["c2s"] >= 1,
+        "control_A_fin_from_cell": None if a_control is None else a_control["fin"]["c2s"] >= 1,
+        "control_A_zero_window_from_cell_after_first_rst": None if a_control is None else a_control["zero_win_after_first_rst"]["c2s"],
     }
     return {
         "schema": 1, "pcap": dict(stats, first_t=rel(stats["first_t"]), last_t=rel(stats["last_t"])),
@@ -523,8 +545,62 @@ def prep_diag(ev: Path, pcap: Path, secrets, port: str):
     (ev / "guest-snaps.txt").write_text("".join("== %s ==\n%s\n" % (k, "\n".join(raw[k])) for k in sorted(raw)))
 
 
+NET_RECLAIM_RE = re.compile(r"\[net\] owner death: cell (\d+) gen (\d+): aborted (\d+) TCP, released (\d+) other")
+NET_WATCH_UNAVAILABLE = "owner death watch unavailable"
+
+
+def net_owner_death(lines):
+    """The Net service's owner-death lines in the serial log (host lines only; a `[guest-uart]` line
+    never counts). `in_cancel_window`: a reclaim line with `aborted N TCP`, N >= 1, lies strictly between
+    the cancel scenario's `p09-case` line and its `P04 PASS/FAIL` line."""
+    obs = re.escape(DIAG_OBSERVATION)
+    start = next((i for i, l in enumerate(lines) if "[guest-uart]" not in l and re.search(r"P04 INFO p09-case %s\b" % obs, l)), None)
+    end = None
+    if start is not None:
+        end = next((i for i in range(start + 1, len(lines))
+                    if "[guest-uart]" not in lines[i] and re.search(r"P04 (?:PASS|FAIL) %s\b" % obs, lines[i])), None)
+    found, unavailable = [], False
+    for i, l in enumerate(lines):
+        if "[guest-uart]" in l:
+            continue
+        if NET_WATCH_UNAVAILABLE in l:
+            unavailable = True
+        m = NET_RECLAIM_RE.search(l)
+        if m:
+            in_win = start is not None and end is not None and start < i < end
+            found.append({"serial_line": i + 1, "cell": int(m.group(1)), "gen": int(m.group(2)), "aborted": int(m.group(3)),
+                          "released": int(m.group(4)), "in_cancel_window": in_win})
+    return {"watch_unavailable": unavailable, "owner_death_lines": found,
+            "in_cancel_window": any(f["in_cancel_window"] and f["aborted"] >= 1 for f in found)}
+
+
+def _is_zero(v):
+    return isinstance(v, int) and not isinstance(v, bool) and v == 0
+
+
+def o7_holds(d):
+    """Outcome O7 "reclaimed" (rerun-cp1.md section 4.1 rows 2-9). Every key is read with `.get`: data that
+    lacks a key (the O1..O6 fixtures, a failed prep) can never be O7, and only exact booleans/zero count."""
+    st = [d.get("cancel_conn_state_at_snap_" + x) for x in "abc"]
+    return (not d.get("env_failure")
+            and d.get("control_ok") is True and d.get("control_closed_logged") is True
+            and d.get("control_producer_started") is True and d.get("control_producer_stopped_at_snap_a") is True
+            and d.get("cancel_marker_pass") is True
+            and d.get("cancel_A_rst_from_cell") is True and d.get("cancel_A_fin_from_cell") is False
+            and _is_zero(d.get("cancel_A_zero_window_from_cell_after_first_rst"))
+            and d.get("slirp_fin_rst_to_guest_after_cancel") is True
+            and all(s is not None and s not in ("ESTABLISHED", "CLOSE_WAIT") for s in st) and st[2] == "absent"
+            and all(d.get("yes_alive_at_snap_" + x) is False and d.get("yes_pid_known_at_snap_" + x) is True for x in "abc")
+            and all(_is_zero(d.get("host_ss_established_at_" + x)) for x in "abc")
+            and d.get("net_owner_death_in_cancel_window") is True and d.get("net_watch_unavailable") is False)
+
+
 def classify(d):
     """Outcome label (cp1-diag-draft.md section 5) from the observed data `d`; returns (label, why)."""
+    if o7_holds(d):
+        return "O7", ("control PASS; cancel marker PASS; RST (no FIN) from the cell on flow A and no zero-window ACK after it; "
+                      "FIN/RST from slirp towards the guest; guest connection not ESTABLISHED/CLOSE_WAIT at snap-a/b/c and absent at snap-c; "
+                      "yes not alive at snap-a/b/c; host ss ESTAB 0 at snap-a/b/c; [net] owner death line with N >= 1 in the cancel window")
     if d["env_failure"]:
         return "O5", d["env_failure"]
     st = [d["cancel_conn_state_at_snap_" + x] for x in "abc"]
@@ -575,6 +651,7 @@ def diag_checks(chk, ev: Path, log: str, host, guest, tl, passes, fails):
     ctl_fail = next((f[1] for f in fails if f[0] == DIAG_CONTROL), None)
     control_ok = passes.get(DIAG_CONTROL) == 1
     derived = ps.get("derived", {}) if isinstance(ps, dict) else {}
+    net = net_owner_death(lines)
     d = {
         "control_ok": control_ok,
         "control_timed_out": control_ok or (ctl_fail is not None and "timed_out=true" in ctl_fail),
@@ -588,6 +665,13 @@ def diag_checks(chk, ev: Path, log: str, host, guest, tl, passes, fails):
         "control_net_fin_rst": derived.get("control_A_fin_rst_from_cell"),
         "control_slirp_fin_rst_to_guest": derived.get("control_B_fin_rst_from_slirp"),
         "cancel_A_zero_window_from_cell_after_mark": derived.get("cancel_A_zero_window_from_cell_after_mark"),
+        "cancel_A_rst_from_cell": derived.get("cancel_A_rst_from_cell"),
+        "cancel_A_fin_from_cell": derived.get("cancel_A_fin_from_cell"),
+        "cancel_A_zero_window_from_cell_after_first_rst": derived.get("cancel_A_zero_window_from_cell_after_first_rst"),
+        "control_A_rst_from_cell": derived.get("control_A_rst_from_cell"),
+        "control_A_fin_from_cell": derived.get("control_A_fin_from_cell"),
+        "control_A_zero_window_from_cell_after_first_rst": derived.get("control_A_zero_window_from_cell_after_first_rst"),
+        "net_owner_death_in_cancel_window": net["in_cancel_window"], "net_watch_unavailable": net["watch_unavailable"],
         "host_ss_states": {n: ss[n]["states"] for n in DIAG_SS_NAMES},
     }
     for x in "abc":
@@ -596,6 +680,7 @@ def diag_checks(chk, ev: Path, log: str, host, guest, tl, passes, fails):
         d["cancel_conn_state_at_snap_" + x] = None if s is None else (row["state"] if row else "absent")
         d["cancel_conn_queues_at_snap_" + x] = None if row is None else "%d:%d" % (row["tx"], row["rx"])
         d["yes_alive_at_snap_" + x] = None if s is None else yes_alive(s)
+        d["yes_pid_known_at_snap_" + x] = None if s is None else bool(s.get("pidfile"))
         d["yes_ppid_at_snap_" + x] = None if s is None else next((p["ppid"] for p in s["procs"] if p["pid"] == s["pidfile"] and p["comm"] == "(yes)"), None)
         d["host_ss_established_at_" + x] = ss["snap-" + x]["states"].get("ESTAB", 0)
         d["guest_uptime_at_snap_" + x] = None if s is None else s["up"]
@@ -622,7 +707,7 @@ def diag_checks(chk, ev: Path, log: str, host, guest, tl, passes, fails):
     return d
 
 
-def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", carry=None, stage: str = "boot"):
+def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", carry=None, stage: str = "boot", expect_outcome: str = ""):
     """Return (verdict dict, stop rule or None). Pure function of the evidence directory.
 
     `carry` (re-judging after the run's keys were deleted): the earlier verdict's checks, from
@@ -738,6 +823,7 @@ def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", c
     before, after = read("protected-before.txt"), read("protected-after.txt")
     chk("protected-paths-and-cargo-lock-unchanged", bool(before) and before == after)
     diag_out = None
+    net_info = None
     if stage == "boot":
         chk("run-ended-by-gates", tl.get("verdict") == "gates-satisfied", tl.get("verdict"))
     else:
@@ -745,8 +831,16 @@ def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", c
         if stage == "full":
             chk("window-within-4h-cap", 0 < int(tl.get("window_s", 0)) <= MAX_WINDOW_S, tl.get("window_s"))
         passes, fails = full_checks(chk, ev, log, host, guest, stage)
+        net_info = net_owner_death(log.splitlines())
+        chk("net:no-owner-death-watch-unavailable", not net_info["watch_unavailable"],
+            "a host line says `owner death watch unavailable`" if net_info["watch_unavailable"] else "")
+        chk("net:owner-death-reclaim-logged-in-cancel-window", net_info["in_cancel_window"],
+            net_info["owner_death_lines"] or "no `[net] owner death:` line")
         if stage == "diag":
             diag_out = diag_checks(chk, ev, log, host, guest, tl, passes, fails)
+            if expect_outcome:
+                chk("diag:outcome-is-" + expect_outcome, diag_out["outcome"] == expect_outcome,
+                    "outcome %s: %s" % (diag_out["outcome"], diag_out["outcome_why"]))
 
     # STOP classification (cp1-draft.md section 5; the diag stage names them STOP-D1..D5 of cp1-diag-draft.md section 8)
     b1 = all(v["pass"] for k, v in checks.items() if k.startswith("B1:"))
@@ -762,11 +856,13 @@ def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", c
         stop = "STOP-D1" if stage == "diag" else "STOP-6"
     elif stage == "diag" and not checks["argv:one-loopback-hostfwd-tcg-qemu-10.2.0"]["pass"]:
         stop = "STOP-D3"
+    elif stage in ("full", "diag") and net_info["watch_unavailable"]:
+        stop = "STOP-7"
     elif not (b1 and b2 and c1ok and c2ok):
         stop = "STOP-D4" if stage == "diag" else ("STOP-1" if not b1 else "STOP-2" if not b2 else "STOP-3" if not c1ok else "STOP-4")
     elif stage == "diag" and not checks["diag:window-within-1h-cap"]["pass"]:
         stop = "STOP-D5"
-    elif stage in ("full", "diag") and not all(v["pass"] for k, v in checks.items() if k.startswith(("D:", "diag:"))):
+    elif stage in ("full", "diag") and not all(v["pass"] for k, v in checks.items() if k.startswith(("D:", "diag:", "net:"))):
         stop = "MARKER-FAIL"
     gates = {"B1": b1, "B2": b2, "C1": c1ok, "C2": c2ok}
     ok = all(v["pass"] for v in checks.values())
@@ -777,6 +873,9 @@ def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", c
     }
     if diag_out is not None:
         verdict["diag"] = diag_out
+    if net_info is not None:
+        verdict["net"] = {"owner_death_lines": net_info["owner_death_lines"], "watch_unavailable": net_info["watch_unavailable"],
+                          "in_cancel_window": net_info["in_cancel_window"]}
     return verdict, stop
 
 
@@ -792,12 +891,15 @@ def cmd_boot(a):
             print("FAIL: no secrets found under --keys (cannot scan)", file=sys.stderr)
             return 2
     stage = a.cmd if a.cmd in ("full", "diag") else "boot"
+    if a.expect_outcome and (stage != "diag" or a.expect_outcome not in OUTCOMES):
+        print("FAIL: --expect-outcome takes one of %s and is only valid for the diag stage" % ", ".join(OUTCOMES), file=sys.stderr)
+        return 2
     if stage == "diag":
         if carry is not None or not a.pcap:
             print("FAIL: the diag stage needs --keys and --pcap (no carry mode)", file=sys.stderr)
             return 2
         prep_diag(ev, Path(a.pcap), secrets, a.port)
-    verdict, stop = judge_boot(ev, secrets, a.fingerprint, a.port, a.head, carry, stage)
+    verdict, stop = judge_boot(ev, secrets, a.fingerprint, a.port, a.head, carry, stage, a.expect_outcome)
     out = Path(a.verdict_out) if a.verdict_out else ev / "verdict.json"
     out.write_text(json.dumps(verdict, indent=2) + "\n")
     for n, v in verdict["checks"].items():
@@ -806,7 +908,7 @@ def cmd_boot(a):
     if stage == "diag":
         dg = verdict["diag"]
         print("OUTCOME %s: %s (%s)" % (dg["outcome"], dg["outcome_text"], dg["outcome_why"]))
-    label = {"full": "full run (T3-D)", "diag": "diagnostic run (T3-D2)"}.get(stage, "boot stage B1 B2 C1 C2")
+    label = {"full": "full run (T3-D3 class)", "diag": "diagnostic run (T3-D3 class)"}.get(stage, "boot stage B1 B2 C1 C2")
     print(("PASS: Tier-3 " + label) if verdict["pass"] else "FAIL: Tier-3 %s (%s)" % (label, stop or "see checks"))
     return 0 if verdict["pass"] else 1
 
@@ -847,6 +949,7 @@ def main(argv=None):
         b.add_argument("--port", required=True)
         b.add_argument("--head", default="")
         b.add_argument("--pcap", default="", help="diag stage: the raw slirp-netdev pcap (kept outside the evidence directory)")
+        b.add_argument("--expect-outcome", default="", help="diag stage only: adds the check diag:outcome-is-LABEL (O1..O7)")
         b.set_defaults(fn=cmd_boot)
     r = sub.add_parser("archive")
     r.add_argument("--src", required=True)

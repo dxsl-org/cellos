@@ -1,0 +1,21 @@
+{
+  "verdict": "driver-verdict",
+  "elapsed_s": 138.6,
+  "timeline_s": {
+    "svm-root": 1.9,
+    "hv-starting": 3.0,
+    "vcpu-ready": 6.6,
+    "guest-kernel": 6.6,
+    "guest-init": 9.3,
+    "guest-kernel-marker": 9.3,
+    "crng-ready": 9.3,
+    "net-up": 9.3,
+    "apk-installed": 10.2,
+    "sshd-server-listening": 10.4,
+    "ssh-guest-ready": 11.5,
+    "listening": 11.7,
+    "driver-terminal": 135.6
+  },
+  "fatal_line": null,
+  "window_s": 3600
+}

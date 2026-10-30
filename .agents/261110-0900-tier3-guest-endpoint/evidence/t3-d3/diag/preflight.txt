@@ -1,0 +1,10 @@
+stage=diag build_only=0 claim_only=0 confirm=0 window=3600 head=fc496bea0b8424e9bfc44a4e155868420132978b
+dirty files (all inside the closure): scripts/qemu-tier3-ssh-guest-x86.sh scripts/test_tier3_ssh_guest_judge.py scripts/tier3_ssh_guest_judge.py .agents/261110-0900-tier3-guest-endpoint/evidence/t3-d3/baseline.txt .agents/261110-0900-tier3-guest-endpoint/evidence/t3-d3/gate-a.txt
+product pins (rerun-cp1.md 6.2): 18 files OK
+cellos-sign --check rc 0
+qemu=/home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 sha256=169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe QEMU emulator version 10.2.0
+tmp-free-kb=718800952 python=Python 3.12.3 ssh=OpenSSH_9.6p1 Ubuntu-3ubuntu13.20, OpenSSL 3.0.13 30 Jan 2024
+ss=/usr/bin/ss
+apk pins match
+hostfwd loopback port=43539 guest host key fingerprint=SHA256:js8WkDiS2gLhIcTc8sbp0BlvLbdbKrjAMjv9tKTJn80
+token=/home/dmin/cellos/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-d-runs/T3D3_DIAG_CONSUMED-1 claimed

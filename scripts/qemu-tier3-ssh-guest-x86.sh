@@ -18,33 +18,43 @@
 #                  only thing that has to run (T3-B/C).
 #   --stage full   (T3-D) the same image, but QEMU runs until the driver prints `P04-TERMINAL:`
 #                  (the reused ssh scenarios plus the three guest-only ones) or the window ends;
-#                  judged by `tier3_ssh_guest_judge.py full`. Budget: at most two evidence runs;
-#                  a token `RUN_CONSUMED-N` is claimed with O_EXCL under evidence/t3-d-runs/
-#                  just before QEMU starts (the second only for a host/environment error, never
-#                  for a marker FAIL: no fix-and-rerun without a new CP1).
+#                  judged by `tier3_ssh_guest_judge.py full` (21 markers, plus the Net owner-death checks).
+#                  T3-D3 budget (rerun-cp1.md section 3): token `T3D3_FULL_CONSUMED-1` under
+#                  evidence/t3-d-runs/, claimed with O_EXCL just before QEMU starts; evidence: evidence/t3-d3/full.
+#                  The T3-D tokens `RUN_CONSUMED-N` stay as records and are no longer read.
 #   --stage diag   (T3-D2, cp1-diag-draft.md) the same image with the driver built `--features guest-diag`
 #                  and one extra QEMU argument, `-object filter-dump` on the slirp netdev; a host
 #                  `ss` snapshot is taken on every `ssh-guest-diag-mark` serial line and just
 #                  before/after QEMU is stopped; judged by `tier3_ssh_guest_judge.py diag` (outcome
-#                  labels O1..O6). Budget: one stage run, a second only for a host/environment
-#                  error; tokens `DIAG_CONSUMED-N` under evidence/t3-d-runs/ (O_EXCL). Window =
-#                  3 x time-to-listening + 20 min, never above 3600 s. Evidence: evidence/t3-d2.
+#                  labels O1..O7; the T3-D3 rerun judges it with `--expect-outcome O7`: only "reclaimed" passes).
+#                  T3-D3 budget: token `T3D3_DIAG_CONSUMED-1` (O_EXCL); window = 3 x time-to-listening +
+#                  20 min, never above 3600 s. Evidence: evidence/t3-d3/diag (T3-D2 used evidence/t3-d2).
 #   --build-only   stop after the ISO is assembled (no QEMU, no token).
+#   T3-D3 rerun (rerun-cp1.md, approval rerun-approval.md): a stage whose `T3D3_*_CONSUMED-1` token exists is
+#                  refused unless TIER3_T3D3_CONFIRM=1, which claims the single `T3D3_CONFIRM_CONSUMED-1`
+#                  (one confirmation boot in total, either stage, evidence in evidence/t3-d3/confirm-STAGE);
+#                  an existing non-empty evidence directory is refused; the preflight pins the product bytes
+#                  (rerun-cp1.md section 6.2) and needs `scripts/cellos-sign --check` rc 0. For the stages full
+#                  and diag the supervisor aborts on `[net] owner death watch unavailable` (STOP-7).
+#   --claim-only   run the preflight, claim the stage's token and exit (Gate A token tests; refused unless
+#                  TIER3_TOKEN_DIR is a scratch path under /tmp, which is refused in every real run).
 #
 # Usage: CELLBOX_TIER3_WORK=/tmp/cellbox-tier3-XXXX bash scripts/qemu-tier3-ssh-guest-x86.sh --stage boot|full|diag [--build-only]
 # Optional: TIER3_BOOT_WINDOW (seconds; default 3600 for boot = the 60 minute T3-B limit, 7200 for
 #           full; never above the 14400 s = 4 h hard cap),
 #           TIER3_LINGER (seconds to keep running after the gates, default 3),
 #           TIER3_EVIDENCE_OUT (default .agents/261110-0900-tier3-guest-endpoint/evidence/t3-bc for boot,
-#           .../t3-d for full).
+#           .../t3-d3/full for full, .../t3-d3/diag for diag, .../t3-d3/confirm-STAGE with TIER3_T3D3_CONFIRM=1).
 set -euo pipefail
 
 STAGE=""
 BUILD_ONLY=0
+CLAIM_ONLY=0
 while (($#)); do
     case "$1" in
         --stage) [[ $# -ge 2 ]] || { echo "FAIL: --stage needs a value" >&2; exit 1; }; STAGE="$2"; shift 2 ;;
         --build-only) BUILD_ONLY=1; shift ;;
+        --claim-only) CLAIM_ONLY=1; shift ;;
         *) echo "FAIL: unknown argument: $1" >&2; exit 1 ;;
     esac
 done
@@ -52,6 +62,8 @@ case "$STAGE" in
     boot|full|diag) ;;
     *) echo "FAIL: --stage boot, full or diag is required" >&2; exit 1 ;;
 esac
+[[ "${TIER3_T3D3_CONFIRM:-0}" == 0 || "${TIER3_T3D3_CONFIRM}" == 1 ]] || { echo "FAIL: TIER3_T3D3_CONFIRM must be 0 or 1" >&2; exit 1; }
+[[ "$CLAIM_ONLY" == 0 || "$BUILD_ONLY" == 0 ]] || { echo "FAIL: --claim-only and --build-only exclude each other" >&2; exit 1; }
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -64,9 +76,16 @@ if [[ "$STAGE" == full ]]; then WINDOW="${TIER3_BOOT_WINDOW:-7200}"; else WINDOW
 [[ "$WINDOW" =~ ^[0-9]+$ ]] && (( WINDOW > 0 && WINDOW <= 14400 )) || { echo "FAIL: window must be 1..14400 seconds (4 h hard cap)" >&2; exit 1; }
 [[ "$STAGE" != diag ]] || (( WINDOW <= 3600 )) || { echo "FAIL: the diag window is capped at 3600 seconds (STOP-D5)" >&2; exit 1; }
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-case "$STAGE" in full) OUT_NAME=t3-d ;; diag) OUT_NAME=t3-d2 ;; *) OUT_NAME=t3-bc ;; esac
+case "$STAGE" in full) OUT_NAME=t3-d3/full ;; diag) OUT_NAME=t3-d3/diag ;; *) OUT_NAME=t3-bc ;; esac
+[[ "${TIER3_T3D3_CONFIRM:-0}" != 1 || "$STAGE" == boot ]] || OUT_NAME="t3-d3/confirm-$STAGE"
 OUT="${TIER3_EVIDENCE_OUT:-$ROOT/.agents/261110-0900-tier3-guest-endpoint/evidence/$OUT_NAME}"
-TOKEN_DIR="$ROOT/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-d-runs"
+if [[ "$CLAIM_ONLY" == 1 ]]; then
+    [[ "${TIER3_TOKEN_DIR:-}" == /tmp/* && "$TIER3_TOKEN_DIR" != *..* ]] || { echo "FAIL: --claim-only needs TIER3_TOKEN_DIR set to a scratch path under /tmp" >&2; exit 1; }
+    TOKEN_DIR="$TIER3_TOKEN_DIR"
+else
+    [[ -z "${TIER3_TOKEN_DIR:-}" ]] || { echo "FAIL: TIER3_TOKEN_DIR is only for --claim-only (the budget tokens are never redirected in a real run)" >&2; exit 1; }
+    TOKEN_DIR="$ROOT/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-d-runs"
+fi
 QEMU_BIN="${HOME}/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64"
 QEMU_SHA=169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe
 FEATURES="phase02-terminal-profile,phase04-driver-profile"
@@ -103,11 +122,44 @@ PF="$EVIDENCE/preflight.txt"
 : > "$PF"
 pf() { printf '%s\n' "$*" | tee -a "$PF"; }
 pfail() { pf "PREFLIGHT FAIL: $*"; exit 1; }
-pf "stage=$STAGE build_only=$BUILD_ONLY window=$WINDOW head=$(git rev-parse HEAD)"
+pf "stage=$STAGE build_only=$BUILD_ONLY claim_only=$CLAIM_ONLY confirm=${TIER3_T3D3_CONFIRM:-0} window=$WINDOW head=$(git rev-parse HEAD)"
 DIRTY="$(git status --porcelain -uall | cut -c4-)"
 BAD="$(printf '%s\n' "$DIRTY" | grep -Ev '^$|^(\.agents/.*|CHANGELOG\.md|tests/guests/x86-sshd/.*|scripts/(fetch-tier3-sshd-apks-x86\.sh|prepare-tier3-sshd-initramfs-x86\.sh|qemu-tier3-ssh-guest-x86\.sh|tier3_ssh_guest_judge\.py|test_tier3_ssh_guest_judge\.py)|cells/tests/phase04-terminal-driver/(Cargo\.toml|src/ssh\.rs|src/ssh/guest\.rs))$' || true)"
 [[ -z "$BAD" ]] || pfail "working tree has changes outside the S10-11 closure: $(printf '%s' "$BAD" | tr '\n' ' ')"
 pf "dirty files (all inside the closure): $(printf '%s' "$DIRTY" | tr '\n' ' ')"
+# The evidence of earlier runs (T3-D evidence/t3-d, T3-D2 evidence/t3-d2, a spent T3-D3 stage) is never overwritten or mixed.
+if [[ -e "$OUT" ]]; then
+    [[ -d "$OUT" && -z "$(ls -A "$OUT")" ]] || pfail "evidence directory $OUT exists and is not empty"
+fi
+# The product bytes this lane's image is built from (rerun-cp1.md section 6.2): a different commit or a drift is not caught by the dirty-tree check alone.
+PIN_OUT="$(sha256sum -c - 2>&1 <<'PINS' || true
+e49d5fea5559275dff32dbdb2469d2d1ff190462cd94aaa30d63923908c711d2  kernel/src/task/scheduler.rs
+c00a71b14fc774e7d961cc302930812c59449ba70932b7e17c1f935148e13b85  kernel/src/task/syscall.rs
+3e8880236286f30b33afa8a72291eb7fefa58fe5b8c7a4f0fd38aba7127cdf61  kernel/src/task/tcb.rs
+1964bc9d0ee14d9db1fd6d60715c65d4c0cfda1edda01c2999705903ff456ecb  cells/services/net/src/socket_table.rs
+28529be349558c9829d0b76dcb459fef5223efdb7b6d25d06741a1a62c20a6ef  cells/services/net/src/socket_table/tests.rs
+89d9334a01d047c93e3ff97352b7a99a460d9093d4a9dc9ac8d97044e7db811e  cells/services/net/src/service-runtime.rs
+3c12780f690adb5a1629a1ccc0fdcab9515035e66e3a917c6cc369343de807a5  cells/services/net/src/service-runtime-owner-death-tests.rs
+76c486d06511d0ab72c567c2318b05326c88a2e795abdcc917a4116967766ced  cells/services/net/src/main.rs
+2344128b467f292f42d4dc4be6a2b45f56c62c4b6983dbca7be34bf156de54b4  libs/ostd/src/clients/net.rs
+b71ebc459312c34e4282c93bc5140206b43033181b68fe2fb5414929ec170401  cells/tools/cellbox/src/ssh.rs
+5181251ccc712f27f71db9861b1b4feab0a8fec910e43716a7b744a4f8c81130  Cargo.lock
+a9636fee1f3b63b89a1058c5053d9cf446b84aede4cb10808362823539408c64  kernel/src/main.rs
+b71f1ba41c72b36b6295da3c10aef73479ccfc5ec9b2a53b40079cfa80669f27  kernel/Cargo.toml
+c46adb3053a91e3513f525017f4cb69601a87c882f2e8195951c09a0518cc22b  kernel/build.rs
+45834caee5979f219a8df2027958ff6969a5b9d6068da07dea7ce7fb5306a48f  kernel/src/loader/launch_profile/targets.rs
+e887e6acfa4e50dc049db9124866a9bee7f0938686725d31a44f89ccf323a44c  kernel/src/hypervisor/svm_registry.rs
+f4a0301c6ba4710c90c752b562c4b8d8878709e031fbd134c51e44fcc7b92b2b  hal/arch/x86/src/x86_64/vmx.rs
+0c89aae7748fa7fa464b75686258ae9ca3fd3a94ef1debee15e44f73bbe284dd  cells/services/hypervisor/src/boot_x86.rs
+PINS
+)"
+if printf '%s\n' "$PIN_OUT" | grep -qv ': OK$'; then
+    pfail "product bytes differ from rerun-cp1.md section 6.2: $(printf '%s\n' "$PIN_OUT" | grep -v ': OK$' | tr '\n' ' ')"
+fi
+pf "product pins (rerun-cp1.md 6.2): $(printf '%s\n' "$PIN_OUT" | grep -c ': OK$') files OK"
+# F1/F5 precondition of the signing step: a red gate fails here, before any key exists or any token is claimed.
+"$PYTHON_BIN" scripts/cellos-sign --check > "$EVIDENCE/cellos-sign-check.txt" 2>&1 || pfail "scripts/cellos-sign --check is not rc 0 (F1/F5): $(tr '\n' ' ' < "$EVIDENCE/cellos-sign-check.txt")"
+pf "cellos-sign --check rc 0"
 [[ -z "${CELLOS_PRODUCTION:-}" ]] || pfail "CELLOS_PRODUCTION is set"
 [[ -x "$QEMU_BIN" && "$(sha256sum "$QEMU_BIN" | cut -d' ' -f1)" == "$QEMU_SHA" ]] || pfail "pinned QEMU 10.2.0 binary missing or its sha256 differs"
 [[ "$("$QEMU_BIN" --version | head -1)" == *"version 10.2.0"* ]] || pfail "QEMU is not 10.2.0"
@@ -127,6 +179,40 @@ done
 (cd "$W/apk-fetch" && sha256sum --quiet -c "$ROOT/tests/guests/x86-sshd/apk-pins.sha256") || pfail "apk pins do not match $W/apk-fetch"
 pf "apk pins match"
 protected_digest > "$EVIDENCE/protected-before.txt"
+
+# Budget accounting, claimed with O_EXCL (rerun-cp1.md 3.1 and L3): stage diag = T3D3_DIAG_CONSUMED-1, stage full =
+# T3D3_FULL_CONSUMED-1; when that token exists the one confirmation token T3D3_CONFIRM_CONSUMED-1 is claimed, only
+# with TIER3_T3D3_CONFIRM=1 (and only if the stage token exists). The T3-D/T3-D2 tokens RUN_CONSUMED-N and
+# DIAG_CONSUMED-N are records and are not read.
+claim_token() {
+    local first confirm name run
+    case "$STAGE" in
+        diag) first=T3D3_DIAG_CONSUMED-1 ;;
+        full) first=T3D3_FULL_CONSUMED-1 ;;
+        *) pfail "stage $STAGE has no budget token" ;;
+    esac
+    confirm=T3D3_CONFIRM_CONSUMED-1
+    mkdir -p "$TOKEN_DIR"
+    if [[ -e "$TOKEN_DIR/$first" ]]; then
+        [[ "${TIER3_T3D3_CONFIRM:-0}" == 1 ]] || pfail "$first exists: the stage budget is spent (a confirmation boot needs TIER3_T3D3_CONFIRM=1 and a recorded lane fix, rerun-cp1.md 3.4)"
+        [[ ! -e "$TOKEN_DIR/$confirm" ]] || pfail "$confirm exists too: the confirmation boot is spent"
+        name="$confirm"; run=confirm-1
+    else
+        [[ "${TIER3_T3D3_CONFIRM:-0}" != 1 ]] || pfail "TIER3_T3D3_CONFIRM=1 but $first does not exist: nothing to confirm"
+        name="$first"; run=1
+    fi
+    if ! ( set -o noclobber; printf 'stage=%s run=%s head=%s window=%s lane_sha256=%s judge_sha256=%s\n' "$STAGE" "$run" "$(git rev-parse HEAD)" "$WINDOW" \
+            "$(sha256sum "$ROOT/scripts/qemu-tier3-ssh-guest-x86.sh" | cut -d' ' -f1)" "$(sha256sum "$ROOT/scripts/tier3_ssh_guest_judge.py" | cut -d' ' -f1)" \
+            > "$TOKEN_DIR/$name" ) 2>/dev/null; then
+        pfail "could not claim $name (O_EXCL)"
+    fi
+    pf "token=$TOKEN_DIR/$name claimed"
+}
+if [[ "$CLAIM_ONLY" == 1 ]]; then
+    claim_token
+    echo "CLAIM_ONLY_OK stage=$STAGE"
+    exit 0
+fi
 
 echo "==> Generating per-run secrets (private to this run)"
 "$PYTHON_BIN" - "$KEYS" <<'PY'
@@ -270,11 +356,11 @@ KERNEL="$KERNEL_TARGET_DIR/$TARGET/release/cellos-kernel"
 [[ -s "$KERNEL" ]] || { echo "FAIL: kernel not produced" >&2; exit 1; }
 X86_KERNEL="$KERNEL" X86_ISO_ROOT="$W/iso-root" bash scripts/x86/make-iso-ci.sh "$ISO"
 [[ -s "$ISO" ]] || { echo "FAIL: ISO not produced" >&2; exit 1; }
-sha256sum "$REL/cellbox" "$REL/hypervisor" "$REL/phase04-terminal-driver" "$KERNEL" "$ISO" "$EMBEDDED/kernel_fs.img" "$INITRAMFS" \
+sha256sum "$REL/cellbox" "$REL/service-net" "$REL/hypervisor" "$REL/phase04-terminal-driver" "$KERNEL" "$ISO" "$EMBEDDED/kernel_fs.img" "$INITRAMFS" \
     ".alpine-cache-x86/vmlinux" ".alpine-cache-x86/vmlinuz-virt" ".alpine-cache-x86/initramfs-virt" "$KEYS/cell.pub" "$QEMU_BIN" \
     > "$EVIDENCE/provenance.sha256"
-printf 'lane-only build at HEAD: service-hypervisor --features volatile-disk, phase04-terminal-driver --features guest, app-cellbox default features, app-init --features input; kernel features %s; no /POLICY.BIN (kernel Absent branch); private-fixture signing; never a product or promoted image\n' \
-    "$FEATURES" > "$EVIDENCE/provenance-build.txt"
+printf 'lane-only build at HEAD: service-hypervisor --features volatile-disk, phase04-terminal-driver --features %s, app-cellbox default features, app-init --features input; kernel features %s; NET-OD kernel and service-net bytes (HEAD %s); no /POLICY.BIN (kernel Absent branch); private-fixture signing; never a product, canonical or promoted image\n' \
+    "$DRIVER_FEATURES" "$FEATURES" "$(git rev-parse HEAD)" > "$EVIDENCE/provenance-build.txt"
 if [[ "$BUILD_ONLY" == 1 ]]; then
     pf "build-only: ISO assembled, QEMU not started"
     cp "$PF" "$EVIDENCE/preflight.final.txt"
@@ -283,19 +369,7 @@ if [[ "$BUILD_ONLY" == 1 ]]; then
 fi
 ! pgrep -x qemu-system-x86 >/dev/null || pfail "a QEMU process is already running"
 if [[ "$STAGE" == full || "$STAGE" == diag ]]; then
-    # Budget accounting, claimed with O_EXCL: full = RUN_CONSUMED-N (cp1-draft.md section 5, at most two),
-    # diag = DIAG_CONSUMED-N (cp1-diag-draft.md section 2, at most two, the second only for a host error).
-    mkdir -p "$TOKEN_DIR"
-    TOKEN_PREFIX=RUN_CONSUMED
-    [[ "$STAGE" != diag ]] || TOKEN_PREFIX=DIAG_CONSUMED
-    TOKEN=""
-    for n in 1 2; do
-        if ( set -o noclobber; printf 'stage=%s run=%s head=%s window=%s\n' "$STAGE" "$n" "$(git rev-parse HEAD)" "$WINDOW" > "$TOKEN_DIR/$TOKEN_PREFIX-$n" ) 2>/dev/null; then
-            TOKEN="$TOKEN_DIR/$TOKEN_PREFIX-$n"; break
-        fi
-    done
-    [[ -n "$TOKEN" ]] || pfail "both $TOKEN_PREFIX tokens exist: the budget of two runs is spent"
-    pf "token=$TOKEN claimed"
+    claim_token
 fi
 
 echo "==> Running the private ISO ($STAGE stage; one user netdev, one loopback hostfwd to the guest)"
@@ -408,6 +482,9 @@ try:
                 fatal_hit = m.strip(); break
         if fatal_hit:
             verdict = "stop-1-fatal"; break
+        if stage in ("full", "diag") and any("owner death watch unavailable" in l for l in host_lines(t)):
+            # STOP-7 (rerun-cp1.md section 7): the kernel's owner-death grant did not hold in the real boot, or the image is stale.
+            verdict = "stop-7-watch-unavailable"; break
         if "guest-fail" in timeline:
             verdict = "guest-init-failed"; break
         # C1: host-side probe once sshd announced itself (a probe only, not claim evidence).
@@ -471,7 +548,7 @@ cmp -s "$EVIDENCE/protected-before.txt" "$EVIDENCE/protected-after.txt" || echo 
 echo "==> Judging and archiving"
 JUDGE_RC=0
 JUDGE_EXTRA=()
-[[ "$STAGE" != diag ]] || JUDGE_EXTRA=(--pcap "$W/net0.pcap")
+[[ "$STAGE" != diag ]] || JUDGE_EXTRA=(--pcap "$W/net0.pcap" --expect-outcome O7)
 "$PYTHON_BIN" scripts/tier3_ssh_guest_judge.py "$STAGE" --evidence "$EVIDENCE" --keys "$KEYS" --fingerprint "$FP" \
     --port "$PORT" --head "$(git rev-parse HEAD)" ${JUDGE_EXTRA[@]+"${JUDGE_EXTRA[@]}"} || JUDGE_RC=$?
 "$PYTHON_BIN" scripts/tier3_ssh_guest_judge.py archive --src "$EVIDENCE" --dst "$OUT" --keys "$KEYS" \

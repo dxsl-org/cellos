@@ -1,0 +1,4 @@
+# name=snap-c wall=1793366453.873 offset_s=124.696
+# cmd=ss -tnoi ( sport = :43539 or dport = :43539 )
+# rc=0
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess

@@ -1,82 +1,73 @@
 ---
 phase: 9
-title: "Post-fault replacement and stash fencing"
+title: "Authorized state handoff and SAS post-fault replacement"
 status: pending
 priority: P1
-effort: "1.5w"
-dependencies: [7, 8]
+dependencies: [1, 7]
 tier: thinking
 ---
 
-# Phase 09: Post-fault replacement and stash fencing
-
-> **Required — deviation-log:** Log every Decision / Deviation / Surprise in § Deviation Log the moment it occurs.
+# Phase 09: Authorized state handoff and post-fault replacement
 
 ## Overview
 
-Ginux proves that a post-fault replacement is a fresh generation and that it recovers the exact committed record (`/tmp/ginux/ARCHITECTURE.md:154-155`, `specs/kernel/service-supervision-v0.md:105-114`). Cellos has two gaps:
+Apply item 3 to a Cell incarnation, not a whole address space per service. All threads of a retiring SAS Cell, its exported pointers and its device users must quiesce; other admitted Cells continue only within the established safe-Rust/audited-substrate failure boundary.
 
-1. **Stash isolation (security).** Syscalls `StateStash`/`StateRestore`/`StateStashClear` (`kernel/src/task/syscall.rs:7465-7552`) call the unversioned `stash`/`restore`/`remove`. A caller that guesses another Cell's key can read, overwrite or clear it. The versioned helpers (`state_stash.rs:169-212`) are used only by a test mirror (`tests/unit_cspace_smoke.rs:684-745`). Real consumers go through the public syscalls (`libs/ostd/src/hotswap.rs:70-113`).
-2. **No faulted-provider replacement test.** `native_stateful` kills VFS rather than the provider, and runs on RV64 (`cells/tests/bench/src/scenarios/native_stateful.rs:128-260`).
+## Observed state and threat scope
 
-This phase supplies P06 AC-14..AC-18 evidence on x86.
+`StateStash/Restore/Clear` non-argv syscall paths call the global-key `stash/restore/remove` (`kernel/src/task/syscall.rs:7490-7546`); these map caller-chosen keys to bytes without holder checks (`kernel/src/cell/state_stash.rs:24-26,103-147`). `SPAWN_ARGV_KEY` is a separate task-owned path (`syscall.rs:7479-7488,7503-7521,7542-7543`) and must stay separate. Versioned helper metadata is not enforcement on the real syscall path. This is an authority gap even for safe Rust, but not evidence that Tier 1 promised protection from arbitrary malicious native code.
 
-## Requirements
+## Requirements and architecture
 
-- Stash fencing at the syscall layer, without a public ABI change:
-  - The kernel derives `(CellId, generation)` from `caller_id`.
-  - Every non-argv StateStash, StateRestore and StateStashClear goes through one versioned owner-checked entry.
-  - Read, write and clear succeed only for the stored owner `CellId`, with caller generation ≥ the latest writer generation. Older-generation writes and clears are refused (single fenced writer).
-  - The cellbox `SPAWN_ARGV_KEY` special case is preserved as-is.
-  - Stop if the syscall signature or error encoding must change (Law-1).
-- The unused versioned helper API is folded into that entry: one stash implementation, no parallel path.
-- Fault-replacement scenario on the **test-hooks lifecycle image from Phase 07** (1 and 2 CPUs), with a stateful provider (hotswap-demo counter or a dedicated test Cell). Fault injection via test hooks:
-  - (F1) before commit;
-  - (F2) after commit, before reply;
-  - (F3) the Phase 08 AHCI driver faults with a notified command outstanding, after an earlier committed write.
-- Expected outcomes:
-  - F1: client sees `INDETERMINATE`; the replacement restores N−1; a retry with the same request id applies once.
-  - F2: client sees `INDETERMINATE`; the replacement restores N; reconciliation returns the committed result without re-applying.
-  - F3: the Phase 08 ordered markers appear, then the no-FLR outcome (the BDF is refused and the provider reports the device unavailable). If the NVMe FLR branch was proven in Phase 08, the replacement also reads the committed LBA there.
-- Freshness assertions, by execution class:
-  - **All:** new generation; CSpace containing only bootstrap grants; fresh task stacks and image mappings; empty operation state; new DMA lease id (device providers); old-generation handles, epochs and service-registry bindings refused.
-  - **Domain Cells only:** a different address-space root.
-  - **Tier-1 SAS Cells:** the shared root is acknowledged as by design (`loader/domain_admission.rs:179-201`), not asserted.
-- Resource oracle: an explicit before/settled-after vector covering CSpace slots, live operations, stash entries, task stacks, pinned frames, quarantine entries, BDF quarantine states, and IOMMU domains/page tables. Any `unknown` value fails the check; it never counts as zero. P01's aggregate counters are not used; their qualification is open (controlling plan :287-293).
+### 09A — independent early handoff-authority slice (depends only on 01)
 
-## Assumptions
+- Inventory all stash consumers and the real hotswap/recovery coordinator. Bind state to a typed state-domain identity with issuer and object generation, not a caller-controlled hash/name, TID or a raw pointer.
+- Ordinary caller reads/writes/clears require its live holder authority. Recovery uses an explicit supervisor/state-authority-approved transfer bound to source incarnation, destination incarnation, state domain, committed revision, schema and writer epoch. A different CellId can be the legitimate replacement; matching CellId or larger numeric generation is insufficient.
+- Atomically fence the old writer at the authoritative commit boundary. Transfer read-only state first; activate a fresh writer epoch only after the required cutover. Cross-Cell transfer is explicit and bounded; no broad supervisor override.
+- One owned state implementation covers read/write/clear and charges bounded entries/bytes and transfer storage. No first-writer-wins global-name ownership and no old/new versioned tables with competing truths.
+- Preserve task-owned argv staging/inheritance independently. Migrate every real SDK/supervisor/provider consumer and its documentation. If public semantics, handles, errors or transfer proof require a Law-1 amendment, obtain it before implementation; unchanged opcode/layout is not a no-ABI exemption.
 
-- **Claim:** committed provider state for F1/F2 can live in the (now fenced) stash: it survives Cell death but not reboot. Reboot durability belongs to 261025. **Confidence:** high.
-- **Claim:** request-id reconciliation exists in the P04 operation layer. **Confidence:** low. **How to verify:** read the P04 operation ledger and `libs/ostd/src/ipc.rs:41-47,124-126`. If absent, the test provider keeps a provider-local idempotency table, and the evidence ceiling says "provider-local idempotency only"; the P04 gap is recorded.
-- **Claim:** each item in the resource vector has an exact source-owned counter or can be enumerated in test hooks. **Confidence:** medium. **How to verify:** list the source of each item before writing the scenario; any item without a source becomes `unknown` and fails.
+### 09B — software provider crash/restore witness (depends on 07 fixture, not device phase)
+
+- Worker-crash retention may use independent RAM state; reboot/node-loss retention requires the existing CellosFS/durable-state owner (Phase 01 item 7). Do not claim RAM retention as durable storage.
+- Commit `(request identity, mutation result, state revision)` atomically with the mutation at the actual state authority before acknowledging. An idempotency table that dies with the worker is insufficient. No generic transparent retry added to C2C.
+- Fault before commit → restore old revision; after commit/before reply → restore committed revision and reconcile the same request without reapplying; corrupt/missing/wrong-schema/revision state → RecoveryFailed, no Ready publication.
+- Freshness means new holder incarnation, CSpace contents derived only from fresh grants, threads/stacks/TLS, operation ownership and publication binding. SAS root remains shared. Domain root/mapping validity must not alias old authority; allocator address reuse after proven quiescence is allowed, so raw CR3/stack-address inequality is not an identity test.
+- Reacquire issuer-approved handles; never deserialize live handles or reuse raw pointers/driver queues. Partial restore failures unwind or quarantine before Ready. A detected fault outside admitted isolation (unsafe shared corruption/kernel failure) requires node recovery, not a successful Cell restart.
+
+### 09C — device-backed extension (additionally depends on 08)
+
+Use the proven controller-specific retirement/reset strategy to replace a driver with a fresh lease and read the committed record. Do not make 09A/09B wait for physical/FLR support. Device unavailability is a real result, not successful replacement evidence.
 
 ## Related Files
 
-- Modify: `kernel/src/task/syscall.rs` (stash arms), `kernel/src/cell/{state_stash.rs,hotswap.rs,service_registry.rs}`, `libs/ostd/src/hotswap.rs` (doc comments only, unless behavior changes), `tests/unit_cspace_smoke.rs` (drop the mirror, test the real entry), the test provider Cell, an x86 variant of `native_stateful`, and the test-hooks lifecycle runner.
-- Docs: P06 phase evidence; Spec 25 recovery annex (stash ownership and fencing rule).
+`kernel/src/cell/state_stash.rs`, real syscall arms, hotswap/publication coordinator and all actual stash SDK/test consumers found by LSP/reference census; private lifecycle fixture from 07. No kernel-wide generic state service or duplicate issuer ACL.
 
 ## Implementation Steps
 
-1. Single owner-checked stash entry plus host tests: foreign read/overwrite/clear refused; stale-generation write/clear refused; same-generation and newer-generation restore OK; argv path unchanged.
-2. Syscall arms routed to it; the old unversioned functions removed (clean cutover).
-3. x86 stateful scenario with F1–F3 hooks; freshness assertions by class; resource vector.
-4. Run on 1 and 2 CPUs (an AP-execution marker is required). Keep serial logs under this plan directory.
+1. Census consumers, authority and transfer contracts; secure exact admission/Law-1 approvals for 09A.
+2. Implement one owner/transfer-fenced stash path and migrate all consumers. Test foreign read/write/clear, stale writer/transfer, wrong destination and guessed-key attacks; retain valid planned replacement and argv controls.
+3. Run 09B on actual 1/2-CPU workload with AP work: multiple threads, in-flight operation, pinned/exported SAS state, before/after-commit faults, failed restore and delayed old writer.
+4. Observe actual result/state through consumers, not only diagnostic markers. Record before/settled-after owned resource vectors; quarantine may legitimately retain charged resources after fault, must be explicit and bounded. Unknown accounting fails the no-leak claim, not zero.
+5. Run 09C after 08. Run durable two-boot/power-cut recovery only through the admitted storage owner; absence leaves that separate profile unqualified.
 
 ## Success Criteria
 
-- [ ] Host stash tests pass (the 6 cases above), and a syscall-level negative test on x86 shows a foreign Cell refused for read, write and clear.
-- [ ] F1, F2 and F3 pass with the stated outcomes on 1 and 2 CPUs.
-- [ ] Class-appropriate freshness assertions pass. The old-handle negative control is refused, with a marker.
-- [ ] Across 10 fault/replace cycles, the resource vector is equal before and after settling, with zero unknowns.
+- [ ] 09A refuses unauthorized reads/writes/clear and replayed/misbound transfer while valid cross-Cell replacement and argv inheritance work.
+- [ ] 09B restores exact committed business state/outcomes; old writer cannot commit; no incomplete destination becomes Ready.
+- [ ] Whole-Cell thread/operation/grant retirement is observed on 2 CPUs; no Drop-only cleanup assumption or retained old pointers.
+- [ ] SAS/shared-root and Domain/private-root cases use incarnation/object identity rather than physical-address inequality.
+- [ ] Ten cycles reconcile released vs explicitly charged quarantine state, with zero unknowns for any no-leak claim.
+- [ ] 09C proves fresh authorized device lease and readback after 08; any durable claim requires the named failure-class evidence.
 
-## Security Considerations
+## Assumptions
 
-This fixes cross-Cell stash read/overwrite/clear. That is a live isolation bug independent of ginux, so it should go first if Phase 09 is split (log the split).
+Actual transfer/publication rights and state-domain identity representation require source/consumer verification; do not assume monotonic Cell generations implement them. Resource counters must be source-owned and complete before qualifying accounting.
 
-## Risk Notes
+## Security and risk assessment
 
-If reconciliation is provider-local only, F2's ceiling says so. Undo: revert. Stash contents are volatile, so there is no migration.
+Names and LBI do not authorize state transfer. A bad ownership retrofit can block legitimate recovery or expose state to a reused ID. Undo with known-good image plus cold boot; committed external effects and new persistent fencing epochs are not undone by binary revert. No persistent format is changed by this planning document.
 
 ## Deviation Log
 
-None.
+SAS review: explicit destination-bound transfer replaces CellId-equality/generation-order rules; split early authority fix, software recovery and device extension; removed fresh-address assertions and volatile dedup shortcut.

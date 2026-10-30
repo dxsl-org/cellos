@@ -1,0 +1,4 @@
+# name=cancel-done wall=1793366383.875 offset_s=54.698
+# cmd=ss -tnoi ( sport = :43539 or dport = :43539 )
+# rc=0
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess

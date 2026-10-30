@@ -1,98 +1,60 @@
 ---
 phase: 4
-title: "x86 privileged-entry hardening"
+title: "SAS-compatible x86 entry safety and measured protection options"
 status: pending
 priority: P1
-effort: "1.5-2w"
-dependencies: [2, 3]
+dependencies: [1]
 tier: thinking
 ---
 
-# Phase 04: x86 privileged-entry hardening
-
-> **Required — deviation-log:** Log every Decision / Deviation / Surprise in § Deviation Log the moment it occurs.
+# Phase 04: SAS-compatible x86 entry safety
 
 ## Overview
 
-The scout confirmed these gaps:
+IST/GS entry correctness is necessary even for trusted SAS Cells: CPL and address-space isolation are separate dimensions. LBI does not make hardware exception delivery safe. Conversely, Ginux's mandatory copy-boundary model must not replace Cellos's admitted shared-memory ownership contracts.
 
-- Every IDT gate uses `ist: 0` (`hal/arch/x86/src/x86_64/idt.rs:51-60,80-87`).
-- An NMI or #MC between `swapgs` and the kernel RSP load (`syscall.rs:229-234`) runs at CPL0 on the user-controlled stack.
-- #DF from a kernel stack overflow has no good stack.
-- SMEP/SMAP/UMIP are off, and `IA32_FMASK` is `0x0300` (IF+DF), so AC survives SYSCALL (`syscall.rs:153`).
+## Requirements and architecture
 
-User-copy fault recovery (F2) already exists; this phase extends it only for SMAP.
-
-## Requirements
-
-- Functional:
-  - Full architectural TSS (`rsp[3]`, `ist[7]`, iomap base). Per CPU (`MAX_CPUS`), three distinct IST stacks: IST1 NMI, IST2 #DF, IST3 #MC. Each is 16 KiB with an unmapped 4 KiB guard page below and above.
-  - IDT vectors 2/8/18 use IST1/2/3. Frame decoding treats IST vectors as always carrying saved RSP/SS, even when the saved CS is CPL0. The current `EntryFrame::old_rsp` decodes RSP only on a privilege change (`idt/entry.rs:29-45`).
-  - **Paranoid GS** for NMI and #MC: decide kernel vs user GS by reading `IA32_GS_BASE` against the per-CPU kernel base, not from the saved CS. Swap on entry only if needed; restore exactly on exit.
-  - Policy decision **D-04a**: NMI = diagnostic marker + IRET (it is a fatal halt today). #DF and #MC stay fatal halt, with a dump (vector, RIP, decoded old RSP, CR2; MCG_STATUS/MCi_STATUS for the reporting bank).
-  - AC is clear at every kernel entry:
-    - `IA32_FMASK` adds bit 18.
-    - The common IDT entry clears AC in live RFLAGS before any Rust code runs, with a sequence that is valid on CPUs without SMAP (`pushfq; andq $~0x40000,(%rsp); popfq`). Saved user RFLAGS stays intact for IRET.
-  - SMEP and UMIP enabled when CPUID reports them (no SAS dependency).
-  - SMAP (**hard gate, D-04b**) is enabled only after every x86 kernel access to U=1 memory outside the guarded copy is migrated to `TaskCopyView`/guarded copies. Known examples:
-    - non-native-domain raw slices (`copy_glue/mod.rs:229-245,280-290`);
-    - `vcpu_regs` (`kernel/src/hypervisor/svm_registry.rs:483-503`).
-
-    Until the migration is complete, SMAP stays off in **every** profile that admits Tier-1 SAS Cells. `native-domains` is a default feature and still admits Tier-1 device Cells (`kernel/Cargo.toml:70,133-138`, `loader/domain_admission.rs:179-201`), so it is not a safety boundary.
-  - `stac`/`clac` scoped to the guarded copy commit only; the #PF landing pad executes `clac`.
-- Non-functional: no `libs/api` change. User-copy error stays `ViError::InvalidInput`.
-
-## Architecture
-
-The SYSCALL instruction sequence is unchanged (no push/call before `mov %gs:0,%rsp`). Its window is made safe by IST plus paranoid GS. Nested NMIs are avoided by construction: the NMI handler takes no faults and never executes `iretq` from a nested exception. A future NMI watchdog/IPI user must add the Linux nested-NMI protocol first; this constraint is documented in Spec 02.
-
-## Assumptions
-
-- **Claim:** QEMU monitor `nmi` and `mce` inject on q35 TCG and KVM. **Confidence:** medium. **How to verify:** run `nmi` and `mce 0 1 0xb200000000000000 0x5 0 0` against the current IDT image; observe the existing fatal markers.
-- **Claim:** a 4 KiB guard can be unmapped inside a static stack reservation in the x86 kernel mapper. **Confidence:** medium. **How to verify:** read the mapper used for task stack guards (`kernel/src/task/stack.rs`).
-- **Claim:** the SMAP migration set is small enough to finish in this phase. **Confidence:** low. **How to verify:** the step 1 inventory. If it is large, SMAP enablement is split into its own phase (recorded as a deviation), and SMEP/UMIP/IST/AC still land here.
+- Preserve Tier 1 shared page tables and admitted Rust ownership paths. No automatic Tier 2 conversion, new CR3 switch, bounce buffer, generic per-IPC revalidation or mandatory copying introduced to enable SMAP.
+- Extend architectural TSS and vector-specific IST for NMI/#DF/#MC, per supported CPU. Derive stack capacity from actual frame/handler nesting and measured high-water, not an unexplained fixed 16 KiB. Preallocate, charge, align and guard both ends before use; map supervisor-only NX in every CR3 that can receive entry, including a private-domain CR3 before software switches it.
+- Decode saved old RSP/SS for same-CPL IST entry. Select GS/CR3 entry behavior safely during SWAPGS and address-space transition windows; do not trust saved CS alone. Per-CPU arrays must not alias during AP initialization or migration.
+- Preserve the existing fatal NMI/#DF/#MC policy initially. Do not adopt log-and-return as a side effect of stack hardening. A future resumable NMI requires separate policy approval and nested-NMI/GS/CR3 proof.
+- Fatal diagnostics use bounded preallocated state and an emergency lock-free/nonblocking output path, never normal logger, allocator, scheduler or locks that an interrupted CPU may hold. If output is unavailable, retain the record and halt; no false ordinary-Cell recovery for kernel corruption.
+- Clear live AC on every kernel entry before normal kernel work, without destroying saved RFLAGS. On return, restore interrupted kernel AC only as part of an actually active authorized access scope; a Cell cannot use its saved AC to bypass SMAP on entry.
+- SMEP/SMAP/UMIP are CPUID/profile-qualified defense in depth, not LBI substitutes. Evaluate independently. Inventory supervisor execution of shared U=1 code before SMEP and legitimate supervisor access to U=1 mappings before SMAP.
+- For existing authorized SAS pointers/grants/rings/MMIO, retain source-owned lifetime/pin and bounded borrowed access. An audited access window may cover the operation without an intermediate copy. Keep `stac` scope non-preemptible or explicitly balanced across entry/return, error and fault fixup; no blanket AC window for all syscalls.
+- User pointers from Tier 2 remain validated and fault-recoverable. Pointer presence or SAS locality is not resource authority.
 
 ## Related Files
 
-- Modify: `hal/arch/x86/src/x86_64/{gdt.rs,idt.rs,idt/entry.rs,idt/dispatch.rs,idt/policy.rs,idt/fatal.rs,syscall.rs,boot.rs}`, `hal/arch/x86/src/x86_64.rs`, `kernel/src/main.rs` (init order), `kernel/src/task/user_copy/guard.rs`, `kernel/src/task/copy_glue/mod.rs` and every SAS raw-access site found in step 1, `scripts/mutable-globals.toml`.
-- Runners: `scripts/qemu-x86_64-idt-test.sh` (QEMU monitor socket + injection), `scripts/x86/qemu-domain-test.sh` (SMAP/SMEP/UMIP cases, Tier-1 device and hypervisor Cells included).
-- Docs: `docs/specs/02-memory.md` §4, `docs/specs/19-hardware-isolation-layers.md`, `docs/security-model.md`.
+HAL `hal/arch/x86/src/x86_64/{gdt.rs,idt.rs,idt/entry.rs,idt/dispatch.rs,idt/fatal.rs,syscall.rs}` and page-table mappings; kernel entry init/AP setup and `kernel/src/task/{user_copy,copy_glue}` only where required. Reuse IDT/domain runners. Classify added state under Phase 02 when that gate is available.
 
 ## Implementation Steps
 
-1. **SMAP inventory:** list every x86 kernel access to U=1 memory outside `user_copy`, for each profile. Log the list and the D-04b scope.
-2. TSS layout plus per-CPU IST stacks with guards. Boot self-check marker: `X86-IST: cpu=N ist1=.. ist2=.. ist3=.. guards=ok`.
-3. IST-aware gate constructor and vector assignment; IST-aware frame decoding.
-4. NMI/#MC paranoid-GS entry; NMI log+IRET; #DF/#MC fatal dump.
-5. AC clearing (FMASK + common IDT entry); SMEP/UMIP enablement.
-6. Migrate the step-1 sites; then enable SMAP (CPUID-gated) with stac/clac in the guard.
-7. Test hooks (`test-hooks` builds only):
-   - (a) **Deterministic entry-window NMI:** a test-only stackless rendezvous immediately after `swapgs`, before the kernel RSP load. It writes a marker byte to a per-CPU slot and the serial port with no stack use, spins on a per-CPU release flag, the runner injects `nmi`, then releases. Expect `X86-NMI: ist=1 gs=kernel origin=syscall-window` and normal syscall completion.
-   - (b) NMI during CPL3 and during CPL0 kernel work; GS identity asserted before and after.
-   - (c) Kernel stack overflow → `X86-DF: ist=2 old_rsp=<guard addr>` → halt.
-   - (d) `mce` → `X86-MC: ist=3 bank=1` → halt.
-   - (e) A CPL3 task sets AC, then enters via `int 0x80`, a timer interrupt and a #PF. Each handler asserts live AC=0.
-   - (f) Kernel read of a user page outside the guard → SMAP #PF; (g) kernel jump to a user page → SMEP #PF; (h) CPL3 `sgdt` → #GP (UMIP).
-   - (i) Tier-1 device Cell and hypervisor `vcpu_regs` paths pass on the SMAP image.
-8. Re-run the existing IDT and domain gates; run the Phase 03 bench and log the overhead.
+1. Map supported CPU/CR3/CPL transitions, known U=1 accesses and callback execution. Establish source-pinned old behavior.
+2. Install guarded per-CPU IST mappings before loading gates. Use layout/offset checks against architectural TSS and hardware frame formats.
+3. Implement assembly-safe GS/CR3 entry and AC handling; preserve fatal policy and bounded diagnostics.
+4. Add a private assembly-only rendezvous at each vulnerable transition stage. It must be reachable with invalid/noncanonical user RSP, mapped in that CR3, use no user-stack or ordinary Rust call, and be releasable via a prevalidated host/debug or handler mechanism. Record the mechanism before implementing it; do not assume a magic runner flag can write guest memory.
+5. Inject NMI/#DF/#MC where QEMU supports it; require vector, origin, actual IST RSP bounds and recorded terminal outcome. Fatal-policy tests use a fresh boot per case. Where #MC/nesting cannot be faithfully injected, mark that scenario pending; `int 18` is not hardware MCE proof.
+6. Evaluate protection options without copying regressions: if an option cannot preserve legitimate SAS ownership/data paths with bounded audited windows, leave that option disabled for that profile and record its remaining acceptance gate, never declare it qualified. Entry correctness still lands independently.
+7. Run existing IDT/domain regression scenarios plus native SAS IPC, driver MMIO/DMA and relevant hypervisor paths; compare Phase 03 costs when available.
 
 ## Success Criteria
 
-- [ ] `bash scripts/build-x86_64-idt-test-ci.sh && bash scripts/qemu-x86_64-idt-test.sh` passes cases 7a–7e on TCG, and on KVM where available.
-- [ ] `bash scripts/build-x86_64-domain-test-ci.sh && bash scripts/x86/qemu-domain-test.sh` passes 7f–7i and the existing copy/fault cases.
-- [ ] Negative controls: the 7a rendezvous on the pre-change image faults at the window (no IST) with a recorded marker; 7e on an image without the IDT AC-clear shows AC=1. The logs are kept.
-- [ ] The Phase 03 KVM budget still passes. Overhead is recorded.
-- [ ] `mutable-globals.py --check` passes with the IST and rendezvous state classified.
-- [ ] If SMAP is deferred by step 1, the deviation entry names the remaining sites and their owner.
+- [ ] Deterministic entry-window injection uses the expected guarded IST under CPL0/CPL3 and private/shared CR3, with exact recorded outcome; negative control lacks that protection.
+- [ ] NMI/#DF/#MC stacks cannot alias per CPU; AP execution and guard faults are observed where supported.
+- [ ] Existing copied IPC and authorized local borrowed/grant paths still work; no new bounce copies or CR3 switch on SAS path.
+- [ ] Enabled protection options pass positive authorized access and negative unauthorized access/AC-set entry tests; disabled/unsupported options are labeled pending, not PASS.
+- [ ] Fault fixup and nested exception paths balance AC. Production image contains no rendezvous/injection path.
 
-## Security Considerations
+## Assumptions
 
-This closes the CPL0-on-user-stack window and the AC-set entry bypass, and adds kernel-execute and kernel-access barriers against user pages. The rendezvous hook exists only in `test-hooks` builds; the success criteria include a check that production images have no rendezvous symbol (`nm` on the kernel ELF).
+QEMU support for real MCE, AP-targeted NMI and exact transition rendezvous must be established before claiming coverage. Private mappings of entry substrate must be inspected, not inferred from a global kernel mapping.
 
-## Risk Notes
+## Security and risk assessment
 
-A paranoid-GS bug corrupts per-CPU state silently; 7a/7b assert GS identity. D-04a (NMI non-fatal) matches the Linux default. Undo: revert and cold boot; no persistent state.
+A bad entry mapping/GS change is node-fatal; use isolated images and preserve a known-good cold-boot artifact. Do not promote LBI into a hostile-code guarantee. Undo by reverting this slice and cold boot; no persistent state changed.
 
 ## Deviation Log
 
-None.
+SAS review: dropped mandatory SMAP/copy migration and unrequested resumable NMI; protection knobs are distinct qualified options. Removed Phase 02/03 tooling/KVM from the security-fix critical path.

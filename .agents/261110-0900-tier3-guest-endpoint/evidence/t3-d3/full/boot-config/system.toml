@@ -1,0 +1,8 @@
+# Embedded boot settings, loaded before init starts.
+version = 1
+
+[logging]
+level = "info"
+
+[memory]
+default_cell_heap_mib = 16

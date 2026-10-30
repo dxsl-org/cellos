@@ -1,77 +1,58 @@
 ---
 phase: 8
-title: "Ordered device quiescence"
+title: "Device-specific quiescence without SAS availability regression"
 status: pending
 priority: P1
-effort: "1.5w"
-dependencies: [4, 7]
+dependencies: [1, 7]
 tier: thinking
 ---
 
-# Phase 08: Ordered device quiescence
-
-> **Required — deviation-log:** Log every Decision / Deviation / Surprise in § Deviation Log the moment it occurs.
+# Phase 08: Device-specific quiescence
 
 ## Overview
 
-Cellos already splits generic IPC timeouts into `PRE_DISPATCH_TIMEOUT` and `INDETERMINATE` (`async_ipc.rs:524-542`). Its retirement funnel is IOMMU revoke → BDF release → frame release (`task.rs:1805-1824`). It never disables interrupt delivery, never clears bus mastering (only `enable_bus_master` exists, `pcie_ecam.rs:688-728`) and never resets the device. This phase adds the ginux ordering (`/tmp/ginux/specs/kernel/device-dma-lease-v0.md:23-37`) kernel-side, plus the prepared/notified distinction in an **x86 PCI** driver Cell, without public ABI.
+Item 2 is valuable for SAS: Rust ownership does not stop a device writing freed DMA memory. But PCIe FLR is only one reset mechanism, not the definition of safe restart. Keep admitted Tier-1 driver Cells and their direct authorized MMIO/DMA path; do not move drivers to private domains or proxy every I/O through the kernel.
 
-The existing virtio-blk/virtio-net Cells are VirtIO-MMIO only and enumerate nothing on x86 (`cells/drivers/virtio-blk/src/device.rs:139-165`), so they are not the oracle.
+## Requirements and architecture
 
-## Requirements
-
-- Kernel retirement order for every BDF owned by the retiring Cell:
-  1. Admission cut (existing).
-  2. **Interrupt quiescence, all modes:** set Command.INTx-Disable; for every MSI and MSI-X capability present, clear enable and set the MSI-X function mask, regardless of which one the driver used; read back each control register. Synchronize already-routed vectors: wait for any in-flight handler on all CPUs, then drop pending entries for that BDF before releasing routing ownership.
-  3. Clear `CMD_BUS_MASTER` and read it back.
-  4. FLR if PCIe DevCap.FLR is set; wait 100 ms; confirm the vendor ID reads non-`0xFFFF`. Without FLR, the BDF becomes `quarantined-until-reset` and is not re-grantable until cold boot (fail closed).
-  5. IOMMU context clear + IOTLB flush (existing; retained-on-failure semantics kept).
-  6. Quarantine acknowledgement / frame release (existing), only after step 5 completes.
-  7. BDF release.
-- Capability data for steps 2 and 4 comes from a **bounded, range-checked ECAM capability walk at retirement time**, not from cached enumeration metadata. `register_device` stubs carry `msix: None` / `pm: None` (`pcie_ecam.rs:850-934`). No Platform Cell registration ABI change.
-- Each step emits a test-hook marker with the BDF and step number. A step failure retains authority and frames (existing retry) and logs the step.
-- Driver side, in **AHCI** (x86-verified: `cells/drivers/ahci/src/main.rs`, two-boot persistence evidence) and, if Assumption 2 holds, **NVMe**: per-command state `Prepared` (slot built, not issued) vs `Notified` (PxCI / doorbell written). A prepared timeout retries in the same generation. A notified timeout exits through the existing abnormal-exit path, which the supervisor treats as restart-required. Clients of dispatched operations get the existing `INDETERMINATE`.
-- The new generation gets a fresh DMA lease and re-initializes the controller; it never inherits port or queue state.
-- e1000/igb/xhci inherit the kernel ordering automatically. Their driver-side tracking is out of scope and listed in Spec 04.
-
-## Assumptions
-
-- **Claim:** the supervisor restart path needs no new public exit code. **Confidence:** medium. **How to verify:** read the `NotifyOnExit` payload in `cells/tools/init/src/supervisor.rs`. If a new code is required, stop: that is a Law-1 change.
-- **Claim:** the NVMe Cell runs on x86 q35 with `-device nvme`, and QEMU's nvme model advertises FLR. **Confidence:** low. **How to verify:** boot the NVMe Cell on q35 and dump DevCap via the retirement-time walk. If either fails, the FLR re-grant path stays **unproven** and is reported as such. AHCI (ICH9, expected no FLR) proves the fail-closed path.
-- **Claim:** the IRQ routing table permits a per-BDF "drop pending" operation. **Confidence:** medium. **How to verify:** read the x86 MSI/IOAPIC routing in `hal/arch/x86` and `kernel/src/task/drivers`.
+- State machine at the actual device publication boundary: prepared/not-issued → issued/notified → completion acknowledged, or ambiguous completion requiring reconciliation/quiescence. Use AHCI PxCI or an actually supported NVMe doorbell; existing virtio-MMIO Cells are not assumed to be q35 PCI drivers.
+- A timeout after hardware issue does not undo effects. Do not retry a write/command blindly, regardless of descriptor ownership. A pre-issue retry must preserve reservation/buffer lifetime and prove no notification occurred.
+- Admission cut closes software submission, then quiescence fences all relevant users: running/switching CPU contexts, delayed workers, borrowed SAS slices, grant/ring users, IRQ callbacks, TLB mappings and DMA. No Rust Drop assumption on fatal faults.
+- Stop/mask every enabled interrupt delivery path actually supported (INTx/MSI/MSI-X). Synchronize in-flight handlers and generation-bound routes before reuse; an AP that cannot acknowledge means quarantine, not a fabricated completed drain.
+- A bounded validated kernel capability walk supplies current PCI controls even for Platform Cell metadata stubs. Do not trust driver-provided cached offsets or expand registration ABI merely for this metadata.
+- Select a reviewed reset/quiesce strategy per controller and ownership/reset domain: FLR where supported; documented AHCI port/controller stop/reset or NVMe disable/reset where sufficient. Verify DMA/queue/interrupt inactivity with the hardware-specific contract. Reset affecting sibling ports/functions requires authority over all affected owners, never blanket bus reset.
+- Disable bus mastering where part of that strategy, revoke translation, wait for required IOMMU/cache/TLB completion and acknowledge pins only after actual quiescence. Exact ordering and posted-write drain requirements are device-specific; do not mistake a config bit readback, 100 ms delay or vendor-ID readability for proof of reset completion.
+- Device re-grant and DMA-frame reclamation have separate proof obligations. If translation fencing proves DMA isolation but reset state is unknown, frames may be reclaimed only with that independent proof; the device stays quarantined. If either proof is absent, retain the affected resources and charge them.
+- Reuse the existing retirement funnel and source-owned per-device state, not a second lifecycle manager. Deferred/retry work is bounded and never waits under scheduler locks.
 
 ## Related Files
 
-- Modify: `kernel/src/task/drivers/{pcie_ecam.rs,iommu_x86.rs,iommu.rs}`, `kernel/src/task.rs` (retirement funnel), `kernel/src/resource_registry.rs` (`quarantined-until-reset`), x86 IRQ routing (per step 2), `kernel/src/memory/pin.rs` (order assertion), `cells/drivers/ahci/src/**`, `cells/drivers/nvme/src/**` (conditional).
-- Tests: a test hook in AHCI (and NVMe) that issues a command and never polls completion; a variant that delays before issue (the prepared case); an x86 runner step on the test-hooks lifecycle image from Phase 07.
-- Docs: `docs/specs/04-hardware.md` (retirement order, driver coverage), Spec 25 annex (device mapping of INDETERMINATE), `scripts/unsafe-allowlist.toml` (only for reviewed driver unsafe changes).
+`kernel/src/task.rs` retirement funnel, `kernel/src/task/drivers/{pcie_ecam,iommu_x86,iommu}.rs`, IRQ route ownership, `kernel/src/memory/pin.rs`, resource registry and the selected AHCI/NVMe Cell. No public status/opcode assumed necessary; exact semantic deltas still require approval.
 
 ## Implementation Steps
 
-1. Retirement-time capability walk plus helpers: `disable_intx`, `quiesce_msi_all`, `disable_bus_master`, `flr_if_supported`, each with readback.
-2. IRQ sync/drop per BDF.
-3. Reorder the funnel; add `quarantined-until-reset`; make grant refuse such BDFs.
-4. AHCI request state and timeout split; NVMe if Assumption 2 holds.
-5. Test hooks plus runner: a notified stall → ordered markers 2→7 → supervisor restart → a new generation is refused the AHCI BDF (no FLR, marker) / NVMe re-inits and reads a known LBA (FLR).
-6. Negative controls: a prepared delay retries without exit; for interrupt modes, run AHCI with MSI and with INTx forced (QEMU `-global ich9-ahci.msi=off` or a driver flag) and check the markers show both disabled.
+1. Establish a source-pinned AHCI q35 fixture and actual IRQ/flush/DMA support. Write a per-controller table of issue point, drain acknowledgement, reset scope, completion evidence and unavailable outcome.
+2. Implement ordered retirement by that contract, preserving existing pin/quarantine semantics. Record each verified stage and outstanding obligations.
+3. Inject timeout before issue, after issue and during quiescence; retain a second unaffected Cell and, when applicable, a sibling device owner to detect overbroad reset.
+4. Restart the selected controller through its supported strategy with a fresh incarnation/lease; read back a known committed record. Also inject failed reset/IOTLB/CPU acknowledgement and prove non-reuse.
+5. Use the Phase 07 private image as a runner fixture only; its authority redesign is not required. Reuse another already adequate isolated runner if available. Entry hardening (04) is required only for a subcase using its new NMI/MCE hooks, not for ordinary device-timeout testing.
 
 ## Success Criteria
 
-- [ ] The x86 runner shows the ordered markers for a notified stall on AHCI. The outcome matches the no-FLR branch (BDF refused after restart).
-- [ ] The NVMe FLR branch passes, or is explicitly reported as unproven with the failing assumption.
-- [ ] A prepared timeout retries in the same generation (no exit marker).
-- [ ] INTx-only and MSI runs both show interrupt quiescence with readback.
-- [ ] `bash scripts/qemu-tier3-hostile-runner-x86.sh build/vicell-x86-virtio-hostile.iso` and the lifecycle test still pass.
-- [ ] Test-hooks assertion: no frame leaves quarantine before the IOTLB flush completes.
+- [ ] Real AHCI prepared vs issued timeout paths differ as specified; uncertain writes are never implicitly replayed.
+- [ ] Supported controller quiesce/reset yields a fresh driver/lease and successful readback, without requiring FLR where an equivalent documented reset works.
+- [ ] Failed reset or CPU/IRQ/IOMMU acknowledgement retains the unsafe device/resources; no premature pin release, route reuse or new BDF grant.
+- [ ] Independent Cell/device owner survives replacement; direct admitted SAS MMIO/DMA path remains intact.
+- [ ] No public API changes or production injection bypass without separate approved delta.
 
-## Security Considerations
+## Assumptions
 
-This closes interrupt/DMA activity during teardown and stops device state leaking into the next generation. Fail-closed (no FLR → no re-grant) trades availability for safety: for AHCI on this lane, a driver fault means a node reboot for that controller, and that is documented in Spec 04.
+AHCI/NVMe reset/IRQ/FLR capabilities are established by actual fixture and hardware contract before implementation. QEMU success qualifies only the exact software/device model, never physical hardware.
 
-## Risk Notes
+## Security and risk assessment
 
-AHCI's no-re-grant behavior reduces availability compared with today; the maintainer must accept it in Phase 01 (listed as decision D-08). Physical FLR timing is P10 scope. Undo: revert the funnel order; BDFs quarantined in a test run need a cold boot.
+LBI cannot substitute for DMA/IRQ/TLB fencing. No-FLR no longer means automatic permanent lockout; missing safe reset/isolation evidence still fails closed. Revert source plus cold boot a known-good image; device effects already issued cannot be undone by binary revert.
 
 ## Deviation Log
 
-None.
+SAS review: replaced blanket FLR-only quarantine with controller-specific proof; removed arbitrary 04 dependency and preserved driver hot path. No completion claimed for absent hardware evidence.

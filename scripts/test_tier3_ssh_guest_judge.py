@@ -46,13 +46,18 @@ SHA = {
     "vmlinux": J.PINS["vmlinux"], "vmlinuz-virt": J.PINS["vmlinuz-virt"], "initramfs-virt": J.PINS["initramfs-virt"],
     "qemu-system-x86_64": J.PINS["qemu-system-x86_64"],
 }
+RECLAIM_LINE = "[net] owner death: cell 7 gen 1: aborted 1 TCP, released 0 other"
+WATCH_LINE = "[net] owner death watch unavailable; socket reclaim deferred"
 
 
-def full_serial(skip=(), dup=(), fail=(), extra="", logins=4, accepted_after=4, selfkill=1, final="PASS checks=21", accepted_before=6):
+def full_serial(skip=(), dup=(), fail=(), extra="", logins=4, accepted_after=4, selfkill=1, final="PASS checks=21", accepted_before=6,
+                reclaim="in", watch_unavailable=False):
     """A passing T3-D serial log: the boot-stage lines plus the 16 reused markers, the three guest
     scenarios and the guest sshd's log lines, with knobs to break one rule at a time."""
     out = ["[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)",
            "[vfs] CellosFS Native mounted at existing volume", SERIAL.rstrip("\n"), "P04 START", "P04 PASS shell-prompt"]
+    if watch_unavailable:  # True: a host line; "guest": the same text on a [guest-uart] line
+        out.insert(2, ("[guest-uart] " if watch_unavailable == "guest" else "") + WATCH_LINE)
     port = [50000]
 
     def session(ok=True):
@@ -73,12 +78,18 @@ def full_serial(skip=(), dup=(), fail=(), extra="", logins=4, accepted_after=4, 
             out.append("P04 %s %s" % ("FAIL" if name in fail else "PASS", name))
         if name in dup:
             out.append("P04 PASS " + name)
+    if reclaim == "before":
+        out.append(RECLAIM_LINE)
     out.append("P04 INFO p09-case ssh-guest-cancel-producer")
+    if reclaim in ("in", "zero"):
+        out.append(RECLAIM_LINE if reclaim == "in" else RECLAIM_LINE.replace("aborted 1", "aborted 0"))
     for _ in range(accepted_after):
         session()
     for name in J.GUEST_MARKERS:
         if name not in skip:
             out.append("P04 %s %s" % ("FAIL" if name in fail else "PASS", name))
+        if name == "ssh-guest-cancel-producer" and reclaim == "after":
+            out.append(RECLAIM_LINE)
     out += ["P04 INFO ssh-guest-selfkill dispatch=accepted", "P04 INFO ssh-guest-ledger selfkill=%d lines=1" % selfkill,
             "P04 INFO ssh-guest-logins %d" % logins, "P04 PASS session-a-close", "P04-TERMINAL: " + final, extra]
     return "\n".join(l for l in out if l) + "\n"
@@ -322,6 +333,69 @@ class FullJudge(unittest.TestCase):
         v, stop = self.judge(serial=full_serial(extra="[guest-uart] x %s" % PASSWORD))
         self.assertEqual(stop, "STOP-5")
 
+    def test_marker_set_is_21_and_includes_the_cancel_marker(self):
+        self.assertEqual(len(J.EXPECTED_MARKERS), 21)
+        self.assertIn("ssh-guest-cancel-producer", J.EXPECTED_MARKERS)
+        self.assertEqual(len(set(J.EXPECTED_MARKERS)), 21)
+
+    def test_cancel_marker_fail_and_missing_are_marker_fail(self):
+        v, stop = self.judge(serial=full_serial(fail=("ssh-guest-cancel-producer",)))
+        self.assertEqual(stop, "MARKER-FAIL")
+        self.assertIn("ssh-guest-cancel-producer", v["checks"]["D:no-FAIL-markers"]["detail"])
+        self.assertIn("D:marker:ssh-guest-cancel-producer", self.failed(v))
+        v, stop = self.judge(serial=full_serial(skip=("ssh-guest-cancel-producer",)))
+        self.assertEqual(stop, "MARKER-FAIL")
+        self.assertIn("D:marker:ssh-guest-cancel-producer", self.failed(v))
+
+    def test_terminal_must_be_pass_with_exactly_21_checks(self):
+        for final in ("PASS checks=22", "PASS checks=20", "FAIL failures=1 checks=21"):
+            v, stop = self.judge(serial=full_serial(final=final))
+            self.assertIn("D:driver-final-verdict", self.failed(v), final)
+            self.assertEqual(stop, "MARKER-FAIL")
+        v, stop = self.judge(serial=full_serial(final="PASS checks=21", extra="P04-TERMINAL: PASS checks=21"))
+        self.assertIn("D:driver-final-verdict", self.failed(v))  # exactly once
+
+    def test_clean_full_run_records_the_reclaim_line(self):
+        v, stop = self.judge()
+        self.assertTrue(v["pass"], self.failed(v))
+        self.assertEqual(v["net"]["watch_unavailable"], False)
+        self.assertEqual(v["net"]["in_cancel_window"], True)
+        (line,) = v["net"]["owner_death_lines"]
+        self.assertEqual((line["cell"], line["gen"], line["aborted"], line["released"], line["in_cancel_window"]), (7, 1, 1, 0, True))
+        self.assertGreater(line["serial_line"], 0)
+
+    def test_reclaim_line_rules_in_the_full_stage(self):
+        for how in ("none", "zero", "before", "after"):
+            v, stop = self.judge(serial=full_serial(reclaim=how))
+            self.assertIn("net:owner-death-reclaim-logged-in-cancel-window", self.failed(v), how)
+            self.assertEqual(stop, "MARKER-FAIL", how)
+            self.assertFalse(v["pass"], how)
+
+    def test_stop7_in_the_full_stage(self):
+        v, stop = self.judge(serial=full_serial(watch_unavailable=True))
+        self.assertEqual(stop, "STOP-7")
+        self.assertIn("net:no-owner-death-watch-unavailable", self.failed(v))
+        self.assertTrue(v["net"]["watch_unavailable"])
+        # even when the gates are incomplete (the line is printed before the guest is up)
+        v, stop = self.judge(serial=full_serial(watch_unavailable=True).replace("[hv-x86] vCPU ready — entering run loop\n", ""))
+        self.assertEqual(stop, "STOP-7")
+        # a secret still wins (STOP-5 is evaluated first)
+        v, stop = self.judge(serial=full_serial(watch_unavailable=True, extra="[guest-uart] x %s" % PASSWORD))
+        self.assertEqual(stop, "STOP-5")
+
+    def test_watch_text_on_a_guest_uart_line_is_not_stop7(self):
+        v, stop = self.judge(serial=full_serial(watch_unavailable="guest"))
+        self.assertTrue(v["pass"], self.failed(v))
+        self.assertIsNone(stop)
+        self.assertFalse(v["net"]["watch_unavailable"])
+
+    def test_boot_stage_has_no_net_checks(self):
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys = make_run(Path(d))
+            v, _ = J.judge_boot(ev, J.secrets_from(keys), FP, PORT, "head")
+        self.assertFalse([k for k in v["checks"] if k.startswith("net:")])
+        self.assertNotIn("net", v)
+
 
 # ---- T3-D2 diagnostic stage -------------------------------------------------------------------
 
@@ -475,6 +549,58 @@ class PcapSummary(unittest.TestCase):
         self.assertEqual(len(s["cancel"]["A"]["after_cancel"]), 10)
         self.assertTrue(s["cancel"]["A"]["after_cancel_truncated"])
 
+    def test_cell_rst_sets_rst_and_not_fin(self):
+        s = self.summarize(conn_pkts(1050.0, 49100, 5500, rst_cell=1058.0)
+                           + conn_pkts(1090.0, 49200, 5600, rst_cell=1100.5, fin_slirp=1100.6))
+        d = s["derived"]
+        self.assertIs(d["cancel_A_rst_from_cell"], True)
+        self.assertIs(d["cancel_A_fin_from_cell"], False)
+        self.assertEqual(d["cancel_A_zero_window_from_cell_after_first_rst"], 0)
+        self.assertIs(d["cancel_B_fin_rst_from_slirp"], True)
+        self.assertIs(d["control_A_rst_from_cell"], True)
+        self.assertIs(d["control_A_fin_from_cell"], False)
+        self.assertEqual(d["control_A_zero_window_from_cell_after_first_rst"], 0)
+        self.assertEqual(s["cancel"]["A"]["first_rst"], {"t": 100.5, "dir": "c2s"})
+
+    def test_no_rst_and_fin_only(self):
+        s = self.summarize(conn_pkts(1050.0, 49100, 5500, fin_cell=1058.0, fin_slirp=1058.1)
+                           + conn_pkts(1090.0, 49200, 5600, fin_cell=1120.0, zero_after=1105.0))
+        d = s["derived"]
+        self.assertIs(d["cancel_A_rst_from_cell"], False)
+        self.assertIs(d["cancel_A_fin_from_cell"], True)
+        self.assertEqual(d["cancel_A_zero_window_from_cell_after_first_rst"], 0)  # no RST: nothing is "after" it
+        self.assertIs(d["control_A_fin_from_cell"], True)
+        self.assertIs(d["control_A_rst_from_cell"], False)
+
+    def test_fin_and_rst_set_both(self):
+        s = self.summarize(conn_pkts(1050.0, 49100, 5500, fin_cell=1058.0) + conn_pkts(1090.0, 49200, 5600, fin_cell=1100.4, rst_cell=1100.5))
+        self.assertIs(s["derived"]["cancel_A_rst_from_cell"], True)
+        self.assertIs(s["derived"]["cancel_A_fin_from_cell"], True)
+
+    def test_zero_window_ack_counts_only_after_the_first_rst(self):
+        def zero(t):
+            return (t, tcp_frame(CELL, SLIRP, 49200, int(PORT), ACK, win=0))
+        base = conn_pkts(1050.0, 49100, 5500, fin_cell=1058.0, fin_slirp=1058.1) + conn_pkts(1090.0, 49200, 5600, rst_cell=1100.5, fin_slirp=1100.6)
+        key = "cancel_A_zero_window_from_cell_after_first_rst"
+        self.assertEqual(self.summarize(base + [zero(1095.0)])["derived"][key], 0)
+        self.assertEqual(self.summarize(base + [zero(1105.0)])["derived"][key], 1)
+        self.assertEqual(self.summarize(base + [zero(1095.0), zero(1105.0), zero(1106.0)])["derived"][key], 2)
+
+    def test_a_rst_from_slirp_also_starts_the_after_rst_count(self):
+        pk = conn_pkts(1090.0, 49200, 5600) + [(1100.5, tcp_frame(SLIRP, CELL, int(PORT), 49200, RST | ACK)),
+                                               (1105.0, tcp_frame(CELL, SLIRP, 49200, int(PORT), ACK, win=0))]
+        d = self.summarize(pk)["derived"]
+        self.assertIs(d["cancel_A_rst_from_cell"], False)
+        self.assertEqual(d["cancel_A_zero_window_from_cell_after_first_rst"], 1)
+
+    def test_unidentified_cancel_connection_gives_none_for_the_new_keys(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "n.pcap"
+            pcap_file(p, sorted(conn_pkts(1050.0, 49100, 5500, fin_cell=1058.0), key=lambda x: x[0]))
+            s = J.summarize_pcap(p, int(PORT), self.PORTS, {"cancel-done": 1000.0}, T_START)
+        for k in ("cancel_A_rst_from_cell", "cancel_A_fin_from_cell", "cancel_A_zero_window_from_cell_after_first_rst"):
+            self.assertIsNone(s["derived"][k], k)
+
 
 class SnapParsing(unittest.TestCase):
     def test_parse_snap(self):
@@ -507,6 +633,22 @@ def diag_data(**kw):
     return d
 
 
+O7_KEYS = ("cancel_A_rst_from_cell", "cancel_A_fin_from_cell", "cancel_A_zero_window_from_cell_after_first_rst",
+           "net_owner_death_in_cancel_window", "net_watch_unavailable")
+
+
+def o7_data(**kw):
+    """Observed data of a passing O7 ("reclaimed") diag run."""
+    d = diag_data(cancel_marker_pass=True, net_fin_rst_after_cancel=True, slirp_fin_rst_to_guest_after_cancel=True,
+                  cancel_A_rst_from_cell=True, cancel_A_fin_from_cell=False, cancel_A_zero_window_from_cell_after_first_rst=0,
+                  net_owner_death_in_cancel_window=True, net_watch_unavailable=False)
+    for x in "abc":
+        d.update({"cancel_conn_state_at_snap_" + x: "absent", "yes_alive_at_snap_" + x: False, "yes_pid_known_at_snap_" + x: True,
+                  "host_ss_established_at_" + x: 0})
+    d.update(kw)
+    return d
+
+
 class Classify(unittest.TestCase):
     def label(self, **kw):
         return J.classify(diag_data(**kw))[0]
@@ -535,19 +677,62 @@ class Classify(unittest.TestCase):
         self.assertEqual(self.label(control_ok=False, control_timed_out=False, control_gone=False), "O6")
 
 
+class ClassifyO7(unittest.TestCase):
+    def test_o7_positive(self):
+        self.assertEqual(J.classify(o7_data())[0], "O7")
+        # the connection may be in a closing state at snap-a/b as long as it is not ESTABLISHED/CLOSE_WAIT, and is absent at snap-c
+        self.assertEqual(J.classify(o7_data(cancel_conn_state_at_snap_a="TIME_WAIT", cancel_conn_state_at_snap_b="FIN_WAIT2"))[0], "O7")
+
+    def test_each_row_alone_prevents_o7(self):
+        flips = [{"control_ok": False}, {"control_closed_logged": False}, {"control_closed_logged": None},
+                 {"control_producer_started": False}, {"control_producer_started": None},
+                 {"control_producer_stopped_at_snap_a": False}, {"control_producer_stopped_at_snap_a": None},
+                 {"cancel_marker_pass": False},
+                 {"cancel_A_rst_from_cell": False}, {"cancel_A_rst_from_cell": None},
+                 {"cancel_A_fin_from_cell": True}, {"cancel_A_fin_from_cell": None},
+                 {"cancel_A_zero_window_from_cell_after_first_rst": 1}, {"cancel_A_zero_window_from_cell_after_first_rst": None},
+                 {"cancel_A_zero_window_from_cell_after_first_rst": False},
+                 {"slirp_fin_rst_to_guest_after_cancel": False}, {"slirp_fin_rst_to_guest_after_cancel": None},
+                 {"cancel_conn_state_at_snap_c": "TIME_WAIT"}, {"cancel_conn_state_at_snap_c": None}, {"cancel_conn_state_at_snap_a": None},
+                 {"env_failure": "ss missing"},
+                 {"net_owner_death_in_cancel_window": False}, {"net_owner_death_in_cancel_window": None},
+                 {"net_watch_unavailable": True}, {"net_watch_unavailable": None}]
+        for x in "abc":
+            flips += [{"cancel_conn_state_at_snap_" + x: "ESTABLISHED"}, {"cancel_conn_state_at_snap_" + x: "CLOSE_WAIT"},
+                      {"yes_alive_at_snap_" + x: True}, {"yes_alive_at_snap_" + x: None}, {"yes_pid_known_at_snap_" + x: False},
+                      {"host_ss_established_at_" + x: 1}, {"host_ss_established_at_" + x: None}]
+        for kw in flips:
+            self.assertNotEqual(J.classify(o7_data(**kw))[0], "O7", kw)
+
+    def test_data_without_the_new_keys_is_never_o7(self):
+        for k in O7_KEYS + ("yes_pid_known_at_snap_a",):
+            d = o7_data()
+            del d[k]
+            self.assertNotEqual(J.classify(d)[0], "O7", k)
+        self.assertEqual(J.classify(diag_data())[0], "O1")  # the historical O1 fixture is unchanged
+
+    def test_o4_shape_is_not_o7(self):
+        d = o7_data(cancel_conn_state_at_snap_a="ESTABLISHED", yes_alive_at_snap_a=True, host_ss_established_at_a=2)
+        self.assertEqual(J.classify(d)[0], "O4")
+
+
 class DiagRun:
     """A consistent synthetic T3-D2 evidence directory: serial log, host ss files, marks, pcap."""
 
     def __init__(self, control="pass", control_closed=True, cancel="fail", snap_states=("01", "01", "01"), yes=(True, True, True),
-                 cancel_fin_cell=False, ss_estab=(2, 2, 2), extra="", control_started=True, control_stopped=True, pcap_shift=0.0):
+                 cancel_fin_cell=False, ss_estab=(2, 2, 2), extra="", control_started=True, control_stopped=True, pcap_shift=0.0,
+                 reclaim="in", watch_unavailable=False, cancel_rst_cell=False, cancel_fin_slirp=False, zero_ack=1105.0, zero_before_rst=False):
         self.kw = dict(control=control, control_closed=control_closed, cancel=cancel, snap_states=snap_states, yes=yes,
                        cancel_fin_cell=cancel_fin_cell, ss_estab=ss_estab, extra=extra, control_started=control_started,
-                       control_stopped=control_stopped, pcap_shift=pcap_shift)
+                       control_stopped=control_stopped, pcap_shift=pcap_shift, reclaim=reclaim, watch_unavailable=watch_unavailable,
+                       cancel_rst_cell=cancel_rst_cell, cancel_fin_slirp=cancel_fin_slirp, zero_ack=zero_ack, zero_before_rst=zero_before_rst)
 
     def serial(self):
         k = self.kw
         out = ["[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)",
                "[vfs] CellosFS Native mounted at existing volume", SERIAL.rstrip("\n"), "P04 START", "P04 PASS shell-prompt"]
+        if k["watch_unavailable"]:
+            out.insert(2, ("[guest-uart] " if k["watch_unavailable"] == "guest" else "") + WATCH_LINE)
         port = [50000]
 
         def session(ok=True):
@@ -574,7 +759,11 @@ class DiagRun:
         else:
             out.append("P04 FAIL ssh-guest-consumer-close-producer timed_out=true gone_ok=false")
         session()  # the control's `p9 gone`
+        if k["reclaim"] == "before":
+            out.append(RECLAIM_LINE)
         out.append("P04 INFO p09-case ssh-guest-cancel-producer")
+        if k["reclaim"] in ("in", "zero"):
+            out.append(RECLAIM_LINE if k["reclaim"] == "in" else RECLAIM_LINE.replace("aborted 1", "aborted 0"))
         self.cancel_port = session()
         out.append("P04 INFO ssh-guest-diag-mark cancel-done off_ms=0")
         for i, x in enumerate("abc"):
@@ -601,6 +790,8 @@ class DiagRun:
                 session()  # `p9 gone`
                 out.append("P04 PASS ssh-guest-cancel-producer" if k["cancel"] == "pass" else
                            "P04 FAIL ssh-guest-cancel-producer cancelled=true gone_ok=false")
+                if k["reclaim"] == "after":
+                    out.append(RECLAIM_LINE)
         session()
         out.append("P04 PASS ssh-guest-fault-may-have-run")
         session()
@@ -626,20 +817,33 @@ class DiagRun:
             rows = "".join("ESTAB 0 0 127.0.0.1:%d 127.0.0.1:%d\n" % (41000 + j, 40123) for j in range(estab))
             (ev / ("host-ss-%s.txt" % n)).write_text("# name=%s wall=%s offset_s=1\n# cmd=ss\n# rc=0\nState Recv-Q Send-Q\n%s" % (n, wall, rows))
         (ev / "diag-marks.json").write_text(json.dumps({"qemu_start_wall": T_START, "marks": marks}))
+        cancel_pk = conn_pkts(1090.0, 49200, self.cancel_port, fin_cell=1120.0 if k["cancel_fin_cell"] else None,
+                              fin_slirp=1100.6 if k["cancel_fin_slirp"] else None, rst_cell=1100.5 if k["cancel_rst_cell"] else None,
+                              zero_after=k["zero_ack"])
+        if k["zero_before_rst"]:
+            cancel_pk.append((1095.0, tcp_frame(CELL, SLIRP, 49200, int(PORT), ACK, win=0)))
         pk = (conn_pkts(1050.0, 49100, self.control_port, fin_cell=1058.0 if k["control_closed"] else None,
-                        fin_slirp=1058.1 if k["control_closed"] else None)
-              + conn_pkts(1090.0, 49200, self.cancel_port, fin_cell=1120.0 if k["cancel_fin_cell"] else None, zero_after=1105.0))
+                        fin_slirp=1058.1 if k["control_closed"] else None) + cancel_pk)
         pcap = Path(root) / "net0.pcap"
         pcap_file(pcap, sorted([(t + k["pcap_shift"], f) for t, f in pk], key=lambda x: x[0]))
         J.prep_diag(ev, pcap, J.secrets_from(keys), PORT)
         return ev, keys, pcap
 
 
+def reclaimed(**kw):
+    """A synthetic O7 run: the cancel marker PASSes, the cell resets flow A (no FIN, no zero-window ACK after the RST), slirp
+    ends flow B, the guest connection is gone at every snapshot, `yes` is gone, host ss has no ESTAB, the Net cell logs the reclaim."""
+    base = dict(cancel="pass", snap_states=(None, None, None), yes=(False, False, False), ss_estab=(0, 0, 0),
+                cancel_rst_cell=True, cancel_fin_slirp=True, zero_ack=None)
+    base.update(kw)
+    return DiagRun(**base)
+
+
 class DiagJudge(unittest.TestCase):
-    def run_diag(self, run=None, **kw):
+    def run_diag(self, run=None, expect="", **kw):
         with tempfile.TemporaryDirectory() as d:
             ev, keys, _ = (run or DiagRun()).write(Path(d), **kw)
-            return J.judge_boot(ev, J.secrets_from(keys), FP, PORT, "head", stage="diag")
+            return J.judge_boot(ev, J.secrets_from(keys), FP, PORT, "head", stage="diag", expect_outcome=expect)
 
     def failed(self, v):
         return {k for k, c in v["checks"].items() if not c["pass"]}
@@ -795,6 +999,134 @@ class DiagJudge(unittest.TestCase):
     def test_shifted_pcap_stamps_are_judged_like_plain_ones(self):
         v, _ = self.run_diag(DiagRun(pcap_shift=25200.0))
         self.assertEqual(v["diag"]["outcome"], "O1", v["diag"]["outcome_why"])
+
+
+class ReclaimedDiag(unittest.TestCase):
+    """O7, STOP-7, the reclaim-line rules and --expect-outcome end to end (synthetic evidence directories)."""
+
+    def run_diag(self, run, expect="O7", **kw):
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys, _ = run.write(Path(d), **kw)
+            return J.judge_boot(ev, J.secrets_from(keys), FP, PORT, "head", stage="diag", expect_outcome=expect)
+
+    def failed(self, v):
+        return {k for k, c in v["checks"].items() if not c["pass"]}
+
+    def test_o7_run_passes_with_expect_outcome(self):
+        v, stop = self.run_diag(reclaimed())
+        self.assertTrue(v["pass"], self.failed(v))
+        self.assertIsNone(stop)
+        self.assertEqual(v["diag"]["outcome"], "O7", v["diag"]["outcome_why"])
+        self.assertTrue(v["checks"]["diag:outcome-is-O7"]["pass"])
+        self.assertIs(v["diag"]["cancel_A_rst_from_cell"], True)
+        self.assertIs(v["diag"]["cancel_A_fin_from_cell"], False)
+        self.assertEqual(v["diag"]["cancel_A_zero_window_from_cell_after_first_rst"], 0)
+        self.assertIs(v["diag"]["net_owner_death_in_cancel_window"], True)
+        self.assertEqual(v["net"]["owner_death_lines"][0]["aborted"], 1)
+
+    def test_o7_without_expect_outcome_has_no_outcome_check(self):
+        v, stop = self.run_diag(reclaimed(), expect="")
+        self.assertNotIn("diag:outcome-is-O7", v["checks"])
+        self.assertEqual(v["diag"]["outcome"], "O7")
+
+    def test_o7_allows_closing_states_early_and_a_zero_window_ack_before_the_rst(self):
+        v, stop = self.run_diag(reclaimed(snap_states=("06", "05", None), zero_ack=None, zero_before_rst=True))
+        self.assertTrue(v["pass"], self.failed(v))
+        self.assertEqual(v["diag"]["outcome"], "O7")
+
+    def test_expect_outcome_o7_fails_an_o1_run(self):
+        v, stop = self.run_diag(DiagRun())
+        self.assertEqual(v["diag"]["outcome"], "O1")
+        self.assertIn("diag:outcome-is-O7", self.failed(v))
+        self.assertFalse(v["pass"])
+        self.assertEqual(stop, "MARKER-FAIL")
+        # without the reclaim line as well (what the T3-D2 boot really looked like)
+        v, stop = self.run_diag(DiagRun(reclaim="none"))
+        self.assertEqual({"diag:outcome-is-O7", "net:owner-death-reclaim-logged-in-cancel-window"} - self.failed(v), set())
+        self.assertEqual(stop, "MARKER-FAIL")
+
+    def test_o4_shaped_run_is_not_o7(self):
+        run = reclaimed(snap_states=("01", "01", None), yes=(True, True, False), ss_estab=(2, 2, 0))
+        v, stop = self.run_diag(run)
+        self.assertEqual(v["diag"]["outcome"], "O4")
+        self.assertIn("diag:outcome-is-O7", self.failed(v))
+        self.assertEqual(stop, "MARKER-FAIL")
+
+    def test_each_observation_alone_prevents_o7_end_to_end(self):
+        cases = {
+            "no RST from the cell": dict(cancel_rst_cell=False),
+            "FIN as well as RST": dict(cancel_fin_cell=True),
+            "zero-window ACK after the RST": dict(zero_ack=1105.0),
+            "no end towards the guest": dict(cancel_fin_slirp=False),
+            "host ESTAB at snap-c": dict(ss_estab=(0, 0, 1)),
+            "yes alive at snap-b": dict(yes=(False, True, False)),
+            "ESTABLISHED at snap-a": dict(snap_states=("01", None, None)),
+            "CLOSE_WAIT at snap-b": dict(snap_states=(None, "08", None)),
+            "present at snap-c": dict(snap_states=(None, None, "06")),
+            "cancel marker FAIL": dict(cancel="fail"),
+            "control close not logged": dict(control_closed=False),
+            "control producer still alive": dict(control_stopped=False),
+            "control producer never started": dict(control_started=False),
+            "no reclaim line": dict(reclaim="none"),
+            "reclaim line aborted 0": dict(reclaim="zero"),
+            "reclaim line before the cancel case": dict(reclaim="before"),
+            "reclaim line after the cancel verdict": dict(reclaim="after"),
+        }
+        for name, kw in cases.items():
+            v, _ = self.run_diag(reclaimed(**kw))
+            self.assertNotEqual(v["diag"]["outcome"], "O7", name)
+            self.assertIn("diag:outcome-is-O7", self.failed(v), name)
+            self.assertFalse(v["pass"], name)
+
+    def test_reclaim_line_rules_in_the_diag_stage(self):
+        for how in ("none", "zero", "before", "after"):
+            v, stop = self.run_diag(reclaimed(reclaim=how))
+            self.assertIn("net:owner-death-reclaim-logged-in-cancel-window", self.failed(v), how)
+            self.assertEqual(stop, "MARKER-FAIL", how)
+
+    def test_stop7_in_the_diag_stage(self):
+        v, stop = self.run_diag(reclaimed(watch_unavailable=True))
+        self.assertEqual(stop, "STOP-7")
+        self.assertIn("net:no-owner-death-watch-unavailable", self.failed(v))
+        self.assertEqual(v["diag"]["net_watch_unavailable"], True)
+        self.assertEqual(v["diag"]["outcome"], "O6")  # never O7 with the watch unavailable
+        # even when the gates are incomplete: the label stays STOP-7, not STOP-D4
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys, _ = reclaimed(watch_unavailable=True).write(Path(d))
+            (ev / "serial.log").write_text((ev / "serial.log").read_text().replace("[hv-x86] vCPU ready — entering run loop\n", ""))
+            _, stop = J.judge_boot(ev, J.secrets_from(keys), FP, PORT, "head", stage="diag", expect_outcome="O7")
+        self.assertEqual(stop, "STOP-7")
+        # the rules before it still win: argv (STOP-D3), a secret (STOP-D2)
+        _, stop = self.run_diag(reclaimed(watch_unavailable=True), argv=ARGV)
+        self.assertEqual(stop, "STOP-D3")
+        _, stop = self.run_diag(reclaimed(watch_unavailable=True, extra="[guest-uart] x %s" % PASSWORD))
+        self.assertEqual(stop, "STOP-D2")
+
+    def test_watch_text_on_a_guest_uart_line_is_not_stop7(self):
+        v, stop = self.run_diag(reclaimed(watch_unavailable="guest"))
+        self.assertTrue(v["pass"], self.failed(v))
+        self.assertIsNone(stop)
+
+    def test_cli_expect_outcome(self):
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys, pcap = reclaimed().write(Path(d))
+            base = ["diag", "--evidence", str(ev), "--keys", str(keys), "--fingerprint", FP, "--port", PORT, "--pcap", str(pcap)]
+            self.assertEqual(J.main(base + ["--expect-outcome", "O7"]), 0)
+            verdict = json.loads((ev / "verdict.json").read_text())
+            self.assertEqual(verdict["diag"]["outcome"], "O7")
+            self.assertEqual(verdict["net"]["owner_death_lines"][0]["aborted"], 1)
+            self.assertFalse(verdict["net"]["watch_unavailable"])
+            self.assertEqual(J.main(base + ["--expect-outcome", "O1"]), 1)
+            self.assertEqual(J.main(base + ["--expect-outcome", "O9"]), 2)
+            self.assertEqual(J.main(base), 0)  # no expectation: the O7 run passes, as any diag run that satisfies the checks
+
+    def test_cli_full_has_net_in_the_verdict_and_rejects_expect_outcome(self):
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys = make_run(Path(d), serial=full_serial(), verdict="driver-verdict", full=True)
+            base = ["full", "--evidence", str(ev), "--keys", str(keys), "--fingerprint", FP, "--port", PORT]
+            self.assertEqual(J.main(base), 0)
+            self.assertEqual(json.loads((ev / "verdict.json").read_text())["net"]["owner_death_lines"][0]["aborted"], 1)
+            self.assertEqual(J.main(base + ["--expect-outcome", "O7"]), 2)
 
 
 class Archive(unittest.TestCase):

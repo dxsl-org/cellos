@@ -1,0 +1,41 @@
+# Gate A (offline) - T3-D3 rerun, executed 2026-10-30 by RerunExec; HEAD fc496bea0b8424e9bfc44a4e155868420132978b (docs-only commit on top of d42e70d6a)
+Pre-edit SHA-256 re-verified equal to rerun-cp1.md 6.1 before the first edit:
+  7c0e3d570f80c03276a5a61550e1d39db6983e4e3ced6dd13041e6740e7a0e74  scripts/qemu-tier3-ssh-guest-x86.sh
+  ff723b7485737657ee957d87402376c81bd7711226d7053575a54bc032b48f6a  scripts/tier3_ssh_guest_judge.py
+  0831939e219f1172b1b6fd7f200b22564ef38ac51ff13f188aefc1a8c8a99dff  scripts/test_tier3_ssh_guest_judge.py
+Post-edit SHA-256:
+8b3a8b0cb440e8fd92cfcfe19a5bc58d8121ed302564fb6bab2bcf2cea1fcb45  scripts/qemu-tier3-ssh-guest-x86.sh
+93bbcb2d44f5d09050e00fec759c0f245a2f908555bd058598ddfcd64ef376b4  scripts/tier3_ssh_guest_judge.py
+994db398f075616b366db398236c7dd99d8fdd2aae44196f63ccbef26eb55249  scripts/test_tier3_ssh_guest_judge.py
+1. bash -n lane: ok; py_compile judge+tests: ok; unittest scripts.test_tier3_ssh_guest_judge: Ran 98 tests in 0.324s
+OK (69 existing + 29 new)
+2. token/guard tests against scratch dirs (--claim-only), real token dir untouched (still DIAG_CONSUMED-1,-2 RUN_CONSUMED-1 only):
+[diag-1] rc=0 :: token=/tmp/t3d3-tok.SMyw/T3D3_DIAG_CONSUMED-1 claimed|CLAIM_ONLY_OK stage=diag|
+[diag-2-refused] rc=1 :: PREFLIGHT FAIL: T3D3_DIAG_CONSUMED-1 exists: the stage budget is spent (a confirmation boot needs TIER3_T3D3_CONFIRM=1 and a recorded lane fix, rerun-cp1.md 3.4)|
+[diag-confirm-claims] rc=0 :: token=/tmp/t3d3-tok.SMyw/T3D3_CONFIRM_CONSUMED-1 claimed|CLAIM_ONLY_OK stage=diag|
+[diag-3-refused] rc=1 :: PREFLIGHT FAIL: T3D3_CONFIRM_CONSUMED-1 exists too: the confirmation boot is spent|
+[diag-plain-after-confirm-refused] rc=1 :: PREFLIGHT FAIL: T3D3_DIAG_CONSUMED-1 exists: the stage budget is spent (a confirmation boot needs TIER3_T3D3_CONFIRM=1 and a recorded lane fix, rerun-cp1.md 3.4)|
+tokens: T3D3_CONFIRM_CONSUMED-1 T3D3_DIAG_CONSUMED-1 
+[full-confirm-without-first-refused] rc=1 :: PREFLIGHT FAIL: TIER3_T3D3_CONFIRM=1 but T3D3_FULL_CONSUMED-1 does not exist: nothing to confirm|
+[full-1] rc=0 :: token=/tmp/t3d3-tok.ETdH/T3D3_FULL_CONSUMED-1 claimed|CLAIM_ONLY_OK stage=full|
+[full-2-refused] rc=1 :: PREFLIGHT FAIL: T3D3_FULL_CONSUMED-1 exists: the stage budget is spent (a confirmation boot needs TIER3_T3D3_CONFIRM=1 and a recorded lane fix, rerun-cp1.md 3.4)|
+[full-confirm-claims] rc=0 :: token=/tmp/t3d3-tok.ETdH/T3D3_CONFIRM_CONSUMED-1 claimed|CLAIM_ONLY_OK stage=full|
+[full-3-refused] rc=1 :: PREFLIGHT FAIL: T3D3_CONFIRM_CONSUMED-1 exists too: the confirmation boot is spent|
+[diag-after-full-confirm-ok-if-diag-first-missing] rc=0 :: token=/tmp/t3d3-tok.ETdH/T3D3_DIAG_CONSUMED-1 claimed|CLAIM_ONLY_OK stage=diag|
+[diag-confirm-refused-confirm-spent] rc=1 :: PREFLIGHT FAIL: T3D3_CONFIRM_CONSUMED-1 exists too: the confirmation boot is spent|
+tokens: T3D3_CONFIRM_CONSUMED-1 T3D3_DIAG_CONSUMED-1 T3D3_FULL_CONSUMED-1 
+stage=full run=1 head=fc496bea0b8424e9bfc44a4e155868420132978b window=7200 lane_sha256=8b3a8b0cb440e8fd92cfcfe19a5bc58d8121ed302564fb6bab2bcf2cea1fcb45 judge_sha256=93bbcb2d44f5d09050e00fec759c0f245a2f908555bd058598ddfcd64ef376b4
+[claim-only-without-tokendir] rc=1 :: FAIL: --claim-only needs TIER3_TOKEN_DIR set to a scratch path under /tmp|
+[claim-only-tokendir-outside-tmp] rc=1 :: FAIL: --claim-only needs TIER3_TOKEN_DIR set to a scratch path under /tmp|
+[real-run-with-tokendir-refused] rc=1 :: FAIL: TIER3_TOKEN_DIR is only for --claim-only (the budget tokens are never redirected in a real run)|
+[claim-only-boot-stage] rc=1 :: PREFLIGHT FAIL: evidence directory /home/dmin/cellos/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-bc exists and is not empty|
+[claim-only-and-build-only] rc=1 :: FAIL: --claim-only and --build-only exclude each other|
+[nonempty-out-refused] rc=1 :: PREFLIGHT FAIL: evidence directory /tmp/t3d3-out.MOpW exists and is not empty|
+tokens after nonempty-out: 0
+[bad-confirm-value] rc=1 :: FAIL: TIER3_T3D3_CONFIRM must be 0 or 1|
+3. apk pins (sha256sum -c apk-pins.sha256 in $W/apk-fetch): OK; Alpine vmlinux/vmlinuz-virt/initramfs-virt and QEMU 10.2.0 binary equal the judge PINS (2d62d53b.., 26bf81ad.., e2562e01.., 169fb4ea..); the lane preflight also checks the 18 product pins of rerun-cp1.md 6.2: "product pins (rerun-cp1.md 6.2): 18 files OK"
+   rerun-cp1.md 6.3 reused files (prepare script, guest.rs, ssh.rs, driver Cargo.toml/main.rs/kssh.rs, guest-init.sh, apk-pins, templates, tooling, guards) re-hashed: all equal to the CP1 values.
+4. python3 scripts/cellos-sign --check: rc 0 (lane preflight line "cellos-sign --check rc 0")
+5. --stage diag --build-only and --stage full --build-only (cargo --locked --offline): both BUILD_ONLY_OK; Cargo.lock 5181251c.. unchanged; protected-path digests before == after (recomputed after both builds, see baseline.txt); initramfs-audit problems [] with only etc/t3-host_ed25519 and etc/t3-password mode 0600 secret; fat-layout.txt has no sshd.
+6. provenance.sha256 of each build-only run lists cellbox, service-net, hypervisor, phase04-terminal-driver, cellos-kernel, tier3.iso, kernel_fs.img, initramfs-sshd.cpio.gz, vmlinux, vmlinuz-virt, initramfs-virt, cell.pub, qemu; kernel and ISO digests differ from evidence/t3-d2/provenance.sha256 (c93664da.. / 51a859df.. there; new builds f9b434fd.. / a0192c0e.. diag, ecf5000b.. / 081b6b4b.. full: different image and a per-run signing key); service-net digests (new builds) d1e9a43a.. / 628ec43c.. (the earlier provenance has no service-net line).
+   Note: the build-only exit precedes protected-after.txt, so before == after was recomputed with the lane's own protected_digest commands after both builds: equal.

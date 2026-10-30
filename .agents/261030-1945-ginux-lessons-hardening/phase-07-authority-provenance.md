@@ -1,84 +1,57 @@
 ---
 phase: 7
-title: "Boot authority provenance invariant"
+title: "Issuer-derived authority provenance and isolated SMP witness"
 status: pending
 priority: P1
-effort: "1-1.5w"
-dependencies: [6]
+dependencies: [1]
 tier: thinking
 ---
 
-# Phase 07: Boot authority provenance invariant
-
-> **Required — deviation-log:** Log every Decision / Deviation / Surprise in § Deviation Log the moment it occurs.
+# Phase 07: Issuer-derived authority provenance
 
 ## Overview
 
-The ginux invariant (`/tmp/ginux/docs/decisions/0001-*.md:23-33`): every runtime capability is authorized by the boot root, or is a strict subset of an existing one. Cellos has the pieces:
+Apply item 4 to Cellos's typed issuer model. Spec 25 §§3.1–3.3, not Ginux's process tree or one global table, defines authority. Memory safety, an ELF name, a signature and a newer generation each fail to grant semantic resource rights.
 
-- per-path `boot_ceiling` (`loader/boot_ceiling.rs:1-97`);
-- spawn intersection (`governed_spawn.rs:114-150`);
-- CSpace lineage, attenuation and revoke (`cell/cspace.rs:400-770`).
+## Requirements and architecture
 
-What is missing is an end-to-end proof. The legacy global `CapTable` has no provenance (`cell/cap_registry.rs:65-104`), but the red team found it has no production allocation callers: it is only revoked at retirement (`task.rs:1453-1456`), and `alloc` is used only in its unit tests (`cap_registry.rs:237-267`). It is therefore **deleted**, not extended.
-
-This phase enforces and tests the invariant over the **existing** root. Replacing that hard-coded root with a signed boot manifest is a Law-1 decision (D-07): drafted here, not implemented.
-
-This phase also creates the shared **test-hooks lifecycle image** used by Phases 08 and 09. The production lifecycle builder has no `test-hooks` (`scripts/build-x86_64-c2c-lifecycle-ci.sh:10-18,35-44`), and the integration helper boots QEMU with its default single CPU (`tests/integration/src/lib.rs:796-830`).
-
-## Requirements
-
-- Invariant (Spec 25 annex, mapped to AC-01..AC-05):
-  - For every live Cell C: `CapSet(C) ⊆ boot_ceiling(path(C)) ∩ CapSet(spawner(C))`, rooted at `boot_ceiling("/bin/init")`.
-  - Every CSpace slot has either a root grant recorded at publication or a parent whose rights ⊇ its own, with a lifetime no longer than its parent's.
-- Provenance is recorded at the real CSpace root-slot insertion and publication paths.
-- Legacy `CapTable` is removed with its retirement revoke and its tests. The CSpace file-backing helpers in `cap_registry.rs:200-229` are retained. Clean cutover.
-- Test-hook audit walk at a quiescent point, under the same locks used for mutation. It emits `AUTH-ENVELOPE: PASS cells=N slots=M` or the first violating `(cell, slot, reason)`.
-- Negative tests:
-  - (a) spawn requesting caps beyond the ceiling → stripped or denied, per current policy;
-  - (b) a test-hook attempt to insert a root slot without provenance → refused;
-  - (c) a delegated child after parent revoke → handle dead;
-  - (d) a stale-generation handle → refused.
-- Test-hooks lifecycle image: a separate build output (it cannot overwrite the production witness), packaging the authority, replacement and provider fixtures. An x86 boot helper with an explicit `-smp` that requires a positive AP-execution marker for 2 CPUs.
-- D-07 ADR draft: signed canonical boot authority manifest as the sole root (record shape per Phase 06), insertion sealed after init, and an observer-READ / service-WRITE split **only for objects with a named consumer**. Status `proposed`.
-
-## Assumptions
-
-- **Claim:** legacy `CapTable::alloc` has no production caller. **Confidence:** high (red team). **How to verify:** `xd://lsp` references on `CapTable::alloc` and `CapTable` before deleting.
-- **Claim:** the root-slot insertion sites are few and kernel-internal. **Confidence:** medium. **How to verify:** LSP references on the CSpace insert/publish functions in `cell/cspace.rs`.
-- **Claim:** a quiescent walk point exists after autoload settles. **Confidence:** medium. **How to verify:** reuse the P01 private-trace snapshot point (controlling plan §"Private implementation runtime evidence").
+- Remove the old invariant `CapSet(child) ⊆ boot_ceiling(path) ∩ CapSet(spawner)` as a universal rule. Current launch branches differ: Root intersects its path ceiling; Ceiling intersects its reviewed ceiling; User intersects caller caps (`governed_spawn.rs:127-149`). Kernel-authorized bootstrap/profile grants must not be mistaken for amplification merely because init lacks the same flattened bitset.
+- Validate each effective grant against its actual issuer/root authorization, delegator live rights (if delegated), destination immutable admission ceiling, receive policy and applicable operator policy (Spec 25:44-56). Rights narrowing is non-increasing, allowing equal rights where authorized; require delegable authority and bounded acyclic lineage, not a strict reduction on every hop.
+- Treat root issuance, delegation and reference close/revoke distinctly. An issuer can create an authorized new object; it need not possess a parent handle to that not-yet-created object. Creator death is not automatically revocation of an independently held grant.
+- Kernel checks kernel handles and attests holder/transfer identity. VFS/NET/state issuers retain their own semantic authorization tables; no duplicate global kernel ACL and no attempt to decode every opaque service-local handle.
+- Observer-read/service-write split is demonstrated only for an actual resource supporting separate operations and admitted consumers. It is not a universal CapSet mask retrofit.
+- Keep boot authority ceiling tied to existing authenticated artifact/policy admission; a signed canonical sole-root manifest and sealing changes remain a proposed ADR, not new authority inferred from a signature.
+- Bound checks on invocation; no whole-CSpace audit, lineage scan of arbitrary size, signature verification, allocation or copy added on every local SAS request.
+- An offline/quiescent audit uses bounded snapshots/versioned retry without reversing scheduler/authority lock order; reports exact coverage. It may verify issuer evidence references but cannot certify opaque issuer ACLs by itself.
 
 ## Related Files
 
-- Modify: `kernel/src/cell/{cap_registry.rs,cspace.rs}`, `kernel/src/task.rs` (remove legacy revoke), `kernel/src/loader/{boot_ceiling.rs,governed_spawn.rs}` (provenance at publication), `kernel/src/task/cap.rs`.
-- Create: an audit-walk module under `kernel/src/cell/` (test-hooks), `scripts/build-x86_64-c2c-lifecycle-hooks-ci.sh`, an `-smp`-aware x86 helper in `tests/integration/src/lib.rs`, a lifecycle-hooks integration test, and `docs/decisions/00NN-signed-boot-authority-manifest.md` (proposed).
-- Docs: Spec 25 annex.
+Actual root issuance/delegation/publication sites in `kernel/src/cell/cspace.rs`, loader launch profiles and `governed_spawn.rs`; issuer-specific tests at the owning service. The legacy `CapTable` is deleted only if reference and resource-lifetime closure proves no live consumer; preserve CSpace file-backing helpers. LSP references precede exported-symbol removal.
 
 ## Implementation Steps
 
-1. LSP references for `CapTable` and the CSpace insert/publish sites; log them.
-2. Delete legacy `CapTable` and its revoke and tests.
-3. Provenance at root-slot insertion and publication.
-4. Audit walk plus the four negative hooks.
-5. Test-hooks lifecycle image builder; `-smp` helper with AP marker.
-6. Run 1-CPU and 2-CPU.
-7. Draft the D-07 ADR.
+1. Census real root/bootstrap/profile issuers, delegation/receive paths and service-local resources against Spec 25. Identify exact missing checks without introducing a second registry.
+2. Correct only uncovered paths; migrate all real consumers. Track public/persistent/semantic deltas for Law-1, not merely struct sizes.
+3. Reuse/extend an isolated lifecycle `test-hooks` image with explicit 1/2-CPU launch and positive AP work. It must not overwrite production witnesses or widen normal bootstrap rights.
+4. Exercise excessive rights, wrong object type/issuer/holder, stale incarnation, expired/revoked lineage and forbidden post-start receipt. Positive controls cover legitimate kernel bootstrap, equal-right delegation and actual authorized issuer minting.
+5. Draft the signed-boot-manifest ADR with root/update/seal/recovery boundaries and a named observer/service example. No frozen ABI implementation in this phase without its approval.
 
 ## Success Criteria
 
-- [ ] The test-hooks lifecycle test passes with `AUTH-ENVELOPE: PASS` on 1 CPU and on 2 CPUs (AP marker observed).
-- [ ] Hooks (a)–(d) each produce their refusal marker. A negative control build that skips provenance recording fails the audit.
-- [ ] No reference to legacy `CapTable` remains (LSP clean). The production lifecycle test `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test local-service-lifecycle-x86` still passes.
-- [ ] The D-07 ADR is filed as `proposed`; no Law-1 bytes are changed.
+- [ ] Actual runtime grants have valid issuer-derived provenance within recipient ceilings; ordinary caller escalation is refused without rejecting reviewed bootstrap/profile launches.
+- [ ] Issuer-local object negatives run through the real issuer; a kernel snapshot alone is not evidence for VFS/NET semantics.
+- [ ] Same authority behavior works for SAS and Domain Cells; no mandatory per-request allocation, copy or global audit.
+- [ ] 1/2-CPU private witness runs with positive AP marker; production lifecycle regression remains unchanged.
+- [ ] New signed-manifest ADR stays proposed; all actual Law-1 changes remain independently gated.
 
-## Security Considerations
+## Assumptions
 
-This is the core authority invariant. An audit that reads without the mutation locks can report a false PASS, so the lock discipline is part of the review.
+Existing issuer/caller closure and exact source grants may have advanced since prior recon; reread before coding. Legacy CapTable deadness is PRIOR until references are verified.
 
-## Risk Notes
+## Security and risk assessment
 
-Serialized P02/P05 ownership: run this as the single admitted slice. Undo: revert and cold boot; there is no persistent state. Deleting `CapTable` is reversible by revert.
+A broad Kernel-issuer escape tag is forbidden. Quiescent inspection cannot acquire all locks arbitrarily. Undo by reverting and cold boot; no authority is restored by replaying old handles.
 
 ## Deviation Log
 
-None.
+SAS review: issuer provenance replaces process ancestry; equality-preserving attenuation and service-local authority remain intact; private witness has no dependency on new ABI headers.

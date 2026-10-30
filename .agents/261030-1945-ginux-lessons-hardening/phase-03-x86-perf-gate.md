@@ -1,59 +1,54 @@
 ---
 phase: 3
-title: "x86 q35 accelerator-bound perf gate"
+title: "Tier-aware x86 performance evidence"
 status: pending
 priority: P2
-effort: "2d"
 dependencies: [1]
 tier: medium
 ---
 
-# Phase 03: x86 q35 accelerator-bound perf gate
-
-> **Required — deviation-log:** Log every Decision / Deviation / Surprise in § Deviation Log the moment it occurs.
+# Phase 03: Tier-aware x86 performance evidence
 
 ## Overview
 
-Today's performance gate is RV64 TCG only (`scripts/bench_results.py:23-26,780-817`, `.github/workflows/perf.yml:92-164`), so it can't tell us anything about the active Intel lane. Add an x86 q35 profile where every capture records its accelerator. Budgets are asserted only on KVM; TCG captures are report-only. This is the ginux pattern (`/tmp/ginux/docs/PERFORMANCE.md:7-14`, `Makefile:173-178`). It gives Phase 04 a before/after baseline.
+Apply item 9 to Cellos workloads, not Ginux's systemd boot budget. Reuse the existing benchmark collector and typed local lifecycle/IPC workload. Security fixes must not wait for access to a KVM runner.
 
-## Requirements
+## Requirements and architecture
 
-- Functional: an x86 runner that selects `-accel kvm` when the host is x86_64 and `/dev/kvm` is readable/writable, otherwise `-accel tcg`, and writes `accelerator` into the capture; `bench_results.py` accepts profile `x86-q35-<cpus>c-<mem>m-v1`; a budget file with per-metric limits that apply only to `kvm` **on a named runner class**.
-- Comparison fingerprint: accelerator, host CPU vendor/family/model/stepping, QEMU version, host kernel/KVM version, CPU frequency governor, vCPU count/topology, guest clocksource. Comparisons and budget enforcement are refused across fingerprints; an unmatched KVM capture is REPORT-ONLY. Baselines are kept per pinned runner class.
-- Workload: the existing configured lifecycle route (init → bench → probe autoload, controlling plan §"Configured lifecycle baseline executed") plus boot-to-shell marker time. No new benchmark program.
-- Non-functional: budgets come from measured medians, never invented.
-
-## Assumptions
-
-- **Claim:** GitHub `ubuntu-latest` runners expose usable `/dev/kvm` after a udev rule. **Confidence:** medium. **How to verify:** a one-off workflow step `ls -l /dev/kvm && kvm-ok`; if absent, the KVM budget runs only on a self-hosted runner or locally, and CI stays report-only.
-- **Claim:** the configured lifecycle image builds via `scripts/build-x86_64-c2c-lifecycle-ci.sh`. **Confidence:** high (controlling plan Verification protocol).
+- Record explicit accelerator, host CPU/kernel, QEMU version, vCPU topology, RAM, guest clocksource, compiler/features and artifact digest. Machine-comparison fingerprint excludes the artifact digest so before/after code can be compared; workload/configuration identity stays fixed.
+- Detect usable KVM by attempting the selected launch, not device-file permissions alone. A requested KVM gate must fail/mark unavailable on launch failure, never silently fall back and label TCG as KVM.
+- Tier 1 SAS: measure copied IPC baseline plus existing authorized local grant/ring path only where implemented and lifetime-qualified. Report privilege transitions, CR3 switches, bytes copied and allocations from real existing counters or explicitly measured instrumentation; unavailable metrics remain unknown.
+- Tier 2: measure the existing private-domain copy path separately. No merged SAS/domain statistic, no fictitious zero-copy result.
+- TCG captures are functional/report-only; KVM budgets require a measured baseline on the same named machine class. Unknown machine/timer/governor metadata disables budget qualification, not functional testing.
+- Preserve existing repeated-capture noise handling. Do not adopt an arbitrary 3000 ms boot limit or derive thresholds from fixtures.
+- Measure P04 entry safety, P08 retirement latency and P09 restore/Ready latency without adding mandatory authority-table scans/signature checks on each IPC.
 
 ## Related Files
 
-- Create: `scripts/x86/bench-q35.sh`, `scripts/x86-perf-budgets.toml`.
-- Modify: `scripts/bench_results.py` (profile table, accelerator field, cross-accelerator refusal, budget check), `scripts/test_compare_bench_results.py`, `.github/workflows/perf.yml` (x86 job beside the RV64 job), `docs/specs/10-testing.md` (perf section: what KVM and TCG captures mean).
+Reuse `scripts/bench_results.py`, `scripts/test_compare_bench_results.py`, `.github/workflows/perf.yml`; add an x86 runner and per-machine budget data only if not already supported. Relevant runtime runners: `scripts/build-x86_64-c2c-lifecycle-ci.sh` and `scripts/x86/qemu-domain-test.sh`.
 
 ## Implementation Steps
 
-1. `bench-q35.sh`: detect the accelerator, collect the fingerprint, boot the lifecycle image N=5 times, parse the existing serial markers into the capture JSON along with `image_sha256`.
-2. Extend `bench_results.py`: add the new profile and the fingerprint comparison (a clear error on mismatch), plus `--budgets <runner-class>`, enforced only when the accelerator is `kvm` and the fingerprint matches that class's baseline; otherwise `REPORT-ONLY`.
-3. Tests: mixed accelerator → rejected; same accelerator with a different CPU model → rejected; KVM matched over budget → fail; TCG over budget → REPORT-ONLY pass; unmatched KVM over budget → REPORT-ONLY pass; the existing RV64 behavior is unchanged.
-4. Pick the runner class (a GitHub KVM runner if the Assumption holds, else a named self-hosted/local host). Take 3 baseline captures on it; each budget is median × 1.10, matching the existing 10% policy (`bench_results.py:23-28`). Commit the baseline JSON with the fingerprint under `evidence/`.
+1. Enumerate actual workload/profile metrics and observation boundaries; separate boot time from request latency.
+2. Extend collector/comparator for explicit tier/path/accelerator/fingerprint; reject incompatible comparisons.
+3. Run TCG functionality now; collect matched KVM baseline when available. Record KVM unavailable as such.
+4. Enforce calibrated budgets only on matched qualified captures. Keep post-change measurements linked to baseline artifacts.
 
 ## Success Criteria
 
-- [ ] `python3 scripts/test_compare_bench_results.py` passes, including the 5 new cases.
-- [ ] `bash scripts/x86/bench-q35.sh` on a KVM host emits captures with `"accelerator": "kvm"` and a budget PASS. On a host without KVM it emits `tcg` + REPORT-ONLY.
-- [ ] Baseline evidence is committed, with image SHA-256 and host description.
+- [ ] Real x86 scenario produces correctly labeled tier/path captures; no synthetic fixture is called runtime evidence.
+- [ ] Mixed profiles/accelerators fail comparison; unmatched KVM is not budget-PASS; a matched deliberate regression fails policy.
+- [ ] TCG cannot pass a KVM budget; a forced KVM launch failure cannot fall back invisibly.
+- [ ] Before/after SAS metrics can expose added copy, allocation or CR3 overhead separately from Tier 2.
 
-## Security Considerations
+## Assumptions
 
-N/A.
+KVM access and qualified grant/ring instrumentation may be unavailable. Those results remain pending; they do not block correctness/security phases. Never implement a new fast path just to fill the matrix.
 
-## Risk Notes
+## Security and risk assessment
 
-KVM timing on shared CI is noisy: keep the existing three-consecutive-capture regression rule, not single-run failure. Undo: remove the x86 job; RV64 is untouched.
+Instrumentation stays optional, bounded and absent from normal hot paths when disabled. Revert collector/workflow changes to undo; historical evidence remains immutable.
 
 ## Deviation Log
 
-None.
+SAS review: removed perf/KVM as a prerequisite for entry hardening; added tier-separated cost accounting and preserved existing authorized local transports.
