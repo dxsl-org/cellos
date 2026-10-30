@@ -83,6 +83,22 @@ fn fail(reason: &str) -> bool {
     false
 }
 
+/// Append one completion and report which tasks its wake request names.
+///
+/// `drain_wake_requests` consumes the request, so the caller must hold
+/// `SCHEDULER` for the whole call: with interrupts off, no tick can run the real
+/// deferred wake and consume the request first.
+fn wake_targets(q: &CompletionQueue) -> Option<alloc::vec::Vec<usize>> {
+    let slot = q.reserve()?;
+    if !q.complete(slot, 1) {
+        return None;
+    }
+    let mut out = alloc::vec::Vec::new();
+    q.drain_wake_requests(&mut out);
+    let _ = q.drain();
+    Some(out)
+}
+
 fn source_validation_is_fail_closed() -> bool {
     let net_rx = api::completion::source::NET_RX;
     let timer = api::completion::source::TIMER;
@@ -367,9 +383,10 @@ fn deferred_wake_reaches_scheduler() -> bool {
     ok
 }
 
-/// Cleanup is ownership-aware: an older waiter must not clear the task that
-/// replaced it on the cell's shared queue.
-fn waiter_cleanup_preserves_replacement() -> bool {
+/// Cleanup is registration-exact: one waiter unwinding must not erase another
+/// waiter on the cell's shared queue, and a completion wakes exactly the
+/// waiters that remain.
+fn waiter_cleanup_preserves_siblings() -> bool {
     insert(TID_A, CELL_ONE);
     insert(TID_B, CELL_ONE);
     let q = match queue(TID_A) {
@@ -384,11 +401,34 @@ fn waiter_cleanup_preserves_replacement() -> bool {
     q.register_waiter(TID_A);
     q.register_waiter(TID_B);
     let mut ok = true;
-    if q.clear_waiter(TID_A) {
-        ok = fail("an older waiter erased its replacement");
-    }
-    if !q.clear_waiter(TID_B) {
-        ok = fail("the current waiter could not clear its registration");
+    {
+        let mut guard = super::SCHEDULER.lock();
+        match guard.as_mut() {
+            Some(sched) => {
+                // Start from a lowered scan flag and no outstanding request.
+                completion::deliver_pending_wakes(sched);
+                if !q.clear_waiter(TID_A) {
+                    ok = fail("a registered waiter could not clear its own registration");
+                }
+                match wake_targets(&q) {
+                    Some(targets) if targets == [TID_B] => {}
+                    _ => ok = fail("clearing one waiter changed who a completion wakes"),
+                }
+                if q.clear_waiter(TID_A) {
+                    ok = fail("a cleared waiter was cleared a second time");
+                }
+                if !q.clear_waiter(TID_B) {
+                    ok = fail("the remaining waiter could not clear its registration");
+                }
+                match wake_targets(&q) {
+                    Some(targets) if targets.is_empty() => {}
+                    _ => ok = fail("a completion still named a cleared waiter"),
+                }
+                // The appends raised the global scan flag; lower it again.
+                completion::deliver_pending_wakes(sched);
+            }
+            None => ok = fail("scheduler absent"),
+        }
     }
 
     remove(TID_A);
@@ -496,7 +536,7 @@ pub fn self_test() -> bool {
         & shared_within_cell()
         & exhaustion_refuses_submission()
         & deferred_wake_reaches_scheduler()
-        & waiter_cleanup_preserves_replacement()
+        & waiter_cleanup_preserves_siblings()
         & self_drain_cancels_stale_wake()
         & withdrawal_raises_no_wake();
 

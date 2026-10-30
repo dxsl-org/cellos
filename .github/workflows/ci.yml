@@ -1721,6 +1721,95 @@ jobs:
           # --lib flag; `driver-disk` ships a staticlib and links std on hosts.
           cargo test -p service-vfs --target x86_64-unknown-linux-gnu
 
+  # KSSH (KMS SSH key custody): `ssh-dev-custody` and `ssh-dev-persist` are opt-in
+  # DEV_POSTURE features that are OFF in every other job, so no other job compiles their
+  # code, runs their ~190 host tests, or proves that the default KMS binary stays free
+  # of their markers. The `unit-tests` job already runs the default `-p service-kms`
+  # suite; this job adds the two feature suites and the artifact proof.
+  #
+  # `ssh-dev-persist` needs `--lib`: `lib.rs` refuses a non-test build of it on any
+  # target but x86_64 bare metal, and a bare `cargo test` also compiles the non-test
+  # lib on the host (K4b CP2 dossier §7.1).
+  #
+  # The artifact step builds the three variants for x86_64-unknown-none (the only
+  # target `ssh-dev-persist` is valid on) and runs scripts/check-ssh-dev-persist-
+  # exclusion.py on each in both directions: the `none` build, made under
+  # CELLOS_PRODUCTION=1 like a production-like candidate, must carry no marker, and the
+  # custody/persist builds must carry exactly their own. It is a sibling of
+  # scripts/check-production-relay-image.py (Phase 02 owns that file); it does not
+  # replace it.
+  kms-ssh-dev-posture:
+    name: KMS SSH dev custody (host tests + variant markers)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: kms-ssh-dev-posture
+
+      # Standard library only; no pip install.
+      - name: Unit-test the KMS SSH exclusion checker
+        run: python3 scripts/test_check_ssh_dev_persist_exclusion.py
+
+      - name: Host tests (ssh-dev-custody, ssh-dev-persist)
+        run: |
+          cargo test -p service-kms --features ssh-dev-custody \
+            --target x86_64-unknown-linux-gnu
+          cargo test -p service-kms --features ssh-dev-persist --lib \
+            --target x86_64-unknown-linux-gnu
+
+      - name: Build the KMS variants and prove which one each is (x86_64-unknown-none)
+        env:
+          # Cell codegen, as the Build job's cells step: only the kernel is
+          # static/code-model=kernel. The markers are .rodata strings, so the flag set
+          # does not change the verdict.
+          CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS: "-C relocation-model=pic"
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/kms-variants"
+          mkdir -p "$out"
+          built=target/x86_64-unknown-none/release/service-kms
+
+          CELLOS_PRODUCTION=1 cargo build --release -p service-kms \
+            --target x86_64-unknown-none -Z build-std=core,alloc
+          cp "$built" "$out/none"
+          cargo build --release -p service-kms --features ssh-dev-custody \
+            --target x86_64-unknown-none -Z build-std=core,alloc
+          cp "$built" "$out/custody"
+          cargo build --release -p service-kms --features ssh-dev-persist \
+            --target x86_64-unknown-none -Z build-std=core,alloc
+          cp "$built" "$out/persist"
+
+          # expect VARIANT FEATURES EXPECT WANTED_EXIT. Both directions are asserted, so a
+          # checker that stopped discriminating fails here instead of passing everything.
+          expect() {
+            local rc=0
+            python3 scripts/check-ssh-dev-persist-exclusion.py \
+              --kms-features "$2" --kms-artifact "$out/$1" --expect "$3" || rc=$?
+            if [ "$rc" -ne "$4" ]; then
+              echo "FAIL: $1 build, --expect $3 exited $rc (wanted $4)" >&2
+              exit 1
+            fi
+          }
+          expect none    ""              none    0
+          expect none    ""              custody 1
+          expect none    ""              persist 1
+          expect custody ssh-dev-custody none    1
+          expect custody ssh-dev-custody custody 0
+          expect custody ssh-dev-custody persist 1
+          expect persist ssh-dev-persist none    1
+          expect persist ssh-dev-persist custody 1
+          expect persist ssh-dev-persist persist 0
+
   f1-admission:
     # Tier-1 admission gate (Spec 18 §2.1): the same `cellos-sign --check` that
     # the image scripts must pass before anything is signed. Replaces the

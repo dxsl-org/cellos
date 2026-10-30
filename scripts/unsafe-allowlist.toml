@@ -787,3 +787,17 @@ class = "c-ffi"
 reason = "Owns allowlisted unsafe under cells/tests/c-spawn-child/ — see the [[file]] entry for the justification."
 approver = "dmin"
 date = "2026-09-25"
+
+[[file]]
+path = "cells/tools/cellbox/src/rg/tests.rs"
+class = "test-harness"
+reason = "Host-only (`#[cfg(test)] mod tests;`, rg.rs:25-26) heap-peak measurement for the D76-3 M2 `rg` arena target: `unsafe impl GlobalAlloc for Counting` forwards every call unchanged to `System` and only counts live bytes per thread. `GlobalAlloc` is an unsafe trait, so the counting allocator cannot be written without the keyword; the file holds no other unsafe and is never compiled into a Cell image."
+approver = "dmin"
+date = "2026-10-30"
+
+[[file]]
+path = "cells/services/input/src/session_zeroize_tests.rs"
+class = "test-harness"
+reason = "Host-only (`#[cfg(test)]`, declared in session.rs) read-back of wiped heap buffers: after `Secret`/`Event`/`Paste::wipe` the test reads the whole retained allocation through a raw pointer to prove every byte, spare capacity included, is zero. Observing memory behind a cleared Vec is not possible without `unsafe`. The file holds exactly that one test and is never compiled into a Cell image; it was split out of session.rs so the secret-handling session code stays under the token rule."
+approver = "dmin"
+date = "2026-10-30"

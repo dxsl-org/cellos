@@ -15,6 +15,7 @@
 
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
+#![forbid(unsafe_code)]
 // The Phase 09 lane runs only the ssh checks; the Phase04 suite is compiled but unused.
 #![cfg_attr(feature = "phase09-ssh", allow(dead_code, unused_imports))]
 

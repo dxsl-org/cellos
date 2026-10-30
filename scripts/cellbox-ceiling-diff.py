@@ -3,7 +3,8 @@
 
 Extracts the `declare_manifest!(...)` key/value pairs and the
 `declare_syscalls![...]` identifier list from a candidate `main.rs` and from a
-baseline (default: `git show HEAD:cells/tools/shell/src/main.rs`) and fails when
+baseline (default: `git show 2f0bc0659:cells/tools/shell/src/main.rs`, the last tree that
+still has the retired shell; 5043e2cf5 removed `cells/tools/shell`) and fails when
 the two sets differ in either direction (an added *or* a removed entry).
 
 Usage:
@@ -24,6 +25,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CANDIDATE = "cells/tools/cellbox/src/main.rs"
 DEFAULT_BASELINE_PATH = "cells/tools/shell/src/main.rs"
+# Parent of 5043e2cf5, the Cellbox commit that deleted cells/tools/shell: the last tree that
+# carries the shell ceiling the cellbox ceiling is compared with (plus the approved additions).
+DEFAULT_BASELINE_REF = "2f0bc06599808be3ab0e4b3df0d79ea08c5317aa"
 
 
 class ExtractionError(Exception):
@@ -90,7 +94,7 @@ def read_baseline(args: argparse.Namespace) -> tuple[str, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("candidate", nargs="?", default=DEFAULT_CANDIDATE)
-    parser.add_argument("--baseline-ref", default="HEAD")
+    parser.add_argument("--baseline-ref", default=DEFAULT_BASELINE_REF)
     parser.add_argument("--allow-added", action="append", default=["Write", "GetRandom"], help="syscalls added by an approved delta (default: Write, Phase 02 CP2 closure; GetRandom, Phase 09 D79-9 as revised)")
     parser.add_argument("--baseline-path", default=DEFAULT_BASELINE_PATH)
     parser.add_argument("--baseline-file", help="read the baseline from a file instead of git")

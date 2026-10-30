@@ -326,41 +326,9 @@ if [[ "$KSSH" == 1 ]]; then
 fi
 
 echo "==> Signing with the private key"
-SIGN_EXTRA=()
-if [[ "$KSSH" == 1 ]]; then
-    # F1 is not satisfied by the tracked tree at HEAD (cells/tests/* became tracked in 2f0bc0659; the
-    # tree-wide gate refuses to sign, L5/L5f included). Decision recorded in k8-cp1-approval.md: K8
-    # images are signed under a PRIVATE per-run allowlist = the repo allowlist (verbatim) + explicit
-    # entries for exactly the items below. The repo allowlist and the signing code are untouched, the
-    # diff is saved in the evidence and the dossier states the waiver.
-    ALLOWLIST="$W/unsafe-allowlist.toml"
-    "$PYTHON_BIN" - "$ROOT/scripts/unsafe-allowlist.toml" "$ALLOWLIST" "$EVIDENCE/unsafe-allowlist.diff" <<'PY'
-import difflib, sys
-from pathlib import Path
-src, dst, diff = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
-base = src.read_text()
-CRATES = ["app-phase02-session-child", "app-phase02-session-parent", "app-phase03-filter",
-          "app-phase04-terminal-driver", "app-top-load"]
-FILES = ["cells/services/input/src/session.rs", "cells/tools/cellbox/src/rg/tests.rs"]
-extra = "\n# ---- K8 per-run waiver (private, not in the repository) ----\n"
-for name in CRATES:
-    extra += ('\n[[crate]]\nname = "%s"\nclass = "k8-lane-waiver"\n'
-              'reason = "K8 private per-run waiver: crate tracked since 2f0bc0659 without forbid(unsafe_code) and without an allowlist entry; not in the repository allowlist."\n'
-              'approver = "K8 decision, k8-cp1-approval.md"\ndate = "2026-10-30"\nreview_by = "2026-10-31"\ntracking = "k8-cp1-approval.md"\n' % name)
-for path in FILES:
-    extra += ('\n[[file]]\npath = "%s"\nclass = "k8-lane-waiver"\n'
-              'reason = "K8 private per-run waiver: tracked file contains the unsafe keyword and has no allowlist entry in the repository."\n'
-              'approver = "K8 decision, k8-cp1-approval.md"\ndate = "2026-10-30"\nreview_by = "2026-10-31"\ntracking = "k8-cp1-approval.md"\n' % path)
-dst.write_text(base + extra)
-diff.write_text("".join(difflib.unified_diff(base.splitlines(True), (base + extra).splitlines(True), "repo/unsafe-allowlist.toml", "run/unsafe-allowlist.toml")))
-print("private F1 allowlist: %d crate and %d file waivers" % (len(CRATES), len(FILES)))
-PY
-    SIGN_EXTRA=(--allowlist "$ALLOWLIST")
-    [[ "$PERSIST" != 1 ]] || mv "$EVIDENCE/unsafe-allowlist.diff" "$EVIDENCE/f1-waiver-unsafe-allowlist.diff"
-fi
 SEED_HEX="$(cat "$KEYS/seed.hex")"
 CELLBOX_PRIVATE_FIXTURE_SIGNING=1 CELLOS_SIGN_ALLOW_PROD_KEY_OUTSIDE_CI=1 "$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "${OBJCOPY:-objcopy}" \
-    "${SIGN_EXTRA[@]}" --seed-hex "$SEED_HEX" --sign "${CELL_BINARIES[@]}" "$REL/app-init"
+    --seed-hex "$SEED_HEX" --sign "${CELL_BINARIES[@]}" "$REL/app-init"
 unset SEED_HEX
 if [[ "$PERSIST" == 1 ]]; then
     # RT1 preflight items 15-17 (k8-rt1-amendment.md 12.2), on the exact signed artifacts the image receives.
@@ -381,10 +349,8 @@ if [[ "$PERSIST" == 1 ]]; then
     pf "exclusion checker on the signed service-kms: persist 0, custody 1, none 1 (checker.txt)"
     SIGN_CHECK="$("$PYTHON_BIN" scripts/cellos-sign --check 2>&1 || true)"
     printf '%s\n' "$SIGN_CHECK" | grep -q '^OK:   F5' || pfail "cellos-sign --check: F5 is not OK"
-    F1_ITEMS="$(printf '%s\n' "$SIGN_CHECK" | grep -E '^  \[(attribute|token)\] ' | sed -E 's/^  \[(attribute|token)\] ([^ ]+) ::.*/\2/' | sort | tr '\n' ' ')"
-    [[ "$F1_ITEMS" == "app-cellbox app-phase02-session-child app-phase02-session-parent app-phase03-filter app-phase04-terminal-driver app-top-load service-input " ]] \
-        || pfail "F1 lists items other than the 7 known ones: $F1_ITEMS"
-    pf "F1: exactly the 7 known items (private per-run waiver applies), F5 OK"
+    printf '%s\n' "$SIGN_CHECK" | grep -q '^OK:   F1' || pfail "cellos-sign --check: F1 is not OK (no waiver exists)"
+    pf "F1 OK, F5 OK (repository allowlist, no per-run waiver)"
 fi
 
 FAT_ARGS=()
