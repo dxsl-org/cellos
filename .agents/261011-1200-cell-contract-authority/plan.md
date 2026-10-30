@@ -633,3 +633,7 @@ P01 still needs the exact finite/profile/caller/provider/issuer/backend decision
 
 The user selected preparing a native development packet. [Handoff r1](native-development-handoff-r1.md) and its companion JSON specify N02-A per-authority arena invariants only, exact source/evidence paths and separately gated P02–P07 successors. The lock register, portfolio and P01/P02 carry the conditional owner/WIP/disposition: no implementation until explicit approval of the reviewed revision/digest and appended decision record. Preparation is not an ABI checkpoint or operational deployment authority; all phases and 38 lock relations retain their current gates.
 
+
+### Bounded adopted slice — KSSH K2 CP2 (2026-10-30)
+
+The accountable owner approved the [handoff packet](../261030-1000-kms-ssh-key-custody/lock-handoff-k2-cp2.md) ([record](../261030-1000-kms-ssh-key-custody/lock-handoff-k2-cp2-approval.md)): a nine-path file-bounded exception in `cell-contract-0024-locks.md` for the append-only KMS SSH ABI (acceptance ceiling: opcodes 15-24 + `SshKeyUnavailable` arms, host tests only, `DEV_POSTURE`). It serves Cellbox publickey, not an Intel C2C outcome; no phase scope changes, all 38 lock relations keep their gates; WIP stays one implementation slice.

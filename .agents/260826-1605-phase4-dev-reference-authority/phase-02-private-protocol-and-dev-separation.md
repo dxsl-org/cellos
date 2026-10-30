@@ -25,6 +25,7 @@ Define the sole private AP↔STM32 authority contract as a `no_std`, no-allocati
 ## Key Insights
 
 - The existing public ABI in `libs/types/src/kms/` is immutable; authority trust is added behind it, not by adding fields or opcodes.
+- **Ruling 2026-10-30 (accountable owner, KSSH K2 CP2 handoff C-1):** the immutability above forbids adding authority-trust fields or opcodes; it does not forbid an unrelated purpose-specific KMS class. KSSH K2 CP2 appends opcodes 15-24 under Law 1's append-only rule and changes no byte of opcodes/payloads 9-14 (see [lock handoff](../261030-1000-kms-ssh-key-custody/lock-handoff-k2-cp2-approval.md)).
 - The AP, VFS, supervisor, service-net, and transport are untrusted. They may relay typed bytes but cannot assert boot, state, time, profile, pending key, commit, or signing results.
 - A closed operation set makes generic signing, digest, TPM, NV, raw time, profile assertion, and firmware update unrepresentable.
 - `DEV_REFERENCE` is a terminal classification for this lane, not a promotion stage or feature switch.

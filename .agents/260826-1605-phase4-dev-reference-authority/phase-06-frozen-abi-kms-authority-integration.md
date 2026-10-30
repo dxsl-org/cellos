@@ -160,6 +160,7 @@ Revert: restore per-phase checker/workspace edits (rejected).
   `7d62eaa9...` (`tests/frame.rs`), `26a2b6ae...` (`tests/payload.rs`), and
   `fd514249...` (`tests/enrollment.rs`). This is a pre-change regression
   baseline only; it grants no hardware or acceptance-criterion credit.
+- Ruling 2026-10-30 (accountable owner, KSSH K2 CP2 handoff C-2/C-3): for `model.rs` (`07531027...`) and `tests/frame.rs` (`7d62eaa9...`) the pinned hashes above become historical once KSSH K2 CP2 lands; the pre-K2 anchor is the closure table in `../261030-1000-kms-ssh-key-custody/k2-cp1-approval.md`. The remaining pinned files stay byte-identical, and opcodes/payloads 9-14 byte fixtures remain the acceptance wording. Later provider/stub replacement here must keep KSSH opcodes 15-24 unchanged (the K2 arms answer `SshKeyUnavailable` and touch no storage or provider code). No `ProductionQualified` classification arises from KSSH (`DEV_POSTURE` only).
 - Evidence: Step 1 registers `development-stm32-authority` only in KMS and
   requires the already-frozen `vf2-root-stream` marker plus the RISC-V
   bare-metal target. Both KMS features are mutually exclusive with every
