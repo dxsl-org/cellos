@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_TIDS_PER_CELL","MAX_WATCHED_CELLS"],"enum":["Incoming"],"fn":["classify","creates_owned_state","death_line","reclaim"],"struct":["Admission","OwnerWatches","Released","Watched"],"trait":["WatchSys"]};

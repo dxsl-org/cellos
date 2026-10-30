@@ -326,7 +326,7 @@
 <a href=#326 id=326 data-nosnippet>326</a>    /// regardless of mask, preserving the public NotifyOnExit contract.
 <a href=#327 id=327 data-nosnippet>327</a>    </span><span class="kw">pub </span>pending_deaths: Vec&lt;(usize, usize)&gt;,
 <a href=#328 id=328 data-nosnippet>328</a>    <span class="doccomment">/// Root-owner death events of registered watchers (the VFS cell and the
-<a href=#329 id=329 data-nosnippet>329</a>    /// registered NET provider cell), kept separate from generic task watches.
+<a href=#329 id=329 data-nosnippet>329</a>    /// live `OWNER_WATCH_SERVICES` providers), kept separate from generic task watches.
 <a href=#330 id=330 data-nosnippet>330</a>    ///
 <a href=#331 id=331 data-nosnippet>331</a>    /// The opaque watch token never crosses the syscall ABI: it binds this queued
 <a href=#332 id=332 data-nosnippet>332</a>    /// event to the exact subscription so a stale cancellation cannot affect a
@@ -890,7 +890,7 @@
 <a href=#890 id=890 data-nosnippet>890</a>    <span class="doccomment">/// Whether a receive mask may dequeue a tokenized owner-death event.
 <a href=#891 id=891 data-nosnippet>891</a>    ///
 <a href=#892 id=892 data-nosnippet>892</a>    /// Owner death is routed on a registered watcher's public plane only (VFS,
-<a href=#893 id=893 data-nosnippet>893</a>    /// NET). Its root TID and subscription token identify the event after this
+<a href=#893 id=893 data-nosnippet>893</a>    /// the `OWNER_WATCH_SERVICES` providers). Its root TID and subscription token identify the event after this
 <a href=#894 id=894 data-nosnippet>894</a>    /// predicate succeeds; neither is a sender match and therefore neither can
 <a href=#895 id=895 data-nosnippet>895</a>    /// authorize a masked backend receive.
 <a href=#896 id=896 data-nosnippet>896</a>    </span><span class="attr">#[inline]

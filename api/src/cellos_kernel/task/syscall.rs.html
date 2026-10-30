@@ -10584,7 +10584,7 @@
 <a href=#10584 id=10584 data-nosnippet>10584</a>
 <a href=#10585 id=10585 data-nosnippet>10585</a>    <span class="doccomment">/// The watching cell (receive context already set to the client, as the
 <a href=#10586 id=10586 data-nosnippet>10586</a>    /// kernel does on delivery) and two live, published client principals.
-<a href=#10587 id=10587 data-nosnippet>10587</a>    </span><span class="kw">fn </span>net_watch_scheduler() -&gt; Scheduler {
+<a href=#10587 id=10587 data-nosnippet>10587</a>    </span><span class="kw">fn </span>owner_watch_scheduler() -&gt; Scheduler {
 <a href=#10588 id=10588 data-nosnippet>10588</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = Scheduler::new();
 <a href=#10589 id=10589 data-nosnippet>10589</a>        <span class="kw">let </span><span class="kw-2">mut </span>watcher = alloc::boxed::Box::new(Task::new(
 <a href=#10590 id=10590 data-nosnippet>10590</a>            NET_TID,
@@ -10617,11 +10617,11 @@
 <a href=#10617 id=10617 data-nosnippet>10617</a>        sched
 <a href=#10618 id=10618 data-nosnippet>10618</a>    }
 <a href=#10619 id=10619 data-nosnippet>10619</a>
-<a href=#10620 id=10620 data-nosnippet>10620</a>    <span class="doccomment">/// One `watch_live_cell_owner` call by the NET watcher with exactly
+<a href=#10620 id=10620 data-nosnippet>10620</a>    <span class="doccomment">/// One `watch_live_cell_owner` call by the watcher cell with exactly
 <a href=#10621 id=10621 data-nosnippet>10621</a>    /// `registry` published (and `pause` applied) for the duration of the call
 <a href=#10622 id=10622 data-nosnippet>10622</a>    /// only: the global registry is shared with tests that do not take
 <a href=#10623 id=10623 data-nosnippet>10623</a>    /// `TEST_STATE_LOCK`.
-<a href=#10624 id=10624 data-nosnippet>10624</a>    </span><span class="kw">fn </span>net_watch(
+<a href=#10624 id=10624 data-nosnippet>10624</a>    </span><span class="kw">fn </span>owner_watch(
 <a href=#10625 id=10625 data-nosnippet>10625</a>        sched: <span class="kw-2">&amp;mut </span>Scheduler,
 <a href=#10626 id=10626 data-nosnippet>10626</a>        registry: <span class="kw-2">&amp;</span>[(u16, usize, u64, u64)],
 <a href=#10627 id=10627 data-nosnippet>10627</a>        pause: <span class="prelude-ty">Option</span>&lt;(u16, usize)&gt;,
@@ -10641,7 +10641,7 @@
 <a href=#10641 id=10641 data-nosnippet>10641</a>        result
 <a href=#10642 id=10642 data-nosnippet>10642</a>    }
 <a href=#10643 id=10643 data-nosnippet>10643</a>
-<a href=#10644 id=10644 data-nosnippet>10644</a>    <span class="kw">fn </span>assert_net_watch(
+<a href=#10644 id=10644 data-nosnippet>10644</a>    <span class="kw">fn </span>assert_owner_watch(
 <a href=#10645 id=10645 data-nosnippet>10645</a>        label: <span class="kw-2">&amp;</span>str,
 <a href=#10646 id=10646 data-nosnippet>10646</a>        want: bool,
 <a href=#10647 id=10647 data-nosnippet>10647</a>        registry: <span class="kw-2">&amp;</span>[(u16, usize, u64, u64)],
@@ -10650,179 +10650,276 @@
 <a href=#10650 id=10650 data-nosnippet>10650</a>        cell: u64,
 <a href=#10651 id=10651 data-nosnippet>10651</a>        generation: u64,
 <a href=#10652 id=10652 data-nosnippet>10652</a>    ) {
-<a href=#10653 id=10653 data-nosnippet>10653</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = net_watch_scheduler();
+<a href=#10653 id=10653 data-nosnippet>10653</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = owner_watch_scheduler();
 <a href=#10654 id=10654 data-nosnippet>10654</a>        mutate(<span class="kw-2">&amp;mut </span>sched);
-<a href=#10655 id=10655 data-nosnippet>10655</a>        <span class="kw">let </span>granted = net_watch(<span class="kw-2">&amp;mut </span>sched, registry, pause, cell, generation);
+<a href=#10655 id=10655 data-nosnippet>10655</a>        <span class="kw">let </span>granted = owner_watch(<span class="kw-2">&amp;mut </span>sched, registry, pause, cell, generation);
 <a href=#10656 id=10656 data-nosnippet>10656</a>        <span class="macro">assert_eq!</span>(granted.is_some(), want, <span class="string">"{label}"</span>);
 <a href=#10657 id=10657 data-nosnippet>10657</a>        <span class="comment">// A refusal installs nothing.
 <a href=#10658 id=10658 data-nosnippet>10658</a>        </span><span class="macro">assert_eq!</span>(sched.cell_owner_watch_count(), usize::from(want), <span class="string">"{label}"</span>);
 <a href=#10659 id=10659 data-nosnippet>10659</a>    }
 <a href=#10660 id=10660 data-nosnippet>10660</a>
-<a href=#10661 id=10661 data-nosnippet>10661</a>    <span class="doccomment">/// The grant is the registry-bound live NET provider cell serving exactly
-<a href=#10662 id=10662 data-nosnippet>10662</a>    /// the principal it names; everything else (and the VFS rule) is as before.
-<a href=#10663 id=10663 data-nosnippet>10663</a>    </span><span class="attr">#[test]
-<a href=#10664 id=10664 data-nosnippet>10664</a>    </span><span class="kw">fn </span>net_owner_watch_grant_matrix() {
-<a href=#10665 id=10665 data-nosnippet>10665</a>        <span class="kw">use </span>api::syscall::service::{CONFIG, INPUT, KMS, NET, VFS};
-<a href=#10666 id=10666 data-nosnippet>10666</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
-<a href=#10667 id=10667 data-nosnippet>10667</a>        <span class="kw">let </span>net = [(NET, NET_TID, NET_CELL, NET_GEN)];
-<a href=#10668 id=10668 data-nosnippet>10668</a>        <span class="kw">let </span>nothing = |<span class="kw">_</span>: <span class="kw-2">&amp;mut </span>Scheduler| {};
-<a href=#10669 id=10669 data-nosnippet>10669</a>
-<a href=#10670 id=10670 data-nosnippet>10670</a>        <span class="comment">// Granted: the Active NET binding, the attested serving context, a live
-<a href=#10671 id=10671 data-nosnippet>10671</a>        // client generation. The watch names the client root.
-<a href=#10672 id=10672 data-nosnippet>10672</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>sched = net_watch_scheduler();
-<a href=#10673 id=10673 data-nosnippet>10673</a>        <span class="kw">let </span>(owner, token) = net_watch(<span class="kw-2">&amp;mut </span>sched, <span class="kw-2">&amp;</span>net, <span class="prelude-val">None</span>, CLIENT_CELL, CLIENT_GEN)
-<a href=#10674 id=10674 data-nosnippet>10674</a>            .expect(<span class="string">"registered NET watcher serving the client"</span>);
-<a href=#10675 id=10675 data-nosnippet>10675</a>        <span class="macro">assert_eq!</span>(
-<a href=#10676 id=10676 data-nosnippet>10676</a>            owner,
-<a href=#10677 id=10677 data-nosnippet>10677</a>            api::cell_owner::CellOwner::new(CLIENT_CELL, CLIENT_GEN, CLIENT_TID <span class="kw">as </span>u64)
-<a href=#10678 id=10678 data-nosnippet>10678</a>        );
-<a href=#10679 id=10679 data-nosnippet>10679</a>        <span class="macro">assert!</span>(token &gt; <span class="number">0</span>);
-<a href=#10680 id=10680 data-nosnippet>10680</a>        <span class="macro">assert_eq!</span>(sched.cell_owner_watch_count(), <span class="number">1</span>);
-<a href=#10681 id=10681 data-nosnippet>10681</a>        <span class="comment">// Only the watcher's own token is cancellable, and only by that token.
-<a href=#10682 id=10682 data-nosnippet>10682</a>        </span>sched.cancel_cell_owner_watch(CLIENT_TID, token);
-<a href=#10683 id=10683 data-nosnippet>10683</a>        sched.cancel_cell_owner_watch(OTHER_TID, token);
-<a href=#10684 id=10684 data-nosnippet>10684</a>        <span class="macro">assert_eq!</span>(sched.cell_owner_watch_count(), <span class="number">1</span>);
-<a href=#10685 id=10685 data-nosnippet>10685</a>        sched.cancel_cell_owner_watch(NET_TID, token + <span class="number">1</span>);
-<a href=#10686 id=10686 data-nosnippet>10686</a>        <span class="macro">assert_eq!</span>(sched.cell_owner_watch_count(), <span class="number">1</span>);
-<a href=#10687 id=10687 data-nosnippet>10687</a>        sched.cancel_cell_owner_watch(NET_TID, token);
-<a href=#10688 id=10688 data-nosnippet>10688</a>        <span class="macro">assert_eq!</span>(sched.cell_owner_watch_count(), <span class="number">0</span>);
-<a href=#10689 id=10689 data-nosnippet>10689</a>
-<a href=#10690 id=10690 data-nosnippet>10690</a>        assert_net_watch(<span class="string">"baseline"</span>, <span class="bool-val">true</span>, <span class="kw-2">&amp;</span>net, <span class="prelude-val">None</span>, nothing, CLIENT_CELL, CLIENT_GEN);
-<a href=#10691 id=10691 data-nosnippet>10691</a>        <span class="comment">// Unregistered NET: refused.
-<a href=#10692 id=10692 data-nosnippet>10692</a>        </span>assert_net_watch(<span class="string">"unregistered"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>[], <span class="prelude-val">None</span>, nothing, CLIENT_CELL, CLIENT_GEN);
-<a href=#10693 id=10693 data-nosnippet>10693</a>        <span class="comment">// Another service's provider with the same Cell identity is not NET.
-<a href=#10694 id=10694 data-nosnippet>10694</a>        </span><span class="kw">for </span>service <span class="kw">in </span>[CONFIG, INPUT, KMS, VFS] {
-<a href=#10695 id=10695 data-nosnippet>10695</a>            assert_net_watch(
-<a href=#10696 id=10696 data-nosnippet>10696</a>                <span class="string">"other service provider"</span>,
-<a href=#10697 id=10697 data-nosnippet>10697</a>                <span class="bool-val">false</span>,
-<a href=#10698 id=10698 data-nosnippet>10698</a>                <span class="kw-2">&amp;</span>[(service, NET_TID, NET_CELL, NET_GEN)],
-<a href=#10699 id=10699 data-nosnippet>10699</a>                <span class="prelude-val">None</span>,
-<a href=#10700 id=10700 data-nosnippet>10700</a>                nothing,
-<a href=#10701 id=10701 data-nosnippet>10701</a>                CLIENT_CELL,
-<a href=#10702 id=10702 data-nosnippet>10702</a>                CLIENT_GEN,
-<a href=#10703 id=10703 data-nosnippet>10703</a>            );
-<a href=#10704 id=10704 data-nosnippet>10704</a>        }
-<a href=#10705 id=10705 data-nosnippet>10705</a>        <span class="comment">// Hot-swap quiesce: a Paused NET binding is refused.
-<a href=#10706 id=10706 data-nosnippet>10706</a>        </span>assert_net_watch(<span class="string">"paused"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>net, <span class="prelude-val">Some</span>((NET, NET_TID)), nothing, CLIENT_CELL, CLIENT_GEN);
-<a href=#10707 id=10707 data-nosnippet>10707</a>        <span class="comment">// NET re-registered to another provider (tid, cell, generation).
-<a href=#10708 id=10708 data-nosnippet>10708</a>        </span>assert_net_watch(
-<a href=#10709 id=10709 data-nosnippet>10709</a>            <span class="string">"re-registered to another provider"</span>,
-<a href=#10710 id=10710 data-nosnippet>10710</a>            <span class="bool-val">false</span>,
-<a href=#10711 id=10711 data-nosnippet>10711</a>            <span class="kw-2">&amp;</span>[(NET, FOREIGN_TID, <span class="number">47</span>, <span class="number">6</span>)],
-<a href=#10712 id=10712 data-nosnippet>10712</a>            <span class="prelude-val">None</span>,
-<a href=#10713 id=10713 data-nosnippet>10713</a>            nothing,
-<a href=#10714 id=10714 data-nosnippet>10714</a>            CLIENT_CELL,
-<a href=#10715 id=10715 data-nosnippet>10715</a>            CLIENT_GEN,
-<a href=#10716 id=10716 data-nosnippet>10716</a>        );
-<a href=#10717 id=10717 data-nosnippet>10717</a>        <span class="comment">// Same CellId, other generation: the stale watcher generation cannot hold it.
-<a href=#10718 id=10718 data-nosnippet>10718</a>        </span>assert_net_watch(
-<a href=#10719 id=10719 data-nosnippet>10719</a>            <span class="string">"stale watcher generation"</span>,
+<a href=#10661 id=10661 data-nosnippet>10661</a>    <span class="doccomment">/// Every service id the registry can bind that is not in the owner-watch table.
+<a href=#10662 id=10662 data-nosnippet>10662</a>    </span><span class="kw">fn </span>services_outside_owner_watch_table() -&gt; alloc::vec::Vec&lt;u16&gt; {
+<a href=#10663 id=10663 data-nosnippet>10663</a>        <span class="kw">use </span>api::syscall::service <span class="kw">as </span>s;
+<a href=#10664 id=10664 data-nosnippet>10664</a>        [
+<a href=#10665 id=10665 data-nosnippet>10665</a>            s::VFS,
+<a href=#10666 id=10666 data-nosnippet>10666</a>            s::NET,
+<a href=#10667 id=10667 data-nosnippet>10667</a>            s::INPUT,
+<a href=#10668 id=10668 data-nosnippet>10668</a>            s::CONFIG,
+<a href=#10669 id=10669 data-nosnippet>10669</a>            s::COMPOSITOR,
+<a href=#10670 id=10670 data-nosnippet>10670</a>            s::SILO,
+<a href=#10671 id=10671 data-nosnippet>10671</a>            s::HOTSWAP_DEMO,
+<a href=#10672 id=10672 data-nosnippet>10672</a>            s::NET_BROKER,
+<a href=#10673 id=10673 data-nosnippet>10673</a>            s::BLOCK_DRIVER,
+<a href=#10674 id=10674 data-nosnippet>10674</a>            s::NIC_DRIVER,
+<a href=#10675 id=10675 data-nosnippet>10675</a>            s::SUPERVISOR,
+<a href=#10676 id=10676 data-nosnippet>10676</a>            s::GPU_DRIVER,
+<a href=#10677 id=10677 data-nosnippet>10677</a>            s::KMS,
+<a href=#10678 id=10678 data-nosnippet>10678</a>            s::AI,
+<a href=#10679 id=10679 data-nosnippet>10679</a>            s::OCEL_JS,
+<a href=#10680 id=10680 data-nosnippet>10680</a>        ]
+<a href=#10681 id=10681 data-nosnippet>10681</a>        .into_iter()
+<a href=#10682 id=10682 data-nosnippet>10682</a>        .filter(|id| !<span class="kw">crate</span>::task::scheduler::OWNER_WATCH_SERVICES.contains(id))
+<a href=#10683 id=10683 data-nosnippet>10683</a>        .collect()
+<a href=#10684 id=10684 data-nosnippet>10684</a>    }
+<a href=#10685 id=10685 data-nosnippet>10685</a>
+<a href=#10686 id=10686 data-nosnippet>10686</a>    <span class="doccomment">/// The grant for one table service: its Active registry-bound provider
+<a href=#10687 id=10687 data-nosnippet>10687</a>    /// cell serving exactly the principal it names. `service` is the only
+<a href=#10688 id=10688 data-nosnippet>10688</a>    /// registration in play, so the case proves that service's own entry.
+<a href=#10689 id=10689 data-nosnippet>10689</a>    </span><span class="kw">fn </span>assert_owner_watch_grant_for(service: u16) {
+<a href=#10690 id=10690 data-nosnippet>10690</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
+<a href=#10691 id=10691 data-nosnippet>10691</a>        <span class="kw">let </span>bound = [(service, NET_TID, NET_CELL, NET_GEN)];
+<a href=#10692 id=10692 data-nosnippet>10692</a>        <span class="kw">let </span>nothing = |<span class="kw">_</span>: <span class="kw-2">&amp;mut </span>Scheduler| {};
+<a href=#10693 id=10693 data-nosnippet>10693</a>
+<a href=#10694 id=10694 data-nosnippet>10694</a>        <span class="comment">// Granted: the Active binding, the attested serving context, a live
+<a href=#10695 id=10695 data-nosnippet>10695</a>        // client generation. The watch names the client root.
+<a href=#10696 id=10696 data-nosnippet>10696</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>sched = owner_watch_scheduler();
+<a href=#10697 id=10697 data-nosnippet>10697</a>        <span class="kw">let </span>(owner, token) = owner_watch(<span class="kw-2">&amp;mut </span>sched, <span class="kw-2">&amp;</span>bound, <span class="prelude-val">None</span>, CLIENT_CELL, CLIENT_GEN)
+<a href=#10698 id=10698 data-nosnippet>10698</a>            .expect(<span class="string">"registered watcher serving the client"</span>);
+<a href=#10699 id=10699 data-nosnippet>10699</a>        <span class="macro">assert_eq!</span>(
+<a href=#10700 id=10700 data-nosnippet>10700</a>            owner,
+<a href=#10701 id=10701 data-nosnippet>10701</a>            api::cell_owner::CellOwner::new(CLIENT_CELL, CLIENT_GEN, CLIENT_TID <span class="kw">as </span>u64)
+<a href=#10702 id=10702 data-nosnippet>10702</a>        );
+<a href=#10703 id=10703 data-nosnippet>10703</a>        <span class="macro">assert!</span>(token &gt; <span class="number">0</span>);
+<a href=#10704 id=10704 data-nosnippet>10704</a>        <span class="macro">assert_eq!</span>(sched.cell_owner_watch_count(), <span class="number">1</span>);
+<a href=#10705 id=10705 data-nosnippet>10705</a>        <span class="comment">// Only the watcher's own token is cancellable, and only by that token.
+<a href=#10706 id=10706 data-nosnippet>10706</a>        </span>sched.cancel_cell_owner_watch(CLIENT_TID, token);
+<a href=#10707 id=10707 data-nosnippet>10707</a>        sched.cancel_cell_owner_watch(OTHER_TID, token);
+<a href=#10708 id=10708 data-nosnippet>10708</a>        <span class="macro">assert_eq!</span>(sched.cell_owner_watch_count(), <span class="number">1</span>);
+<a href=#10709 id=10709 data-nosnippet>10709</a>        sched.cancel_cell_owner_watch(NET_TID, token + <span class="number">1</span>);
+<a href=#10710 id=10710 data-nosnippet>10710</a>        <span class="macro">assert_eq!</span>(sched.cell_owner_watch_count(), <span class="number">1</span>);
+<a href=#10711 id=10711 data-nosnippet>10711</a>        sched.cancel_cell_owner_watch(NET_TID, token);
+<a href=#10712 id=10712 data-nosnippet>10712</a>        <span class="macro">assert_eq!</span>(sched.cell_owner_watch_count(), <span class="number">0</span>);
+<a href=#10713 id=10713 data-nosnippet>10713</a>
+<a href=#10714 id=10714 data-nosnippet>10714</a>        assert_owner_watch(<span class="string">"baseline"</span>, <span class="bool-val">true</span>, <span class="kw-2">&amp;</span>bound, <span class="prelude-val">None</span>, nothing, CLIENT_CELL, CLIENT_GEN);
+<a href=#10715 id=10715 data-nosnippet>10715</a>        <span class="comment">// Unregistered: refused.
+<a href=#10716 id=10716 data-nosnippet>10716</a>        </span>assert_owner_watch(<span class="string">"unregistered"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>[], <span class="prelude-val">None</span>, nothing, CLIENT_CELL, CLIENT_GEN);
+<a href=#10717 id=10717 data-nosnippet>10717</a>        <span class="comment">// Hot-swap quiesce: a Paused binding is refused.
+<a href=#10718 id=10718 data-nosnippet>10718</a>        </span>assert_owner_watch(
+<a href=#10719 id=10719 data-nosnippet>10719</a>            <span class="string">"paused"</span>,
 <a href=#10720 id=10720 data-nosnippet>10720</a>            <span class="bool-val">false</span>,
-<a href=#10721 id=10721 data-nosnippet>10721</a>            <span class="kw-2">&amp;</span>[(NET, NET_TID, NET_CELL, NET_GEN + <span class="number">1</span>)],
-<a href=#10722 id=10722 data-nosnippet>10722</a>            <span class="prelude-val">None</span>,
+<a href=#10721 id=10721 data-nosnippet>10721</a>            <span class="kw-2">&amp;</span>bound,
+<a href=#10722 id=10722 data-nosnippet>10722</a>            <span class="prelude-val">Some</span>((service, NET_TID)),
 <a href=#10723 id=10723 data-nosnippet>10723</a>            nothing,
 <a href=#10724 id=10724 data-nosnippet>10724</a>            CLIENT_CELL,
 <a href=#10725 id=10725 data-nosnippet>10725</a>            CLIENT_GEN,
 <a href=#10726 id=10726 data-nosnippet>10726</a>        );
-<a href=#10727 id=10727 data-nosnippet>10727</a>        assert_net_watch(
-<a href=#10728 id=10728 data-nosnippet>10728</a>            <span class="string">"other watcher cell"</span>,
-<a href=#10729 id=10729 data-nosnippet>10729</a>            <span class="bool-val">false</span>,
-<a href=#10730 id=10730 data-nosnippet>10730</a>            <span class="kw-2">&amp;</span>[(NET, NET_TID, NET_CELL + <span class="number">1</span>, NET_GEN)],
-<a href=#10731 id=10731 data-nosnippet>10731</a>            <span class="prelude-val">None</span>,
-<a href=#10732 id=10732 data-nosnippet>10732</a>            nothing,
-<a href=#10733 id=10733 data-nosnippet>10733</a>            CLIENT_CELL,
-<a href=#10734 id=10734 data-nosnippet>10734</a>            CLIENT_GEN,
-<a href=#10735 id=10735 data-nosnippet>10735</a>        );
-<a href=#10736 id=10736 data-nosnippet>10736</a>        <span class="comment">// Cell 0 is the kernel's allocation, never a provider binding.
-<a href=#10737 id=10737 data-nosnippet>10737</a>        </span>assert_net_watch(
-<a href=#10738 id=10738 data-nosnippet>10738</a>            <span class="string">"cell 0"</span>,
-<a href=#10739 id=10739 data-nosnippet>10739</a>            <span class="bool-val">false</span>,
-<a href=#10740 id=10740 data-nosnippet>10740</a>            <span class="kw-2">&amp;</span>[(NET, NET_TID, <span class="number">0</span>, NET_GEN)],
-<a href=#10741 id=10741 data-nosnippet>10741</a>            <span class="prelude-val">None</span>,
-<a href=#10742 id=10742 data-nosnippet>10742</a>            |sched| {
-<a href=#10743 id=10743 data-nosnippet>10743</a>                sched.tasks.get_mut(<span class="kw-2">&amp;</span>NET_TID).expect(<span class="string">"watcher"</span>).cell_id = CellId(<span class="number">0</span>);
-<a href=#10744 id=10744 data-nosnippet>10744</a>            },
-<a href=#10745 id=10745 data-nosnippet>10745</a>            CLIENT_CELL,
-<a href=#10746 id=10746 data-nosnippet>10746</a>            CLIENT_GEN,
-<a href=#10747 id=10747 data-nosnippet>10747</a>        );
-<a href=#10748 id=10748 data-nosnippet>10748</a>        <span class="comment">// The attested serving context must name the principal asked for.
-<a href=#10749 id=10749 data-nosnippet>10749</a>        </span>assert_net_watch(
-<a href=#10750 id=10750 data-nosnippet>10750</a>            <span class="string">"serving another cell"</span>,
-<a href=#10751 id=10751 data-nosnippet>10751</a>            <span class="bool-val">false</span>,
-<a href=#10752 id=10752 data-nosnippet>10752</a>            <span class="kw-2">&amp;</span>net,
-<a href=#10753 id=10753 data-nosnippet>10753</a>            <span class="prelude-val">None</span>,
-<a href=#10754 id=10754 data-nosnippet>10754</a>            |sched| {
-<a href=#10755 id=10755 data-nosnippet>10755</a>                sched.tasks.get_mut(<span class="kw-2">&amp;</span>NET_TID).expect(<span class="string">"watcher"</span>).current_caller_cell_id = OTHER_CELL;
-<a href=#10756 id=10756 data-nosnippet>10756</a>            },
-<a href=#10757 id=10757 data-nosnippet>10757</a>            CLIENT_CELL,
-<a href=#10758 id=10758 data-nosnippet>10758</a>            CLIENT_GEN,
-<a href=#10759 id=10759 data-nosnippet>10759</a>        );
-<a href=#10760 id=10760 data-nosnippet>10760</a>        assert_net_watch(<span class="string">"asking for another cell"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>net, <span class="prelude-val">None</span>, nothing, OTHER_CELL, OTHER_GEN);
-<a href=#10761 id=10761 data-nosnippet>10761</a>        assert_net_watch(<span class="string">"no serving context"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>net, <span class="prelude-val">None</span>, |sched| {
-<a href=#10762 id=10762 data-nosnippet>10762</a>            sched.tasks.get_mut(<span class="kw-2">&amp;</span>NET_TID).expect(<span class="string">"watcher"</span>).clear_current_caller_context();
-<a href=#10763 id=10763 data-nosnippet>10763</a>        }, CLIENT_CELL, CLIENT_GEN);
-<a href=#10764 id=10764 data-nosnippet>10764</a>        <span class="comment">// Stale client generation: asked for, or recorded, but never live.
-<a href=#10765 id=10765 data-nosnippet>10765</a>        </span>assert_net_watch(<span class="string">"stale client generation"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>net, <span class="prelude-val">None</span>, nothing, CLIENT_CELL, CLIENT_GEN + <span class="number">1</span>);
-<a href=#10766 id=10766 data-nosnippet>10766</a>        assert_net_watch(
-<a href=#10767 id=10767 data-nosnippet>10767</a>            <span class="string">"serving a dead generation"</span>,
-<a href=#10768 id=10768 data-nosnippet>10768</a>            <span class="bool-val">false</span>,
-<a href=#10769 id=10769 data-nosnippet>10769</a>            <span class="kw-2">&amp;</span>net,
-<a href=#10770 id=10770 data-nosnippet>10770</a>            <span class="prelude-val">None</span>,
-<a href=#10771 id=10771 data-nosnippet>10771</a>            |sched| {
-<a href=#10772 id=10772 data-nosnippet>10772</a>                sched.tasks.get_mut(<span class="kw-2">&amp;</span>NET_TID).expect(<span class="string">"watcher"</span>).current_caller_cell_generation =
-<a href=#10773 id=10773 data-nosnippet>10773</a>                    CLIENT_GEN + <span class="number">1</span>;
-<a href=#10774 id=10774 data-nosnippet>10774</a>            },
-<a href=#10775 id=10775 data-nosnippet>10775</a>            CLIENT_CELL,
-<a href=#10776 id=10776 data-nosnippet>10776</a>            CLIENT_GEN + <span class="number">1</span>,
-<a href=#10777 id=10777 data-nosnippet>10777</a>        );
-<a href=#10778 id=10778 data-nosnippet>10778</a>        <span class="comment">// Dead client root.
-<a href=#10779 id=10779 data-nosnippet>10779</a>        </span>assert_net_watch(<span class="string">"dead client root"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>net, <span class="prelude-val">None</span>, |sched| {
-<a href=#10780 id=10780 data-nosnippet>10780</a>            <span class="macro">assert!</span>(sched.tasks.remove(<span class="kw-2">&amp;</span>CLIENT_TID).is_some());
-<a href=#10781 id=10781 data-nosnippet>10781</a>        }, CLIENT_CELL, CLIENT_GEN);
-<a href=#10782 id=10782 data-nosnippet>10782</a>
-<a href=#10783 id=10783 data-nosnippet>10783</a>        <span class="comment">// Regression: the registered VFS cell is granted exactly as before, with
-<a href=#10784 id=10784 data-nosnippet>10784</a>        // no NET registration, and is held to the same serving-context proof.
-<a href=#10785 id=10785 data-nosnippet>10785</a>        </span><span class="kw">crate</span>::fast_ipc::set_vfs_handler_cell(NET_CELL <span class="kw">as </span>usize);
-<a href=#10786 id=10786 data-nosnippet>10786</a>        assert_net_watch(<span class="string">"vfs cell"</span>, <span class="bool-val">true</span>, <span class="kw-2">&amp;</span>[], <span class="prelude-val">None</span>, nothing, CLIENT_CELL, CLIENT_GEN);
-<a href=#10787 id=10787 data-nosnippet>10787</a>        assert_net_watch(<span class="string">"vfs cell, other principal"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>[], <span class="prelude-val">None</span>, nothing, OTHER_CELL, OTHER_GEN);
-<a href=#10788 id=10788 data-nosnippet>10788</a>        <span class="kw">crate</span>::fast_ipc::clear_vfs_if_cell(NET_CELL <span class="kw">as </span>usize);
-<a href=#10789 id=10789 data-nosnippet>10789</a>        assert_net_watch(<span class="string">"vfs cleared"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>[], <span class="prelude-val">None</span>, nothing, CLIENT_CELL, CLIENT_GEN);
-<a href=#10790 id=10790 data-nosnippet>10790</a>    }
-<a href=#10791 id=10791 data-nosnippet>10791</a>
-<a href=#10792 id=10792 data-nosnippet>10792</a>    <span class="doccomment">/// `TryRecv` takes a queued owner death only for the wildcard mask, FIFO,
-<a href=#10793 id=10793 data-nosnippet>10793</a>    /// one exact record at a time, and never a `NotifyOnExit` death.
-<a href=#10794 id=10794 data-nosnippet>10794</a>    </span><span class="attr">#[test]
-<a href=#10795 id=10795 data-nosnippet>10795</a>    </span><span class="kw">fn </span>try_recv_takes_owner_death_only_for_mask_zero() {
-<a href=#10796 id=10796 data-nosnippet>10796</a>        <span class="kw">use </span>super::{peek_owner_death_for_try_recv <span class="kw">as </span>peek, remove_owner_death <span class="kw">as </span>remove};
-<a href=#10797 id=10797 data-nosnippet>10797</a>        <span class="kw">let </span><span class="kw-2">mut </span>task = Task::new(<span class="number">41_010</span>, CellId(NET_CELL), <span class="string">"try-recv"</span>, alloc::vec::Vec::new());
-<a href=#10798 id=10798 data-nosnippet>10798</a>        <span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, <span class="number">0</span>), <span class="prelude-val">None</span>);
-<a href=#10799 id=10799 data-nosnippet>10799</a>
-<a href=#10800 id=10800 data-nosnippet>10800</a>        task.pending_owner_deaths.push((<span class="number">11</span>, <span class="number">101</span>, <span class="number">0xDEAD</span>));
-<a href=#10801 id=10801 data-nosnippet>10801</a>        task.pending_owner_deaths.push((<span class="number">12</span>, <span class="number">102</span>, <span class="number">7</span>));
-<a href=#10802 id=10802 data-nosnippet>10802</a>        task.pending_deaths.push((<span class="number">900</span>, <span class="number">5</span>));
+<a href=#10727 id=10727 data-nosnippet>10727</a>        <span class="comment">// Re-registered to another provider (tid, cell, generation).
+<a href=#10728 id=10728 data-nosnippet>10728</a>        </span>assert_owner_watch(
+<a href=#10729 id=10729 data-nosnippet>10729</a>            <span class="string">"re-registered to another provider"</span>,
+<a href=#10730 id=10730 data-nosnippet>10730</a>            <span class="bool-val">false</span>,
+<a href=#10731 id=10731 data-nosnippet>10731</a>            <span class="kw-2">&amp;</span>[(service, FOREIGN_TID, <span class="number">47</span>, <span class="number">6</span>)],
+<a href=#10732 id=10732 data-nosnippet>10732</a>            <span class="prelude-val">None</span>,
+<a href=#10733 id=10733 data-nosnippet>10733</a>            nothing,
+<a href=#10734 id=10734 data-nosnippet>10734</a>            CLIENT_CELL,
+<a href=#10735 id=10735 data-nosnippet>10735</a>            CLIENT_GEN,
+<a href=#10736 id=10736 data-nosnippet>10736</a>        );
+<a href=#10737 id=10737 data-nosnippet>10737</a>        <span class="comment">// Same CellId, other generation: the stale watcher generation cannot hold it.
+<a href=#10738 id=10738 data-nosnippet>10738</a>        </span>assert_owner_watch(
+<a href=#10739 id=10739 data-nosnippet>10739</a>            <span class="string">"stale watcher generation"</span>,
+<a href=#10740 id=10740 data-nosnippet>10740</a>            <span class="bool-val">false</span>,
+<a href=#10741 id=10741 data-nosnippet>10741</a>            <span class="kw-2">&amp;</span>[(service, NET_TID, NET_CELL, NET_GEN + <span class="number">1</span>)],
+<a href=#10742 id=10742 data-nosnippet>10742</a>            <span class="prelude-val">None</span>,
+<a href=#10743 id=10743 data-nosnippet>10743</a>            nothing,
+<a href=#10744 id=10744 data-nosnippet>10744</a>            CLIENT_CELL,
+<a href=#10745 id=10745 data-nosnippet>10745</a>            CLIENT_GEN,
+<a href=#10746 id=10746 data-nosnippet>10746</a>        );
+<a href=#10747 id=10747 data-nosnippet>10747</a>        assert_owner_watch(
+<a href=#10748 id=10748 data-nosnippet>10748</a>            <span class="string">"other watcher cell"</span>,
+<a href=#10749 id=10749 data-nosnippet>10749</a>            <span class="bool-val">false</span>,
+<a href=#10750 id=10750 data-nosnippet>10750</a>            <span class="kw-2">&amp;</span>[(service, NET_TID, NET_CELL + <span class="number">1</span>, NET_GEN)],
+<a href=#10751 id=10751 data-nosnippet>10751</a>            <span class="prelude-val">None</span>,
+<a href=#10752 id=10752 data-nosnippet>10752</a>            nothing,
+<a href=#10753 id=10753 data-nosnippet>10753</a>            CLIENT_CELL,
+<a href=#10754 id=10754 data-nosnippet>10754</a>            CLIENT_GEN,
+<a href=#10755 id=10755 data-nosnippet>10755</a>        );
+<a href=#10756 id=10756 data-nosnippet>10756</a>        <span class="comment">// Cell 0 is the kernel's allocation, never a provider binding.
+<a href=#10757 id=10757 data-nosnippet>10757</a>        </span>assert_owner_watch(
+<a href=#10758 id=10758 data-nosnippet>10758</a>            <span class="string">"cell 0"</span>,
+<a href=#10759 id=10759 data-nosnippet>10759</a>            <span class="bool-val">false</span>,
+<a href=#10760 id=10760 data-nosnippet>10760</a>            <span class="kw-2">&amp;</span>[(service, NET_TID, <span class="number">0</span>, NET_GEN)],
+<a href=#10761 id=10761 data-nosnippet>10761</a>            <span class="prelude-val">None</span>,
+<a href=#10762 id=10762 data-nosnippet>10762</a>            |sched| {
+<a href=#10763 id=10763 data-nosnippet>10763</a>                sched.tasks.get_mut(<span class="kw-2">&amp;</span>NET_TID).expect(<span class="string">"watcher"</span>).cell_id = CellId(<span class="number">0</span>);
+<a href=#10764 id=10764 data-nosnippet>10764</a>            },
+<a href=#10765 id=10765 data-nosnippet>10765</a>            CLIENT_CELL,
+<a href=#10766 id=10766 data-nosnippet>10766</a>            CLIENT_GEN,
+<a href=#10767 id=10767 data-nosnippet>10767</a>        );
+<a href=#10768 id=10768 data-nosnippet>10768</a>        <span class="comment">// The attested serving context must name the principal asked for.
+<a href=#10769 id=10769 data-nosnippet>10769</a>        </span>assert_owner_watch(
+<a href=#10770 id=10770 data-nosnippet>10770</a>            <span class="string">"serving another cell"</span>,
+<a href=#10771 id=10771 data-nosnippet>10771</a>            <span class="bool-val">false</span>,
+<a href=#10772 id=10772 data-nosnippet>10772</a>            <span class="kw-2">&amp;</span>bound,
+<a href=#10773 id=10773 data-nosnippet>10773</a>            <span class="prelude-val">None</span>,
+<a href=#10774 id=10774 data-nosnippet>10774</a>            |sched| {
+<a href=#10775 id=10775 data-nosnippet>10775</a>                sched.tasks.get_mut(<span class="kw-2">&amp;</span>NET_TID).expect(<span class="string">"watcher"</span>).current_caller_cell_id = OTHER_CELL;
+<a href=#10776 id=10776 data-nosnippet>10776</a>            },
+<a href=#10777 id=10777 data-nosnippet>10777</a>            CLIENT_CELL,
+<a href=#10778 id=10778 data-nosnippet>10778</a>            CLIENT_GEN,
+<a href=#10779 id=10779 data-nosnippet>10779</a>        );
+<a href=#10780 id=10780 data-nosnippet>10780</a>        assert_owner_watch(<span class="string">"asking for another cell"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>bound, <span class="prelude-val">None</span>, nothing, OTHER_CELL, OTHER_GEN);
+<a href=#10781 id=10781 data-nosnippet>10781</a>        assert_owner_watch(<span class="string">"no serving context"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>bound, <span class="prelude-val">None</span>, |sched| {
+<a href=#10782 id=10782 data-nosnippet>10782</a>            sched.tasks.get_mut(<span class="kw-2">&amp;</span>NET_TID).expect(<span class="string">"watcher"</span>).clear_current_caller_context();
+<a href=#10783 id=10783 data-nosnippet>10783</a>        }, CLIENT_CELL, CLIENT_GEN);
+<a href=#10784 id=10784 data-nosnippet>10784</a>        <span class="comment">// Stale client generation: asked for, or recorded, but never live.
+<a href=#10785 id=10785 data-nosnippet>10785</a>        </span>assert_owner_watch(<span class="string">"stale client generation"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>bound, <span class="prelude-val">None</span>, nothing, CLIENT_CELL, CLIENT_GEN + <span class="number">1</span>);
+<a href=#10786 id=10786 data-nosnippet>10786</a>        assert_owner_watch(
+<a href=#10787 id=10787 data-nosnippet>10787</a>            <span class="string">"serving a dead generation"</span>,
+<a href=#10788 id=10788 data-nosnippet>10788</a>            <span class="bool-val">false</span>,
+<a href=#10789 id=10789 data-nosnippet>10789</a>            <span class="kw-2">&amp;</span>bound,
+<a href=#10790 id=10790 data-nosnippet>10790</a>            <span class="prelude-val">None</span>,
+<a href=#10791 id=10791 data-nosnippet>10791</a>            |sched| {
+<a href=#10792 id=10792 data-nosnippet>10792</a>                sched.tasks.get_mut(<span class="kw-2">&amp;</span>NET_TID).expect(<span class="string">"watcher"</span>).current_caller_cell_generation =
+<a href=#10793 id=10793 data-nosnippet>10793</a>                    CLIENT_GEN + <span class="number">1</span>;
+<a href=#10794 id=10794 data-nosnippet>10794</a>            },
+<a href=#10795 id=10795 data-nosnippet>10795</a>            CLIENT_CELL,
+<a href=#10796 id=10796 data-nosnippet>10796</a>            CLIENT_GEN + <span class="number">1</span>,
+<a href=#10797 id=10797 data-nosnippet>10797</a>        );
+<a href=#10798 id=10798 data-nosnippet>10798</a>        <span class="comment">// Dead client root.
+<a href=#10799 id=10799 data-nosnippet>10799</a>        </span>assert_owner_watch(<span class="string">"dead client root"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>bound, <span class="prelude-val">None</span>, |sched| {
+<a href=#10800 id=10800 data-nosnippet>10800</a>            <span class="macro">assert!</span>(sched.tasks.remove(<span class="kw-2">&amp;</span>CLIENT_TID).is_some());
+<a href=#10801 id=10801 data-nosnippet>10801</a>        }, CLIENT_CELL, CLIENT_GEN);
+<a href=#10802 id=10802 data-nosnippet>10802</a>    }
 <a href=#10803 id=10803 data-nosnippet>10803</a>
-<a href=#10804 id=10804 data-nosnippet>10804</a>        <span class="comment">// A masked (dependency) receive never sees an owner death.
-<a href=#10805 id=10805 data-nosnippet>10805</a>        </span><span class="kw">for </span>mask <span class="kw">in </span>[<span class="number">1usize</span>, <span class="number">101</span>, <span class="number">102</span>, <span class="number">900</span>, usize::MAX] {
-<a href=#10806 id=10806 data-nosnippet>10806</a>            <span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, mask), <span class="prelude-val">None</span>, <span class="string">"mask {mask}"</span>);
-<a href=#10807 id=10807 data-nosnippet>10807</a>        }
-<a href=#10808 id=10808 data-nosnippet>10808</a>        <span class="macro">assert_eq!</span>(task.pending_owner_deaths.len(), <span class="number">2</span>);
-<a href=#10809 id=10809 data-nosnippet>10809</a>
-<a href=#10810 id=10810 data-nosnippet>10810</a>        <span class="comment">// Wildcard: the oldest record, and peeking removes nothing.
-<a href=#10811 id=10811 data-nosnippet>10811</a>        </span><span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">11</span>, <span class="number">101</span>, <span class="number">0xDEAD</span>)));
-<a href=#10812 id=10812 data-nosnippet>10812</a>        <span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">11</span>, <span class="number">101</span>, <span class="number">0xDEAD</span>)));
-<a href=#10813 id=10813 data-nosnippet>10813</a>        <span class="macro">assert_eq!</span>(task.pending_owner_deaths.len(), <span class="number">2</span>);
-<a href=#10814 id=10814 data-nosnippet>10814</a>
-<a href=#10815 id=10815 data-nosnippet>10815</a>        <span class="comment">// Commit removes exactly the delivered record; an unknown token is a no-op.
-<a href=#10816 id=10816 data-nosnippet>10816</a>        </span>remove(<span class="kw-2">&amp;mut </span>task, <span class="number">99</span>);
-<a href=#10817 id=10817 data-nosnippet>10817</a>        <span class="macro">assert_eq!</span>(task.pending_owner_deaths.len(), <span class="number">2</span>);
-<a href=#10818 id=10818 data-nosnippet>10818</a>        remove(<span class="kw-2">&amp;mut </span>task, <span class="number">11</span>);
-<a href=#10819 id=10819 data-nosnippet>10819</a>        <span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">12</span>, <span class="number">102</span>, <span class="number">7</span>)));
-<a href=#10820 id=10820 data-nosnippet>10820</a>        remove(<span class="kw-2">&amp;mut </span>task, <span class="number">12</span>);
-<a href=#10821 id=10821 data-nosnippet>10821</a>        <span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, <span class="number">0</span>), <span class="prelude-val">None</span>);
-<a href=#10822 id=10822 data-nosnippet>10822</a>        <span class="macro">assert!</span>(task.pending_owner_deaths.is_empty());
-<a href=#10823 id=10823 data-nosnippet>10823</a>
-<a href=#10824 id=10824 data-nosnippet>10824</a>        <span class="comment">// NotifyOnExit deaths are untouched and never offered by TryRecv.
-<a href=#10825 id=10825 data-nosnippet>10825</a>        </span><span class="macro">assert_eq!</span>(task.pending_deaths, <span class="macro">alloc::vec!</span>[(<span class="number">900</span>, <span class="number">5</span>)]);
-<a href=#10826 id=10826 data-nosnippet>10826</a>    }
-<a href=#10827 id=10827 data-nosnippet>10827</a>}
+<a href=#10804 id=10804 data-nosnippet>10804</a>    <span class="doccomment">/// The grant is the registry-bound live provider cell of a table service
+<a href=#10805 id=10805 data-nosnippet>10805</a>    /// serving exactly the principal it names; everything else (and the VFS
+<a href=#10806 id=10806 data-nosnippet>10806</a>    /// rule) is as before.
+<a href=#10807 id=10807 data-nosnippet>10807</a>    </span><span class="attr">#[test]
+<a href=#10808 id=10808 data-nosnippet>10808</a>    </span><span class="kw">fn </span>owner_watch_grant_matrix() {
+<a href=#10809 id=10809 data-nosnippet>10809</a>        <span class="kw">use </span>api::syscall::service::{COMPOSITOR, NET};
+<a href=#10810 id=10810 data-nosnippet>10810</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>service <span class="kw">in </span><span class="kw-2">&amp;</span><span class="kw">crate</span>::task::scheduler::OWNER_WATCH_SERVICES {
+<a href=#10811 id=10811 data-nosnippet>10811</a>            assert_owner_watch_grant_for(service);
+<a href=#10812 id=10812 data-nosnippet>10812</a>        }
+<a href=#10813 id=10813 data-nosnippet>10813</a>
+<a href=#10814 id=10814 data-nosnippet>10814</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
+<a href=#10815 id=10815 data-nosnippet>10815</a>        <span class="kw">let </span>nothing = |<span class="kw">_</span>: <span class="kw-2">&amp;mut </span>Scheduler| {};
+<a href=#10816 id=10816 data-nosnippet>10816</a>        <span class="comment">// Another service's provider with the same Cell identity is not a table
+<a href=#10817 id=10817 data-nosnippet>10817</a>        // service, whichever table service the matrix is exercising.
+<a href=#10818 id=10818 data-nosnippet>10818</a>        </span><span class="kw">for </span>service <span class="kw">in </span>services_outside_owner_watch_table() {
+<a href=#10819 id=10819 data-nosnippet>10819</a>            assert_owner_watch(
+<a href=#10820 id=10820 data-nosnippet>10820</a>                <span class="string">"other service provider"</span>,
+<a href=#10821 id=10821 data-nosnippet>10821</a>                <span class="bool-val">false</span>,
+<a href=#10822 id=10822 data-nosnippet>10822</a>                <span class="kw-2">&amp;</span>[(service, NET_TID, NET_CELL, NET_GEN)],
+<a href=#10823 id=10823 data-nosnippet>10823</a>                <span class="prelude-val">None</span>,
+<a href=#10824 id=10824 data-nosnippet>10824</a>                nothing,
+<a href=#10825 id=10825 data-nosnippet>10825</a>                CLIENT_CELL,
+<a href=#10826 id=10826 data-nosnippet>10826</a>                CLIENT_GEN,
+<a href=#10827 id=10827 data-nosnippet>10827</a>            );
+<a href=#10828 id=10828 data-nosnippet>10828</a>        }
+<a href=#10829 id=10829 data-nosnippet>10829</a>        <span class="comment">// A watcher bound to neither table service (both bound elsewhere) is
+<a href=#10830 id=10830 data-nosnippet>10830</a>        // refused; a binding of one table service gives no right to the cell
+<a href=#10831 id=10831 data-nosnippet>10831</a>        // that holds another service's binding.
+<a href=#10832 id=10832 data-nosnippet>10832</a>        </span>assert_owner_watch(
+<a href=#10833 id=10833 data-nosnippet>10833</a>            <span class="string">"every table service bound to another provider"</span>,
+<a href=#10834 id=10834 data-nosnippet>10834</a>            <span class="bool-val">false</span>,
+<a href=#10835 id=10835 data-nosnippet>10835</a>            <span class="kw-2">&amp;</span>[(NET, FOREIGN_TID, <span class="number">47</span>, <span class="number">6</span>), (COMPOSITOR, FOREIGN_TID + <span class="number">1</span>, <span class="number">48</span>, <span class="number">7</span>)],
+<a href=#10836 id=10836 data-nosnippet>10836</a>            <span class="prelude-val">None</span>,
+<a href=#10837 id=10837 data-nosnippet>10837</a>            nothing,
+<a href=#10838 id=10838 data-nosnippet>10838</a>            CLIENT_CELL,
+<a href=#10839 id=10839 data-nosnippet>10839</a>            CLIENT_GEN,
+<a href=#10840 id=10840 data-nosnippet>10840</a>        );
+<a href=#10841 id=10841 data-nosnippet>10841</a>        assert_owner_watch(
+<a href=#10842 id=10842 data-nosnippet>10842</a>            <span class="string">"NET bound to the watcher, COMPOSITOR bound elsewhere"</span>,
+<a href=#10843 id=10843 data-nosnippet>10843</a>            <span class="bool-val">true</span>,
+<a href=#10844 id=10844 data-nosnippet>10844</a>            <span class="kw-2">&amp;</span>[(NET, NET_TID, NET_CELL, NET_GEN), (COMPOSITOR, FOREIGN_TID, <span class="number">47</span>, <span class="number">6</span>)],
+<a href=#10845 id=10845 data-nosnippet>10845</a>            <span class="prelude-val">None</span>,
+<a href=#10846 id=10846 data-nosnippet>10846</a>            nothing,
+<a href=#10847 id=10847 data-nosnippet>10847</a>            CLIENT_CELL,
+<a href=#10848 id=10848 data-nosnippet>10848</a>            CLIENT_GEN,
+<a href=#10849 id=10849 data-nosnippet>10849</a>        );
+<a href=#10850 id=10850 data-nosnippet>10850</a>        assert_owner_watch(
+<a href=#10851 id=10851 data-nosnippet>10851</a>            <span class="string">"COMPOSITOR bound to the watcher, NET bound elsewhere"</span>,
+<a href=#10852 id=10852 data-nosnippet>10852</a>            <span class="bool-val">true</span>,
+<a href=#10853 id=10853 data-nosnippet>10853</a>            <span class="kw-2">&amp;</span>[(COMPOSITOR, NET_TID, NET_CELL, NET_GEN), (NET, FOREIGN_TID, <span class="number">47</span>, <span class="number">6</span>)],
+<a href=#10854 id=10854 data-nosnippet>10854</a>            <span class="prelude-val">None</span>,
+<a href=#10855 id=10855 data-nosnippet>10855</a>            nothing,
+<a href=#10856 id=10856 data-nosnippet>10856</a>            CLIENT_CELL,
+<a href=#10857 id=10857 data-nosnippet>10857</a>            CLIENT_GEN,
+<a href=#10858 id=10858 data-nosnippet>10858</a>        );
+<a href=#10859 id=10859 data-nosnippet>10859</a>        assert_owner_watch(
+<a href=#10860 id=10860 data-nosnippet>10860</a>            <span class="string">"both bound to the watcher, one paused"</span>,
+<a href=#10861 id=10861 data-nosnippet>10861</a>            <span class="bool-val">true</span>,
+<a href=#10862 id=10862 data-nosnippet>10862</a>            <span class="kw-2">&amp;</span>[(NET, NET_TID, NET_CELL, NET_GEN), (COMPOSITOR, NET_TID, NET_CELL, NET_GEN)],
+<a href=#10863 id=10863 data-nosnippet>10863</a>            <span class="prelude-val">Some</span>((NET, NET_TID)),
+<a href=#10864 id=10864 data-nosnippet>10864</a>            nothing,
+<a href=#10865 id=10865 data-nosnippet>10865</a>            CLIENT_CELL,
+<a href=#10866 id=10866 data-nosnippet>10866</a>            CLIENT_GEN,
+<a href=#10867 id=10867 data-nosnippet>10867</a>        );
+<a href=#10868 id=10868 data-nosnippet>10868</a>
+<a href=#10869 id=10869 data-nosnippet>10869</a>        <span class="comment">// Regression: the registered VFS cell is granted exactly as before, with
+<a href=#10870 id=10870 data-nosnippet>10870</a>        // no service registration, and is held to the same serving-context proof.
+<a href=#10871 id=10871 data-nosnippet>10871</a>        </span><span class="kw">crate</span>::fast_ipc::set_vfs_handler_cell(NET_CELL <span class="kw">as </span>usize);
+<a href=#10872 id=10872 data-nosnippet>10872</a>        assert_owner_watch(<span class="string">"vfs cell"</span>, <span class="bool-val">true</span>, <span class="kw-2">&amp;</span>[], <span class="prelude-val">None</span>, nothing, CLIENT_CELL, CLIENT_GEN);
+<a href=#10873 id=10873 data-nosnippet>10873</a>        assert_owner_watch(<span class="string">"vfs cell, other principal"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>[], <span class="prelude-val">None</span>, nothing, OTHER_CELL, OTHER_GEN);
+<a href=#10874 id=10874 data-nosnippet>10874</a>        <span class="kw">crate</span>::fast_ipc::clear_vfs_if_cell(NET_CELL <span class="kw">as </span>usize);
+<a href=#10875 id=10875 data-nosnippet>10875</a>        assert_owner_watch(<span class="string">"vfs cleared"</span>, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>[], <span class="prelude-val">None</span>, nothing, CLIENT_CELL, CLIENT_GEN);
+<a href=#10876 id=10876 data-nosnippet>10876</a>    }
+<a href=#10877 id=10877 data-nosnippet>10877</a>
+<a href=#10878 id=10878 data-nosnippet>10878</a>    <span class="doccomment">/// Tripwire: who may hold an owner watch is an explicit owner decision.
+<a href=#10879 id=10879 data-nosnippet>10879</a>    /// Adding a service here is a reviewed change with its own consumer and
+<a href=#10880 id=10880 data-nosnippet>10880</a>    /// grant-matrix coverage, never a silent widening.
+<a href=#10881 id=10881 data-nosnippet>10881</a>    </span><span class="attr">#[test]
+<a href=#10882 id=10882 data-nosnippet>10882</a>    </span><span class="kw">fn </span>owner_watch_services_are_an_explicit_table() {
+<a href=#10883 id=10883 data-nosnippet>10883</a>        <span class="macro">assert_eq!</span>(
+<a href=#10884 id=10884 data-nosnippet>10884</a>            <span class="kw">crate</span>::task::scheduler::OWNER_WATCH_SERVICES,
+<a href=#10885 id=10885 data-nosnippet>10885</a>            [api::syscall::service::NET, api::syscall::service::COMPOSITOR]
+<a href=#10886 id=10886 data-nosnippet>10886</a>        );
+<a href=#10887 id=10887 data-nosnippet>10887</a>    }
+<a href=#10888 id=10888 data-nosnippet>10888</a>
+<a href=#10889 id=10889 data-nosnippet>10889</a>    <span class="doccomment">/// `TryRecv` takes a queued owner death only for the wildcard mask, FIFO,
+<a href=#10890 id=10890 data-nosnippet>10890</a>    /// one exact record at a time, and never a `NotifyOnExit` death.
+<a href=#10891 id=10891 data-nosnippet>10891</a>    </span><span class="attr">#[test]
+<a href=#10892 id=10892 data-nosnippet>10892</a>    </span><span class="kw">fn </span>try_recv_takes_owner_death_only_for_mask_zero() {
+<a href=#10893 id=10893 data-nosnippet>10893</a>        <span class="kw">use </span>super::{peek_owner_death_for_try_recv <span class="kw">as </span>peek, remove_owner_death <span class="kw">as </span>remove};
+<a href=#10894 id=10894 data-nosnippet>10894</a>        <span class="kw">let </span><span class="kw-2">mut </span>task = Task::new(<span class="number">41_010</span>, CellId(NET_CELL), <span class="string">"try-recv"</span>, alloc::vec::Vec::new());
+<a href=#10895 id=10895 data-nosnippet>10895</a>        <span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, <span class="number">0</span>), <span class="prelude-val">None</span>);
+<a href=#10896 id=10896 data-nosnippet>10896</a>
+<a href=#10897 id=10897 data-nosnippet>10897</a>        task.pending_owner_deaths.push((<span class="number">11</span>, <span class="number">101</span>, <span class="number">0xDEAD</span>));
+<a href=#10898 id=10898 data-nosnippet>10898</a>        task.pending_owner_deaths.push((<span class="number">12</span>, <span class="number">102</span>, <span class="number">7</span>));
+<a href=#10899 id=10899 data-nosnippet>10899</a>        task.pending_deaths.push((<span class="number">900</span>, <span class="number">5</span>));
+<a href=#10900 id=10900 data-nosnippet>10900</a>
+<a href=#10901 id=10901 data-nosnippet>10901</a>        <span class="comment">// A masked (dependency) receive never sees an owner death.
+<a href=#10902 id=10902 data-nosnippet>10902</a>        </span><span class="kw">for </span>mask <span class="kw">in </span>[<span class="number">1usize</span>, <span class="number">101</span>, <span class="number">102</span>, <span class="number">900</span>, usize::MAX] {
+<a href=#10903 id=10903 data-nosnippet>10903</a>            <span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, mask), <span class="prelude-val">None</span>, <span class="string">"mask {mask}"</span>);
+<a href=#10904 id=10904 data-nosnippet>10904</a>        }
+<a href=#10905 id=10905 data-nosnippet>10905</a>        <span class="macro">assert_eq!</span>(task.pending_owner_deaths.len(), <span class="number">2</span>);
+<a href=#10906 id=10906 data-nosnippet>10906</a>
+<a href=#10907 id=10907 data-nosnippet>10907</a>        <span class="comment">// Wildcard: the oldest record, and peeking removes nothing.
+<a href=#10908 id=10908 data-nosnippet>10908</a>        </span><span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">11</span>, <span class="number">101</span>, <span class="number">0xDEAD</span>)));
+<a href=#10909 id=10909 data-nosnippet>10909</a>        <span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">11</span>, <span class="number">101</span>, <span class="number">0xDEAD</span>)));
+<a href=#10910 id=10910 data-nosnippet>10910</a>        <span class="macro">assert_eq!</span>(task.pending_owner_deaths.len(), <span class="number">2</span>);
+<a href=#10911 id=10911 data-nosnippet>10911</a>
+<a href=#10912 id=10912 data-nosnippet>10912</a>        <span class="comment">// Commit removes exactly the delivered record; an unknown token is a no-op.
+<a href=#10913 id=10913 data-nosnippet>10913</a>        </span>remove(<span class="kw-2">&amp;mut </span>task, <span class="number">99</span>);
+<a href=#10914 id=10914 data-nosnippet>10914</a>        <span class="macro">assert_eq!</span>(task.pending_owner_deaths.len(), <span class="number">2</span>);
+<a href=#10915 id=10915 data-nosnippet>10915</a>        remove(<span class="kw-2">&amp;mut </span>task, <span class="number">11</span>);
+<a href=#10916 id=10916 data-nosnippet>10916</a>        <span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">12</span>, <span class="number">102</span>, <span class="number">7</span>)));
+<a href=#10917 id=10917 data-nosnippet>10917</a>        remove(<span class="kw-2">&amp;mut </span>task, <span class="number">12</span>);
+<a href=#10918 id=10918 data-nosnippet>10918</a>        <span class="macro">assert_eq!</span>(peek(<span class="kw-2">&amp;</span>task, <span class="number">0</span>), <span class="prelude-val">None</span>);
+<a href=#10919 id=10919 data-nosnippet>10919</a>        <span class="macro">assert!</span>(task.pending_owner_deaths.is_empty());
+<a href=#10920 id=10920 data-nosnippet>10920</a>
+<a href=#10921 id=10921 data-nosnippet>10921</a>        <span class="comment">// NotifyOnExit deaths are untouched and never offered by TryRecv.
+<a href=#10922 id=10922 data-nosnippet>10922</a>        </span><span class="macro">assert_eq!</span>(task.pending_deaths, <span class="macro">alloc::vec!</span>[(<span class="number">900</span>, <span class="number">5</span>)]);
+<a href=#10923 id=10923 data-nosnippet>10923</a>    }
+<a href=#10924 id=10924 data-nosnippet>10924</a>}
 </code></pre></div></section></main></body></html>

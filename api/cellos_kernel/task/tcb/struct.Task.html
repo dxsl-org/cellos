@@ -125,7 +125,7 @@ and the cell would be billed for a thread that is already gone.</p>
 while this watcher was NOT parked in Recv. Drained by the next <code>Recv</code>
 regardless of mask, preserving the public NotifyOnExit contract.</p>
 </div><span id="structfield.pending_owner_deaths" class="structfield section-header"><a href="#structfield.pending_owner_deaths" class="anchor field">§</a><code>pending_owner_deaths: Vec&lt;(u64, usize, usize)&gt;</code></span><div class="docblock"><p>Root-owner death events of registered watchers (the VFS cell and the
-registered NET provider cell), kept separate from generic task watches.</p>
+live <code>OWNER_WATCH_SERVICES</code> providers), kept separate from generic task watches.</p>
 <p>The opaque watch token never crosses the syscall ABI: it binds this queued
 event to the exact subscription so a stale cancellation cannot affect a
 successor. These events are delivered only by a wildcard public receive
@@ -325,7 +325,7 @@ when a nested dependency reply happens to have the same sender TID.</p>
 that must be released after the scheduler lock is dropped.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.owner_death_matches_receive_mask" class="method"><a class="src rightside" href="../../../src/cellos_kernel/task/tcb.rs.html#897-899">Source</a><h4 class="code-header">pub(super) const fn <a href="#method.owner_death_matches_receive_mask" class="fn">owner_death_matches_receive_mask</a>(mask: usize) -&gt; bool</h4></section></summary><div class="docblock"><p>Whether a receive mask may dequeue a tokenized owner-death event.</p>
 <p>Owner death is routed on a registered watcher’s public plane only (VFS,
-NET). Its root TID and subscription token identify the event after this
+the <code>OWNER_WATCH_SERVICES</code> providers). Its root TID and subscription token identify the event after this
 predicate succeeds; neither is a sender match and therefore neither can
 authorize a masked backend receive.</p>
 </div></details><section id="method.clear_current_caller_context" class="method"><a class="src rightside" href="../../../src/cellos_kernel/task/tcb.rs.html#901-907">Source</a><h4 class="code-header">pub fn <a href="#method.clear_current_caller_context" class="fn">clear_current_caller_context</a>(&amp;mut self)</h4></section><section id="method.clear_current_caller_context_if" class="method"><a class="src rightside" href="../../../src/cellos_kernel/task/tcb.rs.html#909-921">Source</a><h4 class="code-header">pub fn <a href="#method.clear_current_caller_context_if" class="fn">clear_current_caller_context_if</a>(
