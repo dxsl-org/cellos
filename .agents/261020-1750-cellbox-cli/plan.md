@@ -1,6 +1,6 @@
 ---
 title: "Cellbox: CLI-first essential tools, typed pipelines and selective Ratatui TUI"
-status: closed-private-evidence-at-stated-ceilings
+status: closed-at-stated-ceilings-with-deferred-items
 priority: P1
 tier: thinking
 created: 2026-10-20
@@ -107,3 +107,12 @@ S9-5 via KSSH K6 is admitted as a bounded Cellbox slice by user approval ([recor
 ### KSSH K8 T0 lane (2026-10-30)
 
 User approved [K8 CP1](../261030-1000-kms-ssh-key-custody/k8-cp1-approval.md): private lane edits and one RT0 plus one RT0f QEMU/TCG evidence boot (no promotion, no rerun, no T1). CBX-24 stays partial until the user's explicit disposition after K8 CP2.
+
+
+## Closure and deferred items (2026-10-31, user)
+
+Plan closed at the stated ceilings (see `phase-10-qualification.md` closure). Not blocking, deferred to later work with their own CP1 when taken up:
+1. **F-GP-1:** guest 512 KiB stdout round trip failed once (`Bad packet length`); vissh/sunset host harness does not reproduce; Net/slirp/guest untested (`261110-1200-cellbox-followups/fgp1-dossier.md`, `fgp1-diagnosis.md` Slice B). The exact-stdout-on-guest claim is not made.
+2. **OSD-1/OSD-3:** host tests and bare-metal builds only; boot proof pending. OSD-2 (KMS wipe on killed client) not adopted; block-driver sender checks unverified.
+3. **Tier-3 lane re-pin:** `qemu-tier3-ssh-guest-x86.sh` refuses until the drifted product pins and the `libs/vissh` pin are refreshed by a lane CP1.
+4. **Out of reach here:** production entropy/custody, crash-durability, rollback resistance, Intel VMX/EPT, physical hardware.
