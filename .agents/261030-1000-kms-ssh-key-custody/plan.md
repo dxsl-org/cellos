@@ -1,6 +1,6 @@
 ---
 title: "KMS SSH key custody (KSSH): ed25519 keys in KMS for outbound Cellbox SSH publickey auth"
-status: k2-k8t0-implemented-rt1-and-disposition-pending
+status: complete-dev-posture-t0-t1
 priority: P2
 created: 2026-10-30
 origin: "Cellbox Phase 09 S9-5 (deferred by D79-14, 2026-10-25); Phase 10 S10-10 decision D10-2 = E (user, 2026-10-30)"
@@ -81,3 +81,4 @@ After K0 approval: CP1 for K2 (KMS ABI design, decides D-K5) and, separately, CP
 - **K2 CP2 Law-1 confirmation 2 APPROVED by the user 2026-10-30** ([k2-cp2-approval.md](k2-cp2-approval.md); the two noted points accepted provisionally for K3/K7). `docs/code-standards.md` gained "KMS SSH Custody Boundary" and the CHANGELOG an entry. K2 is complete; K3 (kernel-attested caller flag, own handoff), K4, K5 (KMS behaviour, applies the K1 lock diff), K6, K7, K8 remain.
 - **2026-10-30 bundle decisions and approvals (user):** K3 Law-1 confirmation 1 + handoff YES ([k3-cp1-approval.md](k3-cp1-approval.md)); K5 CP1 + handoff approved with D-5.2, D-5.10, D-5.3 fail-closed ([k5-cp1-approval.md](k5-cp1-approval.md)); K4b design approved (build after K5/T0 lane), K6a/K6b split, K7 option (b) admin cell `/bin/kms-ssh-admin` with flag `1<<7` and the reading that contract line 142 covers the cellbox command surface, K8 private images, one run per set. Each of K4b/K6/K7/K8 still needs its own CP2 gate/handoff text. K3 implementation is next; K5 CP2 waits for the K3 `libs/api` constants.
 - **2026-10-30 implementation state:** K3 (47a9d5bda), K5 (236b79915), K6 (297a89a9e), K7, K8 T0 lane (RT0 and RT0f class A, 55a31fa97) and K4b (host tests, persist feature) landed at DEV_POSTURE. Open: RT1 (needs a K8 T1 amendment CP1 with the boot-B volatility/persistence checks and the first live VfsBlobIo run), the user's CBX-24 disposition, and the pre-existing red F1 gate (7 items) and ceiling-diff calls at HEAD.
+- **2026-10-30 close:** RT1 class A; user dispositions recorded for CBX-24 publickey half at T0 and T1 (DEV_POSTURE). Open outside the program: pre-existing red F1 gate and ceiling-diff calls at HEAD, COMPLETION-QUEUE selftest failure, no push yet.
