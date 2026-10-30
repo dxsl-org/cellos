@@ -81,7 +81,7 @@ pub enum AuditEvent {
     /// bit6 supervisor, bit7 mmio_devices changed, bit8 block_regions changed,
     /// bit9 net_resolve, bit10 net_connect, bit11 net_listen, bit12 net_l2,
     /// bit13 observe_tasks, bit14 observe_memory, bit15 vfs_mutate,
-    /// bit16 config_write).
+    /// bit16 config_write, bit17 kms_ssh_sign, bit18 kms_ssh_admin).
     CapNarrowedByPolicy = 19,
     /// Runtime revocation: a SpawnCap holder stripped capabilities from a live cell.
     /// Payload: `encode_u32x2(target_tid, cap_mask)` where `cap_mask` matches

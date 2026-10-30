@@ -141,14 +141,23 @@ fn network_worker_edges_carry_only_their_grant() {
     );
 }
 
-/// Phase 09 D79-9: the second install path of the cellbox ELF is the only shell
-/// edge with outbound client rights. The shell's own path holds none, the ELF
-/// route and every other caller are refused, and nothing beyond the client pair
-/// is granted.
+/// Phase 09 D79-9 + KSSH K3: the second install path of the cellbox ELF is the
+/// only shell edge with outbound client rights and the KMS SSH sign right. The
+/// shell's own path holds none, the ELF route and every other caller are refused,
+/// and nothing beyond the client pair and the sign right is granted.
 #[test]
 fn cellbox_ssh_edge_is_shell_only_path_only_client() {
     let edge = shell_edge(LaunchRoute::Path, "/bin/cellbox-ssh");
-    assert_eq!(edge.child_ceiling, CapSet { net_resolve: true, net_connect: true, ..LEGACY });
+    assert_eq!(
+        edge.child_ceiling,
+        CapSet {
+            net_resolve: true,
+            net_connect: true,
+            kms_ssh_sign: true,
+            ..LEGACY
+        }
+    );
+    assert_eq!(edge.child_ceiling, super::profiles::SSH_CLIENT_EDGE);
     let request = CapSet::EMPTY.with_path_caps("/bin/cellbox-ssh");
     assert_eq!(net_rights(request.intersect(edge.child_ceiling)), (true, true, false, false));
     assert_eq!(net_rights(CapSet::EMPTY.with_path_caps("/bin/cellbox")), (false, false, false, false));
@@ -1098,4 +1107,201 @@ fn config_write_is_held_only_by_the_shell_edges() {
             ..CapSet::EMPTY
         }
     );
+}
+
+/// KSSH K3 grant table (`k3-cp1.md` §4.5, §8): `kms_ssh_sign` can be non-false
+/// only when the path is exactly `/bin/cellbox-ssh` (request) AND the spawn edge
+/// is the shell's reviewed `SSH_CLIENT_EDGE` (ceiling). The shared `NET_CLIENT`
+/// ceiling of curl, wget, mqtt, ocel, llm-gateway, https-demo and robot-demo does
+/// not carry it, no boot row carries it, and no edge, boot row or request carries
+/// the admin right or both rights.
+#[test]
+fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
+    use super::profiles::SSH_CLIENT_EDGE;
+    use super::targets::{reviewed_user_target_ceiling, NET_CLIENT};
+    use api::caller_identity::CALLER_FLAG_KMS_SSH_SIGN;
+
+    // The constant is the shared client ceiling plus the one right, and the shared
+    // ceiling itself is unchanged.
+    assert_eq!(
+        SSH_CLIENT_EDGE,
+        CapSet {
+            net_resolve: true,
+            net_connect: true,
+            kms_ssh_sign: true,
+            ..LEGACY
+        }
+    );
+    assert_eq!(
+        NET_CLIENT,
+        CapSet {
+            net_resolve: true,
+            net_connect: true,
+            ..LEGACY
+        }
+    );
+    assert!(!NET_CLIENT.kms_ssh_sign && !NET_CLIENT.kms_ssh_admin);
+    assert_eq!(SSH_CLIENT_EDGE.without_ptrust(), SSH_CLIENT_EDGE);
+    assert_eq!(
+        SSH_CLIENT_EDGE.without_observe_mutate(),
+        CapSet {
+            net_resolve: true,
+            net_connect: true,
+            kms_ssh_sign: true,
+            ..CapSet::EMPTY
+        }
+    );
+    assert!(!CapSet::path_mints_ptrust("/bin/cellbox-ssh"));
+
+    // The one grant: request ∩ edge ceiling holds the sign right, the client pair
+    // and X/M/W, and nothing else (no Q, no admin).
+    let ssh_request = CapSet::EMPTY.with_path_caps("/bin/cellbox-ssh");
+    let granted = ssh_request.intersect(shell_edge(LaunchRoute::Path, "/bin/cellbox-ssh").child_ceiling);
+    assert_eq!(
+        granted,
+        CapSet {
+            net_resolve: true,
+            net_connect: true,
+            kms_ssh_sign: true,
+            ..LEGACY
+        }
+    );
+    assert_eq!(granted.kms_caller_flags(), CALLER_FLAG_KMS_SSH_SIGN);
+
+    // The `NET_CLIENT` targets keep their client pair and gain no KMS right.
+    for target in [
+        "/bin/curl",
+        "/bin/wget",
+        "/bin/mqtt",
+        "/bin/ocel",
+        "/bin/llm-gateway",
+        "/bin/https-demo",
+        "/bin/robot-demo",
+    ] {
+        let ceiling = shell_edge(LaunchRoute::Path, target).child_ceiling;
+        assert_eq!(net_rights(ceiling), (true, true, false, false), "{target}");
+        assert_eq!(ceiling.kms_caller_flags(), 0, "{target}");
+        let kept = CapSet::EMPTY.with_path_caps(target).intersect(ceiling);
+        assert_eq!(kept.kms_caller_flags(), 0, "{target}");
+    }
+
+    // Sweep every path literal of the reviewed launch and boot tables (plus the
+    // near-miss and sandbox spellings of the two KMS paths) against every caller
+    // name, caller capability combination and route.
+    fn quoted_paths(src: &str) -> Vec<&str> {
+        let mut found = Vec::new();
+        let mut rest = src;
+        while let Some(start) = rest.find("\"/") {
+            let tail = &rest[start + 1..];
+            let Some(end) = tail.find('"') else { break };
+            let literal = &tail[..end];
+            if literal.len() > 1 && !literal.contains(char::is_whitespace) {
+                found.push(literal);
+            }
+            rest = &tail[end + 1..];
+        }
+        found
+    }
+    let mut paths: Vec<&str> = Vec::new();
+    for source in [
+        include_str!("targets.rs"),
+        include_str!("profiles.rs"),
+        include_str!("../boot_ceiling.rs"),
+    ] {
+        paths.extend(quoted_paths(source));
+    }
+    paths.extend([
+        "/bin/cellbox-ssh",
+        "/bin/cellbox-ssh2",
+        "/bin/cellbox-sshd",
+        "/bin/kms-ssh-admin",
+        "/bin/kms-ssh-admin2",
+        "/bin/kms",
+        "/mem/cellbox-ssh",
+        "/apps/cellbox-ssh",
+        "/data/bin/cellbox-ssh",
+        "/home/user/cellbox-ssh",
+        "/apps/kms-ssh-admin",
+        "/data/bin/kms-ssh-admin",
+        "/home/user/kms-ssh-admin",
+    ]);
+    assert!(paths.len() > 100, "the sweep must cover the reviewed tables");
+    assert!(paths.contains(&"/bin/cellbox-ssh") && paths.contains(&"/bin/curl"));
+
+    let callers = [
+        "init",
+        "cellbox",
+        "terminal",
+        "desktop",
+        "pipe-test",
+        "c-spawn",
+        "hypha",
+        "tool-spawn",
+        "dwc2-usb",
+        "backend-supervisor",
+        "c2c-render",
+        "supervisor",
+        "bench",
+        "capacity-probe",
+        "periph-demo",
+        "phase02-session-parent",
+        "phase02-session-child",
+        "phase04-terminal-driver",
+        "cellbox-ssh",
+        "kms",
+        "no-such-caller",
+    ];
+    let mut ssh_edges = 0;
+    for path in paths {
+        // Request side: exactly the two spellings, nothing nearby.
+        let request = CapSet::EMPTY.with_path_caps(path);
+        assert_eq!(request.kms_ssh_sign, path == "/bin/cellbox-ssh", "{path}");
+        assert_eq!(request.kms_ssh_admin, path == "/bin/kms-ssh-admin", "{path}");
+        // No boot row and no reviewed generic target carries either right.
+        let boot = boot_ceiling::boot_ceiling(path);
+        assert_eq!(boot.kms_caller_flags(), 0, "boot row {path}");
+        assert!(!request.intersect(boot).kms_ssh_sign && !request.intersect(boot).kms_ssh_admin);
+        if let Some(ceiling) = reviewed_user_target_ceiling(path) {
+            assert_eq!(ceiling.kms_caller_flags(), 0, "reviewed target {path}");
+        }
+        // Edge side: only (shell, kernel-resolved path, /bin/cellbox-ssh).
+        for name in callers {
+            for has_spawn in [false, true] {
+                for has_supervisor in [false, true] {
+                    for route in [
+                        LaunchRoute::Path,
+                        LaunchRoute::Elf,
+                        LaunchRoute::Mem,
+                        LaunchRoute::Pinned,
+                    ] {
+                        let Some(profile) =
+                            authorize(caller(name, has_spawn, has_supervisor), route, path)
+                        else {
+                            continue;
+                        };
+                        let ceiling = profile.child_ceiling;
+                        let ssh_edge = name == "cellbox"
+                            && route == LaunchRoute::Path
+                            && path == "/bin/cellbox-ssh";
+                        assert_eq!(
+                            ceiling.kms_ssh_sign, ssh_edge,
+                            "{name} {route:?} {path}: sign right on the wrong edge"
+                        );
+                        assert!(!ceiling.kms_ssh_admin, "{name} {route:?} {path}: admin edge");
+                        ssh_edges += ssh_edge as usize;
+                        // The sign right is only ever granted to the ssh install path.
+                        assert_eq!(
+                            request.intersect(ceiling).kms_ssh_sign,
+                            ssh_edge && request.kms_ssh_sign,
+                            "{name} {route:?} {path}"
+                        );
+                        assert!(!request.intersect(ceiling).kms_ssh_admin);
+                    }
+                }
+            }
+        }
+    }
+    // The shell reaches the edge in each of its four (has_spawn, has_supervisor)
+    // states for every occurrence of the path in the sweep, so this is a floor.
+    assert!(ssh_edges >= 4, "the sweep never saw the ssh edge");
 }

@@ -387,6 +387,13 @@ pub struct Task {
     /// attests `CALLER_FLAG_CONFIG_WRITE` from the Cell root's copy; service-config
     /// enforces it. Threads inherit it through the same `CapSet` copy.
     pub config_write: bool,
+    /// KSSH K3 sign right (`CapSet::kms_ssh_sign`). `attested_identity_of`
+    /// attests `CALLER_FLAG_KMS_SSH_SIGN` from the Cell root's copy; service-kms
+    /// enforces it. Threads inherit it through the same `CapSet` copy.
+    pub kms_ssh_sign: bool,
+    /// KSSH K3 admin right (`CapSet::kms_ssh_admin`), attested as
+    /// `CALLER_FLAG_KMS_SSH_ADMIN` from the Cell root's copy. No edge grants it yet.
+    pub kms_ssh_admin: bool,
 
     /// MMIO device-class capability bitmask (`DEV_*` from
     /// [`crate::resource_registry`]). Set from the ELF manifest's hardware flags.
@@ -672,6 +679,8 @@ impl Task {
             observe_memory: false,
             vfs_mutate: false,
             config_write: false,
+            kms_ssh_sign: false,
+            kms_ssh_admin: false,
             mmio_devices: 0,
             block_regions: 0,
             pku_key: 0,

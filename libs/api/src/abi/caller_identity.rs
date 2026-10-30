@@ -57,8 +57,9 @@ pub const CALLER_FLAG_NET_CONNECT: u32 = 1 << 2;
 pub const CALLER_FLAG_NET_LISTEN: u32 = 1 << 3;
 /// The calling Cell may send and receive raw Ethernet frames: `L2Send`, `L2Recv`.
 pub const CALLER_FLAG_NET_L2: u32 = 1 << 4;
-/// Every network-right flag. Bits outside this mask, [`CALLER_FLAG_VFS_MUTATE`]
-/// and [`CALLER_FLAG_CONFIG_WRITE`] (6..31) are reserved and must be zero.
+/// Every network-right flag. Bits outside this mask, [`CALLER_FLAG_VFS_MUTATE`],
+/// [`CALLER_FLAG_CONFIG_WRITE`], [`CALLER_FLAG_KMS_SSH_SIGN`] and
+/// [`CALLER_FLAG_KMS_SSH_ADMIN`] (8..31) are reserved and must be zero.
 pub const CALLER_FLAG_NET_RIGHTS_MASK: u32 = CALLER_FLAG_NET_RESOLVE
     | CALLER_FLAG_NET_CONNECT
     | CALLER_FLAG_NET_LISTEN
@@ -73,6 +74,25 @@ pub const CALLER_FLAG_NET_RIGHTS_MASK: u32 = CALLER_FLAG_NET_RESOLVE
 /// to a key outside the shell namespace, with
 /// `ConfigResponse::Err(CONFIG_ERR_DENIED)` before any mutation.
 pub const CALLER_FLAG_CONFIG_WRITE: u32 = 1 << 5;
+
+/// The calling Cell may ask service-kms to sign an SSH userauth challenge
+/// (KSSH K3, CP1 2026-10-30; the sign class of `SignSshUserauth`).
+///
+/// Mirrors the kernel-only `CapSet::kms_ssh_sign` of the sender's **Cell**,
+/// requested by install path (`/bin/cellbox-ssh` only), bounded by the reviewed
+/// shell launch edge `SSH_CLIENT_EDGE` and by the operator policy. It is a
+/// necessary, not a sufficient, condition: service-kms decides the signature
+/// (key, session, replay floor) after checking this bit, and refuses a caller
+/// that also carries [`CALLER_FLAG_KMS_SSH_ADMIN`].
+pub const CALLER_FLAG_KMS_SSH_SIGN: u32 = 1 << 6;
+
+/// The calling Cell may use the service-kms SSH key administration surface
+/// (KSSH K3 CP1 2026-10-30; the admin class, realised by K7).
+///
+/// Mirrors the kernel-only `CapSet::kms_ssh_admin`. No launch edge, boot row or
+/// policy row grants it yet, so no Cell carries it until a later reviewed slice
+/// adds one. Sign and admin are never held by the same Cell.
+pub const CALLER_FLAG_KMS_SSH_ADMIN: u32 = 1 << 7;
 
 /// Size in bytes of the identity trailer reserved at the end of a recv buffer.
 pub const CALLER_IDENTITY_LEN: usize = 32;
@@ -204,15 +224,55 @@ mod tests {
         assert_eq!(CALLER_FLAG_CONFIG_WRITE.count_ones(), 1);
         assert_eq!(seen & CALLER_FLAG_CONFIG_WRITE, 0, "config flag overlaps another flag");
         seen |= CALLER_FLAG_CONFIG_WRITE;
-        // Bits 6..31 are reserved: every defined flag lives in bits 0..5.
-        assert_eq!(seen, 0x3F);
+        for flag in [CALLER_FLAG_KMS_SSH_SIGN, CALLER_FLAG_KMS_SSH_ADMIN] {
+            assert_eq!(flag.count_ones(), 1);
+            assert_eq!(seen & flag, 0, "flag {flag:#x} overlaps another flag");
+            seen |= flag;
+        }
+        // Bits 8..31 are reserved: every defined flag lives in bits 0..7.
+        assert_eq!(seen, 0xFF);
 
         let mut sample = SAMPLE;
-        sample.flags = CALLER_FLAG_NET_RIGHTS_MASK | CALLER_FLAG_VFS_MUTATE | CALLER_FLAG_CONFIG_WRITE;
+        sample.flags = CALLER_FLAG_NET_RIGHTS_MASK
+            | CALLER_FLAG_VFS_MUTATE
+            | CALLER_FLAG_CONFIG_WRITE
+            | CALLER_FLAG_KMS_SSH_SIGN
+            | CALLER_FLAG_KMS_SSH_ADMIN;
         assert_eq!(
             CallerIdentity::from_trailer(&sample.to_trailer()),
             Some(sample)
         );
+    }
+
+    /// KSSH K3: the two KMS flags are bit 6 and bit 7, and the trailer carries
+    /// each alone at the little-endian flags word (trailer bytes 4..8) without
+    /// touching the tag, `cell_id`, generation or sender.
+    #[test]
+    fn kms_ssh_flags_have_the_pinned_values_and_trailer_bytes() {
+        assert_eq!(CALLER_FLAG_KMS_SSH_SIGN, 0x40);
+        assert_eq!(CALLER_FLAG_KMS_SSH_ADMIN, 0x80);
+        for (flag, bytes) in [
+            (CALLER_FLAG_KMS_SSH_SIGN, [0x40u8, 0, 0, 0]),
+            (CALLER_FLAG_KMS_SSH_ADMIN, [0x80u8, 0, 0, 0]),
+            (CALLER_FLAG_KMS_SSH_SIGN | CALLER_FLAG_KMS_SSH_ADMIN, [0xC0u8, 0, 0, 0]),
+        ] {
+            let mut sample = SAMPLE;
+            sample.flags = flag;
+            let trailer = sample.to_trailer();
+            assert_eq!(trailer[0..4], MAGIC.to_le_bytes());
+            assert_eq!(trailer[4..8], bytes);
+            assert_eq!(trailer[8..16], SAMPLE.cell_id.to_le_bytes());
+            assert_eq!(trailer[16..24], SAMPLE.generation.to_le_bytes());
+            assert_eq!(trailer[24..32], SAMPLE.sender_tid.to_le_bytes());
+            assert_eq!(CallerIdentity::from_trailer(&trailer), Some(sample));
+            assert_eq!(CallerIdentity::from_recv_buf(&trailer), Some(sample));
+        }
+        // Neither flag overlaps a pre-existing right.
+        let older = CALLER_FLAG_VFS_MUTATE
+            | CALLER_FLAG_NET_RIGHTS_MASK
+            | CALLER_FLAG_CONFIG_WRITE;
+        assert_eq!(older, 0x3F);
+        assert_eq!(older & (CALLER_FLAG_KMS_SSH_SIGN | CALLER_FLAG_KMS_SSH_ADMIN), 0);
     }
 
     #[test]

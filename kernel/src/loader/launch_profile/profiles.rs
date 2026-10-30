@@ -69,10 +69,11 @@ pub(super) fn cellbox_profile(route: LaunchRoute, target: &str) -> Option<Launch
         LaunchRoute::Path if target == "/bin/shutdown" => LEGACY,
         // Phase 09 D79-9: the cellbox ELF installed a second time for `cellbox ssh`.
         // Only the shell may start it, only by the kernel-resolved path, and only it
-        // carries the outbound client rights; `/bin/cellbox` itself holds none. It is
-        // not in the generic reviewed table, so init autoload and the desktop cannot
+        // carries the outbound client rights plus, since KSSH K3, the KMS SSH sign
+        // right ([`SSH_CLIENT_EDGE`]); `/bin/cellbox` itself holds none. It is not
+        // in the generic reviewed table, so init autoload and the desktop cannot
         // launch it, and its caller-owned ELF route stays denied below.
-        LaunchRoute::Path if target == "/bin/cellbox-ssh" => NET_CLIENT,
+        LaunchRoute::Path if target == "/bin/cellbox-ssh" => SSH_CLIENT_EDGE,
         LaunchRoute::Path | LaunchRoute::Elf => reviewed_user_target_ceiling(target)?,
         LaunchRoute::Mem | LaunchRoute::Pinned => return None,
     };
@@ -164,6 +165,18 @@ pub(super) fn terminal_profile(route: LaunchRoute, target: &str) -> Option<Launc
 pub(super) const SHELL_EDGE: CapSet = CapSet {
     config_write: true,
     ..LEGACY
+};
+
+/// The child ceiling of the one reviewed edge that starts `/bin/cellbox-ssh`
+/// (shell, kernel-resolved path route only): the outbound client rights of
+/// [`NET_CLIENT`] plus `kms_ssh_sign` (KSSH K3). A separate constant on purpose:
+/// `NET_CLIENT` is the ceiling of every other network client (curl, wget, mqtt,
+/// ocel, llm-gateway, https-demo, robot-demo) and must not carry the right. Only
+/// this edge carries it, so `request(/bin/cellbox-ssh) ∩ ceiling` is the sole
+/// way a Cell obtains `CALLER_FLAG_KMS_SSH_SIGN`.
+pub(super) const SSH_CLIENT_EDGE: CapSet = CapSet {
+    kms_ssh_sign: true,
+    ..NET_CLIENT
 };
 
 /// Private Phase04 fixture driver: shell hosting (the same ceiling as the GUI

@@ -265,6 +265,21 @@ pub struct CapSet {
     /// (`CALLER_FLAG_CONFIG_WRITE`). No manifest bit; `/bin/cellbox` is the only
     /// install path that requests it (`with_path_config_rights`). Not P-TRUST.
     pub config_write: bool,
+    /// KSSH K3 (2026-10-30): ask service-kms to sign an SSH userauth challenge.
+    /// Enforced by service-kms, not by any kernel syscall: the kernel only carries
+    /// it from the bounded spawn grant into the attested caller trailer
+    /// (`CALLER_FLAG_KMS_SSH_SIGN`). No manifest bit; `/bin/cellbox-ssh` is the
+    /// only install path that requests it (`with_path_kms_ssh_rights`) and the
+    /// reviewed `SSH_CLIENT_EDGE` the only launch ceiling that carries it. Not
+    /// P-TRUST. Never held together with `kms_ssh_admin`.
+    pub kms_ssh_sign: bool,
+    /// KSSH K3 (2026-10-30): the service-kms SSH key administration class,
+    /// carried as `CALLER_FLAG_KMS_SSH_ADMIN`. No manifest bit; `/bin/kms-ssh-admin`
+    /// is the only install path that requests it (`with_path_kms_ssh_rights`), and
+    /// no launch edge or boot row carries it yet, so nothing can grant it until a
+    /// later reviewed slice adds one. Not P-TRUST. Never held together with
+    /// `kms_ssh_sign`.
+    pub kms_ssh_admin: bool,
 }
 
 impl CapSet {
@@ -289,6 +304,8 @@ impl CapSet {
         observe_memory: false,
         vfs_mutate: false,
         config_write: false,
+        kms_ssh_sign: false,
+        kms_ssh_admin: false,
     };
 
     /// The three S2-T/S2-W rights (task observation, system memory, VFS
@@ -337,6 +354,10 @@ impl CapSet {
         observe_memory: true,
         vfs_mutate: true,
         config_write: true,
+        // `ALL` is the test/self-test ceiling "every field", never a Cell's own
+        // CapSet, so it spans both KMS SSH classes that no Cell may hold together.
+        kms_ssh_sign: true,
+        kms_ssh_admin: true,
     };
 
     /// Snapshot a (running) Task's current capabilities.
@@ -361,6 +382,8 @@ impl CapSet {
             observe_memory: t.observe_memory,
             vfs_mutate: t.vfs_mutate,
             config_write: t.config_write,
+            kms_ssh_sign: t.kms_ssh_sign,
+            kms_ssh_admin: t.kms_ssh_admin,
         }
     }
 
@@ -420,6 +443,8 @@ impl CapSet {
             observe_memory: false,
             vfs_mutate: false,
             config_write: false,
+            kms_ssh_sign: false,
+            kms_ssh_admin: false,
         }
     }
 
@@ -482,6 +507,7 @@ impl CapSet {
         self.with_path_net_rights(path)
             .with_path_observe_mutate_rights(path)
             .with_path_config_rights(path)
+            .with_path_kms_ssh_rights(path)
     }
 
     /// Request the coarse network rights of the reviewed grant table (Phase 04
@@ -538,6 +564,27 @@ impl CapSet {
     fn with_path_config_rights(mut self, path: &str) -> CapSet {
         if path == "/bin/cellbox" {
             self.config_write = true;
+        }
+        self
+    }
+
+    /// Request the KSSH K3 rights (2026-10-30) for `path`: only the genuine
+    /// `cellbox ssh` install path, `/bin/cellbox-ssh`, asks for `kms_ssh_sign`, and
+    /// only `/bin/kms-ssh-admin` asks for `kms_ssh_admin`. Exact string match: no
+    /// prefix, no suffix, no sandbox path, not `/bin/cellbox` itself. The two
+    /// paths are disjoint, so no single request carries both classes. The request
+    /// is bounded by the launch/boot ceiling and operator policy like every other
+    /// field; no launch edge or boot row carries `kms_ssh_admin` yet, so that
+    /// request is always refused until a later slice adds one. Kept out of
+    /// `with_path_caps`' body for the same reason as the network rights:
+    /// `scripts/sign-policy.py` reads that body as the P-TRUST path list. Mirrored
+    /// by `KMS_SSH_SIGN_PATHS` / `KMS_SSH_ADMIN_PATHS` in that script.
+    fn with_path_kms_ssh_rights(mut self, path: &str) -> CapSet {
+        if path == "/bin/cellbox-ssh" {
+            self.kms_ssh_sign = true;
+        }
+        if path == "/bin/kms-ssh-admin" {
+            self.kms_ssh_admin = true;
         }
         self
     }
@@ -612,6 +659,8 @@ impl CapSet {
             observe_memory: self.observe_memory && o.observe_memory,
             vfs_mutate: self.vfs_mutate && o.vfs_mutate,
             config_write: self.config_write && o.config_write,
+            kms_ssh_sign: self.kms_ssh_sign && o.kms_ssh_sign,
+            kms_ssh_admin: self.kms_ssh_admin && o.kms_ssh_admin,
         }
     }
 
@@ -644,6 +693,22 @@ impl CapSet {
         }
     }
 
+    /// The attested caller-trailer flags for this Cell's KMS SSH rights
+    /// (`api::caller_identity::CALLER_FLAG_KMS_SSH_SIGN` /
+    /// `CALLER_FLAG_KMS_SSH_ADMIN`), or 0. Only these two bits; the caller ORs in
+    /// any other flag it owns.
+    pub fn kms_caller_flags(&self) -> u32 {
+        use api::caller_identity::{CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN};
+        let mut flags = 0;
+        if self.kms_ssh_sign {
+            flags |= CALLER_FLAG_KMS_SSH_SIGN;
+        }
+        if self.kms_ssh_admin {
+            flags |= CALLER_FLAG_KMS_SSH_ADMIN;
+        }
+        flags
+    }
+
     /// Write the granted caps into a child Task's TCB fields. Pure data — block-IO
     /// VFS-handler registration and any other side effects stay in the loader,
     /// keyed off the *granted* (not requested) bits.
@@ -666,6 +731,8 @@ impl CapSet {
         t.observe_memory = self.observe_memory;
         t.vfs_mutate = self.vfs_mutate;
         t.config_write = self.config_write;
+        t.kms_ssh_sign = self.kms_ssh_sign;
+        t.kms_ssh_admin = self.kms_ssh_admin;
         // `platform_cap` is transferred only from `PlatformCapReservation`.
         // Applying a plain capability snapshot must never bypass the singleton.
     }
@@ -692,6 +759,8 @@ impl CapSet {
             observe_memory: t.observe_memory,
             vfs_mutate: t.vfs_mutate,
             config_write: t.config_write,
+            kms_ssh_sign: t.kms_ssh_sign,
+            kms_ssh_admin: t.kms_ssh_admin,
         }
     }
 }
@@ -1258,5 +1327,167 @@ mod tests {
             .config_caller_flags(),
             0
         );
+    }
+
+    /// KSSH K3: only the exact path `/bin/cellbox-ssh` requests `kms_ssh_sign`,
+    /// only `/bin/kms-ssh-admin` requests `kms_ssh_admin`, the manifest never
+    /// requests either, the ceiling bounds both, neither is P-TRUST, no request
+    /// carries both, and each maps to exactly its own trailer flag.
+    #[test]
+    fn kms_ssh_sign_is_requested_by_the_ssh_path_only() {
+        use api::caller_identity::{
+            CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN,
+            CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_RESOLVE,
+        };
+        let all = api::manifest::CellManifest::with_all(
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            api::manifest::TIER_LEGACY,
+        );
+        let from_manifest = CapSet::from_manifest(&all);
+        assert!(!from_manifest.kms_ssh_sign && !from_manifest.kms_ssh_admin);
+
+        let ssh = CapSet::EMPTY.with_path_caps("/bin/cellbox-ssh");
+        assert!(ssh.kms_ssh_sign && !ssh.kms_ssh_admin);
+        let admin = CapSet::EMPTY.with_path_caps("/bin/kms-ssh-admin");
+        assert!(admin.kms_ssh_admin && !admin.kms_ssh_sign);
+        for path in [
+            "/bin/cellbox",
+            "/bin/curl",
+            "/bin/kms",
+            "/bin/net",
+            "/bin/config",
+            "/bin/init",
+            "/bin/supervisor",
+            "/bin/cellbox-ssh2",
+            "/bin/cellbox-ssh/",
+            "/bin/cellbox-ssh ",
+            "/bin/CELLBOX-SSH",
+            "bin/cellbox-ssh",
+            "/mem/cellbox-ssh",
+            "/apps/cellbox-ssh",
+            "/apps/bin/cellbox-ssh",
+            "/data/bin/cellbox-ssh",
+            "/home/user/cellbox-ssh",
+            "/home/user/kms-ssh-admin",
+            "/bin/kms-ssh-admin2",
+            "",
+        ] {
+            let r = CapSet::EMPTY.with_path_caps(path);
+            assert!(!r.kms_ssh_sign && !r.kms_ssh_admin, "{path:?}");
+        }
+        // No request names both classes.
+        for path in ["/bin/cellbox-ssh", "/bin/kms-ssh-admin", "/bin/cellbox"] {
+            let r = CapSet::EMPTY.with_path_caps(path);
+            assert!(!(r.kms_ssh_sign && r.kms_ssh_admin), "{path}");
+        }
+
+        // The ceiling bounds both rights; `ALL` is the only ceiling that keeps them.
+        let net_client = CapSet {
+            net_resolve: true,
+            net_connect: true,
+            ..CapSet::LEGACY_OBSERVE_MUTATE
+        };
+        assert!(!ssh.intersect(net_client).kms_ssh_sign);
+        assert!(!ssh.intersect(CapSet::LEGACY_OBSERVE_MUTATE).kms_ssh_sign);
+        assert!(!ssh.intersect(CapSet::EMPTY).kms_ssh_sign);
+        assert!(ssh.intersect(CapSet::ALL).kms_ssh_sign);
+        assert!(
+            ssh.intersect(CapSet {
+                kms_ssh_sign: true,
+                ..CapSet::EMPTY
+            })
+            .kms_ssh_sign
+        );
+        assert!(!admin.intersect(net_client).kms_ssh_admin);
+        assert!(!admin.intersect(CapSet::LEGACY_OBSERVE_MUTATE).kms_ssh_admin);
+        assert!(admin.intersect(CapSet::ALL).kms_ssh_admin);
+        // One right never stands in for the other under a ceiling.
+        let sign_only_ceiling = CapSet {
+            kms_ssh_admin: false,
+            ..CapSet::ALL
+        };
+        assert!(!admin.intersect(sign_only_ceiling).kms_ssh_admin);
+        assert!(!admin.intersect(sign_only_ceiling).kms_ssh_sign);
+
+        // Neither is P-TRUST; both survive the two other `without_*` filters.
+        for path in ["/bin/cellbox-ssh", "/bin/kms-ssh-admin"] {
+            assert!(!CapSet::path_mints_ptrust(path), "{path}");
+        }
+        assert!(ssh.without_ptrust().kms_ssh_sign);
+        assert!(ssh.without_observe_mutate().kms_ssh_sign);
+        assert!(admin.without_ptrust().kms_ssh_admin);
+        assert!(admin.without_observe_mutate().kms_ssh_admin);
+
+        // Flag mapping: exactly its own bit, no leak into the NET or CONFIG flags.
+        assert_eq!(ssh.kms_caller_flags(), CALLER_FLAG_KMS_SSH_SIGN);
+        assert_eq!(admin.kms_caller_flags(), CALLER_FLAG_KMS_SSH_ADMIN);
+        assert_eq!(CapSet::EMPTY.kms_caller_flags(), 0);
+        assert_eq!(
+            CapSet::ALL.kms_caller_flags(),
+            CALLER_FLAG_KMS_SSH_SIGN | CALLER_FLAG_KMS_SSH_ADMIN
+        );
+        assert_eq!(
+            CapSet {
+                kms_ssh_sign: false,
+                kms_ssh_admin: false,
+                ..CapSet::ALL
+            }
+            .kms_caller_flags(),
+            0
+        );
+        assert_eq!(
+            ssh.net_caller_flags(),
+            CALLER_FLAG_NET_RESOLVE | CALLER_FLAG_NET_CONNECT
+        );
+        assert_eq!(ssh.net_caller_flags() & ssh.kms_caller_flags(), 0);
+        assert_eq!(ssh.config_caller_flags(), 0);
+        // The Q and KMS flags come from different fields and never overlap.
+        let shell = CapSet::EMPTY.with_path_caps("/bin/cellbox");
+        assert_eq!(shell.kms_caller_flags(), 0);
+        assert_eq!(shell.config_caller_flags(), CALLER_FLAG_CONFIG_WRITE);
+    }
+
+    /// KSSH K3: the grant survives the plain-data round trip through the TCB
+    /// (`apply_to` / `of_task` / `from_task`) and is cleared by an empty set.
+    #[test]
+    fn kms_ssh_rights_round_trip_through_the_task_control_block() {
+        let mut task = crate::task::tcb::Task::new(
+            1,
+            types::CellId(7),
+            "kms-ssh-round-trip",
+            alloc::vec::Vec::new(),
+        );
+        assert!(!task.kms_ssh_sign && !task.kms_ssh_admin);
+        for grant in [
+            CapSet {
+                kms_ssh_sign: true,
+                ..CapSet::EMPTY
+            },
+            CapSet {
+                kms_ssh_admin: true,
+                ..CapSet::EMPTY
+            },
+        ] {
+            grant.apply_to(&mut task);
+            assert_eq!(
+                (task.kms_ssh_sign, task.kms_ssh_admin),
+                (grant.kms_ssh_sign, grant.kms_ssh_admin)
+            );
+            assert_eq!(CapSet::of_task(&task), grant);
+            assert_eq!(CapSet::from_task(&task), grant);
+            CapSet::EMPTY.apply_to(&mut task);
+            assert!(!task.kms_ssh_sign && !task.kms_ssh_admin);
+        }
     }
 }

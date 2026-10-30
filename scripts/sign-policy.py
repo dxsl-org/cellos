@@ -2,7 +2,7 @@
 """Build + Ed25519-sign a Cellos operator policy blob (roadmap §G.2 P5b).
 
 Blob format (little-endian) — MUST match kernel/src/policy.rs::parse:
-    magic u32 "VPOL" | version u8=7 | flags u8 | entry_count u16
+    magic u32 "VPOL" | version u8=8 | flags u8 | entry_count u16
     per entry: path_len u8, path bytes,
                block_io u8, network u8, spawn u8, hyp u8, mmio_devices u8, block_regions u8,
                pcie_driver u8, platform u8, supervisor u8,          <-- v2+
@@ -10,16 +10,20 @@ Blob format (little-endian) — MUST match kernel/src/policy.rs::parse:
                serial_port u8                                       <-- v4+
                net_resolve u8, net_connect u8, net_listen u8, net_l2 u8   <-- v5+
                observe_tasks u8, observe_memory u8, vfs_mutate u8          <-- v6+
-               config_write u8                                             <-- v7
+               config_write u8                                             <-- v7+
+               kms_ssh_sign u8, kms_ssh_admin u8                           <-- v8
     + Ed25519 signature [u8;64] over all preceding bytes
 
-Older versions (6/9/10/11/15/18 cap bytes) are still accepted by the kernel parser.
+Older versions (6/9/10/11/15/18/19 cap bytes) are still accepted by the kernel parser.
 Do not emit them. Under v1–v4 the privileged bytes they lack read as 0, and because
 a `Permit` INTERSECTS, such an entry strips those caps from every cell it names.
 The network rights (annex S2-N, compatibility rule E1), the S2-T/S2-W rights
 (annex §4) and the Q right (Phase 01 CP1, D-Q6) are the opposite: an entry that
 predates them decodes them as 1, so it leaves them to the reviewed launch ceiling.
-A v7 row states them explicitly, so a path that needs one must say so here.
+The two KSSH K3 rights (`kms_ssh_sign`, `kms_ssh_admin`; O-11) follow the privileged
+rule again: signing authority was never ambient, so an entry that predates v8
+decodes both as 0 and its Permit strips them until the policy is re-signed at v8.
+A v8 row states every right explicitly, so a path that needs one must say so here.
 
 flags bit 0 = MAINTENANCE_PERMITTED. The kernel's `maintenance-mode` build feature
 no longer bypasses policy on its own; it also needs this signed bit. Emit it only
@@ -47,9 +51,9 @@ except ImportError:
     sys.exit("error: pip install cryptography")
 
 MAGIC = b"VPOL"
-VERSION = 7
+VERSION = 8
 # Cap-byte stride per blob version; mirrors `cap_bytes_for` in kernel/src/policy.rs.
-CAP_BYTES = {1: 6, 2: 9, 3: 10, 4: 11, 5: 15, 6: 18, 7: 19}
+CAP_BYTES = {1: 6, 2: 9, 3: 10, 4: 11, 5: 15, 6: 18, 7: 19, 8: 21}
 DEV_SEED = bytes([0x42] * 32)  # fixed dev seed → deterministic dev keypair
 
 FLAG_MAINTENANCE_PERMITTED = 1 << 0
@@ -88,16 +92,20 @@ REGION_MASK = 0b1111   # P1=1 | P4=2 | SRV=4 | /bin/vfs cell-store=8
 #
 # (path, block_io, network, spawn, hyp, mmio, regions, pcie_driver, platform, supervisor
 #  [, usb_driver [, serial_port [, net_resolve, net_connect, net_listen, net_l2
-#  [, observe_tasks, observe_memory, vfs_mutate [, config_write]]]]])
+#  [, observe_tasks, observe_memory, vfs_mutate [, config_write
+#  [, kms_ssh_sign [, kms_ssh_admin]]]]]]])
 #
 # Omitted trailing cap columns are 0, EXCEPT the three S2-T/S2-W rights (task
-# observation, system memory, VFS mutation) and the Q right (Config write): a row
-# that omits them gets exactly what the kernel's `CapSet::with_path_caps`
-# requests for the path. For S2-T/S2-W that is all three unless the path is under
-# a user-app sandbox prefix (annex S2-T/S2-W §3, D-TW1); for Q it is 1 for
-# `/bin/cellbox` only (Phase 01 CP1, D-Q5). They were ambient before their
-# slices, so a 0 default would strip `ps`/`free`, file writes and `export` from
-# every listed cell. A restricted row states them.
+# observation, system memory, VFS mutation), the Q right (Config write) and the two
+# KSSH K3 rights: a row that omits them gets exactly what the kernel's
+# `CapSet::with_path_caps` requests for the path. For S2-T/S2-W that is all three
+# unless the path is under a user-app sandbox prefix (annex S2-T/S2-W §3, D-TW1);
+# for Q it is 1 for `/bin/cellbox` only (Phase 01 CP1, D-Q5); for `kms_ssh_sign` it
+# is 1 for `/bin/cellbox-ssh` only and for `kms_ssh_admin` 1 for
+# `/bin/kms-ssh-admin` only (KSSH K3; no DEV_POLICY row names the admin path, so a
+# loaded policy strips it — H-1). The S2-T/S2-W and Q rights were ambient before
+# their slices, so a 0 default would strip `ps`/`free`, file writes and `export`
+# from every listed cell. A restricted row states them.
 #
 # The four network rights (annex S2-N §5) must match the kernel's
 # `CapSet::with_path_net_rights` grant table: a Permit intersects, so a 0 here
@@ -111,6 +119,9 @@ OBSERVE_MUTATE = (1, 1, 1)   # CapSet::LEGACY_OBSERVE_MUTATE
 SANDBOX_PREFIXES = ("/apps/", "/data/bin/", "/home/")
 # Mirrors `CapSet::with_path_config_rights` in kernel/src/task/cap.rs.
 CONFIG_WRITE_PATHS = ("/bin/cellbox",)
+# Mirrors `CapSet::with_path_kms_ssh_rights` in kernel/src/task/cap.rs.
+KMS_SSH_SIGN_PATHS = ("/bin/cellbox-ssh",)
+KMS_SSH_ADMIN_PATHS = ("/bin/kms-ssh-admin",)
 DEV_POLICY = [
     # ── root authority ────────────────────────────────────────────────────────
     # init is Spawner::Root and exempt in-kernel, so this entry is informational
@@ -191,7 +202,9 @@ DEV_POLICY = [
 ]
 
 
-ROW_FIELDS = 20  # path + 19 cap columns (the v7 entry)
+ROW_FIELDS = 22  # path + 21 cap columns (the v8 entry)
+SIGN_ROW_FIELDS = 21  # path + 20 cap columns (through kms_ssh_sign)
+CFG_ROW_FIELDS = 20  # path + 19 cap columns (through config_write, the v7 entry)
 OM_ROW_FIELDS = 19  # path + 18 cap columns (through the S2-T/S2-W rights)
 NET_ROW_FIELDS = 16  # path + 15 cap columns (through the network rights)
 
@@ -206,25 +219,42 @@ def config_write_request(path):
     return (1,) if path in CONFIG_WRITE_PATHS else (0,)
 
 
-def full_row(row):
-    """Pad a DEV_POLICY row to every v7 column.
+def kms_ssh_sign_request(path):
+    """The KSSH K3 sign right the kernel's `with_path_caps` requests for `path`."""
+    return (1,) if path in KMS_SSH_SIGN_PATHS else (0,)
 
-    Omitted cap columns are 0 except the trailing S2-T/S2-W three and the Q
-    column, which default to the kernel's own request for the path (see the
-    DEV_POLICY comment).
+
+def kms_ssh_admin_request(path):
+    """The KSSH K3 admin right the kernel's `with_path_caps` requests for `path`."""
+    return (1,) if path in KMS_SSH_ADMIN_PATHS else (0,)
+
+
+def full_row(row):
+    """Pad a DEV_POLICY row to every v8 column.
+
+    Omitted cap columns are 0 except the trailing S2-T/S2-W three, the Q column
+    and the two KSSH K3 columns, which default to the kernel's own request for
+    the path (see the DEV_POLICY comment).
     """
     n = len(row)
+    path = row[0]
     if n == ROW_FIELDS:
         return tuple(row)
+    if n == SIGN_ROW_FIELDS:
+        return tuple(row) + kms_ssh_admin_request(path)
+    if n == CFG_ROW_FIELDS:
+        return tuple(row) + kms_ssh_sign_request(path) + kms_ssh_admin_request(path)
     if n == OM_ROW_FIELDS:
-        return tuple(row) + config_write_request(row[0])
+        return (tuple(row) + config_write_request(path)
+                + kms_ssh_sign_request(path) + kms_ssh_admin_request(path))
     if not 10 <= n <= NET_ROW_FIELDS or n in (13, 14, 15):
         sys.exit(
-            f"{row[0]}: row has {n} fields — network rights take all four columns "
+            f"{path}: row has {n} fields — network rights take all four columns "
             "and S2-T/S2-W rights all three"
         )
-    return (tuple(row) + (0,) * (NET_ROW_FIELDS - n) + observe_mutate_request(row[0])
-            + config_write_request(row[0]))
+    return (tuple(row) + (0,) * (NET_ROW_FIELDS - n) + observe_mutate_request(path)
+            + config_write_request(path) + kms_ssh_sign_request(path)
+            + kms_ssh_admin_request(path))
 
 
 def build_body(entries, flags=0):
@@ -234,7 +264,8 @@ def build_body(entries, flags=0):
     seen = set()
     for row in entries:
         (path, bio, net, spawn, hyp, mmio, regions, pcie, plat, sup, usb, serial,
-         n_resolve, n_connect, n_listen, n_l2, o_tasks, o_memory, vfs_mut, cfg_w) = full_row(row)
+         n_resolve, n_connect, n_listen, n_l2, o_tasks, o_memory, vfs_mut, cfg_w,
+         k_sign, k_admin) = full_row(row)
         pb = path.encode("ascii")
         if len(pb) > 255:
             sys.exit(f"path too long: {path}")
@@ -262,13 +293,21 @@ def build_body(entries, flags=0):
             ("observe_memory", o_memory),
             ("vfs_mutate", vfs_mut),
             ("config_write", cfg_w),
+            ("kms_ssh_sign", k_sign),
+            ("kms_ssh_admin", k_admin),
         ):
             if v not in (0, 1):
                 sys.exit(f"{path}: {name} must be 0 or 1, got {v} — blob would be Invalid")
+        # Not a kernel decode rule (a Permit never widens a request, and no request
+        # names both paths): a bake-time lint so no policy row ever grants one Cell
+        # both KMS SSH classes (code-standards.md KMS SSH Custody Boundary).
+        if k_sign and k_admin:
+            sys.exit(f"{path}: kms_ssh_sign and kms_ssh_admin must never both be 1")
         out.append(len(pb))
         out += pb
         caps = [bio, net, spawn, hyp, mmio, regions, pcie, plat, sup, usb, serial,
-                n_resolve, n_connect, n_listen, n_l2, o_tasks, o_memory, vfs_mut, cfg_w]
+                n_resolve, n_connect, n_listen, n_l2, o_tasks, o_memory, vfs_mut, cfg_w,
+                k_sign, k_admin]
         out += bytes(caps[:CAP_BYTES[VERSION]])
     return bytes(out)
 
@@ -290,7 +329,7 @@ def decode_body(body):
     if body[:4] != MAGIC:
         raise ValueError("bad magic")
     version = body[4]
-    cap_bytes = {1: 6, 2: 9, 3: 10, 4: 11, 5: 15, 6: 18, 7: 19}.get(version)
+    cap_bytes = {1: 6, 2: 9, 3: 10, 4: 11, 5: 15, 6: 18, 7: 19, 8: 21}.get(version)
     if cap_bytes is None:
         raise ValueError(f"unknown version {version}")
     flags = body[5]
@@ -362,8 +401,17 @@ def decode_body(body):
         else:
             # Phase 01 CP1 D-Q6: a pre-v7 entry does not narrow the Q right.
             config_write = 1
+        if cap_bytes >= 21:
+            for name, v in zip(("kms_ssh_sign", "kms_ssh_admin"), caps[19:21]):
+                if v > 1:
+                    raise ValueError(f"{path}: {name}={v} out of domain")
+            kms_ssh = tuple(caps[19:21])
+        else:
+            # KSSH K3 O-11: a pre-v8 entry decodes both rights as 0 (never ambient),
+            # so its Permit strips them — the opposite of the S2-N/S2-T/Q rule.
+            kms_ssh = (0, 0)
         out.append((path, caps[0], caps[1], caps[2], caps[3], caps[4], caps[5], *priv,
-                    *net_rights, *observe_mutate, config_write))
+                    *net_rights, *observe_mutate, config_write, *kms_ssh))
     if off != len(body):
         raise ValueError(f"{len(body) - off} trailing bytes after {count} entries")
     return flags, out

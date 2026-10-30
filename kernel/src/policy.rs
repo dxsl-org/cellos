@@ -49,6 +49,10 @@ const VERSION_V5: u8 = 5;
 const VERSION_V6: u8 = 6;
 /// v7 appends the Q right (Phase 01 CP1): `config_write`, a literal 0|1 byte.
 const VERSION_V7: u8 = 7;
+/// v8 appends the two KSSH K3 rights (2026-10-30): `kms_ssh_sign`,
+/// `kms_ssh_admin`, each a literal 0|1 byte. A v1–v7 entry decodes both as
+/// `false` (fail-closed, O-11): the rights were never ambient.
+const VERSION_V8: u8 = 8;
 const SIG_LEN: usize = 64;
 const HEADER_LEN: usize = 8; // magic(4) + version(1) + flags(1) + entry_count(2)
 const CAP_BYTES_V1: usize = 6; // block_io, network, spawn, hyp, mmio_devices, block_regions
@@ -58,6 +62,7 @@ const CAP_BYTES_V4: usize = 11; // + serial_port
 const CAP_BYTES_V5: usize = 15; // + net_resolve, net_connect, net_listen, net_l2
 const CAP_BYTES_V6: usize = 18; // + observe_tasks, observe_memory, vfs_mutate
 const CAP_BYTES_V7: usize = 19; // + config_write
+const CAP_BYTES_V8: usize = 21; // + kms_ssh_sign, kms_ssh_admin
 /// 8.3-safe, root-level path (VIFS1 uppercases + is FAT16 8.3).
 const POLICY_PATH: &str = "/POLICY.BIN";
 
@@ -76,6 +81,7 @@ const fn cap_bytes_for(version: u8) -> Option<usize> {
         VERSION_V5 => Some(CAP_BYTES_V5),
         VERSION_V6 => Some(CAP_BYTES_V6),
         VERSION_V7 => Some(CAP_BYTES_V7),
+        VERSION_V8 => Some(CAP_BYTES_V8),
         _ => None,
     }
 }
@@ -278,7 +284,7 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
         let path_bytes = body.get(off..off.checked_add(path_len)?)?;
         let path = core::str::from_utf8(path_bytes).ok()?;
         off += path_len;
-        // cap bytes: per-version stride from `cap_bytes_for` (6/9/10/11/15/18/19)
+        // cap bytes: per-version stride from `cap_bytes_for` (6/9/10/11/15/18/19/21)
         let caps_raw = body.get(off..off.checked_add(cap_bytes)?)?;
         off += cap_bytes;
 
@@ -374,6 +380,22 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
         } else {
             true
         };
+        // v8 KSSH K3 rights (O-11): literal 0|1 like the rights above, but the
+        // compatibility rule is the OPPOSITE of the network, S2-T/S2-W and Q rights
+        // and the same as the privileged fields. Those rights were ambient before
+        // their slices; signing authority never was, so a v1–v7 entry decodes both
+        // as `false` and its Permit STRIPS them until the policy is re-signed at
+        // v8. Fail-closed: the cost is "publickey unavailable" for that Cell, never
+        // a wrongly granted signing right.
+        let (kms_ssh_sign, kms_ssh_admin) = if cap_bytes >= CAP_BYTES_V8 {
+            let kms = &caps_raw[CAP_BYTES_V7..CAP_BYTES_V8];
+            if kms.iter().any(|&b| b > 1) {
+                return None;
+            }
+            (kms[0] == 1, kms[1] == 1)
+        } else {
+            (false, false)
+        };
         entries.push(PolicyEntry {
             path: String::from(path),
             caps: CapSet {
@@ -396,6 +418,8 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
                 observe_memory,
                 vfs_mutate,
                 config_write,
+                kms_ssh_sign,
+                kms_ssh_admin,
             },
         });
     }
@@ -461,6 +485,9 @@ pub fn self_test() -> bool {
         return false;
     }
     if !v7_parse_cases() {
+        return false;
+    }
+    if !v8_parse_cases() {
         return false;
     }
     // 2. Tampered blob: a flipped body byte must FAIL verification.
@@ -853,9 +880,9 @@ fn v7_parse_cases() -> bool {
     if parse(&V7_CURL[..V7_CURL.len() - 1]).is_some() {
         return false;
     }
-    // Version 8 is unknown → Invalid.
+    // Version 9 is unknown → Invalid.
     let mut bad_ver = V7_CURL;
-    bad_ver[4] = 8;
+    bad_ver[4] = 9;
     if parse(&bad_ver).is_some() {
         return false;
     }
@@ -868,6 +895,127 @@ fn v7_parse_cases() -> bool {
     legacy.config_write
         && decision_to_caps("/bin/cellbox", shell_request, PolicyDecision::Permit(legacy))
             .config_write
+}
+
+/// magic | version=8 | flags=0 | count=1 | len=9 "/bin/curl" | 21 cap bytes:
+/// the `V7_CURL` entry, then kms_ssh_sign=0 kms_ssh_admin=0 (curl asks for neither).
+const V8_CURL: [u8; 39] = [
+    0x56, 0x50, 0x4f, 0x4c, 0x08, 0x00, 0x01, 0x00, 0x09, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x63, 0x75,
+    0x72, 0x6c, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00,
+    0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00,
+];
+/// Offset of the KSSH sign byte (`kms_ssh_sign`) in `V8_CURL`.
+const V8_CURL_SIGN: usize = 37;
+/// Offset of the KSSH admin byte (`kms_ssh_admin`) in `V8_CURL`.
+const V8_CURL_ADMIN: usize = 38;
+
+/// v8 layout coverage for `self_test` (KSSH K3): the 21-byte stride arrives with
+/// the two KMS SSH rights, a v8 Permit narrows them, a non-0|1 byte rejects the
+/// blob, a v7 body relabelled v8 and an unknown version reject, a pre-v8 entry
+/// decodes both as `false` and strips them (O-11), and a loaded policy without a
+/// row strips them while an absent policy leaves them alone (H-1).
+fn v8_parse_cases() -> bool {
+    let Some(p) = parse(&V8_CURL) else {
+        return false;
+    };
+    if p.flags != 0 || p.entries.len() != 1 || p.entries[0].path != "/bin/curl" {
+        return false;
+    }
+    let c = p.entries[0].caps;
+    // The v7 prefix of the entry is read exactly as before.
+    if c.kms_ssh_sign || c.kms_ssh_admin || c.config_write {
+        return false;
+    }
+    if !(c.observe_tasks && !c.observe_memory && c.vfs_mutate) || !(c.network && c.net_resolve) {
+        return false;
+    }
+    // Each byte alone grants exactly its own right, and a Permit narrows to it.
+    let request = CapSet {
+        kms_ssh_sign: true,
+        kms_ssh_admin: true,
+        ..CapSet::LEGACY_OBSERVE_MUTATE
+    };
+    for (offset, want_sign, want_admin) in
+        [(V8_CURL_SIGN, true, false), (V8_CURL_ADMIN, false, true)]
+    {
+        let mut granted = V8_CURL;
+        granted[offset] = 1;
+        let Some(g) = parse(&granted) else {
+            return false;
+        };
+        let gc = g.entries[0].caps;
+        if gc.kms_ssh_sign != want_sign || gc.kms_ssh_admin != want_admin {
+            return false;
+        }
+        let narrowed = decision_to_caps("/bin/curl", request, PolicyDecision::Permit(gc));
+        if narrowed.kms_ssh_sign != want_sign || narrowed.kms_ssh_admin != want_admin {
+            return false;
+        }
+    }
+    let narrowed = decision_to_caps("/bin/curl", request, PolicyDecision::Permit(c));
+    if narrowed.kms_ssh_sign || narrowed.kms_ssh_admin {
+        return false;
+    }
+    // Each KMS byte outside {0,1} makes the whole blob malformed.
+    for i in V8_CURL_SIGN..V8_CURL.len() {
+        let mut bad = V8_CURL;
+        bad[i] = 2;
+        if parse(&bad).is_some() {
+            return false;
+        }
+    }
+    // Truncated v8 entry → None, not a panic.
+    if parse(&V8_CURL[..V8_CURL.len() - 1]).is_some() {
+        return false;
+    }
+    // A v7 body relabelled v8 no longer fits the 21-byte stride → Invalid.
+    let mut v7_as_v8 = V7_CURL;
+    v7_as_v8[4] = VERSION_V8;
+    if parse(&v7_as_v8).is_some() {
+        return false;
+    }
+    // Version 9 is unknown → Invalid.
+    let mut bad_ver = V8_CURL;
+    bad_ver[4] = 9;
+    if parse(&bad_ver).is_some() {
+        return false;
+    }
+    // O-11: a pre-v8 entry decodes both as false, so its Permit strips them.
+    for legacy_body in [&V7_CURL[..], &V6_CURL[..], &V5_CURL[..], &V4_CURL[..]] {
+        let Some(legacy) = parse(legacy_body) else {
+            return false;
+        };
+        let legacy = legacy.entries[0].caps;
+        if legacy.kms_ssh_sign || legacy.kms_ssh_admin {
+            return false;
+        }
+        let narrowed = decision_to_caps("/bin/cellbox-ssh", request, PolicyDecision::Permit(legacy));
+        if narrowed.kms_ssh_sign || narrowed.kms_ssh_admin {
+            return false;
+        }
+    }
+    // H-1: a loaded policy without a row strips both rights, whatever else the
+    // posture does; an absent policy tightens nothing.
+    let loaded = PolicyDecision::NoEntry {
+        policy_loaded: true,
+    };
+    let stripped = decision_to_caps("/bin/cellbox-ssh", request, loaded);
+    if stripped.kms_ssh_sign || stripped.kms_ssh_admin {
+        return false;
+    }
+    #[cfg(not(feature = "policy-required"))]
+    {
+        if stripped != CapSet::LEGACY_OBSERVE_MUTATE {
+            return false;
+        }
+        let absent = PolicyDecision::NoEntry {
+            policy_loaded: false,
+        };
+        if decision_to_caps("/bin/cellbox-ssh", request, absent) != request {
+            return false;
+        }
+    }
+    true
 }
 
 /// Policy decision for a cell path. See `PolicyDecision`; the caller (Phase 04)
@@ -941,6 +1089,21 @@ fn decision_to_caps(path: &str, caps: CapSet, decision: PolicyDecision) -> CapSe
             } else {
                 caps
             };
+            // KSSH K3 (H-1): the signing and admin rights are never ambient, so
+            // under a loaded policy a path it does not name holds neither, exactly
+            // like an explicit `0` row. Without this a loaded v8 policy that merely
+            // omits `/bin/cellbox-ssh` would still leave the right granted
+            // (request ∩ edge ceiling) while a row of `0` strips it. An absent
+            // policy (`policy_loaded == false`) tightens nothing.
+            let caps = if policy_loaded {
+                CapSet {
+                    kms_ssh_sign: false,
+                    kms_ssh_admin: false,
+                    ..caps
+                }
+            } else {
+                caps
+            };
             #[cfg(feature = "policy-required")]
             {
                 if is_trusted_core(path) {
@@ -955,6 +1118,30 @@ fn decision_to_caps(path: &str, caps: CapSet, decision: PolicyDecision) -> CapSe
             }
         }
     }
+}
+
+/// The `CapNarrowedByPolicy` payload mask: one bit per capability `narrowed` lost
+/// relative to `caps`. Bit layout is documented on `AuditEvent::CapNarrowedByPolicy`.
+fn narrowed_bits(caps: CapSet, narrowed: CapSet) -> u32 {
+    (caps.block_io && !narrowed.block_io) as u32
+        | (((caps.network && !narrowed.network) as u32) << 1)
+        | (((caps.spawn && !narrowed.spawn) as u32) << 2)
+        | (((caps.hypervisor && !narrowed.hypervisor) as u32) << 3)
+        | (((caps.pcie_driver && !narrowed.pcie_driver) as u32) << 4)
+        | (((caps.platform && !narrowed.platform) as u32) << 5)
+        | (((caps.supervisor && !narrowed.supervisor) as u32) << 6)
+        | (((caps.mmio_devices != narrowed.mmio_devices) as u32) << 7)
+        | (((caps.block_regions != narrowed.block_regions) as u32) << 8)
+        | (((caps.net_resolve && !narrowed.net_resolve) as u32) << 9)
+        | (((caps.net_connect && !narrowed.net_connect) as u32) << 10)
+        | (((caps.net_listen && !narrowed.net_listen) as u32) << 11)
+        | (((caps.net_l2 && !narrowed.net_l2) as u32) << 12)
+        | (((caps.observe_tasks && !narrowed.observe_tasks) as u32) << 13)
+        | (((caps.observe_memory && !narrowed.observe_memory) as u32) << 14)
+        | (((caps.vfs_mutate && !narrowed.vfs_mutate) as u32) << 15)
+        | (((caps.config_write && !narrowed.config_write) as u32) << 16)
+        | (((caps.kms_ssh_sign && !narrowed.kms_ssh_sign) as u32) << 17)
+        | (((caps.kms_ssh_admin && !narrowed.kms_ssh_admin) as u32) << 18)
 }
 
 /// Apply operator policy to a cell's spawn-time caps (Phase 04): the final grant
@@ -1012,23 +1199,7 @@ pub fn apply(path: &str, tid: usize, caps: CapSet) -> CapSet {
         );
     }
     if narrowed != caps {
-        let dropped = (caps.block_io && !narrowed.block_io) as u32
-            | (((caps.network && !narrowed.network) as u32) << 1)
-            | (((caps.spawn && !narrowed.spawn) as u32) << 2)
-            | (((caps.hypervisor && !narrowed.hypervisor) as u32) << 3)
-            | (((caps.pcie_driver && !narrowed.pcie_driver) as u32) << 4)
-            | (((caps.platform && !narrowed.platform) as u32) << 5)
-            | (((caps.supervisor && !narrowed.supervisor) as u32) << 6)
-            | (((caps.mmio_devices != narrowed.mmio_devices) as u32) << 7)
-            | (((caps.block_regions != narrowed.block_regions) as u32) << 8)
-            | (((caps.net_resolve && !narrowed.net_resolve) as u32) << 9)
-            | (((caps.net_connect && !narrowed.net_connect) as u32) << 10)
-            | (((caps.net_listen && !narrowed.net_listen) as u32) << 11)
-            | (((caps.net_l2 && !narrowed.net_l2) as u32) << 12)
-            | (((caps.observe_tasks && !narrowed.observe_tasks) as u32) << 13)
-            | (((caps.observe_memory && !narrowed.observe_memory) as u32) << 14)
-            | (((caps.vfs_mutate && !narrowed.vfs_mutate) as u32) << 15)
-            | (((caps.config_write && !narrowed.config_write) as u32) << 16);
+        let dropped = narrowed_bits(caps, narrowed);
         crate::audit::log_event(
             crate::audit::AuditEvent::CapNarrowedByPolicy,
             &crate::audit::encode_u32x2(tid as u32, dropped),
@@ -1038,8 +1209,8 @@ pub fn apply(path: &str, tid: usize, caps: CapSet) -> CapSet {
         // policy strips the caps a boot cell needed — leaving the serial log as the
         // only evidence a reader has.
         log::warn!(
-            "[policy] narrowed {:?} (tid {}): dropped {:#019b} \
-             [cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]",
+            "[policy] narrowed {:?} (tid {}): dropped {:#021b} \
+             [kadm|ksgn|cfgw|vfsw|mem|tasks|l2|listen|connect|resolve|regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]",
             path,
             tid,
             dropped
@@ -1102,6 +1273,7 @@ mod tests {
         assert!(v5_parse_cases());
         assert!(v6_parse_cases());
         assert!(v7_parse_cases());
+        assert!(v8_parse_cases());
         assert!(self_test());
     }
 
@@ -1123,7 +1295,7 @@ mod tests {
         }
         assert!(parse(&V7_CURL[..V7_CURL.len() - 1]).is_none());
         let mut bad_ver = V7_CURL;
-        bad_ver[4] = 8;
+        bad_ver[4] = 9;
         assert!(parse(&bad_ver).is_none());
     }
 
@@ -1213,7 +1385,7 @@ mod tests {
         }
         assert!(parse(&V6_CURL[..V6_CURL.len() - 1]).is_none());
         let mut bad_ver = V6_CURL;
-        bad_ver[4] = 8;
+        bad_ver[4] = 9;
         assert!(parse(&bad_ver).is_none());
     }
 
@@ -1271,15 +1443,162 @@ mod tests {
         assert!(parse(&V5_CURL[..V5_CURL.len() - 1]).is_none());
     }
 
-    /// `scripts/sign-policy.py` output verifies under the dev key and decodes with
-    /// the kernel's own parser, and every listed path's network, S2-T/S2-W and Q
-    /// rights equal what the kernel's `with_path_caps` requests — so the shipped
-    /// v7 Permit neither strips a granted right nor names one the kernel never
-    /// requests.
     #[test]
-    fn signer_v7_output_decodes_with_kernel_rule() {
+    fn v8_entry_round_trips_both_kms_bytes_and_rejects_malformed_bytes() {
+        for (sign, admin) in [(0u8, 0u8), (1, 0), (0, 1), (1, 1)] {
+            let mut body = V8_CURL;
+            body[V8_CURL_SIGN] = sign;
+            body[V8_CURL_ADMIN] = admin;
+            let c = parse(&body).expect("v8 body with literal 0|1 KMS bytes parses").entries[0].caps;
+            assert_eq!((c.kms_ssh_sign, c.kms_ssh_admin), (sign == 1, admin == 1));
+            // The v7 prefix is unaffected by the appended bytes.
+            assert_eq!(net_rights(c), (true, true, false, false));
+            assert_eq!(observe_mutate(c), (true, false, true));
+            assert!(!c.config_write);
+        }
+        for i in [V8_CURL_SIGN, V8_CURL_ADMIN] {
+            for value in [2u8, 0x80, 0xFF] {
+                let mut bad = V8_CURL;
+                bad[i] = value;
+                assert!(parse(&bad).is_none(), "byte {i} = {value:#04x} must reject");
+            }
+        }
+        for len in HEADER_LEN..V8_CURL.len() {
+            assert!(parse(&V8_CURL[..len]).is_none(), "truncation to {len} bytes must reject");
+        }
+        // A v7 body relabelled v8 no longer fits the 21-byte stride.
+        let mut v7_as_v8 = V7_CURL;
+        v7_as_v8[4] = VERSION_V8;
+        assert!(parse(&v7_as_v8).is_none());
+        // The entry stride is exactly the two appended bytes.
+        assert_eq!(V8_CURL.len() - V7_CURL.len(), CAP_BYTES_V8 - CAP_BYTES_V7);
+        assert_eq!(V8_CURL_ADMIN, V8_CURL.len() - 1);
+        assert_eq!(V8_CURL_SIGN, HEADER_LEN + 1 + "/bin/curl".len() + CAP_BYTES_V7);
+        // Version 9 is unknown.
+        let mut bad_ver = V8_CURL;
+        bad_ver[4] = 9;
+        assert!(parse(&bad_ver).is_none());
+        assert_eq!(cap_bytes_for(8), Some(21));
+        assert_eq!(cap_bytes_for(9), None);
+    }
+
+    /// O-11: an entry that predates v8 decodes both KMS SSH rights as `false`, so
+    /// its Permit strips them (the rights were never ambient); a v8 byte of 1 keeps
+    /// them and a v8 byte of 0 strips them; no Permit can widen a request.
+    #[test]
+    fn pre_v8_permit_strips_kms_ssh_rights_and_v8_bytes_decide() {
+        let ssh = CapSet::EMPTY.with_path_caps("/bin/cellbox-ssh");
+        let admin = CapSet::EMPTY.with_path_caps("/bin/kms-ssh-admin");
+        assert!(ssh.kms_ssh_sign && !ssh.kms_ssh_admin);
+        assert!(admin.kms_ssh_admin && !admin.kms_ssh_sign);
+        for body in [&V7_CURL[..], &V6_CURL[..], &V5_CURL[..], &V4_CURL[..]] {
+            let legacy = parse(body).expect("legacy body parses").entries[0].caps;
+            assert!(!legacy.kms_ssh_sign && !legacy.kms_ssh_admin);
+            assert!(
+                !decision_to_caps("/bin/cellbox-ssh", ssh, PolicyDecision::Permit(legacy)).kms_ssh_sign,
+                "a pre-v8 Permit must strip the sign right"
+            );
+            assert!(
+                !decision_to_caps("/bin/kms-ssh-admin", admin, PolicyDecision::Permit(legacy))
+                    .kms_ssh_admin,
+                "a pre-v8 Permit must strip the admin right"
+            );
+        }
+        // The opposite O-11 rule applies to the older ambient rights: unchanged.
+        let v4 = parse(&V4_CURL).expect("v4 body parses").entries[0].caps;
+        assert_eq!(net_rights(v4), (true, true, true, true));
+        let mut granted = V8_CURL;
+        granted[V8_CURL_SIGN] = 1;
+        granted[V8_CURL_ADMIN] = 1;
+        let on = parse(&granted).expect("v8 body parses").entries[0].caps;
+        assert!(decision_to_caps("/bin/cellbox-ssh", ssh, PolicyDecision::Permit(on)).kms_ssh_sign);
+        assert!(
+            decision_to_caps("/bin/kms-ssh-admin", admin, PolicyDecision::Permit(on)).kms_ssh_admin
+        );
+        let off = parse(&V8_CURL).expect("v8 body parses").entries[0].caps;
+        assert!(!decision_to_caps("/bin/cellbox-ssh", ssh, PolicyDecision::Permit(off)).kms_ssh_sign);
+        assert!(
+            !decision_to_caps("/bin/kms-ssh-admin", admin, PolicyDecision::Permit(off)).kms_ssh_admin
+        );
+        // A Permit never widens: the shell requests neither right and keeps neither.
+        let shell = CapSet::EMPTY.with_path_caps("/bin/cellbox");
+        let kept = decision_to_caps("/bin/cellbox", shell, PolicyDecision::Permit(on));
+        assert!(!kept.kms_ssh_sign && !kept.kms_ssh_admin);
+    }
+
+    /// H-1: with a policy loaded, a path with no row holds neither KMS SSH right
+    /// (like an explicit 0 row); with no policy at all nothing is tightened.
+    #[test]
+    fn loaded_policy_without_a_row_strips_kms_ssh_rights() {
+        let request = CapSet {
+            kms_ssh_sign: true,
+            kms_ssh_admin: true,
+            ..CapSet::LEGACY_OBSERVE_MUTATE
+        };
+        let loaded = PolicyDecision::NoEntry {
+            policy_loaded: true,
+        };
+        let stripped = decision_to_caps("/bin/cellbox-ssh", request, loaded);
+        assert!(!stripped.kms_ssh_sign && !stripped.kms_ssh_admin);
+        // A fail-closed deny never leaves the rights either.
+        assert_eq!(
+            decision_to_caps("/bin/cellbox-ssh", request, PolicyDecision::DenyAll),
+            CapSet::EMPTY
+        );
+        #[cfg(not(feature = "policy-required"))]
+        {
+            // Only the two rights go; every other cap survives the gap.
+            assert_eq!(stripped, CapSet::LEGACY_OBSERVE_MUTATE);
+            let absent = PolicyDecision::NoEntry {
+                policy_loaded: false,
+            };
+            assert_eq!(decision_to_caps("/bin/cellbox-ssh", request, absent), request);
+            // The P-TRUST strip of the same arm is unchanged.
+            let driver = CapSet {
+                pcie_driver: true,
+                ..request
+            };
+            let s = decision_to_caps("/bin/nvme", driver, loaded);
+            assert!(!s.pcie_driver && !s.kms_ssh_sign && !s.kms_ssh_admin);
+        }
+    }
+
+    /// The `CapNarrowedByPolicy` payload carries the two KMS SSH rights at bits 17
+    /// and 18 and leaves every earlier bit where it was.
+    #[test]
+    fn narrowing_audit_bits_report_the_kms_ssh_rights() {
+        assert_eq!(narrowed_bits(CapSet::ALL, CapSet::ALL), 0);
+        let sign = CapSet {
+            kms_ssh_sign: true,
+            ..CapSet::EMPTY
+        };
+        let admin = CapSet {
+            kms_ssh_admin: true,
+            ..CapSet::EMPTY
+        };
+        assert_eq!(narrowed_bits(sign, CapSet::EMPTY), 1 << 17);
+        assert_eq!(narrowed_bits(admin, CapSet::EMPTY), 1 << 18);
+        assert_eq!(narrowed_bits(sign, sign), 0);
+        assert_eq!(narrowed_bits(CapSet::ALL, CapSet::EMPTY) >> 17, 0b11);
+        let config = CapSet {
+            config_write: true,
+            ..CapSet::EMPTY
+        };
+        assert_eq!(narrowed_bits(config, CapSet::EMPTY), 1 << 16);
+        // A right the request never held cannot be reported as dropped.
+        assert_eq!(narrowed_bits(CapSet::EMPTY, sign), 0);
+    }
+
+    /// `scripts/sign-policy.py` output verifies under the dev key and decodes with
+    /// the kernel's own parser, and every listed path's network, S2-T/S2-W, Q and
+    /// KMS SSH rights equal what the kernel's `with_path_caps` requests — so the
+    /// shipped v8 Permit neither strips a granted right nor names one the kernel
+    /// never requests. Only `/bin/cellbox-ssh` carries the sign right and no row
+    /// carries the admin right or both.
+    #[test]
+    fn signer_v8_output_decodes_with_kernel_rule() {
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-        let out = std::env::temp_dir().join(format!("cellos-policy-v7-{}.bin", std::process::id()));
+        let out = std::env::temp_dir().join(format!("cellos-policy-v8-{}.bin", std::process::id()));
         let status = std::process::Command::new("python3")
             .arg(repo.join("scripts/sign-policy.py"))
             .arg("--out")
@@ -1298,8 +1617,8 @@ mod tests {
         let mut sig64 = [0u8; SIG_LEN];
         sig64.copy_from_slice(sig);
         assert!(crate::ed25519::verify(&DEV_FLEET_PUBKEY, body, &sig64));
-        assert_eq!(body[4], VERSION_V7, "the signer must emit v7");
-        let policy = parse(body).expect("kernel parser accepts the signed v7 body");
+        assert_eq!(body[4], VERSION_V8, "the signer must emit v8");
+        let policy = parse(body).expect("kernel parser accepts the signed v8 body");
         assert!(!policy.entries.is_empty());
         for e in &policy.entries {
             let requested = CapSet::EMPTY.with_path_caps(&e.path);
@@ -1321,14 +1640,33 @@ mod tests {
                 "{}: policy Q right drifts from the kernel request rule",
                 e.path
             );
+            assert_eq!(
+                (e.caps.kms_ssh_sign, e.caps.kms_ssh_admin),
+                (requested.kms_ssh_sign, requested.kms_ssh_admin),
+                "{}: policy KMS SSH rights drift from the kernel request rule",
+                e.path
+            );
+            assert!(
+                !(e.caps.kms_ssh_sign && e.caps.kms_ssh_admin),
+                "{}: sign and admin must never be held by one Cell",
+                e.path
+            );
         }
+        let holders: Vec<&str> = policy
+            .entries
+            .iter()
+            .filter(|e| e.caps.kms_ssh_sign)
+            .map(|e| e.path.as_str())
+            .collect();
+        assert_eq!(holders, ["/bin/cellbox-ssh"]);
+        assert!(policy.entries.iter().all(|e| !e.caps.kms_ssh_admin));
         let curl = policy
             .entries
             .iter()
             .find(|e| e.path == "/bin/curl")
             .expect("curl row");
         assert_eq!(net_rights(curl.caps), (true, true, false, false));
-        assert!(!curl.caps.config_write);
+        assert!(!curl.caps.config_write && !curl.caps.kms_ssh_sign);
         let shell = policy
             .entries
             .iter()
@@ -1337,11 +1675,21 @@ mod tests {
         assert_eq!(net_rights(shell.caps), (false, false, false, false));
         assert_eq!(observe_mutate(shell.caps), (true, true, true));
         assert!(shell.caps.config_write);
+        assert!(!shell.caps.kms_ssh_sign);
         let ssh = policy
             .entries
             .iter()
             .find(|e| e.path == "/bin/cellbox-ssh")
             .expect("cellbox-ssh row");
         assert!(!ssh.caps.config_write);
+        assert!(ssh.caps.kms_ssh_sign);
+        // The signer keeps two literal copies of the stride table (`CAP_BYTES` and
+        // the independent decoder's own); both must have gained v8, and its
+        // request helpers must name the same paths as `with_path_kms_ssh_rights`.
+        let script = std::fs::read_to_string(repo.join("scripts/sign-policy.py"))
+            .expect("signer source is readable");
+        assert_eq!(script.matches("7: 19, 8: 21}").count(), 2, "both stride tables");
+        assert!(script.contains("KMS_SSH_SIGN_PATHS = (\"/bin/cellbox-ssh\",)"));
+        assert!(script.contains("KMS_SSH_ADMIN_PATHS = (\"/bin/kms-ssh-admin\",)"));
     }
 }

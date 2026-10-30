@@ -88,6 +88,12 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             // Q is not delegated through init's own CapSet (launch edges bound
             // children by their reviewed ceiling), and init writes no Config key.
             config_write: false,
+            // KSSH K3: neither KMS SSH right is delegated through init's own
+            // CapSet. `/bin/cellbox-ssh` has no boot row on purpose (the shell
+            // launches it through its reviewed edge), so a kernel-started copy
+            // would get EMPTY; `/bin/kms` keeps its LEGACY row and gains no right.
+            kms_ssh_sign: false,
+            kms_ssh_admin: false,
         },
         // PCIe ECAM enumeration + BAR registration. Kernel-spawned before init.
         // Its manifest declares nothing; `with_path_caps` is the request signal,
@@ -286,6 +292,12 @@ pub fn log_refusal(path: &str, requested: CapSet, ceiling: CapSet, granted: CapS
     }
     if requested.config_write && !granted.config_write {
         log::error!("[loader]   refused: config_write");
+    }
+    if requested.kms_ssh_sign && !granted.kms_ssh_sign {
+        log::error!("[loader]   refused: kms_ssh_sign");
+    }
+    if requested.kms_ssh_admin && !granted.kms_ssh_admin {
+        log::error!("[loader]   refused: kms_ssh_admin");
     }
     if requested.mmio_devices != granted.mmio_devices {
         log::error!(

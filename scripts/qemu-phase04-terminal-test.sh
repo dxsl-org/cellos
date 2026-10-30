@@ -305,11 +305,16 @@ for path in sorted((root / "cells/tools/sys-tools/src/bin").glob("*.rs")):
 # §4.1/§4.2, D-Q5): profiles.rs gives the terminal and private driver shell edges
 # SHELL_EDGE (LEGACY + config_write) and fixes the terminal-edge comment wording;
 # tests.rs pins those ceilings and the Q grant table.
+# Re-pinned 2026-10-30 for KSSH K3 (k3-cp1.md §4.5, §10): profiles.rs adds the
+# SSH_CLIENT_EDGE ceiling (NET_CLIENT + kms_ssh_sign) for the shell's
+# /bin/cellbox-ssh edge only, and tests.rs pins that edge and the KMS SSH grant
+# table. mod.rs and targets.rs are deliberately unchanged (NET_CLIENT stays the
+# shared client ceiling), so their pins keep the CP1-approved digests.
 authority = {
     "kernel/src/loader/launch_profile/mod.rs": "b8db3b800292ad8ebb72c849fdce4cfad1d731b15184bc47f500cb4ab20ec04c",
-    "kernel/src/loader/launch_profile/profiles.rs": "12ff2f739cd7440d2d6b9bce22bef32460b764df6411aff396ebe6a3a93134e2",
+    "kernel/src/loader/launch_profile/profiles.rs": "202745bad8a395770dc6e3d1b7c2d6a1874ef1543f8e1b75cabc6540331c6b38",
     "kernel/src/loader/launch_profile/targets.rs": "45834caee5979f219a8df2027958ff6969a5b9d6068da07dea7ce7fb5306a48f",
-    "kernel/src/loader/launch_profile/tests.rs": "b3d19ebd2670207afdb607c023729643c6ac56edfa2453d5294b2ae37f718170",
+    "kernel/src/loader/launch_profile/tests.rs": "f0463db78b787af0e3e7a534058e9a84db358c3de5cd5e6c9e45906c1187a190",
     "libs/api/src/abi/cell_session.rs": "590fe5ccaa74ae25c751dedb111d76ff6ec102edd52c088198daa28666441595",
 }
 for name, expected in authority.items():

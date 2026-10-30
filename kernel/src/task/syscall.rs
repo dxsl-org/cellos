@@ -2886,6 +2886,12 @@ pub(super) fn take_resume_delivery(task: &mut super::Task, mask: usize) -> Resum
 /// message whose sender already exited) or is not attributable to a cell. A
 /// receiver must read that as "unknown caller" and deny, never as "some caller
 /// that owns nothing" — owning nothing still reads unowned state.
+///
+/// The flag word carries the VFS mutation bit, the four network rights, the Q
+/// Config-write right and the two KMS SSH rights (`CALLER_FLAG_KMS_SSH_SIGN`,
+/// `CALLER_FLAG_KMS_SSH_ADMIN`, KSSH K3). Every right except the VFS bit is read
+/// from the Cell root's `CapSet`, so every thread of a Cell reports the same
+/// right; the kernel attests it and the receiving service enforces it.
 pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::CallerIdentity> {
     let sched_guard = super::SCHEDULER.lock();
     let sched = sched_guard.as_ref()?;
@@ -2903,6 +2909,9 @@ pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::C
     // Q (Phase 01 CP1) is a Cell right exactly like the network rights: read
     // from the same root CapSet, so a thread cannot hold more or less of it.
     flags |= root_caps.config_caller_flags();
+    // KSSH K3: the KMS SSH sign/admin rights are Cell rights too, read from the
+    // same root CapSet for the same reason. Attested, not enforced, here.
+    flags |= root_caps.kms_caller_flags();
     (owner.cell_id == task.cell_id.0 && owner.generation == task.cell_generation).then_some(
         api::caller_identity::CallerIdentity {
             flags,
@@ -10016,6 +10025,108 @@ mod tests {
                 assert_eq!(
                     identity.flags & CALLER_FLAG_NET_RIGHTS_MASK,
                     caps.net_caller_flags(),
+                    "caps {caps:?}"
+                );
+            });
+        }
+    }
+
+    /// KSSH K3: `CALLER_FLAG_KMS_SSH_SIGN` / `CALLER_FLAG_KMS_SSH_ADMIN` are
+    /// attested exactly when the Cell's root holds the matching right,
+    /// independent of the allowlist, never for a Cell without it, and without
+    /// leaking into (or out of) the NET, CONFIG or VFS bits. A thread reports the
+    /// right of its Cell root.
+    #[test]
+    fn kms_ssh_attestation_follows_the_cell_right_only() {
+        use api::caller_identity::{
+            CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN,
+            CALLER_FLAG_NET_RIGHTS_MASK, CALLER_FLAG_VFS_MUTATE,
+        };
+        let sign_only = CapSet {
+            kms_ssh_sign: true,
+            ..CapSet::EMPTY
+        };
+        let admin_only = CapSet {
+            kms_ssh_admin: true,
+            ..CapSet::EMPTY
+        };
+        let ssh_cell = CapSet {
+            kms_ssh_sign: true,
+            net_resolve: true,
+            net_connect: true,
+            ..CapSet::LEGACY_OBSERVE_MUTATE
+        };
+        let shell = CapSet {
+            config_write: true,
+            ..CapSet::LEGACY_OBSERVE_MUTATE
+        };
+        let declared = (1u64 << 62) | (1u64 << 63);
+        for (allowlist, caps, want) in [
+            (1u64 << 62, sign_only, CALLER_FLAG_KMS_SSH_SIGN),
+            (u64::MAX, sign_only, CALLER_FLAG_KMS_SSH_SIGN),
+            (declared, ssh_cell, CALLER_FLAG_KMS_SSH_SIGN),
+            (1u64 << 62, admin_only, CALLER_FLAG_KMS_SSH_ADMIN),
+            (u64::MAX, admin_only, CALLER_FLAG_KMS_SSH_ADMIN),
+            (1u64 << 62, CapSet::EMPTY, 0),
+            (u64::MAX, CapSet::LEGACY_OBSERVE_MUTATE, 0),
+            (u64::MAX, shell, 0),
+            (
+                u64::MAX,
+                CapSet {
+                    net_resolve: true,
+                    net_connect: true,
+                    net_listen: true,
+                    net_l2: true,
+                    config_write: true,
+                    ..CapSet::LEGACY_OBSERVE_MUTATE
+                },
+                0,
+            ),
+        ] {
+            with_scheduler_task_caps(allowlist, caps, |tid| {
+                {
+                    let mut guard = SCHEDULER.lock();
+                    let sched = guard.as_mut().expect("test scheduler installed");
+                    let task = sched.tasks.get_mut(&tid).expect("test task");
+                    task.cell_generation = 1;
+                    task.root_tid = tid;
+                    assert!(sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
+                        7, 1, tid as u64
+                    )));
+                    // A thread of the same Cell generation holds no CapSet of its
+                    // own; it must report whatever its Cell root holds.
+                    let mut thread = alloc::boxed::Box::new(Task::new(
+                        tid + 1,
+                        CellId(7),
+                        "kms-attestation-thread",
+                        alloc::vec::Vec::new(),
+                    ));
+                    thread.cell_generation = 1;
+                    thread.root_tid = tid;
+                    sched.tasks.insert(tid + 1, thread);
+                }
+                let kms = CALLER_FLAG_KMS_SSH_SIGN | CALLER_FLAG_KMS_SSH_ADMIN;
+                let thread_identity =
+                    super::attested_identity_of(tid + 1).expect("live thread has an identity");
+                assert_eq!(thread_identity.flags & kms, want, "thread of caps {caps:?}");
+                let identity =
+                    super::attested_identity_of(tid).expect("live task has an identity");
+                assert_eq!(identity.flags & kms, want, "caps {caps:?}");
+                assert_eq!(identity.flags & kms, caps.kms_caller_flags(), "caps {caps:?}");
+                // The KMS bits never leak into or out of the other attested flags.
+                assert_eq!(
+                    identity.flags & CALLER_FLAG_NET_RIGHTS_MASK,
+                    caps.net_caller_flags(),
+                    "caps {caps:?}"
+                );
+                assert_eq!(
+                    identity.flags & CALLER_FLAG_CONFIG_WRITE,
+                    caps.config_caller_flags(),
+                    "caps {caps:?}"
+                );
+                assert_eq!(
+                    identity.flags & CALLER_FLAG_VFS_MUTATE,
+                    super::vfs_mutate_caller_flag(allowlist, caps.vfs_mutate),
                     "caps {caps:?}"
                 );
             });

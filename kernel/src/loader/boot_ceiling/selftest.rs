@@ -245,6 +245,42 @@ pub fn run() -> bool {
         }
     }
 
+    // KSSH K3: no boot-started Cell keeps either KMS SSH right after
+    // request ∩ boot ceiling. `/bin/cellbox-ssh` has no boot row (the shell
+    // launches it through its reviewed edge, below), so a kernel-started copy
+    // would get EMPTY; `/bin/kms-ssh-admin` has no row and no edge yet.
+    for path in [
+        "/bin/cellbox",
+        "/bin/cellbox-ssh",
+        "/bin/kms-ssh-admin",
+        "/bin/kms",
+        "/bin/config",
+        "/bin/init",
+        "/bin/terminal",
+        "/bin/desktop",
+        "/bin/net",
+        "/bin/sshd",
+    ] {
+        let g = CapSet::EMPTY
+            .with_path_caps(path)
+            .intersect(boot_ceiling(path));
+        if g.kms_ssh_sign || g.kms_ssh_admin {
+            ok = false;
+            log::error!(
+                "[selftest] boot-ceiling: {} kms_ssh_sign {} kms_ssh_admin {}, expected neither",
+                path,
+                g.kms_ssh_sign,
+                g.kms_ssh_admin
+            );
+        }
+    }
+    for path in ["/bin/cellbox-ssh", "/bin/kms-ssh-admin"] {
+        if lookup(path).is_some() {
+            ok = false;
+            log::error!("[selftest] boot-ceiling: {} must have no boot row", path);
+        }
+    }
+
     if authorize(SHELL, LaunchRoute::Mem, "/mem/demo").is_some() {
         ok = false;
         log::error!("[selftest] launch-profile: shell mem launch must fail closed");
@@ -270,20 +306,36 @@ pub fn run() -> bool {
             "[selftest] launch-profile: caller-owned ELF borrowed /bin/httpd network right"
         );
     }
-    // Phase 09 D79-9: the shell's second install path of its own ELF carries exactly
-    // the outbound client pair on the kernel-resolved route and nothing on the
-    // caller-owned ELF route, while `/bin/cellbox` itself keeps none (above).
+    // Phase 09 D79-9 + KSSH K3: the shell's second install path of its own ELF
+    // carries exactly the outbound client pair plus the KMS SSH sign right on the
+    // kernel-resolved route and nothing on the caller-owned ELF route, while
+    // `/bin/cellbox` itself keeps none (above). The request meets that ceiling in
+    // the sign right and no admin right exists on this edge.
     match authorize(SHELL, LaunchRoute::Path, "/bin/cellbox-ssh") {
         Some(profile)
             if profile.child_ceiling
                 == (CapSet {
                     net_resolve: true,
                     net_connect: true,
+                    kms_ssh_sign: true,
                     ..CapSet::LEGACY_OBSERVE_MUTATE
-                }) => {}
+                }) =>
+        {
+            let g = CapSet::EMPTY
+                .with_path_caps("/bin/cellbox-ssh")
+                .intersect(profile.child_ceiling);
+            if !g.kms_ssh_sign || g.kms_ssh_admin {
+                ok = false;
+                log::error!(
+                    "[selftest] launch-profile: /bin/cellbox-ssh edge must grant kms_ssh_sign only"
+                );
+            }
+        }
         _ => {
             ok = false;
-            log::error!("[selftest] launch-profile: shell lost exact client-only /bin/cellbox-ssh edge");
+            log::error!(
+                "[selftest] launch-profile: shell lost exact client-only + kms_ssh_sign /bin/cellbox-ssh edge"
+            );
         }
     }
     if authorize(SHELL, LaunchRoute::Elf, "/bin/cellbox-ssh").is_some() {
