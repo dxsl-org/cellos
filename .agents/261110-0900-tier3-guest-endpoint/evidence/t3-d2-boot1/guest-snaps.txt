@@ -1,0 +1,48 @@
+== snap-a ==
+up=31.21
+ssh_conn=10.0.2.2 44642 10.0.2.16 22
+pidfile=506
+proc 451 (sshd) S 1
+proc 503 (sshd-session) S 451
+proc 505 (sshd-session) S 503
+proc 506 (yes) S 505
+proc 507 (sshd-session) S 451
+proc 509 (sshd-session) S 507
+tcp 00000000:0016 00000000:0000 st=0A q=00000000:00000000
+tcp 1002000A:0016 0202000A:AE62 st=01 q=00000188:00000000
+tcp 1002000A:0016 0202000A:AE52 st=01 q=00000000:00000000
+diag pid=497 ppid=496
+diag pid=506 ppid=505
+Cellos >
+== snap-b ==
+up=50.35
+ssh_conn=10.0.2.2 44566 10.0.2.16 22
+pidfile=506
+proc 451 (sshd) S 1
+proc 503 (sshd-session) S 451
+proc 505 (sshd-session) S 503
+proc 506 (yes) S 505
+proc 511 (sshd-session) S 451
+proc 513 (sshd-session) R 511
+tcp 00000000:0016 00000000:0000 st=0A q=00000000:00000000
+tcp 1002000A:0016 0202000A:AE52 st=01 q=00000000:00000000
+tcp 1002000A:0016 0202000A:AE16 st=01 q=00000048:00000000
+diag pid=497 ppid=496
+diag pid=506 ppid=505
+Cellos >
+== snap-c ==
+up=118.16
+ssh_conn=10.0.2.2 43128 10.0.2.16 22
+pidfile=506
+proc 451 (sshd) S 1
+proc 503 (sshd-session) S 451
+proc 505 (sshd-session) S 503
+proc 506 (yes) S 505
+proc 647 (sshd-session) S 451
+proc 649 (sshd-session) S 647
+tcp 00000000:0016 00000000:0000 st=0A q=00000000:00000000
+tcp 1002000A:0016 0202000A:AE52 st=01 q=00000000:00000000
+tcp 1002000A:0016 0202000A:A878 st=01 q=000001A8:00000000
+diag pid=497 ppid=496
+diag pid=506 ppid=505
+Cellos >

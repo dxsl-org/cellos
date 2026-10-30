@@ -1,0 +1,375 @@
+{
+  "head": "066cb356eee40e9493cd15ed13bc30cc4a30beb3",
+  "pass": false,
+  "stop_rule": "MARKER-FAIL",
+  "gates": {
+    "B1": true,
+    "B2": true,
+    "C1": true,
+    "C2": true
+  },
+  "guest_kernel": "6.12.81-0-virt",
+  "stage": "diag",
+  "time_to_listening_s": 11.6,
+  "time_to_ssh_guest_ready_s": 12.0,
+  "timeline_s": {
+    "svm-root": 1.9,
+    "hv-starting": 3.4,
+    "vcpu-ready": 6.9,
+    "guest-kernel": 6.9,
+    "guest-init": 9.3,
+    "guest-kernel-marker": 9.4,
+    "crng-ready": 9.4,
+    "net-up": 9.4,
+    "apk-installed": 10.2,
+    "sshd-server-listening": 10.4,
+    "listening": 11.6,
+    "ssh-guest-ready": 12.0,
+    "driver-terminal": 166.4
+  },
+  "run_verdict": "driver-verdict",
+  "checks": {
+    "B1:svm-root-active": {
+      "pass": true,
+      "detail": ""
+    },
+    "B1:hypervisor-cell-starting": {
+      "pass": true,
+      "detail": ""
+    },
+    "B1:vcpu-ready": {
+      "pass": true,
+      "detail": "exactly one `vCPU ready` (a second one means the hypervisor cell restarted)"
+    },
+    "B1:no-panic-fault-triplefault": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "B1:no-hv-error-lines": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "B2:guest-kernel-banner": {
+      "pass": true,
+      "detail": "6.12.81-0-virt"
+    },
+    "B2:guest-kernel-marker": {
+      "pass": true,
+      "detail": "('6.12.81-0-virt', '6.12.81-0-virt')"
+    },
+    "B2:guest-init-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:crng-ready": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:net-up": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:apk-installed-offline": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:guest-hostkey-equals-pinned": {
+      "pass": true,
+      "detail": "['SHA256:NovIijpSkMe+AYe2jfGn/jnKauzT+bn4/Wj48WLBPLE']"
+    },
+    "B2:sshd-server-listening-line": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:listening-marker": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:no-guest-init-failure": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "C1:keyscan-fingerprint-equals-guest-key": {
+      "pass": true,
+      "detail": "[(0, 'SHA256:NovIijpSkMe+AYe2jfGn/jnKauzT+bn4/Wj48WLBPLE')]"
+    },
+    "C2:driver-ready-marker-once": {
+      "pass": true,
+      "detail": ""
+    },
+    "C2:sshd-saw-cell-connection-beyond-keyscan": {
+      "pass": true,
+      "detail": "{'connections_from_10.0.2.2': 23, 'keyscan_connections': 1}"
+    },
+    "C2:ready-after-sshd-server-listening": {
+      "pass": true,
+      "detail": "{'svm-root': 1.9, 'hv-starting': 3.4, 'vcpu-ready': 6.9, 'guest-kernel': 6.9, 'guest-init': 9.3, 'guest-kernel-marker': 9.4, 'crng-ready': 9.4, 'net-up': 9.4, 'apk-installed': 10.2, 'sshd-server-listening': 10.4, 'listening': 11.6, 'ssh-guest-ready': 12.0, 'driver-terminal': 166.4}"
+    },
+    "argv:one-loopback-hostfwd-tcg-qemu-10.2.0": {
+      "pass": true,
+      "detail": "/home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+svm,+rdrand,+rdseed -m 1G -display none -chardev socket,id=ser0,path=/tmp/cellbox-tier3-261030a/serial.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-tier3-261030a/tier3.iso -boot d -no-reboot -netdev user,id=net0,hostfwd=tcp:127.0.0.1:44745-10.0.2.16:22 -device"
+    },
+    "hashes:pins-match-and-iso-kernel-initramfs-recorded": {
+      "pass": true,
+      "detail": "{}"
+    },
+    "no-sshd-in-outer-image": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-secret-in-any-evidence-file": {
+      "pass": true,
+      "detail": "{}"
+    },
+    "no-secret-in-serial-raw": {
+      "pass": true,
+      "detail": ""
+    },
+    "protected-paths-and-cargo-lock-unchanged": {
+      "pass": true,
+      "detail": ""
+    },
+    "run-ended-by-driver-verdict": {
+      "pass": true,
+      "detail": "driver-verdict"
+    },
+    "D:driver-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:marker:shell-prompt": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-conf": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-refusals": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-changed-host-key": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-first-trust-no": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-first-trust-paste-refused": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-first-trust-yes": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-first-trust-known-after": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-wrong-password": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-exec-bytes": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-exec-stdin-eof": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-exec-signal": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-pty-shell": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-pty-resize": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-pty-escape-disconnect": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-shell-alive": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:shell-long-line": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-guest-consumer-close-producer": {
+      "pass": false,
+      "detail": "missing"
+    },
+    "D:marker:ssh-guest-cancel-producer": {
+      "pass": true,
+      "detail": "recorded 1 times (PASS or FAIL once: observation)"
+    },
+    "D:marker:ssh-guest-fault-may-have-run": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:ssh-guest-no-replay-ledger": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:marker:session-a-close": {
+      "pass": true,
+      "detail": "FAIL present"
+    },
+    "D:no-unexpected-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "D:no-FAIL-markers": {
+      "pass": false,
+      "detail": "[('ssh-guest-consumer-close-producer', 'timed_out=false gone_ok=true')]"
+    },
+    "D:driver-final-verdict": {
+      "pass": false,
+      "detail": "[('FAIL', '2', '22')]"
+    },
+    "D:boot-ceiling-selftest-pass": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:trust-store-volume-mounted": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:no-weak-entropy": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:fixture-kernel-features-recorded": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:guest-scenarios-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:sshd-saw-guest-connections": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:sshd-accepted-password-six-before-guest-scenarios": {
+      "pass": true,
+      "detail": "6"
+    },
+    "D:sshd-failed-password-once-before-guest-scenarios": {
+      "pass": true,
+      "detail": "1"
+    },
+    "D:guest-scenario-logins-accounted": {
+      "pass": true,
+      "detail": "{'driver_logins': ['11'], 'accepted_after': 11, 'failed_after': 0}"
+    },
+    "D:no-replay-ledger-exactly-one-selfkill": {
+      "pass": true,
+      "detail": "[('1', '1')]"
+    },
+    "D:selfkill-dispatch-reported": {
+      "pass": true,
+      "detail": ""
+    },
+    "D:sshd-one-session-per-connection": {
+      "pass": true,
+      "detail": "{'sessions': 17, 'max': 1}"
+    },
+    "diag:host-ss-files-present-nonempty": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "diag:host-ss-tool-ok": {
+      "pass": true,
+      "detail": "{'cancel-done': 0, 'snap-a': 0, 'snap-b': 0, 'snap-c': 0, 'final': 0, 'after-kill': 0}"
+    },
+    "diag:marks-recorded": {
+      "pass": true,
+      "detail": "['after-kill', 'cancel-done', 'final', 'snap-a', 'snap-b', 'snap-c']"
+    },
+    "diag:pcap-summary-present": {
+      "pass": true,
+      "detail": "{'packets': 4915, 'tcp_packets': 4885, 'linktype': 1, 'first_t': -25197.082, 'last_t': -25033.803}"
+    },
+    "diag:no-secret-in-pcap": {
+      "pass": true,
+      "detail": "{'scanned': True, 'bytes': 2559160, 'hits': []}"
+    },
+    "diag:three-snaps-present": {
+      "pass": true,
+      "detail": "['snap-a', 'snap-b', 'snap-c']"
+    },
+    "diag:window-within-1h-cap": {
+      "pass": true,
+      "detail": "{'window_s': 3600, 'elapsed_s': 169.5}"
+    }
+  },
+  "diag": {
+    "control_ok": false,
+    "control_timed_out": false,
+    "control_gone": true,
+    "control_closed_logged": true,
+    "control_guest_port": 44328,
+    "cancel_guest_port": 44626,
+    "cancel_marker_pass": false,
+    "cancel_closed_logged": false,
+    "net_fin_rst_after_cancel": false,
+    "slirp_fin_rst_to_guest_after_cancel": false,
+    "control_net_fin_rst": true,
+    "control_slirp_fin_rst_to_guest": true,
+    "cancel_A_zero_window_from_cell_after_mark": 0,
+    "host_ss_states": {
+      "cancel-done": {
+        "ESTAB": 2
+      },
+      "snap-a": {
+        "ESTAB": 2
+      },
+      "snap-b": {
+        "ESTAB": 2
+      },
+      "snap-c": {
+        "ESTAB": 2
+      },
+      "final": {
+        "ESTAB": 2
+      },
+      "after-kill": {}
+    },
+    "cancel_conn_state_at_snap_a": "ESTABLISHED",
+    "cancel_conn_queues_at_snap_a": "0:0",
+    "yes_alive_at_snap_a": true,
+    "yes_ppid_at_snap_a": "505",
+    "host_ss_established_at_a": 2,
+    "guest_uptime_at_snap_a": "31.21",
+    "cancel_conn_state_at_snap_b": "ESTABLISHED",
+    "cancel_conn_queues_at_snap_b": "0:0",
+    "yes_alive_at_snap_b": true,
+    "yes_ppid_at_snap_b": "505",
+    "host_ss_established_at_b": 2,
+    "guest_uptime_at_snap_b": "50.35",
+    "cancel_conn_state_at_snap_c": "ESTABLISHED",
+    "cancel_conn_queues_at_snap_c": "0:0",
+    "yes_alive_at_snap_c": true,
+    "yes_ppid_at_snap_c": "505",
+    "host_ss_established_at_c": 2,
+    "guest_uptime_at_snap_c": "118.16",
+    "host_ss_established_at_cancel_done": 2,
+    "host_ss_established_final": 2,
+    "host_ss_established_after_kill": 0,
+    "env_failure": null,
+    "outcome": "O6",
+    "outcome_text": "surprise: any other combination; raw data recorded, no further run without a new CP1",
+    "outcome_why": "no outcome row matches (control_ok=False control_closed_logged=True cancel_pass=False fin_cell=False fin_slirp=False states=['ESTABLISHED', 'ESTABLISHED', 'ESTABLISHED'] yes=[True, True, True] ss=[2, 2, 2])"
+  }
+}

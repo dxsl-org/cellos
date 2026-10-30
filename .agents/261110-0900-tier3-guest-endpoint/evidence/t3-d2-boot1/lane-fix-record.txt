@@ -1,0 +1,20 @@
+T3-D2 diag stage, boot 1 (DIAG_CONSUMED-1), HEAD 066cb356e + the uncommitted lane closure of cp1-diag-draft.md.
+Result of the stage judge: MARKER-FAIL, outcome label O6 (see verdict.json). Cause of the label: the lane's own control
+criterion, not the guest.
+Two defects of the diag lane were found in this boot's data; both are lane/tooling defects, fixed offline before boot 2
+(no product source, no guest image content other than the p9 helper unchanged, no scenario or judge rule weakened):
+
+1. guest.rs diag_checks, control criterion. I had added `run.out contains "p09-started"` to the draft's control criterion
+   (st=124, record mode=exec phase=running dispatch=accepted outcome=timeout, then `p9 gone` = p09-gone). After 8 s of `yes`
+   flood the terminal output buffer no longer holds the first line, so the driver printed
+   `P04 FAIL ssh-guest-consumer-close-producer timed_out=false gone_ok=true` although the client record was exactly as the
+   draft requires (`st=124 ... outcome=timeout`, serial.log control-client detail) and `p9 gone` printed p09-gone.
+   Fix: the driver criterion is the draft's literal one; the producer start and stop are now checked by the judge from the
+   guest's own data (`diag pid=` lines of `p9 snap`, process table at snap-a), a stronger check than a stdout substring.
+2. judge summarize_pcap, packet clock. QEMU 10.2.0 filter-dump stamps in this host's local time as if it were UTC: all
+   boot-1 stamps were exactly -25200 s (host +07:00) away from the lane's wall clock, so the "after the cancel mark" packet
+   list and the zero-window count were empty (the connection-level FIN/RST flags, which do not use time, are valid).
+   Fix: the offset is calibrated from the first packet (skew rounded to 15 minutes) and recorded as pcap.clock_offset_s.
+   The raw pcap of boot 1 was deleted with the other run files, so the per-packet timeline after the cancel mark of boot 1
+   cannot be reproduced; boot 2 keeps the raw pcap until it has been summarized and inspected.
+Boot 1's other data (guest snapshots, host ss, per-connection FIN/RST flags, pairing) is valid and is kept as recorded.

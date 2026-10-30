@@ -22,9 +22,16 @@
 #                  a token `RUN_CONSUMED-N` is claimed with O_EXCL under evidence/t3-d-runs/
 #                  just before QEMU starts (the second only for a host/environment error, never
 #                  for a marker FAIL: no fix-and-rerun without a new CP1).
+#   --stage diag   (T3-D2, cp1-diag-draft.md) the same image with the driver built `--features guest-diag`
+#                  and one extra QEMU argument, `-object filter-dump` on the slirp netdev; a host
+#                  `ss` snapshot is taken on every `ssh-guest-diag-mark` serial line and just
+#                  before/after QEMU is stopped; judged by `tier3_ssh_guest_judge.py diag` (outcome
+#                  labels O1..O6). Budget: one stage run, a second only for a host/environment
+#                  error; tokens `DIAG_CONSUMED-N` under evidence/t3-d-runs/ (O_EXCL). Window =
+#                  3 x time-to-listening + 20 min, never above 3600 s. Evidence: evidence/t3-d2.
 #   --build-only   stop after the ISO is assembled (no QEMU, no token).
 #
-# Usage: CELLBOX_TIER3_WORK=/tmp/cellbox-tier3-XXXX bash scripts/qemu-tier3-ssh-guest-x86.sh --stage boot|full [--build-only]
+# Usage: CELLBOX_TIER3_WORK=/tmp/cellbox-tier3-XXXX bash scripts/qemu-tier3-ssh-guest-x86.sh --stage boot|full|diag [--build-only]
 # Optional: TIER3_BOOT_WINDOW (seconds; default 3600 for boot = the 60 minute T3-B limit, 7200 for
 #           full; never above the 14400 s = 4 h hard cap),
 #           TIER3_LINGER (seconds to keep running after the gates, default 3),
@@ -42,8 +49,8 @@ while (($#)); do
     esac
 done
 case "$STAGE" in
-    boot|full) ;;
-    *) echo "FAIL: --stage boot or --stage full is required" >&2; exit 1 ;;
+    boot|full|diag) ;;
+    *) echo "FAIL: --stage boot, full or diag is required" >&2; exit 1 ;;
 esac
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -55,8 +62,9 @@ case "$W" in /tmp/cellbox-tier3-*) ;; *) echo "FAIL: work directory must be /tmp
 chmod 700 "$W"
 if [[ "$STAGE" == full ]]; then WINDOW="${TIER3_BOOT_WINDOW:-7200}"; else WINDOW="${TIER3_BOOT_WINDOW:-3600}"; fi
 [[ "$WINDOW" =~ ^[0-9]+$ ]] && (( WINDOW > 0 && WINDOW <= 14400 )) || { echo "FAIL: window must be 1..14400 seconds (4 h hard cap)" >&2; exit 1; }
+[[ "$STAGE" != diag ]] || (( WINDOW <= 3600 )) || { echo "FAIL: the diag window is capped at 3600 seconds (STOP-D5)" >&2; exit 1; }
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-if [[ "$STAGE" == full ]]; then OUT_NAME=t3-d; else OUT_NAME=t3-bc; fi
+case "$STAGE" in full) OUT_NAME=t3-d ;; diag) OUT_NAME=t3-d2 ;; *) OUT_NAME=t3-bc ;; esac
 OUT="${TIER3_EVIDENCE_OUT:-$ROOT/.agents/261110-0900-tier3-guest-endpoint/evidence/$OUT_NAME}"
 TOKEN_DIR="$ROOT/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-d-runs"
 QEMU_BIN="${HOME}/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64"
@@ -77,7 +85,7 @@ INITRAMFS="$W/guest/initramfs-sshd.cpio.gz"
 TRUST_DISK="$W/trust-fixture.img"
 
 rm -rf "$EMBEDDED" "$EVIDENCE" "$ISO" "$W/iso-root" "$PRIVATE_CONFIG" "$SCRATCH" "$KEYS" "$TRUST_DISK" \
-    "$KERNEL_TARGET_DIR/$TARGET/release/cellos-kernel" "$W/serial.sock" "$W/srv-receipt.json"
+    "$KERNEL_TARGET_DIR/$TARGET/release/cellos-kernel" "$W/serial.sock" "$W/srv-receipt.json" "$W/net0.pcap"
 mkdir -p "$EMBEDDED" "$KEYS" "$EVIDENCE" "$PRIVATE_CONFIG" "$SCRATCH"
 chmod 700 "$KEYS" "$SCRATCH"
 
@@ -108,6 +116,10 @@ pf "qemu=$QEMU_BIN sha256=$QEMU_SHA $("$QEMU_BIN" --version | head -1)"
 FREE_KB="$(df -Pk /tmp | awk 'NR==2 {print $4}')"
 (( FREE_KB > 8 * 1024 * 1024 )) || pfail "less than 8 GiB free in /tmp"
 pf "tmp-free-kb=$FREE_KB python=$($PYTHON_BIN --version 2>&1) ssh=$(ssh -V 2>&1)"
+if [[ "$STAGE" == diag ]]; then
+    command -v ss >/dev/null || pfail "ss (iproute2) is required by the diag stage"
+    pf "ss=$(command -v ss)"
+fi
 for f in tests/guests/x86-sshd/guest-init.sh scripts/prepare-tier3-sshd-initramfs-x86.sh scripts/fetch-tier3-sshd-apks-x86.sh \
          scripts/qemu-tier3-ssh-guest-x86.sh; do
     bash -n "$f" || pfail "bash -n failed on $f"
@@ -161,8 +173,10 @@ CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --
 # not unified into other packages.
 CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
     -p service-hypervisor --features volatile-disk
+DRIVER_FEATURES=guest
+[[ "$STAGE" != diag ]] || DRIVER_FEATURES=guest-diag
 CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
-    -p app-phase04-terminal-driver --features guest
+    -p app-phase04-terminal-driver --features "$DRIVER_FEATURES"
 CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
     -p app-init --features input
 
@@ -268,16 +282,19 @@ if [[ "$BUILD_ONLY" == 1 ]]; then
     exit 0
 fi
 ! pgrep -x qemu-system-x86 >/dev/null || pfail "a QEMU process is already running"
-if [[ "$STAGE" == full ]]; then
-    # Budget accounting (cp1-draft.md section 5: at most two full runs), claimed with O_EXCL.
+if [[ "$STAGE" == full || "$STAGE" == diag ]]; then
+    # Budget accounting, claimed with O_EXCL: full = RUN_CONSUMED-N (cp1-draft.md section 5, at most two),
+    # diag = DIAG_CONSUMED-N (cp1-diag-draft.md section 2, at most two, the second only for a host error).
     mkdir -p "$TOKEN_DIR"
+    TOKEN_PREFIX=RUN_CONSUMED
+    [[ "$STAGE" != diag ]] || TOKEN_PREFIX=DIAG_CONSUMED
     TOKEN=""
     for n in 1 2; do
-        if ( set -o noclobber; printf 'stage=full run=%s head=%s window=%s\n' "$n" "$(git rev-parse HEAD)" "$WINDOW" > "$TOKEN_DIR/RUN_CONSUMED-$n" ) 2>/dev/null; then
-            TOKEN="$TOKEN_DIR/RUN_CONSUMED-$n"; break
+        if ( set -o noclobber; printf 'stage=%s run=%s head=%s window=%s\n' "$STAGE" "$n" "$(git rev-parse HEAD)" "$WINDOW" > "$TOKEN_DIR/$TOKEN_PREFIX-$n" ) 2>/dev/null; then
+            TOKEN="$TOKEN_DIR/$TOKEN_PREFIX-$n"; break
         fi
     done
-    [[ -n "$TOKEN" ]] || pfail "both full-run tokens exist: the T3-D budget of two runs is spent"
+    [[ -n "$TOKEN" ]] || pfail "both $TOKEN_PREFIX tokens exist: the budget of two runs is spent"
     pf "token=$TOKEN claimed"
 fi
 
@@ -295,11 +312,17 @@ argv = [qemu_bin, "-machine", "q35", "-accel", "tcg", "-cpu", "qemu64,+pdpe1gb,+
         "-serial", "chardev:ser0", "-monitor", "none", "-cdrom", iso, "-boot", "d", "-no-reboot",
         "-netdev", f"user,id=net0,hostfwd=tcp:127.0.0.1:{port}-10.0.2.16:22", "-device", "e1000,netdev=net0",
         "-drive", f"file={trust_disk},if=none,format=raw,id=p09fx", "-device", "nvme,drive=p09fx,serial=cellosp09"]
+pcap_path = os.path.join(work, "net0.pcap")
+if stage == "diag":
+    # The one allowed extra argument of the diag stage (cp1-diag-draft.md section 3.3): a capture of the slirp netdev.
+    argv += ["-object", f"filter-dump,id=fd0,netdev=net0,file={pcap_path}"]
 netdevs = [a for i, a in enumerate(argv) if i and argv[i - 1] == "-netdev"]
-if len(netdevs) != 1 or netdevs[0].count("fwd") != 1 or "restrict" in " ".join(argv) or any(a in ("-nic", "-net") for a in argv):
+if len(netdevs) != 1 or netdevs[0].count("fwd") != 1 or "restrict" in " ".join(argv) or any(a in ("-nic", "-net") for a in argv) \
+        or ("-object" in argv and stage != "diag") or argv.count("-object") > 1:
     raise SystemExit("FAIL: QEMU networking must be one user netdev with exactly one hostfwd")
 open(f"{evidence}/qemu-argv.txt", "w").write(" ".join(argv) + "\n")
 t0 = time.monotonic()
+t0_wall = time.time()
 proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 conn = None
 for _ in range(100):
@@ -343,6 +366,22 @@ FATAL = [r"KERNEL PANIC", r"\[fault\] Cell", r"create_vm failed", r"\[hv-x86\] .
 timeline, c1, scans = {}, {"attempts": [], "ok": False}, 0
 keyscan = None   # (Popen, started)
 fatal_hit = None
+diag_marks = {}
+window_set = False
+def ss_snapshot(name):
+    """Host `ss` of the two loopback sockets of the hostfwd (SA: QEMU -> 127.0.0.1:PORT, SB: the accepted one)."""
+    wall = time.time()
+    cmd = ["ss", "-tnoi", f"( sport = :{port} or dport = :{port} )"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        rc, out, err = r.returncode, r.stdout, r.stderr
+    except (OSError, subprocess.SubprocessError) as e:
+        rc, out, err = -1, "", repr(e)
+    with open(f"{evidence}/host-ss-{name}.txt", "w") as fh:
+        fh.write(f"# name={name} wall={wall:.3f} offset_s={wall - t0_wall:.3f}\n# cmd={' '.join(cmd)}\n# rc={rc}\n{out}")
+        if err:
+            fh.write("# stderr: " + err.replace("\n", " ") + "\n")
+    diag_marks[name] = {"wall": wall, "off_s": round(wall - t0_wall, 3), "ss_rc": rc}
 def sighted(t):
     now = round(time.monotonic() - t0, 1)
     for name, pat in PAT.items():
@@ -355,6 +394,14 @@ try:
         pump()
         t = text()
         sighted(t)
+        if stage == "diag":
+            if "listening" in timeline and not window_set:
+                # window = 3 x time-to-listening + 20 min (cp1-diag-draft.md section 4.1), never above the cap
+                deadline = min(deadline, t0 + 3 * timeline["listening"] + 1200)
+                window_set = True
+            for m in re.finditer(r"P04 INFO ssh-guest-diag-mark (\S+)", t):
+                if m.group(1) not in diag_marks:
+                    ss_snapshot(m.group(1))
         for pat in FATAL:
             m = next((l for l in host_lines(t) if re.search(pat, l)), None)
             if m:
@@ -384,7 +431,7 @@ try:
                 keyscan = None
                 if rec["match"]:
                     c1["ok"] = True; c1["ok_s"] = rec["ended_s"]
-        if stage == "full":
+        if stage in ("full", "diag"):
             # T3-D: the driver's own terminal verdict ends the run (B/C are re-judged from the same log).
             if "driver-terminal" in timeline:
                 verdict = "driver-verdict"; break
@@ -401,10 +448,15 @@ try:
 finally:
     if keyscan is not None and keyscan[0].poll() is None:
         keyscan[0].kill()
+    if stage == "diag" and "final" not in diag_marks:
+        ss_snapshot("final")
     if proc.poll() is None:
         proc.terminate()
         try: proc.wait(timeout=10)
         except subprocess.TimeoutExpired: proc.kill(); proc.wait()
+    if stage == "diag":
+        ss_snapshot("after-kill")
+        json.dump({"qemu_start_wall": t0_wall, "marks": diag_marks}, open(f"{evidence}/diag-marks.json", "w"), indent=2)
     for a in c1["attempts"]: a.pop("ended_mono", None)
     open(f"{evidence}/serial.raw.log", "wb").write(bytes(log))
     open(f"{evidence}/serial.log", "w").write(text())
@@ -418,12 +470,14 @@ cmp -s "$EVIDENCE/protected-before.txt" "$EVIDENCE/protected-after.txt" || echo 
 
 echo "==> Judging and archiving"
 JUDGE_RC=0
+JUDGE_EXTRA=()
+[[ "$STAGE" != diag ]] || JUDGE_EXTRA=(--pcap "$W/net0.pcap")
 "$PYTHON_BIN" scripts/tier3_ssh_guest_judge.py "$STAGE" --evidence "$EVIDENCE" --keys "$KEYS" --fingerprint "$FP" \
-    --port "$PORT" --head "$(git rev-parse HEAD)" || JUDGE_RC=$?
+    --port "$PORT" --head "$(git rev-parse HEAD)" ${JUDGE_EXTRA[@]+"${JUDGE_EXTRA[@]}"} || JUDGE_RC=$?
 "$PYTHON_BIN" scripts/tier3_ssh_guest_judge.py archive --src "$EVIDENCE" --dst "$OUT" --keys "$KEYS" \
     || { echo "FAIL: archive scan refused the evidence (STOP-5; secrets kept in $W for inspection)" >&2; exit 1; }
 if [[ "${TIER3_KEEP_SECRETS:-0}" != 1 ]]; then
-    rm -rf "$KEYS" "$SCRATCH" "$ISO" "$TRUST_DISK" "$EMBEDDED" "$W/iso-root" "$W/guest" "$W/guest-stage" "$W/serial.sock"
+    rm -rf "$KEYS" "$SCRATCH" "$ISO" "$TRUST_DISK" "$EMBEDDED" "$W/iso-root" "$W/guest" "$W/guest-stage" "$W/serial.sock" "$W/net0.pcap"
 fi
 echo "Tier-3 $STAGE stage: qemu supervisor rc $BOOT_RC, judge exit $JUDGE_RC; evidence archived at $OUT"
 exit "$JUDGE_RC"

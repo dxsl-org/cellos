@@ -28,3 +28,7 @@ kssh = ["phase09-ssh"]
 # checks against OpenSSH in the nested guest behind one loopback hostfwd, with a readiness
 # wait before any scenario. Adds no package.
 guest = ["phase09-ssh"]
+# Tier-3 guest diagnostic stage (`--stage diag`, cp1-diag-draft.md): the guest scenarios of
+# `src/ssh/guest.rs` are replaced by `diag_checks` (positive control, observed cancel, marks and
+# guest snapshots). Adds no package.
+guest-diag = ["guest"]

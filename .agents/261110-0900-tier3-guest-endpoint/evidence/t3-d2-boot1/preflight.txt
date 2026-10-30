@@ -1,0 +1,8 @@
+stage=diag build_only=0 window=3600 head=066cb356eee40e9493cd15ed13bc30cc4a30beb3
+dirty files (all inside the closure): cells/tests/phase04-terminal-driver/Cargo.toml cells/tests/phase04-terminal-driver/src/ssh.rs cells/tests/phase04-terminal-driver/src/ssh/guest.rs scripts/prepare-tier3-sshd-initramfs-x86.sh scripts/qemu-tier3-ssh-guest-x86.sh scripts/test_tier3_ssh_guest_judge.py scripts/tier3_ssh_guest_judge.py
+qemu=/home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 sha256=169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe QEMU emulator version 10.2.0
+tmp-free-kb=723638804 python=Python 3.12.3 ssh=OpenSSH_9.6p1 Ubuntu-3ubuntu13.20, OpenSSL 3.0.13 30 Jan 2024
+ss=/usr/bin/ss
+apk pins match
+hostfwd loopback port=44745 guest host key fingerprint=SHA256:NovIijpSkMe+AYe2jfGn/jnKauzT+bn4/Wj48WLBPLE
+token=/home/dmin/cellos/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-d-runs/DIAG_CONSUMED-1 claimed

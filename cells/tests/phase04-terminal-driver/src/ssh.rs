@@ -368,8 +368,10 @@ pub(crate) fn ssh_checks(a: &mut Term) {
     // runs its own three guest-only scenarios instead.
     #[cfg(not(feature = "guest"))]
     s96_checks(a, &f);
-    #[cfg(feature = "guest")]
+    #[cfg(all(feature = "guest", not(feature = "guest-diag")))]
     guest::guest_checks(a, &f);
+    #[cfg(feature = "guest-diag")]
+    guest::diag_checks(a, &f);
 }
 
 /// Field names of the shell's `completion` line, in order (C2).

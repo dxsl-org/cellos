@@ -1,0 +1,4 @@
+# name=after-kill wall=1793358405.466 offset_s=169.454
+# cmd=ss -tnoi ( sport = :44745 or dport = :44745 )
+# rc=0
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess

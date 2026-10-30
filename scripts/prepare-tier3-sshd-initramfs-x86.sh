@@ -87,6 +87,10 @@ CONF
 #                 dispatch: outcome unknown), then sleep so nothing ends the command normally
 #   p9 produce    record this pid in /tmp/p09-prod.pid and `exec yes` (an endless producer)
 #   p9 gone       wait up to 20 s for the pid in /tmp/p09-prod.pid to be gone (or a zombie)
+#   p9 snap       (diag stage, read-only, no ledger write) print one compact snapshot: uptime, this
+#                 login's SSH_CONNECTION, the pid file, `pid (comm) state ppid` of every yes/sh/sshd/
+#                 sshd-session process, the /proc/net/tcp rows with local port 22 (raw hex, decoded by
+#                 the judge) and the lines `produce` appended to /tmp/p09-diag.txt
 cat > "$STAGE/p9" <<'HELPER'
 #!/bin/sh
 case "$1" in
@@ -103,7 +107,25 @@ selfkill)
         esac
     done
     sleep 20 ;;
-produce) echo $$ > /tmp/p09-prod.pid; exec yes p09y ;;
+produce) echo $$ > /tmp/p09-prod.pid; echo "pid=$$ ppid=$PPID" >> /tmp/p09-diag.txt; exec yes p09y ;;
+snap)
+    read -r up _ < /proc/uptime
+    echo "up=$up"
+    echo "ssh_conn=$SSH_CONNECTION"
+    pf=
+    [ -r /tmp/p09-prod.pid ] && read -r pf < /tmp/p09-prod.pid
+    echo "pidfile=$pf"
+    for p in /proc/[0-9]*; do
+        read -r a b c d _ 2>/dev/null < "$p/stat" || continue
+        case "$b" in "(yes)"|"(sh)"|"(sshd)"|"(sshd-session)") echo "proc $a $b $c $d" ;; esac
+    done
+    while read -r _ la ra st q _; do
+        case "$la" in *:0016) echo "tcp $la $ra st=$st q=$q" ;; esac
+    done < /proc/net/tcp
+    if [ -r /tmp/p09-diag.txt ]; then
+        while read -r l; do echo "diag $l"; done < /tmp/p09-diag.txt
+    fi
+    exit 0 ;;
 gone)
     read -r pid < /tmp/p09-prod.pid
     i=0

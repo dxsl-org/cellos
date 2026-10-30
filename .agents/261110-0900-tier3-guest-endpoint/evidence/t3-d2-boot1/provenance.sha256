@@ -1,0 +1,12 @@
+640eb1c4d74ada2fe9f119b852af49b770ba8c898b3d0f9a26e4e066f22440ea  /tmp/cellbox-tier3-261030a/cells-target/x86_64-unknown-none/release/cellbox
+045c4f27b42294d4707d5e3a93426bab4a85bcf59c04ae6051e273e9cffb4668  /tmp/cellbox-tier3-261030a/cells-target/x86_64-unknown-none/release/hypervisor
+fd309c6c1d5d13308d72151161fdaa14b4b5f69e6c514a8551d19f23101dd7dd  /tmp/cellbox-tier3-261030a/cells-target/x86_64-unknown-none/release/phase04-terminal-driver
+8d5039372e6dc46493f4dc0901b501c6680b13f088cd58875340f2faf4f7fc33  /tmp/cellbox-tier3-261030a/kernel-target/x86_64-unknown-none/release/cellos-kernel
+c1a93d28c234f066e1a010ca0904aa7f03e156bf74bb7dfe0d6d419e01bcdd34  /tmp/cellbox-tier3-261030a/tier3.iso
+f26539b47b9cfb59d9098bd051720e46451dbe135dfc575427d395c0c0b1ea5b  /tmp/cellbox-tier3-261030a/embedded/kernel_fs.img
+93b2d8a903f85f0447f6a9457ab531e33eec175c2364e13a0c4e5dffe66a7857  /tmp/cellbox-tier3-261030a/guest/initramfs-sshd.cpio.gz
+2d62d53b39ed16f5d24a89a39abebcf946d9a0f9482734baf3da51e867b1ec07  .alpine-cache-x86/vmlinux
+26bf81ada3e8fc30fd4d81805fe6c8c60be5c7fb18a43563c707e49117e624ca  .alpine-cache-x86/vmlinuz-virt
+e2562e019a506f9bdac24d06953823106a2ab29da50eea01185d005a3ca4acdf  .alpine-cache-x86/initramfs-virt
+15ff772fa5a46df80963c5a968e6c74654a34b31317286076aa1e0f82562546b  /tmp/cellbox-tier3-261030a/keys/cell.pub
+169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe  /home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64

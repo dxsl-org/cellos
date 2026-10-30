@@ -1,0 +1,1756 @@
+{
+  "schema": 1,
+  "pcap": {
+    "packets": 4915,
+    "tcp_packets": 4885,
+    "linktype": 1,
+    "first_t": -25197.082,
+    "last_t": -25033.803
+  },
+  "t_start_wall": 1793358236.0117037,
+  "hostfwd_port": 44745,
+  "guest_side_ports": {
+    "control": 44328,
+    "cancel": 44626
+  },
+  "marks_t": {
+    "cancel-done": 55.358,
+    "snap-a": 58.366,
+    "snap-b": 80.36,
+    "snap-c": 161.046,
+    "final": 169.444,
+    "after-kill": 169.454
+  },
+  "cancel": {
+    "A": {
+      "flow": "A",
+      "client": "10.0.2.15:49165",
+      "server": "10.0.2.2:44745",
+      "pkts": 84,
+      "syn": 1,
+      "fin": {
+        "c2s": 0,
+        "s2c": 0
+      },
+      "rst": {
+        "c2s": 0,
+        "s2c": 0
+      },
+      "zero_win": {
+        "c2s": 7,
+        "s2c": 0
+      },
+      "zero_win_after_cancel": {
+        "c2s": 0,
+        "s2c": 0
+      },
+      "payload_bytes": {
+        "c2s": 682,
+        "s2c": 22534
+      },
+      "after_cancel_truncated": false,
+      "first_t": -25145.611,
+      "last_t": -25039.972,
+      "first_fin": null,
+      "first_rst": null,
+      "after_cancel": []
+    },
+    "B": {
+      "flow": "B",
+      "client": "10.0.2.2:44626",
+      "server": "10.0.2.16:22",
+      "pkts": 123,
+      "syn": 1,
+      "fin": {
+        "c2s": 0,
+        "s2c": 0
+      },
+      "rst": {
+        "c2s": 0,
+        "s2c": 0
+      },
+      "zero_win": {
+        "c2s": 0,
+        "s2c": 0
+      },
+      "zero_win_after_cancel": {
+        "c2s": 0,
+        "s2c": 0
+      },
+      "payload_bytes": {
+        "c2s": 682,
+        "s2c": 67249
+      },
+      "after_cancel_truncated": false,
+      "first_t": -25145.611,
+      "last_t": -25145.328,
+      "first_fin": null,
+      "first_rst": null,
+      "after_cancel": []
+    },
+    "A_pairing": "paired-by-syn-time"
+  },
+  "control": {
+    "A": {
+      "flow": "A",
+      "client": "10.0.2.15:49163",
+      "server": "10.0.2.2:44745",
+      "pkts": 1559,
+      "syn": 1,
+      "fin": {
+        "c2s": 1,
+        "s2c": 0
+      },
+      "rst": {
+        "c2s": 1,
+        "s2c": 0
+      },
+      "zero_win": {
+        "c2s": 27,
+        "s2c": 0
+      },
+      "zero_win_after_cancel": {
+        "c2s": 0,
+        "s2c": 0
+      },
+      "payload_bytes": {
+        "c2s": 1726,
+        "s2c": 976292
+      },
+      "after_cancel_truncated": false,
+      "first_t": -25161.046,
+      "last_t": -25124.998,
+      "first_fin": {
+        "t": -25147.846,
+        "dir": "c2s"
+      },
+      "first_rst": {
+        "t": -25124.998,
+        "dir": "c2s"
+      }
+    },
+    "B": {
+      "flow": "B",
+      "client": "10.0.2.2:44328",
+      "server": "10.0.2.16:22",
+      "pkts": 1493,
+      "syn": 1,
+      "fin": {
+        "c2s": 5,
+        "s2c": 1
+      },
+      "rst": {
+        "c2s": 0,
+        "s2c": 0
+      },
+      "zero_win": {
+        "c2s": 0,
+        "s2c": 0
+      },
+      "zero_win_after_cancel": {
+        "c2s": 0,
+        "s2c": 0
+      },
+      "payload_bytes": {
+        "c2s": 1726,
+        "s2c": 1037289
+      },
+      "after_cancel_truncated": false,
+      "first_t": -25161.046,
+      "last_t": -25147.802,
+      "first_fin": {
+        "t": -25147.846,
+        "dir": "c2s"
+      },
+      "first_rst": null
+    },
+    "A_pairing": "paired-by-syn-time"
+  },
+  "derived": {
+    "cancel_A_fin_rst_from_cell": false,
+    "cancel_A_fin_rst_from_slirp": false,
+    "cancel_B_fin_rst_from_slirp": false,
+    "cancel_B_fin_rst_from_guest": false,
+    "control_A_fin_rst_from_cell": true,
+    "control_B_fin_rst_from_slirp": true,
+    "cancel_A_zero_window_from_cell_after_mark": 0
+  },
+  "connections": {
+    "A": [
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49152",
+        "server": "10.0.2.2:44745",
+        "pkts": 19,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 334,
+          "s2c": 1185
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25194.109,
+        "last_t": -25188.22,
+        "first_fin": {
+          "t": -25188.274,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49153",
+        "server": "10.0.2.2:44745",
+        "pkts": 19,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 334,
+          "s2c": 1185
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25187.126,
+        "last_t": -25186.958,
+        "first_fin": {
+          "t": -25187.002,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49154",
+        "server": "10.0.2.2:44745",
+        "pkts": 19,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 334,
+          "s2c": 1185
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25186.0,
+        "last_t": -25185.706,
+        "first_fin": {
+          "t": -25185.745,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49155",
+        "server": "10.0.2.2:44745",
+        "pkts": 19,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 334,
+          "s2c": 1185
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25184.772,
+        "last_t": -25184.477,
+        "first_fin": {
+          "t": -25184.517,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49156",
+        "server": "10.0.2.2:44745",
+        "pkts": 48,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 738,
+          "s2c": 1709
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25183.545,
+        "last_t": -25182.058,
+        "first_fin": {
+          "t": -25183.001,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49157",
+        "server": "10.0.2.2:44745",
+        "pkts": 47,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 738,
+          "s2c": 1701
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25182.034,
+        "last_t": -25181.715,
+        "first_fin": {
+          "t": -25181.769,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49158",
+        "server": "10.0.2.2:44745",
+        "pkts": 30,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 554,
+          "s2c": 1317
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25180.779,
+        "last_t": -25180.538,
+        "first_fin": {
+          "t": -25180.582,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49159",
+        "server": "10.0.2.2:44745",
+        "pkts": 48,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 770,
+          "s2c": 1745
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25179.532,
+        "last_t": -25179.222,
+        "first_fin": {
+          "t": -25179.242,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49160",
+        "server": "10.0.2.2:44745",
+        "pkts": 57,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 826,
+          "s2c": 1781
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25178.303,
+        "last_t": -25174.786,
+        "first_fin": {
+          "t": -25174.837,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49161",
+        "server": "10.0.2.2:44745",
+        "pkts": 46,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 738,
+          "s2c": 1673
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25173.866,
+        "last_t": -25173.352,
+        "first_fin": {
+          "t": -25173.408,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49162",
+        "server": "10.0.2.2:44745",
+        "pkts": 72,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 1038,
+          "s2c": 2033
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25172.428,
+        "last_t": -25162.039,
+        "first_fin": {
+          "t": -25162.069,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49163",
+        "server": "10.0.2.2:44745",
+        "pkts": 1559,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 0
+        },
+        "rst": {
+          "c2s": 1,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 27,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 1726,
+          "s2c": 976292
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25161.046,
+        "last_t": -25124.998,
+        "first_fin": {
+          "t": -25147.846,
+          "dir": "c2s"
+        },
+        "first_rst": {
+          "t": -25124.998,
+          "dir": "c2s"
+        }
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49164",
+        "server": "10.0.2.2:44745",
+        "pkts": 46,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 1701
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25146.869,
+        "last_t": -25146.555,
+        "first_fin": {
+          "t": -25146.577,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49165",
+        "server": "10.0.2.2:44745",
+        "pkts": 84,
+        "syn": 1,
+        "fin": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 7,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 682,
+          "s2c": 22534
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25145.611,
+        "last_t": -25039.972,
+        "first_fin": null,
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49166",
+        "server": "10.0.2.2:44745",
+        "pkts": 58,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 2537
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25139.313,
+        "last_t": -25138.732,
+        "first_fin": {
+          "t": -25138.783,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49167",
+        "server": "10.0.2.2:44745",
+        "pkts": 47,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 2133
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25117.376,
+        "last_t": -25116.824,
+        "first_fin": {
+          "t": -25116.883,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49168",
+        "server": "10.0.2.2:44745",
+        "pkts": 48,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 1701
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25115.887,
+        "last_t": -25093.552,
+        "first_fin": {
+          "t": -25093.609,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49169",
+        "server": "10.0.2.2:44745",
+        "pkts": 47,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 1701
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25090.621,
+        "last_t": -25067.372,
+        "first_fin": {
+          "t": -25067.392,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49170",
+        "server": "10.0.2.2:44745",
+        "pkts": 47,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 1701
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25064.43,
+        "last_t": -25041.141,
+        "first_fin": {
+          "t": -25041.193,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49171",
+        "server": "10.0.2.2:44745",
+        "pkts": 60,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 2545
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25036.698,
+        "last_t": -25036.316,
+        "first_fin": {
+          "t": -25036.367,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49172",
+        "server": "10.0.2.2:44745",
+        "pkts": 39,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 666,
+          "s2c": 1533
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25035.359,
+        "last_t": -25035.112,
+        "first_fin": {
+          "t": -25035.123,
+          "dir": "s2c"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "A",
+        "client": "10.0.2.15:49173",
+        "server": "10.0.2.2:44745",
+        "pkts": 46,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 746,
+          "s2c": 1709
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25034.101,
+        "last_t": -25033.803,
+        "first_fin": {
+          "t": -25033.854,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      }
+    ],
+    "B": [
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43784",
+        "server": "10.0.2.16:22",
+        "pkts": 16,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 1105,
+          "s2c": 901
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25188.566,
+        "last_t": -25188.434,
+        "first_fin": {
+          "t": -25188.442,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43780",
+        "server": "10.0.2.16:22",
+        "pkts": 15,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 334,
+          "s2c": 1185
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25188.39,
+        "last_t": -25188.225,
+        "first_fin": {
+          "t": -25188.274,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43164",
+        "server": "10.0.2.16:22",
+        "pkts": 16,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 334,
+          "s2c": 1185
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25187.125,
+        "last_t": -25186.962,
+        "first_fin": {
+          "t": -25187.001,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43170",
+        "server": "10.0.2.16:22",
+        "pkts": 16,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 334,
+          "s2c": 1185
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25185.999,
+        "last_t": -25185.708,
+        "first_fin": {
+          "t": -25185.745,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43186",
+        "server": "10.0.2.16:22",
+        "pkts": 17,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 334,
+          "s2c": 1185
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25184.771,
+        "last_t": -25184.48,
+        "first_fin": {
+          "t": -25184.517,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43202",
+        "server": "10.0.2.16:22",
+        "pkts": 41,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 738,
+          "s2c": 1709
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25183.544,
+        "last_t": -25182.943,
+        "first_fin": {
+          "t": -25183.001,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43214",
+        "server": "10.0.2.16:22",
+        "pkts": 42,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 738,
+          "s2c": 1701
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25182.034,
+        "last_t": -25181.721,
+        "first_fin": {
+          "t": -25181.769,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43216",
+        "server": "10.0.2.16:22",
+        "pkts": 27,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 554,
+          "s2c": 1317
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25180.778,
+        "last_t": -25180.542,
+        "first_fin": {
+          "t": -25180.582,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43228",
+        "server": "10.0.2.16:22",
+        "pkts": 42,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 770,
+          "s2c": 1745
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25179.531,
+        "last_t": -25179.225,
+        "first_fin": {
+          "t": -25179.241,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43230",
+        "server": "10.0.2.16:22",
+        "pkts": 44,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 826,
+          "s2c": 1781
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25178.303,
+        "last_t": -25174.789,
+        "first_fin": {
+          "t": -25174.836,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:44742",
+        "server": "10.0.2.16:22",
+        "pkts": 39,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 738,
+          "s2c": 1673
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25173.865,
+        "last_t": -25173.353,
+        "first_fin": {
+          "t": -25173.408,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:44746",
+        "server": "10.0.2.16:22",
+        "pkts": 61,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 1038,
+          "s2c": 2033
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25172.427,
+        "last_t": -25162.041,
+        "first_fin": {
+          "t": -25162.069,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:44328",
+        "server": "10.0.2.16:22",
+        "pkts": 1493,
+        "syn": 1,
+        "fin": {
+          "c2s": 5,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 1726,
+          "s2c": 1037289
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25161.046,
+        "last_t": -25147.802,
+        "first_fin": {
+          "t": -25147.846,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:44620",
+        "server": "10.0.2.16:22",
+        "pkts": 41,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 1701
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25146.868,
+        "last_t": -25146.562,
+        "first_fin": {
+          "t": -25146.577,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:44626",
+        "server": "10.0.2.16:22",
+        "pkts": 123,
+        "syn": 1,
+        "fin": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 682,
+          "s2c": 67249
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25145.611,
+        "last_t": -25145.328,
+        "first_fin": null,
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:44642",
+        "server": "10.0.2.16:22",
+        "pkts": 51,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 2537
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25139.312,
+        "last_t": -25138.736,
+        "first_fin": {
+          "t": -25138.783,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:44566",
+        "server": "10.0.2.16:22",
+        "pkts": 42,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 2133
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25117.374,
+        "last_t": -25116.827,
+        "first_fin": {
+          "t": -25116.883,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:44358",
+        "server": "10.0.2.16:22",
+        "pkts": 41,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 1701
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25115.886,
+        "last_t": -25093.555,
+        "first_fin": {
+          "t": -25093.608,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:42688",
+        "server": "10.0.2.16:22",
+        "pkts": 41,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 1701
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25090.62,
+        "last_t": -25067.375,
+        "first_fin": {
+          "t": -25067.392,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:45518",
+        "server": "10.0.2.16:22",
+        "pkts": 42,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 1701
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25064.429,
+        "last_t": -25041.147,
+        "first_fin": {
+          "t": -25041.193,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43128",
+        "server": "10.0.2.16:22",
+        "pkts": 53,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 730,
+          "s2c": 2545
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25036.697,
+        "last_t": -25036.317,
+        "first_fin": {
+          "t": -25036.367,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43132",
+        "server": "10.0.2.16:22",
+        "pkts": 35,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 666,
+          "s2c": 1533
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25035.359,
+        "last_t": -25035.074,
+        "first_fin": {
+          "t": -25035.123,
+          "dir": "s2c"
+        },
+        "first_rst": null
+      },
+      {
+        "flow": "B",
+        "client": "10.0.2.2:43134",
+        "server": "10.0.2.16:22",
+        "pkts": 42,
+        "syn": 1,
+        "fin": {
+          "c2s": 1,
+          "s2c": 1
+        },
+        "rst": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "zero_win_after_cancel": {
+          "c2s": 0,
+          "s2c": 0
+        },
+        "payload_bytes": {
+          "c2s": 746,
+          "s2c": 1709
+        },
+        "after_cancel_truncated": false,
+        "first_t": -25034.1,
+        "last_t": -25033.806,
+        "first_fin": {
+          "t": -25033.854,
+          "dir": "c2s"
+        },
+        "first_rst": null
+      }
+    ]
+  }
+}
