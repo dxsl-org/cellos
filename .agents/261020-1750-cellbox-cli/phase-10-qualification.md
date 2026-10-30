@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Integrated signed-image qualification and measurement"
-status: closed-partial-private-evidence
+status: closed-private-evidence-at-stated-ceilings
 priority: P1
 tier: thinking
 dependencies: [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -28,7 +28,7 @@ Update the affected image/package/signing recipes, command/app-development docs 
 
 ## Success criteria
 
-- [ ] CBX-01..29 have actual evidence with no silent exclusions or placeholders. **Unmet:** CBX-23/24/25 partial (Tier-3 guest, publickey/KMS). CBX-27 is **met at its stated ceiling** by the user's disposition (S10-9 CP2, 2026-10-30), see criterion 4.
+- [x] CBX-01..29 have actual evidence with no silent exclusions or placeholders. **Met at stated ceilings by explicit user dispositions (2026-10-30):** CBX-23 guest half and CBX-25 at the SVM/TCG ceiling (not Intel VMX/EPT; S9-3 pipeline-exec/non-UTF-8 stdin limitation retained), CBX-24 at the `DEV_POSTURE` ceiling (KMS publickey T0/T1; no production entropy/custody), CBX-27 at its stated ceiling (criterion 4). CBX-27 is **met at its stated ceiling** by the user's disposition (S10-9 CP2, 2026-10-30), see criterion 4.
 - [x] Real keyboard/screen/state and network/file effects prove selected behavior, not source assertions or fixed mock output. **Met at the candidate/promoted ceilings (S10-5 CP2 granted 2026-10-29):** L0/L4/L6 real serial/GUI/network/file effects on QEMU/TCG; guest SSH excluded.
 - [x] One suite artifact and all retained independent apps/services package correctly; no broad ambient authority or hidden legacy fallback. **Met on the promoted dev-posture x86 bytes (S10-5 CP2 granted 2026-10-29):** S10-5 V1–V7.
 - [x] Measurements compare equivalent feature sets and distinguish host/QEMU/physical ceilings. **Checked at the stated ceiling by explicit user disposition (S10-9 CP2, 2026-10-30), NOT as a feature-equivalent comparison:** the B1/B2 baseline lacks rg/edit/ssh/top/typed pipelines/finite stream/real cat (the B2 GUI terminal is a fixed builtin interpreter), so comparison covers only the shared subset; memory is guest-resident (mapped-backed under eager SAS) on test-hooks measurement kernels with lower-bound sentinel stack depths; no allocator comparison for B2, no RSS beyond mapped-backed, no promoted-kernel timing, other cells' stacks boot-phase only; the 10 s recovery criterion was NOT EVALUATED. All numbers QEMU/TCG; no physical/production claim.
@@ -386,3 +386,8 @@ S10-3b's root causes, fix, D3b-1..D3b-3, tests and reruns are drafted in the [S0
 ## Update 2026-10-30: Tier-3 guest endpoint
 
 CBX-25 met and CBX-23 guest half met at the SVM/TCG ceiling (plan `261110-0900-tier3-guest-endpoint`, user dispositions; S9-3 pipeline-exec/non-UTF-8 stdin limitation retained). Criterion 1 remains open only because CBX-24 overall is partial (no production/entropy/custody qualification, no crash-durability or rollback claim). Not Intel VMX/EPT.
+
+
+## Closure 2026-10-30
+
+Phase 10 closed at stated ceilings by the user: `closed-private-evidence-at-stated-ceilings`. This is not production qualification, not Intel VMX/EPT, not physical hardware and not a feature-equivalent footprint comparison; every row keeps its recorded ceiling.

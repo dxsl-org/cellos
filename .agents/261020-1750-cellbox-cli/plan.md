@@ -1,6 +1,6 @@
 ---
 title: "Cellbox: CLI-first essential tools, typed pipelines and selective Ratatui TUI"
-status: closed-partial-private-evidence
+status: closed-private-evidence-at-stated-ceilings
 priority: P1
 tier: thinking
 created: 2026-10-20
