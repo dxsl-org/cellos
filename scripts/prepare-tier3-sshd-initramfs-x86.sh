@@ -13,6 +13,10 @@
 # only adds files and the kernel unpacker creates no parent directories): apk files as
 # /media/t3-apk-<file>, per-run files as /etc/t3-*. guest-init.sh moves them into place.
 #
+# Optional pipeline stage (guest-pipeline-cp1.md): `T3_PUBKEY=/path/key.pub` (one ed25519 public key line)
+# switches the staged sshd_config to publickey only (`PubkeyAuthentication yes`, `PasswordAuthentication
+# no`) and stages the public key as /etc/t3-authorized_keys (non-secret; guest-init.sh installs it for
+# `tester`). Unset: the staged set and every text are unchanged.
 # Usage: CELLBOX_TIER3_WORK=/tmp/cellbox-tier3-XXXX bash scripts/prepare-tier3-sshd-initramfs-x86.sh
 set -euo pipefail
 
@@ -80,6 +84,16 @@ LogLevel VERBOSE
 PerSourcePenalties no
 LoginGraceTime 900
 CONF
+PUBKEY="${T3_PUBKEY:-}"
+if [[ -n "$PUBKEY" ]]; then
+    [[ -f "$PUBKEY" && "$(wc -l < "$PUBKEY")" == 1 && "$(cut -d' ' -f1 "$PUBKEY")" == ssh-ed25519 ]] \
+        || { echo "FAIL: T3_PUBKEY must be a one-line ssh-ed25519 public key file" >&2; exit 1; }
+    sed -e 's/^PubkeyAuthentication no$/PubkeyAuthentication yes/' -e 's/^PasswordAuthentication yes$/PasswordAuthentication no/' \
+        "$STAGE/sshd_config" > "$STAGE/sshd_config.pk"
+    grep -qx 'PubkeyAuthentication yes' "$STAGE/sshd_config.pk" && grep -qx 'PasswordAuthentication no' "$STAGE/sshd_config.pk" \
+        || { echo "FAIL: publickey sshd_config derivation" >&2; exit 1; }
+    mv "$STAGE/sshd_config.pk" "$STAGE/sshd_config"
+fi
 # Remote helper `p9` (the fixture's text plus the three guest-only verbs of T3-D):
 #   p9 TAG        append `p09x-TAG` to the ledger /tmp/p09-ledger (one line per execution)
 #   p9 selfkill   write the ledger line `p09x-selfkill`, then SIGKILL the nearest ancestor that is
@@ -148,6 +162,7 @@ ARGS+=(--add /etc/t3-host_ed25519 "$KEYS/host_ed25519" 100600
        --add /etc/t3-password "$KEYS/password" 100600
        --add /etc/t3-sshd_config "$STAGE/sshd_config" 100644
        --add /etc/t3-p9 "$STAGE/p9" 100755)
+[[ -z "$PUBKEY" ]] || ARGS+=(--add /etc/t3-authorized_keys "$PUBKEY" 100644)
 
 source_sha="$(sha256sum "$SOURCE" | cut -d' ' -f1)"
 "$PYTHON_BIN" tools/repack-initramfs.py "$SOURCE" "$OUTPUT" "${ARGS[@]}" \
@@ -159,10 +174,11 @@ source_sha="$(sha256sum "$SOURCE" | cut -d' ' -f1)"
 [[ "$(sha256sum "$SOURCE" | cut -d' ' -f1)" == "$source_sha" ]] || { echo "FAIL: cached initramfs changed during repack" >&2; exit 1; }
 
 # Read-only audit of the produced cpio (no secret values): names, modes, sizes, hashes.
-"$PYTHON_BIN" - "$OUTPUT" "$STAGE/audit.json" "$KEYS" <<'PY'
+"$PYTHON_BIN" - "$OUTPUT" "$STAGE/audit.json" "$KEYS" "$PUBKEY" <<'PY'
 import gzip, hashlib, json, sys
 from pathlib import Path
 out, audit, keys = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+pubkey = Path(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else None
 raw = gzip.decompress(out.read_bytes())
 entries, off = [], 0
 while True:
@@ -186,6 +202,11 @@ if any(n.endswith(("sshd", "sshd-session")) for n, *_ in entries):
     problems.append("an sshd binary is already in the base initramfs")
 if t3["etc/t3-host_ed25519"]["mode"] != "0o100600" or t3["etc/t3-password"]["mode"] != "0o100600":
     problems.append("secret file mode is not 0600")
+ak = t3.get("etc/t3-authorized_keys")
+if pubkey is None and ak is not None:
+    problems.append("an authorized_keys entry is staged without T3_PUBKEY")
+if pubkey is not None and (ak is None or ak["mode"] != "0o100644" or ak["sha256"] != hashlib.sha256(pubkey.read_bytes()).hexdigest()):
+    problems.append("the staged authorized_keys entry is missing or differs from T3_PUBKEY")
 doc = {"output_sha256": hashlib.sha256(out.read_bytes()).hexdigest(), "entries": len(entries),
        "unpacked_bytes": sum(e[2] for e in entries), "staged": t3, "problems": problems}
 audit.write_text(json.dumps(doc, indent=2) + "\n")

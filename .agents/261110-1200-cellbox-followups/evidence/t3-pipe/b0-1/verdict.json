@@ -1,0 +1,226 @@
+{
+  "head": "c0ae115dc062e8120b4e0eb4776c6c0eb310c0d1",
+  "pass": true,
+  "stop_rule": null,
+  "gates": {
+    "B1": true,
+    "B2": true,
+    "C1": true,
+    "C2": true
+  },
+  "guest_kernel": "6.12.81-0-virt",
+  "stage": "pipe",
+  "time_to_listening_s": 12.0,
+  "time_to_ssh_guest_ready_s": 11.5,
+  "timeline_s": {
+    "svm-root": 2.0,
+    "hv-starting": 3.1,
+    "vcpu-ready": 6.7,
+    "guest-kernel": 6.8,
+    "guest-init": 9.5,
+    "guest-kernel-marker": 9.5,
+    "crng-ready": 9.5,
+    "net-up": 9.5,
+    "apk-installed": 10.3,
+    "sshd-server-listening": 10.5,
+    "ssh-guest-ready": 11.5,
+    "listening": 12.0,
+    "driver-terminal": 34.0
+  },
+  "run_verdict": "driver-verdict",
+  "checks": {
+    "B1:svm-root-active": {
+      "pass": true,
+      "detail": ""
+    },
+    "B1:hypervisor-cell-starting": {
+      "pass": true,
+      "detail": ""
+    },
+    "B1:vcpu-ready": {
+      "pass": true,
+      "detail": "exactly one `vCPU ready` (a second one means the hypervisor cell restarted)"
+    },
+    "B1:no-panic-fault-triplefault": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "B1:no-hv-error-lines": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "B2:guest-kernel-banner": {
+      "pass": true,
+      "detail": "6.12.81-0-virt"
+    },
+    "B2:guest-kernel-marker": {
+      "pass": true,
+      "detail": "('6.12.81-0-virt', '6.12.81-0-virt')"
+    },
+    "B2:guest-init-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:crng-ready": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:net-up": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:apk-installed-offline": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:guest-hostkey-equals-pinned": {
+      "pass": true,
+      "detail": "['SHA256:IMICWHWvfeGXdPKOnV25PrBB/+TGqWw97bMJ5pm7tE8']"
+    },
+    "B2:sshd-server-listening-line": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:listening-marker": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:no-guest-init-failure": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "C1:keyscan-fingerprint-equals-guest-key": {
+      "pass": true,
+      "detail": "[(0, 'SHA256:IMICWHWvfeGXdPKOnV25PrBB/+TGqWw97bMJ5pm7tE8')]"
+    },
+    "C2:driver-ready-marker-once": {
+      "pass": true,
+      "detail": ""
+    },
+    "C2:sshd-saw-cell-connection-beyond-keyscan": {
+      "pass": true,
+      "detail": "{'connections_from_10.0.2.2': 7, 'keyscan_connections': 1}"
+    },
+    "C2:ready-after-sshd-server-listening": {
+      "pass": true,
+      "detail": "{'svm-root': 2.0, 'hv-starting': 3.1, 'vcpu-ready': 6.7, 'guest-kernel': 6.8, 'guest-init': 9.5, 'guest-kernel-marker': 9.5, 'crng-ready': 9.5, 'net-up': 9.5, 'apk-installed': 10.3, 'sshd-server-listening': 10.5, 'ssh-guest-ready': 11.5, 'listening': 12.0, 'driver-terminal': 34.0}"
+    },
+    "argv:one-loopback-hostfwd-tcg-qemu-10.2.0": {
+      "pass": true,
+      "detail": "/home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+svm,+rdrand,+rdseed -m 1G -display none -chardev socket,id=ser0,path=/tmp/cellbox-tier3-261030a/serial.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-tier3-261030a/tier3.iso -boot d -no-reboot -netdev user,id=net0,hostfwd=tcp:127.0.0.1:43223-10.0.2.16:22 -device"
+    },
+    "hashes:pins-match-and-iso-kernel-initramfs-recorded": {
+      "pass": true,
+      "detail": "{}"
+    },
+    "no-sshd-in-outer-image": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-secret-in-any-evidence-file": {
+      "pass": true,
+      "detail": "{}"
+    },
+    "no-secret-in-serial-raw": {
+      "pass": true,
+      "detail": ""
+    },
+    "protected-paths-and-cargo-lock-unchanged": {
+      "pass": true,
+      "detail": ""
+    },
+    "run-ended-by-driver-verdict": {
+      "pass": true,
+      "detail": "driver-verdict"
+    },
+    "window-within-pipe-cap": {
+      "pass": true,
+      "detail": "{'window_s': 1800, 'elapsed_s': 37.0}"
+    },
+    "net:no-owner-death-watch-unavailable": {
+      "pass": true,
+      "detail": ""
+    },
+    "P:driver-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "P:markers": {
+      "pass": true,
+      "detail": "{'problems': {}, 'fails': [], 'extra': []}"
+    },
+    "P:driver-final-verdict": {
+      "pass": true,
+      "detail": "[('PASS', '8')]"
+    },
+    "P:boot-ceiling-selftest-pass": {
+      "pass": true,
+      "detail": ""
+    },
+    "P:trust-store-volume-mounted": {
+      "pass": true,
+      "detail": ""
+    },
+    "P:no-weak-entropy": {
+      "pass": true,
+      "detail": ""
+    },
+    "P:fixture-kernel-features-recorded": {
+      "pass": true,
+      "detail": ""
+    },
+    "P:no-secret-scan-hit-in-driver": {
+      "pass": true,
+      "detail": ""
+    },
+    "P:blob-is-non-utf8-with-nul-and-ff": {
+      "pass": true,
+      "detail": "{'sha256': '23674f33a787e20785213eed8f6dd94def3f88b70d40db173e21d535dfaccb55', 'len': 524288, 'utf8_valid': False, 'has_nul': True, 'has_ff': True}"
+    },
+    "P:digest-stdin-equals-host": {
+      "pass": true,
+      "detail": "[('23674f33a787e20785213eed8f6dd94def3f88b70d40db173e21d535dfaccb55', '524288')]"
+    },
+    "P:digest-roundtrip-equals-host": {
+      "pass": true,
+      "detail": "[('23674f33a787e20785213eed8f6dd94def3f88b70d40db173e21d535dfaccb55', '-')]"
+    },
+    "P:kms-banner-once": {
+      "pass": true,
+      "detail": "1 host lines carry the ssh-dev-custody banner"
+    },
+    "P:no-policy-loaded-line": {
+      "pass": true,
+      "detail": "0 `[policy] loaded` lines in the policy-less shape"
+    },
+    "P:sshd-accepted-publickey-equals-logins": {
+      "pass": true,
+      "detail": "{'driver_logins': ['4'], 'accepted': 4, 'fingerprints_equal_key': True}"
+    },
+    "P:no-password-auth": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "P:neg-ab-no-connection": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "P:neg-c-no-accept": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "P:one-session-per-connection": {
+      "pass": true,
+      "detail": "{'sessions': 4, 'max': 1}"
+    },
+    "P:completion-records": {
+      "pass": true,
+      "detail": "{'remote_exit': 4, 'others': ['identity_unknown', 'host_key_no_frontend']}"
+    }
+  },
+  "net": {
+    "owner_death_lines": [],
+    "watch_unavailable": false,
+    "in_cancel_window": false
+  }
+}

@@ -87,6 +87,17 @@ install -m 600 /etc/t3-host_ed25519 /etc/ssh/ssh_host_ed25519_key
 install -m 644 /etc/t3-sshd_config /etc/ssh/sshd_config
 install -m 755 /etc/t3-p9 /usr/bin/p9
 rm -f /etc/t3-host_ed25519 /etc/t3-password
+# Pipeline stage only (T3_PUBKEY at prepare time): the public key of the run's throw-away
+# credential becomes tester's authorized_keys (non-secret). Absent in every other stage.
+if [ -f /etc/t3-authorized_keys ]; then
+    mkdir -p /home/tester/.ssh || die authorized-keys
+    cat /etc/t3-authorized_keys > /home/tester/.ssh/authorized_keys || die authorized-keys
+    chown -R tester:tester /home/tester/.ssh || die authorized-keys
+    chmod 700 /home/tester/.ssh || die authorized-keys
+    chmod 600 /home/tester/.ssh/authorized_keys || die authorized-keys
+    rm -f /etc/t3-authorized_keys
+    say "PUBKEY_AUTHORIZED"
+fi
 "$SSHD" -t -f /etc/ssh/sshd_config || die sshd-config-test
 say "HOSTKEY $(ssh-keygen -l -f /etc/ssh/ssh_host_ed25519_key)"
 

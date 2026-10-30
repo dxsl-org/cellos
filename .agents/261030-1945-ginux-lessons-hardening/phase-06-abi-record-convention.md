@@ -15,7 +15,7 @@ Item 5 is a rule for serialized/untrusted/versioned boundaries, not a reason to 
 
 ## Requirements and architecture
 
-- Internal Rust types and same-build typed calls remain typed; do not add magic/version/size fields or dynamic validation to them without a boundary requirement.
+- Internal Rust types and same-build typed calls remain typed; do not add magic/version/size fields or repeated wire-format decoding without a boundary requirement. This does not exempt typed calls from bounded holder/rights/live-lineage checks or snapshotting mutable shared metadata at admission (Spec 25:46,56,106).
 - Serialized records, guest/native ABI, persisted metadata and independently updated component boundaries specify identity/type, version policy, exact/bounded length, reserved and unknown-bit handling, ownership and validation-before-effect. Use an existing typed envelope or exact-length contract when adequate; not every record needs all header fields.
 - Feature bits represent real negotiated behavior, never test stages or capability grants. A version supported by policy is not rejected merely for being older (CellManifest v1 is currently accepted).
 - No mass layout conversion. Any actual public bytes/SDK or error semantic change follows Law-1. Fixed producer/consumer format remains sufficient for admitted same-build components.

@@ -2,6 +2,8 @@
 
 Scope: the 9 phases of this plan, reviewed against Tier-1 SAS/LBI contracts (`docs/security-model.md:14-16,97-119`, Spec 25 §§1–7, ADR-0024:56,84) and source. The two independent reviewer subagents (`SasEntryReview`, `SasAuthorityReview`) failed with a usage-limit error and returned no findings. This record is the direct review, so it has one reviewer's evidence ceiling.
 
+Historical record of the first review, not current acceptance evidence. The second review corrects its Ginux copy/process-tree characterization; state handoff is Spec 25 §6, not §7. "09A admitted" in finding 4 means proposed for early admission, not maintainer-approved execution. Current requirements are in `plan.md` and the phase files.
+
 Legend: OBS = read in source/spec at the cited line; INF = inference.
 
 | # | Sev | Phase | Problem in the previous draft | Evidence | Applied change |
@@ -27,9 +29,36 @@ Legend: OBS = read in source/spec at the cited line; INF = inference.
 
 - IST + paranoid GS/CR3 entry: a hardware-level gap on every tier.
 - Ordered DMA/IRQ quiescence: LBI cannot fence a device.
-- Fresh incarnation + fenced writer on replacement: matches Spec 25 §7.
+- Fresh incarnation + fenced writer on replacement: matches Spec 25 §6.
 - Boundary validation before effect; inventory of writable globals; tier-aware perf evidence.
 
 ## Residual uncertainty
 
 Findings 8–10 are INF: they rest on architecture knowledge, not on an observed failure. A second independent review is still recommended when reviewer quota returns.
+
+## Second review — SAS/LBI contract and end-to-end closure
+
+Two independent read-only reviewers completed: `EntryReview` (02/03/04/06) and `RecoveryReview` (07/08/09). Their findings were adjudicated against the source below; neither ran kernel scenarios. RecoveryReview confirmed its five findings were addressed after receiving the correction details. This is a review of the plan, not runtime qualification.
+
+| ID | Priority | Problem | Verified evidence | Plan correction |
+|---|---|---|---|---|
+| R1 | High | Blanket prohibition on per-call revalidation exempts SAS from required authorization | Spec 25:46,56,104,106 | Preserve atomic bounded invocation/lineage checks, destination authorization and immutable metadata snapshots; remove only redundant/unbounded work |
+| R2 | Medium | Ginux was mischaracterized as ancestry-authorized and copy-only | `/tmp/ginux/ARCHITECTURE.md:22-24,69,82,268` | Correct overview/04/07; keep shared-memory and capability lessons without invented contrast |
+| R3 | High | Generic stash was assigned business commit/writer-epoch authority | `state_stash.rs:103-214` is byte storage; Spec 25:116-120 assigns commit/fencing to actual state authority | 09A authorizes byte transfer with opaque attestation; provider-specific 09B owns schema/revision/final watermark/writer epoch |
+| R4 | High | Replay refusal had no consume lifecycle; supervisor reads payload just to poll readiness | `cells/services/supervisor/src/hotswap.rs:37-48`; `state_stash.rs:128-143` permits repeated reads | Prepared/Sealed/Consumed-or-Aborted; destination-only payload, scoped coordinator status/abort, non-consuming partial delivery, terminal-only replay |
+| R5 | High | Recovered dedup tuple omitted payload/authority binding | Spec 25:108; `kernel/src/task/cell_session.rs:648-670` already binds actor/operation and exact request bytes | Atomically retain and compare caller/operation/method/schema/payload with request ID/outcome/revision; conflicting replay negatives |
+| R6 | High | Kernel teardown alone cannot stop VFS replaying ambiguous writes | AHCI `controller.rs:482-501`, `dispatch.rs:10-13,100-107`; VFS `block_stream.rs:139-149` | Include driver reply/router/block-stream consumer cutover; caller-visible NotIssued/Indeterminate/Completed and proof that post-issue timeout causes no second submission |
+| R7 | High | Whole-Cell retirement does not enumerate arbitrary Rust borrows or release abandoned shared locks safely | `libs/ostd/src/sync.rs:1-6`; `kernel/src/task.rs:1212-1246`; `syscall.rs:1134-1158,1215-1243`; Spec 25:56,80,88 | Tracked incarnation-bound exports; acknowledgements gate reuse; charged quarantine, no forced unlock; uncontained cases require node recovery |
+| R8 | High | Entry plan omitted DF normalization on the real SYSCALL path | `hal/arch/x86/src/x86_64/syscall.rs:153,224-332`: FMASK 0x0300 masks TF/IF and no CLD before Rust; IDT `entry.rs:135` does CLD | Add live DF=0 before Rust while preserving saved flags; explicit DF-set caller witness |
+| R9 | Medium | Unconditional AC work contradicts independent optional SMAP | Phase 04 requirement; CPU policy `hal/arch/x86/src/x86_64.rs:106-116,379-382` does not select SMAP. Architectural constraint: CLAC/STAC require SMAP support | Initialize CPUID-safe SMAP-active sequence; no unsupported instruction/per-entry CPUID or SMAP-window overhead for other profiles |
+| R10 | Medium | 08/09B were blocked by unrelated Phase 07 work solely for fixture reuse; phase09 metadata also blocked early 09A | Prior phase08 step 5 already permitted another adequate runner; phase09 called 09A independent | Remove artificial edges; file-level 09 depends on 01, section gates retain 09A→09B and 08+09B→09C |
+| R11 | Medium | Blanket “no Law-1” labels contradicted required semantic changes | Spec 25:80 explicitly gates whole-Cell fault semantics; R6 crosses driver/VFS error protocol | Mark runtime slices for exact semantic-delta review; unchanged bytes/opcodes/private implementation do not waive approval |
+
+### Verification and remaining limits
+
+- Evidence above was read from current source; R8 is a static entry defect, not an observed corruption event. R9's instruction-support condition and R7's untracked-export risk are architectural reasoning grounded in the stated code/contracts, not injected runtime failures.
+- Verification for this planning-only change checks Markdown targets/anchors, phase metadata, table-to-DAG dependency equivalence, acyclicity and required acceptance scenarios. Kernel/QEMU/KVM scenarios remain future acceptance work; no runtime PASS is claimed.
+- The previously reported spec-anchor failures are not rerun or repaired in this review. No kernel, SDK, VFS, driver, ABI or controlling admission/lock file is changed.
+- Rollback of this review is documentation-only. Future runtime slices retain their known-good cold-boot rollback; external writes and committed fencing epochs cannot be undone by reverting a binary.
+
+Observed validation: 13 Markdown documents, 15 local links/anchors resolved; 11 execution slices with 11 matching table/DAG edges, no cycles; all nine phase dependency headers matched. Early 09A/08 and 09B/09C section prerequisites matched. FMASK bit arithmetic confirmed TF/IF, not DF. No throwaway file was created.

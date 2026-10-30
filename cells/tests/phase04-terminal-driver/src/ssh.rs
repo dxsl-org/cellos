@@ -196,6 +196,18 @@ pub(crate) fn ssh_checks(a: &mut Term) {
     if !guest::wait_ready(a, &f) {
         return skip(&SSH_MARKERS[1..], "guest route never ready");
     }
+    // Tier-3 guest pipeline stage (guest-pipeline-cp1.md): the publickey/pipeline scenarios
+    // replace the S9-3 group and the guest-only scenarios.
+    #[cfg(feature = "guest-pipe")]
+    guest::pipe_checks(a, &f);
+    #[cfg(not(feature = "guest-pipe"))]
+    s93_checks(a, f);
+}
+
+/// The reused S9-3 password scenarios (and, per build, the S9-6 group or the guest-only
+/// scenarios). Not part of the `guest-pipe` build.
+#[cfg(not(feature = "guest-pipe"))]
+fn s93_checks(a: &mut Term, f: Fixture) {
 
     let refusals = (|| {
         let mut out = Vec::new();

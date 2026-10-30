@@ -39,7 +39,18 @@
 #   --claim-only   run the preflight, claim the stage's token and exit (Gate A token tests; refused unless
 #                  TIER3_TOKEN_DIR is a scratch path under /tmp, which is refused in every real run).
 #
-# Usage: CELLBOX_TIER3_WORK=/tmp/cellbox-tier3-XXXX bash scripts/qemu-tier3-ssh-guest-x86.sh --stage boot|full|diag [--build-only]
+#   --stage pipe   (GP, guest-pipeline-cp1.md, approval 261110-1200-cellbox-followups/approval.md) the same guest image
+#                  plus /bin/kms (service-kms --features ssh-dev-custody, no /POLICY.BIN), /bin/kms-ssh-admin and
+#                  /t3p/{blob.bin,pipe.key,pipe.conf}; the guest sshd accepts one throw-away ed25519 key (publickey
+#                  only); the driver is built `--features guest-pipe` and proves `cat BLOB | cellbox ssh --auth
+#                  publickey --identity K ... --command C` (512 KiB, NUL/0xFF/invalid UTF-8) plus the password-pipeline
+#                  refusals; judged by `tier3_ssh_guest_judge.py pipe`. Budget (tokens under evidence/t3-d-runs/, O_EXCL):
+#                  TIER3_PIPE_B0=1 = rehearsal (T3P_B0_CONSUMED-1, -2; evidence t3-pipe/b0-N, no evidence value), plain
+#                  `--stage pipe` = the evidence boot (T3P_PIPE_CONSUMED-1; evidence t3-pipe/run), TIER3_T3P_CONFIRM=1 =
+#                  the one confirmation boot (T3P_CONFIRM_CONSUMED-1; evidence t3-pipe/confirm; only after the evidence
+#                  token exists), optionally with TIER3_T3P_POLICY=loaded (the loaded-policy shape, CP1 section 4 row 4).
+#                  Evidence root: .agents/261110-1200-cellbox-followups/evidence/. Window default 1800 s, cap 3600 s.
+# Usage: CELLBOX_TIER3_WORK=/tmp/cellbox-tier3-XXXX bash scripts/qemu-tier3-ssh-guest-x86.sh --stage boot|full|diag|pipe [--build-only]
 # Optional: TIER3_BOOT_WINDOW (seconds; default 3600 for boot = the 60 minute T3-B limit, 7200 for
 #           full; never above the 14400 s = 4 h hard cap),
 #           TIER3_LINGER (seconds to keep running after the gates, default 3),
@@ -59,10 +70,24 @@ while (($#)); do
     esac
 done
 case "$STAGE" in
-    boot|full|diag) ;;
-    *) echo "FAIL: --stage boot, full or diag is required" >&2; exit 1 ;;
+    boot|full|diag|pipe) ;;
+    *) echo "FAIL: --stage boot, full, diag or pipe is required" >&2; exit 1 ;;
 esac
 [[ "${TIER3_T3D3_CONFIRM:-0}" == 0 || "${TIER3_T3D3_CONFIRM}" == 1 ]] || { echo "FAIL: TIER3_T3D3_CONFIRM must be 0 or 1" >&2; exit 1; }
+for v in TIER3_T3P_CONFIRM TIER3_PIPE_B0; do
+    [[ "${!v:-0}" == 0 || "${!v}" == 1 ]] || { echo "FAIL: $v must be 0 or 1" >&2; exit 1; }
+done
+if [[ "$STAGE" == pipe ]]; then
+    [[ "${TIER3_T3D3_CONFIRM:-0}" == 0 ]] || { echo "FAIL: TIER3_T3D3_CONFIRM is not for stage pipe (use TIER3_T3P_CONFIRM)" >&2; exit 1; }
+    [[ "${TIER3_T3P_CONFIRM:-0}" == 0 || "${TIER3_PIPE_B0:-0}" == 0 ]] || { echo "FAIL: TIER3_T3P_CONFIRM and TIER3_PIPE_B0 exclude each other" >&2; exit 1; }
+else
+    [[ "${TIER3_T3P_CONFIRM:-0}" == 0 && "${TIER3_PIPE_B0:-0}" == 0 ]] || { echo "FAIL: TIER3_T3P_CONFIRM and TIER3_PIPE_B0 are only for stage pipe" >&2; exit 1; }
+fi
+case "${TIER3_T3P_POLICY:-absent}" in
+    absent) ;;
+    loaded) [[ "$STAGE" == pipe && "${TIER3_T3P_CONFIRM:-0}" == 1 ]] || { echo "FAIL: TIER3_T3P_POLICY=loaded is only for the pipe confirmation boot" >&2; exit 1; } ;;
+    *) echo "FAIL: TIER3_T3P_POLICY must be absent or loaded" >&2; exit 1 ;;
+esac
 [[ "$CLAIM_ONLY" == 0 || "$BUILD_ONLY" == 0 ]] || { echo "FAIL: --claim-only and --build-only exclude each other" >&2; exit 1; }
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -72,13 +97,17 @@ case "$W" in /tmp/cellbox-tier3-*) ;; *) echo "FAIL: work directory must be /tmp
 [[ -d "$W" && ! -L "$W" ]] || { echo "FAIL: work directory missing or a symlink: $W" >&2; exit 1; }
 [[ "$(stat -c %u "$W")" == "$(id -u)" ]] || { echo "FAIL: work directory not owned by this uid" >&2; exit 1; }
 chmod 700 "$W"
-if [[ "$STAGE" == full ]]; then WINDOW="${TIER3_BOOT_WINDOW:-7200}"; else WINDOW="${TIER3_BOOT_WINDOW:-3600}"; fi
+case "$STAGE" in
+    full) WINDOW="${TIER3_BOOT_WINDOW:-7200}" ;;
+    pipe) WINDOW="${TIER3_BOOT_WINDOW:-1800}" ;;
+    *) WINDOW="${TIER3_BOOT_WINDOW:-3600}" ;;
+esac
 [[ "$WINDOW" =~ ^[0-9]+$ ]] && (( WINDOW > 0 && WINDOW <= 14400 )) || { echo "FAIL: window must be 1..14400 seconds (4 h hard cap)" >&2; exit 1; }
-[[ "$STAGE" != diag ]] || (( WINDOW <= 3600 )) || { echo "FAIL: the diag window is capped at 3600 seconds (STOP-D5)" >&2; exit 1; }
+[[ "$STAGE" != diag && "$STAGE" != pipe ]] || (( WINDOW <= 3600 )) || { echo "FAIL: the $STAGE window is capped at 3600 seconds (STOP-D5 / CP1 section 7)" >&2; exit 1; }
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-case "$STAGE" in full) OUT_NAME=t3-d3/full ;; diag) OUT_NAME=t3-d3/diag ;; *) OUT_NAME=t3-bc ;; esac
+case "$STAGE" in full) OUT_NAME=t3-d3/full ;; diag) OUT_NAME=t3-d3/diag ;; pipe) OUT_NAME=t3-pipe/run ;; *) OUT_NAME=t3-bc ;; esac
 [[ "${TIER3_T3D3_CONFIRM:-0}" != 1 || "$STAGE" == boot ]] || OUT_NAME="t3-d3/confirm-$STAGE"
-OUT="${TIER3_EVIDENCE_OUT:-$ROOT/.agents/261110-0900-tier3-guest-endpoint/evidence/$OUT_NAME}"
+[[ "${TIER3_T3P_CONFIRM:-0}" != 1 ]] || OUT_NAME=t3-pipe/confirm
 if [[ "$CLAIM_ONLY" == 1 ]]; then
     [[ "${TIER3_TOKEN_DIR:-}" == /tmp/* && "$TIER3_TOKEN_DIR" != *..* ]] || { echo "FAIL: --claim-only needs TIER3_TOKEN_DIR set to a scratch path under /tmp" >&2; exit 1; }
     TOKEN_DIR="$TIER3_TOKEN_DIR"
@@ -86,6 +115,17 @@ else
     [[ -z "${TIER3_TOKEN_DIR:-}" ]] || { echo "FAIL: TIER3_TOKEN_DIR is only for --claim-only (the budget tokens are never redirected in a real run)" >&2; exit 1; }
     TOKEN_DIR="$ROOT/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-d-runs"
 fi
+# GP rehearsal boots: the evidence directory carries the number of the rehearsal token this run will claim.
+if [[ "$STAGE" == pipe && "${TIER3_PIPE_B0:-0}" == 1 ]]; then
+    B0_N=""
+    for n in 1 2; do
+        [[ -e "$TOKEN_DIR/T3P_B0_CONSUMED-$n" ]] || { B0_N=$n; break; }
+    done
+    [[ -n "$B0_N" ]] || { echo "FAIL: both rehearsal tokens T3P_B0_CONSUMED-1 and -2 exist" >&2; exit 1; }
+    OUT_NAME="t3-pipe/b0-$B0_N"
+fi
+if [[ "$STAGE" == pipe ]]; then EVIDENCE_ROOT="$ROOT/.agents/261110-1200-cellbox-followups/evidence"; else EVIDENCE_ROOT="$ROOT/.agents/261110-0900-tier3-guest-endpoint/evidence"; fi
+OUT="${TIER3_EVIDENCE_OUT:-$EVIDENCE_ROOT/$OUT_NAME}"
 QEMU_BIN="${HOME}/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64"
 QEMU_SHA=169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe
 FEATURES="phase02-terminal-profile,phase04-driver-profile"
@@ -103,7 +143,7 @@ REL="$CELLS_TARGET_DIR/$TARGET/release"
 INITRAMFS="$W/guest/initramfs-sshd.cpio.gz"
 TRUST_DISK="$W/trust-fixture.img"
 
-rm -rf "$EMBEDDED" "$EVIDENCE" "$ISO" "$W/iso-root" "$PRIVATE_CONFIG" "$SCRATCH" "$KEYS" "$TRUST_DISK" \
+rm -rf "$EMBEDDED" "$EVIDENCE" "$ISO" "$W/iso-root" "$PRIVATE_CONFIG" "$SCRATCH" "$KEYS" "$TRUST_DISK" "$W/t3p" \
     "$KERNEL_TARGET_DIR/$TARGET/release/cellos-kernel" "$W/serial.sock" "$W/srv-receipt.json" "$W/net0.pcap"
 mkdir -p "$EMBEDDED" "$KEYS" "$EVIDENCE" "$PRIVATE_CONFIG" "$SCRATCH"
 chmod 700 "$KEYS" "$SCRATCH"
@@ -122,7 +162,7 @@ PF="$EVIDENCE/preflight.txt"
 : > "$PF"
 pf() { printf '%s\n' "$*" | tee -a "$PF"; }
 pfail() { pf "PREFLIGHT FAIL: $*"; exit 1; }
-pf "stage=$STAGE build_only=$BUILD_ONLY claim_only=$CLAIM_ONLY confirm=${TIER3_T3D3_CONFIRM:-0} window=$WINDOW head=$(git rev-parse HEAD)"
+pf "stage=$STAGE build_only=$BUILD_ONLY claim_only=$CLAIM_ONLY confirm=${TIER3_T3D3_CONFIRM:-0} t3p_confirm=${TIER3_T3P_CONFIRM:-0} pipe_b0=${TIER3_PIPE_B0:-0} t3p_policy=${TIER3_T3P_POLICY:-absent} window=$WINDOW head=$(git rev-parse HEAD)"
 DIRTY="$(git status --porcelain -uall | cut -c4-)"
 BAD="$(printf '%s\n' "$DIRTY" | grep -Ev '^$|^(\.agents/.*|CHANGELOG\.md|tests/guests/x86-sshd/.*|scripts/(fetch-tier3-sshd-apks-x86\.sh|prepare-tier3-sshd-initramfs-x86\.sh|qemu-tier3-ssh-guest-x86\.sh|tier3_ssh_guest_judge\.py|test_tier3_ssh_guest_judge\.py)|cells/tests/phase04-terminal-driver/(Cargo\.toml|src/ssh\.rs|src/ssh/guest\.rs))$' || true)"
 [[ -z "$BAD" ]] || pfail "working tree has changes outside the S10-11 closure: $(printf '%s' "$BAD" | tr '\n' ' ')"
@@ -157,6 +197,23 @@ if printf '%s\n' "$PIN_OUT" | grep -qv ': OK$'; then
     pfail "product bytes differ from rerun-cp1.md section 6.2: $(printf '%s\n' "$PIN_OUT" | grep -v ': OK$' | tr '\n' ' ')"
 fi
 pf "product pins (rerun-cp1.md 6.2): $(printf '%s\n' "$PIN_OUT" | grep -c ': OK$') files OK"
+# GP (guest-pipeline-cp1.md section 6.3): the product trees the pipe image is built from stay byte-identical.
+if [[ "$STAGE" == pipe ]]; then
+    TREE_DRIFT=""
+    while read -r want dir; do
+        got="$(git ls-files --cached --others --exclude-standard "$dir" | LC_ALL=C sort | xargs sha256sum | sha256sum | cut -d' ' -f1)"
+        [[ "$got" == "$want" ]] || TREE_DRIFT+=" $dir"
+    done <<'TREES'
+94779b69aefdd5aa56bf583dd46f3657edcd5ffa8da1653115d4d7ddd695f756 cells/tools/cellbox
+f718d358e85b7a2c459c4cf8eef6b6e30a0f9c58cabca9b7323f57402b5c52a8 cells/tools/kms-ssh-admin
+460bdf66cbf9d73e2be76f11d48d15cbd7761abefa5c2b67c7c09215a19c3769 cells/services/kms
+de3317176e14caa5f1dc3a02f41d44acd92af85e7ea718bb70c950e1317ec109 libs/terminal
+f032373672fd16c4142f06e754353ae38df0ce512cf5c5b1f3888e896029dc5d libs/vissh
+7b6b98d06c4a9fffbe677a8bc8c96e6a793065b576778d927db37323d50761bf libs/ostd
+TREES
+    [[ -z "$TREE_DRIFT" ]] || pfail "product tree digests differ from guest-pipeline-cp1.md section 6.3:$TREE_DRIFT"
+    pf "product tree digests (guest-pipeline-cp1.md 6.3): 6 trees OK"
+fi
 # F1/F5 precondition of the signing step: a red gate fails here, before any key exists or any token is claimed.
 "$PYTHON_BIN" scripts/cellos-sign --check > "$EVIDENCE/cellos-sign-check.txt" 2>&1 || pfail "scripts/cellos-sign --check is not rc 0 (F1/F5): $(tr '\n' ' ' < "$EVIDENCE/cellos-sign-check.txt")"
 pf "cellos-sign --check rc 0"
@@ -185,20 +242,27 @@ protected_digest > "$EVIDENCE/protected-before.txt"
 # with TIER3_T3D3_CONFIRM=1 (and only if the stage token exists). The T3-D/T3-D2 tokens RUN_CONSUMED-N and
 # DIAG_CONSUMED-N are records and are not read.
 claim_token() {
-    local first confirm name run
+    local first confirm name run flag flagname
     case "$STAGE" in
         diag) first=T3D3_DIAG_CONSUMED-1 ;;
         full) first=T3D3_FULL_CONSUMED-1 ;;
+        pipe) first=T3P_PIPE_CONSUMED-1 ;;
         *) pfail "stage $STAGE has no budget token" ;;
     esac
-    confirm=T3D3_CONFIRM_CONSUMED-1
+    confirm=T3D3_CONFIRM_CONSUMED-1; flag="${TIER3_T3D3_CONFIRM:-0}"; flagname=TIER3_T3D3_CONFIRM
+    if [[ "$STAGE" == pipe ]]; then
+        confirm=T3P_CONFIRM_CONSUMED-1; flag="${TIER3_T3P_CONFIRM:-0}"; flagname=TIER3_T3P_CONFIRM
+    fi
     mkdir -p "$TOKEN_DIR"
-    if [[ -e "$TOKEN_DIR/$first" ]]; then
-        [[ "${TIER3_T3D3_CONFIRM:-0}" == 1 ]] || pfail "$first exists: the stage budget is spent (a confirmation boot needs TIER3_T3D3_CONFIRM=1 and a recorded lane fix, rerun-cp1.md 3.4)"
+    if [[ "$STAGE" == pipe && "${TIER3_PIPE_B0:-0}" == 1 ]]; then
+        [[ ! -e "$TOKEN_DIR/$first" ]] || pfail "$first exists: a rehearsal boot after the evidence boot is not allowed"
+        name="T3P_B0_CONSUMED-$B0_N"; run="b0-$B0_N"
+    elif [[ -e "$TOKEN_DIR/$first" ]]; then
+        [[ "$flag" == 1 ]] || pfail "$first exists: the stage budget is spent (a confirmation boot needs $flagname=1 and a recorded lane fix, rerun-cp1.md 3.4)"
         [[ ! -e "$TOKEN_DIR/$confirm" ]] || pfail "$confirm exists too: the confirmation boot is spent"
         name="$confirm"; run=confirm-1
     else
-        [[ "${TIER3_T3D3_CONFIRM:-0}" != 1 ]] || pfail "TIER3_T3D3_CONFIRM=1 but $first does not exist: nothing to confirm"
+        [[ "$flag" != 1 ]] || pfail "$flagname=1 but $first does not exist: nothing to confirm"
         name="$first"; run=1
     fi
     if ! ( set -o noclobber; printf 'stage=%s run=%s head=%s window=%s lane_sha256=%s judge_sha256=%s\n' "$STAGE" "$run" "$(git rev-parse HEAD)" "$WINDOW" \
@@ -241,9 +305,54 @@ printf '%s\n' "$PORT" > "$EVIDENCE/hostfwd-port.txt"
 pf "hostfwd loopback port=$PORT guest host key fingerprint=$FP"
 printf '%s %s %s\n' "$PORT" "$FP" "$(cat "$KEYS/password")" > "$SCRATCH/ssh.conf"
 printf 'rdinit=/bin/virtio-e2e-init\n' > "$SCRATCH/virtio-e2e"
+PIPE_PUB=""
+if [[ "$STAGE" == pipe ]]; then
+    echo "==> Pipeline stage: throw-away publickey credential and the 512 KiB blob (private to this run)"
+    mkdir -p "$W/t3p"
+    chmod 700 "$W/t3p"
+    ssh-keygen -q -t ed25519 -N '' -C t3-pipe -f "$KEYS/pipe_ed25519"
+    chmod 600 "$KEYS/pipe_ed25519"
+    PIPE_PUB="$KEYS/pipe_ed25519.pub"
+    PIPE_FP="$(ssh-keygen -l -f "$PIPE_PUB" | awk '{print $2}')"
+    printf '%s\n' "$PIPE_FP" > "$EVIDENCE/pipe-key.fingerprint"
+    ( umask 077; cp "$KEYS/pipe_ed25519" "$W/t3p/pipe.key" )
+    "$PYTHON_BIN" - "$W/t3p" "$PIPE_FP" <<'PY'
+import hashlib, os, sys
+from pathlib import Path
+d, fp = Path(sys.argv[1]), sys.argv[2]
+N = 524288
+b = bytearray(os.urandom(N))
+def put(off, data):
+    b[off:off + len(data)] = data
+put(0, b"\x00\x00\xff\xff")
+off = 64
+# invalid UTF-8 sequences, then the bytes a terminal path would act on or translate
+for chunk in (b"\xc0\xaf", b"\xed\xa0\x80", b"\xf8\x88\x80\x80\x80", b"\xfe\xff", b"\x80\xbf",
+              b"\x03", b"\x04", b"\x0d\x0a\x0d", b"\x1b\x5b\x41", b"\x7f"):
+    put(off, chunk)
+    off += 256
+put(65536 - 4096, bytes(4096))          # a 4096-byte NUL run ending at the 64 KiB boundary ...
+put(65536, b"\xff" * 4096)              # ... and a 4096-byte 0xFF run starting at it
+put(N - 4, b"\x00\xff\x0a\x00")         # no trailing-newline normalisation
+blob = bytes(b)
+try:
+    blob.decode("utf-8")
+    raise SystemExit("FAIL: the blob is valid UTF-8")
+except UnicodeDecodeError:
+    pass
+if len(blob) != N or b"\x00" not in blob or b"\xff" not in blob:
+    raise SystemExit("FAIL: the blob lacks NUL/0xFF or has the wrong length")
+fd = os.open(d / "blob.bin", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+with os.fdopen(fd, "wb") as f:
+    f.write(blob)
+(d / "pipe.conf").write_text("t3pipe-conf 1\nblob sha256=%s len=%d\nkeyfp %s\nname t3k\nnonce %s\n"
+                             % (hashlib.sha256(blob).hexdigest(), N, fp, os.urandom(8).hex()))
+PY
+    pf "pipeline stage: key fingerprint=$PIPE_FP; $(sed -n 2p "$W/t3p/pipe.conf")"
+fi
 
 echo "==> Guest initramfs (OpenSSH, offline apks)"
-CELLBOX_TIER3_WORK="$W" bash scripts/prepare-tier3-sshd-initramfs-x86.sh | tee "$EVIDENCE/prepare-initramfs.txt"
+T3_PUBKEY="$PIPE_PUB" CELLBOX_TIER3_WORK="$W" bash scripts/prepare-tier3-sshd-initramfs-x86.sh | tee "$EVIDENCE/prepare-initramfs.txt"
 cp "$W/guest/audit.json" "$EVIDENCE/initramfs-audit.json"
 
 export CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS="-C relocation-model=pic"
@@ -259,8 +368,17 @@ CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --
 # not unified into other packages.
 CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
     -p service-hypervisor --features volatile-disk
+if [[ "$STAGE" == pipe ]]; then
+    # K5/K7 build notes (qemu-phase09-ssh-test.sh): service-kms and the admin cell each in their own invocation so the
+    # ssh-dev-custody feature is not unified into other packages; the booted `[kms]` banner is the control.
+    env -u CELLOS_PRODUCTION CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
+        -p service-kms --features ssh-dev-custody
+    env -u CELLOS_PRODUCTION CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
+        -p app-kms-ssh-admin
+fi
 DRIVER_FEATURES=guest
 [[ "$STAGE" != diag ]] || DRIVER_FEATURES=guest-diag
+[[ "$STAGE" != pipe ]] || DRIVER_FEATURES=guest-pipe
 CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
     -p app-phase04-terminal-driver --features "$DRIVER_FEATURES"
 CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
@@ -276,6 +394,10 @@ CELL_IMAGE_PATHS=(
     /bin/platform /bin/nvme /bin/e1000 /bin/net
     /bin/echo /bin/phase04-terminal-driver /bin/hypervisor
 )
+if [[ "$STAGE" == pipe ]]; then
+    CELL_BINARIES+=("$REL/service-kms" "$REL/kms-ssh-admin")
+    CELL_IMAGE_PATHS+=(/bin/kms /bin/kms-ssh-admin)
+fi
 
 echo "==> Signing with the private key (private-fixture lane)"
 SEED_HEX="$(cat "$KEYS/seed.hex")"
@@ -292,15 +414,29 @@ done
 # guest kernel/initramfs and the `/virtio-e2e` selector that picks `rdinit=/bin/virtio-e2e-init`.
 FAT_ARGS+=("$REL/cellbox" /bin/cellbox-ssh "$SCRATCH/ssh.conf" /p09/ssh.conf
            ".alpine-cache-x86/vmlinux" /vmlinux "$INITRAMFS" /initrd.gz "$SCRATCH/virtio-e2e" /virtio-e2e)
+if [[ "$STAGE" == pipe ]]; then
+    FAT_ARGS+=("$W/t3p/blob.bin" /t3p/blob.bin "$W/t3p/pipe.key" /t3p/pipe.key "$W/t3p/pipe.conf" /t3p/pipe.conf)
+    if [[ "${TIER3_T3P_POLICY:-absent}" == loaded ]]; then
+        # CP1 section 4 row 4 (confirmation boot only): the K8-proven loaded v8 policy blob.
+        source scripts/lib-bake-policy.sh
+        bake_policy "$SCRATCH/POLICY.BIN"
+        FAT_ARGS+=("$SCRATCH/POLICY.BIN" /POLICY.BIN)
+    fi
+fi
 
 echo "==> Assembling private kernel_fs.img (boot config: the driver replaces the serial shell; the hypervisor row stays)"
 "$PYTHON_BIN" tools/mkfat32.py --config-features input,hv-autostart --config-output-dir "$EVIDENCE/boot-config-default" \
     "$SCRATCH/default-fs.img" "${FAT_ARGS[@]}"
-"$PYTHON_BIN" - "$EVIDENCE/boot-config-default" "$PRIVATE_CONFIG" <<'PY'
+"$PYTHON_BIN" - "$EVIDENCE/boot-config-default" "$PRIVATE_CONFIG" "$STAGE" <<'PY'
 import re, sys, tomllib
 from pathlib import Path
 src, dst = Path(sys.argv[1]), Path(sys.argv[2])
+pipe = len(sys.argv) > 3 and sys.argv[3] == "pipe"
 services_text = (src / "services.toml").read_text()
+if pipe and not any(c.get("path") == "/bin/kms" for c in tomllib.loads(services_text).get("cells", [])):
+    # GP stage (guest-pipeline-cp1.md 3.1): the headless template drops /bin/kms; the row is the K8 lane's,
+    # config/services.toml byte for byte.
+    services_text = services_text.rstrip("\n") + '\n\n[[cells]]\nname = "kms"\npath = "/bin/kms"\nservice_id = 13\nrestart = "always"\n'
 services = tomllib.loads(services_text)
 service_names = {c["name"] for c in services.get("cells", [])}
 head, *blocks = re.split(r"(?m)^\[\[cells\]\]\s*$", (src / "autoload.toml").read_text())
@@ -308,7 +444,7 @@ out, replaced = [], 0
 for block in blocks:
     cell = tomllib.loads("[[cells]]\n" + block)["cells"][0]
     if cell.get("path") == "/bin/cellbox":
-        after = [n for n in ("vfs", "input", "net") if n in service_names]
+        after = [n for n in ("vfs", "input", "net") + (("kms",) if pipe else ()) if n in service_names]
         new = 'name = "phase04-terminal-driver"\npath = "/bin/phase04-terminal-driver"\n'
         new += "after = [" + ", ".join('"%s"' % n for n in after) + "]\n" if after else ""
         out.append(new + 'restart = "never"\n')
@@ -339,6 +475,17 @@ for name in cellbox cellbox-ssh net e1000 phase04-terminal-driver hypervisor ssh
     grep -Fq -- "-> LFN '$name'" "$EVIDENCE/fat-layout.txt" || grep -Fq -- "$name" "$EVIDENCE/fat-layout.txt" \
         || { echo "FAIL: image misses $name" >&2; exit 1; }
 done
+if [[ "$STAGE" == pipe ]]; then
+    for name in kms kms-ssh-admin blob.bin pipe.key pipe.conf; do
+        grep -Fq -- "-> LFN '$name'" "$EVIDENCE/fat-layout.txt" || { echo "FAIL: image misses $name" >&2; exit 1; }
+    done
+    grep -Fq 'name = "kms"' "$EVIDENCE/boot-config/services.toml" || { echo "FAIL: boot config has no kms service row" >&2; exit 1; }
+    if [[ "${TIER3_T3P_POLICY:-absent}" == loaded ]]; then
+        grep -q -- 'SFN POLICY.BIN' "$EVIDENCE/fat-layout.txt" || { echo "FAIL: image has no /POLICY.BIN (loaded shape)" >&2; exit 1; }
+    else
+        ! grep -q -- 'POLICY.BIN' "$EVIDENCE/fat-layout.txt" || { echo "FAIL: image has a /POLICY.BIN (policy-less shape)" >&2; exit 1; }
+    fi
+fi
 if grep -Eiq "sshd" "$EVIDENCE/fat-layout.txt" "$EVIDENCE/boot-config/"*.toml; then
     echo "FAIL: the outer image or boot config mentions sshd (no inbound Cellos sshd)" >&2; exit 1
 fi
@@ -361,6 +508,11 @@ sha256sum "$REL/cellbox" "$REL/service-net" "$REL/hypervisor" "$REL/phase04-term
     > "$EVIDENCE/provenance.sha256"
 printf 'lane-only build at HEAD: service-hypervisor --features volatile-disk, phase04-terminal-driver --features %s, app-cellbox default features, app-init --features input; kernel features %s; NET-OD kernel and service-net bytes (HEAD %s); no /POLICY.BIN (kernel Absent branch); private-fixture signing; never a product, canonical or promoted image\n' \
     "$DRIVER_FEATURES" "$FEATURES" "$(git rev-parse HEAD)" > "$EVIDENCE/provenance-build.txt"
+if [[ "$STAGE" == pipe ]]; then
+    sha256sum "$REL/service-kms" "$REL/kms-ssh-admin" "$W/t3p/blob.bin" >> "$EVIDENCE/provenance.sha256"
+    printf 'lane-only build at HEAD: service-hypervisor --features volatile-disk, service-kms --features ssh-dev-custody, app-kms-ssh-admin, phase04-terminal-driver --features %s, app-cellbox default features, app-init --features input; kernel features %s; NET-OD kernel and service-net bytes (HEAD %s); policy shape %s; private-fixture signing; never a product, canonical or promoted image\n' \
+        "$DRIVER_FEATURES" "$FEATURES" "$(git rev-parse HEAD)" "${TIER3_T3P_POLICY:-absent}" > "$EVIDENCE/provenance-build.txt"
+fi
 if [[ "$BUILD_ONLY" == 1 ]]; then
     pf "build-only: ISO assembled, QEMU not started"
     cp "$PF" "$EVIDENCE/preflight.final.txt"
@@ -368,7 +520,7 @@ if [[ "$BUILD_ONLY" == 1 ]]; then
     exit 0
 fi
 ! pgrep -x qemu-system-x86 >/dev/null || pfail "a QEMU process is already running"
-if [[ "$STAGE" == full || "$STAGE" == diag ]]; then
+if [[ "$STAGE" == full || "$STAGE" == diag || "$STAGE" == pipe ]]; then
     claim_token
 fi
 
@@ -482,7 +634,7 @@ try:
                 fatal_hit = m.strip(); break
         if fatal_hit:
             verdict = "stop-1-fatal"; break
-        if stage in ("full", "diag") and any("owner death watch unavailable" in l for l in host_lines(t)):
+        if stage in ("full", "diag", "pipe") and any("owner death watch unavailable" in l for l in host_lines(t)):
             # STOP-7 (rerun-cp1.md section 7): the kernel's owner-death grant did not hold in the real boot, or the image is stale.
             verdict = "stop-7-watch-unavailable"; break
         if "guest-fail" in timeline:
@@ -508,7 +660,7 @@ try:
                 keyscan = None
                 if rec["match"]:
                     c1["ok"] = True; c1["ok_s"] = rec["ended_s"]
-        if stage in ("full", "diag"):
+        if stage in ("full", "diag", "pipe"):
             # T3-D: the driver's own terminal verdict ends the run (B/C are re-judged from the same log).
             if "driver-terminal" in timeline:
                 verdict = "driver-verdict"; break
@@ -549,12 +701,13 @@ echo "==> Judging and archiving"
 JUDGE_RC=0
 JUDGE_EXTRA=()
 [[ "$STAGE" != diag ]] || JUDGE_EXTRA=(--pcap "$W/net0.pcap" --expect-outcome O7)
+[[ "$STAGE" != pipe ]] || JUDGE_EXTRA=(--blob "$W/t3p/blob.bin" --policy-shape "${TIER3_T3P_POLICY:-absent}")
 "$PYTHON_BIN" scripts/tier3_ssh_guest_judge.py "$STAGE" --evidence "$EVIDENCE" --keys "$KEYS" --fingerprint "$FP" \
     --port "$PORT" --head "$(git rev-parse HEAD)" ${JUDGE_EXTRA[@]+"${JUDGE_EXTRA[@]}"} || JUDGE_RC=$?
 "$PYTHON_BIN" scripts/tier3_ssh_guest_judge.py archive --src "$EVIDENCE" --dst "$OUT" --keys "$KEYS" \
     || { echo "FAIL: archive scan refused the evidence (STOP-5; secrets kept in $W for inspection)" >&2; exit 1; }
 if [[ "${TIER3_KEEP_SECRETS:-0}" != 1 ]]; then
-    rm -rf "$KEYS" "$SCRATCH" "$ISO" "$TRUST_DISK" "$EMBEDDED" "$W/iso-root" "$W/guest" "$W/guest-stage" "$W/serial.sock" "$W/net0.pcap"
+    rm -rf "$KEYS" "$SCRATCH" "$ISO" "$TRUST_DISK" "$EMBEDDED" "$W/iso-root" "$W/guest" "$W/guest-stage" "$W/serial.sock" "$W/net0.pcap" "$W/t3p"
 fi
 echo "Tier-3 $STAGE stage: qemu supervisor rc $BOOT_RC, judge exit $JUDGE_RC; evidence archived at $OUT"
 exit "$JUDGE_RC"

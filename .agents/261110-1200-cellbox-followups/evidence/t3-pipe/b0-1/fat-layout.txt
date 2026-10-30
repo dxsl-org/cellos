@@ -1,0 +1,89 @@
+Checking: /tmp/cellbox-tier3-261030a/embedded/kernel_fs.img
+Size: 71303168 bytes (69632 KB)
+Sig: 55aa (should be 55aa)
+FS type: b'  FAT16 '
+BPS=512 SPC=4 RES=1 FAT_CNT=2 ROOT_ENT=512 FAT_SZ=160
+Root dir at 164352, Data area at 180736
+  --- root ---
+    LFN[1] 'bin'
+    SFN BIN~1         -> LFN 'bin'  attr=10 clus=2 sz=0
+    LFN[1] 'etc'
+    SFN ETC~1         -> LFN 'etc'  attr=10 clus=3 sz=0
+    LFN[1] 'p09'
+    SFN P09~1         -> LFN 'p09'  attr=10 clus=5 sz=0
+    LFN[1] 't3p'
+    SFN T3P~1         -> LFN 't3p'  attr=10 clus=6 sz=0
+    LFN[1] 'vmlinux'
+    SFN VMLINU~1      -> LFN 'vmlinux'  attr=20 clus=4097 sz=38991404
+    LFN[1] 'initrd.gz'
+    SFN INITRD~1.GZ   -> LFN 'initrd.gz'  attr=20 clus=23136 sz=8728334
+    LFN[1] 'virtio-e2e'
+    SFN VIRTIO~1      -> LFN 'virtio-e2e'  attr=20 clus=27398 sz=28
+bin dir (SFN='BIN~1') at cluster 2, offset 180736
+  --- /bin ---
+    SFN .                    attr=10 clus=2 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellbox'
+    SFN CELLBO~1      -> LFN 'cellbox'  attr=20 clus=7 sz=3140520
+    LFN[1] 'vfs'
+    SFN VFS~1         -> LFN 'vfs'  attr=20 clus=1541 sz=613632
+    LFN[1] 'config'
+    SFN CONFIG~1      -> LFN 'config'  attr=20 clus=1841 sz=47464
+    LFN[1] 'input'
+    SFN INPUT~1       -> LFN 'input'  attr=20 clus=1865 sz=167328
+    LFN[1] 'platform'
+    SFN PLATFO~1      -> LFN 'platform'  attr=20 clus=1947 sz=38576
+    LFN[1] 'nvme'
+    SFN NVME~1        -> LFN 'nvme'  attr=20 clus=1966 sz=40880
+    LFN[1] 'e1000'
+    SFN E1000~1       -> LFN 'e1000'  attr=20 clus=1986 sz=29752
+    LFN[1] 'net'
+    SFN NET~1         -> LFN 'net'  attr=20 clus=2001 sz=496296
+    LFN[1] 'echo'
+    SFN ECHO~1        -> LFN 'echo'  attr=20 clus=2244 sz=30376
+    LFN[2] 'nal-driver'
+    LFN[1] 'phase04-termi'
+    SFN PHASE0~1      -> LFN 'phase04-terminal-driver'  attr=20 clus=2259 sz=157784
+    LFN[1] 'hypervisor'
+    SFN HYPERV~1      -> LFN 'hypervisor'  attr=20 clus=2337 sz=163200
+    LFN[1] 'kms'
+    SFN KMS~1         -> LFN 'kms'  attr=20 clus=2417 sz=170408
+    LFN[2] ''
+    LFN[1] 'kms-ssh-admin'
+    SFN KMS-SS~1      -> LFN 'kms-ssh-admin'  attr=20 clus=2501 sz=124296
+    LFN[1] 'cellbox-ssh'
+    SFN CELLBO~2      -> LFN 'cellbox-ssh'  attr=20 clus=2562 sz=3140520
+etc dir (SFN='ETC~1') at cluster 3, offset 182784
+  --- /etc ---
+    SFN .                    attr=10 clus=3 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellos'
+    SFN CELLOS~1      -> LFN 'cellos'  attr=10 clus=4 sz=0
+cellos dir (SFN='CELLOS~1') at cluster 4, offset 184832
+  --- /etc/cellos ---
+    SFN .                    attr=10 clus=4 sz=0
+    SFN ..                   attr=10 clus=3 sz=0
+    LFN[1] 'system.toml'
+    SFN SYSTEM~1.TOM  -> LFN 'system.toml'  attr=20 clus=27657 sz=128
+    LFN[2] ''
+    LFN[1] 'services.toml'
+    SFN SERVIC~1.TOM  -> LFN 'services.toml'  attr=20 clus=27658 sz=696
+    LFN[2] ''
+    LFN[1] 'autoload.toml'
+    SFN AUTOLO~1.TOM  -> LFN 'autoload.toml'  attr=20 clus=27659 sz=306
+p09 dir (SFN='P09~1') at cluster 5, offset 186880
+  --- /p09 ---
+    SFN .                    attr=10 clus=5 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'ssh.conf'
+    SFN SSH~1.CON     -> LFN 'ssh.conf'  attr=20 clus=4096 sz=81
+t3p dir (SFN='T3P~1') at cluster 6, offset 188928
+  --- /t3p ---
+    SFN .                    attr=10 clus=6 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'blob.bin'
+    SFN BLOB~1.BIN    -> LFN 'blob.bin'  attr=20 clus=27399 sz=524288
+    LFN[1] 'pipe.key'
+    SFN PIPE~1.KEY    -> LFN 'pipe.key'  attr=20 clus=27655 sz=399
+    LFN[1] 'pipe.conf'
+    SFN PIPE~2.CON    -> LFN 'pipe.conf'  attr=20 clus=27656 sz=191

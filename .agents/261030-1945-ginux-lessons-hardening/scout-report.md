@@ -2,7 +2,7 @@
 
 Source repo: `https://github.com/gmkurtzer/ginux`, shallow clone at `/tmp/ginux`, commit `1852455` (2026-10-29), Apache-2.0. Ideas are adopted, not code; any code port needs a `hc-cop` license pass.
 
-Full scout transcripts: `agent://ScoutX86Entry`, `agent://ScoutDeviceRecovery`, `agent://ScoutAuthorityAbi`, `agent://ScoutDisciplineStorage`. Everything below is FACT with a citation unless marked INFERENCE.
+Full scout transcripts: `agent://ScoutX86Entry`, `agent://ScoutDeviceRecovery`, `agent://ScoutAuthorityAbi`, `agent://ScoutDisciplineStorage`. This is historical reconnaissance: citations are PRIOR until rechecked against current source, not fresh runtime evidence. The reviewed `plan.md` and phase files control implementation; Ginux's fresh-address-space and sole-root assumptions are not Tier-1 SAS requirements. Live stash authority enforcement must cover the syscall-used unversioned table, not only the versioned helper.
 
 ## Per-item state
 

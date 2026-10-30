@@ -33,8 +33,8 @@ Docs-only phase. It gets maintainer admission for phases 02–09 under `CELL-CON
 | 06 | Boundary-specific record validation | P01 | host + x86 q35 |
 | 07 | Spec 25 AC-01..AC-05 issuer-derived provenance; private SMP witness image | P02/P05 | x86 q35 |
 | 08 | P05 device/buffer revoke under ambiguous timeout, controller-specific reset | P05/P04 | x86 q35 (exact device model) |
-| 09A | Spec 25 §7 state handoff authority (live stash gap) | P06 | host + x86 q35 |
-| 09B | P06 AC-14..AC-18 software provider recovery | P06 | x86 q35, worker-crash class |
+| 09A | Spec 25 §6 state handoff authority (live stash gap) | P06 | host + x86 q35 |
+| 09B | P06 AC-14..AC-17 software provider recovery (AC-18 diagnostics remain with P06) | P06 | x86 q35, worker-crash class |
 | 09C | P06 device-backed replacement | P06 + P05 | x86 q35 (exact device model) |
 
 CellosFS inputs to record in 261025 (decisions stay with that plan):

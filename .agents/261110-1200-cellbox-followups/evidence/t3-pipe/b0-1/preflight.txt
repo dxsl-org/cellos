@@ -1,0 +1,11 @@
+stage=pipe build_only=0 claim_only=0 confirm=0 t3p_confirm=0 pipe_b0=1 t3p_policy=absent window=1800 head=c0ae115dc062e8120b4e0eb4776c6c0eb310c0d1
+dirty files (all inside the closure): .agents/261030-1945-ginux-lessons-hardening/phase-01-admission.md .agents/261030-1945-ginux-lessons-hardening/phase-04-x86-entry-hardening.md .agents/261030-1945-ginux-lessons-hardening/phase-06-abi-record-convention.md .agents/261030-1945-ginux-lessons-hardening/phase-07-authority-provenance.md .agents/261030-1945-ginux-lessons-hardening/phase-08-device-quiescence.md .agents/261030-1945-ginux-lessons-hardening/phase-09-post-fault-replacement.md .agents/261030-1945-ginux-lessons-hardening/plan.md .agents/261030-1945-ginux-lessons-hardening/sas-lbi-review-2026-10-30.md .agents/261030-1945-ginux-lessons-hardening/scout-report.md cells/tests/phase04-terminal-driver/Cargo.toml cells/tests/phase04-terminal-driver/src/ssh.rs cells/tests/phase04-terminal-driver/src/ssh/guest.rs scripts/prepare-tier3-sshd-initramfs-x86.sh scripts/qemu-tier3-ssh-guest-x86.sh scripts/test_tier3_ssh_guest_judge.py scripts/tier3_ssh_guest_judge.py tests/guests/x86-sshd/guest-init.sh
+product pins (rerun-cp1.md 6.2): 18 files OK
+product tree digests (guest-pipeline-cp1.md 6.3): 6 trees OK
+cellos-sign --check rc 0
+qemu=/home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 sha256=169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe QEMU emulator version 10.2.0
+tmp-free-kb=718675104 python=Python 3.12.3 ssh=OpenSSH_9.6p1 Ubuntu-3ubuntu13.20, OpenSSL 3.0.13 30 Jan 2024
+apk pins match
+hostfwd loopback port=43223 guest host key fingerprint=SHA256:IMICWHWvfeGXdPKOnV25PrBB/+TGqWw97bMJ5pm7tE8
+pipeline stage: key fingerprint=SHA256:ZEkokx9jGwvgQcUwMx3AKhHQWPa9HeamDhODbX8VEwY; blob sha256=23674f33a787e20785213eed8f6dd94def3f88b70d40db173e21d535dfaccb55 len=524288
+token=/home/dmin/cellos/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-d-runs/T3P_B0_CONSUMED-1 claimed

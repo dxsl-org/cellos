@@ -1,0 +1,16 @@
+6dbf751b06d0e4f197f6b7c7c6cb9774a2ed2b7130b4485ac5b123efed8a20f2  /tmp/cellbox-tier3-261030a/cells-target/x86_64-unknown-none/release/cellbox
+c9edf76dd3efd91abb722348e6a96efb0b894b1df5c76f8277d1cffa9c9b0a0f  /tmp/cellbox-tier3-261030a/cells-target/x86_64-unknown-none/release/service-net
+d803f58197118b30734843f7ca1e4b7962f94a749e3b4ac0e9ff473333fc869c  /tmp/cellbox-tier3-261030a/cells-target/x86_64-unknown-none/release/hypervisor
+b58a89d7b905a5993c2574679dbe160aa9d6da8e075e72d6065536c6804bc24f  /tmp/cellbox-tier3-261030a/cells-target/x86_64-unknown-none/release/phase04-terminal-driver
+4526f384e32caf79b8fc770d16c07f66977c876373d404ad5f6878a4bcd889b9  /tmp/cellbox-tier3-261030a/kernel-target/x86_64-unknown-none/release/cellos-kernel
+6b76159ab397744a5072bbba2248b60f8f61e4e7f7bb66c6755962d693e8ce39  /tmp/cellbox-tier3-261030a/tier3.iso
+5494153a5d7b39a07b4dd4dc03a907cf94770e1409394c4c5e5fda1486c9da4d  /tmp/cellbox-tier3-261030a/embedded/kernel_fs.img
+4bf6223c7fd87536f5f60f3b8850c9338e62e692805ab4690675b1b7e37b041c  /tmp/cellbox-tier3-261030a/guest/initramfs-sshd.cpio.gz
+2d62d53b39ed16f5d24a89a39abebcf946d9a0f9482734baf3da51e867b1ec07  .alpine-cache-x86/vmlinux
+26bf81ada3e8fc30fd4d81805fe6c8c60be5c7fb18a43563c707e49117e624ca  .alpine-cache-x86/vmlinuz-virt
+e2562e019a506f9bdac24d06953823106a2ab29da50eea01185d005a3ca4acdf  .alpine-cache-x86/initramfs-virt
+8a52dd65bb8780ef5b9a3325897718b26fb7977c05211932a9dd299600c25e92  /tmp/cellbox-tier3-261030a/keys/cell.pub
+169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe  /home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64
+1b725c8a6d1179498b6858308baff411fa52ef0cea6e1d3bb7fc8875670b7453  /tmp/cellbox-tier3-261030a/cells-target/x86_64-unknown-none/release/service-kms
+72ad2d4cbd8c1608e3fa95c9abbc10e8a994a1b24b844baee707ba8b18c5e0d0  /tmp/cellbox-tier3-261030a/cells-target/x86_64-unknown-none/release/kms-ssh-admin
+b63006467ea413fd5cb50022d6d40ae1aeeface0325eda920cd95ae6ebca79f2  /tmp/cellbox-tier3-261030a/t3p/blob.bin

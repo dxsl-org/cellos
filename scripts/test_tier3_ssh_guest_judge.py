@@ -1151,5 +1151,279 @@ class Archive(unittest.TestCase):
             self.assertFalse(dst.exists())
 
 
+PIPE_FP = "SHA256:" + "Q" * 43
+PIPE_KEY_LINES = ["b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW",
+                  "QyNTUxOQAAACBwaXBlcGlwZXBpcGVwaXBlcGlwZXBpcGVwaXBlcGlwZXBpcGUAAAA="]
+BLOB_SHA = "7e1f" * 16
+KMS_LINE = "[ INFO] " + J.KMS_BANNER
+POLICY_LINE = "[ INFO] [policy] loaded + verified (59 entries, flags 0x00)"
+REC_OK = ("P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=complete dispatch=accepted "
+          "outcome=remote_exit remote_status=0 remote_signal=null error_code=null stdout_complete=true stderr_complete=true")
+REC_REFUSED = ("P04 INFO p09-completion schema=cellbox.ssh.completion schema_version=1 mode=exec phase=%s dispatch=not_sent "
+               "outcome=local_error remote_status=null remote_signal=null error_code=%s stdout_complete=true stderr_complete=true")
+
+
+def pipe_serial(skip=(), dup=(), fail=(), extra="", final="PASS checks=8", stdin_sha=BLOB_SHA, stdin_len="524288", rt_sha=BLOB_SHA,
+                accepted_fp=PIPE_FP, logins="4", password_line="", conn_in_ab=False, accept_in_c=False, banners=1, policy="",
+                records=None, no_marks=False, watch_unavailable=False, scan_hit=False):
+    """A passing GP pipeline serial log with knobs to break one rule at a time."""
+    out = ["[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)",
+           "[vfs] CellosFS Native mounted at existing volume", SERIAL.rstrip("\n")]
+    out += [KMS_LINE] * banners
+    if policy:
+        out.append(policy)
+    if watch_unavailable:
+        out.insert(2, WATCH_LINE)
+    out += ["P04 START", "P04 PASS shell-prompt"]
+    port = [50000]
+
+    def sess(accepted=True):
+        port[0] += 2
+        out.append('[guest-uart] Connection from 10.0.2.2 port %d on 10.0.2.16 port 22 rdomain ""' % port[0])
+        if accepted:
+            out.append("[guest-uart] Accepted publickey for tester from 10.0.2.2 port %d ssh2: ED25519 %s" % (port[0], accepted_fp))
+            out.append("[guest-uart] Starting session: command for tester from 10.0.2.2 port %d id 0" % port[0])
+
+    def mark(name, text="P04 PASS "):
+        if name not in skip:
+            out.append(("P04 FAIL " if name in fail else text) + name)
+        if name in dup:
+            out.append("P04 PASS " + name)
+
+    mark("ssh-conf")
+    out.append("P04 INFO ssh-guest-pk-status attempts=2")
+    mark("ssh-guest-pk-import")
+    sess()
+    out.append(REC_OK)
+    mark("ssh-guest-pk-exec")
+    if not no_marks:
+        out.append("P04 INFO ssh-guest-pipe-mark neg-ab-begin")
+    if conn_in_ab:
+        sess(accepted=False)
+    out.append(REC_REFUSED % ("auth", "identity_unknown"))
+    if not no_marks:
+        out += ["P04 INFO ssh-guest-pipe-mark neg-ab-end", "P04 INFO ssh-guest-pipe-mark neg-c-begin"]
+    sess(accepted=accept_in_c)
+    out.append(REC_REFUSED % ("trust", "host_key_no_frontend"))
+    if not no_marks:
+        out.append("P04 INFO ssh-guest-pipe-mark neg-c-end")
+    mark("ssh-guest-pipe-refusals")
+    sess()
+    out += [REC_OK, "P04 INFO ssh-guest-pipe-digest which=stdin sha=%s len=%s" % (stdin_sha, stdin_len)]
+    mark("ssh-guest-pipe-stdin-exact")
+    sess()
+    sess()
+    out += [REC_OK, REC_OK, "P04 INFO ssh-guest-pipe-digest which=roundtrip sha=%s len=-" % rt_sha]
+    mark("ssh-guest-pipe-roundtrip")
+    if records is not None:
+        out = [l for l in out if "p09-completion" not in l] + records
+    if password_line:
+        out.append(password_line)
+    if scan_hit:
+        out.append("P04 INFO ssh-guest-pipe-scan-hit step=import")
+    out += ["P04 INFO ssh-guest-pipe-logins %s" % logins]
+    mark("session-a-close")
+    out += ["P04-TERMINAL: " + final, extra]
+    return "\n".join(l for l in out if l) + "\n"
+
+
+def make_pipe_run(root: Path, serial=None, blob=None, fingerprint=PIPE_FP, window=1800, elapsed=200.0, verdict="driver-verdict"):
+    ev, keys = make_run(root, serial=serial if serial is not None else pipe_serial(), verdict=verdict, full=True)
+    (keys / "pipe_ed25519").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\n" + "\n".join(PIPE_KEY_LINES) + "\n-----END OPENSSH PRIVATE KEY-----\n")
+    tl = json.loads((ev / "timeline.json").read_text())
+    tl.update({"window_s": window, "elapsed_s": elapsed, "verdict": verdict})
+    (ev / "timeline.json").write_text(json.dumps(tl))
+    facts = blob if blob is not None else {"sha256": BLOB_SHA, "len": 524288, "utf8_valid": False, "has_nul": True, "has_ff": True}
+    (ev / "pipe-blob.json").write_text(json.dumps(facts))
+    if fingerprint is not None:
+        (ev / "pipe-key.fingerprint").write_text(fingerprint + "\n")
+    return ev, keys
+
+
+class PipeJudge(unittest.TestCase):
+    def judge(self, serial=None, policy_shape="absent", **kw):
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys = make_pipe_run(Path(d), serial=serial, **kw)
+            return J.judge_boot(ev, J.secrets_from(keys), FP, PORT, "head", stage="pipe", policy_shape=policy_shape)
+
+    def failed(self, v):
+        return {k for k, c in v["checks"].items() if not c["pass"]}
+
+    def test_pass(self):
+        v, stop = self.judge()
+        self.assertTrue(v["pass"], self.failed(v))
+        self.assertIsNone(stop)
+        self.assertEqual(v["stage"], "pipe")
+        self.assertNotIn("diag", v)
+        self.assertFalse(any(k.startswith("D:") for k in v["checks"]))
+
+    def test_marker_flips(self):
+        for name in J.PIPE_MARKERS[1:]:
+            for kw in ({"skip": (name,)}, {"dup": (name,)}, {"fail": (name,)}):
+                v, stop = self.judge(serial=pipe_serial(**kw))
+                self.assertIn("P:markers", self.failed(v), (name, kw))
+                self.assertEqual(stop, "MARKER-FAIL", (name, kw))
+
+    def test_extra_marker_and_final_verdict(self):
+        v, _ = self.judge(serial=pipe_serial(extra="P04 PASS ssh-exec-bytes"))
+        self.assertIn("P:markers", self.failed(v))
+        for final in ("FAIL failures=1 checks=8", "PASS checks=7", "PASS checks=21"):
+            v, _ = self.judge(serial=pipe_serial(final=final))
+            self.assertIn("P:driver-final-verdict", self.failed(v), final)
+
+    def test_digests_must_equal_the_host_values(self):
+        flipped = BLOB_SHA[:-1] + ("c" if BLOB_SHA[-1] != "c" else "d")  # one nibble
+        v, stop = self.judge(serial=pipe_serial(stdin_sha=flipped))
+        self.assertEqual(self.failed(v), {"P:digest-stdin-equals-host"})
+        self.assertEqual(stop, "MARKER-FAIL")
+        v, _ = self.judge(serial=pipe_serial(stdin_len="524287"))
+        self.assertEqual(self.failed(v), {"P:digest-stdin-equals-host"})
+        v, _ = self.judge(serial=pipe_serial(rt_sha=flipped))
+        self.assertEqual(self.failed(v), {"P:digest-roundtrip-equals-host"})
+        v, _ = self.judge(serial=pipe_serial().replace("P04 INFO ssh-guest-pipe-digest which=stdin", "P04 INFO x"))
+        self.assertIn("P:digest-stdin-equals-host", self.failed(v))
+
+    def test_blob_property_check(self):
+        good = {"sha256": BLOB_SHA, "len": 524288, "utf8_valid": False, "has_nul": True, "has_ff": True}
+        for bad in (dict(good, utf8_valid=True), dict(good, has_nul=False), dict(good, has_ff=False), dict(good, len=1024), {}):
+            v, _ = self.judge(blob=bad)
+            self.assertIn("P:blob-is-non-utf8-with-nul-and-ff", self.failed(v), bad)
+
+    def test_sshd_log_accounting(self):
+        v, stop = self.judge(serial=pipe_serial(accepted_fp="SHA256:" + "Z" * 43))
+        self.assertIn("P:sshd-accepted-publickey-equals-logins", self.failed(v))
+        self.assertEqual(stop, "MARKER-FAIL")
+        v, _ = self.judge(serial=pipe_serial(logins="5"))
+        self.assertIn("P:sshd-accepted-publickey-equals-logins", self.failed(v))
+        v, _ = self.judge(fingerprint=None)
+        self.assertIn("P:sshd-accepted-publickey-equals-logins", self.failed(v))
+        for bad in ("[guest-uart] Accepted password for tester from 10.0.2.2 port 7 ssh2",
+                    "[guest-uart] Failed password for tester from 10.0.2.2 port 7 ssh2",
+                    "[guest-uart] Invalid user p09split from 10.0.2.2 port 7"):
+            v, _ = self.judge(serial=pipe_serial(password_line=bad))
+            self.assertIn("P:no-password-auth", self.failed(v), bad)
+
+    def test_refusal_windows(self):
+        v, stop = self.judge(serial=pipe_serial(conn_in_ab=True))
+        self.assertIn("P:neg-ab-no-connection", self.failed(v))
+        self.assertEqual(stop, "MARKER-FAIL")
+        v, _ = self.judge(serial=pipe_serial(accept_in_c=True))
+        self.assertIn("P:neg-c-no-accept", self.failed(v))
+        v, _ = self.judge(serial=pipe_serial(no_marks=True))
+        self.assertTrue({"P:neg-ab-no-connection", "P:neg-c-no-accept"} <= self.failed(v))
+
+    def test_one_session_per_connection(self):
+        dup = "[guest-uart] Starting session: command for tester from 10.0.2.2 port 50002 id 1"
+        v, _ = self.judge(serial=pipe_serial(extra=dup))
+        self.assertIn("P:one-session-per-connection", self.failed(v))
+
+    def test_completion_records(self):
+        refused = [REC_REFUSED % ("auth", "identity_unknown"), REC_REFUSED % ("trust", "host_key_no_frontend")]
+        v, _ = self.judge(serial=pipe_serial(records=[REC_OK] * 3 + refused))
+        self.assertIn("P:completion-records", self.failed(v))
+        v, _ = self.judge(serial=pipe_serial(records=[REC_OK] * 4 + refused[:1]))
+        self.assertIn("P:completion-records", self.failed(v))
+        v, _ = self.judge(serial=pipe_serial(records=[REC_OK.replace("remote_status=0", "remote_status=3")] + [REC_OK] * 3 + refused))
+        self.assertIn("P:completion-records", self.failed(v))
+        v, _ = self.judge(serial=pipe_serial(records=[REC_OK] * 4 + refused))
+        self.assertTrue(v["pass"], self.failed(v))
+
+    def test_kms_banner_is_stop_p1(self):
+        for banners in (0, 2):
+            v, stop = self.judge(serial=pipe_serial(banners=banners))
+            self.assertIn("P:kms-banner-once", self.failed(v))
+            self.assertEqual(stop, "STOP-P1")
+
+    def test_policy_shape(self):
+        v, _ = self.judge(serial=pipe_serial(policy=POLICY_LINE))
+        self.assertIn("P:no-policy-loaded-line", self.failed(v))
+        v, stop = self.judge(serial=pipe_serial(policy=POLICY_LINE), policy_shape="loaded")
+        self.assertTrue(v["pass"], self.failed(v))
+        v, _ = self.judge(policy_shape="loaded")
+        self.assertIn("P:policy-loaded-line", self.failed(v))
+
+    def test_secret_is_stop5(self):
+        import base64
+        raw = base64.b64decode("".join(PIPE_KEY_LINES)).decode("latin-1")
+        for leak in (PIPE_KEY_LINES[0], PIPE_KEY_LINES[1], "".join(PIPE_KEY_LINES), PASSWORD):
+            v, stop = self.judge(serial=pipe_serial(extra="[guest-uart] x %s y" % leak))
+            self.assertEqual(stop, "STOP-5", leak)
+        self.assertTrue(raw)
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys = make_pipe_run(Path(d))
+            (ev / "preflight.txt").write_text("armor BEGIN OPENSSH PRIVATE KEY\n")
+            v, stop = J.judge_boot(ev, J.secrets_from(keys), FP, PORT, stage="pipe")
+            self.assertEqual(stop, "STOP-5")
+
+    def test_watch_unavailable_is_stop7(self):
+        v, stop = self.judge(serial=pipe_serial(watch_unavailable=True))
+        self.assertEqual(stop, "STOP-7")
+        self.assertIn("net:no-owner-death-watch-unavailable", self.failed(v))
+
+    def test_scan_hit_in_driver_output_fails(self):
+        v, _ = self.judge(serial=pipe_serial(scan_hit=True))
+        self.assertIn("P:no-secret-scan-hit-in-driver", self.failed(v))
+
+    def test_window_and_run_end(self):
+        v, _ = self.judge(window=20000)
+        self.assertIn("window-within-pipe-cap", self.failed(v))
+        v, _ = self.judge(elapsed=4000.0)
+        self.assertIn("window-within-pipe-cap", self.failed(v))
+        v, _ = self.judge(verdict="window-expired")
+        self.assertIn("run-ended-by-driver-verdict", self.failed(v))
+
+    def test_boot_checks_still_apply(self):
+        v, stop = self.judge(serial=pipe_serial().replace("[hv-x86] vCPU ready — entering run loop\n", ""))
+        self.assertEqual(stop, "STOP-1")
+
+    def test_other_stages_are_unchanged_by_the_pipe_stage(self):
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys = make_run(Path(d), serial=full_serial(), verdict="driver-verdict", full=True)
+            v, stop = J.judge_boot(ev, J.secrets_from(keys), FP, PORT, stage="full")
+            self.assertTrue(v["pass"], [k for k, c in v["checks"].items() if not c["pass"]])
+            self.assertFalse(any(k.startswith("P:") for k in v["checks"]))
+        # a pipe log is not a full log
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys = make_run(Path(d), serial=pipe_serial(), verdict="driver-verdict", full=True)
+            v, stop = J.judge_boot(ev, J.secrets_from(keys), FP, PORT, stage="full")
+            self.assertFalse(v["pass"])
+
+    def test_blob_facts_and_cli(self):
+        with tempfile.TemporaryDirectory() as d:
+            blob = Path(d) / "blob.bin"
+            blob.write_bytes(b"\x00\xff\xc0\xaf" + b"a" * 100)
+            f = J.pipe_blob_facts(blob)
+            self.assertEqual((f["len"], f["utf8_valid"], f["has_nul"], f["has_ff"]), (104, False, True, True))
+            import hashlib
+            self.assertEqual(f["sha256"], hashlib.sha256(blob.read_bytes()).hexdigest())
+            blob.write_bytes(b"plain ascii")
+            self.assertTrue(J.pipe_blob_facts(blob)["utf8_valid"])
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys = make_pipe_run(Path(d))
+            (ev / "pipe-blob.json").unlink()
+            base = ["pipe", "--evidence", str(ev), "--keys", str(keys), "--fingerprint", FP, "--port", PORT]
+            self.assertEqual(J.main(base), 2)  # no --blob
+            blob = Path(d) / "blob.bin"
+            blob.write_bytes(b"\x00\xff" * 10)
+            rc = J.main(base + ["--blob", str(blob)])
+            facts = json.loads((ev / "pipe-blob.json").read_text())
+            self.assertEqual(facts["len"], 20)  # recomputed from the file, never taken from the driver
+            self.assertEqual(rc, 1)  # length is not 524288: the blob check fails
+            self.assertEqual(J.main(["full", "--evidence", str(ev), "--keys", str(keys), "--fingerprint", FP, "--port", PORT,
+                                     "--blob", str(blob)]), 2)
+            self.assertEqual(J.main(["boot", "--evidence", str(ev), "--keys", str(keys), "--fingerprint", FP, "--port", PORT,
+                                     "--policy-shape", "loaded"]), 2)
+
+    def test_archive_carries_the_pipe_files_and_refuses_the_pipe_key(self):
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys = make_pipe_run(Path(d))
+            dst = Path(d) / "out"
+            self.assertEqual(J.main(["archive", "--src", str(ev), "--dst", str(dst), "--keys", str(keys)]), 0)
+            self.assertTrue((dst / "pipe-blob.json").exists() and (dst / "pipe-key.fingerprint").exists())
+            (ev / "preflight.txt").write_text("leak %s\n" % PIPE_KEY_LINES[0])
+            dst2 = Path(d) / "out2"
+            self.assertEqual(J.main(["archive", "--src", str(ev), "--dst", str(dst2), "--keys", str(keys)]), 1)
+            self.assertFalse(dst2.exists())
+
 if __name__ == "__main__":
     unittest.main()

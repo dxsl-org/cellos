@@ -32,3 +32,7 @@ guest = ["phase09-ssh"]
 # `src/ssh/guest.rs` are replaced by `diag_checks` (positive control, observed cancel, marks and
 # guest snapshots). Adds no package.
 guest-diag = ["guest"]
+# Tier-3 guest pipeline stage (`--stage pipe`, guest-pipeline-cp1.md): the S9-3 group and the
+# guest scenarios are replaced by `pipe_checks` (KMS import, publickey exec, pipeline stdin
+# and stdout round trip, password-pipeline refusals). Adds no package.
+guest-pipe = ["guest"]

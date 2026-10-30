@@ -36,6 +36,12 @@ Subcommands (host-testable, no QEMU needed; see scripts/test_tier3_ssh_guest_jud
            cancel scenario's `p09-case` line and its PASS/FAIL line). The line `[net] owner death watch
            unavailable; socket reclaim deferred` is the stop rule STOP-7 (after the secret, digest and
            argv rules, before the gate rules and MARKER-FAIL).
+  pipe     The GP pipeline stage (guest-pipeline-cp1.md, 261110-1200-cellbox-followups): everything `boot`
+           judges, plus the driver's eight markers (`P:markers`), the digests of a 512 KiB non-UTF-8 blob
+           against the judge's own recomputation from `--blob`, the KMS banner, the guest sshd's log
+           accounting (publickey logins carrying the run key's fingerprint, no password login, the two
+           refusal windows) and the stage completion records. Not judged: the S9-3 accounting, the cancel
+           window, the ledger. `--policy-shape loaded` is for the one confirmation boot of CP1 section 4 row 4.
   archive  Copy the text evidence to the repository after a secret scan (STOP-5): refuses to copy
            anything when a seed, password or host private key is found in any candidate file.
 
@@ -72,6 +78,12 @@ DIAG_MARKERS = ["shell-prompt"] + S93 + [DIAG_CONTROL] + GUEST_MARKERS + ["sessi
 DIAG_MARK_NAMES = ["cancel-done", "snap-a", "snap-b", "snap-c"]
 DIAG_SS_NAMES = DIAG_MARK_NAMES + ["final", "after-kill"]
 DIAG_WINDOW_CAP_S = 3600  # cp1-diag-draft.md section 8 STOP-D5
+PIPE_WINDOW_CAP_S = 3600  # guest-pipeline-cp1.md section 7: window default 1800 s, hard cap 3600 s
+PIPE_MARKERS = ["shell-prompt", "ssh-conf", "ssh-guest-pk-import", "ssh-guest-pk-exec", "ssh-guest-pipe-refusals",
+                "ssh-guest-pipe-stdin-exact", "ssh-guest-pipe-roundtrip", "session-a-close"]
+PIPE_BLOB_LEN = 524288
+KMS_BANNER = "[kms] DEV_POSTURE ssh-dev-custody: volatile single-identity ssh leaf"
+POLICY_LOADED = "[policy] loaded + verified (59 entries"
 OUTCOMES = {
     "O1": "H1 confirmed: the Net cell holds the dead owner's socket; cooperative close works end to end",
     "O2": "H3: the guest saw the control's close but the producer survived (helper or sshd semantics)",
@@ -90,6 +102,7 @@ ARCHIVE_FILES = [
     "provenance.sha256", "provenance-build.txt", "initramfs-audit.json", "preflight.txt", "preflight.final.txt",
     "protected-before.txt", "protected-after.txt", "guest-host-key.fingerprint", "guest-host-key.pub",
     "hostfwd-port.txt", "prepare-initramfs.txt", "diag-marks.json", "pcap-summary.json", "pcap-scan.json", "guest-snaps.txt",
+    "pipe-blob.json", "pipe-key.fingerprint",
 ]
 ARCHIVE_DIRS = ["boot-config"]
 
@@ -106,20 +119,22 @@ def secrets_from(keys: Path):
         if p:
             out.append(("password", p))
             out.append(("password-hex", p.hex().encode()))
-    hk = keys / "host_ed25519"
-    if hk.exists():
+    for prefix, fname in (("host", "host_ed25519"), ("pipe", "pipe_ed25519")):
+        hk = keys / fname
+        if not hk.exists():
+            continue
         lines = [l for l in hk.read_text().splitlines() if l and not l.startswith("-----")]
         body = "".join(lines)
         if body:
-            out.append(("host-private-key-body", body.encode()))
+            out.append((prefix + "-private-key-body", body.encode()))
             try:
-                out.append(("host-private-key-raw", base64.b64decode(body)))
+                out.append((prefix + "-private-key-raw", base64.b64decode(body)))
             except Exception:
                 pass
             for l in lines:
                 if len(l) >= 24:
-                    out.append(("host-private-key-line", l.encode()))
-        out.append(("host-private-key-armor", b"BEGIN OPENSSH PRIVATE KEY"))
+                    out.append((prefix + "-private-key-line", l.encode()))
+        out.append((prefix + "-private-key-armor", b"BEGIN OPENSSH PRIVATE KEY"))
     return out
 
 
@@ -210,6 +225,114 @@ def full_checks(chk, ev: Path, log: str, host, guest, stage: str = "full"):
             starts += 1
     chk("D:sshd-one-session-per-connection", starts >= 10 and all(v == 1 for v in by_port.values()), {"sessions": starts, "max": max(by_port.values(), default=0)})
     return passes, fails
+
+
+def pipe_blob_facts(path: Path):
+    """Facts of the lane's blob, recomputed by the judge itself (the blob is not a secret)."""
+    import hashlib
+    data = path.read_bytes()
+    try:
+        data.decode("utf-8")
+        utf8_valid = True
+    except UnicodeDecodeError:
+        utf8_valid = False
+    return {"sha256": hashlib.sha256(data).hexdigest(), "len": len(data), "utf8_valid": utf8_valid,
+            "has_nul": b"\x00" in data, "has_ff": b"\xff" in data}
+
+
+def pipe_checks(chk, ev: Path, log: str, host, guest, policy_shape: str = "absent"):
+    """Stage `pipe` checks (prefix `P:`; any failure is MARKER-FAIL, a missing KMS banner STOP-P1)."""
+    def read(name):
+        p = ev / name
+        return p.read_text(errors="replace") if p.exists() else ""
+
+    passes, fails = {}, []
+    for line in host:
+        m = re.search(r"P04 (PASS|FAIL) (\S+)(.*)$", line)
+        if m:
+            if m.group(1) == "PASS":
+                passes[m.group(2)] = passes.get(m.group(2), 0) + 1
+            else:
+                fails.append((m.group(2), m.group(3).strip()[:160]))
+    chk("P:driver-started", any("P04 START" in l for l in host))
+    problems = {n: ("missing" if n not in passes else "duplicate") for n in PIPE_MARKERS if passes.get(n) != 1}
+    extra = sorted(set(passes) - set(PIPE_MARKERS))
+    chk("P:markers", not problems and not fails and not extra, {"problems": problems, "fails": fails, "extra": extra})
+    finals = re.findall(r"P04-TERMINAL: (PASS|FAIL)\S*(?: failures=\d+)? checks=(\d+)", log)
+    chk("P:driver-final-verdict", finals == [("PASS", str(len(PIPE_MARKERS)))], finals)
+    chk("P:boot-ceiling-selftest-pass", "[selftest] boot-ceiling: PASS" in log)
+    chk("P:trust-store-volume-mounted", "[vfs] CellosFS Native mounted at existing volume" in log)
+    chk("P:no-weak-entropy", "serving WEAK xorshift32" not in log)
+    chk("P:fixture-kernel-features-recorded",
+        FIXTURE_KERNEL_FEATURES in read("provenance-build.txt") if (ev / "provenance-build.txt").exists() else False)
+    chk("P:no-secret-scan-hit-in-driver", "ssh-guest-pipe-scan-hit" not in log)
+    # The blob (host facts recomputed by the judge from the lane's file) and the digests the driver reported.
+    try:
+        blob = json.loads(read("pipe-blob.json") or "{}")
+    except ValueError:
+        blob = {}
+    chk("P:blob-is-non-utf8-with-nul-and-ff",
+        blob.get("len") == PIPE_BLOB_LEN and blob.get("utf8_valid") is False and blob.get("has_nul") is True and blob.get("has_ff") is True
+        and bool(re.fullmatch(r"[0-9a-f]{64}", str(blob.get("sha256", "")))), blob)
+    digests = re.findall(r"P04 INFO ssh-guest-pipe-digest which=(\S+) sha=(\S+) len=(\S+)", "\n".join(host))
+    by = {}
+    for which, sha, ln in digests:
+        by.setdefault(which, []).append((sha, ln))
+    want_sha, want_len = blob.get("sha256"), str(blob.get("len"))
+    chk("P:digest-stdin-equals-host", want_sha is not None and by.get("stdin") == [(want_sha, want_len)], by.get("stdin"))
+    chk("P:digest-roundtrip-equals-host", want_sha is not None and [s for s, _ in by.get("roundtrip", [])] == [want_sha]
+        and len(by.get("roundtrip", [])) == 1, by.get("roundtrip"))
+    # KMS banner (the control that the ssh-dev-custody build ran) and the policy shape.
+    banners = sum(1 for l in host if KMS_BANNER in l)
+    chk("P:kms-banner-once", banners == 1, "%d host lines carry the ssh-dev-custody banner" % banners)
+    loaded = sum(1 for l in host if POLICY_LOADED in l)
+    if policy_shape == "loaded":
+        chk("P:policy-loaded-line", loaded == 1, "%d `[policy] loaded + verified (59 entries` lines" % loaded)
+    else:
+        chk("P:no-policy-loaded-line", loaded == 0, "%d `[policy] loaded` lines in the policy-less shape" % sum(1 for l in host if "[policy] loaded" in l))
+    # The guest sshd's log: publickey only, the key's own fingerprint, four logins.
+    gtext = "\n".join(guest)
+    logins = re.findall(r"P04 INFO ssh-guest-pipe-logins (\d+)", "\n".join(host))
+    fp = read("pipe-key.fingerprint").strip()
+    accepted = re.findall(r"Accepted publickey for tester from 10\.0\.2\.2 port \d+ ssh2: ED25519 (SHA256:\S+)", gtext)
+    chk("P:sshd-accepted-publickey-equals-logins",
+        logins == ["4"] and len(accepted) == 4 and bool(fp) and all(a == fp for a in accepted),
+        {"driver_logins": logins, "accepted": len(accepted), "fingerprints_equal_key": bool(fp) and all(a == fp for a in accepted)})
+    bad_pw = re.findall(r"(?:Accepted password|Failed password|Invalid user)", gtext)
+    chk("P:no-password-auth", not bad_pw, bad_pw[:3])
+    lines = log.splitlines()
+
+    def window(begin, end):
+        b = [i for i, l in enumerate(lines) if "[guest-uart]" not in l and "P04 INFO ssh-guest-pipe-mark %s" % begin in l]
+        e = [i for i, l in enumerate(lines) if "[guest-uart]" not in l and "P04 INFO ssh-guest-pipe-mark %s" % end in l]
+        if len(b) == 1 and len(e) == 1 and b[0] < e[0]:
+            return lines[b[0] + 1:e[0]]
+        return None
+
+    ab, c = window("neg-ab-begin", "neg-ab-end"), window("neg-c-begin", "neg-c-end")
+    chk("P:neg-ab-no-connection", ab is not None and not any("Connection from" in l for l in ab),
+        "window missing" if ab is None else [l.strip() for l in ab if "Connection from" in l][:2])
+    chk("P:neg-c-no-accept", c is not None and not any("Accepted" in l or "Starting session" in l for l in c),
+        "window missing" if c is None else [l.strip() for l in c if "Accepted" in l or "Starting session" in l][:2])
+    by_port, starts = {}, 0
+    for l in guest:
+        m = re.search(r"Starting session: \S+ .*?from \S+ port (\d+)", l)
+        if m:
+            by_port[m.group(1)] = by_port.get(m.group(1), 0) + 1
+            starts += 1
+    chk("P:one-session-per-connection", starts == 4 and all(v == 1 for v in by_port.values()), {"sessions": starts, "max": max(by_port.values(), default=0)})
+    # Completion records: the four clean exec exits (markers 4, 6, 7a, 7b); the two others are the refusals.
+    recs = []
+    for l in host:
+        m = re.search(r"P04 INFO p09-completion (schema=cellbox\.ssh\.completion .*)$", l)
+        if m:
+            recs.append(dict(kv.split("=", 1) for kv in m.group(1).split() if "=" in kv))
+    clean = [r for r in recs if r.get("outcome") == "remote_exit"]
+    others = [r for r in recs if r.get("outcome") != "remote_exit"]
+    chk("P:completion-records",
+        len(clean) == 4 and all(r.get("mode") == "exec" and r.get("remote_status") == "0" and r.get("error_code") == "null" for r in clean)
+        and len(others) == 2 and all(r.get("error_code") not in (None, "null") for r in others),
+        {"remote_exit": len(clean), "others": [r.get("error_code") for r in others]})
 
 
 # ---- T3-D2 diagnostic data: guest snapshots, host ss, pcap summary, outcome classification ----
@@ -707,7 +830,8 @@ def diag_checks(chk, ev: Path, log: str, host, guest, tl, passes, fails):
     return d
 
 
-def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", carry=None, stage: str = "boot", expect_outcome: str = ""):
+def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", carry=None, stage: str = "boot", expect_outcome: str = "",
+               policy_shape: str = "absent"):
     """Return (verdict dict, stop rule or None). Pure function of the evidence directory.
 
     `carry` (re-judging after the run's keys were deleted): the earlier verdict's checks, from
@@ -830,17 +954,25 @@ def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", c
         chk("run-ended-by-driver-verdict", tl.get("verdict") == "driver-verdict", tl.get("verdict"))
         if stage == "full":
             chk("window-within-4h-cap", 0 < int(tl.get("window_s", 0)) <= MAX_WINDOW_S, tl.get("window_s"))
-        passes, fails = full_checks(chk, ev, log, host, guest, stage)
-        net_info = net_owner_death(log.splitlines())
-        chk("net:no-owner-death-watch-unavailable", not net_info["watch_unavailable"],
-            "a host line says `owner death watch unavailable`" if net_info["watch_unavailable"] else "")
-        chk("net:owner-death-reclaim-logged-in-cancel-window", net_info["in_cancel_window"],
-            net_info["owner_death_lines"] or "no `[net] owner death:` line")
-        if stage == "diag":
-            diag_out = diag_checks(chk, ev, log, host, guest, tl, passes, fails)
-            if expect_outcome:
-                chk("diag:outcome-is-" + expect_outcome, diag_out["outcome"] == expect_outcome,
-                    "outcome %s: %s" % (diag_out["outcome"], diag_out["outcome_why"]))
+        if stage == "pipe":
+            chk("window-within-pipe-cap", 0 < int(tl.get("window_s", 0)) <= PIPE_WINDOW_CAP_S and float(tl.get("elapsed_s", 0)) <= PIPE_WINDOW_CAP_S,
+                {"window_s": tl.get("window_s"), "elapsed_s": tl.get("elapsed_s")})
+            net_info = net_owner_death(log.splitlines())
+            chk("net:no-owner-death-watch-unavailable", not net_info["watch_unavailable"],
+                "a host line says `owner death watch unavailable`" if net_info["watch_unavailable"] else "")
+            pipe_checks(chk, ev, log, host, guest, policy_shape)
+        else:
+            passes, fails = full_checks(chk, ev, log, host, guest, stage)
+            net_info = net_owner_death(log.splitlines())
+            chk("net:no-owner-death-watch-unavailable", not net_info["watch_unavailable"],
+                "a host line says `owner death watch unavailable`" if net_info["watch_unavailable"] else "")
+            chk("net:owner-death-reclaim-logged-in-cancel-window", net_info["in_cancel_window"],
+                net_info["owner_death_lines"] or "no `[net] owner death:` line")
+            if stage == "diag":
+                diag_out = diag_checks(chk, ev, log, host, guest, tl, passes, fails)
+                if expect_outcome:
+                    chk("diag:outcome-is-" + expect_outcome, diag_out["outcome"] == expect_outcome,
+                        "outcome %s: %s" % (diag_out["outcome"], diag_out["outcome_why"]))
 
     # STOP classification (cp1-draft.md section 5; the diag stage names them STOP-D1..D5 of cp1-diag-draft.md section 8)
     b1 = all(v["pass"] for k, v in checks.items() if k.startswith("B1:"))
@@ -856,13 +988,17 @@ def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", c
         stop = "STOP-D1" if stage == "diag" else "STOP-6"
     elif stage == "diag" and not checks["argv:one-loopback-hostfwd-tcg-qemu-10.2.0"]["pass"]:
         stop = "STOP-D3"
-    elif stage in ("full", "diag") and net_info["watch_unavailable"]:
+    elif stage in ("full", "diag", "pipe") and net_info["watch_unavailable"]:
         stop = "STOP-7"
     elif not (b1 and b2 and c1ok and c2ok):
         stop = "STOP-D4" if stage == "diag" else ("STOP-1" if not b1 else "STOP-2" if not b2 else "STOP-3" if not c1ok else "STOP-4")
     elif stage == "diag" and not checks["diag:window-within-1h-cap"]["pass"]:
         stop = "STOP-D5"
+    elif stage == "pipe" and not checks["P:kms-banner-once"]["pass"]:
+        stop = "STOP-P1"
     elif stage in ("full", "diag") and not all(v["pass"] for k, v in checks.items() if k.startswith(("D:", "diag:", "net:"))):
+        stop = "MARKER-FAIL"
+    elif stage == "pipe" and not all(v["pass"] for k, v in checks.items() if k.startswith(("P:", "net:"))):
         stop = "MARKER-FAIL"
     gates = {"B1": b1, "B2": b2, "C1": c1ok, "C2": c2ok}
     ok = all(v["pass"] for v in checks.values())
@@ -890,7 +1026,10 @@ def cmd_boot(a):
         if not secrets:
             print("FAIL: no secrets found under --keys (cannot scan)", file=sys.stderr)
             return 2
-    stage = a.cmd if a.cmd in ("full", "diag") else "boot"
+    stage = a.cmd if a.cmd in ("full", "diag", "pipe") else "boot"
+    if stage != "pipe" and (a.blob or a.policy_shape != "absent"):
+        print("FAIL: --blob and --policy-shape are only valid for the pipe stage", file=sys.stderr)
+        return 2
     if a.expect_outcome and (stage != "diag" or a.expect_outcome not in OUTCOMES):
         print("FAIL: --expect-outcome takes one of %s and is only valid for the diag stage" % ", ".join(OUTCOMES), file=sys.stderr)
         return 2
@@ -899,7 +1038,12 @@ def cmd_boot(a):
             print("FAIL: the diag stage needs --keys and --pcap (no carry mode)", file=sys.stderr)
             return 2
         prep_diag(ev, Path(a.pcap), secrets, a.port)
-    verdict, stop = judge_boot(ev, secrets, a.fingerprint, a.port, a.head, carry, stage, a.expect_outcome)
+    if stage == "pipe":
+        if not a.blob:
+            print("FAIL: the pipe stage needs --blob (the judge recomputes the host digest itself)", file=sys.stderr)
+            return 2
+        (ev / "pipe-blob.json").write_text(json.dumps(pipe_blob_facts(Path(a.blob)), indent=2) + "\n")
+    verdict, stop = judge_boot(ev, secrets, a.fingerprint, a.port, a.head, carry, stage, a.expect_outcome, a.policy_shape)
     out = Path(a.verdict_out) if a.verdict_out else ev / "verdict.json"
     out.write_text(json.dumps(verdict, indent=2) + "\n")
     for n, v in verdict["checks"].items():
@@ -908,7 +1052,8 @@ def cmd_boot(a):
     if stage == "diag":
         dg = verdict["diag"]
         print("OUTCOME %s: %s (%s)" % (dg["outcome"], dg["outcome_text"], dg["outcome_why"]))
-    label = {"full": "full run (T3-D3 class)", "diag": "diagnostic run (T3-D3 class)"}.get(stage, "boot stage B1 B2 C1 C2")
+    label = {"full": "full run (T3-D3 class)", "diag": "diagnostic run (T3-D3 class)",
+             "pipe": "pipeline stage (GP class)"}.get(stage, "boot stage B1 B2 C1 C2")
     print(("PASS: Tier-3 " + label) if verdict["pass"] else "FAIL: Tier-3 %s (%s)" % (label, stop or "see checks"))
     return 0 if verdict["pass"] else 1
 
@@ -939,7 +1084,7 @@ def cmd_archive(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("boot", "full", "diag"):
+    for name in ("boot", "full", "diag", "pipe"):
         b = sub.add_parser(name)
         b.add_argument("--evidence", required=True)
         b.add_argument("--keys", default="")
@@ -950,6 +1095,8 @@ def main(argv=None):
         b.add_argument("--head", default="")
         b.add_argument("--pcap", default="", help="diag stage: the raw slirp-netdev pcap (kept outside the evidence directory)")
         b.add_argument("--expect-outcome", default="", help="diag stage only: adds the check diag:outcome-is-LABEL (O1..O7)")
+        b.add_argument("--blob", default="", help="pipe stage: the lane's blob file (the judge recomputes sha256/length/UTF-8 validity from it)")
+        b.add_argument("--policy-shape", default="absent", choices=("absent", "loaded"), help="pipe stage: the image's policy shape (absent: no /POLICY.BIN)")
         b.set_defaults(fn=cmd_boot)
     r = sub.add_parser("archive")
     r.add_argument("--src", required=True)

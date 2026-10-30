@@ -1,0 +1,3 @@
+audit ok: 178 entries, 14558485 bytes unpacked
+TIER3_SSHD_INITRAMFS_READY=/tmp/cellbox-tier3-261030a/guest/initramfs-sshd.cpio.gz
+4bf6223c7fd87536f5f60f3b8850c9338e62e692805ab4690675b1b7e37b041c  /tmp/cellbox-tier3-261030a/guest/initramfs-sshd.cpio.gz

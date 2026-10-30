@@ -1,0 +1,14 @@
+# Applications start after the configured required services are ready.
+version = 1
+
+[[cells]]
+name = "hypervisor"
+path = "/bin/hypervisor"
+service_id = 14
+restart = "always"
+
+[[cells]]
+name = "phase04-terminal-driver"
+path = "/bin/phase04-terminal-driver"
+after = ["input", "net", "kms"]
+restart = "never"

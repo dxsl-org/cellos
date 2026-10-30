@@ -11,7 +11,7 @@ tier: thinking
 
 ## Overview
 
-Apply item 4 to Cellos's typed issuer model. Spec 25 §§3.1–3.3, not Ginux's process tree or one global table, defines authority. Memory safety, an ELF name, a signature and a newer generation each fail to grant semantic resource rights.
+Apply item 4 to Cellos's typed issuer model under Spec 25 §§3.1–3.3. Ginux also separates capability authority from process ancestry; Cellos must use its own issuer-local model rather than assume one sole-root table. Memory safety, an ELF name, a signature and a newer generation each fail to grant semantic resource rights.
 
 ## Requirements and architecture
 
