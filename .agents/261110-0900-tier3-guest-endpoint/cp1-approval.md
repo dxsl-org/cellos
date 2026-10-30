@@ -7,3 +7,6 @@ Date: 2026-10-30. Approver: user, "Duyệt D-T3-1..11 khuyến nghị + A-NET".
 
 ## Amendment 2026-10-30 (user): second A-NET session
 The first session fetched only APKINDEX.tar.gz (the offline resolver aborted on an ambiguous /bin/sh provider before any .apk GET). A second GET-only session to dl-cdn.alpinelinux.org is authorized for exactly: openssh-server, openssh-server-common, openssh-keygen, busybox-binsh, busybox, musl, libcrypto3, zlib (Alpine v3.21 main x86_64, ~3.4 MB, index reused from disk), into the scratch dir; hashes recorded. No other host or file.
+
+## Amendment 2026-10-30 (user): one confirmation boot
+T3-B/C passed on boot 2 (cp2-dossier-part1.md). The post-boot guest-init fix (chmod 755 /, 1777 /tmp) is unbooted. One additional stage-boot confirmation boot is authorized (outside the 2-boot budget) before T3-D; it is not evidence for any row. T3-D budget unchanged (one planned full run; a second only for a host/environment error).

@@ -1,0 +1,20 @@
+{
+  "verdict": "gates-satisfied",
+  "elapsed_s": 21.4,
+  "timeline_s": {
+    "svm-root": 1.8,
+    "hv-starting": 3.9,
+    "vcpu-ready": 8.5,
+    "guest-kernel": 8.5,
+    "guest-init": 11.9,
+    "guest-kernel-marker": 11.9,
+    "crng-ready": 11.9,
+    "net-up": 11.9,
+    "apk-installed": 12.8,
+    "sshd-server-listening": 13.1,
+    "ssh-guest-ready": 13.5,
+    "listening": 16.8
+  },
+  "fatal_line": null,
+  "window_s": 3600
+}

@@ -1,0 +1,25 @@
+  cells/services/vfs/src/grant_read.rs (approved 2026-07-30, 92d ago, review_by 2026-10-28, tracking midori-lessons phase 07 — audit the two caller-blocks assumptions)
+  cells/tests/wx-test/src/main.rs (approved 2026-07-30, 92d ago)
+  service-silo (approved 2026-07-30, 92d ago, review_by 2026-10-28, tracking midori-lessons phase 07 (grant/pointer audit))
+  service-vfs (approved 2026-07-30, 92d ago, review_by 2026-10-28, tracking midori-lessons phase 07 (grant/pointer audit))
+  wx-test (approved 2026-07-30, 92d ago)
+OK:   signed 12 cell(s) with the prod key after a passing F1/F5 check
+==> Assembling private kernel_fs.img (boot config: the driver replaces the serial shell; the hypervisor row stays)
+Created FAT16 image at /tmp/cellbox-tier3-261030a/scratch/default-fs.img: 19 file(s), 4 director(ies), 34727 clusters.
+private autoload plan: [('hypervisor', '/bin/hypervisor'), ('phase04-terminal-driver', '/bin/phase04-terminal-driver')]
+Created FAT16 image at /tmp/cellbox-tier3-261030a/embedded/kernel_fs.img: 19 file(s), 4 director(ies), 34727 clusters.
+==> Writing the trust-store fixture disk (P1 config, P5 /srv trust store)
+[mkfat32] /tmp/cellbox-tier3-261030a/trust-fixture.img: base=LBA 2048, 524288 sectors, 130554 data clusters (FAT32), FATsz32=1020, data start=LBA 4120
+cellos-fs-provision: receipt already exists; select a new exclusive receipt output
+Traceback (most recent call last):
+  File "/home/dmin/cellos/scripts/phase09_trust_disk.py", line 83, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/dmin/cellos/scripts/phase09_trust_disk.py", line 73, in main
+    run("cargo", "run", "--quiet", "--locked", "--offline", "--manifest-path", str(tool / "Cargo.toml"),
+  File "/home/dmin/cellos/scripts/phase09_trust_disk.py", line 35, in run
+    subprocess.run(cmd, check=True, env=env)
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '('cargo', 'run', '--quiet', '--locked', '--offline', '--manifest-path', '/home/dmin/cellos/tools/cellos-fs-provision/Cargo.toml', '--target', 'x86_64-unknown-linux-gnu', '--', '--image', '/tmp/cellbox-tier3-261030a/trust-fixture.img', '--base', '931072', '--sectors', '131072', '--intent', 'fresh-blank', '--receipt', '/tmp/cellbox-tier3-261030a/srv-receipt.json', '--seed', '/tmp/tmpy67504ha/srv')' returned non-zero exit status 1.
+rc=1

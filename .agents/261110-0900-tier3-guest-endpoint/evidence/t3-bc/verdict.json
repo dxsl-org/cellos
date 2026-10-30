@@ -1,0 +1,135 @@
+{
+  "head": "17db84bd4a85bddcaa6f6729c81ed18a3ef78a89",
+  "pass": true,
+  "stop_rule": null,
+  "gates": {
+    "B1": true,
+    "B2": true,
+    "C1": true,
+    "C2": true
+  },
+  "guest_kernel": "6.12.81-0-virt",
+  "time_to_listening_s": 16.8,
+  "time_to_ssh_guest_ready_s": 13.5,
+  "timeline_s": {
+    "svm-root": 1.8,
+    "hv-starting": 3.9,
+    "vcpu-ready": 8.5,
+    "guest-kernel": 8.5,
+    "guest-init": 11.9,
+    "guest-kernel-marker": 11.9,
+    "crng-ready": 11.9,
+    "net-up": 11.9,
+    "apk-installed": 12.8,
+    "sshd-server-listening": 13.1,
+    "ssh-guest-ready": 13.5,
+    "listening": 16.8
+  },
+  "run_verdict": "gates-satisfied",
+  "checks": {
+    "B1:svm-root-active": {
+      "pass": true,
+      "detail": ""
+    },
+    "B1:hypervisor-cell-starting": {
+      "pass": true,
+      "detail": ""
+    },
+    "B1:vcpu-ready": {
+      "pass": true,
+      "detail": "exactly one `vCPU ready` (a second one means the hypervisor cell restarted)"
+    },
+    "B1:no-panic-fault-triplefault": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "B1:no-hv-error-lines": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "B2:guest-kernel-banner": {
+      "pass": true,
+      "detail": "6.12.81-0-virt"
+    },
+    "B2:guest-kernel-marker": {
+      "pass": true,
+      "detail": "('6.12.81-0-virt', '6.12.81-0-virt')"
+    },
+    "B2:guest-init-started": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:crng-ready": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:net-up": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:apk-installed-offline": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:guest-hostkey-equals-pinned": {
+      "pass": true,
+      "detail": "['SHA256:3dibqu4RL2D9c0wS2kQU1ZE5nVsBmnCgbQboUxi7MgY']"
+    },
+    "B2:sshd-server-listening-line": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:listening-marker": {
+      "pass": true,
+      "detail": ""
+    },
+    "B2:no-guest-init-failure": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "C1:keyscan-fingerprint-equals-guest-key": {
+      "pass": true,
+      "detail": "[(0, 'SHA256:3dibqu4RL2D9c0wS2kQU1ZE5nVsBmnCgbQboUxi7MgY')]"
+    },
+    "C2:driver-ready-marker-once": {
+      "pass": true,
+      "detail": ""
+    },
+    "C2:sshd-saw-cell-connection-beyond-keyscan": {
+      "pass": true,
+      "detail": "{'connections_from_10.0.2.2': 7, 'keyscan_connections': 1}"
+    },
+    "C2:ready-after-sshd-server-listening": {
+      "pass": true,
+      "detail": "{'svm-root': 1.8, 'hv-starting': 3.9, 'vcpu-ready': 8.5, 'guest-kernel': 8.5, 'guest-init': 11.9, 'guest-kernel-marker': 11.9, 'crng-ready': 11.9, 'net-up': 11.9, 'apk-installed': 12.8, 'sshd-server-listening': 13.1, 'ssh-guest-ready': 13.5, 'listening': 16.8}"
+    },
+    "argv:one-loopback-hostfwd-tcg-qemu-10.2.0": {
+      "pass": true,
+      "detail": "/home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+svm,+rdrand,+rdseed -m 1G -display none -chardev socket,id=ser0,path=/tmp/cellbox-tier3-261030a/serial.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-tier3-261030a/tier3.iso -boot d -no-reboot -netdev user,id=net0,hostfwd=tcp:127.0.0.1:43263-10.0.2.16:22 -device"
+    },
+    "hashes:pins-match-and-iso-kernel-initramfs-recorded": {
+      "pass": true,
+      "detail": "{}"
+    },
+    "no-sshd-in-outer-image": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-secret-in-any-evidence-file": {
+      "pass": true,
+      "detail": "carried from the run's own verdict (keys no longer present): {}"
+    },
+    "no-secret-in-serial-raw": {
+      "pass": true,
+      "detail": "carried from the run's own verdict (keys no longer present): "
+    },
+    "protected-paths-and-cargo-lock-unchanged": {
+      "pass": true,
+      "detail": ""
+    },
+    "run-ended-by-gates": {
+      "pass": true,
+      "detail": "gates-satisfied"
+    }
+  }
+}

@@ -1,0 +1,312 @@
+==> Preflight
+stage=boot build_only=0 window=3600 head=17db84bd4a85bddcaa6f6729c81ed18a3ef78a89
+dirty files (all inside the closure): cells/tests/phase04-terminal-driver/Cargo.toml cells/tests/phase04-terminal-driver/src/ssh.rs .agents/261110-0900-tier3-guest-endpoint/evidence/apk-fetch-record.json .agents/261110-0900-tier3-guest-endpoint/evidence/apk-fetch-session1.stdout .agents/261110-0900-tier3-guest-endpoint/evidence/apk-fetch-session2.stdout .agents/261110-0900-tier3-guest-endpoint/evidence/gate-a-initramfs-audit.json .agents/261110-0900-tier3-guest-endpoint/evidence/gate-a.txt cells/tests/phase04-terminal-driver/src/ssh/guest.rs scripts/prepare-tier3-sshd-initramfs-x86.sh scripts/qemu-tier3-ssh-guest-x86.sh scripts/test_tier3_ssh_guest_judge.py scripts/tier3_ssh_guest_judge.py tests/guests/x86-sshd/apk-pins.sha256 tests/guests/x86-sshd/guest-init.sh
+qemu=/home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 sha256=169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe QEMU emulator version 10.2.0
+tmp-free-kb=723613960 python=Python 3.12.3 ssh=OpenSSH_9.6p1 Ubuntu-3ubuntu13.20, OpenSSL 3.0.13 30 Jan 2024
+apk pins match
+==> Generating per-run secrets (private to this run)
+cell key identity sha256: 5e7dae9e35feca7b1ca26d408bb780e7db42aeb202adca359062cb07fc72c57f
+hostfwd loopback port=43911 guest host key fingerprint=SHA256:hJbWRn9bSm7v62DUKofhyGsAI+lEgOUVAwZKLbT7hSg
+==> Guest initramfs (OpenSSH, offline apks)
+audit ok: 177 entries, 14556010 bytes unpacked
+TIER3_SSHD_INITRAMFS_READY=/tmp/cellbox-tier3-261030a/guest/initramfs-sshd.cpio.gz
+2314bde90512e0525c9f4365fbc5d0f9f87b7c926fc29d527ef1b8d0dc3a230a  /tmp/cellbox-tier3-261030a/guest/initramfs-sshd.cpio.gz
+==> Building cells (private target dir, --locked --offline)
+   Compiling app-sys-tools v0.1.0 (/home/dmin/cellos/cells/tools/sys-tools)
+   Compiling driver-disk v0.1.0 (/home/dmin/cellos/cells/drivers/disk)
+   Compiling driver-nvme v0.1.0 (/home/dmin/cellos/cells/drivers/nvme)
+   Compiling service-input v0.2.0 (/home/dmin/cellos/cells/services/input)
+   Compiling app-cellbox v0.1.0 (/home/dmin/cellos/cells/tools/cellbox)
+   Compiling service-net v0.1.0 (/home/dmin/cellos/cells/services/net)
+   Compiling service-config v0.1.0 (/home/dmin/cellos/cells/services/config)
+   Compiling service-platform v0.1.0 (/home/dmin/cellos/cells/services/platform)
+   Compiling service-vfs v0.1.0 (/home/dmin/cellos/cells/services/vfs)
+   Compiling driver-e1000 v0.1.0 (/home/dmin/cellos/cells/drivers/e1000)
+warning: unused import: `alloc::vec`
+  --> cells/services/net/src/dns.rs:17:5
+   |
+17 | use alloc::vec;
+   |     ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `LOOP_TRACE_INTERVAL_TICKS` is never used
+  --> cells/services/net/src/service-runtime.rs:50:7
+   |
+50 | const LOOP_TRACE_INTERVAL_TICKS: u64 = 2_000 * MTIME_TICKS_PER_MS;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `remove_owner` is never used
+   --> cells/services/net/src/socket_table.rs:204:12
+    |
+ 48 | impl SocketTable {
+    | ---------------- method in this implementation
+...
+204 |     pub fn remove_owner(&mut self, owner: SocketOwner, sockets: &mut smoltcp::iface::SocketSet<'_>) {
+    |            ^^^^^^^^^^^^
+
+warning: function `validity_window` is never used
+  --> cells/services/net/src/tls/clock.rs:27:8
+   |
+27 | pub fn validity_window() -> Option<(u64, u64)> {
+   |        ^^^^^^^^^^^^^^^
+
+warning: method `is_empty` is never used
+   --> cells/services/net/src/tls/dispatch.rs:100:12
+    |
+ 99 | impl TlsPending {
+    | --------------- method in this implementation
+100 |     pub fn is_empty(&self) -> bool {
+    |            ^^^^^^^^
+
+warning: field `handle` is never read
+  --> cells/services/net/src/tls/socket.rs:56:9
+   |
+51 | pub struct TlsSocketEntry {
+   |            -------------- field in this struct
+...
+56 |     pub handle: SocketHandle,
+   |         ^^^^^^
+
+warning: field `expected` is never read
+  --> cells/services/input/src/session.rs:59:66
+   |
+58 | struct Foreground {
+   |        ---------- field in this struct
+59 |     lease: Ref, receipt: Ref, child: ChildRefV1, operation: Ref, expected: u64, next: u64,
+   |                                                                  ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `paste` is never read
+   --> cells/tools/cellbox/src/executor.rs:683:17
+    |
+683 |                 paste = false;
+    |                 ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+691 |                 paste = false;
+    |                 ------------- `paste` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `0` is never read
+   --> cells/tools/cellbox/src/parser.rs:128:24
+    |
+128 |     BackgroundPipeline(Vec<Cmd>),
+    |     ------------------ ^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `Ast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+128 -     BackgroundPipeline(Vec<Cmd>),
+128 +     BackgroundPipeline(()),
+    |
+
+warning: function `run_rows` is never used
+   --> cells/tools/cellbox/src/typed.rs:969:8
+    |
+969 | pub fn run_rows(
+    |        ^^^^^^^^
+
+warning: `service-input` (bin "service-input") generated 1 warning
+warning: `service-net` (bin "service-net") generated 6 warnings (run `cargo fix --bin "service-net" -p service-net` to apply 1 suggestion)
+warning: `app-cellbox` (bin "cellbox") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 15.55s
+   Compiling service-hypervisor v0.1.0 (/home/dmin/cellos/cells/services/hypervisor)
+warning: method `rx_available` is never used
+  --> cells/services/hypervisor/src/virtio_net.rs:53:12
+   |
+29 | impl NetDev {
+   | ----------- method in this implementation
+...
+53 |     pub fn rx_available(&self, vm_id: usize, net_vmio: &VirtioMmio) -> bool {
+   |            ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `service-hypervisor` (bin "hypervisor") generated 1 warning
+    Finished `release` profile [optimized] target(s) in 1.61s
+   Compiling app-phase04-terminal-driver v0.1.0 (/home/dmin/cellos/cells/tests/phase04-terminal-driver)
+warning: type `ssh::Fixture` is more private than the item `wait_ready`
+  --> cells/tests/phase04-terminal-driver/src/ssh/guest.rs:22:1
+   |
+22 | pub(crate) fn wait_ready(a: &mut Term, f: &Fixture) -> bool {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ function `wait_ready` is reachable at visibility `pub(crate)`
+   |
+note: but type `ssh::Fixture` is only usable at visibility `pub(self)`
+  --> cells/tests/phase04-terminal-driver/src/ssh.rs:50:1
+   |
+50 | struct Fixture {
+   | ^^^^^^^^^^^^^^
+   = note: `#[warn(private_interfaces)]` on by default
+
+warning: `app-phase04-terminal-driver` (bin "phase04-terminal-driver") generated 1 warning
+    Finished `release` profile [optimized] target(s) in 1.87s
+   Compiling app-init v0.1.0 (/home/dmin/cellos/cells/tools/init)
+    Finished `release` profile [optimized] target(s) in 2.32s
+==> Signing with the private key (private-fixture lane)
+NOTE: allowlist entries overdue for re-review (past `review_by`, or older than `max_age_days` when they set none):
+  app-c-math-smoke (approved 2026-07-14, 108d ago)
+  app-mlibc-smoke (approved 2026-07-14, 108d ago)
+  app-posix-shim-test (approved 2026-07-14, 108d ago)
+  audio-demo (approved 2026-07-14, 108d ago)
+  cells/demos/audio-demo/src/main.rs (approved 2026-07-14, 108d ago)
+  cells/demos/cfi-test/src/main.rs (approved 2026-07-14, 108d ago)
+  cells/demos/doom/src/main.rs (approved 2026-07-14, 108d ago)
+  cells/demos/tetris-c/src/main.rs (approved 2026-07-14, 108d ago)
+  cells/demos/tetris-lua/src/ffi.rs (approved 2026-07-14, 108d ago)
+  cells/demos/tetris-lua/src/main.rs (approved 2026-07-14, 108d ago)
+  cells/drivers/e1000/src/controller.rs (approved 2026-07-14, 108d ago)
+  cells/drivers/nvme/src/controller.rs (approved 2026-07-14, 108d ago)
+  cells/drivers/nvme/src/dispatch.rs (approved 2026-07-14, 108d ago)
+  cells/drivers/nvme/src/queue.rs (approved 2026-07-14, 108d ago)
+  cells/drivers/virtio-blk/src/device.rs (approved 2026-07-14, 108d ago)
+  cells/drivers/virtio-gpu/src/cursor.rs (approved 2026-07-14, 108d ago)
+  cells/drivers/virtio-gpu/src/display.rs (approved 2026-07-14, 108d ago)
+  cells/drivers/virtio-net/src/device.rs (approved 2026-07-14, 108d ago)
+  cells/guests/silo-guest/src/mailbox.rs (approved 2026-07-14, 108d ago)
+  cells/guests/silo-guest/src/main.rs (approved 2026-07-14, 108d ago)
+  cells/runtimes/lua/src/bindings_io.rs (approved 2026-07-14, 108d ago)
+  cells/runtimes/lua/src/bindings_net.rs (approved 2026-07-14, 108d ago)
+  cells/runtimes/lua/src/bindings_vfs.rs (approved 2026-07-14, 108d ago)
+  cells/runtimes/lua/src/ffi.rs (approved 2026-07-14, 108d ago)
+  cells/runtimes/lua/src/main.rs (approved 2026-07-14, 108d ago)
+  cells/runtimes/lua/src/repl_session.rs (approved 2026-07-14, 108d ago)
+  cells/services/hypervisor/src/timer.rs (approved 2026-07-14, 108d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource.rs (approved 2026-07-14, 108d ago)
+  cells/services/hypervisor/src/virtio_gpu/resource/render.rs (approved 2026-07-14, 108d ago)
+  cells/services/hypervisor/src/vmm.rs (approved 2026-07-14, 108d ago)
+  cells/services/input/src/virtio_device.rs (approved 2026-07-14, 108d ago)
+  cells/services/net/src/tls/socket.rs (approved 2026-07-14, 108d ago)
+  cells/services/net/src/tls/transport.rs (approved 2026-07-14, 108d ago)
+  cells/tests/c-math-smoke/src/main.rs (approved 2026-07-14, 108d ago)
+  cells/tests/hypervisor-test/src/main.rs (approved 2026-07-14, 108d ago)
+  cells/tests/mlibc-smoke/src/main.rs (approved 2026-07-14, 108d ago)
+  cells/tests/posix-shim-test/src/main.rs (approved 2026-07-14, 108d ago)
+  cfi-test (approved 2026-07-14, 108d ago)
+  doom (approved 2026-07-14, 108d ago)
+  driver-e1000 (approved 2026-07-14, 108d ago)
+  driver-nvme (approved 2026-07-14, 108d ago)
+  driver-virtio-blk (approved 2026-07-14, 108d ago)
+  driver-virtio-gpu (approved 2026-07-14, 108d ago)
+  driver-virtio-net (approved 2026-07-14, 108d ago)
+  hypervisor-test (approved 2026-07-14, 108d ago)
+  lua (approved 2026-07-14, 108d ago)
+  service-compositor (approved 2026-07-14, 108d ago)
+  service-hypervisor (approved 2026-07-14, 108d ago)
+  service-input (approved 2026-07-14, 108d ago)
+  service-net (approved 2026-07-14, 108d ago)
+  silo-guest (approved 2026-07-14, 108d ago)
+  tetris-c (approved 2026-07-14, 108d ago)
+  tetris-lua (approved 2026-07-14, 108d ago)
+  app-cellbox (approved 2026-07-30, 92d ago, review_by 2026-10-28, tracking midori-lessons phase 06 (DataPtr removal))
+  cells/services/silo/src/vmm.rs (approved 2026-07-30, 92d ago, review_by 2026-10-28, tracking midori-lessons phase 07 (grant/pointer audit))
+  cells/services/vfs/kernel-fs-legacy.rs (approved 2026-07-30, 92d ago, review_by 2026-10-28, tracking midori-lessons phase 07 (grant/pointer audit))
+  cells/services/vfs/src/fast_handler.rs (approved 2026-07-30, 92d ago, review_by 2026-10-28, tracking midori-lessons phase 07 (grant/pointer audit))
+  cells/services/vfs/src/grant_read.rs (approved 2026-07-30, 92d ago, review_by 2026-10-28, tracking midori-lessons phase 07 — audit the two caller-blocks assumptions)
+  cells/tests/wx-test/src/main.rs (approved 2026-07-30, 92d ago)
+  service-silo (approved 2026-07-30, 92d ago, review_by 2026-10-28, tracking midori-lessons phase 07 (grant/pointer audit))
+  service-vfs (approved 2026-07-30, 92d ago, review_by 2026-10-28, tracking midori-lessons phase 07 (grant/pointer audit))
+  wx-test (approved 2026-07-30, 92d ago)
+OK:   signed 12 cell(s) with the prod key after a passing F1/F5 check
+==> Assembling private kernel_fs.img (boot config: the driver replaces the serial shell; the hypervisor row stays)
+Created FAT16 image at /tmp/cellbox-tier3-261030a/scratch/default-fs.img: 19 file(s), 4 director(ies), 34727 clusters.
+private autoload plan: [('hypervisor', '/bin/hypervisor'), ('phase04-terminal-driver', '/bin/phase04-terminal-driver')]
+Created FAT16 image at /tmp/cellbox-tier3-261030a/embedded/kernel_fs.img: 19 file(s), 4 director(ies), 34727 clusters.
+==> Writing the trust-store fixture disk (P1 config, P5 /srv trust store)
+[mkfat32] /tmp/cellbox-tier3-261030a/trust-fixture.img: base=LBA 2048, 524288 sectors, 130554 data clusters (FAT32), FATsz32=1020, data start=LBA 4120
+CellosFS fresh-blank /tmp/cellbox-tier3-261030a/trust-fixture.img verified; receipt /tmp/cellbox-tier3-261030a/srv-receipt.json
+trust fixture: /tmp/cellbox-tier3-261030a/trust-fixture.img (10.0.2.2:43911 exact, host:43911 mismatched)
+==> Building private kernel (phase02-terminal-profile,phase04-driver-profile)
+   Compiling cellos-kernel v0.2.1 (/home/dmin/cellos/kernel)
+warning: field `reference` is never read
+  --> kernel/src/task/cell_session.rs:76:17
+   |
+76 | struct Intent { reference: Ref, issuer: Binding, writers: [Ref; 2] }
+   |        ------   ^^^^^^^^^
+   |        |
+   |        field in this struct
+   |
+   = note: `Intent` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `expected_epoch` and `seal_len` are never read
+  --> kernel/src/task/cell_session.rs:86:40
+   |
+85 | struct Receipt { reference: Ref, prepared: Ref, child: Child, operation: Ref, issuer: Binding,
+   |        ------- fields in this struct
+86 |     kind: u16, slot: u16, object: Ref, expected_epoch: u64, next_epoch: u64,
+   |                                        ^^^^^^^^^^^^^^
+87 |     digest: [u8; 32], seal: [u8; 256], seal_len: usize, state: u32,
+   |                                        ^^^^^^^^
+
+warning: fields `slot` and `owner_service` are never read
+  --> kernel/src/task/child_context.rs:16:9
+   |
+13 | pub(crate) struct Grant {
+   |                   ----- fields in this struct
+...
+16 |     pub slot: u16,
+   |         ^^^^
+17 |     pub owner_service: u64,
+   |         ^^^^^^^^^^^^^
+   |
+   = note: `Grant` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `cellos-kernel` (bin "cellos-kernel") generated 3 warnings
+    Finished `release` profile [optimized] target(s) in 14.06s
+[make-iso] Building BIOS+UEFI ISO: /tmp/cellbox-tier3-261030a/tier3.iso
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Drive current: -outdev 'stdio:/tmp/cellbox-tier3-261030a/tier3.iso'
+Media current: stdio file, overwriteable
+Media status : is blank
+Media summary: 0 sessions, 0 data blocks, 0 data,  690g free
+Added to ISO image: directory '/'='/tmp/cellbox-tier3-261030a/iso-root'
+xorriso : UPDATE :      10 files added in 1 seconds
+xorriso : UPDATE :      10 files added in 1 seconds
+ISO image produced: 38186 sectors
+Written to medium : 38186 sectors at LBA 0
+Writing to 'stdio:/tmp/cellbox-tier3-261030a/tier3.iso' completed successfully.
+
+ISO_SIZE=78204928 bytes
+ISO_READY=/tmp/cellbox-tier3-261030a/tier3.iso
+==> Booting the private ISO once (one user netdev, one loopback hostfwd to the guest)
+QEMU run: guest-init-failed timeline: {'svm-root': 1.9, 'hv-starting': 3.4, 'vcpu-ready': 7.0, 'guest-kernel': 7.1, 'guest-init': 9.6, 'guest-kernel-marker': 9.6, 'crng-ready': 9.6, 'net-up': 9.7, 'apk-installed': 10.5, 'guest-fail': 11.7}
+==> Judging and archiving
+PASS B1:svm-root-active
+PASS B1:hypervisor-cell-starting
+PASS B1:vcpu-ready
+PASS B1:no-panic-fault-triplefault
+PASS B1:no-hv-error-lines
+PASS B2:guest-kernel-banner
+PASS B2:guest-kernel-marker
+PASS B2:guest-init-started
+PASS B2:crng-ready
+PASS B2:net-up
+PASS B2:apk-installed-offline
+PASS B2:guest-hostkey-equals-pinned
+FAIL B2:sshd-server-listening-line  <- 
+FAIL B2:listening-marker  <- 
+FAIL B2:no-guest-init-failure  <- ['USER: [guest-uart] TIER3_SSHD_FAIL: sshd-exited']
+FAIL C1:keyscan-fingerprint-equals-guest-key  <- []
+FAIL C2:driver-ready-marker-once  <- 
+FAIL C2:sshd-saw-cell-connection-beyond-keyscan  <- {'connections_from_10.0.2.2': 0, 'keyscan_connections': 0}
+FAIL C2:ready-after-listening  <- {'svm-root': 1.9, 'hv-starting': 3.4, 'vcpu-ready': 7.0, 'guest-kernel': 7.1, 'guest-init': 9.6, 'guest-kernel-marker': 9.6, 'crng-ready': 9.6, 'net-up': 9.7, 'apk-installed': 10.5, 'guest-fail': 11.7}
+PASS argv:one-loopback-hostfwd-tcg-qemu-10.2.0
+PASS hashes:pins-match-and-iso-kernel-initramfs-recorded
+PASS no-sshd-in-outer-image
+PASS no-secret-in-any-evidence-file
+PASS no-secret-in-serial-raw
+PASS protected-paths-and-cargo-lock-unchanged
+FAIL run-ended-by-gates  <- guest-init-failed
+gates: {'B1': True, 'B2': False, 'C1': False, 'C2': False} stop_rule: STOP-2 time_to_listening_s: None
+FAIL: Tier-3 boot stage (STOP-2)
+archived 19 text files to /home/dmin/cellos/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-bc
+Tier-3 boot stage: boot rc 0, judge exit 1; evidence archived at /home/dmin/cellos/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-bc
+rc=1

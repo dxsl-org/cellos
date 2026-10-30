@@ -20,8 +20,14 @@
 
 use super::*;
 #[cfg(feature = "kssh")] pub(crate) mod kssh;
+#[cfg(feature = "guest")] pub(crate) mod guest;
 
+/// The guest build waits for nested-TCG OpenSSH: every deadline of a scenario is raised.
+/// Provisional until the T3-B timing is recorded.
+#[cfg(not(feature = "guest"))]
 const SSH_MS: u64 = 120_000;
+#[cfg(feature = "guest")]
+const SSH_MS: u64 = 600_000;
 /// Bulk sink cases (MiB through the throttled consumer under TCG).
 const BULK_MS: u64 = 900_000;
 /// Request/KEX deadline cases: 30 s budgets plus the 5 s hook hold and login.
@@ -183,6 +189,12 @@ pub(crate) fn ssh_checks(a: &mut Term) {
     let Some(f) = fixture else {
         return skip(&SSH_MARKERS[1..], "no fixture conf");
     };
+    // Tier-3 guest lane: the guest's sshd comes up long after the shell; this is lane
+    // readiness (route proof T3-C2), not an ssh check.
+    #[cfg(feature = "guest")]
+    if !guest::wait_ready(a, &f) {
+        return skip(&SSH_MARKERS[1..], "guest route never ready");
+    }
 
     let refusals = (|| {
         let mut out = Vec::new();
@@ -351,6 +363,8 @@ pub(crate) fn ssh_checks(a: &mut Term) {
     check("ssh-shell-alive", alive.as_deref() == Ok(&[String::from("p09-alive")][..]), &format!("{alive:?}"));
     shell_long_line(a);
 
+    // The S9-6 group needs the Docker fixture's hooks and sinks; the guest build has none.
+    #[cfg(not(feature = "guest"))]
     s96_checks(a, &f);
 }
 

@@ -1,0 +1,35 @@
+ISO_READY=/tmp/cellbox-tier3-261030a/tier3.iso
+==> Booting the private ISO once (one user netdev, one loopback hostfwd to the guest)
+QEMU run: gates-satisfied timeline: {'svm-root': 1.8, 'hv-starting': 3.9, 'vcpu-ready': 8.5, 'guest-kernel': 8.5, 'guest-init': 11.9, 'guest-kernel-marker': 11.9, 'crng-ready': 11.9, 'net-up': 11.9, 'apk-installed': 12.8, 'sshd-server-listening': 13.1, 'ssh-guest-ready': 13.5, 'listening': 16.8}
+==> Judging and archiving
+PASS B1:svm-root-active
+PASS B1:hypervisor-cell-starting
+PASS B1:vcpu-ready
+PASS B1:no-panic-fault-triplefault
+PASS B1:no-hv-error-lines
+PASS B2:guest-kernel-banner
+PASS B2:guest-kernel-marker
+PASS B2:guest-init-started
+PASS B2:crng-ready
+PASS B2:net-up
+PASS B2:apk-installed-offline
+PASS B2:guest-hostkey-equals-pinned
+PASS B2:sshd-server-listening-line
+PASS B2:listening-marker
+PASS B2:no-guest-init-failure
+PASS C1:keyscan-fingerprint-equals-guest-key
+PASS C2:driver-ready-marker-once
+PASS C2:sshd-saw-cell-connection-beyond-keyscan
+FAIL C2:ready-after-listening  <- {'svm-root': 1.8, 'hv-starting': 3.9, 'vcpu-ready': 8.5, 'guest-kernel': 8.5, 'guest-init': 11.9, 'guest-kernel-marker': 11.9, 'crng-ready': 11.9, 'net-up': 11.9, 'apk-installed': 12.8, 'sshd-server-listening': 13.1, 'ssh-guest-ready': 13.5, 'listening': 16.8}
+PASS argv:one-loopback-hostfwd-tcg-qemu-10.2.0
+PASS hashes:pins-match-and-iso-kernel-initramfs-recorded
+PASS no-sshd-in-outer-image
+PASS no-secret-in-any-evidence-file
+PASS no-secret-in-serial-raw
+PASS protected-paths-and-cargo-lock-unchanged
+PASS run-ended-by-gates
+gates: {'B1': True, 'B2': True, 'C1': True, 'C2': False} stop_rule: STOP-4 time_to_listening_s: 16.8
+FAIL: Tier-3 boot stage (STOP-4)
+archived 19 text files to /home/dmin/cellos/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-bc
+Tier-3 boot stage: boot rc 0, judge exit 1; evidence archived at /home/dmin/cellos/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-bc
+rc=1

@@ -1,0 +1,15 @@
+{
+  "attempts": [
+    {
+      "started_s": 16.8,
+      "ended_s": 18.2,
+      "rc": 0,
+      "got_fingerprint": "SHA256:3dibqu4RL2D9c0wS2kQU1ZE5nVsBmnCgbQboUxi7MgY",
+      "expected_fingerprint": "SHA256:3dibqu4RL2D9c0wS2kQU1ZE5nVsBmnCgbQboUxi7MgY",
+      "match": true,
+      "connected_returned_key": true
+    }
+  ],
+  "ok": true,
+  "ok_s": 18.2
+}

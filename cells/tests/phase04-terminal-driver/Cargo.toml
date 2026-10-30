@@ -24,3 +24,7 @@ phase09-ssh = []
 # KSSH K8 lane (`scripts/qemu-phase09-ssh-test.sh --kssh`): the key-custody scenarios of
 # `src/ssh/kssh.rs` replace the password-only ssh checks. Adds no package.
 kssh = ["phase09-ssh"]
+# Tier-3 guest endpoint lane (`scripts/qemu-tier3-ssh-guest-x86.sh`, S10-11): the same ssh
+# checks against OpenSSH in the nested guest behind one loopback hostfwd, with a readiness
+# wait before any scenario. Adds no package.
+guest = ["phase09-ssh"]
