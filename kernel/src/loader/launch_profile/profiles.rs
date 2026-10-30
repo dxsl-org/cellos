@@ -74,6 +74,12 @@ pub(super) fn cellbox_profile(route: LaunchRoute, target: &str) -> Option<Launch
         // in the generic reviewed table, so init autoload and the desktop cannot
         // launch it, and its caller-owned ELF route stays denied below.
         LaunchRoute::Path if target == "/bin/cellbox-ssh" => SSH_CLIENT_EDGE,
+        // KSSH K7: the admin cell that imports and deletes the single KMS SSH identity.
+        // Same shape as the ssh edge: shell only, kernel-resolved path route only, not
+        // in the generic reviewed table (so init autoload, the desktop, the terminal and
+        // the caller-owned ELF route cannot start it). Its ceiling carries the admin
+        // right and never the sign right ([`KMS_SSH_ADMIN_EDGE`]).
+        LaunchRoute::Path if target == "/bin/kms-ssh-admin" => KMS_SSH_ADMIN_EDGE,
         LaunchRoute::Path | LaunchRoute::Elf => reviewed_user_target_ceiling(target)?,
         LaunchRoute::Mem | LaunchRoute::Pinned => return None,
     };
@@ -177,6 +183,17 @@ pub(super) const SHELL_EDGE: CapSet = CapSet {
 pub(super) const SSH_CLIENT_EDGE: CapSet = CapSet {
     kms_ssh_sign: true,
     ..NET_CLIENT
+};
+
+/// The child ceiling of the one reviewed edge that starts `/bin/kms-ssh-admin` (shell,
+/// kernel-resolved path route only; KSSH K7): the pre-annex X/M/W rights plus
+/// `kms_ssh_admin`. No network, no sign right: the admin and sign rights are never
+/// held by one Cell, so `request(/bin/kms-ssh-admin) ∩ ceiling` is the sole way a Cell
+/// obtains `CALLER_FLAG_KMS_SSH_ADMIN`. The constant lives here, not in `targets.rs`,
+/// for the same reason as [`SSH_CLIENT_EDGE`].
+pub(super) const KMS_SSH_ADMIN_EDGE: CapSet = CapSet {
+    kms_ssh_admin: true,
+    ..LEGACY
 };
 
 /// Private Phase04 fixture driver: shell hosting (the same ceiling as the GUI

@@ -413,6 +413,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "app-kms-ssh-admin"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "base64ct",
+ "cell-build",
+ "ostd",
+ "service-kms",
+ "terminal-sdk",
+ "types",
+]
+
+[[package]]
 name = "app-mlibc-smoke"
 version = "0.1.0"
 dependencies = [

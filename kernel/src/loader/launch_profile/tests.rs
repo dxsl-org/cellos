@@ -172,6 +172,77 @@ fn cellbox_ssh_edge_is_shell_only_path_only_client() {
     }
 }
 
+/// KSSH K7: the admin cell's edge. Only the shell, only on the kernel-resolved path
+/// route and only for `/bin/kms-ssh-admin`; the ceiling is the pre-annex X/M/W rights
+/// plus the admin right (no network, no sign right, no Q), and no other caller or
+/// route reaches the path.
+#[test]
+fn kms_ssh_admin_edge_is_shell_only_path_only_admin() {
+    use super::profiles::KMS_SSH_ADMIN_EDGE;
+    use api::caller_identity::CALLER_FLAG_KMS_SSH_ADMIN;
+
+    let edge = shell_edge(LaunchRoute::Path, "/bin/kms-ssh-admin");
+    assert_eq!(
+        edge.child_ceiling,
+        CapSet {
+            kms_ssh_admin: true,
+            ..LEGACY
+        }
+    );
+    assert_eq!(edge.child_ceiling, KMS_SSH_ADMIN_EDGE);
+    assert_eq!(edge.denial_label, "cellbox-launch-edge");
+    assert!(!edge.requires_lifecycle_authority);
+    assert_eq!(net_rights(edge.child_ceiling), (false, false, false, false));
+    assert!(!edge.child_ceiling.kms_ssh_sign && !edge.child_ceiling.config_write);
+    assert!(!CapSet::path_mints_ptrust("/bin/kms-ssh-admin"));
+    // The grant: request ∩ ceiling is the admin right and X/M/W, and flags are admin only.
+    let request = CapSet::EMPTY.with_path_caps("/bin/kms-ssh-admin");
+    let granted = request.intersect(edge.child_ceiling);
+    assert_eq!(granted, KMS_SSH_ADMIN_EDGE);
+    assert_eq!(granted.kms_caller_flags(), CALLER_FLAG_KMS_SSH_ADMIN);
+    // The two KMS rights are never on one ceiling: the ssh edge has no admin, this edge no sign.
+    let ssh = shell_edge(LaunchRoute::Path, "/bin/cellbox-ssh").child_ceiling;
+    assert!(!ssh.kms_ssh_admin);
+    assert!(!(edge.child_ceiling.kms_ssh_sign && edge.child_ceiling.kms_ssh_admin));
+    assert_eq!(
+        CapSet::EMPTY.with_path_caps("/bin/cellbox-ssh").intersect(edge.child_ceiling).kms_caller_flags(),
+        0,
+        "the ssh request meets nothing on the admin ceiling"
+    );
+    // The caller-owned ELF route and the memory/pinned routes are refused; so is every
+    // caller other than the shell, on any route.
+    for route in [LaunchRoute::Elf, LaunchRoute::Mem, LaunchRoute::Pinned] {
+        assert!(authorize(caller("cellbox", true, true), route, "/bin/kms-ssh-admin").is_none(), "{route:?}");
+    }
+    for name in ["init", "desktop", "terminal", "kms", "cellbox-ssh", "kms-ssh-admin", "hypha", "tool-spawn"] {
+        for route in [LaunchRoute::Path, LaunchRoute::Elf, LaunchRoute::Mem, LaunchRoute::Pinned] {
+            for (spawn, supervisor) in [(false, false), (true, false), (true, true)] {
+                assert!(
+                    authorize(caller(name, spawn, supervisor), route, "/bin/kms-ssh-admin").is_none(),
+                    "{name} must not launch /bin/kms-ssh-admin on {route:?}"
+                );
+            }
+        }
+    }
+    // Near-miss and sandbox spellings of the path get no edge from the shell either.
+    for path in [
+        "/bin/kms-ssh-admin2",
+        "/bin/kms-ssh-admi",
+        "/bin/KMS-SSH-ADMIN",
+        "bin/kms-ssh-admin",
+        "/bin/kms-ssh-admin/",
+        "/apps/kms-ssh-admin",
+        "/data/bin/kms-ssh-admin",
+        "/home/user/kms-ssh-admin",
+    ] {
+        for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+            if let Some(profile) = authorize(caller("cellbox", false, false), route, path) {
+                assert!(!profile.child_ceiling.kms_ssh_admin, "{path} {route:?}");
+            }
+        }
+    }
+}
+
 #[test]
 fn shell_reviewed_capability_free_edges_remain_empty() {
     for (route, target) in [
@@ -1109,12 +1180,13 @@ fn config_write_is_held_only_by_the_shell_edges() {
     );
 }
 
-/// KSSH K3 grant table (`k3-cp1.md` §4.5, §8): `kms_ssh_sign` can be non-false
-/// only when the path is exactly `/bin/cellbox-ssh` (request) AND the spawn edge
-/// is the shell's reviewed `SSH_CLIENT_EDGE` (ceiling). The shared `NET_CLIENT`
-/// ceiling of curl, wget, mqtt, ocel, llm-gateway, https-demo and robot-demo does
-/// not carry it, no boot row carries it, and no edge, boot row or request carries
-/// the admin right or both rights.
+/// KSSH K3 grant table (`k3-cp1.md` §4.5, §8) extended by KSSH K7: `kms_ssh_sign` can
+/// be non-false only when the path is exactly `/bin/cellbox-ssh` (request) AND the
+/// spawn edge is the shell's reviewed `SSH_CLIENT_EDGE` (ceiling); `kms_ssh_admin`
+/// only when the path is exactly `/bin/kms-ssh-admin` AND the edge is the shell's
+/// reviewed `KMS_SSH_ADMIN_EDGE`. The shared `NET_CLIENT` ceiling of curl, wget, mqtt,
+/// ocel, llm-gateway, https-demo and robot-demo does not carry either, no boot row
+/// carries either, and no edge, boot row or request carries both rights.
 #[test]
 fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
     use super::profiles::SSH_CLIENT_EDGE;
@@ -1252,6 +1324,7 @@ fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
         "no-such-caller",
     ];
     let mut ssh_edges = 0;
+    let mut admin_edges = 0;
     for path in paths {
         // Request side: exactly the two spellings, nothing nearby.
         let request = CapSet::EMPTY.with_path_caps(path);
@@ -1287,15 +1360,34 @@ fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
                             ceiling.kms_ssh_sign, ssh_edge,
                             "{name} {route:?} {path}: sign right on the wrong edge"
                         );
-                        assert!(!ceiling.kms_ssh_admin, "{name} {route:?} {path}: admin edge");
+                        let admin_edge = name == "cellbox"
+                            && route == LaunchRoute::Path
+                            && path == "/bin/kms-ssh-admin";
+                        assert_eq!(
+                            ceiling.kms_ssh_admin, admin_edge,
+                            "{name} {route:?} {path}: admin right on the wrong edge"
+                        );
+                        assert!(
+                            !(ceiling.kms_ssh_sign && ceiling.kms_ssh_admin),
+                            "{name} {route:?} {path}: both KMS rights on one ceiling"
+                        );
                         ssh_edges += ssh_edge as usize;
+                        admin_edges += admin_edge as usize;
                         // The sign right is only ever granted to the ssh install path.
                         assert_eq!(
                             request.intersect(ceiling).kms_ssh_sign,
                             ssh_edge && request.kms_ssh_sign,
                             "{name} {route:?} {path}"
                         );
-                        assert!(!request.intersect(ceiling).kms_ssh_admin);
+                        assert_eq!(
+                            request.intersect(ceiling).kms_ssh_admin,
+                            admin_edge && request.kms_ssh_admin,
+                            "{name} {route:?} {path}"
+                        );
+                        assert!(
+                            !(request.intersect(ceiling).kms_ssh_sign
+                                && request.intersect(ceiling).kms_ssh_admin)
+                        );
                     }
                 }
             }
@@ -1304,4 +1396,5 @@ fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
     // The shell reaches the edge in each of its four (has_spawn, has_supervisor)
     // states for every occurrence of the path in the sweep, so this is a floor.
     assert!(ssh_edges >= 4, "the sweep never saw the ssh edge");
+    assert!(admin_edges >= 4, "the sweep never saw the admin edge");
 }

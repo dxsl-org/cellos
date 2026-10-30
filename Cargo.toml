@@ -134,6 +134,7 @@ members = [
     "cells/tools/sys-tools",
     "cells/tools/net-tools",
     "cells/tools/cellbox",
+    "cells/tools/kms-ssh-admin",
     "cells/tools/wasm",
     # Cells - Apps (user applications)
     "cells/apps/fb-console",

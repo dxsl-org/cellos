@@ -1,0 +1,27 @@
+[package]
+name = "app-kms-ssh-admin"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "KSSH K7: admin cell that imports, inspects and deletes the single KMS-custodied SSH identity (DEV_POSTURE)"
+
+[[bin]]
+name = "kms-ssh-admin"
+path = "src/main.rs"
+
+[dependencies]
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+api = { path = "../../../libs/api", version = "0.1.0" }
+terminal-sdk = { path = "../../../libs/terminal", version = "0.1.0" }
+# Strict standard-alphabet base64 for the OpenSSH armor (O-K7-5); already locked.
+base64ct = { version = "1", default-features = false }
+
+[dev-dependencies]
+# Host-only real-service integration test (K6 deferral O-K6-9): the admin driver is run
+# against the real KMS state machine with the SSH development custody. Local path edges
+# only; neither is a dependency of the cell itself.
+service-kms = { path = "../../services/kms", version = "0.1.0", features = ["ssh-dev-custody"] }
+types = { path = "../../../libs/types", version = "0.1.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }
