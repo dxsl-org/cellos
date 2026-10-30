@@ -637,3 +637,7 @@ The user selected preparing a native development packet. [Handoff r1](native-dev
 ### Bounded adopted slice — KSSH K2 CP2 (2026-10-30)
 
 The accountable owner approved the [handoff packet](../261030-1000-kms-ssh-key-custody/lock-handoff-k2-cp2.md) ([record](../261030-1000-kms-ssh-key-custody/lock-handoff-k2-cp2-approval.md)): a nine-path file-bounded exception in `cell-contract-0024-locks.md` for the append-only KMS SSH ABI (acceptance ceiling: opcodes 15-24 + `SshKeyUnavailable` arms, host tests only, `DEV_POSTURE`). It serves Cellbox publickey, not an Intel C2C outcome; no phase scope changes, all 38 lock relations keep their gates; WIP stays one implementation slice.
+
+### Bounded adopted slices — KSSH K3 and K5 (2026-10-30)
+
+The accountable owner approved the K3 ([record](../261030-1000-kms-ssh-key-custody/k3-cp1-approval.md)) and K5 ([record](../261030-1000-kms-ssh-key-custody/k5-cp1-approval.md)) lock handoffs: file-bounded exceptions recorded in `cell-contract-0024-locks.md` (K3: kernel permission/policy v8 and two additive caller flags, host/regression lanes; K5: KMS T0 volatile SSH behaviour behind an opt-in feature plus the amended three-package lock diff). They serve Cellbox publickey, not an Intel C2C outcome; no phase scope changes, all 38 lock relations keep their gates; WIP stays one implementation slice (K3 first).
