@@ -649,3 +649,7 @@ The accountable owner approved the K7 handoff ([record](../261030-1000-kms-ssh-k
 ### Bounded adopted slice — NET-OD (2026-10-30)
 
 The accountable owner approved the NET-OD handoff ([record](../261110-0900-tier3-guest-endpoint/net-owner-death-approval.md)): file-bounded exception in `cell-contract-0024-locks.md` for the kernel owner-watch grant, `TryRecv` owner-death delivery and Net abort-on-owner-death (host tests, `DEV_POSTURE`, no Law-1 delta). No phase scope changes; WIP stays one implementation slice.
+
+### Bounded adopted slices — Cellbox follow-ups (2026-10-30)
+
+The accountable owner approved the follow-up handoffs ([record](../261110-1200-cellbox-followups/approval.md)): Phase 02 marker hand-off, NET-GCD, OSD-1 and OSD-3 as file-bounded exceptions in `cell-contract-0024-locks.md` (host tests, `DEV_POSTURE`, no Law-1 delta); the guest pipeline stage is lane-only. No phase scope changes; all 38 relations keep their gates.
