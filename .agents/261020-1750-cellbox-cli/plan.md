@@ -99,3 +99,7 @@ See [review.md](review.md) for adversarial review findings/dispositions and [ver
 
 **Plan path:** `/home/dmin/cellos/.agents/261020-1750-cellbox-cli/plan.md`  
 **Current handoff:** The user selected **“Giao slice Phase 02”**, assigning the current assistant bounded D01 child-context/D02 stream/session integration through the controlling owner. The [allocation/source/private-fixture dossier](phase-02-source-admission.md) must be reviewed and its exact digest approved before protected edits or build/sign/image/boot effects. This is no longer a containment-only preparation scope, but it is not completed source admission, acceptance or permission to promote artifacts. Existing rollout/CP2 blocks and unrelated locks remain.
+
+### KSSH K6 bounded slice (2026-10-30)
+
+S9-5 via KSSH K6 is admitted as a bounded Cellbox slice by user approval ([record](../261030-1000-kms-ssh-key-custody/k6-cp1-approval.md)): client, vissh and cellbox/terminal edits listed in its CP1 section 4, host tests only, no re-opening of closed phases; CBX-24 stays partial until K3/K5/K7/K8 evidence.
