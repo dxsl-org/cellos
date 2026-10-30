@@ -381,3 +381,8 @@ S10-3b's root causes, fix, D3b-1..D3b-3, tests and reruns are drafted in the [S0
 
 2026-10-29 — **S10-5 CP2 APPROVED by the user (relayed by Main), including deviations 1–8 in S10-5.13 and the acknowledgement of the new `command-catalog.md` digest `f06f38ce7447758f7b49e58d6e98dc8309b583515bf1ffd3608e665011a5fd0f` (recorded in `contract-deltas.md`).** Documentation only: no VM, build, source or canonical change; nothing staged or committed (commit is a separate step). The Phase 04 and Phase 10 frontmatter statuses stand: Phase 04 `completed-private-evidence` (criterion 4 checked), Phase 10 `closed-partial-private-evidence`.
 - **Unchanged and not approved:** CBX-27 unmet; CBX-23/24/25 partial; Phase 10 criteria 1 and 4 open; no physical Intel, VMX/EPT, production, remote, KVM or crash-durability claim; no cloud formats; non-Intel recipes refused; all 38 CELL-CONTRACT-0024 lock relations remain.
+
+
+## Update 2026-10-30: Tier-3 guest endpoint
+
+CBX-25 met and CBX-23 guest half met at the SVM/TCG ceiling (plan `261110-0900-tier3-guest-endpoint`, user dispositions; S9-3 pipeline-exec/non-UTF-8 stdin limitation retained). Criterion 1 remains open only because CBX-24 overall is partial (no production/entropy/custody qualification, no crash-durability or rollback claim). Not Intel VMX/EPT.
