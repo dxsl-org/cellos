@@ -21,7 +21,12 @@ pub trait Kms {
         blob_sha256: &[u8; 32],
     ) -> Result<SshTransferBeginResponsePayload, KmsClientError>;
     /// Op 16.
-    fn import_chunk(&self, handle: u64, index: u32, data: &[u8]) -> Result<SshChunkAckPayload, KmsClientError>;
+    fn import_chunk(
+        &self,
+        handle: u64,
+        index: u32,
+        data: &[u8],
+    ) -> Result<SshChunkAckPayload, KmsClientError>;
     /// Op 17.
     fn import_commit(
         &self,
@@ -32,7 +37,11 @@ pub trait Kms {
     /// Op 18.
     fn import_abort(&self, handle: u64) -> Result<(), KmsClientError>;
     /// Op 20.
-    fn delete(&self, name: &[u8], public_key: &[u8; KMS_SSH_PUBLIC_KEY_LEN]) -> Result<(), KmsClientError>;
+    fn delete(
+        &self,
+        name: &[u8],
+        public_key: &[u8; KMS_SSH_PUBLIC_KEY_LEN],
+    ) -> Result<(), KmsClientError>;
 }
 
 impl Kms for KmsClient {
@@ -49,7 +58,12 @@ impl Kms for KmsClient {
         self.ssh_import_begin(name, total_len, blob_sha256)
     }
 
-    fn import_chunk(&self, handle: u64, index: u32, data: &[u8]) -> Result<SshChunkAckPayload, KmsClientError> {
+    fn import_chunk(
+        &self,
+        handle: u64,
+        index: u32,
+        data: &[u8],
+    ) -> Result<SshChunkAckPayload, KmsClientError> {
         self.ssh_import_chunk(handle, index, data)
     }
 
@@ -66,7 +80,11 @@ impl Kms for KmsClient {
         self.ssh_import_abort(handle)
     }
 
-    fn delete(&self, name: &[u8], public_key: &[u8; KMS_SSH_PUBLIC_KEY_LEN]) -> Result<(), KmsClientError> {
+    fn delete(
+        &self,
+        name: &[u8],
+        public_key: &[u8; KMS_SSH_PUBLIC_KEY_LEN],
+    ) -> Result<(), KmsClientError> {
         self.ssh_delete(name, public_key)
     }
 }

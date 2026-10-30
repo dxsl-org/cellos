@@ -1659,7 +1659,14 @@ mod tests {
             .map(|e| e.path.as_str())
             .collect();
         assert_eq!(holders, ["/bin/cellbox-ssh"]);
-        assert!(policy.entries.iter().all(|e| !e.caps.kms_ssh_admin));
+        // KSSH K7: exactly one admin row, for the admin cell, and it is not a sign holder.
+        let admins: Vec<&str> = policy
+            .entries
+            .iter()
+            .filter(|e| e.caps.kms_ssh_admin)
+            .map(|e| e.path.as_str())
+            .collect();
+        assert_eq!(admins, ["/bin/kms-ssh-admin"]);
         let curl = policy
             .entries
             .iter()

@@ -310,11 +310,15 @@ for path in sorted((root / "cells/tools/sys-tools/src/bin").glob("*.rs")):
 # /bin/cellbox-ssh edge only, and tests.rs pins that edge and the KMS SSH grant
 # table. mod.rs and targets.rs are deliberately unchanged (NET_CLIENT stays the
 # shared client ceiling), so their pins keep the CP1-approved digests.
+# Re-pinned 2026-10-30 for KSSH K7 (k7-cp1.md §3): profiles.rs adds the
+# KMS_SSH_ADMIN_EDGE ceiling (LEGACY + kms_ssh_admin) for the shell's
+# /bin/kms-ssh-admin edge only, and tests.rs pins that edge and extends the KMS SSH
+# grant table. mod.rs and targets.rs stay byte-identical.
 authority = {
     "kernel/src/loader/launch_profile/mod.rs": "b8db3b800292ad8ebb72c849fdce4cfad1d731b15184bc47f500cb4ab20ec04c",
-    "kernel/src/loader/launch_profile/profiles.rs": "202745bad8a395770dc6e3d1b7c2d6a1874ef1543f8e1b75cabc6540331c6b38",
+    "kernel/src/loader/launch_profile/profiles.rs": "78058780bad2549c67ab7487b2a1e741d52580cbbdd27d1fccef132a69aa2930",
     "kernel/src/loader/launch_profile/targets.rs": "45834caee5979f219a8df2027958ff6969a5b9d6068da07dea7ce7fb5306a48f",
-    "kernel/src/loader/launch_profile/tests.rs": "f0463db78b787af0e3e7a534058e9a84db358c3de5cd5e6c9e45906c1187a190",
+    "kernel/src/loader/launch_profile/tests.rs": "b41874eb9299487aa5d857617e41027f05f638fd39dc86b6bc4ce19c7a33bc3d",
     "libs/api/src/abi/cell_session.rs": "590fe5ccaa74ae25c751dedb111d76ff6ec102edd52c088198daa28666441595",
 }
 for name, expected in authority.items():

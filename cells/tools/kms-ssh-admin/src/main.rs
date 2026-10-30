@@ -83,7 +83,9 @@ impl UsageError {
     pub const fn message(&self) -> &'static str {
         match self {
             Self::Grammar => report::USAGE,
-            Self::Name => "kms-ssh-admin: invalid key name (1 to 64 characters from A-Z a-z 0-9 _ -)\n",
+            Self::Name => {
+                "kms-ssh-admin: invalid key name (1 to 64 characters from A-Z a-z 0-9 _ -)\n"
+            }
         }
     }
 }
@@ -158,8 +160,14 @@ fn entry(context: &ostd::child_context::ChildContext) -> i32 {
     use ostd::child_context::GrantSlot;
     use terminal_sdk::session::TerminalSession;
 
-    let has_control = context.grants().any(|grant| grant.slot == GrantSlot::Control);
-    let session = if has_control { TerminalSession::from_own_context(context).ok() } else { None };
+    let has_control = context
+        .grants()
+        .any(|grant| grant.slot == GrantSlot::Control);
+    let session = if has_control {
+        TerminalSession::from_own_context(context).ok()
+    } else {
+        None
+    };
     let Some(session) = session else {
         console::refuse_without_terminal(context);
         return report::EXIT_NO_TERMINAL;

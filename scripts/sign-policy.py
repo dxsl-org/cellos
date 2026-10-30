@@ -102,8 +102,8 @@ REGION_MASK = 0b1111   # P1=1 | P4=2 | SRV=4 | /bin/vfs cell-store=8
 # unless the path is under a user-app sandbox prefix (annex S2-T/S2-W §3, D-TW1);
 # for Q it is 1 for `/bin/cellbox` only (Phase 01 CP1, D-Q5); for `kms_ssh_sign` it
 # is 1 for `/bin/cellbox-ssh` only and for `kms_ssh_admin` 1 for
-# `/bin/kms-ssh-admin` only (KSSH K3; no DEV_POLICY row names the admin path, so a
-# loaded policy strips it — H-1). The S2-T/S2-W and Q rights were ambient before
+# `/bin/kms-ssh-admin` only (KSSH K3; KSSH K7 adds the DEV_POLICY row for the admin
+# path — without a row a loaded policy strips the right, H-1). The S2-T/S2-W and Q rights were ambient before
 # their slices, so a 0 default would strip `ps`/`free`, file writes and `export`
 # from every listed cell. A restricted row states them.
 #
@@ -143,6 +143,10 @@ DEV_POLICY = [
     # Phase 09 D79-9: the same cellbox ELF at its ssh install path; outbound
     # client rights only, no direct NIC access.
     ("/bin/cellbox-ssh", 0, 0, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
+    # KSSH K7: the KMS SSH admin cell, launched by the shell's reviewed path edge only.
+    # No network, no spawn; the omitted columns default to the kernel's own request for
+    # the path (X/M/W and the admin right; never the sign right).
+    ("/bin/kms-ssh-admin", 0, 0, 0, 0, 0, 0,   0, 0, 0),
     # ── driver cells (pcie_driver comes from CapSet::with_path_caps) ───────────
     ("/bin/block",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/nvme",        0, 0, 0, 0, 0, 0,     1, 0, 0),

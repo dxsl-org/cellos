@@ -9,8 +9,7 @@ use alloc::format;
 use alloc::string::String;
 use base64ct::{Base64Unpadded, Encoding};
 use ostd::clients::kms::{
-    KmsClientError, KmsCustodyPosture, KmsErrorCode, KmsSshKeyCustody,
-    SshKeyStatusPayload,
+    KmsClientError, KmsCustodyPosture, KmsErrorCode, KmsSshKeyCustody, SshKeyStatusPayload,
 };
 
 pub const EXIT_OK: i32 = 0;
@@ -31,7 +30,8 @@ pub const NO_TERMINAL: &str = "kms-ssh-admin: an interactive terminal session is
 pub const IMPORT_PROMPT: &str =
     "Paste the OpenSSH private key now (nothing is echoed; Escape cancels):\n";
 pub const IMPORT_CANCELLED: &str = "kms-ssh-admin: cancelled; nothing imported\n";
-pub const DELETE_PROMPT: &str = "Type 'delete' and press Enter to delete this key (Escape cancels): ";
+pub const DELETE_PROMPT: &str =
+    "Type 'delete' and press Enter to delete this key (Escape cancels): ";
 pub const DELETE_CANCELLED: &str = "kms-ssh-admin: cancelled; nothing deleted\n";
 pub const TEXT_TOO_LONG: &str = "kms-ssh-admin: key text is longer than 98304 bytes\n";
 pub const PLAIN_WARNING: &str =
@@ -53,7 +53,9 @@ pub fn custody_name(custody: KmsSshKeyCustody) -> &'static str {
 pub fn posture_text(posture: KmsCustodyPosture) -> &'static str {
     match posture {
         KmsCustodyPosture::Unassessed => "posture unassessed",
-        KmsCustodyPosture::DevPostureVolatile => "DEV_POSTURE volatile: lost when the key service restarts",
+        KmsCustodyPosture::DevPostureVolatile => {
+            "DEV_POSTURE volatile: lost when the key service restarts"
+        }
         KmsCustodyPosture::DevPosturePersistent => {
             "DEV_POSTURE persistent: no rollback or crash-durability claim"
         }
@@ -115,7 +117,12 @@ pub fn deleted(name: &str) -> String {
 
 /// A completed import: KMS's facts about the stored key, and what the cell itself decoded
 /// (length and a SHA-256 prefix) so the operator can compare it with the host's blob.
-pub fn imported(name: &str, status: &SshKeyStatusPayload, blob_len: usize, digest: &[u8; 32]) -> String {
+pub fn imported(
+    name: &str,
+    status: &SshKeyStatusPayload,
+    blob_len: usize,
+    digest: &[u8; 32],
+) -> String {
     let mut text = format!(
         "kms-ssh-admin: imported key '{name}'\n{}  blob: {blob_len} bytes, sha256 prefix {}\n",
         key_lines(status),
@@ -135,10 +142,12 @@ pub fn kms_failure(error: KmsClientError) -> (i32, String) {
         KmsClientError::Timeout => (EXIT_TIMEOUT, "the key service did not answer in time"),
         KmsClientError::ServiceNotFound => (EXIT_REFUSED, "key service not found"),
         KmsClientError::Ipc => (EXIT_REFUSED, "key service transport error"),
-        KmsClientError::WrongSender => (EXIT_REFUSED, "the reply did not come from the key service"),
-        KmsClientError::MismatchedResponse | KmsClientError::InvalidPayload | KmsClientError::Wire(_) => {
-            (EXIT_REFUSED, "key service protocol error")
+        KmsClientError::WrongSender => {
+            (EXIT_REFUSED, "the reply did not come from the key service")
         }
+        KmsClientError::MismatchedResponse
+        | KmsClientError::InvalidPayload
+        | KmsClientError::Wire(_) => (EXIT_REFUSED, "key service protocol error"),
         KmsClientError::Service(code) => return (EXIT_REFUSED, service_message(code)),
     };
     (code, line(message))

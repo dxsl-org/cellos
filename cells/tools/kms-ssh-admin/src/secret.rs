@@ -12,12 +12,16 @@ pub struct Secret {
 impl Secret {
     /// Empty buffer that holds at most `capacity` bytes.
     pub fn with_capacity(capacity: usize) -> Self {
-        Self { bytes: Vec::with_capacity(capacity) }
+        Self {
+            bytes: Vec::with_capacity(capacity),
+        }
     }
 
     /// `len` zero bytes (capacity `len`), for decoding into.
     pub fn zeroed(len: usize) -> Self {
-        Self { bytes: alloc::vec![0u8; len] }
+        Self {
+            bytes: alloc::vec![0u8; len],
+        }
     }
 
     pub fn len(&self) -> usize {

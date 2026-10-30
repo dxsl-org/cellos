@@ -136,7 +136,11 @@ pub fn read_block(events: &mut dyn Events, buf: &mut Secret) -> Block {
                     None
                 }
             }
-            EventKind::Key { code, modifiers: mods, pressed: 1 | 2 } if is_submit(*code, *mods) => {
+            EventKind::Key {
+                code,
+                modifiers: mods,
+                pressed: 1 | 2,
+            } if is_submit(*code, *mods) => {
                 if !buf.push(b'\n') {
                     Some(Block::TooLong)
                 } else if end_line_seen(buf, &mut checked) {
@@ -151,7 +155,11 @@ pub fn read_block(events: &mut dyn Events, buf: &mut Secret) -> Block {
                     buf.pop();
                     // A removed line break reopens its line for inspection.
                     if checked > buf.len() {
-                        checked = buf.as_slice().iter().rposition(|&b| b == b'\n').map_or(0, |at| at + 1);
+                        checked = buf
+                            .as_slice()
+                            .iter()
+                            .rposition(|&b| b == b'\n')
+                            .map_or(0, |at| at + 1);
                     }
                 }
                 None
@@ -195,13 +203,15 @@ pub fn read_word(events: &mut dyn Events) -> Word {
                 } else {
                     // Never the confirmation word, and never longer than the bound.
                     word.clear();
-                    word.push_str("?");
+                    word.push('?');
                 }
                 None
             }
-            EventKind::Key { code, modifiers: mods, pressed: 1 | 2 } if !paste && is_submit(*code, *mods) => {
-                Some(Word::Given(core::mem::take(&mut word)))
-            }
+            EventKind::Key {
+                code,
+                modifiers: mods,
+                pressed: 1 | 2,
+            } if !paste && is_submit(*code, *mods) => Some(Word::Given(core::mem::take(&mut word))),
             kind if plain_key(kind, key_code::ESCAPE) => Some(Word::Cancelled),
             kind if !paste && plain_key(kind, key_code::BACKSPACE) => {
                 word.pop();
@@ -238,11 +248,16 @@ mod tty {
 
     /// Say why on this child's stderr stream, when it has one (a pipeline stage does).
     pub fn refuse_without_terminal(context: &ChildContext) {
-        let Some(grant) = context.grants().find(|g| g.slot == GrantSlot::Stderr && g.kind == 1) else {
+        let Some(grant) = context
+            .grants()
+            .find(|g| g.slot == GrantSlot::Stderr && g.kind == 1)
+        else {
             return;
         };
-        let (Ok(operation), Ok(object)) = (OperationRef::from_raw(context.operation()), EndpointRef::from_raw(grant.object))
-        else {
+        let (Ok(operation), Ok(object)) = (
+            OperationRef::from_raw(context.operation()),
+            EndpointRef::from_raw(grant.object),
+        ) else {
             return;
         };
         let endpoint = Endpoint::new(object, operation);
@@ -265,7 +280,10 @@ mod tty {
 
     impl Tty {
         pub fn new(session: TerminalSession) -> Self {
-            Self { session, lost: false }
+            Self {
+                session,
+                lost: false,
+            }
         }
 
         fn write(&mut self, stderr: bool, mut data: &[u8]) {
@@ -288,7 +306,11 @@ mod tty {
     fn note(lost: &mut bool, status: Status) {
         if matches!(
             status,
-            Status::Stale | Status::Revoked | Status::BrokenPipe | Status::WrongSession | Status::WrongEpoch
+            Status::Stale
+                | Status::Revoked
+                | Status::BrokenPipe
+                | Status::WrongSession
+                | Status::WrongEpoch
         ) {
             *lost = true;
         }
@@ -303,8 +325,9 @@ mod tty {
         fn next(&mut self) -> Next {
             loop {
                 // Without the monotonic clock the wait is a one-tick poll.
-                let until = ostd::session::monotonic_ns()
-                    .map_or(0, |now| now.saturating_add(SLICE_MS.saturating_mul(1_000_000)));
+                let until = ostd::session::monotonic_ns().map_or(0, |now| {
+                    now.saturating_add(SLICE_MS.saturating_mul(1_000_000))
+                });
                 match self.session.next_event(until) {
                     Ok(event) => return Next::Event(event.kind),
                     Err(Status::TimedOut | Status::WouldBlock) => {
@@ -338,7 +361,13 @@ mod tty {
                     return Block::Lost;
                 }
             };
-            let result = read_block(&mut Source { session: guard.session(), lost: &mut self.lost }, buf);
+            let result = read_block(
+                &mut Source {
+                    session: guard.session(),
+                    lost: &mut self.lost,
+                },
+                buf,
+            );
             match guard.release() {
                 Ok(()) => result,
                 Err(status) => {
@@ -349,7 +378,10 @@ mod tty {
         }
 
         fn read_word(&mut self) -> Word {
-            read_word(&mut Source { session: &mut self.session, lost: &mut self.lost })
+            read_word(&mut Source {
+                session: &mut self.session,
+                lost: &mut self.lost,
+            })
         }
 
         fn lost(&self) -> bool {

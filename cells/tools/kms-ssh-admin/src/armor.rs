@@ -170,7 +170,7 @@ pub fn decode(text: &[u8]) -> Result<Secret, ArmorError> {
     // outside the alphabet and non-zero trailing bits. A 65,536 and a 65,537 byte blob
     // share one base64 length, so the destination is sized by the upper bound and the
     // real length is checked after the decode.
-    if encoded.len() % 4 != 0 {
+    if !encoded.len().is_multiple_of(4) {
         return Err(ArmorError::BadBase64);
     }
     let mut blob = Secret::zeroed(encoded.len() / 4 * 3);

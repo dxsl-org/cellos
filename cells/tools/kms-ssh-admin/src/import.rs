@@ -5,9 +5,7 @@
 //! decryptability is not checked here (K2 O-15). The cell prints the blob length and a
 //! SHA-256 prefix so the operator can compare it with the host's decoded blob.
 
-use ostd::clients::kms::{
-    ssh_chunk_count, KmsClientError, SshKeyStatusPayload, KMS_SSH_CHUNK_LEN,
-};
+use ostd::clients::kms::{ssh_chunk_count, KmsClientError, SshKeyStatusPayload, KMS_SSH_CHUNK_LEN};
 
 use crate::armor::{self, TEXT_MAX};
 use crate::console::{Block, Console};
@@ -38,7 +36,11 @@ pub fn drive(kms: &dyn Kms, name: &[u8], blob: &[u8]) -> Result<Imported, KmsCli
             let _ = kms.import_abort(begin.handle);
         }
     }
-    Ok(Imported { status: committed?, blob_len: blob.len(), digest })
+    Ok(Imported {
+        status: committed?,
+        blob_len: blob.len(),
+        digest,
+    })
 }
 
 fn stage_and_commit(
@@ -114,7 +116,12 @@ pub fn run(name: &str, console: &mut dyn Console, kms: &dyn Kms) -> i32 {
     };
     match drive(kms, name.as_bytes(), blob.as_slice()) {
         Ok(done) => {
-            console.out(&report::imported(name, &done.status, done.blob_len, &done.digest));
+            console.out(&report::imported(
+                name,
+                &done.status,
+                done.blob_len,
+                &done.digest,
+            ));
             if console.lost() {
                 EXIT_NO_TERMINAL
             } else {
