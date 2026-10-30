@@ -103,3 +103,7 @@ See [review.md](review.md) for adversarial review findings/dispositions and [ver
 ### KSSH K6 bounded slice (2026-10-30)
 
 S9-5 via KSSH K6 is admitted as a bounded Cellbox slice by user approval ([record](../261030-1000-kms-ssh-key-custody/k6-cp1-approval.md)): client, vissh and cellbox/terminal edits listed in its CP1 section 4, host tests only, no re-opening of closed phases; CBX-24 stays partial until K3/K5/K7/K8 evidence.
+
+### KSSH K8 T0 lane (2026-10-30)
+
+User approved [K8 CP1](../261030-1000-kms-ssh-key-custody/k8-cp1-approval.md): private lane edits and one RT0 plus one RT0f QEMU/TCG evidence boot (no promotion, no rerun, no T1). CBX-24 stays partial until the user's explicit disposition after K8 CP2.
