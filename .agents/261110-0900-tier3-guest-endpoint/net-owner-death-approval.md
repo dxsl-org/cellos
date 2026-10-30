@@ -1,0 +1,5 @@
+# NET-OD CP1 + lock handoff approval
+
+Date: 2026-10-30. Approver: accountable owner (user), "Duyệt tất cả theo khuyến nghị" (D-NOD-1..13 as recommended; acknowledgement of the two behavioural points: (1) WatchCellOwner grant widened to the registry-bound Active NET provider cell serving the principal; (2) TryRecv mask 0 delivers owner deaths).
+- Text: net-owner-death-cp1.md SHA-256 c40fdf98ebaee4de89bb13acc64a2bc5a03ec4a2d83bae6cb059729f61224965. File-bounded exception for its section 7 closure (three kernel paths: scheduler.rs, syscall.rs, tcb.rs doc comments; Net: socket_table.rs, socket_table/tests.rs, service-runtime.rs, new service-runtime-owner-death-tests.rs; docs/network-api.md; CHANGELOG.md at CP2). No libs/api, libs/types, Cargo.lock, kernel/src/main.rs, manifest/allowlist change. Pinned files stay byte-identical. DEV_POSTURE, host tests; QEMU proof only as the T3 diag + full rerun under its own later CP1.
+- Narrowing L2 and L38 step 6; rows L8, L21, L23, L33, L35, L36, L9, L37, L32 keep whole-plan relations.
