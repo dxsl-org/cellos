@@ -8,7 +8,7 @@ use types::kms::{
 };
 
 use crate::auth::{
-    register_broker, register_service_net, BrokerBinding, ServiceNetBinding,
+    authorize_supervisor, register_broker, register_service_net, BrokerBinding, ServiceNetBinding,
     ServiceRegistrySnapshot,
 };
 use crate::reply::SuccessPayload;
@@ -195,6 +195,22 @@ impl KmsService {
             KmsOpcode::GetRelayActivePublicKey => {
                 self.get_relay_active_public_key(&request, sender, caller, registry)
             }
+            // Opcodes 15-24 (single SSH identity custody). The service has no
+            // SSH leaf yet, so every one of them is admitted through the
+            // attested-caller check and then answered `SshKeyUnavailable`.
+            // There is deliberately no storage, parser, KDF, signer, or key
+            // handling behind these arms; they are the status-honest answer of
+            // a build without the leaf, not an implementation of it.
+            KmsOpcode::BeginSshKeyImport
+            | KmsOpcode::ImportSshKeyChunk
+            | KmsOpcode::CommitSshKeyImport
+            | KmsOpcode::AbortSshKeyImport
+            | KmsOpcode::GetSshKeyStatus
+            | KmsOpcode::DeleteSshKey
+            | KmsOpcode::SignSshUserauth
+            | KmsOpcode::BeginSshUnlock
+            | KmsOpcode::SshUnlockChunk
+            | KmsOpcode::AbortSshUnlock => ssh_leaf_unavailable(sender, caller),
         };
         Some(match result {
             Ok(payload) => {
@@ -255,6 +271,39 @@ fn require_empty(request: &KmsRequestV1) -> Result<(), KmsErrorCode> {
         .ok_or(KmsErrorCode::ProviderFailure)
 }
 
+/// Answer for opcodes 15-24 while the SSH leaf is not served.
+///
+/// Admission is the existing attested-caller validation only (missing trailer,
+/// zero generation, or a `sender_tid` that is not the receive sender is
+/// `CallerUnattested`). The Admin and Login caller classes are not defined yet,
+/// so no class is checked and the payload is not parsed. Nothing is read or
+/// written before the typed `SshKeyUnavailable` answer.
+fn ssh_leaf_unavailable(
+    sender: usize,
+    caller: Option<CallerIdentity>,
+) -> Result<SuccessPayload, KmsErrorCode> {
+    admit_attested_caller(sender, caller)?;
+    Err(KmsErrorCode::SshKeyUnavailable)
+}
+
+/// Run only the caller-trailer validation shared by every KMS opcode.
+///
+/// `validated_caller` is private to `auth`; `authorize_supervisor` runs it
+/// first and then compares the live supervisor tid, which is made vacuous here
+/// by passing the sender itself. No supervisor authority is implied.
+fn admit_attested_caller(
+    sender: usize,
+    caller: Option<CallerIdentity>,
+) -> Result<(), KmsErrorCode> {
+    authorize_supervisor(sender, caller, Some(sender))?;
+    // A zero cell id is never a live Cell principal; refuse it with the same
+    // typed error as a missing trailer (refusal matrix row 1).
+    if caller.is_some_and(|caller| caller.cell_id == 0) {
+        return Err(KmsErrorCode::CallerUnattested);
+    }
+    Ok(())
+}
+
 /// Boot only from authenticated protected lifecycle state and a strictly
 /// newer protected restart epoch. Unavailable, torn, or regressed state seals
 /// enrollment and serving; no process-local counter substitutes for it.
@@ -272,5 +321,210 @@ fn boot_lifecycle() -> crate::lifecycle::RelayLifecycle {
     #[cfg(test)]
     {
         crate::lifecycle::RelayLifecycle::sealed()
+    }
+}
+
+#[cfg(test)]
+mod ssh_unavailable_tests {
+    use super::*;
+    use crate::storage::FixtureRelayProvider;
+    use types::kms::{KmsCapabilityReadiness, RelayP256StatusPayload, KMS_PAYLOAD_LEN};
+
+    const SSH_OPCODES: [KmsOpcode; 10] = [
+        KmsOpcode::BeginSshKeyImport,
+        KmsOpcode::ImportSshKeyChunk,
+        KmsOpcode::CommitSshKeyImport,
+        KmsOpcode::AbortSshKeyImport,
+        KmsOpcode::GetSshKeyStatus,
+        KmsOpcode::DeleteSshKey,
+        KmsOpcode::SignSshUserauth,
+        KmsOpcode::BeginSshUnlock,
+        KmsOpcode::SshUnlockChunk,
+        KmsOpcode::AbortSshUnlock,
+    ];
+    const NO_SERVICES: ServiceRegistrySnapshot = ServiceRegistrySnapshot {
+        net_broker_tid: None,
+        supervisor_tid: None,
+        net_tid: None,
+    };
+
+    fn identity(cell_id: u64, generation: u64, tid: usize, flags: u32) -> CallerIdentity {
+        CallerIdentity {
+            flags,
+            cell_id,
+            generation,
+            sender_tid: tid as u64,
+        }
+    }
+
+    fn call(
+        service: &mut KmsService,
+        opcode: KmsOpcode,
+        payload: &[u8],
+        sender: usize,
+        caller: Option<CallerIdentity>,
+        registry: ServiceRegistrySnapshot,
+    ) -> KmsResponseV1 {
+        let frame = KmsRequestV1::new(opcode, 41, payload).unwrap().to_bytes();
+        service.handle(&frame, sender, caller, registry).unwrap()
+    }
+
+    fn assert_error(response: &KmsResponseV1, opcode: KmsOpcode, expected: KmsErrorCode) {
+        assert_eq!(response.opcode().unwrap(), opcode);
+        assert_eq!(response.request_id, 41);
+        assert_eq!(response.error_code().unwrap(), Some(expected));
+        assert!(response.payload().unwrap().is_empty());
+    }
+
+    #[test]
+    fn unattested_callers_are_refused_before_anything_else() {
+        let garbage = [0xA5u8; KMS_PAYLOAD_LEN];
+        for opcode in SSH_OPCODES {
+            for caller in [
+                None,
+                Some(identity(20, 0, 7, 0)),
+                Some(identity(20, 30, 70, 0)),
+            ] {
+                let mut service = KmsService::new();
+                let response = call(&mut service, opcode, &garbage, 7, caller, NO_SERVICES);
+                assert_error(&response, opcode, KmsErrorCode::CallerUnattested);
+            }
+        }
+    }
+
+    #[test]
+    fn zero_cell_id_is_unattested() {
+        let mut service = KmsService::new();
+        for opcode in SSH_OPCODES {
+            let response = call(
+                &mut service,
+                opcode,
+                &[],
+                7,
+                Some(identity(0, 30, 7, 0)),
+                NO_SERVICES,
+            );
+            assert_error(&response, opcode, KmsErrorCode::CallerUnattested);
+        }
+    }
+
+    #[test]
+    fn attested_callers_get_the_unavailable_status_without_payload_parsing() {
+        let valid_shaped = [0x11u8; KMS_PAYLOAD_LEN];
+        for opcode in SSH_OPCODES {
+            let mut service = KmsService::new();
+            let mut reference: Option<[u8; 128]> = None;
+            for (payload, flags) in [
+                (&[][..], 0u32),
+                (&valid_shaped[..], 0),
+                (&valid_shaped[..8], u32::MAX),
+            ] {
+                let response = call(
+                    &mut service,
+                    opcode,
+                    payload,
+                    7,
+                    Some(identity(20, 30, 7, flags)),
+                    NO_SERVICES,
+                );
+                assert_error(&response, opcode, KmsErrorCode::SshKeyUnavailable);
+                // Identical bytes whatever the payload: nothing was parsed.
+                let bytes = response.to_bytes();
+                assert_eq!(*reference.get_or_insert(bytes), bytes);
+            }
+            // Every attested identity gets the same answer, including the
+            // registered supervisor and broker tids: no class exists yet.
+            let registry = ServiceRegistrySnapshot {
+                net_broker_tid: Some(7),
+                supervisor_tid: Some(7),
+                net_tid: Some(7),
+            };
+            let response = call(
+                &mut service,
+                opcode,
+                &[],
+                7,
+                Some(identity(20, 30, 7, 0)),
+                registry,
+            );
+            assert_error(&response, opcode, KmsErrorCode::SshKeyUnavailable);
+        }
+    }
+
+    #[test]
+    fn ssh_arms_change_no_service_state() {
+        let mut service = KmsService::new();
+        for opcode in SSH_OPCODES {
+            for caller in [None, Some(identity(20, 30, 7, 0))] {
+                call(&mut service, opcode, &[0u8; 8], 7, caller, NO_SERVICES);
+            }
+        }
+        assert!(service.binding.is_none());
+        assert!(service.service_net_binding.is_none());
+        assert_eq!(service.next_binding_epoch, 1);
+        assert_eq!(service.next_service_binding_epoch, 1);
+        assert_eq!(service.last_tls_request_id, 0);
+    }
+
+    #[test]
+    fn undefined_opcodes_and_noncanonical_frames_get_no_reply() {
+        let mut service = KmsService::new();
+        let attested = Some(identity(20, 30, 7, 0));
+        let valid = KmsRequestV1::new(KmsOpcode::SignSshUserauth, 41, &[])
+            .unwrap()
+            .to_bytes();
+        assert!(service.handle(&valid, 7, attested, NO_SERVICES).is_some());
+        // Opcode 25 is not defined, a nonzero flags/reserved word or tail byte
+        // is noncanonical, and version 2 is unsupported: all are dropped.
+        for (at, value) in [(1, 25u8), (2, 1), (10, 1), (15, 1), (127, 1), (0, 2)] {
+            let mut frame = valid;
+            frame[at] = value;
+            assert!(
+                service.handle(&frame, 7, attested, NO_SERVICES).is_none(),
+                "byte {at}"
+            );
+        }
+    }
+
+    #[test]
+    fn relay_readiness_never_makes_the_ssh_leaf_available() {
+        let mut service = KmsService::with_provider_fixture(FixtureRelayProvider::production());
+        let net = ServiceRegistrySnapshot {
+            net_broker_tid: None,
+            supervisor_tid: Some(8),
+            net_tid: Some(7),
+        };
+        let net_caller = Some(identity(50, 4, 7, 0));
+        let bound = call(
+            &mut service,
+            KmsOpcode::RegisterServiceNetInstance,
+            &[],
+            7,
+            net_caller,
+            net,
+        );
+        assert_eq!(bound.error_code().unwrap(), None);
+        let relay_status = |service: &mut KmsService| {
+            let response = call(
+                service,
+                KmsOpcode::GetRelayP256Status,
+                &[],
+                7,
+                net_caller,
+                net,
+            );
+            RelayP256StatusPayload::decode(response.payload().unwrap()).unwrap()
+        };
+        let before = relay_status(&mut service);
+        assert_eq!(before.readiness, KmsCapabilityReadiness::Ready);
+
+        // The relay leaf is Ready; every SSH opcode still reports the SSH leaf
+        // unavailable, even for the very identity that is the live net service.
+        for opcode in SSH_OPCODES {
+            let response = call(&mut service, opcode, &[], 7, net_caller, net);
+            assert_error(&response, opcode, KmsErrorCode::SshKeyUnavailable);
+        }
+        // And the SSH calls did not disturb the relay leaf.
+        assert_eq!(relay_status(&mut service), before);
     }
 }

@@ -53,6 +53,27 @@ wire_enum!(
         StageRelayProfile = 13,
         /// Read the active generation's public SPKI and its SHA-256.
         GetRelayActivePublicKey = 14,
+        /// Open one pending SSH identity import (admin class): declare the
+        /// admin-chosen name, blob length, and SHA-256.
+        BeginSshKeyImport = 15,
+        /// Deliver one strictly ordered chunk of the pending SSH import.
+        ImportSshKeyChunk = 16,
+        /// Verify SHA-256 and count, then parse, store, and destroy staging.
+        CommitSshKeyImport = 17,
+        /// Destroy the pending SSH import.
+        AbortSshKeyImport = 18,
+        /// Read SSH leaf readiness (empty name) or the one stored key's facts.
+        GetSshKeyStatus = 19,
+        /// Delete the single stored SSH identity (admin class).
+        DeleteSshKey = 20,
+        /// Sign the session-bound SSH userauth input (login class).
+        SignSshUserauth = 21,
+        /// Open a one-shot staged secret for the wrapped identity (login class).
+        BeginSshUnlock = 22,
+        /// Deliver one strictly ordered chunk of the staged unlock secret.
+        SshUnlockChunk = 23,
+        /// Destroy the staged unlock secret without signing.
+        AbortSshUnlock = 24,
     }
 );
 wire_enum!(
@@ -97,6 +118,8 @@ wire_enum!(
     pub enum KmsKeyAlgorithm: u8 {
         C2cX25519 = 1,
         RelayP256Sha256 = 2,
+        /// One KMS-custodied OpenSSH ed25519 user identity (K2).
+        SshEd25519 = 3,
     }
 );
 wire_enum!(
@@ -116,6 +139,29 @@ wire_enum!(
         DevelopmentReference = 1,
         QualificationTest = 2,
         ProductionQualified = 3,
+    }
+);
+wire_enum!(
+    /// How the single stored SSH identity is protected, derived by KMS from the
+    /// cipher and KDF names of the imported blob and never caller-selected.
+    pub enum KmsSshKeyCustody: u8 {
+        /// No key is stored.
+        None = 0,
+        /// Unencrypted private section; signs without an unlock secret.
+        Plain = 1,
+        /// Passphrase-wrapped; one staged unlock secret authorizes one signature.
+        PassphraseWrapped = 2,
+    }
+);
+wire_enum!(
+    /// Custody posture of the SSH leaf. Both stored values are development
+    /// posture; no production-qualified value is declared.
+    pub enum KmsCustodyPosture: u8 {
+        Unassessed = 0,
+        /// Volatile in-RAM store (T0).
+        DevPostureVolatile = 1,
+        /// Persistent development store (T1).
+        DevPosturePersistent = 2,
     }
 );
 wire_enum!(
@@ -152,6 +198,30 @@ wire_enum!(
         TimeUntrusted = 25,
         /// Policy epoch moved backward against the protected monotonic floor.
         PolicyEpochRegressed = 26,
+        /// The SSH leaf is not serving (not provisioned, provider failed, sealed).
+        SshKeyUnavailable = 27,
+        /// Named key or public key is not stored, or a delete public key mismatched.
+        SshKeyNotFound = 28,
+        /// The name is taken or the public key is already stored.
+        SshKeyExists = 29,
+        /// An SSH identity already exists (exactly one per store) or the byte budget is reached.
+        SshStoreFull = 30,
+        /// An import by the same principal is still open.
+        SshImportPending = 31,
+        /// SSH transfer handle is stale, foreign, consumed, or unknown.
+        SshHandleInvalid = 32,
+        /// SSH chunk index, length, total, or commit state is out of order.
+        SshOrderInvalid = 33,
+        /// SHA-256 or chunk count mismatch at commit.
+        SshImportIntegrity = 34,
+        /// Content refused by the pre-KDF allowlist or structure checks (any reason).
+        SshKeyFormatRejected = 35,
+        /// Sign on a wrapped key with no complete staged secret.
+        SshUnlockRequired = 36,
+        /// Wrong passphrase, checkint mismatch, or derived public key mismatch.
+        SshUnlockFailed = 37,
+        /// Unlock failure limit reached; refused before any KDF work.
+        SshUnlockLocked = 38,
     }
 );
 

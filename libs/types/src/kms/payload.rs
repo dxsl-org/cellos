@@ -4,6 +4,7 @@ mod noise;
 mod relay;
 mod rotate;
 mod service_net;
+mod ssh;
 mod tls;
 
 pub use binding::{AcquireNodeIdentityPayload, BrokerBindingPayload, NodeIdentityStatusPayload};
@@ -17,6 +18,12 @@ pub use noise::{NoiseStaticDhRequestPayload, NoiseStaticDhResponsePayload};
 pub use relay::RelayP256StatusPayload;
 pub use rotate::{RotateNodeIdentityRequestPayload, RotateNodeIdentityResponsePayload};
 pub use service_net::ServiceNetBindingPayload;
+pub use ssh::{
+    SshAbortRequestPayload, SshChunkAckPayload, SshChunkRequestPayload, SshDeleteRequestPayload,
+    SshImportBeginRequestPayload, SshImportCommitRequestPayload, SshKeyStatusPayload,
+    SshSignRequestPayload, SshSignResponsePayload, SshStatusRequestPayload,
+    SshTransferBeginResponsePayload, SshUnlockBeginRequestPayload,
+};
 pub use tls::{
     Tls13ClientCertificateVerifyRequestPayload, Tls13ClientCertificateVerifyResponsePayload,
 };

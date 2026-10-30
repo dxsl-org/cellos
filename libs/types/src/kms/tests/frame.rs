@@ -2,9 +2,13 @@
 //! Frame envelope and append-only opcode layout tests.
 
 use crate::kms::{
-    BindingEpoch, KmsErrorCode, KmsOpcode, KmsRequestV1, KmsResponseV1, KmsWireError,
-    NodeIdentityHandle, NoiseStaticDhRequestPayload, RelayP256StatusPayload,
-    RotateNodeIdentityResponsePayload, ServiceNetBindingPayload,
+    BindingEpoch, KmsErrorCode, KmsKeyAlgorithm, KmsOpcode, KmsRequestV1, KmsResponseV1,
+    KmsWireError, NodeIdentityHandle, NoiseStaticDhRequestPayload, RelayP256StatusPayload,
+    RotateNodeIdentityResponsePayload, ServiceNetBindingPayload, SshAbortRequestPayload,
+    SshChunkAckPayload, SshChunkRequestPayload, SshDeleteRequestPayload,
+    SshImportBeginRequestPayload, SshImportCommitRequestPayload, SshKeyStatusPayload,
+    SshSignRequestPayload, SshSignResponsePayload, SshStatusRequestPayload,
+    SshTransferBeginResponsePayload, SshUnlockBeginRequestPayload,
     Tls13ClientCertificateVerifyRequestPayload, Tls13ClientCertificateVerifyResponsePayload,
     KMS_MESSAGE_LEN, KMS_NODE_KEY_ID_C2C, KMS_PAYLOAD_LEN,
 };
@@ -28,6 +32,21 @@ fn fixed_layouts_match_the_frozen_wire_contract() {
         core::mem::size_of::<Tls13ClientCertificateVerifyResponsePayload>(),
         64
     );
+    // SSH identity payloads (opcodes 15-24). The 105-byte delete request pads
+    // to 112 in memory because it leads with a u64; its wire length is 105.
+    assert_eq!(core::mem::size_of::<SshImportBeginRequestPayload>(), 112);
+    assert_eq!(core::mem::size_of::<SshTransferBeginResponsePayload>(), 24);
+    assert_eq!(core::mem::size_of::<SshChunkRequestPayload>(), 112);
+    assert_eq!(core::mem::size_of::<SshChunkAckPayload>(), 16);
+    assert_eq!(core::mem::size_of::<SshImportCommitRequestPayload>(), 48);
+    assert_eq!(core::mem::size_of::<SshAbortRequestPayload>(), 8);
+    assert_eq!(core::mem::size_of::<SshKeyStatusPayload>(), 80);
+    assert_eq!(core::mem::size_of::<SshStatusRequestPayload>(), 65);
+    assert_eq!(core::mem::size_of::<SshDeleteRequestPayload>(), 112);
+    assert_eq!(SshDeleteRequestPayload::LEN, 105);
+    assert_eq!(core::mem::size_of::<SshUnlockBeginRequestPayload>(), 48);
+    assert_eq!(core::mem::size_of::<SshSignRequestPayload>(), 104);
+    assert_eq!(core::mem::size_of::<SshSignResponsePayload>(), 104);
 }
 
 #[test]
@@ -46,12 +65,62 @@ fn opcode_values_are_append_only() {
     assert_eq!(KmsOpcode::AbortRelayEnrollment as u8, 12);
     assert_eq!(KmsOpcode::StageRelayProfile as u8, 13);
     assert_eq!(KmsOpcode::GetRelayActivePublicKey as u8, 14);
+    assert_eq!(KmsOpcode::BeginSshKeyImport as u8, 15);
+    assert_eq!(KmsOpcode::ImportSshKeyChunk as u8, 16);
+    assert_eq!(KmsOpcode::CommitSshKeyImport as u8, 17);
+    assert_eq!(KmsOpcode::AbortSshKeyImport as u8, 18);
+    assert_eq!(KmsOpcode::GetSshKeyStatus as u8, 19);
+    assert_eq!(KmsOpcode::DeleteSshKey as u8, 20);
+    assert_eq!(KmsOpcode::SignSshUserauth as u8, 21);
+    assert_eq!(KmsOpcode::BeginSshUnlock as u8, 22);
+    assert_eq!(KmsOpcode::SshUnlockChunk as u8, 23);
+    assert_eq!(KmsOpcode::AbortSshUnlock as u8, 24);
+    assert_eq!(KmsOpcode::try_from(25), Err(25));
+
+    assert_eq!(KmsKeyAlgorithm::C2cX25519 as u8, 1);
+    assert_eq!(KmsKeyAlgorithm::RelayP256Sha256 as u8, 2);
+    assert_eq!(KmsKeyAlgorithm::SshEd25519 as u8, 3);
+
+    assert_eq!(KmsErrorCode::CallerUnattested as u16, 1);
+    assert_eq!(KmsErrorCode::PermissionDenied as u16, 2);
+    assert_eq!(KmsErrorCode::BindingRequired as u16, 3);
+    assert_eq!(KmsErrorCode::BindingStale as u16, 4);
+    assert_eq!(KmsErrorCode::SecureRootRequired as u16, 5);
+    assert_eq!(KmsErrorCode::CloneDetected as u16, 6);
+    assert_eq!(KmsErrorCode::InvalidHandle as u16, 7);
+    assert_eq!(KmsErrorCode::InvalidPeerKey as u16, 8);
+    assert_eq!(KmsErrorCode::UnknownOpcode as u16, 9);
+    assert_eq!(KmsErrorCode::UnsupportedVersion as u16, 10);
+    assert_eq!(KmsErrorCode::PersistFailed as u16, 11);
+    assert_eq!(KmsErrorCode::ProviderFailure as u16, 12);
+    assert_eq!(KmsErrorCode::Busy as u16, 13);
+    assert_eq!(KmsErrorCode::ServiceBindingRequired as u16, 14);
+    assert_eq!(KmsErrorCode::ServiceBindingStale as u16, 15);
+    assert_eq!(KmsErrorCode::RelayUnavailable as u16, 16);
+    assert_eq!(KmsErrorCode::RelayGenerationMismatch as u16, 17);
+    assert_eq!(KmsErrorCode::ActiveProfileMismatch as u16, 18);
+    assert_eq!(KmsErrorCode::InvalidSignature as u16, 19);
+    assert_eq!(KmsErrorCode::QualificationRequired as u16, 20);
+    assert_eq!(KmsErrorCode::InvalidRequest as u16, 21);
 
     assert_eq!(KmsErrorCode::EnrollmentPendingExists as u16, 22);
     assert_eq!(KmsErrorCode::CsrHandleInvalid as u16, 23);
     assert_eq!(KmsErrorCode::CsrOrderInvalid as u16, 24);
     assert_eq!(KmsErrorCode::TimeUntrusted as u16, 25);
     assert_eq!(KmsErrorCode::PolicyEpochRegressed as u16, 26);
+    assert_eq!(KmsErrorCode::SshKeyUnavailable as u16, 27);
+    assert_eq!(KmsErrorCode::SshKeyNotFound as u16, 28);
+    assert_eq!(KmsErrorCode::SshKeyExists as u16, 29);
+    assert_eq!(KmsErrorCode::SshStoreFull as u16, 30);
+    assert_eq!(KmsErrorCode::SshImportPending as u16, 31);
+    assert_eq!(KmsErrorCode::SshHandleInvalid as u16, 32);
+    assert_eq!(KmsErrorCode::SshOrderInvalid as u16, 33);
+    assert_eq!(KmsErrorCode::SshImportIntegrity as u16, 34);
+    assert_eq!(KmsErrorCode::SshKeyFormatRejected as u16, 35);
+    assert_eq!(KmsErrorCode::SshUnlockRequired as u16, 36);
+    assert_eq!(KmsErrorCode::SshUnlockFailed as u16, 37);
+    assert_eq!(KmsErrorCode::SshUnlockLocked as u16, 38);
+    assert_eq!(KmsErrorCode::try_from(39), Err(39));
 }
 
 #[test]

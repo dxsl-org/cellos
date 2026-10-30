@@ -3320,3 +3320,5 @@ Environment fact for the probe: the host exposes `/dev/kvm` with nested VMX (`kv
 - **KSSH K1/K2 decisions by the user 2026-10-30:** K1 CP1 approved (D-K4 own parser + allowlist; lock diff of three packages applied only with K5; the unauthorized `rust-fatfs` read-only fetch acknowledged); K2 CP1 decisions approved (D-K5 per-login unlock, O-1, O-10 = B, O-14), implementation not approved. Evidence `261030-1000-kms-ssh-key-custody/reports/`. CBX-24 stays partial; Phase 10 unchanged; nothing in the repo source/lock edited.
 
 - **KSSH K2 CP1 Law-1 confirmation 1 APPROVED by the user 2026-10-30** (text `261030-1000-kms-ssh-key-custody/k2-cp1.md`, digest-bound in `k2-cp1-approval.md`): LR-1 option Y (one SSH identity per store; supersedes the earlier O-1 multi-key reading once the Law-1 text was shown), LR-2 option P. Design only; no source/lock/key/network/image change. CBX-24 stays partial; Phase 10 unchanged.
+
+- **KSSH K2 CP2 implemented 2026-10-30** (nine-path closure; `types` 74 passed, `service-kms` 65 passed; opcodes 1-14/errors 1-26 unchanged); awaiting Law-1 confirmation 2. CBX-24 stays partial; Phase 10 unchanged.

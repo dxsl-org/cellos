@@ -8,6 +8,7 @@ mod csr;
 mod frame;
 mod model;
 mod payload;
+mod ssh;
 #[cfg(test)]
 mod tests;
 
@@ -19,6 +20,11 @@ pub use csr::{
 pub use frame::{KmsRequestV1, KmsResponseV1};
 pub use model::*;
 pub use payload::*;
+pub use ssh::{
+    ssh_chunk_count, ssh_chunk_len, validate_ssh_key_name, validate_ssh_username,
+    KMS_SSH_CHUNK_LEN, KMS_SSH_IMPORT_MAX_LEN, KMS_SSH_KEY_NAME_MAX, KMS_SSH_PUBLIC_KEY_LEN,
+    KMS_SSH_SECRET_MAX, KMS_SSH_SESSION_ID_LEN, KMS_SSH_SIGNATURE_LEN, KMS_SSH_USERNAME_MAX,
+};
 
 /// Current KMS ABI version. Versions and opcodes are append-only.
 pub const KMS_ABI_VERSION: u8 = 1;
